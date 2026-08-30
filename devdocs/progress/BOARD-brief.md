@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:24 blocked:9 backlog:321 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2686 rejected:55`
+`working:5 unfinished:24 blocked:9 backlog:322 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2686 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead` [C] — owner: frankC
+- `bug-nilpy-render-backend-py-compile-does-not-terminate` [N] — owner: frankwasm
 - `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45` [A+S] — owner: frankS
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
@@ -53,7 +54,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 340, ranked
+## Ready — top 30 of 339, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -61,7 +62,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
-- `[p 68] [E]` feature-demo-songformatter-pxx-target
+- `[p 68] [B]` bug-b-imagereader-getsize-returns-a-string-where-reportlab-returns-a-pair
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [P]` bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
@@ -86,4 +87,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 
-_310 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_309 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

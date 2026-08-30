@@ -138,3 +138,40 @@ is not typed as one). If both come from how a method's result type is inferred,
 one fix closes both; if not, that is worth knowing early.
 
 This is now the wall for [[feature-demo-songformatter-pxx-target]].
+
+## Update 2: the getSize refusal is a LIBRARY bug, and it was hiding this one
+
+Claimed by frankwasm 2026-08-30 (promoted to effective prio 68 once
+[[feature-demo-songformatter-pxx-target]]'s `blocked-by` was corrected — it
+listed three tickets that are all in `done/`, so this one never inherited its
+68).
+
+The `w, h = img.getSize()` refusal in Update 1 is **not a compiler defect and
+not this ticket**. `lib/pcl/mimic_reportlab_lib_utils.pas` declares
+`ImageReader.getSize: AnsiString` returning `''`, where reportlab returns a
+`(width, height)` pair. The compiler is correct to refuse to unpack a string.
+Filed as
+[[bug-b-imagereader-getsize-returns-a-string-where-reportlab-returns-a-pair]]
+(Track B, `lib/pcl`) — the shim's own subset policy says a narrowed feature
+"fails loudly at drawImage", i.e. at RUN time; a wrong RESULT TYPE fails at
+COMPILE time in the caller and takes the module with it.
+
+**Measured, with that shim shape applied locally and then reverted:**
+
+| shim | `convertrawtext.py` |
+| --- | --- |
+| `getSize: AnsiString` (today) | stops at `render_backend.py:114`, seconds |
+| `getSize: TPyList` (a 2-element pair) | **no error; ran past 200s without finishing** |
+
+So the string return was **masking this ticket, not causing it**. With the
+library bug fixed the compile reaches the non-termination and stays there,
+which is the first time the hang has been observed through the *import* path
+rather than only on a direct compile. Direct compilation still does not
+terminate either (timed out at 120s), unchanged.
+
+That gives whoever takes this two doors into the same hang instead of one, and
+the import door is the one that matters for the demo. It also means this ticket
+cannot be closed by fixing the library: the two are independent and sequential.
+
+**Not started beyond this.** The lane holds the ticket; the diagnosis above is
+banked rather than half a fix, per `devdocs/dev/root-cause-over-microfix.md`.
