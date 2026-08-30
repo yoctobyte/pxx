@@ -268,7 +268,12 @@ def oracle_c(tmp=None):
             rows.append((next(iter(names)), E2.search(l).group(1), l, i + 1))
     built, rej = set(), 0
     for b in sorted({r[0] for r in rows}):
-        p = subprocess.run(['gcc', '-w', '-I', 'test', '-o', os.path.join(tmp, b), b2s[b]],
+        # NOTE: adding the compile line's own -I dirs here was tried and is a
+        # REGRESSION -- gcc built 10 FEWER sources with them (no-oracle 62 -> 72),
+        # because a pxx include dir shadows a system header gcc needs. The
+        # symmetric-looking fix that helped FPC hurts gcc, so it is not applied.
+        src, _cline = b2s[b]
+        p = subprocess.run(['gcc', '-w', '-I', 'test', '-o', os.path.join(tmp, b), src],
                            capture_output=True, text=True, errors='replace', timeout=90)
         if p.returncode == 0: built.add(b)
         else: rej += 1
@@ -328,7 +333,9 @@ def oracle_pas(limit=None):
     b2s = {}
     for l in mk:
         for m in CMAP.finditer(l):
-            b2s.setdefault(m.group(2), m.group(1))
+            # Keep the COMPILE line: it carries the -Fu/-I unit paths, and FPC
+            # cannot resolve a test's companion units without them.
+            b2s.setdefault(m.group(2), (m.group(1), l))
     E2 = re.compile(r'expect_same\.sh\s+([A-Za-z0-9_./-]+)\s+(".*")\s*$')
     BIN = re.compile(r'\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
     OTHER = re.compile(r'\$\((?!TESTTMP\))[A-Za-z_]+\)')
