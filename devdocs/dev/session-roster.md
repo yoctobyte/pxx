@@ -22652,3 +22652,59 @@ same fix. frankC renamed the ticket once the diagnosis moved to labelling
 the `new_red: []` caveat in verbatim. It had also written "no `pin: v398` row" into
 that ticket **on frankT's report without checking** — the ticket's own defect, one
 layer further out, self-caught.
+
+## The work's list is never the user's list — a test matrix inherits the shape of the list it came from
+
+frankwasm, three distinct instances in one day, and the third is the one with
+teeth:
+
+| the list it was derived from | what the bug was shaped like |
+| --- | --- |
+| entity-shaped (symbol, field, param…) | position-shaped — 7 of 9 positions wrong |
+| `AN_CALL` only | three call shapes: direct, virtual, interface |
+| **every test sets `{$define PXX_WIDE_PAYLOAD}`** | **real FPC source never will** |
+
+The third was found by running the campaign's own acceptance line —
+`S := Utf8Encode(WideString(WideChar(u1) + WideChar(u2)));` from `jsonscanner.pp`,
+the line in `feature-unicodestring-model`'s **first paragraph** — for the first
+time. It works with **no define**, and *that* is the finding rather than a
+convenience: had it needed one, the wall would still be standing for the file the
+campaign is named after, and **all seven existing tests would have gone on
+reporting success, because every one of them sets the define.** The gate covers the
+type *names* `widestring`/`unicodestring`, not `WideChar`.
+
+**Each time, the list was the one frankwasm had used to do the work.** That is the
+mechanism: a matrix built from your own working set tests the shape of your
+understanding, not the shape of the world. `220caf027`.
+
+**And the surrogate case is the only line with teeth — a coin flip whether a test
+has it.** Per-unit transcoding yields CESU-8: two unpaired surrogates, six bytes, a
+plausible wrong answer **no length check on the BMP line would catch**. Measured
+against FPC 3.2.2 with `uses cwstring`: `D83D + DE00 -> 240 159 152 128`, identical.
+Same family as the ASCII blind spot — *a test that can only fail one way.*
+
+## A campaign's acceptance criterion should be measured when it is MET, not when the work ends
+
+The `jsonscanner.pp` line passes against **`pinned`** too — so the campaign met its
+stated goal at **7c**, and nobody checked for two more steps. frankwasm recorded
+that instead of quietly filing the green, and the general form is worth keeping:
+**when the opening measurement and the closing measurement are days apart, the
+intervening steps were never prioritised against the actual target.** Its own
+verdict on 6d — *"worth doing on its own merits, but I did not know that when I did
+it"* — is the honest version, and it is a scheduling defect, not a work defect.
+
+## The sizing law: a `grep -c` gives you the read count while your instinct reads it as the write count
+
+frankwasm's, with the caveat that makes it usable. **Sizing by where the NAME
+appears measures where the fact is CONSUMED**, and for any carrier the writes are a
+handful of declaration sites while the reads are everywhere the fact travels — 6d-2
+was **two write sites, eighteen read sites**, and an earlier "71 write sites"
+estimate had counted reads too. Both misestimates ran the same direction, which is
+what makes it a law rather than two mistakes.
+
+Corollary already seen twice: an item that reads as one mechanism in a plan can be
+two in the code. `a: array[0..1] of PW` inline needs **no carrier** (`AllocArray`
+stamps the symbol while `LastTypePointerStrElemTk` is live); `TArr = array[0..1] of
+PW` named needs a real row, because a *use* of a named type is arbitrarily far from
+where it was parsed. Same declaration, two answers, measured 4 and 8 before a line
+was written.
