@@ -1,8 +1,8 @@
 ---
 prio: 45
 track: A
-status: backlog
-owner: ""
+status: done
+owner: frank-optimize
 ---
 
 # -O3 (x86-64): W1 slice 10 fused the sign-extend and skipped the zero-extend
@@ -56,3 +56,6 @@ answer), and a deliberate break verified to change the emitted bytes.
 - Sibling that fused the other flavour: `feature-opt-o3-fuse-resident-read-and-widen-into-movsxd`
 - The port that surfaced it: `feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen`
 - Umbrella: `feature-opt-o3-register-pressure`
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -4221,6 +4221,29 @@ test-threads: $(COMPILER)
 	else \
 	  echo "=== test_shr_resident_widen: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
+	# The ZERO-extend flavour of the same site, x86-64. Slice 10 fused only the
+	# sign-extend arm; `mov eax, rNd` is the resident read and the zero-extend in
+	# one instruction, where `mov rax, rN` + `mov eax, eax` was two.
+	# Every band value is ABOVE 2^31, so a sign-extend cannot be mistaken for a
+	# zero-extend by any amount of luck: the answers differ by a factor of 2^32.
+	# --strict-fpc is the second expectation and reproduces FPC 3.2.2 exactly
+	# (verified against fpc on this box), and here it is NOT a control -- the
+	# fold fires under it too, because an unsigned operand needs the zero-extend
+	# at either result width.
+	# Deliberate break verified: dropping REX.R from EmitMovEaxRegD makes r8-r15
+	# read rax instead, and -O3 answered acc=374503906869 -- a plausible wrong
+	# number, no crash. Note what that break did NOT do: the compiler still
+	# self-hosted byte-identically with the encoding broken, so the fixedpoint is
+	# not coverage for this pass and these rows are the only thing that is.
+	# feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64
+	./$(COMPILER) -O3 test/test_shr_resident_zeroext.pas $(TESTTMP)/test_shrzext326
+	tools/expect_same.sh test_shrzext326 "$$($(TESTTMP)/test_shrzext326)" "$$(printf 'acc=1299819431187\none=433273143729\ndone')"
+	./$(COMPILER) -O0 test/test_shr_resident_zeroext.pas $(TESTTMP)/test_shrzext026
+	tools/expect_same.sh test_shrzext026 "$$($(TESTTMP)/test_shrzext026)" "$$(printf 'acc=1299819431187\none=433273143729\ndone')"
+	./$(COMPILER) -O3 --strict-fpc test/test_shr_resident_zeroext.pas $(TESTTMP)/test_shrzextsf326
+	tools/expect_same.sh test_shrzextsf326 "$$($(TESTTMP)/test_shrzextsf326)" "$$(printf 'acc=1292922389427\none=430974129809\ndone')"
+	./$(COMPILER) -O0 --strict-fpc test/test_shr_resident_zeroext.pas $(TESTTMP)/test_shrzextsf026
+	tools/expect_same.sh test_shrzextsf026 "$$($(TESTTMP)/test_shrzextsf026)" "$$(printf 'acc=1292922389427\none=430974129809\ndone')"
 	# The LAST call argument is pushed last and popped first with nothing in
 	# between, so its 16-byte temp round trip is ceremony over a value already in
 	# x0. It becomes `mov x(n-1), x0`, and for a ONE-argument call not even that.

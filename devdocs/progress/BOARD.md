@@ -67,7 +67,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (393)
+## backlog (392)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -360,7 +360,6 @@ _none_
 | feature-opt-dynarray-grows-in-place | A+O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | A+O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
-| feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64 | A+O | 45 | feature | -O3 (x86-64): W1 slice 10 fused the sign-extend and skipped the zero-extend | — |
 | feature-opt-o3-now-has-differential-coverage-and-it-should-be-standing | A+O | 40 | feature | -O3 is the free tier for new passes precisely because nothing gates OptLevel>=3. As of 2026-08-30 it has 443 programs of csmith self-differential coverage (pxx -O0 vs -O2 vs -O3, zero MISCOMPILE_OPT) -- an oracle-free check no gcc-disagreement argument can touch. Proposes making it standing per new -O3 pass rather than a one-off. | — |
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | A+O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
@@ -740,9 +739,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2884)
+## done (2885)
 
-2884 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2885 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -1004,7 +1003,6 @@ _none_
 - [p 45] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [A+O] feature-opt-inline-float-and-record-returning-leaves
-- [p 45] [A+O] feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend

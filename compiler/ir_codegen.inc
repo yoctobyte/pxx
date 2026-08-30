@@ -2886,15 +2886,38 @@ end;
   Deliberately NOT the trailing re-sign in the same arm (that one narrows the
   RESULT, and its `size(node) < 8` is disjoint from this `= 8`), and not
   `shl`, which has no leading widen. }
-function W1LeadingCdqe(node, left: Integer; op: TTokenKind): Boolean;
+{ Which LEADING widen does a shift's narrow left operand need?
+    0 = none   1 = sign-extend (cdqe)   2 = zero-extend (mov eax, eax)
+  Deliberately shaped like aarch64's W1LeadingExtA64, which has answered with
+  both flavours since it was written. This side answered only the signed one
+  until 2026-08-30, and slice 10 therefore fused only that arm -- see
+  feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64 for how
+  the asymmetry stayed invisible: the unsigned rows of slice 10's own test are
+  controls asserting the fold does NOT claim this site, and a control proving
+  "does not fire here" reads identically whether not-firing is right or is a
+  missed opportunity. }
+function W1LeadingWidenKind(node, left: Integer; op: TTokenKind): Integer;
 begin
-  W1LeadingCdqe := False;
+  W1LeadingWidenKind := 0;
   if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
   if op = tkIdent then                                        { Pascal `shr` }
-    W1LeadingCdqe := (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
-                     TypeSigned(IntToTypeKind(IRTk[left]))
+  begin
+    if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+       TypeSigned(IntToTypeKind(IRTk[left])) then
+      W1LeadingWidenKind := 1
+    else
+      W1LeadingWidenKind := 2;
+  end
   else if op = tkShr then                                     { C `>>` }
-    W1LeadingCdqe := True;
+    W1LeadingWidenKind := 1;
+end;
+
+{ The signed answer alone, for the three sites that ask exactly that question.
+  Kept as its own name rather than inlined at the call sites: `= 1` reads as a
+  magic number and this reads as the thing it means. }
+function W1LeadingCdqe(node, left: Integer; op: TTokenKind): Boolean;
+begin
+  W1LeadingCdqe := W1LeadingWidenKind(node, left, op) = 1;
 end;
 
 { -O3 W1 slice 10: can the left operand's load be skipped and carried by the
@@ -2912,10 +2935,27 @@ function W1WidenLeftEligible(node, left: Integer; op: TTokenKind): Integer;
 begin
   W1WidenLeftEligible := 0;
   if OptLevel < 3 then Exit;
-  if not W1LeadingCdqe(node, left, op) then Exit;
+  { BOTH flavours since 2026-08-30. `mov eax, rNd` zero-extends into the full
+    64-bit register by construction, exactly as `mov rax, rN` + `mov eax, eax`
+    did in two instructions -- and for the same reason movsxd was chosen over
+    deleting the cdqe: it is correct whatever the register's upper half holds,
+    so it rests on no invariant maintained in another file. }
+  if W1LeadingWidenKind(node, left, op) = 0 then Exit;
   if not LeafSymRcxLoadable(left) then Exit;
+  { Exactly-4: a 1- or 2-byte symbol's own load is a movsx/movzx from the low
+    8/16 bits, which neither movsxd nor a 32-bit mov reproduces. }
   if TypeSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
   W1WidenLeftEligible := ResidentRegOf(IRA[left]);
+end;
+
+{ mov eax, rNd -- 89 /r with mod=11, reg=N (source), rm=000 (eax). The 32-bit
+  destination form zero-extends into rax by construction. REX.R only for r8-r15;
+  no REX.W, which is the point. }
+procedure EmitMovEaxRegD(reg: Integer);
+begin
+  if reg >= 8 then EmitB($44);
+  EmitB($89);
+  EmitB($C0 or ((reg and 7) shl 3));
 end;
 
 { movsxd rax, rNd -- REX.W[+B] 63 /r with mod=11, reg=000 (rax), rm=N. }
@@ -7450,6 +7490,8 @@ begin
                   else
                     begin EmitB($48); EmitB($98); end         { cdqe (sign-extend) }
                 end
+                else if w1WidenLeftReg <> 0 then
+                  EmitMovEaxRegD(w1WidenLeftReg)              { mov eax, rNd — read AND zero-extend }
                 else
                   begin EmitB($89); EmitB($C0); end;          { mov eax, eax (zero-extend) }
               end;
