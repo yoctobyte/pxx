@@ -1822,3 +1822,46 @@ burned the ESP float arm.
 
 The wrong-file diagnostic frankB hit on the way is filed separately as
 [[bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line]].
+
+
+## 2026-08-30 (frankwasm) — INDEPENDENT corroboration of the note above
+
+frank-rust's measurement and mine were made separately and agree. Recorded
+because two independent arrivals at the same number is the only kind of
+confirmation worth having, and because my run carries a control theirs does not
+(and theirs carries one mine does not — the locally-declared generic interface).
+
+Not a claim on this ticket. Measured before deciding whether to take it, and it
+changed the answer to that question.
+
+    binary at HEAD (post-28b2851cd), -Fu/usr/share/fpcsrc/3.2.2/packages/rtl-generics/src
+
+    6a  uses Generics.Defaults      ok   code=671512B  procs=1661
+    6b  uses Generics.Collections   pascal26:259: error: unknown type: IEnumerable
+                                    (and the `expected ')' before '>'` that follows it)
+
+**`TKey` is gone — zero occurrences, where the summary said four unbound
+identifiers.** `bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body` is
+in `done/`, closed by `28b2851cd` (frank-rust): `TList<T>`'s template capture
+overran by ~10,914 tokens because a bodiless nested class ran the depth loop one
+level high. The summary here still told readers to trust that ticket as the live
+wall and not to open a new one.
+
+**6a's numbers are byte-identical to the ones this file already recorded**
+(`code=671512B procs=1661`), which is the control: the corpus and the flags are
+the same, so the difference at 6b is the compiler and not the measurement.
+
+### What this means for whoever takes the ladder
+
+The remaining wall is **not a frontend bug**. FPC supplies `generic
+IEnumerable<T>` / `IEnumerator<T>` from the implicit ObjPas unit; our RTL
+declares neither, and `generics.collections.pas:259` specializes one. That is
+`bug-b-rtl-provides-no-ienumerable-generic-interface` [B p55] — **Track B, not
+P** — with `28b2851cd` serving as the control that the compiler handles the
+shape. So "take the corpus ladder" currently means *drive a Track B ticket, or
+work a different rung*, and that should be a knowing choice rather than a
+discovery three hours in.
+
+Left in `unfinished/` and still owned by frankB. Nothing here is claimed; the
+summary is corrected because rule 2 requires it and this file is the one that
+tells its own readers to trust only the canonical table.
