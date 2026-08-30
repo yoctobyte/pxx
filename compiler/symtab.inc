@@ -288,6 +288,18 @@ begin
     AliasStrCap[AliasCount] := LastTypeStrCap
   else
     AliasStrCap[AliasCount] := 0;
+  { …and a MANAGED-string alias keeps its ELEMENT WIDTH, for the same reason and
+    in the same window: ParseTypeKind has just run for the right-hand side, so
+    LastTypeStrElemTk holds tyWideChar for `TW = WideString`. tyAnsiString is
+    the kind for both widths, so dropping this here would resolve the alias to
+    the kind alone and every variable, field and parameter declared through it
+    would index at stride 1. Inert until the WideString alias is broken (step 7)
+    — nothing sets LastTypeStrElemTk to tyWideChar before that.
+    feature-unicodestring-model }
+  if IntToTypeKind(tk) = tyAnsiString then
+    AliasStrElemTk[AliasCount] := Ord(LastTypeStrElemTk)
+  else
+    AliasStrElemTk[AliasCount] := 0;
   AliasUnitIdx[AliasCount] := CurrentUnitIdx;
   Inc(AliasCount);
 end;
@@ -4193,7 +4205,19 @@ begin
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := tyInteger;
   if tk = tyAnsiString then
-    Syms[SymCount].ElemType := tyChar;
+  begin
+    { The managed string's ELEMENT WIDTH. tyAnsiString is the kind for BOTH
+      widths, so the width comes from the LastTypeStrElemTk channel that
+      ParseTypeKind has just set (directly for an inline `WideString`, or handed
+      back from AliasStrElemTk for a named alias). tyUnknown = a byte string,
+      which is every string today: nothing sets tyWideChar until the alias break
+      (step 7), so this reads tyChar exactly as it always did.
+      feature-unicodestring-model }
+    if LastTypeStrElemTk = tyWideChar then
+      Syms[SymCount].ElemType := tyWideChar
+    else
+      Syms[SymCount].ElemType := tyChar;
+  end;
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;

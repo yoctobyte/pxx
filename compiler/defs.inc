@@ -2887,6 +2887,14 @@ var
                            {Code@0, Data@8} minted on first `of object` proc
                            type; REC_NONE until then }
   LastTypePointerElemTk : TTypeKind;
+  { The ELEMENT kind of a managed STRING type just parsed — tyWideChar for
+    `WideString`/`UnicodeString`, tyChar (or tyUnknown, read as tyChar) for a
+    byte string. The string twin of LastTypePointerElemTk above: tyAnsiString
+    is the KIND for both widths, so the width cannot ride in ParseTypeKind's
+    return value and travels here instead. Obeys the window rule at the head of
+    this block — durable captures are Syms[].ElemType, UFldStrElemTk and
+    AliasStrElemTk. feature-unicodestring-model }
+  LastTypeStrElemTk : TTypeKind;
   LastArrIdxTk     : Integer;  { set by ParseArrayDimBounds on every call: the INDEX type of the dimension it just parsed, as Ord(TTypeKind), or 0 for an ordinary integer range. The one producer of ArrTypeIdxTk/SymArrIdxTk. Valid only immediately after the call -- the next dimension overwrites it, which is why the callers capture it for dimension 0 and drop the rest. }
   LastArrIdxEnumId : Integer;  { its enum type index when LastArrIdxTk is Ord(tyInteger), else -1. }
   LastTypePointerElemRec : Integer;
@@ -4646,6 +4654,7 @@ var
   AliasPtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base record/class id }
   AliasProcSig : array[0..MAX_TYPEALIAS-1] of Integer;  { procedural-type alias: signature proc index (Procs[] entry, BodyAddr=-1); -1 = not a proc type }
   AliasStrCap : array[0..MAX_TYPEALIAS-1] of Integer; { named frozen-string alias (T = string[N]): the capacity N, which the alias table used to DROP — so a variable of the alias truncated at DEFAULT_STR_CAP instead of N (bug-a-string-n-type-alias-loses-its-capacity). 0 = not one. }
+  AliasStrElemTk : array[0..MAX_TYPEALIAS-1] of Integer; { named managed-STRING alias (`TW = WideString`): the ELEMENT TTypeKind ordinal, 0 = unset (read as tyChar). Exactly AliasStrCap's problem one type over — a USE of the alias is far from where the string type was parsed, so LastTypeStrElemTk is whatever the last unrelated declaration left behind. Without it `type TW = WideString; var x: TW; x[i]` indexes a UTF-16 string at stride 1, silently. feature-unicodestring-model }
   AliasIsSub : array[0..MAX_TYPEALIAS-1] of Boolean; { named SUBRANGE alias (T = lo..hi): bounds retained for {$R+}. BSS-false default keeps every other Register*Alias site honest without touching them (feature-pascal-range-checks-r-plus). }
   AliasSubLo : array[0..MAX_TYPEALIAS-1] of Int64;
   AliasSubHi : array[0..MAX_TYPEALIAS-1] of Int64;

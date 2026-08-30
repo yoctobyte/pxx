@@ -133,6 +133,7 @@ var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
 begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
+  LastTypeStrElemTk := tyUnknown;
   LastTypePointerElemRec := REC_NONE;
   LastTypePointerAlias := -1;
   LastTypePointerElemArrAi := -1;
@@ -652,6 +653,10 @@ begin
                   stamps SymStrCap and the store clamps at N }
                 if AliasStrCap[aliasIdx] > 0 then
                   LastTypeStrCap := AliasStrCap[aliasIdx];
+                { …and a managed-string alias hands back its ELEMENT width, so
+                  Alloc* stamps Syms[].ElemType and `x[i]` uses the right stride }
+                if AliasStrElemTk[aliasIdx] <> 0 then
+                  LastTypeStrElemTk := IntToTypeKind(AliasStrElemTk[aliasIdx]);
                 if AliasIsSub[aliasIdx] then
                 begin
                   { named subrange: hand the retained bounds to Alloc* for
