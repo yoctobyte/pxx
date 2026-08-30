@@ -643,6 +643,10 @@ exactly the same places a typed pointer does.
 
 ### The count: five carriers, two written
 
+**The channel design is settled and should not be re-opened** — `defs.inc:4612`
+is the citation. The companion global is right; the missing captures are the
+defect. Three documented instances of the pattern say the pattern is fine.
+
     entity            pointer element kind      string element kind
     ---------------   -----------------------   -----------------------------
     symbol            Syms[].PtrElemTk          Syms[].ElemType     EXISTS
@@ -679,9 +683,29 @@ Revised tail of the ordering constraint:
     6a. AliasStrElemTk       (type alias)
     6b. ArrTypeStrElemTk     (array element)
     6c. param / return slots
+    6d. `p: ^WideString` — the POINTEE-side carrier.  BLOCKS 7.
     ---- only then ----
     7.  break the alias in pasparser_lval.inc:6322/6424, with sysutils'
         UTF8Encode/UTF8Decode in the SAME commit
+
+**6d is a numbered item and it blocks 7.** It was nearly left as a paragraph
+saying "decide it with the code in front of you", which is exactly how a case
+gets forgotten — an open question with no number and no owner is a stale shared
+assumption waiting to happen, which is the failure this campaign has spent the
+day cataloguing. The two facts it needs are: `^WideString` is **legal Pascal**,
+and `Length(ps^)` already has history at `ir.inc:11150` (a managed string
+reached through a pointer deref, with its own bug and its own comment). The
+recursion at `pasparser_decl.inc:268` puts the element width on the CHILD while
+the outer type is `tyPointer`, so it must be harvested into a local like
+`childBaseTk` and stored in a sixth, pointee-side carrier.
+
+Do it AFTER 6a-6c, which are all value-typed and unaffected by it — by then
+five carriers exist and the sixth's shape is either obvious or obviously
+different, which beats deciding it now. **What must not happen is 7 landing
+while 6d is still prose:** once the alias breaks, `p: ^WideString` becomes
+constructible and a missing carrier is a live stride-1 index of a UTF-16
+string. If two defensible designs turn up at that point, it becomes a `decide-*`
+then — it is not one now, because the code can answer it.
 
 Note this is the "one of six parallel arrays not written" class by name — which
 the deleted `tyWideString` comment was right about even though it was wrong

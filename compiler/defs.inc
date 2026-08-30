@@ -2829,6 +2829,50 @@ var
   DynamicOff       : Integer;
   DynamicSize      : Integer;
   DynamicNeededCount : Integer; { distinct DT_NEEDED libraries }
+  { ===== The LastType* side channel: A RETURN CHANNEL, NOT STORAGE =========
+    ParseTypeKind returns a bare TTypeKind, which cannot describe a type whose
+    kind is not the whole story — `string[N]`'s capacity, `PWideChar`'s element,
+    a subrange's bounds, a set's element. Those travel here, set at the moment
+    the kind is decided.
+
+    THE LIFETIME IS ONE CALL, and it is shorter than the reset at
+    pasparser_decl.inc:135 suggests. ParseTypeKind is RECURSIVE — it calls
+    itself at pasparser_decl.inc:268 for a pointer's element type — so every
+    nested parse re-runs that reset and clobbers the OUTER declaration's values
+    unconditionally. The pointer arm survives only by harvesting the child's
+    values into locals immediately on return and then re-establishing its own
+    (pasparser_decl.inc:271-280). That harvest IS the mechanism; the reset line
+    on its own would tell you these are per-declaration storage with a clean
+    lifetime, and they are not.
+
+        Read a LastType* value in the window immediately after the
+        ParseTypeKind that set it. If the value must outlive that window,
+        it needs a DURABLE PER-ENTITY SLOT, not a longer-lived global.
+
+    Treating one as storage is not a style question; it is a known bug class
+    with three instances in this compiler, all silent wrong values read by a
+    consumer far from the declaration:
+
+      bug-pascal-array-of-pointer-deref-loses-the-record-type  LastTypePointerElemRec
+      bug-p-typed-constants-cannot-hold-a-pointer-...          LastTypePointerElemTk
+      bug-a-nd-array-function-result-indexes-the-wrong-slot    LastTypeStrCap
+
+    The second is told in full at ArrTypePtrElemTk below: `TAp = array[0..1] of
+    PChar`, then `a[0] := 'hey'; WriteLn(a[0])` printed 4304310 — the POINTER —
+    because every consumer of the alias read whatever the last unrelated pointer
+    declaration in the unit had left behind.
+
+    THE FIX WAS NEVER TO ABANDON THE CHANNEL. It was to capture the value into a
+    per-entity slot at definition time — which is what AliasElemTk,
+    ArrTypePtrElemTk, UFldPtrElemTk, ptypesPtrElemTk/ProcRetPtrElemTk and
+    Syms[].PtrElemTk are. Five carriers, because five kinds of entity can hold a
+    type whose kind does not describe it fully. Adding a new LastType* means
+    asking which of those five must capture it.
+
+    Individual entries below restate this where it bit (LastArrIdxTk, SymEnumId,
+    UFldEnumId, ArrTypeElemStrCap). Stated once here because a fact about a
+    mechanism recorded only on one member of it is a fact nobody searching for
+    the mechanism will find. }
   LastTypeRecId : Integer;
   LastTypeElemDynDepth : Integer; { set when a fixed-array element type resolves to a dynamic-array alias; consumed by AllocArray to lay the element out pointer-sized and record SymElemDynDepth, then reset }
   LastTypeDynElemRowLen : Integer; { set when a dynamic array's element resolves to a named FIXED-array alias (`array of T`): the row's flattened element count; consumed by AllocDynArray into SymDynElemRowLen, then reset }
