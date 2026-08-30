@@ -1,6 +1,7 @@
 ---
 prio: 60
 track: A
+status: done
 ---
 
 > **Track T by default: no lane could be inferred** from `tools/size_canary.py`. This is a FALLBACK, not a finding — nothing here says the defect is Track T's, only that the test source did not name an owner. Re-lane it before working it.
@@ -162,3 +163,41 @@ growth had a single cause and all of it was removed.
 `widestring` is still an alias for a byte string — so the guard introduces no
 confusing diagnostic. What a bare-ESP program *should* do when it names a real
 UTF-16 type becomes live at 7b, which is when 7a has removed the reason to care.
+
+## GREEN at `c59bcb7f0` — resolved (coordinator, 2026-08-30)
+
+```
+size-canary: 5 subject(s) within their allowances
+x86_64-empty  65304  (+4025)    <- the parent's EXACT number
+```
+
+Step 7a moved the wide runtime into a separately-pulled `builtinwide` unit behind
+a token-scan predicate, on `wasibackend.pas`'s shipped shape. **All five subjects
+within allowance; the 69,400 recorded above as "the figure to compare against" is
+retired.** 65,304 is precisely what the parent measured in the worktree A/B that
+confirmed the regression — the same exactness test the ESP guard passed, applied
+to the row the guard could not fix.
+
+**The `{$ifndef PXX_ESP}` guard is GONE, not kept beside the unit split.** An
+`{$ifndef}` cannot express "this program does not use UTF-16" — which is exactly
+why it fixed the four ESP rows and left x86_64 paying 4 KB. Keeping both would
+have left a target-shaped special case sitting under a program-shaped fix, which
+is the second-path smell `normalise-dont-special-case` names.
+
+**The number that makes the fix legible:** `var s: widestring` now compiles to
+**69,400 B — exactly what the EMPTY program cost before this commit.** The cost
+did not shrink; it moved onto the programs that ask for it. That is the entire
+claim in one number, and it is measured rather than argued.
+
+Four behaviours measured, not three: empty program back to baseline; naming the
+type pulls the unit and runs; bare esp32 naming it still builds at 43,516 B
+*without* pulling it; native string corpus unchanged.
+
+Two traps the template forced, both avoided: `PXXHdrSetMeta` is
+implementation-only in builtinheap so the two calls write `PXX_HDR_META`
+directly, and the pointer aliases are **re-declared locally rather than
+exported** — exporting `PWord` would silently re-type a user's own. Duplicating
+a type alias is not a second code path; getting `PWord` wrong is.
+
+Resolves at `c59bcb7f0`.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
