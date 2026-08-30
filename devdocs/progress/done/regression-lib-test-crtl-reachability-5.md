@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: C
+status: done
 ---
 
 > **Track guessed as C** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -44,3 +45,35 @@ lib/crtl/src/sys/socket.c for the guard-order trap that shape has).
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## 2026-08-30, frankA — already fixed at HEAD; closing on evidence, not on a green
+
+Reproduced the tool, not the tier: `python3 tools/crtl_reachability.py` at
+current HEAD prints
+`OK -- 42 headers, 26 modules, every declared function reachable from its own header`,
+exit 0. The two rows this ticket names — `wait()` and `waitpid()` declared in
+`<sys/wait.h>` and defined in `unistd.c` — are gone.
+
+**Attributed by artifact rather than by ancestry**, which is the check that
+cannot be asked backwards:
+
+```
+git log --diff-filter=A -- lib/crtl/src/sys/wait.c   -> 42f7a4040
+git show 7227f3e0f1f8:lib/crtl/src/sys/wait.c        -> does not exist
+```
+
+So `lib/crtl/src/sys/wait.c` was **created after** the tested sha, and it is the
+sibling `.c` the tool's own message asks for. The fault and the fix are both
+established from the tree; nothing here rests on a bisect, which this ticket
+already records as unsound (the named sha builds with `$(PXX_STABLE)` and moved
+no `stable_linux_amd64/**`).
+
+**Not claiming a green tier.** `lib-test` is full-tier and this session does not
+run it; what is verified is the exact check that produced the signal, which is
+the tool itself.
+
+**The track guess was right for the wrong reason.** The ranker read `C` off the
+test path `tools/crtl_reachability.py` — a Python tool, which is Track T's file.
+The defect was in `lib/crtl`, so `C` is correct, but the path it was inferred
+from points at the wrong lane. Worth knowing when the next auto-filed stub lands.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
