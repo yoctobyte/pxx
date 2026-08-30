@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:3 unfinished:27 blocked:8 backlog:359 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2743 rejected:56`
+`urgent:1 working:4 unfinished:27 blocked:8 backlog:358 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2743 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
+- `regression-test-nilpy-test-nilpy-max-min-iterables` [N] — owner: frankA
 
 ## urgent (1) — jump the queue
 
@@ -58,7 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 381, ranked
+## Ready — top 30 of 380, ranked
 
 - `[p 65] [N]` bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever (unblocks 1)
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -75,7 +76,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` regression-test-asm-test-asm-emit-x64
 - `[p 70] [A]` regression-test-asm-test-asmcore-x64
 - `[p 70] [A]` regression-test-asm-test-x64enc
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-max-min-iterables
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-in-a-variable
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
@@ -90,5 +90,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
+- `[p 62] [N]` feature-nilpy-enum-class
 
-_351 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_350 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

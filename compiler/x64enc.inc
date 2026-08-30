@@ -161,6 +161,18 @@ begin
   EncB($C9);
 end;
 
+{ Set by the COMPILER to its own EmitSyscall; left nil by every other consumer.
+
+  x64enc.inc is a pure byte encoder and has three consumers: the compiler, and
+  the standalone harnesses test_asm_emit_x64 / test_x64enc, which mock the byte
+  sink and include the real encoder. Calling EmitSyscall directly from here made
+  the encoder depend on compiler POLICY (RtlOverLibc, OptLevel, the call-site
+  table) and broke both harnesses with `undefined variable (EmitSyscall)` --
+  five test-asm reds from one line. A hook keeps the dependency pointing the
+  right way: the encoder knows only "somebody may want to lower this
+  differently", and the harnesses need no mock at all, because nil means raw. }
+var X64SyscallHook: procedure = nil;
+
 procedure x64_syscall;
 { Every COMPILER-GENERATED kernel entry on x86-64 funnels here: `EmitAsmX64`
   spells it as the mnemonic 'syscall' (asmtext.inc), and there are 17 such sites
@@ -169,28 +181,26 @@ procedure x64_syscall;
   byte pair, which is how an earlier pass of --rtl-libc missed them and reported
   a residual count as if it were the emitter population.
 
-  Only the DIRECT encoding path may be rerouted to the --rtl-libc thunk. In
-  staging mode EncB defers to AsmB, and CodeLen is then not this instruction's
-  address -- the recorded call site would be patched somewhere else entirely,
-  which is the silent-wrong-address failure this feature already produced once.
-  That the staged path is also the one a user's inline `syscall` would arrive on
-  is a second, independent reason to leave it raw: a hand-written syscall keeps
-  its own register contract and must not acquire the thunk's. (Today user asm
-  reaches lib/asmcore's AsmEncodeX64 instead of this encoder, so that half is
-  belt-and-braces rather than load-bearing.)
+  Only the DIRECT encoding path may be rerouted. In staging mode EncB defers to
+  AsmB and CodeLen is not this instruction's address, so a recorded call site
+  would be patched somewhere else entirely -- the silent-wrong-address failure
+  this feature already produced once. That the staged path is also the one a
+  user's inline `syscall` would arrive on is a second, independent reason to
+  leave it raw. (Today user asm reaches lib/asmcore's AsmEncodeX64 instead of
+  this encoder, so that half is belt-and-braces rather than load-bearing.)
 
-  EmitSyscall holds the -O3 refusal and the site-count check; routing here
-  rather than duplicating them is the whole point -- one lowering, one place it
-  can be wrong. In the default (non-libc) build EmitSyscall emits the same two
-  bytes through the same EmitB, so emitted code is unchanged byte for byte. }
+  The hook holds the -O3 refusal and the site-count check on the compiler side;
+  routing there rather than duplicating them is the point -- one lowering, one
+  place it can be wrong. With the hook nil, or in staging mode, this is exactly
+  the two bytes it always was, so emitted code is unchanged byte for byte. }
 begin
-  if EncToAsmBuffer then
-  begin
-    AsmB($0F);
-    AsmB($05);
-  end
+  if (not EncToAsmBuffer) and Assigned(X64SyscallHook) then
+    X64SyscallHook
   else
-    EmitSyscall;
+  begin
+    EncB($0F);
+    EncB($05);
+  end;
 end;
 
 { --- Register/Register & Register/Immediate Mov --- }

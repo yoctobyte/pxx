@@ -867,6 +867,11 @@ begin
   LibcErrnoProcIdx := -1;
   LibcSyscallCallCount := 0;
   LibcSyscallThunkAddr := -1;
+  { Hand the pure byte encoder our lowering. x64enc.inc cannot reference
+    EmitSyscall itself: it is also included by the standalone asm harnesses,
+    which mock the byte sink and have no compiler policy at all. Nil there
+    means "emit the two bytes", which is exactly what they want. }
+  X64SyscallHook := @EmitSyscall;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   SocExplicit := False;
