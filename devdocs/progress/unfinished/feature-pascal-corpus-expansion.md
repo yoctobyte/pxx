@@ -3,6 +3,7 @@ prio: 75
 track: P
 status: unfinished
 owner:
+summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and is RED. Re-compiled 2026-08-30 (first actual compile since 08-28, binary faf762981c3c = pin v397): 6a Generics.Defaults is CLEAN and the green is control-verified non-vacuous (+11 procs with the generic actually instantiated); 6b Generics.Collections still fails with TKey/TValue/TDictionaryPair/PDictionaryPair unbound — that wall is bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body [P p55], do NOT open a new ticket for it. The object-types blocker IS discharged (option C, verified by compiling). Every OTHER wall table in this file is a dated snapshot and they disagree by design — read THE ONE CANONICAL TABLE only. Diagnostic coordinates in this corpus are unreliable: identify a wall by SYMBOL, never by file or line."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had

@@ -3,7 +3,7 @@ track: P
 prio: 60
 type: bug
 blocked-by: []
-summary: "`r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked."
+summary: "A record-typed lvalue assigned an AnsiString is type-checked in exactly ONE of its six forms. Only `r := s` (plain variable) is rejected; the dyn-array element, fixed-array element, record FIELD, class FIELD and pointer DEREF all compile clean and segfault. FPC rejects all six. Root cause measured 2026-08-30: the check at the AN_ASSIGN funnel (ir.inc:9349) is correct and correctly placed, but AssignSideKind (ir.inc:75) types only AN_IDENT and literals, so for AN_INDEX/AN_FIELD/AN_DEREF it returns False, the `and` chain short-circuits and the check is SILENTLY SKIPPED — it never runs. TRAP for the implementer: defs.inc:422 documents AN_INDEX.Left as a base SYM index while ir.inc:1544 reads it as a NODE; a wrong reading turns a false-accept into a false-REJECT, which looks like progress and is a regression. The var/out neighbour is a separate question (AssignSideKind IsRef bail)."
 status: working
 owner: ""
 ---
