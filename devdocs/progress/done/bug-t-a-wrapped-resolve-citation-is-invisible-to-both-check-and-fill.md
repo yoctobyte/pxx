@@ -137,4 +137,4 @@ to prose — the last deliberately, and it must stay that way.
   prose, so frankC's own was already unwrapped by hand.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit ad4db86ed.
