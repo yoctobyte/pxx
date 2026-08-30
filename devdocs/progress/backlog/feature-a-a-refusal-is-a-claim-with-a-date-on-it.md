@@ -6258,8 +6258,8 @@ twice.*
 
 The per-backend gate count was measured by `grep -c 'OptLevel >= 3'`. **About a fifth of
 the campaign's gates are spelled `if OptLevel < 3 then Exit;`** — the early-return shape
-that slices 7, 8 and 10 all use — and that grep cannot see it. Real ratio **23 : 7**, not
-the 15 : 4 reported.
+that slices 7, 8 and 10 all use — and that grep cannot see it. Reported ratio **23 : 7**, not the 15 : 4 previously
+recorded — **and 23 : 7 is ALSO WRONG. See 159.**
 
 **The tell was that adding a gate did not move the count: 17 before the slice, 17 after.**
 A measurement that fails to respond to a change you know you made is the cheapest
@@ -6961,3 +6961,76 @@ numbers, pass the job, and leave the metric at `n=1` with the counter back to fu
 **Success path observed, not modelled.** Restoring only the injected key — because the
 run's other learning was real and discarding it would have been worse than the injection —
 is the same care one level down.
+
+### 159 — A FINDING WHOSE SUPPORTING NUMBER KEEPS CHANGING WHILE ITS DIRECTION HOLDS IS ONE NOBODY RE-CHECKS
+
+*frank-optimize-b4, 2026-08-30, correcting the correction in face 148. **148's `23 : 7` is
+wrong; the number is `22 : 6`.***
+
+Three counts of the same quantity, three wrong answers, **every one of them the
+instrument**:
+
+| count | what it got wrong |
+| --- | --- |
+| **15 : 4** | missed a spelling — `grep -c 'OptLevel >= 3'` cannot see `if OptLevel < 3 then Exit;` |
+| **23 : 7** | counted **comments** — a raw grep counts prose |
+| **22 : 6** | the first that needs no asterisk |
+
+Both files carry exactly one continuation line *inside* a `{ }` block mentioning a gate in
+passing — `ir_codegen.inc:4434`, `ir_codegen_aarch64.inc:1280` — and **neither starts with
+a comment marker**, so no per-line filter removes them.
+
+**And the sibling ticket's original figure already carried the footnote "(a 5th match is
+prose)". The footnote was the defect, read as a footnote.** A caveat attached to a number
+does not protect the number; it documents that someone once knew better, and then travels
+with it as decoration.
+
+> **The conclusion never moved through any of it — and that is the danger, not the
+> reassurance.**
+
+x86-64 far ahead of aarch64 was true at 15:4, at 23:7 and at 22:6, so every re-count
+*confirmed the direction* and nobody had a reason to distrust the arithmetic. **A number
+that keeps being wrong in a way that never changes the conclusion is a number that will
+never be audited** — its only consumer is a claim it cannot falsify. This is 129 (*the
+smaller number is the one nobody questions*) generalised: **it is not smallness that
+protects a number, it is irrelevance to the argument it decorates.**
+
+The repair is the right one: the checker now comment-strips for real, and `--census` prints
+every match with file and line, **so the fourth number is checkable by a reader instead of
+trusted.**
+
+### 159a — `lib/**` IS A BUILD INPUT TO THE COMPILER, so "compiler/ is clean" does not mean the binary held still
+
+Slice 10's published shas do not reproduce at HEAD. `1055347eb44a` / `c8303ca1f5b2` were
+taken **before `sync.sh` rebased**; `de276c8f5` (xtensa) and `d2a61a524`
+(`lib/rtl/math.pas`, `bignum.pas`) landed underneath. **`compiler/` was untouched by both
+and the binary still moved — because the compiler links the RTL.**
+
+Re-measured at landed HEAD: baseline `1bca19929e04`, new `46ff97f32ed7`, **deltas
+byte-for-byte identical** (−2 / −10 / −6, all lower levels byte-identical).
+
+**That is exactly what a HEAD-minus-only-this-hunk baseline buys: the delta survived a
+changed tree; the absolute shas did not.** Second time this campaign has quoted a sha the
+rebase invalidated, which puts it beside 148a as one rule in two costumes —
+**an absolute number is only as portable as the tree it was taken on.** Operationally:
+**re-measure after the push, not before**, because `sync.sh` rebases nearly every sync here
+and the sha you cite pre-push exists only in your reflog.
+
+### 159b — and the checker was DECLARED, not just landed
+
+It added a step to `tools/gate.sh` — **not in its file-lane, and not obviously anyone's**:
+the pin gate every lane runs. One additive `step` line plus a comment, no change to existing
+steps, `bash -n` clean, quick gate green before it, and it **said so and offered to move
+it.**
+
+That is the right handling, and the coordinator's answer is that it stays: `tools/gate.sh`
+is shared tooling rather than the owner's permission machinery, a checker nothing runs is
+face 33, and **the alternative to landing it in the gate was landing it nowhere.** The
+precedent worth recording is the *declaration*, not the placement — an unfiled change to a
+shared gate reads as covered, exactly like an unfiled grant (operating rule 5).
+
+Note what the check does **not** do: it does not forbid a one-armed slice — most
+legitimately are — it forbids **one nobody noticed was one-armed.** Widening the delta is
+now an edit to that file, in the same commit, in the diff, with both honest resolutions in
+the failure message. Verified by breaking it three ways, including that a **prose mention**
+of a gate does not fire it, which is the exact defect it was built to end.
