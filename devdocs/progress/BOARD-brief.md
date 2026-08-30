@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:32 blocked:9 backlog:391 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2896 rejected:68`
+`working:5 unfinished:32 blocked:9 backlog:390 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2896 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-no-cross-target-can-build-the-compiler-itself` [A] — owner: frankS
+- `bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi` [A+S] — owner: frankA
 - `feature-c-corpus-busybox-applet` [C] — owner: frankC
 - `feature-pascal-corpus-expansion` [P] — owner: frankwasm
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
@@ -61,7 +62,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 
-## Ready — top 30 of 430, ranked
+## Ready — top 30 of 429, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -94,4 +95,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 
-_400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

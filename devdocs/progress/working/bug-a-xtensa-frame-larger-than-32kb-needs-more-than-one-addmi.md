@@ -3,10 +3,11 @@ slug: bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi
 track: A+S
 prio: 55
 type: bug
-status: backlog
+status: working
 found: 2026-08-30
 found-by: frankS
 summary: "`pascal26 --target=xtensa compiler/compiler.pas` fails with `target xtensa (call0): stack frame too large (> 32 KB) for a single ADDMI`. ADDMI shifts an 8-bit immediate by 8, so it reaches +/-32 KB in 256-byte steps; a frame bigger than that needs a second ADDMI or a materialised constant. This is NOT the reach family the parent ticket predicted xtensa would share with riscv32 -- it is frame size, and it was a THIRD distinct defect that ticket had not measured."
+owner: frankA
 ---
 
 # An xtensa frame larger than 32 KB needs more than one ADDMI
