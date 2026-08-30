@@ -79,4 +79,4 @@ mechanism was reproduced from synthetic C, yielding the reported error string
 verbatim. Re-check the five tstate jobs against the fix.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6237cbebb.
