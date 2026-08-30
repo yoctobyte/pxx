@@ -929,8 +929,29 @@ closed**, and rediscovered by a future batch if the classes survive.
   complexity, which is where the ticket says a crasher must come from, and found
   none in 268 comparisons. That is evidence, not proof: it narrows the class
   without closing it.
-- **Cross targets** — `--target` is implemented and ready (see the section
-  above); no cross batch run this sitting.
-- **Bitfield LAYOUT** (`sizeof` 12 vs gcc's 8) — structurally invisible to the
-  checksum oracle, so no batch will ever find it. Still unfiled.
+- **Cross targets** — **first ever cross batch RUN this sitting**, and clean:
+  100 programs at `--target aarch64`, seeds 50000-50099, through
+  `tools/run_target.sh` — **90 agreed, 10 skipped, 0 findings**. An i386 (ILP32)
+  batch followed at seeds 60000+.
+
+  The harness reported one thing *more* than a verdict, which is worth copying:
+  `NOT CHECKED: the slow ratio — the oracle matched aarch64's data model, not
+  its ISA, and ran natively.` It names the comparison it did **not** make rather
+  than letting a green stand for it. That is the same discipline as reporting
+  skips separately from passes, and the exact opposite of a rung that self-skips
+  `exit 0`.
+- **Bitfield LAYOUT — NOW FILED, and it is worse than this bullet said.** Filed
+  as `bug-c-a-long-long-bitfield-after-a-smaller-one-puts-later-members-at-the-wrong-offset`
+  [C p40]. The recorded shape (`sizeof` 12 vs 8) does not reproduce; the real one
+  is `unsigned a:1; unsigned long long b:33;`, where pxx starts a second
+  allocation unit and gcc packs one. **With a following member the SIZES MATCH
+  (16 both) and `offsetof` differs (12 vs 8)** — so the size assertion this
+  bullet implied is exactly the test that misses it, which is why the sharper
+  half went unrecorded for seven weeks.
+
+  This bullet's own reasoning was right and is now confirmed by measurement:
+  values are always correct, so the checksum oracle cannot fire, and the item
+  survived 443 clean comparisons this sitting exactly as predicted. **A layout
+  differential needs to compare OFFSETS, not sizes** — comparing sizes reproduces
+  this bullet's blind spot.
 - **Brace elision over rows** — pre-existing, unchanged.
