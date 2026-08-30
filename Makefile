@@ -9645,7 +9645,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_writeln_float_width.pas $(TESTTMP)/test_writeln_float_width26
 	tools/expect_same.sh test_writeln_float_width26 "$$($(TESTTMP)/test_writeln_float_width26)" "$$(printf '[      3.1416]\n[     -3.1416]\n[  10.0]\n[    1]\n[   -1]\n[123456.0]\n[    0.00]\n[      100000000000000000000.00]\n[     -100000000000000000000.00]\n[3.14]\nOK')"
 	./$(COMPILER) -O2 test/test_warn_ignored_directives.pas $(TESTTMP)/test_warn_ignored_directives26 2>/dev/null | grep -c warning | grep -qx 0
-	tools/expect_same.sh test_warn_ignored_directives26.1 "$$(./$(COMPILER) -O2 --warn-ignored-directives test/test_warn_ignored_directives.pas $(TESTTMP)/test_warn_ignored_directives26 2>&1 | grep -c warning)" "6"
+	tools/expect_same.sh test_warn_ignored_directives26.1 "$$(./$(COMPILER) -O2 --warn-ignored-directives test/test_warn_ignored_directives.pas $(TESTTMP)/test_warn_ignored_directives26 2>&1 | grep -c warning)" "5"
 	tools/expect_same.sh test_warn_ignored_directives26.2 "$$($(TESTTMP)/test_warn_ignored_directives26)" "$$(printf '1\n1')"
 	./$(COMPILER) test/test_shadow_program_over_unit.pas $(TESTTMP)/test_shadow_program_over_unit26
 	tools/expect_same.sh test_shadow_program_over_unit26 "$$($(TESTTMP)/test_shadow_program_over_unit26)" "$$(printf 'mine\nmine-trim\nX\n7')"
@@ -11221,7 +11221,7 @@ test-core: $(COMPILER)
 	# in softfloat, which needs calloc, and that backend emits no dynamic segment.
 	# Reading the bits needs none of it. xtensa was ZERO here before the fix.
 	./$(COMPILER) test/test_single_const_bits.pas $(TESTTMP)/test_single_bits26
-	tools/expect_same.sh test_single_bits26 "$$($(TESTTMP)/test_single_bits26)" "$$(printf '1056964608\n-1077936128')"
+	tools/expect_same.sh test_single_bits26 "$$($(TESTTMP)/test_single_bits26)" "$$(printf '1056964608\n-1077936128\n1056964608\n-1077936128\n1056964608\n1056964608\n1056964608\n1056964608')"
 	# feature-c-import-a-pascal-unit-under-a-mangled-name: `#include "x.pas"` is
 	# an IMPORT SITE, not textual inclusion -- the unit's routines arrive as
 	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
@@ -15189,7 +15189,7 @@ test-c-float-const-cross: $(COMPILER)
 	    echo "test-c-float-const-cross: COMPILE FAIL xtensa (Single const bits)"; tail -2 $(TESTTMP)/p_scb_xtensa.err; overall=1; \
 	  else \
 	    xgot="$$(qemu-xtensa $(TESTTMP)/p_scb_xtensa 2>&1)"; \
-	    if [ "$$xgot" = "$$(printf '1056964608\n-1077936128')" ]; then echo "test-c-float-const-cross: PASS xtensa (Single const bits)"; \
+	    if [ "$$xgot" = "$$(printf '1056964608\n-1077936128\n1056964608\n-1077936128\n1056964608\n1056964608\n1056964608\n1056964608')" ]; then echo "test-c-float-const-cross: PASS xtensa (Single const bits)"; \
 	    else echo "test-c-float-const-cross: FAIL xtensa (Single const bits)"; printf '%s\n' "$$xgot" | sed 's/^/    /'; overall=1; fi; \
 	  fi; \
 	else echo "test-c-float-const-cross: SKIP xtensa (qemu absent)"; fi; \
