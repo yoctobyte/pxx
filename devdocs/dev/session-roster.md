@@ -7615,7 +7615,7 @@ Applied here:
   absent** — a job to compile it would have to be written separately. So the tuple
   edit alone buys a download.
 
-**When it flips:** the moment `feature-typinfo-facade-unit` (p72) lands and the
+**When it flips:** the moment `feature-typinfo-facade-unit` (now in `done/`) (p72) lands and the
 rung can plausibly go green. *That* is when a recurring job earns its keep, because
 from then on its value is catching a regression rather than restating a known
 block. frankT adds the name then — small, in-lane, no ticket — and it is recorded
@@ -7755,7 +7755,7 @@ the tool and the three commits are still separately revertable.
 
 `6a8d4e974` records the `rtl-generics` call at `CORPUS_EXPECTED` itself: that
 adding a name makes the watcher fetch and warn but compile nothing, that the
-trigger is `feature-typinfo-facade-unit`, and the `install_lib_candidates.sh`
+trigger is `feature-typinfo-facade-unit` (now in `done/`), and the `install_lib_candidates.sh`
 contract written where a violation would otherwise surface only as a silent
 warning on an unattended box.
 
@@ -8803,7 +8803,7 @@ that a third failure it saw is not yet understood.
 
 frankA's call on the pointer bug's prio, and it is better than the alternative I would
 have accepted: leave it at 65 and add a **`Blocks:` edge** to
-`feature-typinfo-facade-unit`. *"This doesn't outrank things on its own merits, it
+`feature-typinfo-facade-unit` (now in `done/`). *"This doesn't outrank things on its own merits, it
 outranks them because of what sits behind it."* The ranker propagates down edges by
 design; hand-inflating the number **double-counts** the moment the edge exists.
 
