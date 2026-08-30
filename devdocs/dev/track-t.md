@@ -409,6 +409,14 @@ invisible one, since nobody re-reads `done/`.
 
 ## Rule: a coverage claim needs its BOUNDARY checked, not just its result
 
+**The mechanical version of this rule is `devdocs/dev/the-empty-tree-audit.md`:**
+run every guard against a scratch tree with an empty `Makefile` and an empty
+`test/`, because a guard that passes over nothing was never measuring anything.
+It needs no prior suspicion, it partitions the population for free, and it found
+two real defects in one pass — one of them a guard written earlier the same
+session by the agent running the audit. The rest of this section is the same
+error found by reading; that doc is how to find it by running.
+
 Track T's product is coverage claims — "the tier is green", "this sweep covered
 those commits", "that guard handles this case". The characteristic way they fail
 is not a wrong result but an unchecked boundary, and it is invisible from the

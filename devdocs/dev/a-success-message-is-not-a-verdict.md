@@ -123,6 +123,14 @@ list is open-ended and a liveness check is not.
   a waiter reads as patience; it is equally consistent with the thing it watches
   having died before it started.
 
+## The sibling: an empty population
+
+This doc is about a green whose **scope** nobody states. Its sibling is a green
+whose **population is empty** — a guard asserting a negative passes just as
+readily when there is nothing to check as when the property holds, and prints the
+same word either way. The audit that finds those, and the rule for disposing of
+what it turns up, is **`the-empty-tree-audit.md`**.
+
 ## Where the instances are recorded
 
 Faces 31, 45, 46 and the MAX_CODE ticket's own notes, in
