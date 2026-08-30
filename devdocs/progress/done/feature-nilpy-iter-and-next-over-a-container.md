@@ -88,4 +88,4 @@ above and a CPython diff of every gate row. Left in place rather than edited:
 the line is a record of what the ticket asked for when it was written.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit fb2604429.
