@@ -11298,28 +11298,21 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-30T14:57:36Z",
+  "date": "2026-08-30T16:49:11Z",
   "red": [
    "test-core#src:test/test_warn_ignored_directives.pas",
-   "test-asm#src:test/test_asm_emit_x64.pas",
+   "test-fgl#src:compiler/.pascal26.fixedpoint",
    "test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint",
    "tools-devtest#00",
-   "test-pascal-conformance#shard0/6",
-   "test-pascal-conformance#shard1/6",
-   "test-pascal-conformance#shard2/6",
-   "test-pascal-conformance#shard3/6",
    "test-pascal-conformance#shard4/6",
-   "test-pascal-conformance#shard5/6",
-   "size-canary#src:tools/size_canary.py"
+   "test-pascal-conformance#shard5/6"
   ],
-  "sha": "26cbbf4169fda4136bb6960233e38ebe454044fc",
+  "sha": "00779811b91295da6269e441d8a2800d34f278e6",
   "tier": "full",
-  "ver": "v396",
+  "ver": "v397",
   "verdict": "RED",
   "why": {
-   "size-canary#src:tools/size_canary.py": "esp32s3-bare.code: 43452 -> 56684 (+13232, +30.5%), over the allowed 47797 | esp32s2-bare.code: 43452 -> 56684 (+13232, +30.5%), over the allowed 47797 | esp32-bare.code: 43452 -> 56684 (+13232, +30.5",
-   "test-asm#src:test/test_asm_emit_x64.pas": "pascal26:1052: error: undefined variable (PxxDbgWants) | in: compiler/asmtext.inc | near: , ' no-room=' , AsmMemoNoRoom , ' pool=' >>> , AsmMemoPoolLen , | pascal26:1075: error: undefined variable (Px",
-   "test-core#src:test/test_warn_ignored_directives.pas": "expect_same: MISMATCH [test_warn_ignored_directives26.1] | --- expected | +++ actual | @@ -1 +1 @@ | -6 | +5"
+   "test-fgl#src:compiler/.pascal26.fixedpoint": "PASS map_str.pas | FAIL objectlist.pas -- compile error: | pascal26:9: error: generic constraint violated: TFPGObjectList<T> is constrained to `TObject`, but TThing is not TObject or a descendant of i"
   }
  }
 }
