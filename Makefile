@@ -4748,6 +4748,32 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test-core: qemu-user not present, skipping cross -O3 residency ==="; \
 	fi
+	# A TYPED CONST ARRAY STARTS ON THE BOUNDARY ITS ELEMENT TYPE REQUIRES.
+	#
+	# Guards the OFFSET half of the address -- TryBakeConstArrayIntoData's
+	# `AlignTo(DataLen, TypeAlign(elemTk))` in symtab.inc, which nothing
+	# asserted. The BASE half is df98fea47's AlignCodeForData, asserted by the
+	# esp-bare-*-data-align8 rows in test-esp; on a hosted image the base is a
+	# PT_LOAD boundary and so page-aligned, which is exactly why a residue
+	# observed HERE can only come from the offset.
+	#
+	# Not a test that cannot fail: pin v394 (53800fbeb0b6) reports MISALIGNED
+	# on all five rows and emits no OK token. Cross-run because the failure is
+	# invisible on x86-64 -- an under-aligned qword array returns the right
+	# answer there, and faults on xtensa's l32i.
+	# bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section
+	./$(COMPILER) test/test_const_array_align.pas $(TESTTMP)/test_const_align26
+	tools/expect_same.sh test_const_align26 "$$($(TESTTMP)/test_const_align26)" "CONST-ARRAY-ALIGN OK checked=5"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1 \
+	   && command -v qemu-riscv32 >/dev/null 2>&1; then \
+	  for arch in i386 aarch64 arm32 riscv32; do \
+	    ./$(COMPILER) --target=$$arch test/test_const_array_align.pas $(TESTTMP)/test_const_align_$$arch >/dev/null; \
+	    tools/expect_same.sh $$arch/test_const_align_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_const_align_$$arch)" "CONST-ARRAY-ALIGN OK checked=5" \
+	      || { echo "cross const-array alignment FAIL on $$arch"; exit 1; }; \
+	  done; echo "cross const-array alignment ok: i386 aarch64 arm32 riscv32"; \
+	else \
+	  echo "=== test-core: qemu-user not present, skipping cross const-array alignment ==="; \
+	fi
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
 	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \

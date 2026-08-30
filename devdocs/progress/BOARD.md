@@ -70,7 +70,6 @@ _none_
 | bug-a-a-bad-value-for-a-known-option-is-reported-as-an-unknown-option | A | 30 | bug | `--target=x` answers `unknown option: --target=x`, but --target is a known option with a bad value. Same for --xtensa-cpu= and --esp-profile=. The message sends the reader to hunt a typo in the FLAG NAME when the flag is right and the VALUE is wrong, and it makes every value-taking option indistinguishable from a nonexistent one to any tool or person probing the CLI. | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
-| bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section | A | 55 | bug | The typed-const data path does not align at all. A const array lands at whatever offset the preceding emitted bytes leave -- ANY residue, ODD ones included -- while the `var` path is 8-aligned in every cell measured. Originally filed as `a Double typed const misaligns the NEXT const array`; that framing is WRONG and is kept only so the links resolve. The Double is not a trigger, nothing is: with nothing declared before it, `const A: array[0..3] of Int64` is already misaligned, on all six targets. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why | A+S | 60 | bug | 75d2ba662 pads Code[] so data starts on its own page — filed and reviewed as a qemu PERFORMANCE fix (287x). Bisected: it also takes xtensa/windowed from 53 to 94 of 129 programs matching the oracle, lost=0 gained=41. A layout change fixed 41 CORRECTNESS divergences on a target its author was not looking at, the mechanism is unknown, and an unrelated layout change could take all 41 back. | — |
 | bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows | A | 55 | bug | The rel8 patch idiom `Code[p] := Byte(CodeLen - (p + 1))` truncates without any diagnostic when the span exceeds 127 bytes. A forward jump silently becomes a BACKWARD jump into the middle of an instruction. Measured: a jns meant to skip 181 bytes was written as -75 and the program segfaulted at a mid-instruction address. Latent today; armed the moment any emitter between a patch site and its target grows. | — |
@@ -102,6 +101,7 @@ _none_
 | bug-a-set-membership-truncates-the-test-value-on-32-bit-backends | A | 25 | bug |  | — |
 | bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits | A | 40 | bug | Pascal's shr is a LOGICAL shift at the operand's own width. pxx performs it at 64 bits regardless of the operand's declared type, so a negative Integer shifted right yields a 63-bit value instead of a 32-bit one. Writing it back to an Integer then truncates to a third answer, so the same expression gives two different wrong results depending on whether it is stored. | — |
 | bug-a-shr-reaches-the-ir-spelled-as-tkident | A | 20 | bug | Pascal's shr is lexed as an identifier — there is no tkShr token for it — so an IR_BINOP carrying shr carries Ord(tkIdent) as its operator. ir.inc:8878 substitutes Ord(tkShr) for exactly one consumer. Every other consumer must repeat that substitution or silently mistake `shr` for whatever it does with tkIdent. The wasm32 backend is now the second arm; normalise at IRAppend instead. | — |
+| bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit | A | 50 | bug | `@V[0]` where V is an `array of Double` or `array of Single` fails to COMPILE on i386, arm32 and riscv32 -- `unsupported float operator` -- in a program containing no float operation. The element type routes an ADDRESS computation into the softfloat binop lowering. `@V` (whole array) is fine, `@V[0]` on an `array of Int64` is fine, and real float work (`V[0] := 1.5`) is fine, so it is the indexed-address path specifically. | — |
 | bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug | A | 20 | bug | Sweep of every comment that ENUMERATES targets, checked against a derived backend list. Three miscounts: PXXVarBinOp's 'the other four targets' (five call it), symtab.inc's 'Every 32-bit backend (i386, arm32, riscv32)' (xtensa is a fourth and does NOT consult the shared decision), and PXXStrCmp3's 'the four cross backends' — that last one already filed as a live bug. A count reads as a complete enumeration, so nobody counts. | — |
 | bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture | A | 40 | bug | Five Makefile guards check the pinned stable with `test -x`, which tests the executable BIT — a property of the file, not of whether this CPU can run it. On a non-x86-64 host every guard reports healthy and the recipe then dies at exec with `Exec format error`, after printing a message saying there is no pinned stable at a path where one demonstrably is. Found on `via` (aarch64), where the repo ships only `stable_linux_amd64`. A reader would reasonably conclude the checkout is broken. | — |
 | bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire | A | 45 | bug |  | — |
@@ -700,9 +700,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2789)
+## done (2790)
 
-2789 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2790 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -828,7 +828,6 @@ _none_
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
-- [p 55] [A] bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section
 - [p 55] [A] bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows
 - [p 55] [A] bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
@@ -884,6 +883,7 @@ _none_
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
+- [p 50] [A] bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit
 - [p 50] [A+S] bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
