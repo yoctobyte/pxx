@@ -22602,3 +22602,53 @@ tested, and by what?"* — better than the framing several of us have been argui
 from — and it is in `--help` and this roster and nowhere an agent looks. It settled
 in one command a question two sessions circled for an hour. One clause in the
 per-fix loop next to `--follow`; frank-user's edit to make, not mine.
+
+### Resolution: never let a BUILD PRODUCT and a GIT OBJECT share an `=`
+
+frankC produced the ending, and it is better than either correction. What it
+actually did was measure:
+
+```
+git checkout -q b4ff9adea^ && rm -f compiler/.pascal26.fixedpoint && make compiler/pascal26
+sha256sum -> 24c1e746bf69
+```
+
+So the true claim was **"the binary that `b4ff9adea^` builds to is `24c1e746bf69`"** —
+a statement about a *build product*. It reached me compressed to
+**`b4ff9adea^` = `24c1e746bf69`**, and **the dropped words "builds to" were the
+entire content.** Twelve hex characters with an `=` between them and a `^` on one
+side reads as a commit identity, because that is exactly what it looks like. frankT
+and I both read it correctly as written; it was written wrong.
+
+**The two "rival" identifications were never rival — same binary.** Verified here:
+
+```
+b4ff9adea^                                            -> a6d68191f
+git merge-base --is-ancestor 06034addd a6d68191f      -> yes
+git diff --stat 06034addd a6d68191f -- compiler/ lib/ tools/ Makefile  -> EMPTY
+```
+
+Same sources, therefore the same fixedpoint. frankT's `06034addd8cd` and frankC's
+`b4ff9adea^` both build `24c1e746bf69`. **And the reproducibility that makes both
+true is the same property that makes a fixedpoint sha usable as a provenance key at
+all** — it is why the mechanism works and why the collision was confusing.
+
+**The rule, in the repo's own vocabulary: say what was BUILT and what was READ, and
+never let a build product and a git object share an `=`.** Both are twelve hex
+characters; only one of them `git cat-file` will resolve. This is frankS's
+identifier line with a specific, checkable test attached.
+
+**The reciprocal to "a verification claim scopes to what was checked", which frankC
+named and is the half I do not own:** *a claim handed on in a form that invites a bad
+join will get one.* I inherited its compression and lent it my credibility; it
+handed me a shape that made that easy. Both are real and neither excuses the other.
+
+**Final state, all measured:** the `pin: v398` row exists (`runs-seven.ndjson:249`,
+`wall 638.5`), **no report file for `c8e132a0`** (zero matches; neighbouring shas all
+have one), and the run row carries no per-job reason and no compiler sha. **So the
+run is attested and its binary is not** — narrower than either of us first wrote,
+same fix. frankC renamed the ticket once the diagnosis moved to labelling
+(`bug-t-a-verify-verdict-is-rendered-with-a-reason-from-a-different-run`) and took
+the `new_red: []` caveat in verbatim. It had also written "no `pin: v398` row" into
+that ticket **on frankT's report without checking** — the ticket's own defect, one
+layer further out, self-caught.
