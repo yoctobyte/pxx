@@ -6204,6 +6204,25 @@ test-core: $(COMPILER)
 	# `q div 10` does not turn a QWord above 2^63 negative. All 35 are FPC 3.2.2's.
 	./$(COMPILER) test/test_div_mod_mixed_signedness.pas $(TESTTMP)/test_divsign26
 	tools/expect_same.sh test_divsign26 "$$($(TESTTMP)/test_divsign26 | tail -1)" "total ok 35 / 35"
+	# The SAME operator family, the other axis, and the one the sibling above
+	# cannot see: a NEGATIVE dividend over a CONSTANT power of two. That is the
+	# only case the div/mod strength reduction can get wrong -- a bare `sar`
+	# floors where Pascal `div` truncates toward zero -- and the sibling uses
+	# VARIABLE divisors, so the pass (which needs IR_CONST_INT) never fires in
+	# it. The pass has been at -O2 since 13d4bba0c and ships in every emitted
+	# binary; its promotion ticket made this differential a CONDITION of
+	# promoting and it was never written.
+	# -O0 is a real control, not a duplicate run: the guard is `OptLevel >= 2`,
+	# so -O0 provably cannot use the pass and reaches the same answers by idiv.
+	# Sensitivity verified by deliberate break, not assumed: deleting the bias
+	# and leaving a bare `sar rax, k` makes 28 of the 35 lines wrong.
+	# All three levels assert ONE expectation, which is FPC 3.2.2's output.
+	./$(COMPILER) -O0 test/test_div_mod_negative_dividend_pow2.pas $(TESTTMP)/test_negdivpow2_026
+	$(TESTTMP)/test_negdivpow2_026 | diff -u test/test_div_mod_negative_dividend_pow2.expected -
+	./$(COMPILER) -O2 test/test_div_mod_negative_dividend_pow2.pas $(TESTTMP)/test_negdivpow2_226
+	$(TESTTMP)/test_negdivpow2_226 | diff -u test/test_div_mod_negative_dividend_pow2.expected -
+	./$(COMPILER) -O3 test/test_div_mod_negative_dividend_pow2.pas $(TESTTMP)/test_negdivpow2_326
+	$(TESTTMP)/test_negdivpow2_326 | diff -u test/test_div_mod_negative_dividend_pow2.expected -
 	# The same rule one operator family over: a COMPARISON picked its domain from
 	# the WIDER operand (a C rank rule), so `LongWord(3000000000) > SmallInt(-1)`
 	# was FALSE where FPC says TRUE -- Pascal widens the pair to a type that HOLDS
