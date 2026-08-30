@@ -370,14 +370,29 @@ stops resolving to `tyAnsiString`, no program can construct a wide string, so
 existing program. That is what lets them land one at a time, green, without
 holding every lock at once:
 
-    1. node-level element width (defs.inc + ast_arena.inc)
-    2. ir.inc:1794 — the one site that hardcodes elemSize := 1 / tk := tyChar
-    3. Length — a frontend shift over the existing byte count
-    4. the SIX per-backend COW guards          <- must precede step 5
-    5. break the alias in pasparser_lval.inc:6322/6424  <- LAST
+    1. ir.inc:1794 SYMBOL arm                             DONE 12111b1f2
+    2. AST-node element slot          (ast_arena.inc)
+    3. record-field element slot      (pasparser_decl.inc)
+    4. the SIX per-backend COW guards (ir_codegen*.inc)
+    5. Length — a frontend shift over the existing byte count
+    ---- only then ----
+    6. break the alias in pasparser_lval.inc:6322/6424    <- LAST
        (and change sysutils' UTF8Encode/Decode in the SAME commit: they are
         DOCUMENTED as the identity, so at that moment the documentation stops
         being merely stale and becomes a lie)
+
+**Steps 2 and 3 were not on the first version of this list, and their absence
+was the more dangerous omission.** `ir.inc:1794` derives its type from THREE
+entities and only ONE of them has a width slot:
+
+    AN_IDENT -> Syms[].TypeKind  + ElemType   EXISTS (deliberate, symtab.inc:4169)
+    AN_FIELD -> RecFieldType()   + nothing    UFldTk/UFldPtrElemTk, no string elem
+    else     -> ASTTk[baseNode]  + nothing    no AST node carries an element type
+
+So `rec.w[i]` and `(a + b)[i]` would index a wide string at stride 1, silently.
+And the AST-node slot is not optional polish: the wall this ticket exists to
+remove is `WideChar(u1) + WideChar(u2)`, which is an EXPRESSION, so step 2 is
+load-bearing for the actual goal.
 
 **Why step 4 must precede step 5, stated as a reason so nobody reorders it
 innocently.** Each backend guards copy-on-write with
