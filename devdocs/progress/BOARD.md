@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (327)
+## backlog (328)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -349,6 +349,7 @@ _none_
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
+| grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm | A | 55 | grant | GRANT: `ir_codegen_riscv32.inc` → frankS (Track S), scoped to the `SPECIAL_IN` arm | — |
 | grant-progress-py-to-pxx-a5-for-the-uncited-resolve-check | A | 50→45 | grant |  | — |
 | grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s | A+S | 55 | grant | GRANT: the xtensa arm of `EmitManagedLocalCleanupForTarget` → Track S | — |
 | idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 5 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
@@ -793,6 +794,7 @@ _none_
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
+- [p 55] [A] grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm
 - [p 55] [A+S] grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s
 - [p 55] [A+O] perf-o-promote-constant-divisor-strength-reduction-to-o2
 - [p 55] [A] refactor-a-two-predicates-answer-what-a-caret-yields

@@ -7105,3 +7105,51 @@ the tables rather than silently omitted.** An unmeasured row left out without co
 indistinguishable from a row that passed; saying why it is missing costs a sentence and
 prevents exactly the 149-class error where the reader assumes the untested spelling behaves
 like the tested one.
+
+### 161 — I FIXED ONE ARM OF A DOUBLE CASE AND CLOSED THE TICKET WITHOUT GREPPING FOR THE SIBLING
+
+*frankS, 2026-08-30, reporting its own miss from four hours earlier — unprompted.*
+
+`in` is reachable through **two shapes**. `x in someSetVar` is an `IR_BINOP` with a `tkIn`
+arm — implemented, measured green, ticket closed. **`x in [a, b, lo..hi]` with constant
+items never becomes a set at all**: the parser emits a builtin call with
+`procIdx = -SPECIAL_IN` and the backend compares and accumulates inline.
+
+> *I fixed one arm of a double case and closed the ticket without grepping for the sibling,
+> which is the one thing `normalise-dont-special-case.md` tells you to do before closing.
+> The sibling was two programs away the whole time.*
+
+That doc's rule is stated in one line — **if you fix a bug on one arm of a double case,
+grep for the sibling before closing the ticket** — and it was still missed by a lane that
+had spent the night finding exactly this shape in other people's code (156a's arm32
+under-alignment, found by grepping the sibling). **Knowing the rule and applying it to
+yourself are different acts**, and the second one has no external trigger: nothing fails,
+the ticket closes green, and the sibling waits.
+
+**What made it visible was classifying the tail rather than guessing at it.** All 23
+remaining xtensa compile failures partitioned into seven named categories — 5 call0
+displacement, 6 scheduler, 5 builtin-with-no-arm, 3 `SA_SIGINFO`, 2 by-design refusals, 1
+`IR_SET_SIGNAL`, 1 non-scalar result. **A bucket you have counted is a bucket whose members
+you have looked at**, which is the direct antidote to 144: an unspecific diagnostic merges
+defects, and a forced partition un-merges them.
+
+### 161a — AND THE FIX FOR A DOUBLE-CASE BUG MUST NOT ITSELF BE APPLIED TO ONE ARM
+
+`SPECIAL_IN` is missing from **both** 32-bit backends. `ir_codegen.inc`, aarch64, arm32 and
+i386 carry it; **riscv32 and xtensa do not**, confirmed failing on the same two programs on
+each — measured on riscv32, not assumed.
+
+The lane owns `ir_codegen_xtensa.inc` and not `ir_codegen_riscv32.inc`, so the obvious
+correct move is: fix xtensa, file riscv32 as a Track A ticket with the arm32 model cited.
+**That is the same defect one level up.** It leaves riscv32 as *"the next lane's
+surprise"* — and the ticket being repaired exists precisely because one arm was left.
+
+**So the grant was given rather than the work split.** A repair for a
+fixed-on-one-arm-only bug that is itself applied to one arm is not a partial fix; it is the
+bug, re-committed by someone who has just read the rule. The two 32-bit backends land the
+rule together, by the lane holding the model.
+
+Note the asymmetry that hid it: riscv32's diagnostic is the generic *"standard builtin
+calls not supported in bare-metal stage 1"* bucket — **face 144 still live on that
+backend** — so the gap was invisible there while xtensa at least failed loudly enough to be
+classified.
