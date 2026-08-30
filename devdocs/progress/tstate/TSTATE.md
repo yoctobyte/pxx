@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `5dbcc861e3fc` | 2026-08-30T04:42:43Z | GREEN (native) | 441.4s | `e46dbffaa80d` RED |
-| seven | `08cbfa20a11d` | 2026-08-30T05:49:23Z | RED (native) | 112.8s | `97c5fba007f9` RED |
+| seven | `c951ec710b33` | 2026-08-30T05:52:50Z | RED (native) | 112.3s | `97c5fba007f9` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -39,3 +39,4 @@
 - **test-asm#src:compiler/compiler.pas** — compiler/compiler.pas (seven): bad `97c5fba007f9`, last good `31198d3674df`, 2 commit(s) in range
 - **test-asm#src:test/hello.pas** — test/hello.pas (seven): bad `97c5fba007f9`, last good `31198d3674df`, 2 commit(s) in range
 - **test-asm#src:test/test_asmcore_x64.pas** — test/test_asmcore_x64.pas (seven): bad `97c5fba007f9`, last good `31198d3674df`, 2 commit(s) in range
+- **test-core#src:test/test_opt_store_reload.pas** — test/test_opt_store_reload.pas tools/expect_same.sh (seven): bad `c951ec710b33`, last good `08cbfa20a11d`, 3 commit(s) in range
