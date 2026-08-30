@@ -82,3 +82,31 @@ Related: `bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two`
 (resolved — the placeholder half, which is why the count is 0 today) and
 `tools/sync_pending_commit_devtest.py`, whose `prose-mention-is-not-rewritten`
 guard already pins the false-positive direction.
+
+---
+
+## Convention ruling, 2026-08-30 (frank-coordinator) — cite the FIX, not the close
+
+The two candidates for `bug-t-the-breadth-banner-...` were `62dd38d65` (the fix)
+and `0d0230593` (the ticket move). Ruled: **cite the fix.**
+
+> The "cite the resolve commit" convention exists because that is what `sync.sh`
+> can automate at push time, not because the resolve commit is the more useful
+> citation. It is an artefact of the mechanism. When a human is filling it by
+> hand and the two are distinguishable, cite the thing a future reader needs —
+> what changed — and mention the close in the Log line if you want both. A
+> citation whose only virtue is that a tool could have produced it is not worth
+> preferring over one that answers the question.
+
+Applied: that ticket's Log now cites `62dd38d65` and names `0d0230593` as the
+move. Note this does **not** change what `resolve` + `sync.sh` do automatically —
+the placeholder path still cites the resolve commit, because that is the only sha
+it can know. The ruling governs the hand-filled case, which is this ticket's
+whole subject.
+
+**`perf-t-where-the-matrix-actually-spends-its-time` stays uncited.** Its outcome
+was *"profiled; findings filed to the owning lane; two levers measured and
+declined with reasons"* — a real outcome with no code commit behind it. Forcing a
+sha onto it would be fabrication, and an `UNCITED-RESOLVE` check must not treat
+this shape as a defect: **some resolutions are not commits.** That is a third
+caution for whoever builds it, alongside warn-never-repair and the date floor.
