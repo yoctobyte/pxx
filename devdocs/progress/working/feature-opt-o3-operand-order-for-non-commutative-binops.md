@@ -1,8 +1,8 @@
 ---
 prio: 65
 track: A
-status: backlog
-owner: ""
+status: working
+owner: frank-optimize-b4
 ---
 
 # -O3: evaluate a non-commutative binop's operands right-first when the right is pure
@@ -95,3 +95,57 @@ the shape.
   scheduler" is this item)
 - Sibling split out at the same time: `feature-opt-o3-fuse-resident-read-and-widen-into-movsxd` (item B, worth −1)
 - Together with (B): the `three.pas` loop goes 18 -> 15 instructions.
+
+
+## 2026-08-30 — LANDED behind -O3, and the ticket's own -2 was wrong
+
+**Worth -1 instruction, not -2.** The estimate above was made by reading a
+disassembly and counting the two moves that looked removable; writing the pass
+showed why only one of them is.
+
+The obvious version — right into rcx, then left into rax — is **unsafe**.
+`ScratchSafeSubtree` does not promise rcx is untouched: its whitelist explicitly
+admits emissions using rax/rcx/rdx, and a nested BINOP loads its own right
+operand into rcx. Emitting left after setting rcx would clobber it. That version
+is safe only for a LEAF left, which is exactly the case the `-O2` mirror already
+takes — so what remains is the both-complex case, and there the win is one move.
+
+The safe form parks the **right** value instead of the left: park, emit left
+(which lands in rax where it belongs), then move rcx straight from the scratch
+register. Three moves become two; the restore disappears.
+
+**Legality is stricter than this ticket assumed.** The arm below needs only
+`ScratchSafeSubtree(right)` because it evaluates left FIRST. Reversing the order
+needs **both** sides pure — a left with side effects must not be moved after a
+right that can read them. That is not a belt-and-braces guard, it is the guard:
+dropping it is the pass's real failure mode, and the test catches it.
+
+**Result:** `three.pas`'s loop 18 -> **17** instructions. Campaign cumulative on
+that loop: **22 -> 17**.
+
+Controlled A/B at HEAD, baseline = HEAD with only this hunk reverted (new
+`ee260a116022`, base `3b567373c1ef`, both 1 round). All six byte-identical at
+-O0/-O1/-O2; -O3 smaller on all six:
+
+| program | -O3 base -> new |
+| --- | --- |
+| `perf/three.pas` | 18590 -> 18557 (**-33**) |
+| `bench/portable/mandelbrot.pas` | 25137 -> 25107 (**-30**) |
+| `examples/mandelbrot/mandelbrot.pas` | 122534 -> 122345 (**-189**) |
+| `examples/lisp/lispdemo.pas` | 105587 -> 105461 (**-126**) |
+| `examples/json/jsondemo.pas` | 446736 -> 446085 (**-651**) |
+| `examples/primes/sieve.pas` | 86511 -> 86406 (**-105**) |
+
+**Per-backend gate count** (the umbrella's new standing rule): x86-64 **16**,
+aarch64 **4**. This slice widened the gap by one, on the arm that was already
+ahead — recorded rather than excused; see
+`feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen`.
+
+**Non-vacuity.** Two deliberate breaks, both moving -O3 while -O0 stays correct:
+dropping the left-purity guard gives `leftimp=52` instead of 51, and mismatching
+the scratch register gives `pure=1007` and a truncated call log. The first is the
+one the ticket demanded — **and it only works because the value straddles a `shr`
+boundary.** An earlier draft used gV=100, where `100 shr 1` and `101 shr 1` are
+both 50, and the unsafe build passed. Standing rule 4 is about adjacency, and it
+applies to an ORDERING exactly as it does to a register: the reordered read must
+differ from the correct one, and round numbers are where it does not.

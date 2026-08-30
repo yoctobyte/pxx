@@ -3932,6 +3932,21 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_cmp32f326 "$$($(TESTTMP)/test_cmp32f326)" "$$(printf 'acc=189\none=63\ndone')"
 	./$(COMPILER) -O0 test/test_cmp_32bit_fold.pas $(TESTTMP)/test_cmp32f026
 	tools/expect_same.sh test_cmp32f026 "$$($(TESTTMP)/test_cmp32f026)" "$$(printf 'acc=189\none=63\ndone')"
+	# BOTH subtrees of a binop proven pure -> evaluate the RIGHT one first and park
+	# it in the scratch register, so the left value is produced last and is already
+	# in rax. Three moves become two. The arm below parks LEFT and needs a restore.
+	# The rows that matter are the IMPURE ones: the unsafe version of this pass is
+	# the one that checks only the right subtree, and it is caught by leftimp,
+	# where Bump's result straddles a `shr` boundary so a wrongly-early right read
+	# differs by exactly 1 (51 vs 52). A round number hides it -- 100 shr 1 and
+	# 101 shr 1 are both 50 -- which is standing rule 4 applied to an ORDERING.
+	# Verified against FPC 3.2.2; two deliberate breaks (drop the left-purity
+	# guard, mismatch the scratch register) each move -O3 while -O0 stays correct.
+	# feature-opt-o3-operand-order-for-non-commutative-binops (W1 slice 9)
+	./$(COMPILER) -O3 test/test_binop_operand_order.pas $(TESTTMP)/test_binoporder326
+	tools/expect_same.sh test_binoporder326 "$$($(TESTTMP)/test_binoporder326)" "$$(printf 'pure=957\nleftimp=51 log=L\nbothimp=-3 log=ab\ndone')"
+	./$(COMPILER) -O0 test/test_binop_operand_order.pas $(TESTTMP)/test_binoporder026
+	tools/expect_same.sh test_binoporder026 "$$($(TESTTMP)/test_binoporder026)" "$$(printf 'pure=957\nleftimp=51 log=L\nbothimp=-3 log=ab\ndone')"
 	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
 	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
 	# "evaluate both bounds before assigning the control variable"; eliding it

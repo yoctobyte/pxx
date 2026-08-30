@@ -6354,6 +6354,44 @@ begin
             EmitLoadVar(IRA[left]);
         end
         else if (OptLevel >= 3) and (not InLValueWrite) and
+                (ScratchDepth < 2) and
+                ScratchSafeSubtree(right) and ScratchSafeSubtree(left) then
+        begin
+          { -O3 W1 slice 9: BOTH subtrees proven pure -> park the RIGHT value in
+            the scratch register instead of the left, and the restore move
+            disappears. The scratch arm below parks left, evaluates right, then
+            needs THREE moves (park, rcx, restore); parking right needs TWO
+            (park, then rcx straight from the scratch reg) because the left
+            value is produced last and is already in rax where it belongs.
+
+            Reorder legality: both subtrees are ScratchSafeSubtree, so neither
+            has an observable effect and neither can read what the other writes
+            -- evaluation order is unobservable. The arm below cannot do this
+            with only `ScratchSafeSubtree(right)`, because a left with side
+            effects must not be moved after a right that could read them.
+
+            WHY NOT the obvious version -- right into rcx, then left into rax,
+            for one move instead of two. Because ScratchSafeSubtree does NOT
+            promise rcx is untouched: its whitelist explicitly admits emissions
+            that use rax/rcx/rdx (a nested BINOP loads its own right operand
+            into rcx). Emitting left after setting rcx would clobber it. That
+            version is only safe for a LEAF left -- which is exactly the case
+            the -O2 mirror above already takes. So this arm is the both-complex
+            remainder, and it is worth one instruction, not two. }
+          IREmitNode(right);
+          if ScratchDepth = 0 then
+            begin EmitB($49); EmitB($89); EmitB($C0); end  { mov r8, rax }
+          else
+            begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9, rax }
+          Inc(ScratchDepth);
+          IREmitNode(left);
+          Dec(ScratchDepth);
+          if ScratchDepth = 0 then
+            begin EmitB($4C); EmitB($89); EmitB($C1); end  { mov rcx, r8 }
+          else
+            begin EmitB($4C); EmitB($89); EmitB($C9); end; { mov rcx, r9 }
+        end
+        else if (OptLevel >= 3) and (not InLValueWrite) and
                 (ScratchDepth < 2) and ScratchSafeSubtree(right) then
         begin
           { -O3 W1 scratch: both operands complex, but the right subtree is
