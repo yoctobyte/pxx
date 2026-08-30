@@ -1,8 +1,8 @@
 ---
 prio: 50
 track: A
-status: backlog
-owner: ""
+status: done
+owner: frank-optimize-b4
 ---
 
 # Give data its own PT_LOAD (R+W, no X) instead of one RWX segment
@@ -113,3 +113,80 @@ get more valuable, the risk got legible. Cash it in while the lane that built th
 invariant still holds the context.
 
 Not a claim on anyone; ranked, not assigned.
+
+## Landed 2026-08-30 by frank-optimize-b4
+
+Three program headers on a hosted image — `PT_LOAD` code **R+X**, `PT_LOAD`
+data+bss **R+W**, `PT_GNU_STACK` — and five when there are externals. Verified
+by `readelf -l` *and by running the binary* on x86-64, aarch64, i386, arm32 and
+riscv32: two correctly-flagged non-overlapping LOADs on each, all printing
+their expected output. `--rtl-libc` (dynamic, INTERP and DYNAMIC inside the
+data segment), `-g`, `--proc-map` and `--emit-obj` all still work. The ESP
+bare-metal image is deliberately untouched at one RWX segment and emits
+`code=44940`, the same byte count as `pinned`.
+
+`p_vaddr = LOAD_ADDR + p_offset` is preserved on both segments, so no fixup
+arithmetic changed — which is also why the failure mode of getting the segment
+alignment wrong is a permissions fault and not a content fault. See below.
+
+### The scope hazard was closed with an Error, not with care
+
+`codeOffset` and the phdr count are one fact spelled twice, exactly as this
+ticket warned. Both 64-bit writers and the 32-bit writer now fail the build if
+they disagree:
+
+    if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
+      Error('internal: CODE_OFFSET disagrees with the program-header count');
+
+A silent 56-byte drift there produces an image that loads, runs, and lies about
+every address it reports.
+
+### The one thing this ticket did not anticipate: the split has a page-size dependency
+
+A single RWX segment has none. Two segments do, and it is not `p_align`: the
+loader maps each `PT_LOAD` from `PAGE_START(p_vaddr)` at the **hardware** page
+size, and `p_align` is only a congruence requirement. If the code/data boundary
+is not aligned to the loader's page, the data segment's mapping starts *below*
+the end of the code segment and re-maps the overlap R+W. The content is still
+correct — that is the `p_vaddr = LOAD_ADDR + p_offset` identity paying off — but
+real code in the overlap is no longer executable and the program dies on the
+first call into it.
+
+4096 is right for x86-64, i386, arm32, riscv32 and hosted xtensa. It is not
+right for **aarch64**, whose kernels ship 4, 16 or 64 KiB pages — which is why
+GNU ld defaults `max-page-size` to `0x10000` there. So `ELF_AARCH64_PAGE =
+65536` and `ElfSegAlign` picks per target.
+
+**Measured cost, `test/hello.pas`:**
+
+| target | before the split | after | delta |
+| --- | --- | --- | --- |
+| x86-64 | 68296 | 68296 | 0 |
+| aarch64 | 154240 | 199296 | +45056 (+29%) |
+
+Bounded rather than proportional — under 1% on `compiler/pascal26` at 9.5 MB.
+It is a *file* cost because a real linker avoids it with a virtual-address gap,
+and that is exactly what this ticket rules out of scope for breaking the
+identity.
+
+**Why 65536 and not 4096**, since the size is real: today, at one RWX segment,
+aarch64 binaries work on 4, 16 and 64 KiB kernels. Choosing 4096 would
+*introduce* a break where nothing is broken now, in exchange for size, by
+sizing a boundary to the page granularity we happen to test on. That is the
+same mistake as `bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why`
+with a worse blast radius: SIGSEGV on the first instruction of the overlap
+rather than one unlucky load. 65536 is the only value that regresses nothing.
+**The knob is one line** — `ELF_AARCH64_PAGE` in `elfwriter.inc` — and the
+consequence of turning it down is "aarch64 images are correct on 4 KiB-page
+kernels only".
+
+### Gate
+
+`tools/gate.sh quick` GREEN; self-host fixedpoint `a8e814c28442`, converged
+after 2 rounds. The windowed xtensa canary added in `df98fea47` is green.
+Timing was **not** re-measured — the boundary is still padded to at least 4096,
+so the shared code/data page the parent ticket removed cannot return, and the
+box was not free to measure on.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

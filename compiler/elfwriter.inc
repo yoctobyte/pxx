@@ -1590,6 +1590,9 @@ end;
   bound that matters here — CodeCapacity is, and it starts at 64 KiB. }
 const
   ELF_DATA_PAGE = 4096;
+  { aarch64 kernels ship with 4, 16 or 64 KiB pages; 64 KiB covers all three.
+    See ElfSegAlign below for why the loader's page and not ours decides this. }
+  ELF_AARCH64_PAGE = 65536;
 
 { THE DATA SECTION MUST BE WORD-ALIGNED, AND FOR YEARS IT ONLY WAS BY LUCK.
 
@@ -1646,10 +1649,45 @@ begin
           + 'will fault on it');
 end;
 
+{ THE PAD IS NOW A SEGMENT BOUNDARY, AND ITS SIZE IS THE LOADER'S PAGE, NOT OURS.
+
+  With code and data in separate PT_LOADs the loader maps each one from
+  PAGE_START(p_vaddr) at the HARDWARE page size, whatever that is -- p_align is
+  a congruence requirement, not a promise about granularity. If the boundary
+  between the two segments is not aligned to the loader's page, the data
+  segment's mapping starts BELOW the end of the code segment and re-maps that
+  overlap R+W. The content stays correct (our p_vaddr = LOAD_ADDR + p_offset
+  identity guarantees the same file bytes land at the same addresses either
+  way); the PERMISSIONS do not. Real code in the overlap becomes
+  non-executable and the program dies on its first call into it.
+
+  4096 is right for x86-64, i386, arm32, riscv32 and hosted xtensa: their Linux
+  base page is 4 KiB. It is NOT right for aarch64, whose kernel may be built
+  for 4, 16 or 64 KiB -- so aarch64 gets 65536, which is exactly why GNU ld
+  defaults `max-page-size` to 0x10000 on that architecture. The cost is up to
+  64 KiB of zero padding in an aarch64 image and it buys the property that the
+  image is correct on a kernel we have never run it on.
+
+  This is the same lesson as AlignCodeForData above, one level up: the data
+  section was word-aligned for years by a coincidence nobody tested, and 41
+  xtensa programs were the bill. Sizing this pad to the page size we happen to
+  test on would be the identical mistake with a bigger blast radius, because a
+  wrong answer here is a SIGSEGV on the first instruction of the overlap rather
+  than on one unlucky load. }
+function ElfSegAlign: Int64;
+begin
+  if TargetArch = TARGET_AARCH64 then
+    ElfSegAlign := ELF_AARCH64_PAGE
+  else
+    ElfSegAlign := ELF_DATA_PAGE;
+end;
+
 procedure PadCodeToPageBoundary(codeOffset: Int64);
+var segAlign: Int64;
 begin
   if CodePadStart < 0 then CodePadStart := CodeLen;
-  while ((codeOffset + CodeLen) mod ELF_DATA_PAGE) <> 0 do
+  segAlign := ElfSegAlign;
+  while ((codeOffset + CodeLen) mod segAlign) <> 0 do
     EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note above }
 end;
 
@@ -1665,14 +1703,20 @@ begin
     machine := 183
   else
     machine := 62;
-  phCount := 2;   { PT_LOAD + PT_GNU_STACK }
+  phCount := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK }
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
   begin
     PrepareDynamicData;
-    phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
+    phCount := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
+  { Code starts immediately after the program headers, so the constant and the
+    header count are one fact spelled twice and drift silently: the image still
+    loads, every address it reports is off by 56, and nothing fails. Checked
+    here because this file keeps two parallel copies of this writer. }
+  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
+    Error('internal: CODE_OFFSET disagrees with the program-header count');
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
@@ -1766,9 +1810,19 @@ begin
     writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
   end;
 
-  writeU32(f,1);writeU32(f,7);  { PT_LOAD, RWX }
+  { PT_LOAD #1 -- headers + code, R+X. p_filesz = p_memsz: nothing in this
+    segment is zero-filled at load, the page pad is real bytes in the file. }
+  writeU32(f,1);writeU32(f,5);  { PT_LOAD, R+X }
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
-  writeU64(f,filesz);writeU64(f,memsz);writeU64(f,$200000);
+  writeU64(f,codeOffset + CodeLen);writeU64(f,codeOffset + CodeLen);
+  writeU64(f,ElfSegAlign);
+  { PT_LOAD #2 -- data + bss, R+W and NO X. p_memsz runs to the end of bss,
+    which the kernel zero-fills past p_filesz. bssBase is dataBase + DataLen
+    rounded up to 8, so the gap is inside this segment and is zeroed too. }
+  writeU32(f,1);writeU32(f,6);  { PT_LOAD, R+W }
+  writeU64(f,codeOffset + CodeLen);writeU64(f,dataBase);writeU64(f,dataBase);
+  writeU64(f,DataLen);writeU64(f,(bssBase - dataBase) + BSSSize);
+  writeU64(f,ElfSegAlign);
   if ExternalCount > 0 then
   begin
     writeU32(f,3);writeU32(f,4); { PT_INTERP, R }
@@ -1810,14 +1864,20 @@ begin
     machine := 183
   else
     machine := 62;
-  phCount := 2;   { PT_LOAD + PT_GNU_STACK }
+  phCount := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK }
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
   begin
     PrepareDynamicData;
-    phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
+    phCount := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
+  { Code starts immediately after the program headers, so the constant and the
+    header count are one fact spelled twice and drift silently: the image still
+    loads, every address it reports is off by 56, and nothing fails. Checked
+    here because this file keeps two parallel copies of this writer. }
+  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
+    Error('internal: CODE_OFFSET disagrees with the program-header count');
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
@@ -1923,9 +1983,19 @@ begin
     writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
   end;
 
-  writeU32(f,1);writeU32(f,7);  { PT_LOAD, RWX }
+  { PT_LOAD #1 -- headers + code, R+X. p_filesz = p_memsz: nothing in this
+    segment is zero-filled at load, the page pad is real bytes in the file. }
+  writeU32(f,1);writeU32(f,5);  { PT_LOAD, R+X }
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
-  writeU64(f,filesz);writeU64(f,memsz);writeU64(f,$200000);
+  writeU64(f,codeOffset + CodeLen);writeU64(f,codeOffset + CodeLen);
+  writeU64(f,ElfSegAlign);
+  { PT_LOAD #2 -- data + bss, R+W and NO X. p_memsz runs to the end of bss,
+    which the kernel zero-fills past p_filesz. bssBase is dataBase + DataLen
+    rounded up to 8, so the gap is inside this segment and is zeroed too. }
+  writeU32(f,1);writeU32(f,6);  { PT_LOAD, R+W }
+  writeU64(f,codeOffset + CodeLen);writeU64(f,dataBase);writeU64(f,dataBase);
+  writeU64(f,DataLen);writeU64(f,(bssBase - dataBase) + BSSSize);
+  writeU64(f,ElfSegAlign);
   if ExternalCount > 0 then
   begin
     writeU32(f,3);writeU32(f,4); { PT_INTERP, R }
@@ -2002,14 +2072,30 @@ begin
       same as i386/arm32. Nothing esp-specific remains. }
   end;
 
-  phnum := 2;   { PT_LOAD + PT_GNU_STACK }
-  codeOffset := CODE_OFFSET32;
+  { A bare-metal ESP image keeps the original SINGLE RWX PT_LOAD: it loads into
+    SoC SRAM as one region, no loader enforces a second segment's permissions,
+    and the split would cost a page of padding in a memory measured in hundreds
+    of KB to buy nothing. Everything hosted gets code and data separated. }
+  if EspBareBoot then
+  begin
+    phnum := 2;   { PT_LOAD (RWX) + PT_GNU_STACK }
+    codeOffset := ESP_CODE_OFFSET32;
+  end
+  else
+  begin
+    phnum := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK }
+    codeOffset := CODE_OFFSET32;
+  end;
   if isDyn then
   begin
     PrepareDynamicData32;          { appends interp/dynstr/dynsym/hash/rel/dynamic }
-    phnum := 4;   { + PT_INTERP + PT_DYNAMIC }
+    phnum := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET32;
   end;
+  { See the same check in writeELF: the constant and the header count are one
+    fact spelled twice, and drift produces an image that loads and lies. }
+  if codeOffset <> ELF32_HEADER_SIZE + phnum * PROG32_HEADER_SIZE then
+    Error('internal: CODE_OFFSET32 disagrees with the program-header count');
   { Bare-metal ESP image loads into the SoC SRAM (one RWX region under qemu);
     everything else uses the classic i386 ET_EXEC base. }
   if EspBareBoot then
@@ -2146,11 +2232,27 @@ begin
     writeU16(f,phnum);writeU16(f,0);writeU16(f,0);writeU16(f,0);
   end;
 
-  { phdr32 (32 bytes): PT_LOAD RWX, whole file at loadBase }
-  writeU32(f,1);writeU32(f,0);                          { type, offset }
-  writeU32(f,loadBase);writeU32(f,loadBase);
-  writeU32(f,filesz);writeU32(f,memsz);
-  writeU32(f,7);writeU32(f,$1000);                      { flags, align }
+  { phdr32 (32 bytes each). The ESP bare image is one RWX segment covering the
+    whole file, as it has always been; every hosted image is code R+X then
+    data+bss R+W. }
+  if EspBareBoot then
+  begin
+    writeU32(f,1);writeU32(f,0);                        { PT_LOAD, offset 0 }
+    writeU32(f,loadBase);writeU32(f,loadBase);
+    writeU32(f,filesz);writeU32(f,memsz);
+    writeU32(f,7);writeU32(f,$1000);                    { flags RWX, align }
+  end
+  else
+  begin
+    writeU32(f,1);writeU32(f,0);                        { PT_LOAD, offset 0 }
+    writeU32(f,loadBase);writeU32(f,loadBase);
+    writeU32(f,codeOffset + CodeLen);writeU32(f,codeOffset + CodeLen);
+    writeU32(f,5);writeU32(f,ElfSegAlign);              { flags R+X }
+    writeU32(f,1);writeU32(f,codeOffset + CodeLen);     { PT_LOAD, data offset }
+    writeU32(f,dataBase);writeU32(f,dataBase);
+    writeU32(f,DataLen);writeU32(f,(bssBase - dataBase) + BSSSize);
+    writeU32(f,6);writeU32(f,ElfSegAlign);              { flags R+W, no X }
+  end;
   if isDyn then
   begin
     { PT_INTERP (R): the dynamic loader path. }

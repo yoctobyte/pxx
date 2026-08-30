@@ -1346,10 +1346,15 @@ const
   LOAD_ADDR        = $400000;
   ELF_HEADER_SIZE  = 64;
   PROG_HEADER_SIZE = 56;
-  { PT_LOAD + PT_GNU_STACK (bug-elf-missing-pt-gnu-stack: every image we emit
-    carries a GNU_STACK header now, RW/no-X, so newer kernels don't refuse to
-    load it for wanting an executable stack). }
-  CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE + PROG_HEADER_SIZE;
+  { THREE program headers on a hosted image: PT_LOAD(code, R+X),
+    PT_LOAD(data+bss, R+W), PT_GNU_STACK (RW/no-X --
+    bug-elf-missing-pt-gnu-stack: newer kernels refuse an image that asks for
+    an executable stack). It was two until the code/data split, and the code
+    started right after the headers then as it does now -- so THIS CONSTANT AND
+    THE PHDR COUNT ARE ONE FACT SPELLED TWICE, and the writers assert they
+    agree rather than trusting it. feature-a-second-pt-load-so-data-is-not-executable }
+  CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE + PROG_HEADER_SIZE +
+                     PROG_HEADER_SIZE;
 
   { Compile targets. x86-64 is the native/self-host target; others are
     cross-only and grow op-by-op (unsupported constructs error, never
@@ -1452,15 +1457,22 @@ var
 const
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
-  { PT_LOAD + PT_GNU_STACK, see CODE_OFFSET above. }
-  CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE + PROG32_HEADER_SIZE;
-  { Dynamic i386: ehdr + PT_LOAD + PT_INTERP + PT_DYNAMIC + PT_GNU_STACK. }
+  { 2 x PT_LOAD + PT_GNU_STACK, see CODE_OFFSET above. }
+  CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE +
+                       PROG32_HEADER_SIZE + PROG32_HEADER_SIZE;
+  { A bare-metal ESP image keeps the ORIGINAL single RWX PT_LOAD (+ GNU_STACK):
+    it loads into SoC SRAM as one region and there is no loader to enforce a
+    second segment's permissions, so the split would buy nothing and cost a
+    page of padding in a memory measured in hundreds of KB. }
+  ESP_CODE_OFFSET32  = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE +
+                       PROG32_HEADER_SIZE;
+  { Dynamic i386: ehdr + 2 x PT_LOAD + PT_INTERP + PT_DYNAMIC + PT_GNU_STACK. }
   DYNAMIC_CODE_OFFSET32 = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE +
                           PROG32_HEADER_SIZE + PROG32_HEADER_SIZE +
-                          PROG32_HEADER_SIZE;
+                          PROG32_HEADER_SIZE + PROG32_HEADER_SIZE;
   DYNAMIC_CODE_OFFSET = ELF_HEADER_SIZE + PROG_HEADER_SIZE +
                         PROG_HEADER_SIZE + PROG_HEADER_SIZE +
-                        PROG_HEADER_SIZE;
+                        PROG_HEADER_SIZE + PROG_HEADER_SIZE;
 
   INTBUF_OFFSET   = 0;
   INTBUF_SIZE     = 24;
