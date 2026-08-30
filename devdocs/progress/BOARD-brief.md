@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:32 blocked:9 backlog:389 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2888 rejected:68`
+`working:5 unfinished:32 blocked:9 backlog:388 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2888 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds` [A] — owner: frankA
 - `feature-c-corpus-busybox-applet` [C] — owner: frankC
 - `feature-opt-o3-now-has-differential-coverage-and-it-should-be-standing` [A+O] — owner: frank-optimize
 - `feature-pascal-corpus-expansion` [P] — owner: frankwasm
@@ -61,7 +62,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 
-## Ready — top 30 of 430, ranked
+## Ready — top 30 of 429, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -92,6 +93,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
-- `[p 60] [A]` bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds
+- `[p 60] [A]` bug-a-no-cross-target-can-build-the-compiler-itself
 
-_400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

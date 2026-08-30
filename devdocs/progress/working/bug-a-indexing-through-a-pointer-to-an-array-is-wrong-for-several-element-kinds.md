@@ -371,3 +371,62 @@ and it changes a predicate shared across the compiler. **A shared-predicate chan
 that fixes nothing, sitting next to a still-broken IR, reads as a fix to the next
 person.** The exact edit is banked in the ticket so whoever takes the IR half gets
 the parser half in a minute.
+
+## 2026-08-30, frankA — three of the readers fixed; the frozen-string arm is not
+
+Landed with a ten-row test against `fpc -Mobjfpc`. **Fixed:** a raw pointer
+element, a record-pointer element (with a field behind the second caret), an
+AnsiString element (read, write and `Length`), and a PChar element written
+inline. **Still broken, and it is the silent one:** a FROZEN-string element.
+
+### What the three fixes were
+
+One ambiguous tag, three readers. The caret arm tags a deref node with the
+ELEMENT's kind, so `tk = tyPointer` on `p^` means both "the pointee is a
+pointer" and "the pointee is an ARRAY whose element is a pointer".
+
+| reader | wrong answer | effect |
+| --- | --- | --- |
+| `IsNodeArray` | FALSE | the array path took the managed-STRING arm: `p^` loaded as a handle, indexed 1-based at stride 1 |
+| `IRNodePointerBase` | TRUE | lowered as pointer arithmetic: extra `load_mem`, stride 1, element 0's contents as the base |
+| `IsNodePChar` | FALSE | had `arr[i]` and `q^`/`q[i]`, not the two composed — silent wrong value |
+
+`DerefPtrArrayInfo` already knew the real shape; two of the three now ask it.
+
+### The two lowering fixes are disjoint — ablated, not argued
+
+With only `IsNodeArray` fixed, a Pointer/PChar/PRec element still segfaults.
+With only `IRNodePointerBase` fixed, an AnsiString element still segfaults.
+
+### The ticket's suspected site measured as NO CHANGE
+
+This ticket named the parser's `p^[i]` arm. I guarded it there first — it is the
+obvious fix and it reads right. Ablated properly it moved **nothing**: every row
+passes without it, *including* the two compile errors it was supposed to
+explain. Those come from `IsNodeArray`, which the **parser** also calls. Dropped
+rather than kept.
+
+The first ablation was itself wrong and is worth recording: `(not False and X)`
+parses as `(not False) and X` = `X`, which **inverts** a guard rather than
+disabling it. The rows passed anyway, which is how it survived a look.
+
+### What is left, and why my own table missed it
+
+**I asserted exit code, not output.** `ShortString` scored as PASSING in my
+element-type sweep on `rc=0` alone. Measured properly on the fixed binary:
+
+```
+string[7]     pxx [] [] len=0                 fpc [hi] [hi] len=2
+string[31]    pxx [] [] len=0                 fpc [hi] [hi] len=2
+ShortString   pxx [i <220 spaces>] [] len=7493989779944505344
+```
+
+A frozen-string element is a different arm from the three above —
+`TypeIsFrozenString(tk) and not isArr` in `IRLowerAddress`, plus whatever gives
+`Length` a garbage answer. `isArr` is now TRUE for this shape, so that arm is no
+longer the one being taken and the remaining fault is downstream of it. Not
+diagnosed further.
+
+Test: `test/test_ptr_to_array_of_pointers_index.pas`, wired in `make test`.
+Non-vacuous per row on `pinned` (139 / compile error / 139 / 139), measured
+individually because the file stops at the first compile error.
