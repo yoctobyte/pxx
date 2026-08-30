@@ -203,4 +203,4 @@ targets (`asmtext_386/arm32/a64/rv32/xtensa/wasm`) have the same shape and were
 left alone: same reasoning, and `asmtext_wasm.inc` is another lane's file.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 15e3d3585.
