@@ -385,4 +385,4 @@ different things is worse than none, and this one nearly got a fabricated number
 into a ticket.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 0b8841a33.
