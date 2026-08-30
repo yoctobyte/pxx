@@ -181,4 +181,4 @@ Unchanged against `pinned`: `test_deref_shape_through_arith_and_nonident_base`,
 both binaries — pre-existing and identical).
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6f894db66.
