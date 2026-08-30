@@ -3,7 +3,7 @@ slug: bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body
 track: P
 prio: 60
 type: bug
-status: backlog
+status: done
 blocked-by: []
 summary: "DIAGNOSED 2026-08-30 — the title is wrong and the diagnostic was right all along. `IEqualityComparer<TKey>` (inc/generics.dictionariesh.inc:56) is a nested specialization of a generics.defaults.pas template using `TKey`, a parameter of the ENCLOSING template `TCustomDictionary<CUSTOM_DICTIONARY_CONSTRAINTS>` whose parameter list arrives from a `{$DEFINE}` macro. It is minted as a concrete specialization instead of being deferred, so `TKey` is passed as a real type and is not one. Nothing to do with TList, nothing to do with file attribution. Original framing: The rtl-generics corpus wall, as of binary d5a35c8de13a: `unknown type: TKey` raised while replaying a `TList<T>` method body, where `TKey` is not a parameter of `TList<T>` and the surrounding tokens still show `SizeOf(T)` with `T` un-substituted. Symptom recorded from a measurement; the mechanism is NOT diagnosed and the obvious story (a body replayed against another template's parameter set) is a hypothesis only. Unmoved by the cross-unit interface-splice fix — it fires before splice placement can matter, so it is the thing actually holding `uses Generics.Collections`."
 owner: unassigned
@@ -492,3 +492,6 @@ P**: `IEnumerable<T>` is declared in neither the corpus nor our RTL, while FPC
 supplies it from the implicit ObjPas unit (`rtl/objpas/objpas.pp:86`). Control:
 a generic interface declared locally and used as a parameter type of a generic
 class compiles and runs, so the compiler handles the shape.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
