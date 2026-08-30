@@ -4,8 +4,8 @@ track: A+O
 type: bug
 blocked-by: []
 summary: "Fuzz finding pxx-self_case: at -O3 the compiler produces a DIFFERENT result than it does at -O0 and -O2 for a nested `case` statement, with no diagnostic. fpc-O0, fpc-O2, pxx-O0 and pxx-O2 all agree on 16452949249337348755; pxx-O3 alone says 16571182087083257235. Four independent implementations against one, so the program's meaning is a fact rather than a judgement call, and -O3 is the one that is wrong. --no-dce does not change it, so it is not the DCE pass. Contained to the -O3 free tier today, but it blocks promoting whichever pass is at fault to -O2."
-status: new
-owner: ""
+status: done
+owner: frank-optimize-b4
 ---
 
 # `-O3` alone computes a different result for a nested `case` statement
@@ -111,3 +111,40 @@ after the full gate", and a pass cannot be promoted while it is miscompiling.
 
 `-O3` agrees with `-O0`, `-O2` and both FPC oracles on seed 91162, and the pass
 at fault is named in the fix so the promotion decision has something to cite.
+
+## Resolution (2026-08-30, frank-optimize-b4)
+
+**Same defect as `bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements`,
+and that is a measurement rather than the assumption the two tickets were kept
+separate to avoid.** Fixing that one and re-running seed 91162 — the acceptance
+criterion written into the sibling — gives:
+
+```
+g O0: 16452949249337348755
+g O2: 16452949249337348755
+g O3: 16452949249337348755
+```
+
+matching all four oracles. The `case` statement at checkpoint 8 was not the
+subject; it was the shape that happened to contain a chained assignment whose
+reload the `-O3` store→reload pass elided after the emitter reordered the
+operands. Root cause, mechanism and the fix are written up in full in the
+sibling's Resolution section; there is nothing `case`-specific to record here.
+
+Worth keeping from this ticket: the two rule-outs cost real time and both still
+stand — **not DCE** (`--no-dce` diverged identically) and **not the
+`for`-to-MaxLongint bound** at `ir.inc:12072`. A third rule-out was added while
+closing it: **the IR is byte-identical at `-O2` and `-O3`** for the diverging
+body (`PXXDBG=a.ir:<proc>`), which is what moved the search out of `ir.inc`
+entirely and into the x86-64 emitter. That is the cheapest single measurement in
+this hunt and it should be the first step next time — it eliminated two of the
+nine candidate gate sites before any of them was probed.
+
+Also recorded because it was measured and came back negative: the three sites
+pre-ranked as suspects by shape (`ir_codegen.inc` `op = tkStar` +
+`IRKind[left] = IR_LOAD_SYM`, and the two in its family) were each disabled and
+rebuilt individually. All three still printed 222. **The shape that matches is
+not the shape that fires**, and one build each is what settled it.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

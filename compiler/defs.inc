@@ -4191,6 +4191,24 @@ var
     IR_LOAD_SYM arm, which re-extends rax to the symbol's width instead of
     loading. Always False below -O3 and on every non-x86-64 backend. }
   IRLoadRedundant : array of Boolean;
+  { The mark above is a PREDICTION of emitter behaviour; this is the check that
+    the prediction held. IREmitMachineCode sets it to CodeLen at the top of every
+    IR node's iteration, so inside a statement it holds "CodeLen when this
+    statement began emitting". The redundant-load arm elides only when CodeLen is
+    still equal to it — i.e. when the load really is the first thing this
+    statement emits, which is exactly the premise the mark asserts.
+
+    It exists because IRFirstEvaluated is a hand-maintained MIRROR of
+    IREmitNode's operand-order guard chain, and a mirror drifts: the -O3 W1
+    slice 9 arm (both subtrees pure -> park the RIGHT value and evaluate it
+    FIRST) was added to the emitter and not to the mirror, so `h := h * 31 xor
+    qword(c)` marked the load of h redundant, the emitter evaluated qword(c)
+    into rax first, and the load vanished into a value that was never loaded.
+    Four oracles said 635218 and -O3 alone said 222, silently
+    (bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements).
+    With this check a mirror that drifts costs a MISSED optimisation instead of
+    wrong code, which is what the mirror's own comment already claimed. }
+  ReloadRaxCodeLen : Integer;
   IRLine  : array of Integer; { source line of this IR instr (from CurLowerLine), 0 if unknown — DWARF -g }
   IRFile  : array of Integer; { .debug_line file index of that line (from CurLowerFile) }
   IRCount : Integer;

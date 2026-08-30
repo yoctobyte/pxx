@@ -222,7 +222,23 @@ PXXDBG=a.poisonslot compiler/pascal26 -O3 prog.pas out # does ANYTHING still rea
 make pxx-debug && gdb --args compiler/pascal26-debug prog.py /tmp/out
 ```
 
-The last two answer a question this repo keeps asking in different words: *was
+**`a.ir` at TWO `-O` levels is the cheapest disconfirming measurement here, and
+it is worth running before any bisect of an optimizer bug.** Dump the diverging
+routine's IR at the level that is right and the level that is wrong and diff
+them. If they are identical, every IR-level pass is exonerated in one command
+and the search is now inside the backend — that is half the candidate sites gone
+before the first rebuild. It settled
+`bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements` (33
+nodes, same numbering at `-O2` and `-O3`), where a site-by-site probe of nine
+`OptLevel >= 3` gates was the alternative at ~20s per rebuild each.
+
+*The wrinkle that makes it look like the tool does not apply:* `a.ir:<proc>`
+takes a ROUTINE NAME, and a program's MAIN BODY has none, so a top-level repro
+prints every routine but the one you care about. **Wrap the repro in a
+`procedure` first** — if the bug survives that (check, do not assume), you can
+ask for it by name.
+
+The next two answer a question this repo keeps asking in different words: *was
 the metadata never populated, or never read?* `a.symptr:<name>` (or `:*`) prints
 a pointer variable's recorded depth, pointee and ultimate base — the exact
 fields `IsNodePChar` and friends consult, so a shape that lowers wrong tells you

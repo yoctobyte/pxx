@@ -5360,12 +5360,29 @@ begin
         { -O3 store->reload elimination: the statement immediately before this
           one stored this very symbol and nothing at all was emitted in
           between, so rax still holds the value — only the width fixup is left.
-          Set by IRMarkRedundantReloads; always False below -O3. }
-        if IRLoadRedundant[node] then
+          Set by IRMarkRedundantReloads; always False below -O3.
+
+          The CodeLen test is not belt-and-braces, it is the SECOND HALF of the
+          premise. The mark is made by IRFirstEvaluated, a hand-maintained mirror
+          of the operand-order guard chain below, and the mirror does not know
+          about every arm — W1 slice 9 evaluates the RIGHT operand first and was
+          added to the emitter only. `ReloadRaxCodeLen` is CodeLen at the start
+          of this statement, so `CodeLen = ReloadRaxCodeLen` says "nothing has
+          been emitted yet in this statement", which is the mark's own claim,
+          verified where it is used instead of predicted where it is made. }
+        if IRLoadRedundant[node] and (CodeLen = ReloadRaxCodeLen) then
         begin
           EmitReExtendRax(IRA[node]);
           Exit;
         end;
+        { PXXDBG=a.reload:* prints the MARKS; this prints the marks the emitter
+          then DECLINED, which is the only visible cost of the check and the
+          number to watch if the mirror drifts further. A decline is not a bug —
+          it is the pass correctly refusing a stale prediction. }
+        if IRLoadRedundant[node] and PxxDbgWants('a.reload', '*') then
+          WriteLn('PXXDBG a.reload DECLINED node ', node, ' sym ',
+                  Syms[IRA[node]].Name, ' (', CodeLen - ReloadRaxCodeLen,
+                  ' bytes already emitted this statement)');
         EmitLoadVar(IRA[node]);
         { EmitLoadVar leaves floats in xmm0, but the IR value model carries
           floats as double bits in rax. Bridge xmm0 -> rax. }
@@ -9765,6 +9782,10 @@ begin
     calls DbgRecordRow in its statement loop). }
   DwarfLastLine := 0;
   DwarfProcFirstRow := True;
+  { -1 is "no statement has begun", so a redundant-load mark reached from
+    anything emitted before the statement loop (a prologue path) is declined
+    rather than trusted on the previous body's leftover value. }
+  ReloadRaxCodeLen := -1;
 {$ifndef PXX_NO_I386}
   if TargetArch = TARGET_I386 then
   begin
@@ -9864,6 +9885,9 @@ begin
   for i := 0 to IRCount - 1 do
   begin
     DbgRecordRow(i);   { DWARF -g line table }
+    { CodeLen as this statement begins — the redundant-load arm compares against
+      it to confirm the load really is the first thing emitted here. }
+    ReloadRaxCodeLen := CodeLen;
     case IRKind[i] of
       IR_LABEL:
         begin
