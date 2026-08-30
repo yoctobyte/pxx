@@ -990,6 +990,74 @@ unrelated two-line defects. Same ticket, same model, different context depth.
 
 ## Current assignments
 
+### LIVE — 2026-08-30 13:30 CEST, after the morning reboot (frank-coordinator)
+
+Owner's instruction this session: **Track A is the priority, two or three
+concurrent Track A sessions**; **host seven runs Track T and the local Track T
+session stays idle**; the **wasm tree is merged** (8f6f3e373 and the wasm tip are
+contained in `master` — `origin/wasm` still exists but is no longer where the
+work lives).
+
+`ListAgents` showed nine local interactive sessions, all idle, all started ~3
+minutes after boot. Three were dispatched; the rest were deliberately left idle,
+because idle is not a failure state and the token budget is shared.
+
+| session | assignment | files it OWNS this session |
+| --- | --- | --- |
+| frankA | `regression-test-asm-test-asm-emit-rv32` (p70, live red) | `compiler/rv32enc.inc` |
+| frank-optimize | `regression-test-core-test-opt-store-reload` (p70, live red) | `compiler/ir_codegen.inc`, `compiler/defs.inc` |
+| frankwasm | `bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver` (p60) | wasm backend, `lib/rtl/platform/wasi/**`, `test/wasm/**` |
+| frankT | **stood down** — seven owns Track T | none |
+| frankB, frankC, frankS, frank-rust, frank-user | idle by choice | none |
+
+**The three A dispatches are file-disjoint by construction, and that was the
+binding constraint on which tickets went out.** The highest-value A ticket
+available, `bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64`
+(p70), was **not** dispatched: it lives in `compiler/ir_codegen.inc`, which
+frank-optimize holds. It is queued for frankA the moment frank-optimize releases
+that file. Three concurrent A sessions is only safe as long as somebody is
+enforcing that; the ranker will not.
+
+**Seven had already bisected all three open regressions to ONE commit each**, and
+the tickets do not say so — each carries a stale plexus range of 88 commits and a
+`Track guessed as P` line that is wrong. The culprits, from `tstate/TSTATE.md`:
+
+- `test-asm#src:test/test_asm_emit_rv32.pas` → `2f81d8008a9b` (riscv32 PC-relative
+  encoders refuse what they cannot encode) — a compiler BUILD error,
+  `undefined variable (AIntToStr)` in `rv32enc.inc`, where `AIntToStr` is declared
+  at `util.inc:44`.
+- `test-core#src:test/test_opt_store_reload.pas` → `10c869750675`, which is the
+  commit that **added the failing test**. Red on both plexus and seven, so not a
+  host quirk.
+- The six `test-pascal-conformance` shards → `f6303d410d78`, which is a
+  **tstate-ticket doc-only commit touching one Markdown file**. That is the
+  "bad sha touches no buildable file" case: unlocalizable as printed. Not
+  dispatched, and it should not start a bisect on that sha.
+
+### plexus's own watcher is FAILED, and it is staying down
+
+`trackt-watcher.service` crash-looped 11 times after the reboot and systemd gave
+up. The cause is not a code defect:
+
+```
+twatch: /home/neo/trackt-watch has uncommitted changes — this looks like a dev
+checkout, not a dedicated watcher clone. Refusing.
+M devdocs/progress/tstate/plexus.json
+```
+
+The reboot killed the daemon mid-publish and left its own `plexus.json` dirty;
+the clone's guard against being run in a dev checkout then fires on it every
+start. `trackt-health.timer` and `trackt-regressions.timer` are active, and
+`twatch_web.py` on port 8377 is up, so the dashboard is live over stale data.
+
+**Left down on purpose.** The owner wants seven doing Track T and the box doing
+Track A, and a local watcher running full tiers makes every compile here 2-3x
+slower. The consequence is visible and expected: plexus's newest verdict is 1h+
+old and 72 testable commits behind. Restoring it is one command in the clone
+whenever the owner wants a second Track T host — and note the dirty file is
+**uncommitted state**, so it gets committed or stashed, never discarded.
+
+
 > **Historical — these are the assignments of 2026-08-17, not of now (checked
 > 2026-08-30, frankD).** `frank2`, `frank3` and `plexus-T` are not live sessions;
 > `plexus-T` shows as an offline Remote Control row. The section also names
