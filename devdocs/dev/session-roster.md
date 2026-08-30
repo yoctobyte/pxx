@@ -22203,3 +22203,44 @@ your own verdict; the stale file copy destroys other people's work.**
 same message: the C-ABI gate moved the callee's prologue and not the five
 call sites, so a guard that was correct only while an accident held became wrong
 the moment someone moved the accident.
+
+## A single place is only "single" if everything asks it AND it can answer for every population
+
+frankA, 2026-08-30, correcting a dispatch of mine that would have produced a
+broken fix if applied literally.
+
+I imposed "one named predicate, not a condition spelled at eight sites", and when
+the intra-C row went red I dispatched *"the guards want `CProcUsesCAbi(procIdx)`
+too."* **A straight substitution would have broken the bridge subject** exactly as
+the incomplete routing broke the intra-C one. The predicate had to **widen** at
+the same time:
+
+```pascal
+Result := (procIdx >= 0) and ProcCdecl[procIdx] and
+          ((not CProgramMode) or CUnitOfPascalProgram);
+```
+
+`not CProgramMode` names the **Pascal-caller** population; `CUnitOfPascalProgram`
+names the **intra-C** one; **both** reach the C ABI. The predicate as it stood
+named only the second, and the guards named only the first — so the defect was
+never "one site short of routed."
+
+**The corrected rule:** centralising a condition has two obligations, and naming
+the predicate only discharges the first. *Every* site must ask it, **and** it must
+be able to answer for every population that asks. A predicate extracted from one
+call site inherits that site's population as an unstated precondition, and the
+second caller silently violates it. When you route a new caller into an existing
+predicate, ask what population the original was written for **before** swapping.
+
+**And frankC's caution about coverage was right, measured.** Seven guards, not
+five — and **arm32 was red too**, found only by varying the shape: it needs
+`(int, double)`, because AAPCS32 wants a 64-bit argument in an **even** core-register
+pair while the word-based convention uses `(r1,r2)`. One shape of six finds it.
+riscv32 is genuinely unaffected — its prologue is not gated, so it has nothing to
+disagree with. *"Do not read a green as coverage when you have tested one shape"*
+has now paid twice on this ticket.
+
+**Not fallout, for whoever measures arm32 next:** `(double,int,double,int,double,int)`
+does not compile on arm32 — `bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area`
+[p45]. The **pinned** binary refuses the identical source with the identical
+message, so it pre-dates all of today's ABI work.
