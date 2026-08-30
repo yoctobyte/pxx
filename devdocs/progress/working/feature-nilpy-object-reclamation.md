@@ -4,6 +4,7 @@ prio: 55
 type: feature
 owner: frankS
 status: working
+summary: "NilPy object lifetime. Slices 1-4 landed 2026-07-23; 2026-08-31 added the two that made the rest look undone — the instance finalizer hook was installed only by pylib's CONTAINER constructors (410 MB -> 980 kB), and a construction stored into a VARIANT was retained twice on all three backends with an inline object arm (22932 kB -> 1044 kB). NEXT items 3 and 5 are DONE and were already done; item 4's aarch64 half is unreachable until NilPy builds for aarch64. Remaining: literal-chain ownership, pyeval per-exec leaks."
 ---
 
 # NilPy object reclamation — dict/list/instance/bound-method lifetime
@@ -97,6 +98,79 @@ mid-body tyClass watermark zero-init (hidden temps join ARC); refcounted
 pyeval closure objects (RAW2 magic + registry recycle stack, VT_PYCLOSURE=9
 in all ARC arms); construction-in-arg spill to owning temp (pathIdx>=1).
 doloop 595 -> 413 MB; plain container/bound-method churn probes flat.
+
+## Night 2026-08-30/31 (frankS) — two landed fixes, and the NEXT list re-measured
+
+**Every item below was measured, not read.** Probe shape: the same program at
+two loop counts, `/usr/bin/time` max RSS, CPython as the oracle for the printed
+value. Scratch probes, not tests, except where a test is named.
+
+**LANDED 1 — `1205cf286`: every managed field of every NilPy class instance
+leaked, unless the program happened to build a container.**
+`PXXObjFinalizeHook` is what `PXXObjRelease` calls at rc=0 to release an
+instance's children. All nine install sites are pylib/pyeval CONSTRUCTORS
+(`pylist_new`, `pydict_new`, `pybound_new`, bytes, the iterators), so a program
+that builds user-class instances and never a container ran with the hook nil:
+the block was freed and not one field released. 200k constructions of a class
+with one 2000-byte string field: **410 MB peak**. Adding an unrelated
+`dummy = [1]` to the same program made it **flat at 980 kB** — the leak was
+gated on a feature the program did not use. Fixed from pylib's own
+`initialization`, the way pyeval's section already fixed the identical shape for
+`PyIterCallHook`. Byte-identical code size. Guard:
+`test_nilpy_class_field_no_container_no_leak.npy` (RSS ceiling 20 MB; positive
+control run — it fails pre-fix by 20x), and the .npy carries a warning that a
+container added to it anywhere disarms it.
+
+**LANDED 2 — `ca8153b6c`: a construction stored into a VARIANT was retained
+twice, on all three backends with an inline object arm.** A NilPy construction
+is lowered through a conduit local (`inst := PXXObjAlloc(size)`, VMT stamp,
+ctor, then `LOAD_SYM`), so the variant store — decided in CODEGEN — never saw
+the `IR_CALL`. The AST-level arms ask `IRNodeYieldsOwnedRef` and see the
+`AN_CALL`, which is why a tyClass local and a tyClass FIELD were already flat
+and only the variant slot leaked. Three backends, three different wrong
+answers: x86-64 listed the three call kinds, aarch64 listed none, i386 retained
+unconditionally (so i386 leaked an ordinary `v = f()` too). One predicate,
+`IRNodeOwnsManagedObj`, forwarded in compiler.pas beside its string twin; it can
+answer because the conduit is flagged where it is minted
+(`SymIsCtorResultTemp`). 400k `o.w = Inner(i)` into a variant field: **22932 kB
+-> 1044 kB**. Guard: `test_nilpy_object_in_variant_slot_survives_churn.npy`,
+which is also the "shared instance in two locals" canary this ticket listed as
+unwritten — it reads `keep.v` and an `a is b` pair AFTER 50k constructions have
+churned through the same conduit, so it fails in the other direction too.
+
+**The NEXT list below is STALE in three places. Re-measured:**
+
+- **Item 3 (class-typed FIELDS in the finalizer) is DONE and was already done.**
+  `ClassFieldNeedsFinal` admits `isNilPy and tyClass` (rtti_emit.inc:66-71),
+  `rtti_emit.inc:1465` stamps member kind 6, and `PXXRecordRelease` has the
+  kind-6 arm (`PXXObjRelease` on the child). What made it *look* undone is
+  LANDED 1: the walker was never reached.
+- **Item 5 (`d = None` rebind) is DONE for a local, and the FIELD case was never
+  a missing release** — `o.w = None` over a variant field measured flat once
+  LANDED 2 removed the double retain. The `AN_IDENT` scalar-rebind arm is
+  ir.inc:10082.
+- **Item 4 is HALF wrong and the surviving half is smaller than it reads.**
+  The aarch64 inline `EmitVariantClearA64`/`RetainA64` really do lack the object
+  arms (one lower-bound compare against `VT_PROMO_BASE`; tags 7..10 fall
+  through) — but that is **unreachable today**, because NilPy does not build for
+  aarch64 at all (`bug-a-nilpy-on-cross-targets-four-remaining-walls`; the wall
+  has MOVED and that ticket's table is stale — it is now
+  `indirect call with more than 8 parameters` at ir_codegen_aarch64.inc:3309,
+  one of six separate `> 8` refusals on that backend). The epilogue half —
+  "scope-exit tyClass release is x86-64 only" — is TRUE (none of the five cross
+  arms in `EmitManagedLocalCleanupForTarget` has a tyClass case) and is **bounded
+  at one object per scope, not per iteration**: the loop case is covered by the
+  IR-level rebind ARC, which is target-independent. Measured on arm32 (the one
+  cross target NilPy reaches): `x = Node(i)` 400k times is FLAT, as is
+  `o.w = Node(i)` into a variant field, and the churn test prints the right
+  answer.
+  **Residual question, owned by this ticket:** arm32/riscv32/xtensa take NO
+  retain when boxing an object into a variant (`VariantTagForTk` then fill, no
+  `PXXObjRetain`), which is right for a construction and wrong for a borrow —
+  yet a borrow-then-drop probe (`b.v = a` in a callee, then 400 constructions of
+  churn) printed correctly on arm32. It is balanced by the missing scope-exit
+  release, so **fixing either half alone turns a bounded leak into a UAF.** They
+  move together or not at all.
 
 NEXT (ranked):
 1. **Literal-chain ownership**: list/dict literals lower as Self-returning

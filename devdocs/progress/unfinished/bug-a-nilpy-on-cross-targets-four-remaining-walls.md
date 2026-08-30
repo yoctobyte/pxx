@@ -3,7 +3,7 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-summary: "After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall."
+summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32 and xtensa `a heap arena needs mmap`, wasm32 `undefined variable (SYS_openat)`. Five walls, not four. ~53 .npy tests stay cross-blind on everything but arm32."
 status: unfinished
 owner: claude-A
 ---
@@ -32,6 +32,24 @@ for t in i386 arm32 aarch64 riscv32; do
   ./compiler/pascal26 --target=$t /tmp/v1.npy /tmp/v1_$t && tools/run_target.sh $t /tmp/v1_$t
 done
 ```
+
+## Re-measured 2026-08-31 (frankS) — read this table, not the 2026-08-21 one
+
+One command per target, `print(1+1)` as the source, at `96f92002f`:
+
+| target | wall, today |
+| --- | --- |
+| **arm32** | **NONE — it builds and RUNS.** `test_nilpy_object_in_variant_slot_survives_churn.npy` prints CPython's own answer under `qemu-arm`, and RSS is flat over 400k constructions. The SIGILL below is fixed. |
+| **i386** | `target i386: symbol kind not supported yet (load)` — unchanged |
+| **aarch64** | `target aarch64: indirect call with more than 8 parameters not supported` (ir_codegen_aarch64.inc:3309). NOT the "aggregate result" message below; the wall moved. It is one of SIX `> 8` refusals on that backend — constructor, external, variadic external, cdecl indirect, indirect, virtual — i.e. aarch64 has no stack-argument passing for five of six call kinds, and the direct call is the only one that does. That is one mechanism, refused six times. |
+| **riscv32** | `a heap arena needs mmap, which this profile has not` — unchanged |
+| **xtensa** | same mmap wall (not in the 2026-08-21 table at all) |
+| **wasm32** | `undefined variable (SYS_openat)` (not in the table either) |
+
+Cost of the aarch64 wall, so it is not underrated: it is what makes the aarch64
+half of `feature-nilpy-object-reclamation`'s item 4 unreachable — the inline
+`EmitVariantClearA64`/`RetainA64` object arms cannot be tested by any NilPy
+program, because no NilPy program compiles for that target.
 
 ## Current walls (2026-08-21, at the sha that resolved the binop gate)
 
