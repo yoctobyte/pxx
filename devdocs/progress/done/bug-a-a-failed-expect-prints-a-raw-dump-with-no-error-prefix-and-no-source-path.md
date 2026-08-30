@@ -173,4 +173,4 @@ same line numbers, one such line each, before and after.
 `tools/gate.sh quick` -> GREEN 7/7.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 116104a9c.
