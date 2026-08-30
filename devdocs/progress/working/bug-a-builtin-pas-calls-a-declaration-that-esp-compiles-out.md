@@ -2,8 +2,8 @@
 track: A
 prio: 50
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: claude-A
 blocked-by: []
 summary: "`builtin.pas` will not compile on a bare ESP target (xtensa or riscv32, identical): it calls two names — `PXXVarBinOp` (:1148) and `PxxSciDigits17` (:1702) — from UNGUARDED code, while their declarations sit inside `{$ifndef PXX_ESP}` (`builtinheap.pas:407-441`). MEASURED 2026-08-30: exactly those two, of the 17 declarations that block removes; the other 15 have no caller in `builtin.pas` and are cleanly excluded, so the guard is 15/17 correct and this is a two-callsite leak, NOT a root cause behind the 22 `(not TargetIsEspClass)` arms. The ticket's own disproof check fired — see DISPROOF RUN."
 ---
@@ -168,3 +168,102 @@ numbers above are interchangeable — but **a fix applied to `compiler/builtin/`
 alone will not change this measurement until a pin**, and re-running the
 falsifier with `pinned` will show the identical two errors. That reads exactly
 like "the fix didn't work".
+
+---
+
+## THIRD FRAMING (claude-A, 2026-08-30): `builtin.pas` never defines `PXX_ESP`, so its guards have never run
+
+The two framings above locate the defect in *which declarations are guarded*.
+Neither holds, because the guard in **`builtin.pas`** is not leaking — **it is
+not running**, and never has.
+
+`PXX_ESP` is **not a compiler-provided symbol**. The compiler provides
+`PXX_ESP_BARE` (`lexer.inc:1148`). `PXX_ESP` is created by exactly one line,
+`builtinheap.pas:18`:
+
+```pascal
+{$ifdef PXX_ESP_BARE}{$define PXX_ESP}{$endif}
+```
+
+Conditional defines do not cross unit boundaries. `builtin.pas` has three
+`{$ifndef PXX_ESP}` regions — 62, 436, 1409 — and **defines `PXX_ESP` nowhere**.
+All three have compiled on every target since they were written.
+
+### Proven with a canary, not by reading
+
+`CANARY_NOT_PASCAL @@@ ;` planted inside `builtin.pas`'s own region at line 62,
+compiled for bare xtensa:
+
+| | result |
+| --- | --- |
+| without the define | `pascal26:63: error: unexpected token …` — **guard inert, canary compiled** |
+| with `{$ifdef PXX_ESP_BARE}{$define PXX_ESP}{$endif}` added | no error at 63 — guard honoured |
+
+frankS's 15/17 measurement was of **`builtinheap.pas`**'s guard, which does work.
+That is a different guard in a different unit, and it is correct. The two were
+being read as one.
+
+### Why three dead guards never broke anything
+
+The only region that matters, 1409, nests `PXX_ESP` **inside**
+`{$ifndef CPURISCV32}{$ifndef CPUXTENSA}`. The ISA guards do the real work; the
+`PXX_ESP` layer is decorative. So the file has looked protected to everyone who
+grepped it — which is exactly what happened, twice, to two sessions.
+
+### N is NOT 2 — the queue exists, in a second species
+
+The disproof rule watched for another undefined **name** and stopped when none
+appeared. The queue is **soft-float kernels** instead. With the define added and
+the two named functions guarded:
+
+```
+step 0   undefined PXXVarBinOp (1148), undefined PxxSciDigits17 (1702)
+step 1   -> no FPU and __pxx_d2i_rne is not linked     (1235, VariantToDouble)
+step 2   guard the Variant* group
+         -> no FPU and __pxx_dcmp is not linked        (1586)
+step 3   ...
+```
+
+Identical on bare riscv32, line for line. Each guard exposes the next, and each
+step is a decision about what bare ESP offers rather than a mechanical fix.
+
+### The diagnostic's own advice does not work
+
+`uses softfloat, builtin;` fails **identically** — same kernel, same line — on
+both bare targets. The unit is found (no unit-not-found error) and the check
+still refuses. Either the check cannot see softfloat's kernels or the message is
+stale. Not chased here; it deserves its own ticket.
+
+### The fork (open — for the coordinator or Track U)
+
+- **(a)** guard two callers + add the define — **does not make `uses builtin;`
+  compile** (step 1 above). Not a fix.
+- **(b)** guard the whole float/variant surface on bare ESP, iterating to clean.
+  Coherent with the builtinheap guard's stated intent; open-ended step count.
+- **(c)** make the soft-float kernel check satisfiable on bare ESP. Contradicts
+  the size rationale the guard exists for — `1a526a89d` just removed 13,232 B
+  from every bare image on exactly that argument.
+- **(d)** close as working-as-intended: `uses builtin;` is unsupported on bare
+  ESP, the 22 arms stay, and the three inert regions in `builtin.pas` are
+  **deleted or corrected** — a guard that has never run is worse than no guard,
+  because it reads as protection.
+
+**Recommended: (d) plus the deletion.** Not for being less work: the entropy stub
+does not depend on this, the 22 arms are already the honest documented
+constraint, and (b) commits someone to an open-ended sequence of judgement calls
+about a profile nobody has asked to run `uses builtin` on. If (b) is wanted it
+should be ranked as its own feature ticket, not as this bug.
+
+### Method note for whoever continues
+
+No repo file was edited to establish any of this. The probes ran against an
+isolated copy of `compiler/builtin` with a **copied `pascal26` binary**: the
+compiler resolves its builtin tree relative to **the binary's own directory**,
+not the cwd, so copying the binary next to a scratch tree gives a fully isolated
+harness. That also avoids editing `builtinheap.pas`, which `feature-unicodestring-model`
+(owner frankwasm) currently holds.
+
+**The two trees are no longer byte-identical** — `builtinheap.pas` differs after
+`1a526a89d` — so the note above about `compiler/builtin` and
+`stable_linux_amd64/default/builtin` line numbers being interchangeable has
+expired.
