@@ -1515,3 +1515,63 @@ retrying"* on this very push, so the shas the commits were authored as no
 longer exist. Two agents cited ghost shas today for exactly this reason, and
 "confirm it landed" and "read the sha after it landed" are different
 instructions.
+
+## The acceptance test, run at last — and the wall falls in a DEFAULT build
+
+The ticket's own goal, stated at the top, is one line from `jsonscanner.pp`:
+
+```pascal
+S := Utf8Encode(WideString(WideChar(u1) + WideChar(u2)));
+```
+
+Nothing in this campaign had actually run it. 7c said "the wall is down" from the
+lowering's side; this is the line itself, measured, against FPC 3.2.2 with
+`uses cwstring`:
+
+| input | pxx | FPC |
+| --- | --- | --- |
+| `E9` + `20AC` (BMP, two characters) | `5: 195 169 226 130 172` | identical |
+| `D83D` + `DE00` (surrogate pair, ONE character U+1F600) | `4: 240 159 152 128` | identical |
+
+Landed as `test_widestring_jsonscanner_wall`.
+
+**The surrogate line is the one with teeth.** Transcoding each unit on its own
+yields CESU-8 — two unpaired surrogates, six bytes — which is a plausible wrong
+answer that no length check on the BMP line would catch. Four bytes is the proof
+that the pair was combined, not concatenated.
+
+### The finding: no `PXX_WIDE_PAYLOAD` needed, and that is what makes it real
+
+That test carries **no define**, and it was written that way deliberately after
+checking the obvious failure: **real-world FPC source will never carry a pxx
+define**, so a wall that falls only under `{$define PXX_WIDE_PAYLOAD}` is a wall
+that is still standing for the file this campaign is named after. Every other
+test in the family sets the define, and every one of them would have reported
+success while `jsonscanner.pp` stayed uncompilable.
+
+It works ungated because **the gate covers the type NAMES, not the type.**
+`pasparser_decl.inc:497` widens `widestring` / `unicodestring` behind the define;
+`WideChar` is untouched by it. So `WideChar + WideChar` is a genuine two-unit
+UTF-16 value in a default build, and 7c's assignment conversion transcodes it on
+the way to an AnsiString. Verified by removing the `WideString(...)` cast and
+`Utf8Encode` entirely and getting the same four bytes — both are pass-throughs
+once the concat is wide.
+
+Measured against `pinned` as well: it already passed there, so this is a
+verification of 7c rather than a consequence of 6d. **The campaign hit its
+acceptance criterion at 7c and nobody checked for two steps** — a goal stated in
+the first paragraph of the ticket and not tested until after the last carrier
+landed. Worth stating plainly rather than quietly filing the green: the
+measurement that ends a campaign should be the one it opened with.
+
+### Still gated, and correctly so
+
+Declaring `w: WideString` still needs the define — without it that name is the
+byte alias it has always been, measured this session:
+
+    no define:   Length(w)=5  w[4]=195     (UTF-8 bytes, the old alias)
+    with define: Length(w)=4  w[4]=233     (UTF-16 units, é = U+00E9)
+
+That gate is a separate decision from the wall and should stay until the
+element-width model has run against real code. What this section establishes is
+narrower and more useful: **the escape path does not depend on it.**
