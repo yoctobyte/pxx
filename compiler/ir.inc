@@ -8784,6 +8784,35 @@ begin
         cpi := FindProc('pystr_repeat');
         if cpi < 0 then Error('Nil Python: pystr_repeat (pylib) not loaded');
         left := IRLowerCallArg(cpi, 0, argVal, Procs[cpi].Params[0].IsRef);
+        { `ASTTk[argVal]`, NOT `Procs[cpi].Params[0].TypeKind`, and this line
+          has already nearly been "fixed" once. It looks wrong: the arg node is
+          tagged with the ORIGINAL expression's type rather than the parameter
+          the callee declares, and for a string literal those differ.
+
+          They differ correctly. The tag must describe what IRLowerCallArg
+          actually RETURNS, not what the parameter is declared as -- on the
+          plain path that is a freshly copied managed temp, which the original
+          node's type describes and the parameter's kind does not. Same
+          invariant IRCoerceCharArrayArg states from the other side (~:2995):
+          convert the VALUE inside IRLowerCallArg and the arg node keeps the old
+          tag, so the callee reads a handle as one byte.
+
+          Measured 2026-08-30, this change ALONE and nothing else, self-hosted
+          at 66d1836a8b0d: `len("a" * 3)` SEGFAULTS. Not a wrong value -- a
+          crash. frankB measured the same edit as one wrong row in fourteen on a
+          different probe; either way it is a fresh regression, not a latent
+          correctness fix.
+
+          The trap is that it becomes right only in company. An optimisation
+          that makes IRLowerCallArg hand back the literal's own managed handle
+          would make the parameter's kind the honest tag -- and 9588c8535 did
+          exactly that, changed what the call produces WITHOUT changing this
+          tag, and broke 24 NilPy jobs. Reverted in 72b4c47a7; the perf ticket
+          is in rejected/, superseded 36 minutes after it landed. So: one change
+          or nothing, in either direction. If you are here because this line
+          disagrees with the parameter, build with just your edit and run
+          `x = "a" * 3` before you believe it.
+          perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call }
         first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[argVal]);
         { IRLowerCallArg, not a raw IRLowerAST: parameter 1 is an Int64, so a
           PROMO count narrows through PXXPromoToInt64Wrap there. Lowered raw it

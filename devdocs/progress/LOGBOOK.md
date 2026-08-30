@@ -73,3 +73,15 @@ nothing and defeats the point of keeping this file.
   hook must match text, and one that parsed shell well enough to tell a `-m`
   string from an argument would be worse to maintain. Rephrasing is enough.
 2026-08-30 | frank-user | devdocs/progress/tstate/bench.tsv + {plexus,seven}.json | Checked whether the idle bench actually accumulates numbers on its own. It does not: 17178 rows, hosts are borg 11242 / plexus 3747 / xeon 2185 and seven ZERO — borg and xeon are retired, plexus's last row is 2026-08-28, and seven's only attempt (2026-08-30T11:11) recorded rc=1 rows=0. Cause is a guard behaving correctly: BENCH_QUIET_LOAD_FRAC 0.60 with a 10s wait cap, BENCH_CPU_WALL_MAX 1.06 discarding descheduled runs, 5 spare attempts. The box with idle time is the box that is sweeping, so the bench waits, fails to find quiet, burns its retries on contaminated runs and exits 1. A correct instrument refusing to lie, producing nothing, with its refusal in a field nobody reads. Filed as bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven.
+
+- 2026-08-30 (frankwasm) — `compiler/ir.inc`, comment only at the `pystr_repeat`
+  arg node: warn that `ASTTk[argVal]` is deliberate and not a bug. frankB nearly
+  landed the "obvious" change to the parameter's kind as a latent-correctness
+  fix; I built it alone and `len("a" * 3)` SEGFAULTS. The tag must describe what
+  IRLowerCallArg returns, not what the parameter declares — the same invariant
+  `IRCoerceCharArrayArg` states from the other side. It becomes right only in
+  company with an optimisation that makes the call return the literal's own
+  handle, which is what 9588c8535 did without changing the tag, breaking 24
+  NilPy jobs. WHY a comment and not a ticket: the code is correct, so there is
+  nothing to fix — the cost is entirely that the line looks wrong to a reader,
+  and it has already attracted one repair attempt.
