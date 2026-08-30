@@ -7,7 +7,7 @@ status: new
 owner: ""
 found: 2026-08-30
 found-by: frank-optimize, probing the per-call cost driver behind feature-opt-nilpy-container-subscript
-summary: "RULED + CORRECTED 2026-08-30, and the ACTION IS AUTHORIZED — no further decision is needed. Owner's ruling: prove-then-promote, proof is the only ceremony; -O0 debug, -O1 limbo, -O2 de-facto stable, -O3 experimental by design. The compiler built at -O3 compiles compiler.pas 28-34% faster, self-hosts in zero rounds, is 3.3% smaller. ~71% of that win is ONE named pass: EmitStaticLitHandle / PXX_FLAG_STATIC at ir_codegen.inc:3480, which gives string literals a static .data handle plus `inc qword [rax-16]` instead of a heap allocate+copy+free per evaluation. Promoting that single gate to -O2 gives 20% of the 28%, 5/5 reps, self-hosts, six programs pass. So per-pass promotion is one pass, not a campaign — and the earlier no-single-pass-reproduces-it claim (which I used to argue the unit of proof was the TIER) was a null from a min-of-3 sweep under load 6-13 that could not resolve the effect; that inference is WITHDRAWN. ACTION: promote EmitStaticLitHandle behind a normal full gate under the owner's standing rule, then re-open the remaining ~29% separately. Promote ONE AT A TIME — all gates at once measured WORSE (18.06s) than that pass alone (16.23s); passes interfere. Building the dev-loop compiler at -O3 stays rejected."
+summary: "-O3 was 28-34% faster than -O2 on the compiler's own workload. ~78-82% of that was ONE pass -- EmitStaticLitHandle / EmitStaticLitHandleA64, the static string-literal handle -- PROMOTED to -O2 in 440c822e6a80 (both backends; quick gate green, full+cross sweep requested from frankT, not pin-eligible until it returns). MEASURED AFTER: the remaining -O3 gap is ~5-7%, real (7 of 9 paired runs) but at the edge of what a contended box resolves. The campaign is effectively over -- the rest does not justify per-pass promotion at this measurement precision. -O1 limbo untouched."
 ---
 
 # The `-O3` tier is 34% faster than `-O2`, and nothing gates it
@@ -490,3 +490,43 @@ That is not a caveat on the ruling. It is
 [[the-name-is-not-the-thing]] applied to a test result: *"all tests passed"* is
 an identifier, and what it stands for is *"every way this could be wrong was
 exercised"* — which is a different claim, and occasionally a false one.
+
+---
+
+## Closing measurement — the campaign is effectively over
+
+**After `440c822e6a80` (the promotion), same workload, same method.** Compiling
+`compiler.pas`, 9 paired interleaved runs, load 6.3 -> 11.1:
+
+| | before the promotion | after |
+| --- | ---: | ---: |
+| `-O3` vs `-O2` on `compiler.pas` | **28%** | **~5-7%** |
+| binary size gap | 3.3% | 2.2% |
+
+Min-of-9 gives 6.6% and **7 of 9 paired runs favour `-O3`** — reported as a sign
+test rather than a mean because at this size the mean is mostly a measure of the
+other agents on the box. **One pass took the tier from 28% to ~6%.**
+
+**Recommendation: stop here.** The remaining passes are worth ~5-7% *collectively*
+and each would need its own full gate under prove-then-promote. That is a poor
+trade at a measurement precision that cannot cleanly separate 6% from noise —
+and the one-at-a-time rule, which is correct, makes the collective figure the
+wrong thing to promote against anyway. Whoever wants the rest should first
+re-measure on a quiet box; if the gap is really 6%, no individual remaining pass
+is likely to clear the bar.
+
+**What the remaining gap is made of**, for whoever does pick it up — from a
+mnemonic-frequency diff of the two builds of `compiler.pas` (1.95M instructions
+each), which needs no timing at all:
+
+| mnemonic | `-O3` minus `-O2` |
+| --- | ---: |
+| `push` / `pop` | **-26,965 each** (exactly matched pairs) |
+| `movslq` | -17,241 |
+| `mov` | +55,717 |
+| `movaps` | +219 (zero at `-O2`) |
+
+So the rest is the **W1/W2 scratch-register work** — ~27k push/pop pairs
+replaced by register moves — plus sign-extension elimination. Note that this is
+a large *instruction* change for a small *time* change, which is the same trap
+this ticket already fell into once: **an instruction count is not a cost.**
