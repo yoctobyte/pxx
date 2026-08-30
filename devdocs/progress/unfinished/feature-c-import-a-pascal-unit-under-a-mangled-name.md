@@ -331,3 +331,39 @@ diagnostic.
 So the ticket is not being actively worked and should not hold the `working/`
 lock. Moved to `unfinished/`. Nothing here is half-applied: the compiler change
 is complete, self-host green, and pushed.
+
+## 2026-08-30 — RE-MEASURE (triage only, nothing applied): PARTIALLY DISSOLVED
+
+Checked as part of a pass over parked tickets whose park names another ticket as
+its resume condition. Two of this park's three stated blockers no longer hold.
+
+**1. The collision-resolution blocker is gone.** The park says two items are
+"blocked on Track A holding `parser.inc`", one of them
+`refactor-a-one-resolved-file-identity-for-a-translation-unit`. That ticket
+resolved **2026-08-20, commit `883ef0c05`** — the same day this park was
+written. Ten days unread.
+
+**2. The file it names no longer exists, and the lane it names is wrong.**
+`compiler/parser.inc` was sliced into the `pasparser_*.inc` set on 2026-08-20.
+The missing-unit diagnostic this ticket wants to change is now at
+`compiler/pasparser_proc.inc:3504` and `:4103` — a **Track P** file, not Track A
+ground. So "blocked on Track A holding parser.inc" is stale on both counts: the
+file and the owner. The concern *under* it still stands and is unchanged — a
+pre-check in `cparser.inc` would have to duplicate the loader's
+case-insensitive + `.pp` + `-Fu` search — but that is a design argument, not a
+lane conflict, and it is now a Track C ↔ Track P conversation.
+
+**3. §6 is still genuinely blocked, and on the one thing no agent can clear.**
+It needs `PXX_ALLOW_FULL_SUITE=1` for the four corpus builds, which is the
+user's to grant. The park is right that a coordinator cannot supply it and that
+hand-running the recipe bodies would be reshaping a denied command; that
+reasoning is unchanged and is restated here so the next reader does not retry
+it. **This is the item to put in front of the user** — the park's own estimate
+is one deletion plus four corpus builds, an afternoon for whoever holds the
+escape.
+
+**Re-priced:** from "three blockers, two of them cross-lane" to *one* blocker
+that is a **user permission grant**, plus a Track C ↔ P design conversation that
+was previously mis-recorded as a lane lock. Nothing here is waiting on Track A.
+
+Nothing applied. Measured at HEAD; triage pass, not work.

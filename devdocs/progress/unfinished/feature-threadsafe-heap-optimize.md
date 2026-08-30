@@ -239,3 +239,20 @@ Where the remaining measured speed actually is, for whoever picks this up: the
 lock half already took 26-32% off the contended path (see the table above), and
 [[feature-a-io-lock-owner-from-tls-not-gettid]] removes a **syscall per I/O
 statement**, which is a bigger constant than anything left in the allocator.
+
+## 2026-08-30 — RE-MEASURE (triage only, nothing applied): still genuine
+
+Checked in the parked-ticket pass. The four resolved slugs are the TLS
+groundwork this ticket cites as landed; the open one
+(`feature-a-io-lock-owner-from-tls-not-gettid`) is flagged here as the bigger
+constant, not as a blocker. Nothing is waiting on another ticket.
+
+The park is `root-cause-over-microfix.md` applied deliberately: step 1 is
+separating the allocator-state lock from the managed-refcount critical section,
+a Track A design change under the self-host gate, and the park explicitly
+records that the available microfix — a magazine skipping a lock it does not
+hold — *would look like it worked*. That is the strongest reason to leave a
+ticket parked, and it does not age.
+
+**Re-priced: unchanged.** Diagnosis is banked; this needs an owner and a design
+pass, not a re-read.

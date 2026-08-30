@@ -122,3 +122,28 @@ That is Track B's gate, not Track C's.
 `make compiler/pascal26` — converged after 2 round(s), fixedpoint verified. (No
 compiler source was changed by this work: the change is a new test, its header,
 and two Makefile lines.) New test and both existing GTK2 tests run green above.
+
+## 2026-08-30 — RE-MEASURE (triage only, nothing applied): still genuine, scope reduced
+
+Checked in the parked-ticket pass.
+
+**Still blocked, on a Track U decision that is genuinely open:**
+[[decide-which-gtk-a-bare-gtk-gtk-h-means]] is in `backlog/` (track U, p55).
+Human judgment, correctly escalated, and it does not age — it stays open until
+someone answers it.
+
+**One thing has changed, in this ticket's favour.**
+[[feature-b-migrate-pcl-off-the-curated-gtk3-header]] — the Track B job this
+park deliberately refused to smuggle in, on the grounds that swapping the
+curated header changes signatures under the whole PCL widget stack, 11 GUI
+tests and 5 examples — is now in `done/`. So the largest stated *consequence* of
+resolving the decision has already been absorbed by the lane that owned it.
+That does not unblock the decision, but it means whoever answers it faces a
+smaller blast radius than this park describes.
+
+The remaining plumbing note stands and is a staffing call, not a blocker: it
+crosses Track P's `pasparser_proc.inc` and Track C's `cpreproc.inc`, so it
+"wants an owner assigned rather than a lane guessed".
+
+**Re-priced: unchanged**, but the ticket is one Track U answer away rather than
+one answer plus a Track B migration.

@@ -119,3 +119,32 @@ reject.
 Moved back to `backlog/`.
 
 - 2026-07-19 (backlog sweep note) Stale numbers: sweep at HEAD is 323 pass / 0 fail (7b54288c) — the 283/7 and 279/0 figures above are outdated. Remaining scope = the ~200-entry skip-list burn-down (rainy-day per user).
+
+## 2026-08-30 — RE-MEASURE (triage only, nothing applied): not a stale blocker; possibly mispriced
+
+Checked in the parked-ticket pass, because this ticket names four now-resolved
+slugs. It is **not** a stale resume condition: the 2026-07-10 park was blocked on
+two parser clusters, and the ticket **already recorded its own unblocking** on
+2026-07-14 ("UNPARKED... both big parser clusters it was blocked on ... are in
+`done/`"). The scan hit is those same slugs, cited by the note that resolved
+them. Working as intended.
+
+What it is instead is a **pricing** question. The current park is a user call —
+*"remaining burn-down is rainy-day per user call 2026-07-11"* — and the last
+note (2026-07-19) puts the sweep at 323 pass / 0 fail with the remaining scope
+being the ~200-entry skip-list burn-down. That work is `compat`-tagged
+conformance-diagnostic parity, which CLAUDE.md's compat table places at the
+*defer* end ("our diagnostic/message/error number differs → defer"), and it is
+explicitly rainy-day by the owner's own call.
+
+**It sits at `prio: 65`.** That is high enough to keep it in every ranker scan
+ahead of work the same table ranks above it, which is the exact cost CLAUDE.md
+warns about for parked-but-ranked tickets. **Recommend re-pricing down to the
+15-25 band** the compat table implies for diagnostic parity — a Track P/owner
+call, not mine, so it is flagged here rather than changed.
+
+Also dated: the numbers in this file have now been superseded three times
+(279/0 → 283/7 → 323/0). Anyone resuming should re-run the sweep before quoting
+any of them.
+
+Nothing applied.

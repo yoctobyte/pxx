@@ -540,3 +540,16 @@ on a procedure type, and the x86-64-only restriction.
 
 Plus the follow-up slice: park the signal number on the remaining four hosted
 targets, and drop the refusal.
+
+## 2026-08-30 — RE-MEASURE (triage only, nothing applied): still genuine
+
+Checked in the parked-ticket pass. The six resolved slugs this ticket names are
+**prior landed work it cites**, not blockers — `blocked-by: []`, and nothing
+here is waiting on another ticket.
+
+What remains is item 2 (`--threadsafe` masks), item 5 (SIGPIPE), item 4's RTL
+half (Track B), and parking the signal number on the other four targets. That is
+*feature-missing* work, which ages well: it stays missing until someone builds
+it. The park is a staffing state, not a blocked one.
+
+**Re-priced: unchanged (p55).** No stale resume condition.
