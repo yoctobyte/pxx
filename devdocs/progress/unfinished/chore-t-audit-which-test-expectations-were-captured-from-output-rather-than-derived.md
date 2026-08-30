@@ -586,3 +586,76 @@ would not have caught either: in both cases the code does exactly what it says.
 
 That last sentence is the open edge, and it is deliberately inside the claim
 rather than after it.
+
+## The 58 candidates — read, and the mechanism became repetitive
+
+These were the real open edge: rows an oracle **did** reach and **disagree**
+with. Everywhere else a capture could only hide behind the *absence* of a
+verdict; here it could hide behind a real one. All were read.
+
+**None is a capture.** Every one is a divergence the test exists to exercise, in
+six families:
+
+| n | family | what FPC does instead |
+| --- | --- | --- |
+| 11 | a pxx directive or CLI flag FPC ignores | compiles the OTHER branch — `{$THREADSAFE}`, `--mimic-fpc`, `--strict-fpc`, mode switches |
+| 12 | a pxx RTL/runtime feature FPC lacks | managed-local reuse, `GetInterface` by GUID, `TCriticalSection` semantics, dynlib stubs |
+| 14 | float formatting / precision | Track F by charter — digit counts, exponent form, `WriteFloat` |
+| 13 | promotion / shift-width / layout | our widening rules; `SizeOf(Variant)`=16 vs FPC's 24 |
+| 2 | unicode / widechar | FPC emits `?` and replacement chars where we emit UTF-8 |
+| 6 | our own `-O3` passes and nil-check directives | no FPC equivalent exists |
+
+The families are not a taxonomy imposed afterwards; by the second half the
+mechanism was predictable from the test's *name* before opening it — a name
+containing `strict_fpc`, `mimic_fpc`, `managed_`, or `nil_check` announces that
+divergence from FPC is the subject rather than an accident. That is where the
+returns flattened.
+
+The two strongest individual cases, because they are the ones a rubber stamp
+would have missed:
+
+- **`sweep_regcall_O3`** — a deterministic arithmetic difference, the one shape
+  in the whole set that could genuinely be a wrong recorded value. We expect
+  `t1=5010003`, FPC produces `6010003`. Computed by hand: `Probe3(g, BumpG(1),
+  loc)` with `g=5, loc=3` under **left-to-right** argument evaluation gives
+  `5·10⁶ + 10·10³ + 3 = 5010003`. FPC's value is what right-to-left produces —
+  it read `g` after the bump. pxx guarantees left-to-right and the test's own
+  header says so. Derived from a stated language rule, checked independently.
+- **`test_sizeof26`** — `16` where FPC says `24`, and the source documents its
+  own divergence in a comment: *"16 Variant (pxx's own 16-byte tagged value: 8
+  tag + 8 payload; FPC's TVarData is 24 — a representation difference, not a
+  bug)"*, citing `docs/types-and-targets.md` as the contract. An expectation
+  that names the reference value it differs from and cites its authority is the
+  shape every divergent expectation should have.
+
+### The 59th was a harness artefact, and that is the finding
+
+`test_unitpath_posix26` was flagged a candidate with an **empty diff** — reported
+as differing, with nothing shown to differ. Built on its own, FPC prints
+`posix`, exactly our expectation.
+
+The sweep compiled all 1215 sources with **one shared `-FU` unit-output
+directory**. `test/unitpath/posix/platgreet.pas` and
+`test/unitpath/esp/platgreet.pas` are different units with the same basename (as
+are two `mymod.pas`), so whichever compiled first left its `.ppu` there and bound
+for every later row using that name. Only two basenames collide, so the count was
+barely affected — but the count is not the point. **Contamination between rows of
+a sweep is indistinguishable from a finding, and it points whichever way the
+sweep ORDER happened to go.** A re-run in a different order would have moved the
+result with nothing to say why.
+
+Fixed with a per-binary unit directory. The re-run moved exactly one row —
+797 derived (+1), 58 candidates (−1) — which is the whole predicted effect and
+no more, so the fix did what it claimed and nothing else.
+
+**What exposed it was the empty diff**, not the verdict: a row classified as
+*differing* with no difference to show. The classifier could not see the
+contradiction because it reports the verdict and the evidence through different
+paths, so nothing ever compares them. **A verdict and its evidence that travel
+separately can disagree indefinitely** — worth a guard, and cheap: assert that a
+row called a difference has at least one diff line.
+
+### Final counts
+
+**342/353 NilPy · 333/395 C · 797/1280 Pascal**, with 58 Pascal candidates read
+and every one a documented dialect divergence.
