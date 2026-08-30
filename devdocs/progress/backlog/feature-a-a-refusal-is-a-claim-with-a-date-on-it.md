@@ -10086,3 +10086,72 @@ The correct disposal is what happened: **say it out loud to someone who can rout
 the ticket.** A finding is recorded when it is in a ticket on master — and a *suspicion* is not
 yet a finding. The ten minutes to convert one into the other is cheap; the ticket asserting the
 conversion happened is not.
+
+---
+
+## 207 — A TICKET DESCRIBING A MISMATCH IS READ AS LICENCE TO CHANGE EITHER SIDE
+
+*(pxx-a5, 2026-08-30, converting the `pxx-gdb.py` suspicion — which **inverted**.)*
+
+The suspicion was that `pxx-gdb.py:109` decodes `VT_PROMO_INT64` by treating the payload as a
+pointer while `defs.inc:1151` calls it *"inline Int64, or a bignum ref"*. **The tool is correct
+and the comment is wrong.**
+
+`defs.inc` names `pylib.pas` as the authority for the VT_ block (*"MUST match pylib.pas"*), and
+three independent sites there agree, **with the code matching the prose** at each:
+`pylib.pas:6069` and `:8522` both say *"payload = exact decimal in a managed string"* and both
+read `PPyAnsiString(@p^.Payload)^`; `:6497` groups `VT_PROMO_INT64 (8193)` with `VT_STRING (6)`
+as *"by string CONTENT"*. So inside a variant the payload **is** a managed string pointer, and
+handling those two tags together is exactly right.
+
+The defect is one level up, and it is `defs.inc` **contradicting itself inside fifteen lines**:
+it defines the slot discriminator and states plainly that it is *"distinct from the VT_PROMO_*
+variant tags above, which only apply when a promotable int is boxed inside a variant"* — then
+four lines later annotates those very tags with the slot's semantics. **The file separates the
+two concepts in prose and conflates them in the annotation.**
+
+### The face
+
+pxx-a5 wrote into the ticket's **own summary** that `pxx-gdb.py:109` is **CORRECT and must not
+be "fixed"**:
+
+> *A ticket describing a mismatch is read as licence to change either side, and the tool is the
+> side that is right.*
+
+Without that line, whoever picks it up has a **50/50 chance of "fixing" the correct file** — and
+would be repairing working code against a wrong comment, which is strictly worse than leaving
+both alone. A mismatch ticket that does not name the correct side is not half a finding; it is a
+finding plus a coin flip.
+
+Same shape as the `SIDE-BRANCH-SHA` remedy the same night: a confident check text sent three
+lanes to correct three citations **that were already right**. In both cases the report was
+accurate about the *disagreement* and silent about the *direction*, and silence about direction
+is what converts a finding into work in the wrong place. Compare 204a — name the direction of an
+instrument's error, not just its existence. This is the same rule for a *ticket*: **name which
+side is wrong, or you have shipped a disagreement rather than a defect.**
+
+Priority reasoning worth keeping: **comment-only, nothing miscompiles, prio 20 — and still worth
+a ticket**, because the comment is load-bearing for anyone reading tag semantics without reading
+`pylib.pas`, and *it points them at a wrong conclusion about working code*. The cost is not
+hypothetical; it was paid, by the person who filed it. Read together, `defs.inc` +
+`pxx-gdb.py:109` describe a debugger silently rendering a number as an address — the
+`debugging-playbook.md` failure mode aimed at **the instrument the playbook tells every lane to
+reach for when they already have a wrong value.**
+
+The ticket also flags `VT_PROMO_INT32` (8192) for the same pass: `symtab.inc:2951` assigns it,
+`pylib.pas` handles only 8193 explicitly plus a `t >= 8192` catch-all, so **whether 8192 ever
+reaches a variant payload should be stated rather than left implied** — that ambiguity is what
+made the original suspicion plausible. An implication is not a specification, and the gap
+between them is where the next twenty minutes gets spent.
+
+### 207a — the disposal that made it cheap
+
+Three facts, kept separate throughout: the code reads that way (**confirmed**), which case
+actually occurs (**unchecked**), whether the neighbouring tag is a guide (8192 falls through to
+`<tag 8192 payload 0x…>`, **honest**). The suspicion was **spoken to someone who could route
+it, without a ticket**, and converted to a finding before being filed — twenty minutes to
+establish that the comment was the wrong half.
+
+Had it been filed as first noticed, the ticket would have asserted a defect in the correct file.
+**A finding is recorded when it is in a ticket on master; a suspicion is not yet a finding, and
+filing it early does not make it one — it launders it into one.**
