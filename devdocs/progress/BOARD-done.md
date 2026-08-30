@@ -2400,6 +2400,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-cascade-343a52551808-triage | T | 40 | regression | triage: the 17-job CASCADE at bad=343a52551808 — its 5 NilPy jobs are GREEN natively at HEAD | — |
 | regression-cascade-343a52551808 | T | 70 | regression | regression CASCADE: 17 jobs newly red at 343a52551808 (auto-filed by twatch) | — |
 | regression-cascade-426b90021634 | T | 70 | regression | regression CASCADE: 17 jobs newly red in 8a5e4abb3..426b90021 (3 commits) — auto-filed by twatch | — |
+| regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-cascade-63d1d0de90d3 | T | 70 | regression | regression CASCADE: 29 jobs newly red at 63d1d0de90d3 (auto-filed by twatch) | — |
 | regression-cascade-8654c4d55b61 | T | 70 | regression | regression CASCADE: 11 jobs newly red in 4f526e338..8654c4d55 (241 commits) — auto-filed by twatch | — |
 | regression-cascade-aba953cae031 | T | 70 | regression | regression CASCADE: 15 jobs newly red at aba953cae031 (auto-filed by twatch) | — |

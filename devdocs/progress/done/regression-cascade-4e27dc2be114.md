@@ -4,6 +4,8 @@ prio: 70
 type: regression
 blocked-by: [bug-n-tkinter-is-missing-from-the-python-serving-unit-list]
 summary: "TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it."
+status: done
+owner: frankA
 ---
 
 # regression CASCADE: 12 jobs newly red at 4e27dc2be114 (auto-filed by twatch)
@@ -128,3 +130,69 @@ which `ready`/`next` never scan — while it was actually rankable. Nothing abou
 changed; only the record was stale. Found by a sweep (see
 `chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`); 14 tickets repo-wide
 carry at least one `blocked-by` naming a closed ticket, five of them fully unblocked.
+
+---
+
+## RESOLVED, 2026-08-30 (frankA) — verification only, no code change
+
+All 12 jobs of the cascade are green, plus the two that were failing as
+recipe-block collateral. **Nothing needed fixing**: half 1 was fixed in the
+2026-08-19 triage, and half 2's blocker
+(`bug-n-tkinter-is-missing-from-the-python-serving-unit-list`) has since been
+resolved — `tkinter` is in `PyRtlUnitServesPython`
+(`compiler/pasparser_proc.inc:2847`, which is where `parser.inc`'s copy went in
+the P/A split). The ticket was open only because nothing re-checked it after the
+blocker closed.
+
+Verified against a self-host fixedpoint at `22c67e5ea61e`, by running each job's
+**exact Makefile assertion** — the `-Futest/nilpy_units` flag and the
+`expect_same.sh` comparison — not merely the compile.
+
+| job | verdict |
+| --- | --- |
+| `examples/tk/tkinter_facade.npy` | compiles (compile-only per recipe: needs an X display) |
+| `examples/tk/field_class_identity.npy` | compiles (compile-only) |
+| `examples/tk/callbacks.npy` | compiles (compile-only) |
+| `examples/tk/import_in_body.npy` | `in a suite left / before / after both` |
+| `examples/tk/shadow_format_except.npy` | `module function / Tap BPM: 92.5 / caught: clipboard` |
+| `examples/tk/facade_and_paths.npy` | all six lines |
+| `test_nilpy_array_of_const_unit.npy` | `x:2` |
+| `test_nilpy_class_named_after_its_imported_base.npy` | all three lines |
+| `test_nilpy_multiple_inheritance_imported_base.npy` | all four lines |
+| `test_nilpy_qualifier_vs_cproc.npy` | `main / bye` |
+| `test_nilpy_renamed_class_attrs.npy` | all six lines |
+| `test_nilpy_subclass_unit_base.npy` | `override: KeepCase / inherited: keepcase` |
+| `test_nilpy_two_imported_bases_fail.npy` (collateral) | refused, **and at its own message** |
+| `test_nilpy_kwargs_by_name.npy` (collateral) | all four lines |
+
+**The negative test was checked the way this ticket's own triage said to check
+it.** `two_imported_bases_fail` is satisfied by any failure, so `!` alone would
+pass on a compiler that died at the import wall instead of the real refusal. Its
+paired `grep -q 'names TWO base classes whose bodies are not in this file'`
+matches, so it still dies at ITS OWN wall.
+
+Three "output mismatches" appeared in the first sweep and were **my harness, not
+the tests**: I extracted `TESTTMP` from the Makefile without expanding its
+`$(shell ...)` calls, so the binaries were written to a literal path and the
+runs produced a bash error. Re-run with a real directory, all three pass.
+Recording it because a mismatch on a *just-unblocked* ticket is exactly the
+shape one would be tempted to file.
+
+### The one lost assertion is tracked, not dangling
+
+The triage flagged that `from 'basehook.pas' import ConfigBase` has no spelling
+(`expected a module name after from`), costing
+`test_nilpy_subclass_unit_base.npy` one of its three assertions. Still true at
+this binary — and it was escalated properly rather than guessed: answered in
+`decided/decide-should-from-accept-a-quoted-foreign-file`, and carried by
+`feature-n-from-accepts-a-quoted-foreign-file` [N p45] and
+`feature-n-a-quoted-from-import-reaches-another-language`. The assertion comes
+back with that feature, not with this ticket; the test's header already records
+what went and why.
+
+`blocked-by:` still names the closed blocker — left as the historical record of
+why this sat in `blocked/`; the coordinator's 2026-08-28 note above is the live
+statement.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
