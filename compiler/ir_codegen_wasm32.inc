@@ -343,14 +343,36 @@ end;
 
 { ===== the linear-memory map =====
 
-    0 .. WASM_BSS_BASE-1   null guard.
+    0 .. WASM_NULL_GUARD-1 null guard.
+    WASM_NULL_GUARD ..     the shadow stack, growing DOWN from WASM_BSS_BASE.
     WASM_BSS_BASE ..       globals: BSSSize bytes at Syms[].Offset, which for
                            an skGlobal is a positive offset from the start of
                            BSS. Zero-initialised for free — wasm linear memory
                            starts zeroed, so a .bss needs no data segment.
     WasmDataBase ..        the initialised blob: DataLen bytes of Data[],
                            loaded by one active data segment.
-    ... WasmStackTop       the shadow stack, growing DOWN from the top.
+    ... the heap           PXXAlloc's BSS arena, then pages from memory.grow.
+
+  WHY THE STACK IS AT THE BOTTOM, AND WHY THAT IS THE WHOLE POINT. It used to
+  sit at the TOP, above the data blob, growing down into it — so an overflow
+  did not fault, it OVERWROTE the initialised blob and then the globals, and
+  the program carried on with a plausible wrong value somewhere else entirely.
+  Measured: compiler.pas under WASI, with 64 KB of stack, faulted inside
+  CaseEqual on a garbage AnsiString handle that a deep parse had written over
+  a global thousands of instructions earlier. That is the single most expensive
+  bug shape this repo has, and this target had it by construction.
+
+  Down here an overflow runs into the null guard (a kilobyte of slack that
+  nothing else uses), then past address 0, where the i32 address wraps to
+  ~4 GB and the very next load or store is OUT OF BOUNDS and TRAPS. Linear
+  memory has no page protection to give us a guard page, so running off the
+  BOTTOM of the address space is the only loud failure this target can
+  produce — the same reasoning HeapMmap's wasm arm uses when it returns -1
+  rather than 0 for an exhausted heap.
+
+  The cost is that an overflow scribbles on the null-guard kilobyte before it
+  traps. That is acceptable precisely because nothing lives there, and it is
+  paid only on the path that was already fatal.
 
   WHY BSS COMES FIRST, AND WHY THAT DECIDES WHICH BASE IS A CONSTANT. Both
   region sizes are unknown while bodies are being emitted — BSSSize and DataLen
@@ -380,7 +402,25 @@ end;
   compare before every dereference — a real cost, and a Phase 7 decision, not
   something to slip in here. }
 const
-  WASM_BSS_BASE    = 1024;
+  { Nothing lives here. See the null-guard note above for what it does and does
+    not buy on a target with no page protection. }
+  WASM_NULL_GUARD  = 1024;
+  { 1 MiB, and it is DECLARED address space rather than file size — BSS is
+    never emitted into the module, so this costs nothing in the .wasm and only
+    pages the host would have had to provide anyway.
+
+    64 KB (wasm-ld's default, and what this backend shipped) is fine for the
+    programs a wasm module usually holds and is not a judgement call for a
+    recursive-descent compiler. MEASURED, in compiler.pas's own wasm module:
+    ParseUsesUnitBody's frame is 11216 bytes and it recurses once per nested
+    `uses`, so SIX levels of unit nesting exhausted the old stack — and
+    exhausted it by scribbling on the data blob, because the stack was above it.
+    1 MiB is ~93 levels of that same frame.
+
+    Not a number to tune by feel: if this ever needs raising, raise it because a
+    trap said so. That is now possible, which is the other half of this change. }
+  WASM_STACK_BYTES = 1048576;
+  WASM_BSS_BASE    = WASM_NULL_GUARD + WASM_STACK_BYTES;
 
 { A HANDLER FRAME — one per `try` in the body, living in the shadow frame below
   the Pascal slots. Three words, and the third is the one the register backends
@@ -411,7 +451,6 @@ const
     record TYPE, not per copy site, so this counts declared types and not code. }
   WASM_MAX_RECDESC = 512;
   WASM_STR_SLOTS   = 8;
-  WASM_STACK_BYTES = 65536;
   WASM_PAGE        = 65536;
 
 const
@@ -5845,8 +5884,10 @@ begin
   WasmDataBase := ((WASM_BSS_BASE + BSSSize + 15) div 16) * 16;
   WasmGlobInit[WasmGData] := WasmDataBase;
   WasmFillData;
-  top := ((WasmDataBase + DataLen + 15) div 16) * 16 + WASM_STACK_BYTES;
-  WasmGlobInit[WasmGSp] := top;
+  { $sp starts at the TOP OF THE STACK REGION, which is the base of BSS — the
+    stack is below the globals now, not above the data. See the memory map. }
+  WasmGlobInit[WasmGSp] := WASM_BSS_BASE;
+  top := ((WasmDataBase + DataLen + 15) div 16) * 16;
   WasmSetMemory((top + WASM_PAGE - 1) div WASM_PAGE, -1);
 end;
 
