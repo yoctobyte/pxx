@@ -18613,3 +18613,43 @@ correction this system produces.
   the name in neither case — right for the first, wrong for the second.
 - **Five test-asm tickets may be one defect.** twatch files per source, so one cause splits into
   five slugs — the same overcount pxx-a5 found in the fuzz ledger tonight.
+
+## Tick — 2026-08-30 ~09:2x (coordinator)
+
+**PIN v394 `53800fbeb0b66e11`** (measured). Track T **UP**. U queue **31**. `progress.sh check`:
+3 STATUS-DRIFTs cleared, 4 SIDE-BRANCH-SHA (all `origin/wasm`, all deliberate), 1 DANGLING-SHA
+which was **mine and deliberate** — the index now carries `DANGLING SHAS BY DESIGN`.
+
+**THE CARRIED /loop PROMPT FIRED STALE THIS TICK** and it is worth recording as the seat's
+characteristic failure. It described ~07:15: frankA on `feature-port-rtl-over-libc` holding seven
+compiler files (it holds none), frankS's veneer "QUEUED" (landed `3f203a20b`), frankwasm on Phase
+9j (9j *and* 9k landed), b4 on the page-align (landed `75d2ba662`, and it has since closed both
+`-O3` bugs), the index "past FACE 201" (past 218). **Every live slot in it was wrong and every
+line read as authoritative.** Step 7 exists for exactly this — a false fact in the recurring
+prompt re-justifies itself on every wake. Ran the tick against measurement instead.
+
+**Live slots — all dispatched, no idle session.**
+
+| session | holds | state |
+| --- | --- | --- |
+| frankA | none at last report | NilPy max/min claimed; **the urgent hang routed to it** (both candidate files are A/N and it owns both); ParamStr and 5 `test-asm` reds queued |
+| frankB | — | the captured-vs-derived expectation audit it filed [T p40, B file-ownership] |
+| frankS | `ir_codegen.inc` xtensa arm — **GRANTED, `6901fa114`** | encoder guard landed `9bc4113e6` |
+| frankD | — | `feature-pascal-corpus-expansion` [P p75] park assessment, **read-and-judge, no edits** |
+| b4 | `bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code` | live red in limited/full tiers; 20 rows, bounded |
+| frankwasm | `feature-target-wasm` (**live lock, verified**) | blocked only on the WASI U decision [U p70] |
+| pxx-a5 | Track T | watcher version stamp landed; **fuzz deliberately deferred** until the tree settles |
+| frankC | `cir.inc`, `ir.inc` | **silent since 05:29**, uncommitted `tools/c_lowering_callers.py`; chased twice |
+| frank-rust | `pasparser_generic.inc` | **10h unpushed, four messages unanswered** — P lane blocked on a file I cannot prove is live |
+
+**Two NEAR-DUPs adjudicated rather than left open.** `bug-a-twenty-new-cross-target-rows…` [A]
+and `chore-t-make-every-cross-target-row-assert-the-exit-code` [T p45] are a **regression** (531
+armed → 551, 20 rows, red tier) and a **campaign** (all 531, piloted per-arch because
+`run_target.sh` returns the *emulator's* status and signal deaths do not encode identically under
+qemu-user). Recorded on both tickets so nobody merges them.
+
+**Escalation for the owner, and it is the only thing here I cannot solve:** frank-rust has held
+uncommitted work in `compiler/pasparser_generic.inc` since 23:39 on 08-29 and has not answered
+four messages. I will not touch another session's tree and I will not tell it to discard. The
+cost is that `feature-pascal-corpus-expansion` [P p75] — the top non-urgent item on the board,
+parked with seven now-resolved blockers — cannot be routed to anyone.
