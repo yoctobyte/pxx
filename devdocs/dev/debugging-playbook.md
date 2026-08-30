@@ -1168,6 +1168,67 @@ one was silently wrong (`map` answered `[1,2,3]` where CPython says `[2,3,4]`).
 Boundaries are where these live — check the smallest and the largest case, not a
 comfortable middle.
 
+## Reaching for the instrument is necessary and not sufficient — the FORMATTER is part of its aperture
+
+The section above is about choosing a sentinel the *program* cannot mistake for
+a value. This is its mirror: an illegal sentinel, chosen correctly, destroyed on
+the way to your eyes by the thing that printed it.
+
+Measured 2026-08-30, hunting `bug-c-a-header-reached-by-uses-discards-function-
+bodies-and-imports-them-instead`. The question was what `CModuleOfTok` returns
+for a token in a `uses`d header, where **-1 means "no C module"** — a properly
+illegal sentinel, exactly as the section above prescribes. The probe printed it
+with `IncSmallIntStr`, whose own doc comment says *"decimal text of a small
+**non-negative** int"* and whose first line is `if n <= 0 then Result := '0'`.
+
+So the probe printed `module=0`. Which is a module id. The one value that meant
+*"no module"* was rendered as a real answer, the output looked entirely
+reasonable, and the conclusion drawn from it was wrong. `differential-probes.md`
+already carries this warning — *a probe that FORMATS its output can answer a
+different question than you asked* — and it had been read the same night, in
+this repo, by the person who then walked into it.
+
+**The sequence is the lesson, because each step was closer to measurement than
+the last and each still produced a plausible wrong answer:**
+
+1. **Reasoned about the function instead of printing it.** This file's headline
+   failure, committed by someone who had read this file.
+2. **Printed it — through a formatter that could not represent the answer.**
+   The instrument was right, the aperture was not.
+3. **Measured a harness artefact and read it as the bug.** The test program and
+   the test header shared a stem, so `uses foo` resolved to `foo.pas`, the
+   program itself. The compiler reported a real and correct error about *that*,
+   and it was read as the defect under investigation — which is the most
+   expensive of the three, because everything about it looks like signal.
+
+Only the fourth attempt — distinct names, and a formatter with a branch for the
+negative case — produced the boundary table the ticket now carries.
+
+**What to actually do**, in rough order of cost:
+
+- **Print the sentinel's own spelling, not its number.** `module=NEG` /
+  `module=none` cannot be confused with an id. Branch on the sentinel in the
+  probe rather than trusting the renderer.
+- **Read the helper you reached for.** `IncSmallIntStr` says non-negative in its
+  first comment line and clamps in its first statement; thirty seconds of
+  reading beats a rebuild and a wrong conclusion. Its siblings
+  (`CPSmallIntStr`, `AsmIntToStr`, `RIntToStr`) do not all agree on this, so
+  which one is in scope changes the answer.
+- **Sanity-check the probe against a case whose answer you already know.** Here
+  a header with no includes at all was known to work; had its probe line said
+  `module=0` while the failing one also said `module=<some id>`, the collision
+  would have been visible immediately.
+- **Give the harness distinct names.** A test program and its test header
+  sharing a stem is not an exotic mistake — it is what you get from naming both
+  after what they test.
+
+The general form, which is what makes this more than one bad night:
+
+> **An instrument narrows what you can be wrong about; it does not eliminate it.
+> Everything between the value and your eyes — the accessor, the formatter, the
+> harness, the file names — is part of the instrument, and any of it can quietly
+> answer a different question.**
+
 ## `perf` being blocked is not "no profiler" — build the compiler with FPC and `-pg`
 
 `perf` is refused on plexus (`kernel.perf_event_paranoid = 4`) and cannot be
