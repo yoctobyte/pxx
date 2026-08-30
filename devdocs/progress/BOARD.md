@@ -8,16 +8,17 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-no-cross-target-can-build-the-compiler-itself | A | 60 | bug | PARTLY FIXED 2026-08-30. i386, aarch64 and arm32 now BUILD the compiler, and the i386 and aarch64 binaries RUN under qemu and compile a working program -- their shared blocker was `LoadFile` with an array-element destination (cpreproc.inc), fixed by normalising in the frontend rather than teaching five backends a slot-address shape. TWO TARGETS REMAIN, with DIFFERENT causes, neither related to the first: riscv32 `jal displacement 2197196 is outside the encodable range` (reach) and xtensa `stack frame too large (> 32 KB) for a single ADDMI` (frame size) -- the latter is a THIRD defect this ticket originally missed. And the title claim was too strong: wasm32 built the compiler all along and was never measured. arm32 builds but its cross-built compiler SEGFAULTS, which is a fourth, separate defect. | — |
 | feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64. | — |
+| feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current` near TOpenAddressing<TKey,TValue,THashFactory>, which is the LIVE EDGE and is not yet reduced. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit. | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 
-## unfinished (32)
+## unfinished (31)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -38,7 +39,6 @@ _none_
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-enum-class | N | 62 | feature | `from enum import Enum` — enum classes are not supported | — |
-| feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-user-defined-decorators | N | 68 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython | O | 55 | feature | Container subscript is NilPy's worst primitive against CPython. RE-MEASURED 2026-08-31 on a quiet box: b[2] is now 117 ns vs 11 (10.6x, was 234 vs 12 = 19.2x) and d['k'] 262 vs 25 (10.6x, was 16.5x) -- the absolute cost roughly HALVED, and the -O3 reserve this ticket recorded as 30-40% is now 3-7% because the static-literal pass promoted to -O2 exactly as predicted. All FOUR previously-named drivers are now resolved, so a ~10x gap remains with no cause. New suspect, named categorically: a subscript costs 11 out-of-line calls, 8 of them into three tag-dispatch routines sharing an identical 18-instruction preamble that re-tests the type tag with six compares. Benchmark committed as bench/nilpy_primitives.npy. Next step is confirm-then-decide, not a fix. | — |
@@ -51,7 +51,7 @@ _none_
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-target-wasm | A+B | 25 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
-| perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
+| perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 
 ## blocked (9)
@@ -841,6 +841,7 @@ _none_
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- [p 60] [U] decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies (unblocks 1)
 - [p 60] [N] bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
@@ -854,14 +855,12 @@ _none_
 - [p 60] [T] bug-t-the-o-level-sweep-never-sees-the-third-party-corpus
 - [p 60] [U] decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane
-- [p 60] [U] decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
 - [p 60] [U] decide-one-managed-string-kind-with-an-element-width-or-a-second-kind
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [T] feature-t-commit-trailer-hook
 - [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
-- [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image [parked — re-claim, do not duplicate]
 - [p 60] [A] refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 60] [N] regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native
 - [p 58] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
@@ -869,7 +868,6 @@ _none_
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
-- [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 55] [C] bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead [parked — re-claim, do not duplicate]
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
@@ -1260,6 +1258,7 @@ _none_
 - **1** — decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
+- **1** — decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
 - **1** — decide-posix-master-vs-fpc-named-master-for-the-socket-facades
 - **1** — decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - **1** — decide-tobject-classinfo-blob-or-refusal
