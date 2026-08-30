@@ -11,7 +11,25 @@ summary: "A `static`/`static inline` function DEFINED in a .h reached through `u
 
 # `uses <header>` throws away the header's function bodies, then imports them
 
+> **NOT UNTOUCHED — one fix has been TRIED AND REVERTED.** The shape that
+> failed was *"detect a bodied `static` by scanning back over the specifiers
+> (`CDeclSawStatic`) and let it fall through to ordinary compilation whenever
+> we are in header-import mode."* That is correct for a user's own header and
+> it worked there; it is wrong because **the same walk is entered by crtl's own
+> module pulls**, and compiling their bodies needs two things the header path
+> cannot give (details in the REOPENED section). Do not re-derive that — read
+> it. The forward plan is in "What the next attempt needs"; this banner exists
+> because a parked ticket that records only the plan reads as untouched.
+
 ## Measured, at `62714dc5eb06`
+
+*(That sha does not exist in this repository — checked 2026-08-30. It was named
+before the push and the rebase rewrote it, which is the exact hazard
+`bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` describes. The measurement
+below is unaffected: **re-measured at `5ced3d9a0`** with a HEAD-built
+`compiler/pascal26` (fixedpoint `8cc79f5b6f77`, converged after 1 round) —
+`zzstat` in a `.h`, called from a `uses`ing `.pas`, still links
+`NEEDED libzzhdr3.so` and dies at load with rc 127.)*
 
 Same function, two files. Only the extension differs:
 
