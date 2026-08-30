@@ -11,4 +11,5 @@ mixLit len=6 out=abcd!!
 narrow len=4 out=abcd
 rewide len=4 out=abcd
 units: 97 98 99
+argNW=4 argWN=4 argLW=6 argWW=4
 empty len=0 out=[]

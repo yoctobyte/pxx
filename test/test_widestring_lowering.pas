@@ -35,6 +35,21 @@ begin
   F := 'result';
 end;
 
+{ ARGUMENTS convert too, and in both directions. The parameter's width lives in
+  ProcParamStrElemTk -- built in 6c-params and unread until 7c, which is why
+  `TakesWide(narrowStr)` handed the callee UTF-8 bytes that Length then halved.
+  Value parameters only: a var/out parameter binds the variable, so a width
+  mismatch there is a type error and not a conversion. }
+function TakesWide(const p: WideString): Integer;
+begin
+  TakesWide := Length(p);
+end;
+
+function TakesNarrow(const p: AnsiString): Integer;
+begin
+  TakesNarrow := Length(p);
+end;
+
 begin
   w := 'abcd';  a := 'abcd';  r.w := 'abcd';  u := 'abcd';
   { Length counts CODE UNITS, not bytes, and indexing steps one unit. }
@@ -62,6 +77,14 @@ begin
   write('units:');
   for i := 1 to Length(w) do write(' ', Ord(w[i]));
   writeln;
+  { Arguments: narrow -> wide param, wide -> narrow param, literal -> wide
+    param, and the matching pair. On ASCII every count is the character count,
+    which is the point -- a conversion that did not happen shows up as a
+    doubled or halved number. }
+  w := 'abcd';
+  s := 'abcd';
+  writeln('argNW=', TakesWide(s), ' argWN=', TakesNarrow(w),
+          ' argLW=', TakesWide('abcdef'), ' argWW=', TakesWide(w));
   { The empty string is the nil handle in both widths. }
   w := '';
   writeln('empty len=', Length(w), ' out=[', w, ']');

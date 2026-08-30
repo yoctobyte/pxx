@@ -414,7 +414,9 @@ function StrToInt64Def(const s: AnsiString; def: Int64): Int64;
   and the bytes it carries through are whatever the source gave it, which for JSON/HTTP/etc is
   UTF-8. So DefaultSystemCodePage reports CP_UTF8, and code that asks "do I need to convert?"
   correctly concludes it does not. That is the honest answer for this string model, not a
-  placeholder: see UTF8Decode above, which is the identity for the same reason. }
+  placeholder. Note it stays CP_UTF8 even under {$define PXX_WIDE_PAYLOAD}: the define changes
+  what a UnicodeString holds, not what an AnsiString holds, and this constant is about the byte
+  string. UTF8Decode above is where the two models meet. }
 const
   CP_ACP   = 0;
   CP_UTF16 = 1200;
@@ -455,15 +457,27 @@ function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
 
 { FPC's UTF-8 <-> UnicodeString converters.
 
-  THIS RTL HAS ONE STRING MODEL: bytes. There is no UTF-16 UnicodeString to convert TO, so
-  `UnicodeString` IS `string` here and these are the IDENTITY. That is stated rather than
-  hidden, because it IS an approximation: FPC's UTF8Decode produces UTF-16 code units, and
-  code that indexes the result expecting one element per CHARACTER will see one element per
-  BYTE here. For ASCII -- which is what fpjson's JSON escaping actually walks -- the two agree
-  exactly; for multi-byte UTF-8 they do not. Real UTF-16 is a string-model decision, not a
-  function to bolt on. }
-function UTF8Decode(const s: AnsiString): AnsiString;
-function UTF8Encode(const s: AnsiString): AnsiString;
+  THESE ARE REAL NOW, AND THE BODIES DID NOT CHANGE TO MAKE THEM REAL. The whole conversion
+  is in the two signatures: `UnicodeString` is the wide ELEMENT WIDTH of the one managed-string
+  kind, so `Result := s` across a width boundary lowers to PXXWideFromStr / PXXStrFromWide
+  automatically (feature-unicodestring-model step 7c). Writing the transcode out by hand here
+  would be a SECOND implementation of it, and the second one is the one that stays broken.
+
+  WHAT YOU GET DEPENDS ON THE PROGRAM, and that is not a hedge -- it is the migration. Under
+  `{$define PXX_WIDE_PAYLOAD}` UnicodeString is genuinely UTF-16: UTF8Decode('café') answers
+  4 code units for 5 UTF-8 bytes, indexing steps one CHARACTER as FPC's does, and a non-BMP
+  code point is the surrogate PAIR that jsonscanner needs. Without the define UnicodeString
+  is still an alias for the byte string, these are still the identity, and every existing
+  program compiles to exactly what it compiled to before.
+
+  So the old note on this declaration -- "there is no UTF-16 UnicodeString to convert TO" --
+  was true when it was written and is now true only of the default build. It is corrected
+  rather than deleted because a caller that relied on the identity is relying on something
+  that still holds for them, and needs to know what turning the define on would change:
+  one element per CHARACTER instead of one per BYTE. For ASCII, which is what fpjson's escaping
+  actually walks, the two agree exactly either way. }
+function UTF8Decode(const s: AnsiString): UnicodeString;
+function UTF8Encode(const s: UnicodeString): AnsiString;
 
 { FPC SysUtils Int64/QWord parsers. StrToInt64/StrToQWord raise EConvertError on
   malformed input, like FPC; the *Def forms return the default instead. }
@@ -1050,12 +1064,15 @@ begin
   else raise EConvertError.CreateFmt('"%s" is not a valid boolean', [s]);
 end;
 
-function UTF8Decode(const s: AnsiString): AnsiString;
+{ Both bodies are a bare assignment ON PURPOSE -- see the declaration. The store carries the
+  width conversion when the widths differ and is a plain copy when they do not, so there is one
+  transcoder in this compiler and it lives in the runtime, not here. }
+function UTF8Decode(const s: AnsiString): UnicodeString;
 begin
-  Result := s;      { identity -- see the declaration }
+  Result := s;
 end;
 
-function UTF8Encode(const s: AnsiString): AnsiString;
+function UTF8Encode(const s: UnicodeString): AnsiString;
 begin
   Result := s;
 end;

@@ -1,0 +1,6 @@
+utf8 bytes=5
+decoded units=4
+units: 99 97 102 233
+re-encoded bytes=5 out=café
+round trip intact=TRUE
+ascii units=5 bytes=5
