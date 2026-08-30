@@ -30,13 +30,29 @@ program test_cdecl_bodied_narrow;
   and `f(a: Integer; b: Double)` printed 7 where 9 was correct, the double
   arriving as zero. Reusing another target's discriminating case here would have
   reported a false green from a correct test pointed at the wrong ABI. Both
-  orders are therefore asserted below, deliberately. }
+  orders are therefore asserted below, deliberately.
+
+  THE DISCRIMINATING CASE FOR i386 IS THREE DISTINCT INTEGERS, and it involves
+  no floats at all -- a third mechanism, unrelated to both of the above. i386
+  passes everything on the stack in one sequence, so neither register banks nor
+  8-byte alignment can diverge. What diverges is ORDER: cdecl puts arg0 at the
+  LOWEST address, [ebp+8], while pxx's internal convention pushes left-to-right
+  and leaves the LEFTMOST argument DEEPEST.
+
+  Measured before i386's arm existed: f(1, 2, 3) returning a*100 + b*10 + c
+  printed 321 on i386 and 123 on every other target. The three values must be
+  DISTINCT for that to be visible -- every other case in this file passes equal
+  or nil-shaped arguments in at least one position, and a reversed argument list
+  is invisible under those. Each of the three earlier mechanisms is silent on
+  the other two targets' cases, which is the whole reason this file carries
+  three discriminating cases rather than one. }
 
 type
   TFnDI = function(a: Double; b: Integer): Integer; cdecl;
   TFnID = function(a: Integer; b: Double): Integer; cdecl;
   TFnSI = function(s: Single; n: Integer): Integer; cdecl;
   TFnRef = function(var a: Double; b: Integer): Integer; cdecl;
+  TFn3I  = function(a, b, c: Integer): Integer; cdecl;
 
 var failures: Integer = 0;
     checks: Integer = 0;
@@ -69,6 +85,11 @@ begin Result := Trunc(s * 2) + n; end;
 function CbRef(var a: Double; b: Integer): Integer; cdecl;
 begin Result := Trunc(a) + b; end;
 
+{ The ORDER case. On i386 this is the only one of the five that fails without a
+  cdecl prologue, and it is the only one with no float in it. }
+function Cb3I(a, b, c: Integer): Integer; cdecl;
+begin Result := a * 100 + b * 10 + c; end;
+
 procedure TakeDI(fn: TFnDI);
 begin Expect(fn(2.5, 7), 9, 'double-then-int via fnptr'); end;
 
@@ -85,15 +106,25 @@ begin
   Expect(fn(d, 7), 9, 'by-ref float via fnptr');
 end;
 
+procedure Take3I(fn: TFn3I);
+begin Expect(fn(1, 2, 3), 123, 'three distinct ints via fnptr (argument ORDER)'); end;
+
 { The ASSIGNMENT shape. Refused outright on a target still behind the ir.inc
   reject, so this half does not COMPILE there -- which is what stops this file
   being wired for a target before that target is ready. All three targets wired
-  today (x86-64, aarch64, arm32) have their arm AND have left the reject. }
+  today (x86-64, aarch64, arm32, i386) have their arm AND have left the reject. }
 procedure ViaVariable;
 var f: TFnID;
 begin
   f := @CbID;
   Expect(f(7, 2.0), 9, 'int-then-double via assigned variable');
+end;
+
+procedure Via3IVariable;
+var f: TFn3I;
+begin
+  f := @Cb3I;
+  Expect(f(1, 2, 3), 123, 'three distinct ints via assigned variable');
 end;
 
 var dref: Double;
@@ -102,13 +133,16 @@ begin
   TakeID(@CbID);
   TakeSI(@CbSI);
   TakeRef(@CbRef);
+  Take3I(@Cb3I);
 
   Expect(CbDI(2.5, 7), 9, 'double-then-int direct');
   Expect(CbID(7, 2.0), 9, 'int-then-double direct');
   Expect(CbSI(1.5, 4), 7, 'single-then-int direct');
   dref := 2.5;
   Expect(CbRef(dref, 7), 9, 'by-ref float direct');
+  Expect(Cb3I(1, 2, 3), 123, 'three distinct ints direct');
   ViaVariable;
+  Via3IVariable;
 
   if failures = 0 then
     writeln('CDECL-NARROW OK checks=', checks)

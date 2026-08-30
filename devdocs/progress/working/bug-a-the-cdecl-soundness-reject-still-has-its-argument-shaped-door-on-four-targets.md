@@ -75,8 +75,20 @@ option is taken.
 | x86-64 | done | done | `feature-cdecl-bodied-sysv-prologue` |
 | aarch64 | done | done | AAPCS64, independent x0..x7 / d0..d7 banks |
 | arm32 | done | done | AAPCS soft-float; **half-joined**, see below |
-| i386 | — | — | fails 3 of 8 narrow checks today |
-| riscv32 | — | — | passes all 8 narrow checks today, which proves nothing |
+| i386 | done | done | cdecl argument ORDER; no float mechanism involved |
+| riscv32 | — | — | passes all 12 narrow checks today, which proves nothing |
+
+**i386's mechanism was a third one, and no earlier case could see it.** x86-64
+and aarch64 diverged on independent register banks; arm32 on 8-byte alignment.
+i386 has neither — it passes everything on the stack in one sequence — and
+diverged purely on ORDER: cdecl puts arg0 at the lowest address, pxx's internal
+convention pushes left-to-right and leaves the leftmost argument deepest. Its
+discriminating case is `f(1, 2, 3)` returning `a*100 + b*10 + c`, which printed
+**321** pre-arm on i386 and 123 on every other target. Three DISTINCT integers
+are load-bearing: every other case in the narrow file passes an equal or
+nil-shaped argument somewhere, and a reversed argument list is invisible under
+those. That is now three targets in a row whose mechanism was invisible to the
+previous target's case, which is the evidence behind the riscv32 note below.
 
 **arm32 half-joins.** Its arm is correct for every signature it accepts and it
 refuses any argument block over 4 core registers, because stack arguments are
@@ -104,7 +116,7 @@ The other targets' discriminating case ALREADY PASSED on arm32 —
 `f(a: Double; b: Integer)` gave the right answer, because soft-float coincides
 with positional when the double is first. **A correct test pointed at the wrong
 ABI reports a false green**, and reusing it would have shipped an arm nothing
-tested. riscv32 passing all 8 narrow checks today is that same reading and must
+tested. riscv32 passing all 12 narrow checks today is that same reading and must
 be treated as mute, not clean.
 
 ## One predicate, four targets, four symptoms, and a census that cannot see it

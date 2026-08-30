@@ -93,9 +93,9 @@ Three strikes on this predicate so far: `b362` (indirect, lua + sqlite),
 
 ## Sequencing note
 
-`EmitParamSpillsForTarget` now has C-ABI arms for x86-64, aarch64 and arm32 (from
-`bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets`),
-so the shared destination for the collapse **already exists on three of five
+`EmitParamSpillsForTarget` now has C-ABI arms for x86-64, aarch64, arm32 and i386
+(from `bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets`),
+so the shared destination for the collapse **already exists on four of five
 targets** and grows as that campaign finishes. Doing this after that campaign is
 cheaper than doing it now, and doing it at all is what stops strike four.
 

@@ -4881,24 +4881,32 @@ test-core: $(COMPILER)
 	# arm -- soft-float coincides with positional there -- so the other targets'
 	# discriminating case would have reported a false green here. Both orders
 	# are asserted for that reason.
-	# Wired for x86-64 + aarch64 + arm32. i386 fails 3 of 8 today and riscv32
-	# passes all 8; neither is wired until it has an arm, and riscv32's green
-	# means it needs its OWN discriminating case, not that it is done.
+	# Wired for x86-64 + aarch64 + arm32 + i386. riscv32 passes all 12 WITHOUT an
+	# arm and is still not wired: passing three cases each built from a DIFFERENT
+	# target's ABI is not evidence about riscv32's, so that green means it needs
+	# its OWN discriminating case, not that it is done. It also cannot compile
+	# this file yet -- it has not left the ir.inc reject.
 	# bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
 	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow26
-	tools/expect_same.sh test_cdecl_narrow26 "$$($(TESTTMP)/test_cdecl_narrow26)" "CDECL-NARROW OK checks=9"
+	tools/expect_same.sh test_cdecl_narrow26 "$$($(TESTTMP)/test_cdecl_narrow26)" "CDECL-NARROW OK checks=12"
 	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=aarch64 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_a64 && \
-	  tools/expect_same.sh aarch64/test_cdecl_narrow "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cdecl_narrow_a64)" "CDECL-NARROW OK checks=9"; \
+	  tools/expect_same.sh aarch64/test_cdecl_narrow "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cdecl_narrow_a64)" "CDECL-NARROW OK checks=12"; \
 	else \
 	  echo "=== test_cdecl_bodied_narrow: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
 	@if command -v qemu-arm >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=arm32 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_a32 && \
-	  tools/expect_same.sh arm32/test_cdecl_narrow "$$(tools/run_target.sh arm32 $(TESTTMP)/test_cdecl_narrow_a32)" "CDECL-NARROW OK checks=9"; \
+	  tools/expect_same.sh arm32/test_cdecl_narrow "$$(tools/run_target.sh arm32 $(TESTTMP)/test_cdecl_narrow_a32)" "CDECL-NARROW OK checks=12"; \
 	else \
 	  echo "=== test_cdecl_bodied_narrow: qemu-arm absent, arm32 arm NOT verified ==="; \
 	fi
+	# i386 runs natively on this host, so it is wired unguarded like every other
+	# i386 target above. Its discriminating case is the three-distinct-integer
+	# ORDER one; measured on a pre-arm binary it printed 321 through a function
+	# pointer and through an assigned variable, 123 direct.
+	./$(COMPILER) --target=i386 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_i386
+	tools/expect_same.sh i386/test_cdecl_narrow "$$(tools/run_target.sh i386 $(TESTTMP)/test_cdecl_narrow_i386)" "CDECL-NARROW OK checks=12"
 	# AN AGGREGATE RESULT FROM A FUNCTION WITH MORE THAN 8 PARAMETERS.
 	#
 	# aarch64 refused this outright until the x8 load and the matching stack
