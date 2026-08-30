@@ -140,6 +140,26 @@ substitution set applied when a template is specialized covers its PARAMETERS
 (`TKey` -> `Integer`) and not the type names its own body declares, so a nested
 name used as a generic argument survives into a top-level declaration unmapped.
 
+### READ THIS BEFORE CLAIMING IT: the `blocked-by` is lifted and the ticket is NOT ready
+
+`bug-p-a-qualified-type-name-cannot-be-a-generic-argument` is **resolved**
+(`3ee9a672f`), so the dependency edge below is clear and `progress.sh` will
+compute this ticket as unblocked. **It is still RED.** Those are two different
+claims and the ranker can only compute the first.
+
+**The machinery exists; the wiring does not.** Verified by running the reduction
+AFTER that fix landed: the prerequisite emitter still writes an un-substituted
+nested name and the file still fails with `unknown type: TPair` / `unknown type:
+PT` at line 35. Nothing about this ticket's symptom changed. What changed is that
+the frontend can now *read* the form the fix will need to *emit* — a qualified
+argument is normalised to a minted single identifier
+(`QualArgAliasName` / `NoteQualArgNeed` / `EmitQualAliasDecl` in
+`pasparser_generic.inc`) — so the route that was impossible is now merely unbuilt.
+
+A lifted edge over hollow content is the same failure as a stale blocker, wearing
+the opposite sign, and it is the one the board cannot represent. Hence this
+paragraph rather than a frontmatter field.
+
 ### CORRECTION, same day, after probing: the remainder is NOT one mapping
 
 The paragraph below said "one mapping is missing, not the machinery". Measured,
