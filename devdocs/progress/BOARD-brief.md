@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:30 blocked:7 backlog:379 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2797 rejected:58`
+`unfinished:30 blocked:7 backlog:380 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2797 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -81,10 +81,10 @@ _none — no lane is locked._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [U]` decide-adopt-a-second-string-model-or-refuse-utf16-honestly (unblocks 1)
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
 _377 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

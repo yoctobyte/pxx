@@ -59,7 +59,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (379)
+## backlog (380)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -228,6 +228,7 @@ _none_
 | compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees | P | 25→70 | compat | set (32 vs 4), subrange (4 vs 1) and string[N] (8 vs 21) all store wider or narrower than FPC; every VALUE agrees, only SizeOf and record layout differ -- one layout family, four filed measurements | — |
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
+| decide-adopt-a-second-string-model-or-refuse-utf16-honestly | U | 62 | decide | feature-unicodestring-model [A p62] says in its own body that this is a MODEL DECISION, not a function to write -- and its title offers the alternative outright: a real UTF-16 model, or an honest refusal. pxx has one string model (bytes, CP_UTF8 passthrough) and the RTL is already candid about it at the declaration: UTF8Decode/UTF8Encode are the identity, WideChar casts to a 2-byte ordinal. Adopting UTF-16 is a second model in a compiler whose whole design pushes generality DOWN into one substrate. Refusing means fcl-json's \\uXXXX surrogate path stays uncompilable. Neither is derivable from the code or from a sensible default, so it is Track U. | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
 | decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused | U | 60 | decide | make revert DELETES the row from history.log and pin.log, and the next pin REUSES the counter -- so v394 names two different binaries and the withdrawn one appears nowhere in the ledger. Two forks: erase vs annotate, and reuse vs burn. It touches a public claim: the launch fact sheet says pins are in git with their sha256 and landing commit 'so the trajectory is reconstructible', which is true of git and false of the ledger a reader would actually check. | — |
 | decide-does-nilpy-random-seed-itself-at-import | U | 60 | decide | CPython's `random` seeds from entropy at import; NilPy's starts from a fixed constant, deliberately, so a failing run reproduces. That is a real trade-off and it collides with the upward-compatibility rule. Recommendation: seed by default, keep determinism behind an explicit opt-in. | — |
@@ -379,7 +380,7 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 35 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
 | feature-typeinfo-last-categories | A | 20 | feature | The tail of the TypeInfo widening that still has NO consumer: interfaces (14) and metaclasses (28) are refused outright, TypeInfo(PChar) is refused while bare Pointer works, Currency (4) needs a tyCurrency that does not exist, procvar/method types get no TTypeData, and NativeInt reports tkInteger where FPC reports tkInt64 on a 64-bit target. | — |
-| feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
+| feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | decide-adopt-a-second-string-model-or-refuse-utf16-honestly |
 | feature-web-blog-bootstrap | W | 35 | feature | `/blog/` returns 200 and says `Coming soon.` [[feature-promo-launch-plan]] already decided that VISIBILITY starts now and is ungated — the blog is the surface that decision needs and it does not exist yet. This ticket is the MACHINERY plus two concrete first posts; the strategy, the audience and the one-shot launch guard all live in that ticket and are not relitigated here. | — |
 | feature-web-machine-readable-project-metadata | W | 40 | feature | pxxc.org serves no `/llms.txt` (404) and no JSON-LD structured data. The site is otherwise unusually legible to machines — server-rendered, indexed, and summarised ACCURATELY including the byte-identical discipline holding under compression — so these two files are the remaining gap in a channel that already works, not a rescue job. | — |
 | feature-web-syndication-feeds | W | 30 | feature | The site publishes two things that change continuously — the `Latest resolved` ticket list and (once it exists) the blog — and offers no RSS/Atom feed for either. No `application/rss+xml` or `application/atom+xml` link anywhere in the head. A follower has no way to follow, and the one genuinely novel asset (a live public record of a compiler being built by an agent fleet) is unsubscribable. | — |
@@ -795,10 +796,10 @@ _none_
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
+- [p 62] [U] decide-adopt-a-second-string-model-or-refuse-utf16-honestly (unblocks 1)
 - [p 62] [A] feature-a-typeref-migrate-consumers
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
-- [p 62] [A] feature-unicodestring-model
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [A+S] bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
@@ -1187,6 +1188,7 @@ _none_
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
+- **1** — decide-adopt-a-second-string-model-or-refuse-utf16-honestly
 - **1** — decide-does-nilpy-random-seed-itself-at-import
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal

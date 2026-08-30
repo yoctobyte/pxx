@@ -1,6 +1,16 @@
 ---
 prio: 62
+track: A
+blocked-by: [decide-adopt-a-second-string-model-or-refuse-utf16-honestly]
+status: backlog
 ---
+
+> **Not dispatchable as implementation — the choice IS the work.** This ticket's
+> own body says "this is a model decision, not a function", and its title carries
+> both branches. Escalated 2026-08-30 to
+> `decide-adopt-a-second-string-model-or-refuse-utf16-honestly` (U p62) so an
+> agent does not settle the language's string model by picking one while
+> implementing. do not claim until that lands.
 
 # A real UnicodeString / WideChar model (UTF-16), or an honest refusal
 
