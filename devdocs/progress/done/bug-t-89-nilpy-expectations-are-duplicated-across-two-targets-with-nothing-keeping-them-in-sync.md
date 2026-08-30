@@ -203,4 +203,4 @@ automatically. Box load 9-18 throughout with two other testmgr runs on it, so no
 timing here is a signal.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit bb78dbc3d.
