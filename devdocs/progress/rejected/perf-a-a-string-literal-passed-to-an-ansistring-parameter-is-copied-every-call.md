@@ -4,10 +4,10 @@ track: A
 prio: 70
 type: perf
 blocked-by: []
-status: unfinished
+status: rejected
 created: 2026-08-30
 owner: frankB
-summary: "REOPENED 2026-08-30 -- the fix LANDED (9588c8535, 849ms -> 84ms) and was REVERTED (72b4c47a7) because it broke NilPy string repeat with a LITERAL left operand: `x = \"a\" * 3; len(x)` gives 285 instead of 3, while `a = \"a\"; len(a * 3)` is correct. ~24 test-nilpy jobs + 4 test-core. Confirmed mine by reverse-applying the ir.inc hunk alone and rebuilding (285 -> 3). The perf win is real and re-landable; what it needs is a guard that excludes the callee paths which already do their own +8, and a way to GATE it -- test-nilpy is full-tier only, so gate.sh quick could not see the failing population at all. Do not re-land without a NilPy repeat repro in the evidence."
+summary: "REJECTED 2026-08-30 as SUPERSEDED -- do not re-land. The optimisation was real (849ms -> 84ms, measured correctly at the time) and is now worth NOTHING at the default level, because 440c822e6 promoted EmitStaticLitHandle from -O3 to -O2 THIRTY-SIX MINUTES after this landed and does the same job at codegen. Interleaved min-of-9 at HEAD: -O2 with=48ms without=41ms (no gain, marginally worse); -O1 with=50ms without=517ms (the 10x is real but only at -O1, which the owner has ruled in limbo). It also broke ~28 NilPy jobs and was reverted (72b4c47a7). The 2-line arg-tag change that fixes the NilPy break is NOT a standalone fix -- landed alone it is a FRESH regression (measured: 14 correct rows become one wrong line), because ASTTk[argVal] correctly describes what IRLowerCallArg produces on the unoptimised path. Net: land nothing."
 ---
 
 # A string literal passed to an `AnsiString` parameter is copied on every call
@@ -313,3 +313,84 @@ cannot run.** The answer is not to widen the gate (that spends the machine that
 produces Track T's median-8 sampling); it is to carry **one NilPy canary in the
 evidence** for any change to argument marshalling. `x = "a" * 3` would have
 caught this in under a second.
+
+
+---
+
+## REJECTED 2026-08-30 (frankB) — superseded in flight; land nothing
+
+Re-opened to build the proper guard, and the measurement said not to. Recording
+it in full because the *reasoning* is reusable and the conclusion is
+counter-intuitive.
+
+### The optimisation is worth nothing at the default level
+
+Original harness (inlined above), HEAD, **interleaved A/B, min of 9, never
+means**, load 8.4. A = my hunk re-applied, B = without it, nothing else differing:
+
+| level | A (with opt) | B (without) | verdict |
+| --- | --- | --- | --- |
+| **-O2** (default) | 48 ms | **41 ms** | **no gain — marginally worse** |
+| **-O1** | 50 ms | **517 ms** | 10x — real, but only here |
+
+**My original 849 -> 84 ms was correct when it was taken.** What changed is
+`440c822e6`, *"promote the static string-literal pass from -O3 to -O2, both
+backends"* — `EmitStaticLitHandle` now does the same job one layer down, at the
+default level. Timestamps:
+
+```
+9588c8535  20:07:45   my optimisation
+440c822e6  20:43:52   the -O2 promotion   <- 36 minutes later
+```
+
+So this was **superseded in flight**, while it sat in the tree causing the NilPy
+regression. Re-landing would restore a 60-line special case in `ir.inc` for zero
+gain at the level everything is built at, and its only remaining benefit is at
+**-O1, which the owner has ruled "in limbo"**.
+
+This is `ir-as-substrate` working as designed: the general fix belongs at
+codegen, where it applies to every literal, not at the call boundary behind a
+guard listing the shapes I could think of.
+
+### The arg-tag "fix" is NOT a standalone fix — it is a fresh regression
+
+The NilPy break was `ir.inc:8848` tagging the `IR_ARG` with `ASTTk[argVal]` (the
+argument's source type) rather than the parameter's. Re-tagging it to
+`Ord(Procs[cpi].Params[0].TypeKind)` **does** fix `len("a" * 3)` — *with the
+optimisation applied*: 14 probe rows byte-identical to CPython, `print("a" * 3)`
+back to `aaa`.
+
+**Landed WITHOUT the optimisation it BREAKS the same 14 rows** — measured, one
+wrong line where fourteen correct ones belong.
+
+So the conclusion I reached first was wrong and is worth stating so nobody
+re-derives it: **`ASTTk[argVal]` was never the bug.** It correctly describes what
+`IRLowerCallArg` hands back on the unoptimised path — a freshly copied managed
+temp. The optimisation changed *what that call produces* without changing the
+tag, and the two only ever agreed by accident. Neither half is independently
+correct; they are one change or nothing.
+
+I nearly landed the tag change on its own as a "latent correctness fix". The only
+thing that stopped it was running the repro against a build that had **just** the
+tag change — a control that felt redundant, because the fix was "obviously" a
+strict improvement.
+
+### What to do if -O1 is ever revived
+
+Both halves together, as one commit, gated with `x = "a" * 3` in the evidence.
+Not before — and check first whether `EmitStaticLitHandle` has been extended to
+-O1 by then, which would supersede it again.
+
+### The reusable half
+
+1. **A perf win has a shelf life.** Between measuring and landing, someone can
+   make it redundant one layer down. Re-time against HEAD before re-landing
+   anything perf, especially after a revert — the tree you are returning to is
+   not the tree you left.
+2. **"My change measures as no difference" is data about the model, not a null.**
+   The playbook says so; here it was the whole finding.
+3. **Test the halves separately even when one is obviously subordinate.** The
+   half I was sure was a strict improvement is a regression alone.
+4. Measured `-O1` = 517 ms vs `-O2` = 41 ms on this row: **-O1 is 12x slower
+   than -O2 on literal-heavy code.** Not this ticket's business, but relevant to
+   whoever settles -O1's limbo.

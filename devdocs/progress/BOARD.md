@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | regression-test-core-test-methodptr-nil-assign | P | 70 | regression | regression: test-core#src:test/test_methodptr_nil_assign.pas red at dc798834ba33 (auto-filed by twatch) | — |
 
-## unfinished (35)
+## unfinished (34)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -49,7 +49,6 @@ _none_
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-target-wasm | A+B | 25 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
-| perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call | A | 70 | perf | REOPENED 2026-08-30 -- the fix LANDED (9588c8535, 849ms -> 84ms) and was REVERTED (72b4c47a7) because it broke NilPy string repeat with a LITERAL left operand: `x = \"a\" * 3; len(x)` gives 285 instead of 3, while `a = \"a\"; len(a * 3)` is correct. ~24 test-nilpy jobs + 4 test-core. Confirmed mine by reverse-applying the ir.inc hunk alone and rebuilding (285 -> 3). The perf win is real and re-landable; what it needs is a guard that excludes the callee paths which already do their own +8, and a way to GATE it -- test-nilpy is full-tier only, so gate.sh quick could not see the failing population at all. Do not re-land without a NilPy repeat repro in the evidence. | — |
 | perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
@@ -739,7 +738,7 @@ _none_
 
 2872 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (66)
+## rejected (67)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -799,6 +798,7 @@ _none_
 | grant-elf-writer-and-object-writers-to-b4 | A | 50 | grant | frankA holds Track A. frank-optimize-b4 keeps a bounded file slice under A's gate: compiler/elfwriter.inc, defs.inc's ELF constants, and the object writers (writeELFRelX64 / writeELF32Rel). Dispatched by ticket, not by lane. Disjoint from symtab.inc and every frontend. | — |
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break | A+P | 0 | grant | HISTORICAL RECORD — the grant system was cut on 2026-08-30 and nothing in here is an instruction any more. Kept for the correction it contains: symtab.inc makes a type well-formed, pasparser_lval.inc is what makes one EXIST, and a file list that named only the first would have landed an unnameable type. | — |
+| perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call | A | 70 | perf | REJECTED 2026-08-30 as SUPERSEDED -- do not re-land. The optimisation was real (849ms -> 84ms, measured correctly at the time) and is now worth NOTHING at the default level, because 440c822e6 promoted EmitStaticLitHandle from -O3 to -O2 THIRTY-SIX MINUTES after this landed and does the same job at codegen. Interleaved min-of-9 at HEAD: -O2 with=48ms without=41ms (no gain, marginally worse); -O1 with=50ms without=517ms (the 10x is real but only at -O1, which the owner has ruled in limbo). It also broke ~28 NilPy jobs and was reverted (72b4c47a7). The 2-line arg-tag change that fixes the NilPy break is NOT a standalone fix -- landed alone it is a FRESH regression (measured: 14 correct rows become one wrong line), because ASTTk[argVal] correctly describes what IRLowerCallArg produces on the unoptimised path. Net: land nothing. | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 18 | refactor | DUPLICATE of refactor-a-seven-frontends-borrow-rust-parser-helpers. Tombstone kept so citations resolve; the 123-places-in-zparser measurement and the substrate-doc framing were merged into the survivor. | — |
 | regression-cascade-110774a14648 | T | 70 | regression | regression CASCADE: 17 jobs newly red at 110774a14648 (auto-filed by twatch) | — |
 | regression-cascade-154d1aa3fba6 | T | 70 | regression | regression CASCADE: 18 jobs newly red in e417731e9..154d1aa3f (12 commits) — auto-filed by twatch | — |
@@ -815,7 +815,6 @@ _none_
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- [p 70] [A] perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 70] [P] bug-p-generic-constraints-are-checked-before-the-type-section-closes [parked — re-claim, do not duplicate]
 - [p 70] [P] bug-p-generic-type-param-unresolved-in-class-abstract-template [parked — re-claim, do not duplicate]
 - [p 70] [A+O] feature-opt-o3-register-pressure

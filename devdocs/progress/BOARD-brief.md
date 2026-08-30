@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:35 blocked:9 backlog:388 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2872 rejected:66`
+`working:1 unfinished:34 blocked:9 backlog:388 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2872 rejected:67`
 
 ## Held now (working/ — do not touch these files)
 
 - `regression-test-core-test-methodptr-nil-assign` [P] — owner: frank-rust
 
-## unfinished (35) — parked mid-flight; re-claim, do not duplicate
+## unfinished (34) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S]
@@ -44,7 +44,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-signal-siginfo-ucontext` [A]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `feature-threadsafe-heap-optimize` [A]
-- `perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call` [A]
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 - `ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired` [A+S]
@@ -61,12 +60,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 
-## Ready — top 30 of 432, ranked
+## Ready — top 30 of 431, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [A]` perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call (unblocks 1)
 - `[p 70] [P]` bug-p-generic-constraints-are-checked-before-the-type-section-closes
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
@@ -93,5 +91,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 
-_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
