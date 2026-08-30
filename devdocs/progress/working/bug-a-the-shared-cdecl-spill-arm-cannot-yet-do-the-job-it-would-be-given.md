@@ -2,9 +2,9 @@
 track: A
 prio: 65
 type: bug
-status: new
+status: working
 blocked-by: []
-owner: ""
+owner: frankA
 summary: "EmitParamSpillsForTarget's ProcCdecl arms have three gaps that only surface once the C frontend routes into them: aarch64 mishandles a by-value Single, i386's arm has no float classification at all, and arm32's cannot compile a varargs-using translation unit. These are PREREQUISITES for bug-c-a-c-function-s-calling-convention-depends-on-the-target, not follow-ons -- routing the C prologue into an arm with these gaps breaks pure C no matter what the call sites do."
 ---
 
@@ -77,3 +77,80 @@ are `test-c-abi-cross` (RED by design until the pair lands). Note `flt` is
 ALREADY red on arm32/riscv32/i386 in pure C before any of this — that is
 [[bug-c-a-float-parameter-and-return-are-wrong-in-pure-c-on-three-targets]] and
 must not be read as caused by this work.
+
+
+---
+
+# GAP 1 IS NOT A Single MISHANDLING — the RETURN convention has no counterpart
+
+frankA, 2026-08-30. Measured under the scaffold (cparser routing applied
+locally, never committed), compiler shas quoted per run.
+
+## The complementary table that settles it
+
+`fnarrow.c` isolates the two halves: **D** is a `float` parameter with an `int`
+return; **C** is an `int` parameter with a `float` return. Both run on aarch64,
+same source, one variable changed between the two runs.
+
+| | routing ON, guards PRESENT | routing ON, guards REMOVED |
+| --- | --- | --- |
+| **D** — float PARAM, int return | **0 — BAD** | **10 — ok** |
+| **C** — int param, float RETURN | **10 — ok** | **0 — BAD** |
+
+Exactly complementary. Removing the guards fixes the parameter and breaks the
+return; keeping them does the reverse. Nothing here is a `Single`
+classification defect.
+
+**The mechanism.** The C-side change routes only the *parameter spill* into the
+shared arm. Nothing routes the callee's **return**. So with the guards removed,
+the caller takes the AAPCS arm — which, per its own comment at
+`ir_codegen_aarch64.inc:2993`, *"bridges a float result d0 -> x0 for the GPR
+value model"* — while the C callee's epilogue still returns the float in the
+positional model. Caller and callee disagree about where the result lives.
+
+The parameter half was routed; the return half was not. **That is the gap**, and
+it is one defect, not the per-target list below.
+
+## What this does to the ticket's own framing
+
+- The "aarch64 mishandles a by-value `Single`" reading is wrong. I tested it
+  first, because the arm's comment invited it: I made the cdecl arm narrow with
+  `fcvt s0, d[n]` instead of a raw `str s[n]`. **`flt` stayed `0.00`** and the
+  change was reverted — the arm's existing comment is correct and states the
+  caller already narrows (`fmov d[hi], x9` then `fcvt s[hi], d[hi]`). Recorded
+  so nobody re-runs it.
+- **i386's "floats stay Nan" is very likely the same defect**, not a separate
+  "no float classification": the i386 arm has the identical shape, an st0->xmm0
+  result bridge behind the same guard (`ir_codegen386.inc:3646`).
+- **Gap 3 is not distinct from
+  [[bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area]] after all.** The full
+  error, which the ticket quotes only the tail of, is
+  `target arm32: a cdecl routine whose argument block exceeds 4 core registers
+  is not supported yet`, raised while compiling **`lib/crtl/src/stdarg.c`**. It
+  is that ticket's refusal, reached because routing sends a `stdarg.c` helper
+  through the shared arm. Not "a TU with no wide call in it".
+
+## Correction to a claim I made earlier in this ticket's history
+
+I reported the pure-C baseline as CLEAN on all five targets and frankC reported
+`flt` failing on three. **Both were right about their own control.** Mine routes
+the float result through a *prototyped* `chk(const char*, double, double)`;
+frankC's hands it straight to variadic `printf`. Isolated on baseline: a float
+result assigned to a local and compared in C is correct on all of
+x86-64/arm32/riscv32/i386, and only the direct-into-variadic form fails. That is
+[[bug-c-a-float-parameter-and-return-are-wrong-in-pure-c-on-three-targets]],
+which is also mis-titled — the parameter is fine and the return is fine; the
+variadic argument conversion is not.
+
+**Consequence for anyone using these subjects as an oracle:** on
+arm32/riscv32/i386 an absolute float row in the pure-C control is reading that
+defect, not this one. The *deltas* in the paired table remain valid.
+
+## Where this leaves the work
+
+The prerequisite is bigger than "three gaps in the spill arm" and is not only a
+spill-arm change: the C-defined callee's **return** must move to the C
+convention at the same time as its parameters, or the two halves will keep
+trading places. Whether that lands as a return-side counterpart to
+`EmitParamSpillsForTarget` or as part of the C-side commit is the open design
+question.
