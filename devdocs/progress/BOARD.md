@@ -30,7 +30,7 @@ _none_
 | bug-p-generic-type-param-unresolved-in-class-abstract-template | P | 70 | bug | A generic template's own type parameter is not in scope inside a `class abstract(...)` body: generics.collections' TCustomPointersEnumerator<T, PT> reports `unknown type: PT` for its own PT. This is the wall the rtl-generics corpus hits now that bug-p-object-value-types-standard-meaning cleared the one 26 lines later that used to abort the parse first. | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
-| feature-c-corpus-busybox-applet | C | 60 | feature | UNBLOCKED 2026-08-30 -- libbb.h now compiles and all 145 TUs are reachable. Spun out of idea-c-realworld-test-targets (its own top pick, #1 in the suggested order). Build ONE busybox applet -- cat -- from upstream source with cfront, standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, run under tools/run_target.sh on x86-64 + aarch64. busybox is syscall-heavy, which points it straight at crtl, the layer that is actually thin. | — |
+| feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED 2026-08-30 -- libbb.h now compiles and all 145 TUs are reachable. Spun out of idea-c-realworld-test-targets (its own top pick, #1 in the suggested order). Build ONE busybox applet -- cat -- from upstream source with cfront, standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, run under tools/run_target.sh on x86-64 + aarch64. busybox is syscall-heavy, which points it straight at crtl, the layer that is actually thin. | — |
 | feature-c-diagnostics-name-the-module-they-are-in | C | 40 | feature | A Pascal diagnostic now prints `in: <path>` when the error is in an include or a `uses`d unit. The C frontend has the same information already — CModRange* is populated in every build, not just under -g — and prints nothing, so an error in a crtl module or an included header still reports a bare line number. | bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it |
 | feature-c-gtk3-header-final-wiring | C | 55 | feature | Stock GTK3 headers import, link to libgtk-3.so.0 and run a real window — done and gated by test_c_gtk3_stock. The 2026-06-29 probe failure was a wrong include root, not an importer limit. Parked: dropping the explicit -I needs decide-which-gtk-a-bare-gtk-gtk-h-means, and the PCL migration is a Track B ticket. | decide-which-gtk-a-bare-gtk-gtk-h-means |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
@@ -67,7 +67,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (388)
+## backlog (389)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -297,6 +297,7 @@ _none_
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | BLOCKED on decide-posix-master-vs-fpc-named-master-for-the-socket-facades: the design says Posix.* is canonical and the FPC-named units wrap it, but the tree shipped the FPC-named units AS the implementation on PAL, and all three of the design's selectable backends already exist one layer down at the PAL. Building as designed would invert a working layer with 15 in-tree consumers plus Synapse, for zero current consumer. Not implementation work until the layering question is re-decided. | decide-posix-master-vs-fpc-named-master-for-the-socket-facades |
 | feature-bare-esp-supports-uses-builtin | A+S | 20 | feature | Make `uses builtin;` compile on a bare ESP boot | — |
+| feature-busybox-kiosk-selfhosting-target | B | 80 | feature | Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- the work lives in the rungs below, each of which is filed or exists. ONE host dependency the fleet cannot satisfy: qemu-system is NOT installed (only qemu-user), see decide-install-qemu-system-and-a-freebsd-image-on-plexus. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-package-namespace-decision | A | 35 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
@@ -812,6 +813,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 78] [C] feature-c-corpus-busybox-applet [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -861,7 +864,6 @@ _none_
 - [p 60] [U] decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
 - [p 60] [U] decide-one-managed-string-kind-with-an-element-width-or-a-second-kind
 - [p 60] [N] feature-a-declaration-phase
-- [p 60] [C] feature-c-corpus-busybox-applet [parked — re-claim, do not duplicate]
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [T] feature-t-commit-trailer-hook
