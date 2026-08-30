@@ -1338,7 +1338,19 @@ var
 begin
   case IRKind[node] of
     IR_CONST_INT:
-      if Is64BitRISCV32(IntToTypeKind(IRTk[node])) then
+      { A float constant's IVal is the DOUBLE bit pattern whatever its tk says
+        (defs.inc, AN_FLOAT_LIT) -- so a tySingle const has to be NARROWED here,
+        not truncated. Low32 of a double pattern is the low mantissa half, which
+        is why `float v = 0.1f` read back as -0.000000000 once C started typing
+        an f-suffixed literal as single (bug-c-the-f-suffix-on-a-float-literal-
+        is-ignored). x86-64 and aarch64 never needed this -- their value model
+        carries a single as double bits -- and arm32 loads the whole pattern
+        into d0 and converts on the way out; riscv32 is soft-float ILP32 and
+        carries a single as its own 32 bits in a0 (see the tySingle arm of the
+        Trunc/Round lowering), so the narrowing has to be explicit. }
+      if IntToTypeKind(IRTk[node]) = tySingle then
+        EmitLoadImmRISCV32(reg_a0, DoubleBitsToSingleBits(IRIVal[node]))
+      else if Is64BitRISCV32(IntToTypeKind(IRTk[node])) then
         EmitLoadConst64RISCV32(IRIVal[node])
       else
         EmitLoadImmRISCV32(reg_a0, Low32(IRIVal[node]));

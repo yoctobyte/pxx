@@ -3942,6 +3942,7 @@ var
   CLexUnsignedSuffix : Boolean; { last C integer literal had a u/U suffix }
   CLexLongCount : Integer;      { last C integer literal's l/L suffix count (1=long, >=2=long long) }
   CLexHexOctal : Boolean; { last C integer literal was hex or octal (radix<>10) — C types these through the unsigned rungs of the constant ladder, decimals do not }
+  CLexFloatSuffixF : Boolean; { last C float literal carried an f/F suffix — it has TYPE float, not double (sizeof, and the width its arithmetic is done in) }
   { Declaration-order gating for program/unit GLOBAL VARIABLES (declare-before-use,
     FPC-parity). The whole-program pre-scan registers every global before any body
     compiles, which otherwise lets a routine bind a global declared textually below

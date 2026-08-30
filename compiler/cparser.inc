@@ -1413,10 +1413,17 @@ begin
     end;
     tkFloat:
     begin
-      { float literal — IVal carries the IEEE-754 double bit pattern (clexer) }
+      { float literal — IVal carries the IEEE-754 double bit pattern (clexer),
+        already rounded through single if the source wrote an `f` suffix.
+
+        The suffix also decides the literal's TYPE (C 6.4.4.2): `0.1f` is a
+        float, so `sizeof(0.1f)` is 4 and its arithmetic is done at float width.
+        Flag 64 is set by the lexer at the one place the suffix is visible.
+        bug-c-the-f-suffix-on-a-float-literal-is-ignored }
       node := AllocNode(AN_FLOAT_LIT);
       ASTIVal[node] := CurTok.IVal;
-      ASTTk[node] := Ord(tyDouble);
+      if (CAttrFlags[TokPos - 1] and 64) <> 0 then ASTTk[node] := Ord(tySingle)
+      else ASTTk[node] := Ord(tyDouble);
       Next;
       Result := node;
     end;

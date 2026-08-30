@@ -612,6 +612,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-c-tag-redef-misfiles-field-selfref-segv | A | 65 | bug | C: struct-tag redefinition misfiles a field into the prior record → self-referential record → compiler SIGSEGV | — |
 | bug-c-ternary-middle-comma | C | 50 | bug | C: ternary middle arm rejects comma expression | — |
+| bug-c-the-f-suffix-on-a-float-literal-is-ignored | C | 40 | bug | `16777217.0f` keeps its double value where C requires the single-precision 16777216.0, and `0.1f` prints 0.100000000 instead of 0.100000001. The explicit `(float)` cast rounds correctly and a store into a float lvalue rounds correctly -- only the literal SUFFIX is ignored. All five targets, so it is a frontend defect, not an ABI or backend one. | — |
 | bug-c-typedef-array-element-init | A | 50 | bug |  | — |
 | bug-c-typedef-name-as-uninitialized-local | C | 94 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | 50 | bug | C typedef alias to struct loses record id | — |

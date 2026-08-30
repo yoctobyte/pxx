@@ -11132,6 +11132,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_c_abi_intra26 "$$($(TESTTMP)/test_c_abi_intra26)" "$$(printf 'dbl_first 1000\nint_first 1000\nthree_ints 123\ntwo_dbl 1750\nflt 1000\ndbl_arg_int_ret 1000')"
 	./$(COMPILER) test/c_float_to_double_cast_variadic.c $(TESTTMP)/c_f2d_cast26
 	tools/expect_same.sh c_f2d_cast26 "$$($(TESTTMP)/c_f2d_cast26)" "$$(printf '1 2.50\n2 2.50\n3 250\n4 250\n5 2.50\n6 2.50\n7 5.00\n8 2.50\n9 16777216.0\n10 16777216.0\n11 0.100000001')"
+	# The `f` SUFFIX, which is the third arm of the same double case and the one
+	# nobody grepped for: the cast rounds and a store into a float lvalue rounds,
+	# but `0.1f` kept the nearest DOUBLE. Row F is a comparison a program can
+	# branch on, not a display question, and row G is the TYPE half -- the value
+	# rows went green one build before G did, so it is not redundant.
+	# The riscv32 arm of this only fails cross-target; see test-c-float-const-cross.
+	# bug-c-the-f-suffix-on-a-float-literal-is-ignored
+	./$(COMPILER) test/c_float_literal_f_suffix.c $(TESTTMP)/c_flit_fsuf26
+	tools/expect_same.sh c_flit_fsuf26 "$$($(TESTTMP)/c_flit_fsuf26)" "$$(printf 'A 0.100000001\nB 0.100000001\nC 0.100000001\nD 16777216.0\nE 16777216.0\nF 0\nG 4\nH 8\nI 0.100000001\nJ 0.100000001')"
+	# ... and the Pascal defect UNDERNEATH it, which had nothing to do with C: a
+	# Single const is stored as a double's bits, so a backend must narrow it.
+	# riscv32 took the low 32 bits and every Single const there was 0.0.
+	./$(COMPILER) test/test_single_const_value.pas $(TESTTMP)/test_single_const26
+	tools/expect_same.sh test_single_const26 "$$($(TESTTMP)/test_single_const26)" "$$(printf '1 2.5000\n2 0.5000\n3 -1.5000\n4 1.5000\n5 0.00 -1.50 2.50\n6 TRUE')"
 	# feature-c-import-a-pascal-unit-under-a-mangled-name: `#include "x.pas"` is
 	# an IMPORT SITE, not textual inclusion -- the unit's routines arrive as
 	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
@@ -15045,6 +15059,39 @@ test-c-conformance-i386: $(COMPILER)
 # NOT a dependency of `test`. Run it directly; it is for whoever takes the
 # ticket, and c_abi_pure_c_control.c (wired into the ordinary C tests) is the
 # regression half that must stay green while this one goes from red to green.
+.PHONY: test-c-float-const-cross
+test-c-float-const-cross: $(COMPILER)
+	# Both subjects are target-independent arithmetic, so a target that disagrees
+	# is wrong by construction -- no cross-gcc oracle needed. Both were RED on
+	# riscv32 only, through one shared cause: IR_CONST_INT took Low32 of a float
+	# constant's DOUBLE bit pattern when the constant's type was tySingle.
+	# x86-64 and aarch64 carry a single as double bits so they never noticed;
+	# arm32 loads the whole pattern into d0 and converts on the way out.
+	@overall=0; \
+	cexp="$$(printf 'A 0.100000001\nB 0.100000001\nC 0.100000001\nD 16777216.0\nE 16777216.0\nF 0\nG 4\nH 8\nI 0.100000001\nJ 0.100000001')"; \
+	pexp="$$(printf '1 2.5000\n2 0.5000\n3 -1.5000\n4 1.5000\n5 0.00 -1.50 2.50\n6 TRUE')"; \
+	for t in aarch64 arm32 riscv32 i386; do \
+	  if [ "$$t" != "i386" ] && ! command -v qemu-$$t >/dev/null 2>&1 && \
+	     ! { [ "$$t" = "arm32" ] && command -v qemu-arm >/dev/null 2>&1; }; then \
+	    echo "test-c-float-const-cross: SKIP $$t (qemu absent)"; continue; \
+	  fi; \
+	  if ! ./$(COMPILER) --target=$$t test/c_float_literal_f_suffix.c $(TESTTMP)/c_flit_$$t >$(TESTTMP)/c_flit_$$t.err 2>&1; then \
+	    echo "test-c-float-const-cross: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/c_flit_$$t.err; overall=1; \
+	  else \
+	    got="$$(tools/run_target.sh $$t $(TESTTMP)/c_flit_$$t 2>&1)"; \
+	    if [ "$$got" = "$$cexp" ]; then echo "test-c-float-const-cross: PASS $$t (C f-suffix)"; \
+	    else echo "test-c-float-const-cross: FAIL $$t (C f-suffix)"; printf '%s\n' "$$got" | sed 's/^/    /'; overall=1; fi; \
+	  fi; \
+	  if ! ./$(COMPILER) --target=$$t test/test_single_const_value.pas $(TESTTMP)/p_scv_$$t >$(TESTTMP)/p_scv_$$t.err 2>&1; then \
+	    echo "test-c-float-const-cross: COMPILE FAIL $$t (Pascal Single const)"; tail -2 $(TESTTMP)/p_scv_$$t.err; overall=1; \
+	  else \
+	    pgot="$$(tools/run_target.sh $$t $(TESTTMP)/p_scv_$$t 2>&1)"; \
+	    if [ "$$pgot" = "$$pexp" ]; then echo "test-c-float-const-cross: PASS $$t (Pascal Single const)"; \
+	    else echo "test-c-float-const-cross: FAIL $$t (Pascal Single const)"; printf '%s\n' "$$pgot" | sed 's/^/    /'; overall=1; fi; \
+	  fi; \
+	done; \
+	test "$$overall" = "0" || { echo "test-c-float-const-cross: RED"; exit 1; }
+
 .PHONY: test-c-abi-cross
 test-c-abi-cross: $(COMPILER)
 	@overall=0; \

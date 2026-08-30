@@ -232,6 +232,32 @@ begin
   end;
 end;
 
+{ The double bits of `bits` after a round trip through SINGLE precision -- what
+  C's `f` suffix means. `0.1f` is not the nearest double to 0.1, it is the
+  nearest double to the nearest FLOAT to 0.1, and `16777217.0f` is 16777216.0
+  because 16777217 is the smallest integer a float cannot hold. Ignoring the
+  suffix left `16777217.0f == 16777217.0` answering true where C says false, so
+  this is not a display question -- a program can branch on it
+  (bug-c-the-f-suffix-on-a-float-literal-is-ignored).
+
+  Rounding HERE rather than at the use is deliberate: the value is then right in
+  every context a literal can reach, including a global initializer and a
+  constant expression, neither of which can materialise the anonymous tySingle
+  temp that the `(float)` CAST path round-trips through. Same narrowing, done at
+  the one place the suffix is visible.
+
+  The host does the conversion, for the reason DoubleBitsToSingleBits gives: every
+  host this compiler builds on is IEEE-754 round-to-nearest-even, which is what
+  the target would have done. }
+function CFloatBitsRoundedToSingle(bits: Int64): Int64;
+var d: Double; f: Single; pd: ^Int64;
+begin
+  pd := @d; pd^ := bits;
+  f := d;
+  d := f;
+  Result := pd^;
+end;
+
 { C99 hex float literal: 0x1.8p3, 0x1.0p-28f, 0x1p+10. SrcPos sits just past the
   `0x`. These are EXACT binary values -- value = M * 2**(binExp - 4*fracDigits),
   M being the hex digits read as one integer -- so the bits are built with integer
@@ -244,7 +270,7 @@ procedure CLexHexFloatTail;
 var
   m, mant, bitsv, p52: Int64;
   fracDigits, binExp, expSign, dropped, lead, shiftBits, i, d: Integer;
-  sawDigit, sticky, roundBit: Boolean;
+  sawDigit, sticky, roundBit, fSuffix: Boolean;
   expField: Integer;
 begin
   m := 0; fracDigits := 0; binExp := 0; dropped := 0;
@@ -311,11 +337,18 @@ begin
     end;
     binExp := binExp * expSign;
   end;
-  { f/F/l/L suffix — the value is carried as double bits either way, as for
-    decimal literals }
-  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['f','F','l','L']) then Inc(SrcPos);
+  { f/F/l/L suffix. The value is carried as double bits either way -- but an
+    f/F is a NARROWING and has to be applied, so remember which we saw and round
+    once the bits exist (below). l/L is long double, which we map to double. }
+  fSuffix := False;
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['f','F','l','L']) then
+  begin
+    if Source[SrcPos] in ['f','F'] then fSuffix := True;
+    Inc(SrcPos);
+  end;
 
   CurTok.Kind := tkFloat;
+  if fSuffix then CLexFloatSuffixF := True;
   if m = 0 then begin CurTok.IVal := 0; Exit; end;
 
   { value = m * 2**binExp, corrected for the digits after the dot and any we had
@@ -362,13 +395,18 @@ begin
     bitsv := mant - p52;                  { strip the implicit leading 1 }
     CurTok.IVal := Int64(expField) * p52 + bitsv;
   end;
+  if fSuffix then
+  begin
+    CurTok.IVal := CFloatBitsRoundedToSingle(CurTok.IVal);
+    CLexFloatSuffixF := True;
+  end;
 end;
 
 { Scan the fractional/exponent/suffix tail of a C float literal that begins at
   numStart (SrcPos is positioned at the `.` or `e`/`E`), and emit a tkFloat whose
   IVal carries the IEEE-754 double bit pattern (matching the Pascal lexer). }
 procedure CLexFloatTail(numStart: Integer);
-var fs: AnsiString; valEnd: Integer;
+var fs: AnsiString; valEnd: Integer; fSuffix: Boolean;
 begin
   if (SrcPos <= Length(Source)) and (Source[SrcPos] = '.') then
   begin
@@ -382,10 +420,23 @@ begin
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do Inc(SrcPos);
   end;
   valEnd := SrcPos;   { value text ends before any f/F/l/L suffix }
-  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['f','F','l','L']) then Inc(SrcPos);
+  fSuffix := False;
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['f','F','l','L']) then
+  begin
+    if Source[SrcPos] in ['f','F'] then fSuffix := True;
+    Inc(SrcPos);
+  end;
   fs := Copy(Source, numStart, valEnd - numStart);
   CurTok.Kind := tkFloat;
   CurTok.IVal := StrToDoubleBits(fs);
+  { An `f` suffix narrows: the constant is the nearest FLOAT to the text, not the
+    nearest double. Two roundings, in that order -- rounding the decimal straight
+    to single would be a different (double-rounding) answer for some texts. }
+  if fSuffix then
+  begin
+    CurTok.IVal := CFloatBitsRoundedToSingle(CurTok.IVal);
+    CLexFloatSuffixF := True;
+  end;
 end;
 
 { A `# <line> "<path>"` origin marker left by the preprocessor under -g.
@@ -488,6 +539,7 @@ begin
   CLexUnsignedSuffix := False;
   CLexLongCount := 0;
   CLexHexOctal := False;
+  CLexFloatSuffixF := False;
   if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
   c := Source[SrcPos];
 
@@ -847,6 +899,7 @@ begin
     if CLexLongCount >= 1 then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 16;
     if CLexLongCount >= 2 then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 32;
     if CLexHexOctal then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 8;
+    if CLexFloatSuffixF then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 64;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
     CAttrAligned := False;
@@ -935,6 +988,7 @@ begin
     if CLexLongCount >= 1 then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 16;
     if CLexLongCount >= 2 then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 32;
     if CLexHexOctal then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 8;
+    if CLexFloatSuffixF then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 64;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
     CAttrAligned := False;
