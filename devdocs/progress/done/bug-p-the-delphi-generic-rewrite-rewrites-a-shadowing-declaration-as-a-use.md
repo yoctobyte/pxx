@@ -122,4 +122,4 @@ All six earlier repro shapes now compile; A and C, which always passed, still
 pass.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 97b45aabe.
