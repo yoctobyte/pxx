@@ -143,4 +143,4 @@ tidiness.
 `make compiler/pascal26` — converged, 1 round, `6c337931e11c`. Six-row gcc
 differential agrees. `chas_include` (7 lines) and `chas_include_lax` green;
 malformed operands terminate, no loop, no error.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 7f08c6798.
