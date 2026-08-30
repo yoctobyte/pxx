@@ -793,11 +793,22 @@ begin
         compiles it), or a redeclaration in one unit. Rewriting it injects
         `specialize` in FRONT of a declaration and the parse dies with
         `Expected: =, but got: <name>`.
-        The `:` test is what keeps a typed constant out of this arm: `x:
-        TFoo<Integer> = (V: 1)` is ALSO followed by `=` and IS a genuine use.
+        The preceding token is a WHITELIST, not a blacklist, and that is the
+        whole point: several genuine USES are also followed by `=`. A typed
+        constant `x: TFoo<Integer> = (V: 1)` is one; `const P: ^specialize
+        TTest<LongInt> = Nil` is another, and it is preceded by `specialize`,
+        not by `:`. An earlier version of this guard excluded only `:` and so
+        suppressed the rewrite for the `^specialize` spelling, widening
+        regression-test-pascal-conformance-shard0-6-2 from the handful of type
+        names that lex as tkIdent to EVERY type name. A declaration's left-hand
+        side can only follow the `type` keyword or the `;` that ended the
+        previous declaration, so test for those instead of trying to enumerate
+        the ways a use can be spelled.
         bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use }
       if ok and ((j + 1) < TokCount) and (Tokens[j+1].Kind = tkEq) and
-         ((i = 0) or (Tokens[i-1].Kind <> tkColon)) then ok := False;
+         (i > 0) and
+         ((Tokens[i-1].Kind = tkType) or (Tokens[i-1].Kind = tkSemicolon)) then
+        ok := False;
       if ok then
       begin
         { A `<...>` group can be resolved EAGERLY into an alias only when every

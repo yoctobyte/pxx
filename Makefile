@@ -5497,6 +5497,13 @@ test-core: $(COMPILER)
 	@# disabling the guard: 2 injections and a failed parse.
 	./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26
 	test "$$($(TESTTMP)/test_genshadow26)" = "shadow 12 10"
+	@# The control that a blacklist-style guard needs and that its absence cost:
+	@# `const PC: ^specialize TCell<Integer> = Nil` is a USE whose group is
+	@# followed by `=` and preceded by `specialize`, not `:`. Guarding only the
+	@# `x: TFoo<I> = (...)` spelling suppresses the rewrite here and breaks every
+	@# typed const of this shape. Oracle: FPC prints the same line.
+	./$(COMPILER) test/test_generic_ptr_specialize_const.pas $(TESTTMP)/test_genptrspec26
+	test "$$($(TESTTMP)/test_genptrspec26)" = "ptrspec 7 1"
 	@out=$$(PXXDBG=p.dgen ./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26 2>&1); \
 	 decl=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TBox'); \
 	 real=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TPairU'); \
