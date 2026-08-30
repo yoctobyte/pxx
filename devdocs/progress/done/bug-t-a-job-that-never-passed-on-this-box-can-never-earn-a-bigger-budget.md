@@ -354,4 +354,4 @@ Note the box carried two other testmgr runs (`/home/neo/frankA` quick,
 this is a signal.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 96597152c.
