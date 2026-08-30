@@ -8021,3 +8021,85 @@ own ticket. I could not independently find that ruling's text, so it is relayed 
 citation and labelled as such — while the *activity* on that date is corroborated from
 elsewhere. **Verifying a claim against a source the claimant did not choose does not always
 confirm or refute it; sometimes it returns a different, better fact.**
+
+### 177 — A SHA CHECK ON THE SOURCE PROVES NOTHING ABOUT WHAT WILL EXECUTE
+
+*pxx-a5, 2026-08-30. The most transferable finding of the night, and every lane writing a
+Python negative control is exposed to it.*
+
+Its negative control edited `testmgr.py` in place, ran, restored the file, and **confirmed the
+restore by sha256.** Guard 1 then failed against a correct tree — **three runs in a row**,
+with the right source open in front of it.
+
+CPython validates `__pycache__` against the source's **`(mtime, size)`**, with mtime at
+**one-second resolution**. The edit was `if stepf:` → `if False:` — **five characters for
+five.** Size-preserving, and inside one second. So the cache stayed valid and **every later
+run executed the control's bytecode.**
+
+> **A restored tree reporting a defect that is no longer in it.**
+
+The sha check was not sloppy; it was *correct and irrelevant*. It answered "is the source
+what I think it is" when the question was "is that the code that will run". Those are the same
+question only when nothing caches between them, and Python caches by default.
+
+Note what makes it nearly undetectable: **it needs a size-preserving edit inside one second**,
+which is exactly what a careful minimal negative control looks like. A sloppier edit — adding
+a line, taking two seconds — invalidates the cache and behaves correctly. **The discipline
+that makes the control minimal is what makes it invisible.**
+
+Fixed by having the devtest compile what it measures from text and write no cache.
+
+**Alongside 168a and 175, this completes a set: three ways a control's own apparatus produces
+a finding.** 168a destroys its subject (all guards red, reads as maximum sensitivity). 175
+creates its subject (guard fires cleanly on a fabricated file). 177 restores its subject and
+runs the old one anyway. **All three fail in the flattering direction and all three look
+exactly like a working guard.** The shared cause is that the apparatus's state is never itself
+measured — 158b, four times over now.
+
+### 177a — AND IT REFUTED THE TICKET'S FIRST PROPOSAL STRUCTURALLY, NOT BY PREFERENCE
+
+The ticket asked for the slug to be built from the failing step. **The slug cannot move**, for
+two reasons that are facts about the code rather than taste:
+
+1. It is the dedupe key when **filing**, and is recomputed as `reg_slug(r["job"])` when
+   **closing** — where no step is in scope, because *the closing run is the one where the job
+   went green*. A step-derived slug is unfindable at close time, so **every stub leaks open,
+   silently** — the exact failure `feature-t-autoticket-must-close-its-own-stubs-when-fixed`
+   existed to end.
+2. `progress.py` derives a ticket's `type` from the slug's first token, so
+   `regression-lib-units-pcl-gtk3` becomes a ticket of type `lib`.
+
+Second time this lane has refuted its ticket's own suggested shape and **written the
+refutation into the code and the guards** rather than only the write-up — because *a ticket's
+own suggested shape is the thing most likely to be re-adopted later*.
+
+### 177b — THE BOUND MATTERS MORE THAN THE RULE
+
+A blanket *"never fall back to the job's src"* would have swept the entire single-test
+majority to Track T: `compile foo.pas` then `diff foo.expected -`, whose failing step names
+only the `.expected`. So the refusal is **bounded to multi-source jobs** — where a job names
+one source, first-source and only-source are the same file and no other lane is in frame.
+Guard 5 is that bound, and its control shows `test-core#src:test/alpha.pas` going P → T
+without it.
+
+> **Fixing a mis-routing by installing a bigger one is the easy failure here.**
+
+The number that carries it: `lib-test#00` is **198 recipe lines naming 39 source files across
+four lanes**, and `src` is the first two of thirty-nine. Step 28 now routes B — that is
+crtl-reachability-4, the red that cost the C lane an evening.
+
+### 177c — AND IT SAID THE FIX DOES NOT COVER THE CASE I GAVE IT
+
+`test-threads#src:test/test_cmp_both_in_place.pas@2` fails in step 3 of 14, **whose text
+legitimately names `test/test_cmp_both_in_place.pas`** — so the step-derived track is P, the
+same wrong answer. b4's ownership is not derivable from any path, and **no rule over filenames
+will find it.**
+
+Of the four facts that name could not carry, the fix delivers two: the **arm** is now in the
+H1 (`for o in 0 3; do ./compiler/pascal26 --target=aarch64 …`) instead of being reconstructed
+from the log tail, and a first-ever run is headed **`first-ever red`** rather than
+`regression`. The step kind and the owner are the honest residue, stated as residue.
+
+**A fix reported with the half of the motivating case it does not solve is worth more than one
+reported as complete**, because the next person knows where to start rather than discovering
+the gap by trusting it.
