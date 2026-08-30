@@ -5,15 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:28 blocked:7 backlog:386 backlog_new:20 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2813 rejected:58`
+`working:3 unfinished:29 blocked:7 backlog:385 backlog_new:20 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2813 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets` [A] — owner: claude-A
+- `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S] — owner: frankS
 - `feature-unicodestring-model` [A] — owner: frankwasm
-- `ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired` [A+S] — owner: frankS
 
-## unfinished (28) — parked mid-flight; re-claim, do not duplicate
+## unfinished (29) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -43,6 +43,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
+- `ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired` [A+S]
 
 ## blocked (7) — has an unmet blocker; do not claim
 

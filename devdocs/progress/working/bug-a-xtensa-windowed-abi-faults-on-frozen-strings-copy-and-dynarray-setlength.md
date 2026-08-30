@@ -2,9 +2,10 @@
 track: A+S
 type: bug
 prio: 50
-status: open
+status: working
 found: 2026-08-30
 found-by: frankS
+owner: frankS
 ---
 
 # The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength

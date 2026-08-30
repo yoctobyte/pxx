@@ -517,3 +517,33 @@ The check is in the encoders now, so this stub inherits the protection; it is
 recorded here because "the offset silently targets a different valid address" is
 the same failure class as the `-1` sentinel and the recalled syscall number, and
 this ticket has now met it three times in three different disguises.
+
+## PARKED 2026-08-30 (frankS) — the landed part is COMPLETE, not half-applied
+
+Moved to `unfinished/` because the remaining work needs a file this lane does not
+hold, not because a change is half-in. Stating that explicitly because a Track A
+ticket in `unfinished/` is flagged CRITICAL by `tools/progress.sh check` on the
+assumption of *a half-applied compiler change that could break the self-host
+gate*, and that is not the situation here:
+
+- `EmitSignalRuntimeXtensa` landed whole in `ir_codegen_xtensa.inc`
+  (`feat(A+S)`, binary `cf30672a934e`, fixedpoint converged in 1 round).
+- It is **dead code** — its only caller would be `EmitSignalRuntimeForTarget`'s
+  xtensa arm at `ir_codegen.inc:812`, which is not written. Nothing calls it,
+  nothing executes it, and its presence cannot change any emitted program.
+- Reverting it is a clean delete. There is no partial state to reconcile.
+
+**What remains, in order:**
+
+1. The two dispatcher arms — `ir_codegen.inc:812` (`EmitSignalRuntimeForTarget`)
+   and `:830` (`EmitDefaultSignalInstallForTarget`). Queued with the coordinator
+   behind frankA's aarch64 regression work. **First execution of the stub happens
+   here and not before** — everything green so far means it assembles.
+2. The `ir.inc` ucontext offsets (`:3953`, `:3993`) — unblocked in principle,
+   file contended. See addendum 3 for why the `-1` must be filled in the SAME
+   commit that lifts the refusal.
+3. The refusal lift itself, in all five parser/guard sites at once
+   (addendum 2's rule: the axis moves with the runtime, not before).
+
+**Re-claim before the first commit when this resumes** — the lock is not
+inherited from this session.
