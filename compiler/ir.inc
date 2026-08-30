@@ -4136,6 +4136,34 @@ begin
       end;
     end;
   end;
+  { 7c: ELEMENT-WIDTH conversion on an ARGUMENT. The parameter's width lives in
+    ProcParamStrElemTk -- a parallel array rather than a Params[] field, because
+    param syms are reused across procs and a CALLER cannot read the width back
+    off the symbol. This is the reader that array was built for in 6c-params.
+
+    Measured before it was written: without this, `TakesWide(narrowStr)` handed
+    the callee UTF-8 bytes that Length then halved -- 'café' arrived as two
+    units of mojibake -- and `TakesNarrow(wideStr)` handed over raw UTF-16 that
+    Write emitted as eight bytes. Both silent.
+
+    VALUE parameters only. A `var`/`out` parameter binds the variable itself, so
+    converting it would hand the callee a temp and silently drop the write-back;
+    a width mismatch there is a type error, not a conversion, and refusing it is
+    FPC's answer too.
+
+    At the single tail rather than per-shape: every managed-string argument
+    reaches `Result := value` here, and the 25 early Exits above are procvar,
+    variant and NilPy-container shapes that are not managed strings.
+    feature-unicodestring-model }
+  if (cpi >= 0) and (cpi < ProcCount) and (not isRefArg) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+     (not Procs[cpi].Params[pathIdx].IsArray) and
+     ((IntToTypeKind(ASTTk[argAST]) = tyAnsiString) or
+      (IntToTypeKind(ASTTk[argAST]) = tyString)) then
+    value := IRStrWidthConv(value, argAST,
+               ProcParamStrElemTk[cpi * MAX_PROC_PARAMS + pathIdx] = Ord(tyWideChar),
+               ASTStrElemTkOf(argAST) = Ord(tyWideChar));
   Result := value;
 end;
 
