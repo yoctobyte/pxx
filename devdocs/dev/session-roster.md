@@ -18465,3 +18465,107 @@ either way.
 heredoc; frankD's: two, for writing prose *about* the gate). Every lane worked around
 them correctly and nobody reached for the escape, which is the owner's to grant. **I am
 collecting, not editing** — `.claude/**` and hooks stay the owner's.
+
+## 2026-08-30 ~06:30 — tick: three grants filed, two self-retractions, faces to 196
+
+**PIN: v394 `53800fbeb0b66e11`** — measured with `sha256sum stable_linux_amd64/default/pinned`
+every tick, never recalled. History a future coordinator must not re-derive: I blessed v394
+`e2ea9034a65ea8b6` at ~06:40, it broke Track B's gate (a parameter typed as an **alias** of
+`Pointer` rejected a class instance that plain `Pointer` accepts, so vendored Synapse stopped
+compiling), I verified it on a six-line repro and **reverted** at ~07:40 (`b8fd07377`). The
+alias bug is now fixed and re-pinned. **grid-pad is CLOSED against the current pin**
+(`a521b5171`, eleven of eleven, frankB) — do not reopen it.
+
+### Live slots at tick end
+
+| lane | on | file ground |
+| --- | --- | --- |
+| frankA | `feature-port-rtl-over-libc`, increment 2 **redesigned** as one out-of-line thunk | `defs.inc`, `compiler.pas`, `symtab.inc`, `ir_codegen.inc`, `emit.inc` |
+| frankS | builtin -55, then the LoadFile pair | `ir_codegen_riscv32.inc`, `ir_codegen_xtensa.inc`, **granted** `builtinheap.pas` ×3 wrappers |
+| frankB | minidom hang, delta-debugging on a **private copy** of `lib/rtl` | `lib/**` |
+| frankC | `feature-c-diagnostics-name-the-module-they-are-in` [C p40] | C frontend + **granted** `lexer.inc`/`WriteDiagSourceFile` |
+| frankwasm | PLAN.md Phase 9j (unparked — it had parked unblocked work "for want of a session") | wasm target |
+| b4 | **`regression-test-threads-test-static-string-literals`**, its own red | `builtinheap.pas` (landed), `EmitStaticLitHandle` sites |
+| pxx-a5 | fuzzing / differential, self-directed per T's charter | `tools/**`, `tstate/**` |
+| frankD | **dry, correctly** — its only ready item awaits the owner's own prose | `docs/**` |
+| frank-rust | **holds `feature-rust-option-type`, messaged twice, NO REPLY. Chase.** | Rust frontend |
+
+### Grants filed this tick — all three, because an unfiled grant fails in BOTH directions
+
+`715a2e1b3` · `lexer.inc` → frankC, bounded to `WriteDiagSourceFile`; **plus** the deliberate
+`ir_codegen.inc` **dual occupancy** (frankA in `EmitSyscall`'s body, frankS in
+`EmitParamSpillsForTarget`'s xtensa arm). The disjointness is a property of **the edits, not
+the file**, and lapses if frankA touches a call site.
+
+`5dbcc861e` · `builtinheap.pas` → frankS, bounded to `PXXSysOpenRO` / `PXXSysLseek` /
+`PXXSysClose`, riscv32+xtensa arms only.
+
+`done/grant-devdocs-dev-audit-to-frankd-time-boxed-report-only` · **discharged, closed by me
+and not by the grantee** — a grantee closing their own authorisation is marking their own
+homework.
+
+**The lesson that cost a dispatch:** that last grant *re-offered work already finished*. It
+was issued verbally, not filed; frankD ran the sweep; the grant was then filed citing that
+sweep's own findings as its rationale; the board, never having seen the first issue, offered
+it as a fresh ticket and **I dispatched it**. frankD's reading is the durable one — *a
+coordinator's memory of a verbal grant and the board's record of it are two instruments, and
+only one is queryable.* The standing rule was half right: an unfiled grant reads as **covered**
+to anyone checking permission (risk: unpermitted action) **and** as **not yet done** to the
+ranker (risk: a wasted dispatch). **File the grant in the same minute you give it.**
+
+### The method that cleared `builtinheap.pas`, and it generalises
+
+Three lanes wanted the file. I asked each **"what did you touch"**, never **"do you object"**
+— and that is the whole reason the real hazard surfaced. It was not a collision:
+
+> `PXXCensusReport` calls `PXXSysWrite` and runs **from inside `PXXAlloc`**, documented as
+> allocating nothing for that reason. A new `PXXSys*` arm that allocates re-enters the
+> allocator; on the threadsafe build the temp's finalize takes the heap lock the caller
+> already holds — `bug-a-threadsafe-plus-heap-debug-hangs-at-runtime` exactly.
+
+300 lines apart, zero textual overlap, **invisible to any collision check.** A semantic
+adjacency, not a textual one. A "do you object?" would have got a truthful *no*.
+
+### Two workers retracted their own recommendations, both cheaper than the alternative
+
+- **frankA** prototyped the arm it had recommended and killed it with a 59/28/13 decomposition.
+- **b4** withdrew its `-O2` promotion: the supporting numbers were real, correctly measured,
+  and silently about **x86-64 only**. On aarch64 the same test is `-O0` 1.193s vs `-O3`
+  **99.083s**, output correct at both — so only a clock with a deadline could ever have fired.
+  Its bisect refuses to localise: **each half is faster at `-O3` and the whole is 83× slower.**
+
+A wrong promotion lands in `-O2`, becomes the proven default, and is then measured by everyone
+as the baseline. **Take a self-retraction immediately and propagate it** — it is the strongest
+correction this system produces.
+
+### Faces added this tick: 190–196 (index `feature-a-a-refusal-is-a-claim-with-a-date-on-it`)
+
+- **190** the fixedpoint proves the compiler reproduces **itself** — not that codegen is
+  unchanged. A change that perturbs codegen *consistently* passes by construction. Diff
+  emitted output against a binary that predates the edit. **190b** re-derive a baseline: a
+  number that never moves is stable or **unmeasured**, and those read identically.
+- **191** assert on positive output **the subject emits**, not on `$?`. The right question is
+  not "do you use pipelines" but **"does any verdict rest on `$?` after one?"** **191a** a
+  silent failure looks like *the result you wanted* — four instances in one night. **191b** an
+  improving metric is not a passing test (9 syscalls, segfaulting binary).
+- **192** a derived figure and its rows are two measurements. **192a** the catch was
+  **arithmetic, not suspicion**; a result *worse than possible* is a harness bug until proven
+  otherwise.
+- **193** **a caveat that ends in a full stop is the one to check** — a limit paired with its
+  escape route defuses itself, and a missing escape route is evidence the limit was *reasoned,
+  not measured*. Converts an expensive audit into a greppable one.
+- **194** the landmine is not in the code that crashes: `Code[p] := Byte(CodeLen-(p+1))` at ~30
+  sites, armed by **growing an emitter**. `rip` at a mid-instruction address is a *proof*, not
+  a clue.
+- **195** repairing the visible defect **retires the only detector for the invisible one** —
+  measured, not supposed. The least deliberate line in the file (a debug dump) was the entire
+  detection surface.
+- **196** each half faster, the whole 83× slower — halving search is structurally blind to an
+  interaction.
+
+### My own errors this tick
+
+- **Relayed a stale POSITION to frankS** — described where it had been, not where it was. **Ask
+  for state; do not assert it.**
+- **Dispatched frankD onto finished work** (above).
+- Two malformed heredocs cost a retry each. `-F <file>` for commit messages remains absolute.
