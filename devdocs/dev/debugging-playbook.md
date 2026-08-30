@@ -72,7 +72,14 @@ order to read them in. Route by what you are holding:
 **A measurement or a verdict is telling you something and you are about to believe it**
 - ``## Profile the SHIPPING binary`` -- `-g` alone silently means `-O0`, so
   `make pxx-debug` profiles a different program and says nothing about it
-- `## Reading a NEGATIVE result — the gap four agents named on the same day
+- `## Reading a NEGATIVE result` -- a change that measures as NO CHANGE is
+  data about your model
+- `## Prefer the version of the question that has an ON/OFF answer` -- when
+  the box is noisy, look for the experiment that cannot be a margin
+- `## A canary nobody has watched fail is indistinguishable from one that is
+  not measuring`
+
+## Reading a NEGATIVE result — the gap four agents named on the same day
 
 The rest of this playbook is about finding a wrong **value**. Most of the work in
 some lanes is disproving a **hypothesis**, and nothing here covered it. Filed
@@ -123,6 +130,69 @@ corroboration.
 measurement — not seniority, not who edited the file first.** Three disagreements
 were settled this way in one day, each reversing the more confident party. Nobody
 should have to happen to have a measurement handy in order to win.
+
+## Prefer the version of the question that has an ON/OFF answer
+
+Named by frankwasm 2026-08-30 from two of Track O's results, both of which
+survived scrutiny that a difference of means would not have.
+
+**"The evidence points elsewhere" and "the hypothesis is unreachable" are
+different strengths, and only the second is stable.** Clearing a suspect by
+*isolation* is an argument about what you controlled — it degrades the moment
+someone finds a second variable you did not know about. Clearing it by
+*construction* is an argument about what is possible, and nothing later can
+weaken it.
+
+The two instances:
+
+- **`-O3`'s win is not DCE.** Settled not by timing `-O2` against `-O3` — the box
+  was at load 10 and every timing attempt had already failed — but by
+  `-O3 --no-dce` keeping the **whole** win. A flag, not a margin.
+- **A pass cannot cause a bug at an optimisation level it does not run at.** A
+  string regression was suspected of belonging to a newly promoted pass; it
+  reproduced identically at `-O0` and `-O1`, where the pass's own gate
+  (`if OptLevel < 2 then Exit`) means it never executes. No measurement precision
+  enters into it.
+
+**Neither was reasoned into.** `-O0`/`-O1` were run because they were the fastest
+thing to try, and the gate happened to make the answer categorical. That is why
+it is written down: the *reflex* is to ask, before you start timing, whether
+there is a flag, a gate, or a level at which the mechanism cannot run — because a
+noisy box cannot resolve a margin but can always resolve a present/absent.
+
+Its sibling is `## When the box is busy, stop timing and start COUNTING`; this is
+the stronger form, because a count is still a quantity and this is not.
+
+## A canary nobody has watched fail is indistinguishable from one that is not measuring
+
+Measured 2026-08-30 on `test/quick_canary_nilpy.npy`, checks 24-27.
+
+**Passing is what a canary always does**, so a green tells you nothing about
+whether it can detect the thing it names. It will sit at `27 / 27` through the
+exact regression it was written for and nobody will know — the same reading as an
+instrument that is not connected.
+
+**Two probes, and they are NOT the same claim even though both end in a red
+gate:**
+
+| probe | proves |
+| --- | --- |
+| invert the assertion by hand | the **harness**: `chk` → counter → `tail -1` → `expect_same` → a red gate. A failure can *travel*. |
+| build the compiler at the offending sha | the **canary**: this check detects the thing it names. |
+
+Every canary here has the first property by construction and the second only if
+someone went and got a broken compiler. Doing it: `## Ancestry is not existence`'s
+neighbour rule about seeds applies — build at the sha, and accept the result only
+on `converged after N round(s)` with a fixedpoint sha that **differs from the
+seed you copied in**, or you have measured the current compiler while believing
+you measured history.
+
+**What it bought beyond a yes/no:** the run failed check 24 and *only* 24, with
+the deliberate variable-form twin (25) passing. That converts a localisation
+*intuition* into a measured property — a future failure now reads as *the literal
+arm* on sight instead of collapsing into "strings are broken". Design a canary in
+pairs and the pair is worth more than either row, which is the same reason the
+original diagnosis was cheap.
 
 ## Do not read a green as coverage
 
@@ -685,6 +755,36 @@ Both directions cost:
 **A "not found" is only evidence once you have proved your own tree is
 current.** `git rev-list --count HEAD..origin/master` is that proof and costs
 nothing.
+
+## A sha that EXISTS can still be the wrong sha for the question
+
+Distinct from the ghost family above, and more expensive. A ghost is a sha that
+does not exist and resolves to nothing. This one exists, is yours, and is simply
+wrong for what was asked of it.
+
+Measured 2026-08-30. A pass was promoted in `440c822e6a80`; a sweep was requested
+against that sha as "the promotion sha". It carries a **broken** commit that
+landed 36 minutes before it, and **not** the revert that landed 11 minutes after
+it. A full tier on it returns RED with ~24 unrelated jobs, in an archived row
+keyed to the promotion.
+
+**"My change landed at X" and "X is a good tree" are different claims, and the
+second decays with every commit that lands after yours.** A sweep request, a
+bisect anchor, a "please reproduce at" — every one of them is a question about a
+**tree**, never about your commit. So the sha to hand over is the newest one that
+contains everything the answer depends on, which is usually not the one you
+wrote.
+
+**Check it, do not assert it** — one command per dependency:
+
+```
+git merge-base --is-ancestor <the-revert-you-need> <sha-you-are-about-to-send>
+```
+
+Catching it before the sweep runs is cheap. The version where it runs is the
+expensive shape: a RED with real evidence attached, pointing at the wrong author,
+in a record that outlives the session that knew better. **The archive is what the
+next person reads**, and no footnote travels with it.
 
 ## A bisect can name the RIGHT commit and still be wrong
 
