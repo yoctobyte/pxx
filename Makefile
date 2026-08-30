@@ -13644,7 +13644,95 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interface_arc_exc.pas $(TESTTMP)/test_xtensa_interface_arc_exc
 	./$(COMPILER) test/test_interface_arc_exc.pas $(TESTTMP)/test_xtensa_interface_arc_exc_x64
 	tools/expect_same.sh xtensa/test_interface_arc_exc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_interface_arc_exc)" "$$($(TESTTMP)/test_xtensa_interface_arc_exc_x64)"
-	@echo "hosted xtensa: 103 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	# ---------------------------------------------------------------------
+	# WINDOWED ABI — the executed rows. Everything above this line is Call0.
+	#
+	# Until these landed, `--xtensa-abi=windowed` appeared exactly twice in this
+	# entire Makefile and BOTH rows were compile-only: one grepped a .o header,
+	# the other printed "lowers ok". So the whole windowed backend was gated on
+	# "the compiler did not crash" — a check whose PASS and whose SKIP print the
+	# same thing. What that cost, measured: 41 of 94 windowed programs were dying
+	# on SIGBUS (signal 7, an unaligned l32i on a data section that had never been
+	# aligned), they were repaired as an accidental side effect of a qemu PERF
+	# commit, and no gated suite in this repo could see the breakage or the
+	# repair. The only instrument that ever executed a windowed program was a
+	# scratch harness in one agent's /tmp.
+	#
+	# The comment that kept anyone from asking said "no runner: windowed images
+	# link through xtensa-esp-elf-gcc". True when written, false since the hosted
+	# profile landed: these rows use plain tools/run_target.sh xtensa, the same
+	# runner the 107 Call0 rows above already use. A refusal is a claim with a
+	# date on it, and that one outlived its reason by an unknown margin.
+	#
+	# WHY THESE FIVE AND NOT FIVE OTHERS. Each was measured RED under windowed at
+	# 75d2ba662^ and green at 75d2ba662 — they are 5 of the 41 that flipped, one
+	# per aggregate/RTTI family, chosen because a row that has demonstrably been
+	# red is worth more than five that never have. They are canaries, not a port
+	# of the 129-source differential; that harness is not in this repo and this
+	# is deliberately not it.
+	#
+	# PROVEN ABLE TO GO RED, because a gate row that has never failed is
+	# indistinguishable from one that CANNOT fail — which is the exact defect
+	# these rows exist to remove. Run against the pre-repair compiler
+	# (41e452a55913 = 75d2ba662^) all five die on signal 7 and BOTH slots fire:
+	# the rc slot reports exit 135 and the value slot reports differing output.
+	# Note which one carries the diagnosis — without the rc slot the failure
+	# reads as a value mismatch and the SIGBUS is invisible.
+	#
+	# What did NOT reproduce it, recorded because it is the more useful half:
+	# setting ELF_DATA_ALIGN = 1 at HEAD leaves all five GREEN. The data section
+	# is page-aligned a second time by the PT_LOAD split (3b8d1039e) — readelf
+	# shows data in its own segment at offset 0x30000 — so AlignCodeForData is
+	# currently REDUNDANT on the executable path and CheckDataBaseAligned cannot
+	# fire there. That is belt-and-braces on a property that cost 41 programs,
+	# not a defect; but it means the invariant is not what these rows are
+	# measuring today, and anyone who removes the split must not read their
+	# green as evidence the explicit alignment still holds it up.
+	#
+	# TWO OUTCOME SLOTS PER PROGRAM, because the subject has two outcomes. A
+	# SIGBUS is a STATUS, not a string: the one-line $$(...) form keeps stdout,
+	# silently discards the status, and would report a VALUE MISMATCH for a
+	# signal death — the right verdict for the wrong reason, handed to whoever
+	# reads the failure. The 107 Call0 rows above still have that shape; they
+	# fail on a crash (empty output != oracle) but they misdiagnose it.
+	# bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never
+	# ---------------------------------------------------------------------
+	# records — multi-word descriptors, the shape b4's alignment canary used
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_record.pas $(TESTTMP)/xtw_record
+	./$(COMPILER) test/test_cross_record.pas $(TESTTMP)/xtw_record_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_record > $(TESTTMP)/xtw_record.out; tools/expect_same.sh xtensa-windowed/test_cross_record-rc "$$?" "0"
+	$(TESTTMP)/xtw_record_x64 > $(TESTTMP)/xtw_record_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_record "$$(cat $(TESTTMP)/xtw_record.out)" "$$(cat $(TESTTMP)/xtw_record_x64.out)"
+	# dynamic arrays — the length/refcount header ahead of the payload
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_dynarray.pas $(TESTTMP)/xtw_dynarray
+	./$(COMPILER) test/test_cross_dynarray.pas $(TESTTMP)/xtw_dynarray_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_dynarray > $(TESTTMP)/xtw_dynarray.out; tools/expect_same.sh xtensa-windowed/test_cross_dynarray-rc "$$?" "0"
+	$(TESTTMP)/xtw_dynarray_x64 > $(TESTTMP)/xtw_dynarray_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_dynarray "$$(cat $(TESTTMP)/xtw_dynarray.out)" "$$(cat $(TESTTMP)/xtw_dynarray_x64.out)"
+	# interfaces — vtable and RTTI words reached through two indirections
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_interfaces.pas $(TESTTMP)/xtw_interfaces
+	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/xtw_interfaces_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_interfaces > $(TESTTMP)/xtw_interfaces.out; tools/expect_same.sh xtensa-windowed/test_interfaces-rc "$$?" "0"
+	$(TESTTMP)/xtw_interfaces_x64 > $(TESTTMP)/xtw_interfaces_x64.out
+	tools/expect_same.sh xtensa-windowed/test_interfaces "$$(cat $(TESTTMP)/xtw_interfaces.out)" "$$(cat $(TESTTMP)/xtw_interfaces_x64.out)"
+	# sets — multi-word bitmaps loaded a word at a time
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_sets.pas $(TESTTMP)/xtw_sets
+	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/xtw_sets_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_sets > $(TESTTMP)/xtw_sets.out; tools/expect_same.sh xtensa-windowed/test_cross_sets-rc "$$?" "0"
+	$(TESTTMP)/xtw_sets_x64 > $(TESTTMP)/xtw_sets_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_sets "$$(cat $(TESTTMP)/xtw_sets.out)" "$$(cat $(TESTTMP)/xtw_sets_x64.out)"
+	# variants — a tagged union whose payload word follows a byte tag
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_variant.pas $(TESTTMP)/xtw_variant
+	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/xtw_variant_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_variant > $(TESTTMP)/xtw_variant.out; tools/expect_same.sh xtensa-windowed/test_cross_variant-rc "$$?" "0"
+	$(TESTTMP)/xtw_variant_x64 > $(TESTTMP)/xtw_variant_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_variant "$$(cat $(TESTTMP)/xtw_variant.out)" "$$(cat $(TESTTMP)/xtw_variant_x64.out)"
+	@echo "hosted xtensa: 107 programs Call0 + 5 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
