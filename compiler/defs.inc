@@ -419,8 +419,8 @@ const
   AN_NOT       = 7;   { unary not;   Left = operand }
   AN_CALL      = 8;   { IVal = proc index; Left = first arg (AN_ARG chain) }
   AN_ARG       = 9;   { Left = value; Right = next arg or -1 }
-  AN_INDEX     = 10;  { Left = base sym idx; Right = index expr }
-  AN_FIELD     = 11;  { Left = base sym idx; SOffset/SLen = field name }
+  AN_INDEX     = 10;  { Left = base NODE; Right = index expr }
+  AN_FIELD     = 11;  { Left = base NODE; SOffset/SLen = field name }
   AN_ASSIGN    = 12;
   AN_IF        = 13;  { Left = cond; Right = AN_PAIR(then, else) }
   AN_WHILE     = 14;  { Left = cond; Right = body }

@@ -6287,6 +6287,26 @@ test-core: $(COMPILER)
 	# RUNS, because "accepted" and "correct" are different claims.
 	./$(COMPILER) test/test_assign_compatible_types.pas $(TESTTMP)/test_asgok26
 	tools/expect_same.sh test_asgok26 "$$($(TESTTMP)/test_asgok26)" "compat 7 abc 7 0 2"
+	# ...and the same check must reach every LVALUE SHAPE, not just a bare
+	# identifier. `r := s` was refused; `rs[1] := s` compiled to a byte move of
+	# a string HANDLE over a record and segfaulted at scope exit. Five of the
+	# six shapes were unchecked -- not a check that fired and passed, a check
+	# that NEVER RAN: AssignSideKind answered only AN_IDENT, so the `and` chain
+	# short-circuited on an element, a field or a deref. Row 1 (`r := s`) is in
+	# the file on purpose: it is the arm that already worked, and it is what
+	# proves the fix to the other five did not break it. The count is the
+	# assertion, as above -- fpc 3.2.2 rejects the same twelve rows.
+	# bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
+	! ./$(COMPILER) test/test_assign_lvalue_shapes_fail.pas $(TESTTMP)/test_lvbad26 > $(TESTTMP)/test_lvbad.log 2>&1
+	tools/expect_same.sh test_lvbad.log "$$(grep -c 'incompatible types' $(TESTTMP)/test_lvbad.log)" "12"
+	grep -q "cannot assign AnsiString to record" $(TESTTMP)/test_lvbad.log
+	grep -q "cannot assign record to AnsiString" $(TESTTMP)/test_lvbad.log
+	# ...and its accept half, which RUNS: widening what the check can refuse
+	# widened what it can wrongly refuse by exactly as much. An interface is
+	# spelled tyRecord, so `ptr := o.I` -- which fpc accepts -- is the row the
+	# record rule would refuse without the bail. Output verified against fpc.
+	./$(COMPILER) test/test_assign_lvalue_shapes_ok.pas $(TESTTMP)/test_lvok26
+	tools/expect_same.sh test_lvok26 "$$($(TESTTMP)/test_lvok26)" "lvok 16 a sh sh z 1 TRUE 7"
 	# A class that is its own ancestor through a CHAIN is refused, and the
 	# refusal REPORTS rather than spinning. This hung the compiler forever with
 	# no output, no exit and no error: ~72 sites step UClsParent across five

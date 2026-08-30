@@ -61,11 +61,23 @@ end;
 function AssignSideRecOf(node: Integer): Integer;
 { The record/class id of an assignment side, or REC_NONE. Companion to
   AssignSideKind, which answers the KIND: an operator overload is keyed on
-  both, and a record kind with the wrong id is a different type. }
+  both, and a record kind with the wrong id is a different type.
+
+  The three non-identifier shapes AssignSideKind now types -- an element, a
+  field, a deref -- are answered by ResolveNodeRec, which already knows all
+  three (and their nested forms) because the field-offset and by-value-argument
+  paths depend on it. Answering the kind without the id would key an operator
+  lookup on REC_NONE and stand a conversion down that exists. }
 var si: Integer;
 begin
   AssignSideRecOf := REC_NONE;
   if node < 0 then Exit;
+  if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_FIELD) or
+     (ASTKind[node] = AN_DEREF) then
+  begin
+    AssignSideRecOf := ResolveNodeRec(node);
+    Exit;
+  end;
   if ASTKind[node] <> AN_IDENT then Exit;
   si := Integer(ASTIVal[node]);
   if (si < 0) or (si >= SymCount) then Exit;
@@ -73,7 +85,7 @@ begin
 end;
 
 function AssignSideKind(node: Integer; var tk: TTypeKind): Boolean;
-var si: Integer;
+var si, rec: Integer; nk: TTypeKind;
 begin
   AssignSideKind := False;
   if node < 0 then Exit;
@@ -100,6 +112,45 @@ begin
     AN_INT_LIT, AN_STR_LIT, AN_BOOL_LIT, AN_FLOAT_LIT:
       begin
         tk := IntToTypeKind(ASTTk[node]);
+        AssignSideKind := True;
+      end;
+    AN_INDEX, AN_FIELD, AN_DEREF:
+      { An ELEMENT, a FIELD, a DEREF. The identifier arm above is the only one
+        this function had, so the AN_ASSIGN type check never RAN for any of
+        these -- it short-circuited on a False and looked like a check that had
+        fired and passed. Five of six lvalue shapes were unchecked, and
+        `rs[1] := s` compiled to a byte move of a string handle over a record
+        and crashed at scope exit while releasing it
+        (bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked).
+
+        The kind is read off the NODE, not re-derived from a base symbol. Two
+        reasons, and the first is the one that was nearly got wrong:
+        defs.inc documented AN_INDEX as `Left = base sym idx`, which would have
+        made a symbol walk nearly free -- and that comment is FALSE. All 196
+        builders of these three node kinds in compiler/*.inc assign a NODE to
+        ASTLeft; not one assigns a bare symbol index, which is what the
+        *MakeIdent helpers exist to prevent. Second: the parser already resolved
+        the element/field/pointee type into ASTTk when it built the node, and a
+        walk would be a second, divergent answer to a question already answered
+        -- the shape normalise-dont-special-case.md is about.
+
+        Unset stays SILENT rather than wrong: ASTTk 0 is tyUnknown, on which
+        AssignKindsIncompatible stands down. That is deliberate. This check
+        exists to refuse stores that can only produce a wrong value, so a shape
+        it cannot type must fall back to the old accept -- a false REJECT of
+        working code is a worse defect than the false accept being fixed here.
+
+        The interface bail is the AN_IDENT arm's, one shape over and for the
+        same measured reason: an interface is spelled tyRecord (a 16-byte fat
+        pointer), so without it `p := o.IntfField` -- which FPC accepts -- would
+        be refused by the record rule. }
+      begin
+        nk := IntToTypeKind(ASTTk[node]);
+        if nk = tyUnknown then Exit;
+        rec := ResolveNodeRec(node);
+        if (rec >= REC_UCLASS_BASE) and (rec - REC_UCLASS_BASE < MAX_UCLASS) and
+           UClsIsInterface[rec - REC_UCLASS_BASE] then Exit;
+        tk := nk;
         AssignSideKind := True;
       end;
   end;
