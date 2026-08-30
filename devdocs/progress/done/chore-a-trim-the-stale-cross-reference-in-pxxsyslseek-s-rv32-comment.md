@@ -56,4 +56,4 @@ Track A's: `make compiler/pascal26` (the self-host fixedpoint) — a
 comment-only change, so nothing else is expected to move.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit aa28134a0.
