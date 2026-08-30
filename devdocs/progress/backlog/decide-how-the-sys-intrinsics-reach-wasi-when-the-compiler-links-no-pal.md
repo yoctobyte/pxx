@@ -2,7 +2,7 @@
 slug: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 title: "How should the sysopen/sysread/sysclose intrinsics reach WASI, given compiler.pas links no PAL by design?"
 track: U
-prio: 40
+prio: 70
 type: decide
 status: backlog
 owner: ""
@@ -10,6 +10,25 @@ created: 2026-08-29
 found-by: frankwasm (sizing the builtins refusal block)
 summary: "24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrinsics (tkSysOpen 15, tkSyswrite 6, tkArgStr 3), and they collapse to ONE blocked primitive: opening a file under WASI. That needs preopen resolution, rights computation and errno mapping, which exist once in lib/rtl/platform/wasi/platform_backend.pas -- a unit compiler.pas deliberately does not link, because the compiler bootstraps on intrinsics to avoid an RTL dependency. Three ways out, each with a real cost: duplicate the capability model into builtinheap.pas, link the PAL into the compiler, or factor the WASI helpers into a shared include. The choice spans Track A and Track B files, so it is not the wasm lane's to make."
 ---
+
+> **Re-priced 40 -> 70 by the coordinator, 2026-08-30, on a re-measurement by frankwasm.**
+> When this was filed it was 24 of 52 refusals -- one blocker among several. It is now
+> **32 of 32**: the histogram has exactly one shape left (17x -50, 8x -100 `LoadFile`,
+> 6x -52, 1x IR op 54 `getdents64`), every one file / directory / environment I/O, every
+> one gated by this decision. The two categories that were NOT this ticket have both
+> been cleared since -- argv landed as Phase 9j (`b9e1ef22f`, backend-emitted
+> `args_sizes_get`/`args_get`, self-host fixedpoint plus 28 wasm checks) and the float
+> intrinsics as Phase 9k (`Frac` -205 / `Int` -206, ten lines, both `f64.trunc`).
+>
+> **What changed is not the number, it is the shape.** 24-of-52 prices as "a big piece of
+> the work"; 32-of-32 prices as "the lane cannot finish the anchor without a human". This
+> decision now gates 32 bodies in the compiler itself, i.e. the entire *pascal26 runs
+> under wasmtime* milestone. Nothing else in the wasm lane's anchor work is blocked on
+> anything but this.
+>
+> Not raised higher: frankwasm is NOT idle on it -- it continues on non-anchor lane work
+> while this sits, so the cost is a stalled milestone, not a stalled agent. 70 puts it
+> level with the other ranked Track U items rather than ahead of the fleet.
 
 # The number, and what is actually behind it
 
