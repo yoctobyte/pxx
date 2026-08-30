@@ -1844,6 +1844,16 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              "skips: %s" % ((report.get("skips") or {}).get("count", "unknown")),
              "skip_holes: %s" % ((report.get("skips")
                                   or {}).get("coverage_holes", "unknown")),
+             # Jobs that FAILED and then passed on a retry. testmgr has always
+             # recorded these ("flaky" in its result JSON) and this publisher
+             # dropped them, so 1155 reports carried not one mention of a retry
+             # -- and the retries are real: RUN_RETRY_SIGNATURES exists
+             # precisely to absorb "Text file busy". A suppression with no
+             # counter makes its own population unmeasurable: any question of
+             # the form "has this race ever fired?" gets a confident NO from a
+             # record that could not have said otherwise.
+             # bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets
+             "flaky: %s" % len(report.get("flaky") or []),
              "---", ""]
     if report.get("timed_out") or report.get("verdict") == "TIMEOUT":
         lines += ["> **THIS RUN HAS NO VERDICT.** It hit its %s-second deadline "
@@ -1893,6 +1903,19 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
             more = "" if len(names) <= 12 else " …+%d more" % (len(names) - 12)
             lines += ["- **%s** — %s%s" % (why, shown, more)]
         lines += ["", "</details>", ""]
+
+    # ...and the jobs that DID run, failed, and passed on a retry. A green
+    # verdict is correct for them and incomplete: something made them fail
+    # once, and the retry is what stops it reaching the verdict, not what
+    # explains it. Named rather than counted only, because the NAMES are what
+    # let a reader ask whether one path keeps recurring.
+    flaky = report.get("flaky") or []
+    if flaky:
+        shown = " ".join(flaky[:12])
+        more = "" if len(flaky) <= 12 else " …+%d more" % (len(flaky) - 12)
+        lines += ["> **%d job(s) failed and passed on a RETRY.** They are green "
+                  "above and they are not nothing: %s%s"
+                  % (len(flaky), shown, more), ""]
 
     # -O3 coverage: the breadth note's question, one tier over. `opt` is
     # DISJOINT from the quick<native<limited<full chain and runs only as idle

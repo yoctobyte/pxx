@@ -110,3 +110,98 @@ python3 tools/npy_cross_target_expectation_devtest.py   # the frozen set
 The full listing is regenerable from the Makefile with the same scan the devtest
 uses: group `$(COMPILER) <src> $(TESTTMP)/<bin>` by `<bin>` and report any with
 more than one `<src>` or more than one enclosing target.
+
+---
+
+## 2026-08-30 — the escalation measurement was RUN. It does not hit, and it
+## COULD NOT HAVE. Prio stays 50; the instrument is now fixed so a future run
+## of it means something.
+
+### What was measured
+
+1155 published reports, 2026-07-07 → 2026-08-30, grepped for the signatures
+this ticket named:
+
+| signature | reports |
+| --- | ---: |
+| `Text file busy` | 3 |
+| `ETXTBSY` | 0 |
+| `: not found` | 1 |
+
+And none of the four is this ticket's race:
+
+- two are `/tmp/testmgr-scratch-*/pascal26-self` and `…/pascal26-next` — the
+  **self-host chain**, which is the pair the Makefile comment records as
+  "observed twice on 2026-08-02" and which was then fixed with
+  compile-to-unique-name + `rename(2)`;
+- one is `./compiler/pascal26: Text file busy` — the compiler binary itself,
+  not a `$(TESTTMP)` path, a different mechanism;
+- the `: not found` one is `cprintf_ll_b252_386`, which is written by **one
+  source in one target** (`Makefile:8016`) and so is in neither the 15 nor the
+  117. Its cause is elsewhere.
+
+### Why a negative result here proves nothing — the measurement is blind by
+### construction, and I proposed it
+
+`tools/testmgr.py:352`:
+
+```python
+RUN_RETRY_SIGNATURES = ("Text file busy", "ETXTBSY")
+```
+
+**testmgr already retries exactly this.** A job whose log tail carries either
+signature is re-run, and if the retry passes the job is marked `flaky` and
+scored GREEN. So the event this ticket is about is *consumed by the harness
+before it can reach a report* — and the report is what I told the next reader to
+grep. A search whose blind spot is precisely its subject returns a confident NO
+and cannot return anything else.
+
+Same shape as counting `.expected` siblings to find unwired tests
+([[done/chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring]]:
+the proxy could only see subjects that had one, and would have reported "three"
+for any true number). Recording it because I wrote the bad measurement into this
+ticket myself, as the thing that would settle it.
+
+### The retry ticket and this one are the two halves of one defect
+
+[[done/bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs]] closed by adding that
+retry — and the comment it left in the source says the rest out loud:
+
+> Root cause belongs in the recipe (write under a temp name and rename into
+> place, atomic on one filesystem)
+
+**This ticket is that root cause**, arrived at independently from the name map
+rather than from a red. That ticket suppressed the symptom and named the cure;
+this one is the cure, for 117 paths instead of three.
+
+### Fixed here: the flake population is no longer unmeasurable
+
+testmgr has always put `"flaky": [...]` in its result JSON. `twatch.py` — the
+publisher — **never read the field**: `grep -n flaky tools/twatch.py` returned
+nothing, and not one of 1155 reports mentions a retry. A suppression with no
+counter, which is what made the measurement above impossible rather than merely
+negative.
+
+The watcher now carries it: `flaky: N` sits in the report **header**, beside
+`skips:` and `skip_holes:` and for the same stated reason — a field that appears
+only when it has something to say cannot report finding nothing — and the job
+NAMES are rendered when there are any, because names are what let a reader ask
+whether one path keeps recurring.
+
+Guarded by `tools/twatch_flaky_report_devtest.py`, 4 guards, each verified
+against its own broken condition: the header field removed → 3 red; the details
+block removed (the original defect exactly) → 1 red; clean → 4 green. One
+instrument error recorded in its own comment — the header check split on the
+first `---`, which is the YAML frontmatter opener, so it read an empty header
+and reported every field missing against a correct report.
+
+### So: prio stays 50, and the ticket is now ANSWERABLE
+
+Nothing observed, and for the first time nothing observed is a fact about the
+tree rather than about the instrument. The re-measurement, for whoever next
+reads this: **grep the reports for `flaky:` with a nonzero count, and for names
+in the frozen 15**, over reports published after this change. That is the
+evidence that was being asked for; it did not exist until now.
+
+Unchanged: the 117-recipe sweep is still not the move, and the frozen set in
+`tools/npy_cross_target_expectation_devtest.py` still stops it growing.
