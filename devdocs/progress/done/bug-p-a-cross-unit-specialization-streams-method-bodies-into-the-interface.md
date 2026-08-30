@@ -221,4 +221,4 @@ placement bug. Not diagnosed here — filed as its own ticket rather than guesse
 at, per root-cause-over-microfix.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 19f17c60a.

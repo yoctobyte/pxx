@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:34 blocked:7 backlog:388 backlog_new:26 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2841 rejected:58`
+`urgent:1 working:1 unfinished:34 blocked:8 backlog:389 backlog_new:26 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2841 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -52,17 +52,18 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 - `ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired` [A+S]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (8) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
+- `bug-c-a-c-function-s-calling-convention-depends-on-the-target` [A+C] — blocked-by: bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 431, ranked
+## Ready — top 30 of 432, ranked
 
 - `[p 70] [P]` regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -83,8 +84,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [A]` bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given (unblocks 1)
 - `[p 65] [A]` bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized
-- `[p 65] [A+C]` bug-c-a-c-function-s-calling-convention-depends-on-the-target
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
@@ -95,4 +96,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 
-_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
