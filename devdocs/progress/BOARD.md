@@ -62,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (338)
+## backlog (339)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -231,6 +231,7 @@ _none_
 | decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop | U | 70 | decide | The ticket lock is too heavy for the loop it sits in — 607 commits, 3 locks | — |
 | decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation | U | 30 | decide | devdocs/dev/ (50 files) and devdocs/developer/ (58 files) both hold internal developer docs. A grep in the wrong one returns silence, which reads like a refuted citation rather than a mislocated file. Decide whether to consolidate, and if so which name wins, given 631 citations point at dev/ and 40 at developer/. | — |
 | decide-two-threading-docs-disagreed-for-seven-weeks | U | 40 | decide | Two threading docs, one subject: consolidate, or make the split explicit? | — |
+| decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work | U | 50 | decide | tools/exit_observable_devtest.py fails when the count of stdout-only cross-target rows exceeds a high-water mark. The number grew 531 -> 551 in six hours from four commits across three lanes doing normal work. Bumping the ratchet each time measures nothing; holding the red makes a shared gate permanently owned by no one. Third option: report the drift and its attribution WITHOUT failing. Raised by pxx-a5, which deliberately did not make the change. | — |
 | decide-where-a-persistent-fpc-trunk-oracle-lives | U | 30 | decide | The FPC trunk oracle works but has nowhere to live: a trunk build is ~4 min and ~1GB, it must sit OUTSIDE the repo, and installing into ~ needs the owner's say-so. Three options with different refresh obligations. Filed because closing feature-t-fpc-probe-needs-a-trunk-oracle with item 3 undone would otherwise lose it. | — |
 | decide-which-gtk-a-bare-gtk-gtk-h-means | U | 55 | decide | GTK2 and GTK3 both answer to `#include <gtk/gtk.h>` and are told apart only by include root. /usr/include/gtk-2.0 is a default system include root and gtk-3.0 is not, so GTK3 needs an explicit -I today. Adding gtk-3.0 to the defaults decides the GTK version for every C consumer at once — including the GTK2 macro-soup regression guard. | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
@@ -827,6 +828,7 @@ _none_
 - [p 50] [T] bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets
 - [p 50] [T] bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure
 - [p 50] [U] decide-does-the-legacy-gtk-alias-still-point-at-gtk-2
+- [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-nested-routine-fixed-array-capture

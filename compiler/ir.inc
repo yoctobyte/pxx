@@ -689,6 +689,8 @@ function IRAddrMayCall(n, depth: Integer): Boolean; forward;
 function IRAssignIsSharedCompound(node: Integer): Boolean; forward;
 function IRLowerCompoundAssign(node: Integer): Integer; forward;
 function CNodeIsDecayedRow(node: Integer): Boolean; forward;
+procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer;
+                                     var defaultLabel: Integer); forward;
 { defined near IRWrapChkBounds, used from IRLowerAddress's AN_DEREF arm far above it
   — the FPC seed needs the forward (bug-a-fpc-seed-drift-emitasmx64-forward). }
 function IRWrapNilChk(ptrVal, astNode: Integer; defaultOn: Boolean): Integer; forward;
@@ -4553,48 +4555,6 @@ begin
                  -1, -1, 0, Ord(tyPointer));
   IRB[last] := argNode;                                        { baseRecDesc }
   AppendDynWalkTail := argNode;
-end;
-
-{ Dispatch scan: walk the ENTIRE switch body (any depth — case/default labels are
-  labels on arbitrarily nested statements, C 6.8.1) assigning each C marker an
-  IR_LABEL and, for a case, emitting `if (sel == val) goto label`. Recurses into
-  every construct EXCEPT a nested AN_SWITCH (its own cases belong to it). This is
-  what lets Duff's device work: the case labels buried inside a do-while are found
-  here and the body lowering (normal IRLowerAST) drops the IR_LABELs in place, so
-  dispatch can jump straight into the loop. C markers carry ASTSLen=1 (distinct
-  from a Pascal AN_CASE statement / the Default(T) node). }
-procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer; var defaultLabel: Integer);
-var condNode, selSz: Integer; caseVal: Int64;
-begin
-  if node < 0 then Exit;
-  if ASTKind[node] = AN_SWITCH then Exit;   { nested switch owns its own case labels }
-  if (ASTKind[node] = AN_CASE) and (ASTSLen[node] = 1) then
-  begin
-    ASTSOffset[node] := IRNewLabel;
-    { C 6.8.4.2: each case constant is CONVERTED to the promoted controlling
-      type. quickjs switches a uint32_t tag over negative enum labels
-      (JS_TAG_OBJECT = -1): the label must compare as 0xFFFFFFFF, not as a
-      sign-extended 64-bit -1 that never matches a zero-extended selector. }
-    caseVal := ASTIVal[node];
-    selSz := TypeSize(IntToTypeKind(selTk));
-    if (selSz < 8) and TypeCompareUnsigned(IntToTypeKind(selTk), IntToTypeKind(selTk)) and
-       (caseVal < 0) then
-      caseVal := caseVal and ((Int64(1) shl (selSz * 8)) - 1);
-    condNode := IRAppend(IR_BINOP,
-      IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
-      IRAppend(IR_CONST_INT, -1, -1, -1, caseVal, selTk),
-      Ord(tkNeq), 0, Ord(tyBoolean));
-    IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[node], condNode, -1, 0, 0);
-    Exit;                                    { marker has no children of interest }
-  end;
-  if (ASTKind[node] = AN_DEFAULT) and (ASTSLen[node] = 1) then
-  begin
-    ASTSOffset[node] := IRNewLabel;
-    defaultLabel := ASTSOffset[node];
-    Exit;
-  end;
-  IRLowerCSwitchDispatchScan(ASTLeft[node], selTmp, selTk, defaultLabel);
-  IRLowerCSwitchDispatchScan(ASTRight[node], selTmp, selTk, defaultLabel);
 end;
 
 { Inline expansion (feature-inline-routines): clone a retained inline body from

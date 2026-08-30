@@ -603,3 +603,111 @@ queue happens to be preprocessor-shaped is still not independently staffable.
 Recorded because a table that survives its own counter-examples is worth more
 than one that never met any — and because the next person to quote the ratio
 should quote the narrower claim, which is the one that holds.
+
+## SLICE 1b — the method applied TRANSITIVELY finds what slice 1 missed. frankC, 2026-08-30
+
+Slice 1's own finding was *"follow CALLERS, not the guard"*. Applied again at
+HEAD, mechanically this time (`callers.py`: every routine defined in `ir.inc`
+whose every mention across all of `compiler/**` is inside `ir.inc`/`cir.inc`,
+with the enclosing routine of each site named), it turns up something the first
+pass could not have:
+
+> **Slice 1 followed callers ONE level. The property is transitive, and two
+> routines sit at the second level.**
+
+`IRBitMask` is called from `IRLowerBitFieldRead` and `IRLowerBitFieldStore` and
+from nowhere else. Both of those moved to `cir.inc` in slice 1 — so `IRBitMask`
+became reachable only from `cir.inc` *as a result of slice 1*, and a one-level
+scan run before the move could not have seen it. **Every extraction can create
+new candidates one level below it**, which means the census is not a thing you
+run once.
+
+### `IRLowerCSwitchDispatchScan` — MOVED
+
+32 lines, `ir.inc` -> `cir.inc`. Lowers C's `switch` dispatch: walks the whole
+switch body at any depth assigning `IR_LABEL`s to case/default markers, which is
+what makes Duff's device work. Reached only from `IRLowerAST`'s `AN_SWITCH` arm
+and from itself; `AN_SWITCH` is constructed at exactly one place in the whole
+compiler, `cparser.inc:6657`, so the node kind is C-exclusive by construction and
+not merely by current usage.
+
+Costs one more forward in `ir.inc` (the arm at 11997 calls it, and `cir.inc` is
+included after). That is 6 forwards for the file now, against the 1 originally
+predicted — the drift is worth watching, and it is the number to carry into the
+arms decision.
+
+### `IRBitMask` — DELIBERATELY NOT MOVED, and this is the sharper half
+
+It qualifies on the stated rule and it should stay, which means the rule was
+incomplete. `IRBitMask(width)` is `(1 shl width) - 1` written as a loop: pure
+integer arithmetic, no AST, no `CProgramMode`, no C semantics whatsoever. It is
+C-only by *who happens to call it*, not by *what it is*.
+
+Moving it would put a general-purpose helper in a frontend's file, so that the
+day Pascal wants a bit mask, the answer is either a duplicate or a Pascal
+dependency on `cir.inc`. That is the `parser.inc` lesson running the other way:
+that split sent `ast_arena`, `inline_expand` and `ast_syminfer` to **A** — not
+because Pascal had stopped using them, but because they were never Pascal's
+*subject*. Same test, opposite direction.
+
+**So the charter needs its second half, and `cir.inc`'s header now carries it:**
+
+> Reached only from C is NECESSARY and NOT SUFFICIENT. The routine must also
+> BE C — its subject must be a C-language construct. A general utility that
+> only C happens to call stays where any lane can reach it.
+
+That distinction is exactly what condition 2 of the grant asks for
+(*"C-shaped and belongs to C" vs "shared lowering with a guard bolted on"*),
+met in a third form the condition did not anticipate: **shared machinery with
+no guard at all.**
+
+### Gate — the C-side byte-identical one, as adopted
+
+`make compiler/pascal26` is blind here for the same structural reason as slice 1:
+compiling `compiler.pas` compiles Pascal, `CProgramMode` is never set, and
+`IRLowerCSwitchDispatchScan` is never called. It would go green if the body were
+deleted.
+
+Six C tests built with the pre-move compiler `e2ea9034a65e` and the post-move
+compiler `410f0b9afac4`, sha256 of the emitted binaries:
+
+```
+cswitch_b13                         28c0b1b9469e
+cswitch_nested_case_block_b127      62f66889c1cd
+cswitch_noncompound_duff_b207       678ee565010a   (Duff's device — the case this routine exists for)
+cswitch_unsigned_negative_case_b374 965100a18a35   (the C 6.8.4.2 label conversion inside it)
+quick_canary_c                      ec7f4f4fcd5e
+cchar_promotion_contexts            1cf3791036e8
+```
+
+**All six byte-identical, outputs and exit codes identical.** Plus
+`forwardlint` clean (216,812 lines, no use-before-declaration, no duplicate
+forward) and `gate.sh quick`.
+
+### Where the census leaves the file
+
+`ir.inc` is at **38** `CProgramMode` matches, down from 40. That number was never
+the scope and is now further from it than ever: two of the missing sites left
+with slice 1's seven routines, none of which contained the string, and this
+slice moves a routine that does not contain it either. The count measures the
+guard, and the guard is not where the work lives.
+
+### Two gate-methodology notes from this slice, both self-inflicted
+
+**1. Do not edit the tree while `gate.sh` runs.** The first run of this slice's
+gate went RED on the self-host fixedpoint — *"the fixedpoint reached from PINNED
+differs from compiler/pascal26 ... two distinct fixedpoints means the binary we
+test with is not the one these sources define"*. Nothing was wrong: I had
+appended a comment block to `cir.inc` mid-run, so the sources genuinely changed
+under the comparison. Re-run on a quiescent tree: GREEN, same contents. The
+gate's diagnostic is precise and it is worth reading literally — it says the
+binary and the sources disagree, which is exactly what an edit-during-gate
+produces.
+
+**2. The completion notification's exit code was `tail`'s, not the gate's.** The
+gate was launched as `tools/gate.sh quick > log 2>&1; tail -12 log`, so the
+`;`-list's status belongs to the last command. The RED run above was reported as
+**"completed (exit code 0)"** while its own final line read `gate: RED (exit 1)`.
+Read the log's `gate: GREEN|RED` line; do not trust a wrapper's status. Launch it
+as `tools/gate.sh quick > log 2>&1` alone, or capture `rc=$?` before appending
+anything.
