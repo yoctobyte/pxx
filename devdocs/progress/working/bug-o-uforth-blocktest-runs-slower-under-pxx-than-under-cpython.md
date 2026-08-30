@@ -585,7 +585,10 @@ Parked to `unfinished/` with follow-up 2 landed and follow-up 1 sized.
 
 ## 2026-08-30 — FOLLOW-UP 1 LANDED behind -O3 (x86-64). A literal is an address now
 
-`e3055e7a5`, measured at HEAD `823f1c85bdb9`, binary `6a078478d137`.
+Landed and measured at `823f1c85b`; the binary those numbers came from is
+sha256 `6a078478d137`. (Both citations were first written as the pre-rebase
+shas out of this session's own reflog, which resolve here and nowhere else —
+`tools/progress.py check` now reports that as DANGLING-SHA.)
 
 The sizing above said the tempting implementation — interning inside
 `PXXStrFromLit`, keyed on `(src, len)` — is unsound, and it is. But the "second
@@ -705,7 +708,7 @@ the table is for.
 
 ## 2026-08-30 — aarch64 ported, and where the next cost is
 
-`90b4d2b51` ports the same pass to aarch64: one predicate and three emit sites,
+`89ab3d9d4` ports the same pass to aarch64: one predicate and three emit sites,
 because the header is in the **pool** and not in a per-backend shim, so the
 representation was already shared. `EmitAnsiStringFromNodeA64` is one central
 conversion where x86-64 has eight. Parity counts move together, x86-64 22→23
