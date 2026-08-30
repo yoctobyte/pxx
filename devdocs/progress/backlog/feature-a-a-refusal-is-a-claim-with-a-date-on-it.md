@@ -8789,6 +8789,32 @@ context I already had** rather than a claim needing a check — the same profile
 unchecked relay in this index: plausible, load-bearing, and adjacent to something I
 genuinely knew.
 
+**What actually caught it was self-suspicion, and that is not a mechanism** (frankA, same
+day, unprompted):
+
+> *"I did not catch it by being sceptical of you. I went to check whether **my own**
+> narrowing was the cause, because that was the uncomfortable possibility, and the ancestry
+> check fell out of that. Had the story implicated someone else's commit instead of mine, I
+> would very likely have taken it — it was well-formed, it named a real pattern, and it
+> arrived from the session with the widest view."*
+
+> **Self-suspicion only fires when the false claim happens to point somewhere the reader has
+> a personal stake.** A relay that exonerates its recipient is checked by nobody, and this
+> one *was* checkable in a single command. The command got run for a reason unrelated to
+> doubting the relay.
+
+That is the missing half of 138. The index has said for weeks that a wrong argument reaching
+a right destination does not self-correct; this says **who** the correction depends on — not
+the sceptic, but whoever the claim happens to accuse. The coordinator's relays are the worst
+case, because a coordinator's account of events usually assigns cause to a lane *other* than
+its reader.
+
+**Corroborated from a source frankA did not choose**, because "your commit broke it" is
+exactly the claim that should not be relayed unchecked: `gate.sh quick` ran **green,
+including `-O3 backend parity`**, on the v394 pin commit `cc5e02d6c`, and
+`git merge-base --is-ancestor 823f1c85b cc5e02d6c` says **NO** — the slice landed *after*
+that pin. An independent green at a known sha, from a run made for another purpose entirely.
+
 ### 189a — ONE CAUSE, TWO ERAS: A FIX THAT MADE A GARBAGE CHANNEL DETERMINISTIC
 
 The real mechanism, and it is worth more than the bug. `RegisterGeneralAlias` recorded
