@@ -285,7 +285,35 @@ re-run, so the *line numbers* below are still the 08-28 measurement.
 > evidence for independence and not proof. **Re-measure 6b against a post-fix
 > binary before concluding anything about `TKey`.**
 >
-> A second, separate defect fell out of this and is filed:
+> **RETRACTED 2026-08-30, same day (frankB): the corpus diagnostic was CORRECT
+> and my "wrong file" evidence was backwards.** frank-rust's source-map
+> instrument (`PXXDBG=a.srcmap:*`) shows the error token sits inside a body
+> spliced *from* `generics.defaults.pas`, and the file and line were right all
+> along. Confirmed independently here: `generics.defaults.pas:78` is
+> `function Equals(constref ALeft, ARight: T): Boolean;` inside
+> `IEqualityComparer<T>`, and `inc/generics.dictionariesh.inc:56` specializes it
+> as `IEqualityComparer<TKey>`. So `unknown type: TKey` reported at that line is
+> exactly right — the template's own line, with `T` substituted by `TKey`.
+>
+> **`TKey` occurring 0 times in that file is what a CORRECT specialization looks
+> like from a grep**, because the argument comes from the instantiation site and
+> is not in the template's text. I had printed line 78 myself, observed it
+> "contains neither `TKey` nor `SizeOf`", and read that as proof of
+> mis-attribution when it was proof of correctness. The disconfirming evidence
+> was in my hand and I read it backwards.
+>
+> **What IS wrong in the corpus is `near:`**, which printed stale pre-splice
+> spellings that really do occur at `collections.pas:1631`/`:1687` — a real
+> place, in a file that really does contain `TKey` 65 times, so everything
+> corroborated everything. That is
+> [[bug-a-the-near-context-window-is-stale-after-a-token-splice]] [A p45].
+>
+> **The transferable lesson is the third failure mode:** a symbol grep rides on
+> no token index and so survives both broken instruments — and still answered a
+> question nobody wanted asked. Coordinate-free bought soundness, not relevance.
+>
+> The wrong-file defect below is REAL and is fixed (`dc7757a11`) — but on
+> frank-rust's own reduction, not on this corpus instance, which was never one:
 > [[bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line]]
 > [P p60] — the errors name `generics.defaults.pas:78`, which contains neither
 > `TKey` nor `SizeOf`, while the `near:` context is `collections.pas:1309-1310`.

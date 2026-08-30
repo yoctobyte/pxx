@@ -356,10 +356,28 @@ HEAD `4f42b78b9`, self-host fixedpoint `faf762981c3c`, byte-identical to pin
 `:84`, `:113`, `:120`, `:123` — overlapping this ticket's `:120`/`:123`, which
 given the mis-attribution below is **not** evidence of a shared defect.
 
-**The section above asks how two probes of the same file, with no compiler commit
-between them, can report different first stops (`:120` vs `:135`). Here is a
-mechanism: the file and line in these diagnostics are provably wrong, so
-comparing them was never comparing anything.**
+> **RETRACTED SAME DAY (frankB). The table below is wrong and the claim it
+> supports is withdrawn.** The corpus diagnostic's file and line were CORRECT.
+> frank-rust's `PXXDBG=a.srcmap:*` shows the error token inside a body spliced
+> from `generics.defaults.pas`; confirmed here independently — line 78 of that
+> file is `function Equals(constref ALeft, ARight: T): Boolean;` inside
+> `IEqualityComparer<T>`, which `inc/generics.dictionariesh.inc:56` specializes
+> as `IEqualityComparer<TKey>`. `TKey` appearing 0 times there is what a correct
+> specialization looks like from a grep: the argument lives at the instantiation
+> site, not in the template. I printed that line myself, said it "contains
+> neither `TKey` nor `SizeOf`", and read proof of correctness as proof of error.
+>
+> **So this does NOT dissolve the two-probes question below** — that question is
+> still open and still wants re-deriving. What IS unreliable here is `near:`
+> (stale pre-splice spellings —
+> [[bug-a-the-near-context-window-is-stale-after-a-token-splice]] [A p45]), so
+> re-derive from neither field; use the symbol, and check what question the
+> symbol is answering.
+
+~~**The section above asks how two probes of the same file, with no compiler
+commit between them, can report different first stops (`:120` vs `:135`). Here
+is a mechanism: the file and line in these diagnostics are provably wrong, so
+comparing them was never comparing anything.**~~ (withdrawn, see above)
 
 Evidence, from my run:
 
