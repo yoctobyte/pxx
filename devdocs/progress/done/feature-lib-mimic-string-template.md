@@ -242,4 +242,4 @@ separately and still match, since adding `uses pylib, sysutils` to the
 implementation changes what every `import string` program pulls in.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit a627e019c.
