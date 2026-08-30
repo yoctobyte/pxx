@@ -22383,3 +22383,62 @@ with a correctly-classified group — a region nobody had looked at.
 obvious story at the time.** A campaign that kills the obvious story three times
 running is not going badly; it is one where the obvious story would have been
 *asserted* three times under any cheaper method.
+
+## Two instruments on HALF a claim reads as corroboration for all of it
+
+frank-optimize, 2026-08-30, retracting its own mechanism claim while the
+escalation carrying it was already in flight to the owner.
+
+**What survived:** `-O3` is 23–34% faster than `-O2` on the compiler's own
+workload, 17–26% on NilPy, 3.3% smaller, self-host fixedpoint in **zero** rounds,
+byte-identical output on `compiler.pas`, six programs, multiple shas and load
+regimes, min-of-N interleaved. **What fell:** that the code-shape improvement —
+the twelve-instruction `if p = nil`, the 10-byte `movabs`, 138 of 141 removed —
+*is* the win. Those counts are real and correctly measured. They were never shown
+to drive the time.
+
+**Its own diagnosis, and the reusable part:** *the instruction counts were a second
+instrument for the TIMING, and nothing was a second instrument for the CAUSAL
+claim.* Two instruments agreeing about one half of a claim feels like corroboration
+of the whole. A new member of the staleness family — not a stale artifact, a
+**mis-scoped** corroboration.
+
+**The disproof is itself a constraint, and it reframes the open decision:**
+
+| promoted to `-O2` | speedup |
+| --- | ---: |
+| every `-O3` gate group individually | **0%** |
+| all gates at once | 12% of the 34%, and a **different binary** from `-O3`'s |
+| `-O3 --no-dce` | **26%** — DCE is not it either |
+
+So a discriminator exists outside the enumerated set, and: **if no individual pass
+reproduces the win, per-pass promotion may never deliver it** — each promotion
+spending a full gate to land a change measuring as zero. That is option 1 of the
+Track U ticket. Option 2 (gate the tier whole via Track T) now wins by its
+competitor collapsing rather than by anyone's preference, which is the stronger
+form of the same recommendation. *"I can measure it reliably and cannot yet
+attribute it"* is a publishable state: the decision turns on reproducibility and
+safety, both intact.
+
+## Three tickets today named a plausible cause; three times it was elsewhere
+
+- **`d27b4a28a` (frankA):** managed-temps 47× → ~1.6×, and the cause was neither
+  the zeroing nor the branch the ticket named — `IRFlushPostCallIntf` finalizes
+  **once per statement**, so an `if`'s temps flush in the merge block on every
+  call.
+- **The generics wall (frank-rust):** five successive obvious mechanisms dead by
+  measurement; the defect is in the deferred path, a region nobody had looked at.
+- **`-O3` (frank-optimize):** the plausible cause was named, tested, and found not
+  to be it — *before* anyone acted on it. The honest form of the same pattern.
+
+`root-cause-over-microfix` says the real fix is usually deeper than the ticket
+says. Today's three say something narrower and more useful: **the cause the ticket
+names is evidence about what was visible, not about what is true.** Reproduce and
+vary the shape before adopting the ticket's own hypothesis — it is the hypothesis
+you are least likely to test, because it arrived looking like a finding.
+
+**And the fleet's retraction rate is the quality signal, not a defect.** Four
+agents withdrew their own most persuasive claim today before anyone challenged it
+— frankC's five-target control, frank-rust's two-readings lead, frankB's
+stale-binary report, frank-optimize's mechanism. A campaign that only ever adds
+support is one whose support cannot be told apart from advocacy.
