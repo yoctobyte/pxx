@@ -135,3 +135,76 @@ reach most bodies — that is a cheap negative, and A is still there.
 Still a **decision**, not a conclusion: A is unconditional and B is not, and
 choosing to bank a permanent maintenance hazard for an unconditional win is
 exactly the sort of trade that should be made deliberately by the owner.
+
+---
+
+## Measured arm: what B is actually worth (2026-08-30)
+
+Prototyped as a **measurement, not an implementation** — no compiler change was
+made and none is proposed here. The ceiling for "defer every routine body" was
+obtained by removing the bodies from the runtime source itself: each of the 863
+column-0 `begin`/`end;` pairs in `pylib.pas` and 170 in `pyeval.pas` replaced by
+`begin end;`. Declarations, interfaces and unit structure untouched.
+
+That the substitution is faithful to B's *shape* is checkable rather than
+assumed: both configurations report **`procs=1859`**, identical. Every symbol
+still registers; only bodies vanish. Emitted code goes 1,253,550 B → 370,983 B.
+
+Binary `eb3b0fd5c642` at `f036624b4`. Load average was 15.6-15.9 throughout — far
+above the 2.76 of the earlier baseline in this ticket — so **the numbers below
+were re-measured interleaved (full, then stripped, then full…) and only the
+within-sweep differences are meaningful.** The absolute times are not comparable
+to the figures higher up this page.
+
+| configuration | n | median | min-max |
+| --- | ---: | ---: | --- |
+| zero-byte `.npy`, full runtime | 8 | **2.78s** | 2.69-3.03 |
+| zero-byte `.npy`, all bodies stripped | 8 | **1.15s** | 1.06-1.32 |
+| `x=1; print(x)`, full runtime | 8 | 2.81s | 2.44-3.54 |
+| `x=1; print(x)`, all bodies stripped | 8 | 1.15s | 1.03-1.31 |
+| Pascal `program p; begin end.` (no pylib at all) | 3 | 0.37s | 0.31-0.40 |
+
+**The decomposition of a 2.78s compile of a program that does nothing:**
+
+| component | cost | who can remove it |
+| --- | ---: | --- |
+| routine bodies (parse + lower + emit) | **1.63s** (59%) | B, partially — only the dead ones |
+| declaration/interface parsing of the runtime | **0.78s** (28%) | **A only** |
+| fixed compiler floor | 0.37s (13%) | neither |
+
+**This inverts the recommendation this ticket closed with.** B's *entire
+ceiling* — deferring every body, including the ones the program needs — is
+1.63s, and B can only claim the dead share of it. Scaling by the 60.3% dead-body
+figure measured above gives **≈0.98s, about 35%**, and that is optimistic for the
+reason qualification 1 already gave: dead bodies are the *smaller* ones (60% by
+count, 40% by emitted size), so the true figure sits below it. A, by removing
+bodies and declarations together, has a ceiling of **2.41s (87%)** — A's
+realistic reach is roughly twice B's ceiling and nearly three times B's likely
+value.
+
+**One term is measured and one is not.** Replacing the bodies with comment text
+of the same byte volume (837,857 B vs the original 807,791 B) costs 0.97-1.05s
+against the stripped 0.96-1.04s: **the body text's byte-scan cost is ~0.02s**, so
+the 1.63s is parse+lower+emit and not I/O. What that experiment does *not* cover
+is **tokenisation** — pxx lexes the whole file into `Tokens[]` up front, and a
+real B would still build those tokens before skipping them, whereas both the
+stripped and commented variants avoid it (comments never become tokens). So B's
+real saving is `1.63s × dead-share − tokenisation`, and only the subtrahend is
+unmeasured. It can only make B worse.
+
+**What this does and does not settle.** It does not retire B: no staleness class
+is still a real property, and 35% of a 2.8s tax is not nothing. It does remove
+the argument that carried the earlier recommendation — that B should be tried
+*first* because its ceiling was large enough to make A's 176-array maintenance
+hazard avoidable. The 28% declaration-parsing band is invisible to B by
+construction, and it is the band that makes A unconditional. **Recommendation
+revised to A-first**, with the same caveat as before: it is the owner's call, and
+A's cost is a serialiser over 176 parallel arrays that must be maintained
+forever — see the gate note above (single-program byte-identity would pass a
+serialiser that forgot 170 of the 176; the corpus-wide cold-vs-cached run over
+T's 719 NilPy jobs is the real gate).
+
+Method note: the timing harness asserts each compile printed `ok:` and captures
+`$?` immediately, after frankC and frank-coordinator found gates reporting exit 0
+because a `tail`/`echo` ran last. A compile that fails reports a beautifully fast
+time, which is the same failure shape.
