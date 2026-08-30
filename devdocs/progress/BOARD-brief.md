@@ -65,12 +65,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [P]` regression-test-asm-test-asm-emit-x64-2
-- `[p 70] [P]` regression-test-c-conformance-aarch64-shard0-6-2
-- `[p 70] [P]` regression-test-c-conformance-aarch64-shard1-6-2
-- `[p 70] [P]` regression-test-c-conformance-aarch64-shard2-6
-- `[p 70] [P]` regression-test-c-conformance-aarch64-shard5-6
+- `[p 70] [A]` regression-test-c-conformance-aarch64-shard0-6-2
+- `[p 70] [A]` regression-test-c-conformance-aarch64-shard1-6-2
+- `[p 70] [A]` regression-test-c-conformance-aarch64-shard2-6
+- `[p 70] [A]` regression-test-c-conformance-aarch64-shard5-6
 - `[p 70] [P]` regression-test-core-test-warn-ignored-directives
-- `[p 70] [P]` regression-test-lua-cross-pascal26
+- `[p 70] [A]` regression-test-lua-cross-pascal26
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2

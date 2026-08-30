@@ -433,12 +433,12 @@ _none_
 | regression-size-canary-size-canary | T | 40 | regression | advisory: size-canary#src:tools/size_canary.py red at 83fb0ef72419 (auto-filed by twatch) | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-x64-2 | P | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 94492d162332 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard0-6-2 | P | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at b695bcb4b192 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard1-6-2 | P | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at b695bcb4b192 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard2-6 | P | 70 | regression | regression: test-c-conformance-aarch64#shard2/6 red at b695bcb4b192 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard5-6 | P | 70 | regression | regression: test-c-conformance-aarch64#shard5/6 red at b695bcb4b192 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard0-6-2 | A | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at b695bcb4b192 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard1-6-2 | A | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at b695bcb4b192 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard2-6 | A | 70 | regression | regression: test-c-conformance-aarch64#shard2/6 red at b695bcb4b192 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard5-6 | A | 70 | regression | regression: test-c-conformance-aarch64#shard5/6 red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-core-test-warn-ignored-directives | P | 70 | regression | regression: test-core#src:test/test_warn_ignored_directives.pas red at 83fb0ef72419 (auto-filed by twatch) | — |
-| regression-test-lua-cross-pascal26 | P | 70 | regression | regression: test-lua-cross#src:compiler/.pascal26.fixedpoint red at b695bcb4b192 (auto-filed by twatch) | — |
+| regression-test-lua-cross-pascal26 | A | 70 | regression | regression: test-lua-cross#src:compiler/.pascal26.fixedpoint red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
@@ -794,12 +794,12 @@ _none_
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-asm-test-asm-emit-x64-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-c-conformance-aarch64-shard0-6-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-c-conformance-aarch64-shard1-6-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-c-conformance-aarch64-shard2-6 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-c-conformance-aarch64-shard5-6 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [A] regression-test-c-conformance-aarch64-shard0-6-2
+- [p 70] [A] regression-test-c-conformance-aarch64-shard1-6-2
+- [p 70] [A] regression-test-c-conformance-aarch64-shard2-6
+- [p 70] [A] regression-test-c-conformance-aarch64-shard5-6
 - [p 70] [P] regression-test-core-test-warn-ignored-directives [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-lua-cross-pascal26 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [A] regression-test-lua-cross-pascal26
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
