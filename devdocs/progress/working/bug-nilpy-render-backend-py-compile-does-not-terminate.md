@@ -254,10 +254,29 @@ Recorded so the next attempt does not repeat mine. All of these compile fine:
   still hangs, so it is not a forward reference)
 - comment removal (still hangs, so it is not raw token count)
 
-So the cycle alone is not sufficient. What `_text` has that my reproduction did
-not: `self._y(y) + self._descent(font)`, `text.split(" ")`, `len(words) < 2`,
-`pdf_string_width(...) is None`, `... or 0.0`, and `self.cv.create_text(...)`
-into a Tk shim. One of those closes the loop.
+So the cycle alone is not sufficient. I then added `_text`'s real ingredients
+back one at a time onto that cycle, and these ALSO compile clean:
+
+- `self._y(y) + self._descent(font)` on the first line
+- `text.split(" ")` and `len(words) < 2`
+- a module-level `pdf_string_width` with the real body — a function returning
+  **None or a float** through two `try`/`except` arms — plus `... is None` and
+  `... or 0.0` at the call sites
+
+What is left, and what I could NOT get to reproduce standalone because it needs
+a real Tk canvas to resolve against: `self.cv.create_text(x, py, text=text,
+anchor="sw", fill=self._fill, font=font)` and `_descent`'s
+`tkfont.Font(root=self.cv, font=font).metrics("descent")`. Both are **keyword
+calls into a shim on an UNANNOTATED receiver** (`self.cv = tk_canvas`, a plain
+constructor parameter), and `_descent` is called from `_text`'s first line. In
+isolation they fail with `no class declares ...` rather than hanging, because
+nothing types `self.cv`; in the real module the caller supplies one. That is
+where I would start.
+
+One hypothesis already **excluded**, so nobody re-runs it: "`_text` has two
+callers with different argument types, so its parameter type oscillates."
+`drawString` (line 297) is the second caller, and deleting the whole 297-378
+range still hangs.
 
 ### A warning about bisecting this file
 
