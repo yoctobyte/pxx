@@ -940,6 +940,44 @@ closed**, and rediscovered by a future batch if the classes survive.
   than letting a green stand for it. That is the same discipline as reporting
   skips separately from passes, and the exact opposite of a rung that self-skips
   `exit 0`.
+### Cross-target coverage is NOT uniform, and the reason is the oracle — 2026-08-30
+
+The two cross batches this sitting returned different *kinds* of result, and the
+difference is not visible unless the report's own "NOT CHECKED" lines are read:
+
+| batch | oracle | what was actually compared | result |
+| --- | --- | --- | --- |
+| aarch64, seeds 50000+ | **yes** — native gcc, LP64 matches | pxx vs **gcc**, plus pxx `-O` vs `-O` | 90 agreed, 10 skipped, 0 findings |
+| i386, seeds 60000+ | **NONE** | pxx `-O0` vs `-O2` **only** | 88 clean, 12 skipped, 0 findings |
+
+> `NO ORACLE for i386 (ILP32) -- gcc: does not build; i686-linux-gnu-gcc: not
+> installed. MISCOMPILE_VS_GCC and PXX_SLOW are NOT CHECKED this run; pxx-vs-pxx
+> -O comparison still is.`
+
+**aarch64 got a real differential only because it is LP64** — the same data model
+as the native compiler, which is exactly what `174186b5d` built the
+data-model-not-ISA oracle selection for. It is working as designed.
+
+**Every ILP32 target has no oracle on this box.** Measured, not assumed:
+
+```
+i686-linux-gnu-gcc  arm-linux-gnueabihf-gcc  arm-linux-gnueabi-gcc
+riscv32-linux-gnu-gcc  riscv64-linux-gnu-gcc  aarch64-linux-gnu-gcc   -- all MISSING
+gcc -m32  ->  cannot find Scrt1.o / crti.o    (no multilib)
+```
+
+So an i386 / arm32 / riscv32 batch is a **self-differential only**: it can find a
+disagreement between our own `-O` levels — which is a real finding we own
+outright — and it cannot find "we disagree with gcc" at all. A clean ILP32 batch
+means considerably less than a clean aarch64 one, and the report says so on its
+own line rather than leaving the reader to infer it.
+
+**The remedy needs root and is therefore not an agent's to apply**:
+`gcc-multilib` would give `-m32` for i386; the `gcc-*-linux-gnu` cross packages
+would cover arm32/riscv32 (and give aarch64 a same-ISA oracle instead of a
+same-data-model one). Raised for the owner rather than worked around, and noted
+here so the next sitting does not read a clean ILP32 batch as a vs-gcc result.
+
 - **Bitfield LAYOUT — NOW FILED, and it is worse than this bullet said.** Filed
   as `bug-c-a-long-long-bitfield-after-a-smaller-one-puts-later-members-at-the-wrong-offset`
   [C p40]. The recorded shape (`sizeof` 12 vs 8) does not reproduce; the real one
