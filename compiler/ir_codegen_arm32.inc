@@ -3316,7 +3316,7 @@ begin
         else if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
             not Syms[IRA[left]].IsArray) or
            (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
-            (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
+            (IRTk[left] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2))) then
         begin
           { Managed string in write position: clone-if-shared so the index write
             does not mutate a buffer still aliased by another handle. r0 holds the

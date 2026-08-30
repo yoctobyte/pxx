@@ -1659,7 +1659,7 @@ begin
           via PXXStrUnique to get a writable handle (COW). }
         { Two shapes reach here, and only the first was handled: a SCALAR
           managed string (IR_LEA), and a managed string that is itself a FIELD
-          or an ARRAY ELEMENT (IR_FIELD / IR_INDEX with a 1-byte stride) —
+          or an ARRAY ELEMENT (IR_FIELD / IR_INDEX, stride 1 or 2) —
           `a[i][1] := 'x'` on an `array[0..N] of string`. For the second, a0
           held the element's SLOT ADDRESS and neither the COW call nor the
           deref ran, so the character store landed in the handle slot itself:
@@ -1670,7 +1670,7 @@ begin
         if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
             not Syms[IRA[left]].IsArray) or
            (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
-            (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
+            (IRTk[left] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2))) then
         begin
           if InLValueWrite then
           begin

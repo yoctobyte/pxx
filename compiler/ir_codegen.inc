@@ -6133,10 +6133,13 @@ begin
             isAnsiStr := True;
         end
         else if ((IRKind[baseAddr] = IR_FIELD) or (IRKind[baseAddr] = IR_INDEX)) and
-                (IRTk[baseAddr] = Ord(tyAnsiString)) and (elemSize = 1) then
+                (IRTk[baseAddr] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2)) then
         begin
-          { Char-indexing a scalar AnsiString field or array element (s[i]) uses
-            a 1-byte stride and needs copy-on-write. }
+          { Char-indexing a scalar AnsiString field or array element (s[i]).
+            Stride 1 (byte string) or 2 (UTF-16) — both are a managed string
+            being indexed and both need copy-on-write. Stride 8 is excluded on
+            purpose: that is an `array of AnsiString`, whose IRTk is
+            tyAnsiString because the ELEMENT is a string, not the base. }
           isAnsiStr := True;
         end;
 

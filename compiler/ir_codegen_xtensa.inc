@@ -1662,7 +1662,7 @@ begin
               (32 where the oracle says 65) while Length(d) and WriteLn(d) were
               both correct — which is what made it look like an index bug rather
               than a base bug.
-            a FIELD or ELEMENT        (IR_FIELD / IR_INDEX, 1-byte stride) —
+            a FIELD or ELEMENT        (IR_FIELD / IR_INDEX, stride 1 or 2) —
               `r.f[1]`, `a[i][1]`. The base is the field's SLOT ADDRESS. Read
               gave the wrong byte; WRITE was worse: neither the COW call nor the
               deref ran, so the character store landed in the HANDLE SLOT
@@ -1674,7 +1674,7 @@ begin
         if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
             not Syms[IRA[left]].IsArray) or
            (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
-            (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
+            (IRTk[left] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2))) then
         begin
           if InLValueWrite then
           begin
