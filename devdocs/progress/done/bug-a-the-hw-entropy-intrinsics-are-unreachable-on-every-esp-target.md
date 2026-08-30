@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "__pxxCpuHasHwRandom / __pxxHwRandom64 are excluded from the builtin-unit pull by an `and (not TargetIsEspClass)` guard in pasparser_prog.inc, so naming either on any ESP target is `error: undefined variable`. lib/rtl/random.pas calls them unconditionally -- by design, since its mandate is no per-arch branching -- so the random library is UNCOMPILABLE on xtensa and riscv32, the primary ESP targets. Blocks feature-random-library."
+status: done
+owner: claude-A
 ---
 
 # The HW-entropy intrinsics are unreachable on every ESP target
@@ -231,3 +233,53 @@ whether pulling the whole `builtin` unit is the right way to reach
 The open question for whoever implements (3) is unchanged and is still the
 ticket's real content: **how does a False stub reach a bare target without the
 builtin pull?** That route is precisely what the falsifier shows is unavailable.
+
+
+---
+
+## OPEN DISAGREEMENT: the SCOPE CORRECTION's `hosted xtensa: ok` row does not reproduce
+
+**Not resolved here, deliberately.** Recorded so neither framing gets leaned on
+until someone says what "hosted xtensa" names. This row matters because it was
+used to argue the ticket's original framing was too broad and to lower its
+urgency.
+
+frankS measured `hosted xtensa` → **ok, compiles fine**. I get `calloc`, in four
+independent runs — at the **pin** (which predates everything I touched) and at
+HEAD, with **unmodified** `random.pas`, on **both** program shapes.
+
+Exact invocations, not labels, since the labels are the suspected problem:
+
+```
+./stable_linux_amd64/default/pinned --target=xtensa -Fulib/rtl ur.pas out
+./compiler/pascal26               --target=xtensa -Fulib/rtl ur.pas out
+    where ur.pas is BOTH
+      program ur; uses random; begin end.                        (frankS's shape)
+      program ur; uses random; var v: UInt64; begin v := Random64; ... end.
+```
+
+All four:
+
+```
+pascal26:2: error: target xtensa: external (dynamic) symbols are not supported
+on this target (first one: calloc)
+```
+
+**A third source agrees with my reading.** This ticket's own CONTROL table
+already reports that same `calloc` error for `--target=xtensa --platform=esp`
+(non-bare), and
+[[bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs]] classifies
+*"external (dynamic) symbols"* on hosted xtensa as **by design**. If that
+classification is right, `uses random` cannot build on hosted xtensa at all, and
+the `ok` row cannot be describing the configuration its label names.
+
+**No ticket filed for the calloc limitation** — it is already recorded as
+by-design in the ticket above. Checked before filing rather than after.
+
+**What is NOT concluded:** that frankS was wrong. Two sessions measured
+different things under one name, which is the likeliest reading, and neither the
+scope correction nor the original framing should carry weight until the
+configurations are pinned down.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

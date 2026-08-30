@@ -27,6 +27,17 @@ unit random;
 
 interface
 
+{ builtinentropy carries the tier-1 intrinsics (__pxxCpuHasHwRandom /
+  __pxxHwRandom64). Declared HERE rather than relied on ambiently, because the
+  compiler's ambient pull is triggered by a token scan of the PROGRAM, and a
+  program that merely `uses random` never names them itself.
+
+  This is a dependency declaration, not per-arch branching: it is the same line
+  on every target and this file still contains no {$ifdef}. The mandate that
+  random.pas carries no per-arch anything is intact.
+  bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target }
+uses builtinentropy;
+
 { --- Tier 1: hardware entropy --- }
 
 { True if this CPU has a usable hardware RNG instruction. x86-64 answers from a

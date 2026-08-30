@@ -549,6 +549,7 @@ end;
 procedure ParseProgram;
 var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     needsWide: Boolean;   { program can reach the UTF-16 runtime — see the token scan }
+    needsEntropy: Boolean; { program names a hardware-entropy intrinsic — builtinentropy }
     doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
@@ -629,6 +630,7 @@ begin
   needsThreads := False;
   needsPromoInt := False;
   needsWide := False;
+  needsEntropy := False;
   { Default standard surface: textfile (classic Text/Assign/Reset/WriteLn) is
     loaded by default on every non-ESP program, so `var f: Text` resolves
     uniformly in programs, units, methods, and nested scopes — no token-scan
@@ -1076,15 +1078,28 @@ begin
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { The hardware-entropy intrinsics (__pxxCpuHasHwRandom / __pxxHwRandom64)
-      live in the builtin unit, and lib/rtl/random.pas is required to call them
-      with no per-arch anything of its own — that mandate is the whole reason
-      they are compiler-side. Bare-name match: the probe takes no arguments, so
-      it is normally written without parentheses.
-      feature-a-rdrand-cpuid-compiler-builtins }
+      live in builtinentropy, NOT in builtin, and this arm carries NO
+      TargetIsEspClass guard — which is the fix, not an oversight.
+
+      They used to live in `builtin` and this arm was guarded, because
+      `builtin.pas` cannot be compiled on a bare ESP boot. The guard therefore
+      turned "answer False and route to tier 2" into `undefined variable
+      (__pxxCpuHasHwRandom)`, and lib/rtl/random.pas did not build at all on
+      bare xtensa or bare riscv32. The correct answer already existed in the
+      non-x86-64 body; the only thing wrong was the vehicle carrying it.
+
+      builtinentropy uses NOTHING — no heap, no strings, no builtinheap — so it
+      is pullable on a bare boot. If it ever gains a dependency this guard-free
+      arm becomes unsafe again; see that unit's header.
+
+      Bare-name match: the probe takes no arguments, so it is normally written
+      without parentheses.
+      feature-a-rdrand-cpuid-compiler-builtins
+      bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target }
     if (Tokens[i].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(i), '__pxxcpuhashwrandom') or
-        CaseEqual(GetTokenStr(i), '__pxxhwrandom64')) and (not TargetIsEspClass) then
-      needsBuiltin := True;
+        CaseEqual(GetTokenStr(i), '__pxxhwrandom64')) then
+      needsEntropy := True;
     { `obj.MethodAddress(name)` / `obj.MethodName(addr)` lower to __pxxMethodAddress /
       __pxxMethodName in the builtin unit (see ParseLValueAST) — FPC has them on
       TObject in System, so they must work with no `uses`. A class with a method of
@@ -1343,6 +1358,9 @@ begin
     UTF-16 host, and that is the same trade builtinheap makes for its
     mmap-dependent bodies. feature-unicodestring-model }
   if needsWide and (not EspBareBoot) then ParseUsesUnitAmbient('builtinwide');
+  { No EspBareBoot condition, deliberately: bare ESP is the profile this unit
+    exists to reach. bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target }
+  if needsEntropy then ParseUsesUnitAmbient('builtinentropy');
   { The WASI file core, on wasm32 ONLY. `sysopen`/`sysread`/`syswrite` are
     intrinsics that every native backend emits as a raw `syscall` instruction
     inline — which is precisely why a program using them needs no RTL. wasm has
