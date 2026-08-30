@@ -422,8 +422,21 @@ def oracle_pas(limit=None):
             # side; no '+' lines means the subject emitted nothing.
             res['no oracle: fpc built it but it produced no output'] += 1
         else:
-            res['candidate: fpc differs (read it)'] += 1
-            cand.append((name, ln))
+            # A row called a DIFFERENCE must be able to SHOW one. The verdict and
+            # the evidence reach the reader by different paths -- the verdict from
+            # this counter, the diff from a separate re-run -- so nothing ever
+            # compares them, and a verdict and its evidence that travel separately
+            # can disagree indefinitely. test_unitpath_posix26 was reported as a
+            # candidate with an EMPTY diff for a whole sweep: it agreed with fpc
+            # and the harness's shared unit dir had made it look otherwise.
+            diff = [x for x in (p.stdout + p.stderr).split('\n')
+                    if x[:1] in ('+', '-') and not x.startswith(('+++', '---'))]
+            if not diff:
+                res['SUSPECT: called a difference but has no diff lines'] += 1
+                cand.append((name + '  [NO DIFF -- suspect the harness]', ln))
+            else:
+                res['candidate: fpc differs (read it)'] += 1
+                cand.append((name, ln))
     print("Pascal expectations tied to one .pas-built binary: %d rows, fpc built %d of %d binaries"
           % (len(rows), len(built), nbuild))
     for k, v in res.most_common():
