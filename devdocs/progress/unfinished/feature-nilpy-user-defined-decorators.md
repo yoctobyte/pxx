@@ -4,8 +4,8 @@ track: N
 type: feature
 blocked-by: []
 summary: "A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it."
-status: working
-owner: frankwasm
+status: unfinished
+owner: ""
 ---
 
 # A decorator that is not one of the recognised names is refused
@@ -141,3 +141,92 @@ A general fallback has to land at each, or they diverge.
 `.npy` diffed against CPython: a plain decorator, a stacked pair (applied
 bottom-up), a decorator taking arguments, a decorated METHOD, and the four
 recognised names still lowering exactly as they do now.
+
+## ATTEMPTED AND DELIBERATELY NOT LANDED, 2026-08-30 (frankwasm)
+
+A working implementation of the bare-name case exists and **was reverted on
+purpose**, because in its current state it turns a LOUD refusal into a SILENT
+wrong answer:
+
+```python
+@deco
+def g():
+    return "g"
+print(g())      # compiled clean and printed "g"; CPython prints "wrapped:g"
+```
+
+The decorator ran and its result was discarded. Today's
+`unsupported decorator` error is worse ergonomics and **better behaviour**, so
+shipping the half was not an option. The tree is clean; nothing of this is on
+master except this write-up.
+
+### What the attempt established (all measured, all reusable)
+
+1. **The desugaring target is correct and already works** — see the previous
+   section. `g = deco(g)` by hand, and it CHAINS (`W(W(g))`), which is stacked
+   decorator semantics for free.
+2. **The AST shape is buildable** with existing helpers, and the attempt built
+   it: `PyMakeFuncValueFor(defPi, name)` for the def-as-value argument,
+   `PyMakeIdent(gsym)` for the target, `AN_CALL`/`AN_ARG`, appended with
+   `PySeqAppend` at the program loop's decorator branch. Self-host fixedpoint
+   stayed green throughout (`da69b3bc9668`, `f079e86461a8`).
+3. **The token-scan gap is real and was fixed.** `PyCollectModuleLocalsAST` is
+   a TOKEN scan, so an AST-only assignment is invisible to it and `g` was never
+   collected. Adding an arm for `@name NEWLINE def NAME` — plus a
+   `PyDecoratedDefBindsName` predicate that walks a whole decorator stack and
+   declines for a decorated `class` — fixed that: `PXXDBG=n.locals` then showed
+   `<module> g tk=22` and `PXXDBG=n.bfn` showed `funcvalue for g`. **Both
+   halves of the desugaring were confirmed present.**
+
+### The one thing that defeated it, stated exactly
+
+The CALL still binds the proc directly. `PXXDBG=a.ast` on the same `return g()`
+inside a later def:
+
+| form | node |
+| --- | --- |
+| hand-written `g = deco(g)` | `AN_CALL ival=1635 tk=22` — the dynamic path |
+| `@deco` | `AN_CALL ival=1860 tk=23` — **`g` itself, called directly** |
+
+So the module global exists and is a variant, the func value is built, the
+assignment is built — and the call site still does not consult any of it. The
+resolution evidently keys on something the desugaring does not provide, and the
+candidate is a TOKEN POSITION: the repo's neighbouring rules are all of the
+form "from its own statement onward" (`PyUserShadowsProc` tests
+`ProcPyDefTok[i] - 1 <= TokPos`; `PyRedefBindingAt` picks the last binding whose
+`def` token PRECEDES the reference). A synthesised assignment has no token index,
+so no such test can ever see it.
+
+Tried and **not** the answer: swapping `FindSym(defName)` for
+`PyAssignTargetSym` plus an `skGlobal`/`skLocal` kind check, on the theory that
+`FindSym` was returning the def's own procedure symbol and suppressing the
+`AllocVar`. Behaviour unchanged, so either that lookup answers the same way or
+the symbol is not what the call site consults.
+
+### Where the next attempt should start
+
+Find the call-site arm that chooses the dynamic path over a direct proc call
+for a rebound def name, and ask what it tests. Two shapes are plausible and the
+choice matters:
+
+- **it tests a token position** → the decorator needs to register a binding at
+  its own `@` token, likely through the existing `PyRedefNote(qname, defTok,
+  procName)` table rather than a new one; or
+- **it tests the symbol** → then something about the symbol the desugaring
+  allocates differs from the one a real assignment allocates, and diffing the
+  two `Syms[]` entries answers it in one measurement.
+
+A third option, which sidesteps the question rather than answering it: register
+the decorated def under a HIDDEN name (`$pydec.g`) so `g` is only ever the
+variant and no proc of that name exists to be preferred. That is closer to what
+CPython does — the undecorated function is unreachable — but it needs a hook
+inside `PyParseDef`'s naming, which the attempt did not look for.
+
+### Also worth keeping
+
+`PyCollectModuleLocalsAST` is a fixed-point loop that trial-parses the module
+body up to `PY_INFER_ROUNDS` times and re-derives rather than memoises. That is
+the same shape as the pass implicated in
+[[bug-nilpy-render-backend-py-compile-does-not-terminate]] (17,485 overload
+queries, 967 distinct). Probably unrelated; noted because two tickets now point
+at the same machinery.

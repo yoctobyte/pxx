@@ -5,16 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:26 blocked:7 backlog:330 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2694 rejected:56`
+`working:3 unfinished:27 blocked:7 backlog:330 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2694 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45` [A+S] — owner: frankS
-- `feature-nilpy-user-defined-decorators` [N] — owner: frankwasm
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (26) — parked mid-flight; re-claim, do not duplicate
+## unfinished (27) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -32,6 +31,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
+- `feature-nilpy-user-defined-decorators` [N]
 - `feature-pal-esp-posix-fd-semantics` [S] — blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
 - `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
@@ -53,7 +53,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 351, ranked
+## Ready — top 30 of 352, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -68,6 +68,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+S]` regression-test-emit-obj-test-emit-obj
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
+- `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [P]` bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
@@ -84,6 +85,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
-- `[p 62] [A]` feature-unicodestring-model
 
-_321 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_322 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
