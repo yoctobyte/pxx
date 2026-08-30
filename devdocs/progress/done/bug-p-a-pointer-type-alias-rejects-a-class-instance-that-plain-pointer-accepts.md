@@ -272,3 +272,47 @@ Caught by frankB, whose own citation had moved the same way in the same window
 before the push is the pre-rebase one, and this repo rebases nearly every sync because the
 watcher publishes tstate continuously. That protection covers the `Log:` line; **prose in
 the body is outside it**, which is where this one got through.
+
+## What the reporter's factor table could and could not see (frankB, after the fix)
+
+Folded in rather than replacing the original table with the answer, because the
+two instruments found different things and the difference is the reusable part.
+
+**The table found the trigger in minutes and got the mechanism wrong.** It said
+*cross-unit* alias vs *same-unit* alias, and I hypothesised that cross-unit
+resolution used to lose the alias and now preserves it. The measured mechanism is
+`AliasElemTk := tk` conflating "what kind is T" with "what does T point at", and
+the v393 behaviour was **position-dependent** — an alias formal at parameter
+index 0 accepted, at index 1 or 2 rejected — which is the signature of a
+recycled-symbol read, not a rule about unit boundaries.
+
+**My table could not have seen that, and the reason is structural: every row I
+varied held the parameter position fixed at index 1.** The alias formal was the
+second parameter in all five rows, because that is where it sits in Synapse's
+`SslCtxSetDefaultPasswdCbUserdata(ctx, u)` and I built the repro by shrinking the
+real call rather than by enumerating a space.
+
+**That is not a flaw in the method.** A factor table is blind along exactly the
+axes it holds fixed, and holding most axes fixed is what makes it fast — it
+isolated the trigger from a 90-second suite failure without touching the
+frontend. The lesson is not "vary more axes", which is unbounded; it is that a
+factor table locates a **trigger** and a second instrument is needed for a
+**mechanism**, and a hypothesis built only from the table should be labelled as
+one. It was, and the label is why frankA went looking rather than implementing my
+version.
+
+**The inherited-repro hazard, stated for the next person.** Shrinking a real
+failure preserves whatever the real call happened to fix — here, the argument
+position. It is the cheapest way to a repro and it silently inherits the
+original's coincidences. The counter is not to stop doing it; it is to notice
+which properties came from the source rather than from the investigation, and to
+say so when handing the repro on.
+
+**One thing this closes that the fix's own acceptance did not.** The five-row
+table was re-run on a build carrying `9b01b1b9b` from a tree with
+`external/synapse` genuinely present, and all five pass **including the same-unit
+arm that failed on both v393 and v394** — the "both arms or it is not fixed"
+constraint, checked independently of the fixing lane's own acceptance. Build
+provenance: worktree at HEAD `5dd4d33b2`, seeded from the pin and dated
+`2000-01-01` so the build could not silently no-op, `converged after 2 round(s)`,
+built sha `fb2ce9b87b09` ≠ seed `1d69760deabe`.
