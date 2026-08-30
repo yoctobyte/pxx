@@ -10017,3 +10017,72 @@ comment admitted the gap and no one read it**, because nothing routes a reader f
 to the unfixed one. **When a fix lands on one backend, the ticket's close should name what it
 checked on the others** — including "did not check", which is at least a fact the next reader can
 act on.
+
+---
+
+## 206 — SORT BY WHAT A NUMBER *IS*, NOT BY HOW LONG IT HAS SAT STILL
+
+*(pxx-a5, 2026-08-30, executing 190b's sweep — and correcting the sweep's own premise, which
+was the coordinator's.)*
+
+190b said: **re-derive a baseline; a number that never moves is stable or unmeasured, and those
+read identically.** True as far as it goes, and it specified the wrong population. pxx-a5 ran it
+line-level with `git blame` over every `.py`/`.sh` in `tools/` and `test/` — **255 files, 63,863
+lines blamed, 129 matches at any date, 21 older than a month across 7 files** — and then did the
+thing the spec did not ask for:
+
+| kind | n | can it rot? |
+| --- | ---: | --- |
+| **policy tunables** — `MEM_FLOOR`, `PSI_ADMIT`, `HEARTBEAT_STALE`, `CASCADE_THRESHOLD`, `HISTORY_CAP`… | 15 | **no** — a chosen operating point. Unchanged for a month is **health**, not staleness. |
+| **protocol constants** — `rc == 130`, `rc == 124`, `VT_PROMO_INT64 = 8193` | 4 | only against their source. Checked: 8193 still matches `compiler/defs.inc:1151`. |
+| **asserted observations** — `ADDLINE=10` (`dwarf_smoke.sh`), `BLANK_MAX=4000` (`gui_shot.sh`), both 2026-06-24 | **2** | **yes** — a number someone measured once and wrote down. |
+
+> **A tunable and a recorded measurement are indistinguishable in a diff and age identically in
+> blame, and only the second decays.**
+
+So age is not the discriminator; **provenance** is. And the cost of getting that wrong was
+about to be paid: pxx-a5's first output was *"21 candidates"* with no denominator and no kinds,
+which would have **manufactured 19 items of work out of 2** — 200a's polarity, from a sweep
+designed to find dead checks. A survey that mis-partitions produces a backlog, and a backlog
+looks like diligence.
+
+The residue is **two files**, not a survey. Both still **unverified**: re-deriving them needs a
+build, deferred off a loaded box. **Enumeration is cheap and re-derivation is not — they are
+separate jobs**, and saying so is what keeps "21 candidates" from becoming a standing debt.
+
+### 206a — the absence was the result, and only the denominator made it readable
+
+The stale list contains **zero devtests**. That looked like a broken glob until the population
+line showed **47 recently-touched files carrying such values**. So the real finding is
+*devtests are actively maintained* — a fact nobody had, arriving as a **null result that the
+scan was one number away from misreporting as a bug in itself.**
+
+This is the empty-tree lesson (197) applied by its own author to their own scan, one screen
+later: **report the searched population, not only the hits.** 21 is unreadable without the
+63,863 — and the direction of the misreading is not fixed. Here the missing denominator would
+have made a *healthy* absence look like a *broken instrument*; in 197 it made a finding
+unreadable. Either way the number alone is not a result.
+
+### 206b — the observation NOT filed, and why that was right
+
+pxx-a5 noticed that `pxx-gdb.py:109` decodes `VT_PROMO_INT64` by calling `_read_cstring(payload)`
+— treating the payload as a pointer — while `defs.inc:1151` documents it as *"inline Int64, or a
+bignum ref"*. If the inline case reaches that line, **the debugger reads a number as an
+address.**
+
+It did not file it:
+
+> *A ticket asserting a mechanism I have not checked is the thing I have spent all night arguing
+> against.*
+
+Three separable facts, kept separate: the code reads that way (**confirmed**), which case
+actually occurs (**unchecked**), and whether the neighbouring tag's behaviour is a guide
+(8192 falls through to `<tag 8192 payload 0x…>`, which is **honest**). Reporting the first as
+though it were the second is precisely how a wrong root cause enters a ticket — and the subject
+makes it worse than usual: **a debugger that misreports a value is the "plausible wrong value"
+trap aimed at the instrument people reach for when they already have one.**
+
+The correct disposal is what happened: **say it out loud to someone who can route it, without
+the ticket.** A finding is recorded when it is in a ticket on master — and a *suspicion* is not
+yet a finding. The ten minutes to convert one into the other is cheap; the ticket asserting the
+conversion happened is not.
