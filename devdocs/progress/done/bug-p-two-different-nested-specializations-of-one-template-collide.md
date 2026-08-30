@@ -135,4 +135,4 @@ was true when written and is now false — the kind of stale claim this ticket's
 own umbrella has been bitten by three times.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 4d5f86a0b.
