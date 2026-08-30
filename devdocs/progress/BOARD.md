@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (326)
+## backlog (327)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,8 +95,9 @@ _none_
 | bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 40 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
-| bug-b-imagereader-getsize-returns-a-string-where-reportlab-returns-a-pair | B | 68 | bug | lib/pcl/mimic_reportlab_lib_utils.pas declares `ImageReader.getSize: AnsiString` returning '', where reportlab returns a (width, height) pair. Any caller that unpacks it — `w, h = img.getSize()` — fails to COMPILE, taking the whole module with it. Blocks convertrawtext.py and SongFormatter.py. | — |
+| bug-b-drawimage-discards-pdfgens-error-and-writes-a-pdf-with-no-image | B | 52 | bug | Canvas.drawImage in lib/pcl/mimic_reportlab_pdfgen.pas calls pdf_add_image_file and throws the return code away. When pdfgen refuses the image -- an unsupported colour type, or today's byte-swapped PNG header -- the PDF is written, saved and reported OK with the image simply absent. The unit's stated policy is loud refusal; this is the one path that is silent. | — |
 | bug-b-seven-of-eight-workarounds-waiting-on-an-open-bug-are-waiting-on-nothing | B | 35 | bug | track-b-workarounds.md's section titled 'Waiting on an open bug' has 8 rows and 7 cite a bug that is now in done/ or rejected/. Four of those seven carry no keep-note, so lib/rtl and lib/pcl are written non-idiomatically for bugs fixed weeks ago -- verified live in the code, not just stale in the ledger. The file's own instruction ('when the listed bug moves to done/, revert the workaround and drop the entry') has not been run, and the section header asserts the opposite of what is true. | — |
+| bug-c-has-include-unsupported-so-pdfgen-selects-big-endian | C | 55 | bug | pxx's C preprocessor does not define `__has_include`, so the vendored pdfgen skips its `#include <endian.h>` probe; its fallback then compares two macros endian.h would have defined -- both absent, so `0 == 0` is true and it selects BIG endian on a little-endian host. `ntoh32` becomes the identity, every 32-bit PNG header field is byte-swapped, and PNG embedding into PDFs silently fails. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
@@ -638,9 +639,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2690)
+## done (2691)
 
-2690 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2691 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -716,7 +717,6 @@ _none_
 - [p 70] [P] regression-test-core-test-c-gtk-window-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-c-gtk3-stock [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-2
-- [p 68] [B] bug-b-imagereader-getsize-returns-a-string-where-reportlab-returns-a-pair
 - [p 68] [N] feature-nilpy-user-defined-decorators
 - [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - [p 65] [P] bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
@@ -763,6 +763,7 @@ _none_
 - [p 55] [A] bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A+T] bug-a-testtmp-defaults-to-a-path-every-checkout-shares
+- [p 55] [C] bug-c-has-include-unsupported-so-pdfgen-selects-big-endian
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-from-import-alias-resolves-its-source-through-flat-scope
@@ -807,6 +808,7 @@ _none_
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
+- [p 52] [B] bug-b-drawimage-discards-pdfgens-error-and-writes-a-pdf-with-no-image
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]

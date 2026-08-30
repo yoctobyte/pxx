@@ -4,7 +4,7 @@ track: B
 type: bug
 blocked-by: []
 summary: "lib/pcl/mimic_reportlab_lib_utils.pas declares `ImageReader.getSize: AnsiString` returning '', where reportlab returns a (width, height) pair. Any caller that unpacks it — `w, h = img.getSize()` — fails to COMPILE, taking the whole module with it. Blocks convertrawtext.py and SongFormatter.py."
-status: new
+status: done
 owner: ""
 ---
 
@@ -100,3 +100,56 @@ finishing. Both are real and independent; this one is simply the first.
 - the value is usable as numbers, not merely unpackable
 - `drawImage` with an `ImageReader` still behaves as the subset policy states
 - `str(ImageReader(path))` still yields the path (`__str__` is what drawImage uses)
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
+
+---
+
+## Resolution (2026-08-30, Track B)
+
+`getSize: TPyList` returning a two-element pair, and the elements are the
+**real** dimensions, not zeros.
+
+The ticket's open question — "can the two elements be the REAL dimensions" —
+was answered yes, but **not** through the obvious route. `pdf_parse_image_header`
+is exactly the accessor the ticket predicted, and under pxx it returns
+byte-swapped garbage: a valid 8x4 RGB PNG measures 134217728 x 67108864. That is
+not a shim problem and chasing it here would have hidden it, so the unit reads
+the headers itself (PNG IHDR, BMP, and the JPEG SOFn segment walk, ~110 lines)
+and the byte-swap was split out as
+[[bug-c-has-include-unsupported-so-pdfgen-selects-big-endian]].
+
+`Pair` takes **Integers** here, unlike the pagesizes sibling's Doubles:
+reportlab hands back PIL's `image.size`, a pair of ints, and `1024.0` where
+CPython prints `1024` is a visible divergence at the boundary. Arithmetic is
+unaffected either way — Variant widens.
+
+An unreadable or unrecognised file **raises**, it does not answer `(0, 0)`.
+The ticket flagged the trap and it is the right call: zeros unpack, scale a
+drawing to nothing, and produce a wrong PDF with no diagnostic — the same
+defect this ticket is about, one level down.
+
+### The four assertions
+
+```
+w, h = ImageReader(path).getSize()   ->  unpacked 1024 1024
+usable as numbers                    ->  2048 1025
+drawImage over an ImageReader        ->  runs; PDF written; empty-source arm still raises
+str(ImageReader(path))               ->  /home/neo/frankB/examples/adventure/scenes/cpu.png
+```
+
+Header reader vs `identify` as oracle: `png 1024x1024 (oracle 1024 x 1024)`,
+`rgb 8x4 (oracle 8 x 4)`, missing file refused loudly.
+
+**Third assertion, with a caveat worth reading.** `drawImage` over an
+ImageReader behaves as the subset policy states — the path comes out through
+`__str__`, the empty-source arm still raises — but the PDF it writes contains
+**no image**, silently, because pdfgen refuses the file and the return code is
+dropped. That is pre-existing and untouched by this fix; filed as
+[[bug-b-drawimage-discards-pdfgens-error-and-writes-a-pdf-with-no-image]].
+
+### Where the wall moves to
+
+As the ticket predicted: `convertrawtext.py` still does not compile. The next
+wall is [[bug-nilpy-render-backend-py-compile-does-not-terminate]].
