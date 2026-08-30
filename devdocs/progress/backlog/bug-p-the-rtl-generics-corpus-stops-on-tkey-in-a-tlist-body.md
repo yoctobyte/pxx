@@ -297,3 +297,58 @@ Two cuts were tried and both are invalid, for the same reason:
 
 `generics.collections.pas` is too densely interdependent to cut. The instrument
 (`p.specbound`, `a.srcmap`, `p.dgen`) is the way in, not deletion.
+
+---
+
+## NARROWED AGAIN: the classification is CORRECT. The defect is downstream of it.
+
+Binary `d5623b4d45d4`. Both arms of the previous fork are dead.
+
+`PXXDBG=p.dgen:IEqualityComparer` on the corpus prints every sweep window and
+every `<...>` group the rewrite considered for that template:
+
+```
+sweeps: 78     groups: 1838     groups with args=TKey: 674
+paramform distribution over those 674:   674 x paramform=1     0 x paramform=0
+```
+
+- **Arm (a) — "the use never reaches the consultation site" — dead.** 674 groups
+  with `TKey` as the argument are seen. The sweep is forward-only from
+  `insertAt`, so a use earlier in the token stream than the sweep start would be
+  invisible; that is not what happens here.
+- **Arm (b) — "`isParamForm` is set and the deferred path mints anyway" — dead as
+  stated.** `isParamForm` is set on **every single one**, 674 of 674, at exactly
+  the corpus lines: `inc/generics.dictionariesh.inc:56`, `:82`, `:83`.
+
+So `DelphiRewriteGenericUses` does the right thing. It sees the group, it
+recognises `TKey` as a spec-bound name, and it sends the group down the deferred
+path rather than minting a concrete alias.
+
+**The bug is therefore in what the DEFERRED path does with a correctly-classified
+group** — the nested-specialization / nested-prerequisite handling in
+`ParseSpecialization`, not the decision that routed it there. That is a different
+region of the file and a different set of code from everything examined so far.
+
+### Running tally of eliminated mechanisms
+
+| candidate | verdict | instrument |
+| --- | --- | --- |
+| the `{$DEFINE}` macro parameter list defeats the enclosing-parameter check | dead | 8 constructed shapes, 2 agents |
+| `MAX_SPEC_BOUND_NAMES` overflow silently drops the name | dead | `p.specbound` — 294 of 512 |
+| `TKey` is never collected as a spec-bound name | dead | `p.specbound:TKey` — 4800 hits |
+| the use is outside the rewrite's forward sweep window | dead | `p.dgen:IEqualityComparer` — 674 groups seen |
+| the group is misclassified as concrete | dead | same — 674/674 `paramform=1` |
+| **the deferred path mishandles a correctly-classified group** | **open** | — |
+
+Five mechanisms eliminated by measurement rather than by argument, and the sixth
+is where to start. Note that the first three were each the obvious story at the
+time.
+
+### Tooling added along the way
+
+`PXXDBG=p.dgen:<TemplateName>` prints one template's whole sweep — the window
+(`from=`, `tokcount=`) and every group with its arguments, arity and
+`paramform`. The window matters because a use outside it and a use inside it
+that was classified concrete produce the **identical** symptom: an alias minted
+under a name that is really a parameter. Nothing printed the window before, so
+the two were indistinguishable from outside.

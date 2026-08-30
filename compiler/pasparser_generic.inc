@@ -1041,7 +1041,7 @@ var
   seenLen: array[0..MAX_DGEN_TUPLES-1] of Integer;
   seenArg: array[0..MAX_DGEN_TUPLES*MAX_TEMPLATE_PARAMS-1] of TRawToken;
   ins: array[0..MAX_TEMPLATE_PARAMS*2+8] of TRawToken;
-  ok, isParamForm, specB: Boolean;
+  ok, isParamForm, specB, dgDbg: Boolean;
   si: Integer;
   { qualified arguments minted by THIS rewrite, emitted at insertAt below.
     Local, not the QNeed* set ParseSpecialization uses: this runs at rewrite
@@ -1057,6 +1057,17 @@ begin
   np := TemplateNParams[ti];
   seenCnt := 0;
   i := insertAt;
+  { `PXXDBG=p.dgen:<TemplateName>` — one template's whole sweep. The sweep is
+    FORWARD-ONLY from insertAt, so a use of this template that sits EARLIER in
+    the token stream than the sweep start is never seen at all, and the symptom
+    of that is identical to the symptom of a use that was seen and classified as
+    concrete: an alias minted with a name that is really a parameter. Printing
+    the sweep window is the only way to tell the two apart, so print it. }
+  dgDbg := CaseEqual(PxxDbgArg('p.dgen'), tname);
+  if dgDbg then
+    writeln('PXXDBG p.dgen sweep ', tname, ' ti=', ti, ' from=', insertAt,
+            ' tokcount=', TokCount, ' delphiPattern=', Ord(delphiPattern),
+            ' np=', np);
   while i < TokCount - 1 do
   begin
     { Pattern A (mode-Delphi only): bare `TFoo<Args>`. Pattern B (both modes):
@@ -1191,6 +1202,14 @@ begin
                          GetTokenStrFromRaw(SpecBoundNameOff[kk], SpecBoundNameLen[kk])) then
               isParamForm := True;
         if DebugTrace then writeln('DGEN match at ', i, ' na=', na, ' paramform=', isParamForm);
+        if dgDbg then
+        begin
+          write('PXXDBG p.dgen   group at=', i, ' line=', Tokens[i].Line,
+                ' na=', na, ' paramform=', Ord(isParamForm), ' args=');
+          for k := 0 to na - 1 do
+            write(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen), ' ');
+          writeln;
+        end;
         if isParamForm then
         begin
           if not specB then
