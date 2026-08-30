@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:30 blocked:7 backlog:376 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2789 rejected:58`
+`working:1 unfinished:29 blocked:7 backlog:377 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2789 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-c-import-a-pascal-unit-under-a-mangled-name` [C] — owner: frankC
 
-## unfinished (30) — parked mid-flight; re-claim, do not duplicate
+## unfinished (29) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -25,7 +25,6 @@ _none — no lane is locked._
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — blocked-by: bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
 - `feature-c-diagnostics-name-the-module-they-are-in` [C] — blocked-by: bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
-- `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-dynamic-compiler-tables` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-enum-class` [N]

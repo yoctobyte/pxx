@@ -4,7 +4,8 @@ prio: 50
 type: feature
 blocked-by: []
 summary: "Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion."
-status: unfinished
+status: working
+owner: frankC
 ---
 
 # C imports a Pascal unit under a mangled name
@@ -367,3 +368,96 @@ that is a **user permission grant**, plus a Track C ↔ P design conversation th
 was previously mis-recorded as a lane lock. Nothing here is waiting on Track A.
 
 Nothing applied. Measured at HEAD; triage pass, not work.
+
+## 2026-08-30 — RE-CLAIMED and RE-MEASURED at HEAD. One item left, and it is the user's.
+
+frankC, resuming from `unfinished/`. Re-claimed before the first commit per
+CLAUDE.md's resume rule. Compiler `aa78a7faf63a` — `make compiler/pascal26`,
+**converged after 1 round**, sha distinct from `pinned`, so the fixedpoint was
+actually proved rather than skipped by an up-to-date no-op.
+
+### The landed feature is green — 11 of 11, run individually, not as a suite
+
+| test | result |
+| --- | --- |
+| `c_pasunit` (short form 42 + Integer overload 7) | PASS |
+| `c_pasunit_ovl` (Double overload, 9.25) | PASS |
+| `c_pasunit_twice` (same file twice, one spelled `./`) | PASS |
+| `c_pasunit_collide_fail` | PASS |
+| `c_pasunit_case_fail` | PASS |
+| `c_pasunit_ovl_fail` | PASS |
+| `c_pasunit_knr_fail` | PASS |
+| `c_pasunit_two_overloads_fail` | PASS |
+| `c_pasunit_ansistring_fail` (parameter) | PASS |
+| `c_pasunit_ansistring_result_fail` (**result**) | PASS |
+| `c_pasunit_strings` (differential vs the Pascal driver on the same unit) | PASS |
+
+### Two items this ticket still lists as open are DONE, and neither was recorded here
+
+**1. The AnsiString RESULT refusal is reachable, tested, and green.** This ticket
+says twice that it "cannot be reached today" and "has no test", because any unit
+whose body touched a managed string died at import with *"call to a runtime stub
+that was never emitted"*. That was fixed in `6b26c38e8` — *fix(A): a Pascal unit
+included from C is compiled as Pascal, shims and all* — which also landed
+`test/c_pasunit_ansistring_result_fail.c` and its Makefile recipe.
+
+**2. A differential test exists that this ticket never asked for**, and it is the
+strongest one in the block: `c_pasunit_strings.c` imports a managed-string unit
+from C while `test_c_pasunit_strings.pas` compiles **the same unit** through the
+Pascal driver, and the two outputs are `diff`ed. The oracle is the other driver,
+so there is no expected string a future regression could be edited to match. It
+caught a second defect at the time — `CProgramMode` left on while parsing the
+imported unit, so a Pascal literal in a concat was adjusted +8 into a `char*` and
+`Length('ab' + 'cdef')` returned 3.
+
+Both landed 2026-08-29 under a Track A bug ticket, so this ticket's own "Still
+open" list was never updated. **Ten days of this ticket's stated scope was
+already closed by someone else's fix.**
+
+### The last non-§6 item is now filed separately, and it is worse than recorded
+
+The missing-unit diagnostic: this ticket describes it as *"still speaks Pascal"*.
+Measured, it does three further things, and one of them is not wording —
+
+    #include "nosuch.pas"        <- line 1
+    int main(void){return 0;}    <- line 2
+
+    pascal26:2: error: uses: unit source not found: /abs/path/nosuch
+      near: __pxx_pascal_unit /abs/path/ nosuch.pas  >>>  main
+
+**It reports line 2.** Consistently include-line + 1 (verified at lines 1 and 5),
+because `CParsePascalUnitMarker` consumes the marker's tokens before calling
+`ParseUsesUnit`, so the raise sees the *next* line. The line it names is valid
+user code, which is the expensive kind of wrong. It also leaks the internal
+`__pxx_pascal_unit` marker into the `near:` context.
+
+Filed as `bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker`
+[p30]. **I checked for a Track-C-only fix rather than inheriting the previous
+session's conclusion, and there isn't one** — the previous reasoning ruled out C
+*refusing* on its own pre-check, but not C checking merely to reword; that escape
+fails too, because the loader's failure is fatal at the raise site with nothing
+to intercept. The fix is a `ParseUsesUnit` signature change in
+`pasparser_proc.inc` — **Track P's file**. Not edited under C.
+
+### So the whole remaining scope of this ticket is §6
+
+Everything in §1-§5 is landed, tested and green at `aa78a7faf63a`. §3's
+*resolution* stays out of scope by the 2026-08-20 finding (two same-named units
+cannot coexist; identity-is-the-name is Track A ground and that ticket resolved
+in `883ef0c05`) — what this ticket owes for §3 is the **refusal**, and the
+refusal is green.
+
+**§6 is blocked on a user permission grant and on nothing else.** It is one
+deletion (`cparser.inc:9448`, the cross-namespace declaration bind) plus four
+corpus builds — lua, tcc, quickjs, zlib — and those builds are `make test-lua`
+and friends, refused for this lane by `.claude/hooks/no-full-suite.sh` rule 1.
+The escape is `PXX_ALLOW_FULL_SUITE=1` *and only when the user has asked for it*.
+A coordinator cannot supply it and hand-running the recipe bodies to dodge the
+refusal would be reshaping a denied command.
+
+**Put to the user 2026-08-30.** The spec is emphatic that this is measured and
+not reasoned (*"Do not decide this by reasoning. Measure it... If something
+breaks, those failures ARE the spec for what must stay"*), so there is no
+defensible way to close §6 from the armchair, and no way to run it without the
+grant. Ticket stays in `working/` only while that question is live; if the answer
+is "not now", it goes back to `unfinished/` with §6 as its sole open item.

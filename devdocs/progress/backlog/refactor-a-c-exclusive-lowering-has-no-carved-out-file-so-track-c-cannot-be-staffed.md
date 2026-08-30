@@ -49,9 +49,29 @@ The consequence, over the six ranked Track C tickets:
 | `refactor-c-string-literal-decay-belongs-at-the-producer` [p50] | `ir.inc` | **no — A** |
 | `feature-c-diagnostics-name-the-module-they-are-in` [p40] | `lexer.inc` | **no — A** |
 | `refactor-c-the-partial-index-sentinel` [p40] | `cparser.inc` + `ir.inc` | **no — C+A** |
-| `feature-c-import-a-pascal-unit-under-a-mangled-name` [p50] | — | no — blocked on the user |
+| `feature-c-import-a-pascal-unit-under-a-mangled-name` [p50] | `cparser.inc` + `cpreproc.inc` | **yes — C only** (see correction below) |
 | `idea-c-realworld-test-targets` [p60] | — | no — brainstorm parent |
 | `compat-c-printf-p-of-null` [p22] | `lib/crtl` | yes — **resolved `e885d94ef`** |
+
+**Row corrected 2026-08-30 by frankC, which wrote the original row and the
+coordinator flagged as stale.** The correction is smaller than "stale" suggests
+and the distinction is the point:
+
+- **What was wrong:** the row read *"no — blocked on the user"* with no file
+  named, which reads as *the design is unsettled and the whole ticket waits on a
+  decision*. It was written on 2026-08-29 from the ticket's position, not its
+  contents. In fact the design was settled by the user on **2026-08-19** — the
+  ticket says so in its own frontmatter (*"this ticket is a SPEC, not a
+  discussion"*) — and §1-§5 were built, tested and green ten days ago, entirely
+  inside `cparser.inc` and `cpreproc.inc`. It is one of the strongest examples
+  AGAINST this table's thesis, and it was filed as an example for it.
+- **What was right, and is still true:** §6 alone — the bare-name experiment —
+  is blocked on the user, but on a **permission grant**
+  (`PXX_ALLOW_FULL_SUITE=1` for four corpus builds), not on a design call. That
+  is a different kind of block and does not make the ticket unworkable; it makes
+  one section of it unrunnable.
+
+Re-measured green at `aa78a7faf63a`, 11 of 11 tests, 2026-08-30.
 
 **`ready --track C` prints nine items; exactly one was workable, and it is now
 done.** That gap is why "Track C has a queue and no agent" read as an easy
