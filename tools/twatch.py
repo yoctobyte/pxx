@@ -1208,7 +1208,55 @@ def load_state(clone, host):
             "open_regressions": [], "history": []}
 
 
+def file_id(path):
+    """A short content hash of a source file, or "?" if it cannot be read."""
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()[:12]
+    except OSError:
+        return "?"
+
+
+# The code THIS PROCESS is running, hashed once at import — which is the only
+# moment it can be captured, and the point.
+#
+# A published report already names the sha it TESTED. It said nothing about the
+# code that produced it, and those two diverge at exactly one moment: when a
+# watcher fix lands. A daemon holds its code from start, so `git pull` in the
+# clone does not change what is running; the clone can be current while the
+# process is hours behind, and every report it writes looks entirely healthy.
+#
+# Measured 2026-08-30: the step-routing fix landed at ae26693a3 (05:06) and IS
+# an ancestor of the tested sha; at 05:28 the daemon filed five regressions with
+# no failing step and a wrong lane, because the running process predated it. Two
+# agents then spent an hour reasoning about whether the CLONE was behind — which
+# is the only staleness the reports could express. You reason inside the failure
+# modes your instrument can name, and the one it cannot name does not read as an
+# omission, it reads as not having happened.
+#
+# Hashing __file__ rather than asking git: git answers what is ON DISK, and the
+# whole failure is on-disk disagreeing with in-memory. Only the bytes this
+# interpreter loaded can answer it, and only at import.
+#
+# NOT stamped with a start time, deliberately. This field must change when the
+# CODE changes and at no other moment: a restart on identical code then produces
+# no diff and no publish, while a restart on new code produces exactly one. A
+# timestamp would make every restart a state change and turn the signal into
+# churn.
+WATCHER_CODE = file_id(os.path.abspath(__file__))
+
+
 def save_state(clone, host, st):
+    # Stamped here rather than at the call sites: one writer, so no publish path
+    # can forget it, including ones added later.
+    st["watcher"] = {
+        "twatch": WATCHER_CODE,
+        # testmgr is re-invoked as a subprocess from the clone on every run, so
+        # it is NOT subject to the daemon's in-memory staleness — it is recorded
+        # because a report should name every producer, not because it can drift
+        # the same way.
+        "testmgr": file_id(os.path.join(clone.path, "tools/testmgr.py")),
+    }
     os.makedirs(os.path.dirname(state_path(clone, host)), exist_ok=True)
     with open(state_path(clone, host), "w") as f:
         json.dump(st, f, indent=1, sort_keys=True)
@@ -4240,7 +4288,8 @@ prio: %d
 %s%s
 # %s: %s at %s%s (auto-filed by twatch)
 
-- **Type:** %s (auto-filed by Track T watcher, host %s). Untriaged.
+- **Type:** %s (auto-filed by Track T watcher, host %s, twatch `%s`).
+  Untriaged.
 - **Found:** %s
 - **Test source:** %s%s
 
@@ -4274,7 +4323,8 @@ takes it from the repro line.*
                     "verdict; the tool cannot decide this one.\n\n"
                     % ", ".join(sorted(refusals)[:4])) if refusals else ""),
                 staleness_note(clone, sha, parent),
-                head_kind, job, sha[:12], head_step, kind, host, utcnow(),
+                head_kind, job, sha[:12], head_step, kind, host,
+                WATCHER_CODE, utcnow(),
                 j.get("src") or "unknown (see repro commands)",
                 step_note(j),
                 report["tier"], job, sha,
