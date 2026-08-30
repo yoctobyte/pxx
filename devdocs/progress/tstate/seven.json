@@ -11524,6 +11524,7 @@
   },
   {
    "bad": "d9f02bdc62402bbcdcd5743b86f9de516b464700",
+   "bad_untestable": true,
    "cascade": [
     "test-xtensa#src:test/test_call_result_member.pas",
     "test-xtensa#src:test/test_const_record_temp.pas",
@@ -11543,6 +11544,7 @@
    "good": "7acd2315e72cc52450d32e89343f4631013f79df",
    "job": "cascade@d9f02bdc6240",
    "name": "",
+   "no_testable_change": false,
    "opened": "2026-08-30T22:43:31Z",
    "range": [
     "1a4c05d8156d5e1590aed7b46051ab9a19f89a25",
