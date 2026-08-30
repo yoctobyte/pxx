@@ -135,4 +135,4 @@ hand-written asm block, and no block in the tree is anywhere near 1 MB. If one
 ever is, it fails loudly with the same message and this is the shape to copy.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 1df4ee490.
