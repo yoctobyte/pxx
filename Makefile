@@ -4029,6 +4029,15 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_tshd_both26 "$$($(TESTTMP)/test_tshd_both26)" "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
 	./$(COMPILER) --threadsafe test/test_thread_heap.pas $(TESTTMP)/test_thread_heap26
 	tools/expect_same.sh test_thread_heap26 "$$($(TESTTMP)/test_thread_heap26)" "$$(printf 'errors=0\nHEAP OK')"
+	# The POSITIVE CONTROL for the {$ifndef PXX_TS_HARDLOCK} guard around
+	# PXXClassFinalize's managed-field pass. That guard costs a measured 392 kB
+	# -> 398336 kB leak on 200k instances, so the reflex is to delete it; this
+	# says no. Measured 2026-08-31: guard ON NT=4 clean 3/3, guard OFF NT=4
+	# SIGSEGV 3/3, guard OFF NT=1 clean 3/3 -- the last row is what makes it a
+	# race rather than a double free. Whatever fixes the leak must keep this green.
+	# bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign
+	./$(COMPILER) --threadsafe test/test_threadsafe_class_finalize_race.pas $(TESTTMP)/test_tscfr26
+	tools/expect_same.sh test_tscfr26 "$$($(TESTTMP)/test_tscfr26)" "$$(printf 'errors=0\nRACE OK')"
 	# heap contract: every allocation family safe under concurrent churn (strings, dynarrays, classes, raw+realloc)
 	./$(COMPILER) --threadsafe test/test_thread_heap_mixed.pas $(TESTTMP)/test_thread_heap_mixed26
 	tools/expect_same.sh test_thread_heap_mixed26 "$$($(TESTTMP)/test_thread_heap_mixed26)" "$$(printf 'errors=0\nHEAP MIXED OK')"
