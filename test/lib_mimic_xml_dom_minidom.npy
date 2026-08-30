@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_xml_dom_minidom.py against CPython's real `xml.dom.minidom`.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where
+`import xml.dom.minidom` finds the stdlib module, and every line below produces
+identical output both ways. Run it as `python3 test/lib_mimic_xml_dom_minidom.npy`
+to see that.
+
+THE IMPORT SPELLING IS DELIBERATE. `from xml.dom import minidom` -- the spelling
+CPython's own documentation uses -- currently binds the PARENT PACKAGE here, not
+the submodule, so `minidom.getDOMImplementation` is not found while
+`minidom.XHTML_NAMESPACE` silently answers with xml.dom's. That is filed as
+[[bug-n-from-package-import-submodule-binds-the-parent-package]]. This file uses
+`from xml.dom.minidom import ...`, which resolves correctly under both
+interpreters, so the test measures the DOM and not the import bug. When that
+ticket closes, the other spelling becomes available; nothing here needs to change.
+
+WHAT THIS COVERS AND WHAT IT DOES NOT. A differential pins what the two
+implementations AGREE on, so this asserts tree structure, node identity,
+attribute storage and namespace splitting -- the things a caller depends on.
+It does NOT assert anything our implementation does differently on purpose,
+because asserting a difference would make the file fail under one of the two
+interpreters, which is the property that makes it worth having. Where our
+subset simply stops, the shim's own header says so and fails loudly rather
+than approximating.
+"""
+
+from xml.dom.minidom import getDOMImplementation
+
+# The counter is a one-element list rather than a `global`, and a mismatch
+# prints FAIL instead of raising: both keep this file's failure modes confined
+# to the DOM. A wrong value stops the "=ok" count short, which is what the
+# Makefile compares, so nothing is lost by not raising -- and a construct that
+# is not the subject of the test cannot be what breaks it.
+n = [0]
+
+
+def check(name, got, want):
+    if got != want:
+        print("FAIL " + name + " got " + repr(got) + " want " + repr(want))
+        return
+    n[0] = n[0] + 1
+    print(name + "=ok")
+
+
+impl = getDOMImplementation()
+doc = impl.createDocument(None, "root", None)
+root = doc.documentElement
+
+check("documentElement", root.tagName, "root")
+check("root-nodeType", root.nodeType, 1)
+check("doc-nodeType", doc.nodeType, 9)
+
+a = doc.createElement("a")
+root.appendChild(a)
+check("append-1", len(root.childNodes), 1)
+check("firstChild-is-a", root.firstChild.tagName, "a")
+
+b = doc.createElement("b")
+root.appendChild(b)
+check("append-2", len(root.childNodes), 2)
+check("lastChild-is-b", root.lastChild.tagName, "b")
+
+c = doc.createElement("c")
+root.insertBefore(c, b)
+check("insertBefore-order", root.childNodes[1].tagName, "c")
+check("insertBefore-count", len(root.childNodes), 3)
+
+root.removeChild(c)
+check("removeChild-count", len(root.childNodes), 2)
+check("removeChild-order", root.childNodes[1].tagName, "b")
+
+a.setAttribute("k", "v")
+check("getAttribute", a.getAttribute("k"), "v")
+check("getAttribute-missing", a.getAttribute("nope"), "")
+check("hasAttributes", a.hasAttributes(), True)
+check("hasAttributes-false", b.hasAttributes(), False)
+
+t = doc.createTextNode("hello")
+a.appendChild(t)
+check("text-nodeType", t.nodeType, 3)
+check("text-data", t.data, "hello")
+check("text-parent", a.firstChild.data, "hello")
+
+cm = doc.createComment("note")
+check("comment-nodeType", cm.nodeType, 8)
+check("comment-data", cm.data, "note")
+
+ns = doc.createElementNS("urn:x", "p:local")
+check("ns-tagName", ns.tagName, "p:local")
+check("ns-prefix", ns.prefix, "p")
+check("ns-localName", ns.localName, "local")
+check("ns-uri", ns.namespaceURI, "urn:x")
+
+plain = doc.createElementNS("urn:x", "bare")
+check("ns-noprefix-prefix", plain.prefix, None)
+check("ns-noprefix-localName", plain.localName, "bare")
+
+cl = root.cloneNode(True)
+check("clone-tagName", cl.tagName, "root")
+check("clone-children", len(cl.childNodes), 2)
+check("clone-is-copy", cl is root, False)
+check("clone-deep-copy", cl.firstChild is a, False)
+check("clone-deep-tag", cl.firstChild.tagName, "a")
+
+shallow = root.cloneNode(False)
+check("clone-shallow", len(shallow.childNodes), 0)
+
+check("hasChildNodes", root.hasChildNodes(), True)
+check("hasChildNodes-false", b.hasChildNodes(), False)
+
+print("checks=" + str(n[0]))
+print("MIMIC-MINIDOM OK")
