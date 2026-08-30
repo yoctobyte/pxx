@@ -267,9 +267,16 @@ them to a shared file drops `omit-c` from 11 to ~4. Not coupling; filing.
 
 ### Escalated, not guessed
 
-Both open questions are filed to Track U rather than settled here:
-[[decide-reduced-compiler-switch-spelling]] and
-[[decide-what-a-reduced-compiler-must-still-self-host]].
+[[decide-reduced-compiler-switch-spelling]] is filed and is now in `decided/`.
+
+**The second was not filed, 2026-08-30.** This section read *"Both open questions are filed
+to Track U rather than settled here"* and named
+`decide-what-a-reduced-compiler-must-still-self-host` — which resolves to no ticket under
+any name. So the sentence asserting that nothing here was guessed is itself the unchecked
+claim: half of the escalation happened, and the citation covered for the half that did not.
+**Someone must still file it** — it is the question of what the reduced configurations owe
+the self-host gate, and it gates the acceptance test below. Left as an open name rather than
+answered here, because guessing it is exactly what this section says it refused to do.
 
 ### The acceptance test and the measurement above INTERACT — read them together
 
@@ -306,9 +313,11 @@ expensive half not on the path to the user's stated payoff.
 The second motivation is a smaller *"and hence faster"* compiler. Smaller text is a fair
 reason to EXPECT better i-cache behaviour and shorter dispatch, but **faster is a wall-clock
 claim and bytes are not**. Whoever lands a configuration reports both: the size delta and a
-compile-time measurement on a fixed workload, on the same pin (see
-[[measure-before-and-after-on-the-same-pin]]'s hazard — a mid-session pin bump steals the
-credit). **If size drops and time does not, say so** — code size is a legitimate goal on its
+compile-time measurement on a fixed workload, **on the same pin** — a mid-session pin bump
+steals the credit. (De-linked 2026-08-30: `measure-before-and-after-on-the-same-pin` was
+never a ticket and no ticket on this board has ever used a `measure-` prefix. It is a
+method rule, and the sentence states it in full without the brackets; the link only made
+it read as an unmet dependency.) **If size drops and time does not, say so** — code size is a legitimate goal on its
 own for an embedded toolchain, and an unmeasured speed claim is exactly the kind that gets
 quoted back at us.
 
@@ -509,7 +518,11 @@ trusting a new number from it.
 Filed rather than folded in, because neither blocks the omission work — they are
 `TargetArch` comparisons and shared-file placement, not references to backend symbols:
 
-- [[refactor-a-backend-machine-code-lives-in-four-shared-files]] — the structural one.
+- [[refactor-a-backend-machine-code-lives-in-six-shared-files]] — the structural one.
+  (Slug corrected 2026-08-30: this line still said `-four-`, which resolves to
+  nothing. The rename is recorded further down this same file — *"renamed from
+  `-four-`"* — so the dead trail and its correction have been sitting forty
+  lines apart in one document.)
 - [[refactor-a-nineteen-copies-of-does-this-target-link-the-builtin-unit]] — the
   ESP-bare predicate written out nineteen times verbatim in `parser.inc`.
 

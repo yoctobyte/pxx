@@ -262,11 +262,31 @@ Child: [[feature-nilpy-cpyext-c-api-from-source]].
 
 ## Children (file as they start)
 
-- [[feature-nilpy-cpyext-c-api-from-source]] — the strategic one
-- [[feature-nilpy-future-import-noop]]
-- [[feature-nilpy-dataclasses]]
-- [[feature-nilpy-corpus-html5lib]]
-- [[feature-nilpy-corpus-neuzelaar]]
+**State resolved 2026-08-30 (frankD, board-hygiene sweep). Four of these five names
+resolved to no ticket, and they were four different situations:**
+
+| child | resolves? | state |
+| --- | --- | --- |
+| [[feature-nilpy-cpyext-c-api-from-source]] | yes, `unfinished/` | the strategic one; held |
+| [[feature-nilpy-decorators-dataclass]] | **slug corrected** — was `feature-nilpy-dataclasses` | **done**, in `done/` |
+| `feature-nilpy-future-import-noop` | no ticket, ever | **delivered anyway** — see "Step 1, `__future__`, DONE" below |
+| `feature-nilpy-corpus-html5lib` | no ticket, ever | genuinely not started — the ladder is still on shims |
+| `feature-nilpy-corpus-neuzelaar` | no ticket, ever | genuinely not started |
+
+The three that were never filed are **de-linked on purpose**: as
+[[chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected]] puts it, an
+unfiled `[[link]]` is *"a promise, not a citation"*, and the brackets are what make a
+promise read as an open dependency to anything counting them. They stay as names because
+they are still the intended children; they stop wearing citation punctuation until someone
+files them.
+
+**And one of the four is a bucket that chore does not name.** It lists *rename* and
+*never filed*; `feature-nilpy-future-import-noop` is **never filed AND already delivered**.
+That is the only combination invisible in both directions at once — there is no ticket to
+find in `done/`, and the link goes on advertising the work as pending. Verified against
+`$(PXX_STABLE)` rather than taken from the note below: `from __future__ import annotations`
+plus an `@dataclass` with a defaulted field compiles and prints the default. Two of this
+list's four unfiled children were finished; the list said nothing had started.
 
 ## 2026-08-09 — plan steps 1 and 2 done; step 3 STARTED on webencodings
 
