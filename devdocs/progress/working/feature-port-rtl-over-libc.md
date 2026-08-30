@@ -8,9 +8,9 @@ prio: 55
 # RTL-over-libc — the portability force multiplier
 
 - **Type:** feature (Track A — RTL lowering / codegen / linking). Portability campaign.
-- **Status:** unfinished — PARKED 2026-08-17 by frank2 at a green point;
+- **Status:** working
   acceptance instrument landed, no compiler changes made. See the dated note below.
-- **Owner:** frank2
+- **Owner:** frankA
 - **Opened:** 2026-07-17, from the OS-portability mapping session. Full analysis in
   [`devdocs/dev/portability-axes.md`](../../dev/portability-axes.md).
 - **Related / unblocks:** [[feature-port-openbsd-libc]] (falls out immediately),

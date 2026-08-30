@@ -5,17 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:340 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2732 rejected:56`
+`working:6 unfinished:26 blocked:7 backlog:340 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2732 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — owner: frankB
+- `feature-port-rtl-over-libc` [A] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A] — owner: frankA
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## unfinished (26) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -40,7 +41,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P]
 - `feature-pascal-type-helpers` [A]
-- `feature-port-rtl-over-libc` [A]
 - `feature-signal-siginfo-ucontext` [A]
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
@@ -55,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 360, ranked
+## Ready — top 30 of 359, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -88,4 +88,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 - `[p 60] [U]` decide-does-track-r-work-on-master-like-every-other-lane
 
-_330 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_329 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
