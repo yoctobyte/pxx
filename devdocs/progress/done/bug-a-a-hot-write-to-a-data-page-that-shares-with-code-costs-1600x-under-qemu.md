@@ -1,8 +1,8 @@
 ---
 prio: 45
 track: A
-status: backlog
-owner: ""
+status: done
+owner: frank-optimize-b4
 ---
 
 # A hot write to a data page that shares with code costs 1600x under qemu
@@ -113,3 +113,78 @@ the count was never part of what the row asserts (the static refcount starts at
 **all four arms produce byte-identical output against one expectation**, which
 is the proof that the count is not being asserted. The cliff keeps its own
 numbers here.
+
+## Resolution (2026-08-30, frank-optimize-b4)
+
+Fixed in the ELF writer: `PadCodeToPageBoundary` pads `Code[]` so the data
+section starts on a page of its own. **The padding goes into `Code[]`, never
+into `dataBase`** — there is one `PT_LOAD` with `p_offset = 0`, so a virtual
+address *is* `LOAD_ADDR` plus a file offset, and aligning `dataBase` on its own
+would desynchronise the two and make every data reference read up to 4095 bytes
+early. That version would still have passed the self-host fixedpoint, because a
+uniformly-wrong compiler reproduces itself perfectly.
+
+Applied in all three writers (`{$ifdef FPC}` and `{$else}` `writeELF`, and
+`writeELF32`), guarded off for the ESP bare-boot image, where the target is SoC
+SRAM measured in hundreds of KB and nothing is translating from that page.
+
+**Measured, both arms rebuilt at the same HEAD** with only the three call sites
+commented out for the *before* arm — not against an older binary, so nothing but
+the padding differs. `-O3 test/test_static_string_literals.pas`:
+
+| arm | before `a2701c58b005` | after `f50ff77ecd42` | |
+| --- | ---: | ---: | ---: |
+| qemu-aarch64 | 91.69s | **0.32s** | 287x |
+| qemu-x86_64 | 13.83s | **0.09s** | 154x |
+| native x86-64, 200 runs, interleaved | 6.50 / 5.10 ms | 5.85 / 5.30 ms | no measurable change |
+
+All six runs exit 0 and print the same nine lines ending `done`.
+
+**Read the native row as a null, not as a result.** The runs were interleaved
+before/after/before/after so the noise floor would be visible: 5.10 ms and
+6.50 ms are *both* the before arm. A single pair would have supported a
+defensible 9% "regression" or 20% "win" depending on which sample landed where.
+The padding costs nothing where there is no emulator, and that is all these
+numbers say.
+
+### The bug this fix shipped with for one build, worth more than the fix
+
+The first version wrote the padding as `Code[CodeLen] := 0; Inc(CodeLen)`,
+bounds-checked against `MAX_CODE`. **`MAX_CODE` (32 MiB) is the logical bound —
+the largest program we accept — and `CodeCapacity` (starting at 64 KiB) is the
+physical one.** `Code` is `array of Byte`, grown on demand by `GrowCode`, so
+only the second can be overrun, and the check was present, deliberate, and
+against the wrong number. The safe path (`EmitB`) was a call away and the unsafe
+one was one character shorter.
+
+The symptom was nowhere near the cause. The overrun landed in `GlobFix` and
+zeroed all 185 entries, so the writer then ran 185 iterations of
+`Patch32(0, bssBase + 0)`: every global reference patched to the same wrong
+value at code offset **0**, on top of the entry instruction's opcode, and all
+185 real sites left holding zero. `test/test_ansistring.pas` died `SIGILL` on its
+first instruction, with a fixup table that had been correct 200 lines earlier.
+
+Two things found it, and neither was reasoning about the byte diff:
+
+- **The incoherence.** "The patch is off by one" and "the patch is missing" each
+  fit their own evidence and contradict each other. When two readings are
+  locally true and jointly incoherent, neither is right — both are downstream of
+  something neither describes. That signal was available two rounds before it
+  was used.
+- **Two `writeln(StdErr)` lines** around the pad loop: `gf0.pos` **1 before, 0
+  after**. One number, and the whole story collapses to it.
+
+And one control that a self-hosting compiler always needs: rebuilding with the
+fix changes *two* things — the writer pads, and the compiler binary is itself
+padded — so "it works now" cannot say which. Having the known-good unpadded
+compiler build a padded-logic compiler, and finding *that* compiler's output
+broken too, pinned the fault to the writer and cleared the self-host binary
+before anything else was touched.
+
+Follow-on, filed and deliberately not built here:
+`feature-a-second-pt-load-so-data-is-not-executable` — the padding removes the
+shared *page*, not the shared *segment*, and 4096 is what the measured emulators
+use rather than a proof.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -115,20 +115,19 @@ begin
        is count-INDEPENDENT, which is why one expectation covers both arms and
        why lowering the emulated count is not a weakening.
 
-       It is lowered for the emulated targets because of a real and separately
-       filed cliff: the static block's refcount word can land on the same 4 KiB
-       page as translated code (one RWX PT_LOAD, code and data adjacent), and a
-       hot write there makes a qemu-user-style emulator invalidate translation
-       blocks on every store. Measured 83x on aarch64 and 1600x on x86-64 run
-       under qemu-x86_64, with the SAME binary fast natively -- so it is an
-       emulation artifact, not a codegen defect, and the count is what makes it
-       a tier timeout rather than a note.
+       The count was briefly lowered for the emulated targets, because the
+       static block's refcount word could land on the same 4 KiB page as
+       translated code and a hot write there made a qemu-user-style emulator
+       invalidate its translations on every store -- 83x on aarch64, 1600x on
+       x86-64 under qemu-x86_64, for a binary that ran in 0.009s natively.
+       That is fixed at the source: the ELF writer now pads code to a page
+       boundary so the data section starts on a page of its own, and this
+       subject runs in 0.32s on aarch64 under qemu against 91.69s without the
+       padding (same HEAD, both arms rebuilt: f50ff77ecd42 vs a2701c58b005).
+       The full count is back, because a workaround that outlives its cause is
+       how a test quietly stops testing what its comment says it does.
        bug-a-a-hot-write-to-a-data-page-that-shares-with-code-costs-1600x-under-qemu }
-{$ifdef CPUX86_64}
   for i := 1 to 200000 do
-{$else}
-  for i := 1 to 2000 do
-{$endif}
   begin
     a := 'recycled';
     b := a;

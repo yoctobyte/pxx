@@ -70,7 +70,6 @@ _none_
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
 | bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section | A | 55 | bug | The typed-const data path does not align at all. A const array lands at whatever offset the preceding emitted bytes leave -- ANY residue, ODD ones included -- while the `var` path is 8-aligned in every cell measured. Originally filed as `a Double typed const misaligns the NEXT const array`; that framing is WRONG and is kept only so the links resolve. The Double is not a trigger, nothing is: with nothing declared before it, `const A: array[0..3] of Int64` is already misaligned, on all six targets. | — |
-| bug-a-a-hot-write-to-a-data-page-that-shares-with-code-costs-1600x-under-qemu | A | 45 | bug | A hot write to a data page that shares with code costs 1600x under qemu | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows | A | 55 | bug | The rel8 patch idiom `Code[p] := Byte(CodeLen - (p + 1))` truncates without any diagnostic when the span exceeds 127 bytes. A forward jump silently becomes a BACKWARD jump into the middle of an instruction. Measured: a jns meant to skip 181 bytes was written as -75 and the program segfaulted at a mid-instruction address. Latent today; armed the moment any emitter between a patch site and its target grows. | — |
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
@@ -264,6 +263,7 @@ _none_
 | feature-a-promoint-variant-esp-targets | A+S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 45 | feature | Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix. | — |
 | feature-a-report-fixed-cap-headroom | A | 40 | feature | Three fixed caps in defs.inc have now been raised AFTER a user hit them — MAX_CODE 8->16 MB, MAX_STRS 8192->65536, MAX_CODE 16->32 MB — and each was found by a program failing, never by anyone looking. Nothing reports how close a compile came to any cap, so the only headroom signal the project has is an overflow. Proposal: a PXXDBG=a.caps topic printing per-cap utilisation at end of compile, so `the next one` is a number someone can read instead of an incident. Small, additive, no behaviour change. | — |
+| feature-a-second-pt-load-so-data-is-not-executable | A | 30 | feature | Give data its own PT_LOAD (R+W, no X) instead of one RWX segment | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 10 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-typeref-migrate-consumers | A | 62 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
@@ -671,9 +671,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2739)
+## done (2740)
 
-2739 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2740 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -863,7 +863,6 @@ _none_
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
 - [p 45] [A] bug-a-2d-array-row-as-a-const-array-param-still-segfaults
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
-- [p 45] [A] bug-a-a-hot-write-to-a-data-page-that-shares-with-code-costs-1600x-under-qemu
 - [p 45] [A] bug-a-a-static-array-of-promo-ints-releases-only-element-zero
 - [p 45] [A+S] bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa
 - [p 45] [A] bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown
@@ -1017,6 +1016,7 @@ _none_
 - [p 30] [U] decide-where-a-persistent-fpc-trunk-oracle-lives
 - [p 30] [A+S] feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
+- [p 30] [A] feature-a-second-pt-load-so-data-is-not-executable
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
 - [p 30] [E] feature-demo-nilpy-ide
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised

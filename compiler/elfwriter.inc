@@ -1536,6 +1536,67 @@ begin
   DbgShStrSecSize := DbgLen - DbgShStrSecOff;
 end;
 
+{ ---- page-separate CODE from DATA ------------------------------------------
+  Pad Code[] until the data section starts on a page of its own.
+
+  THE PADDING GOES INTO Code[], NOT INTO dataBase, and that distinction is the
+  whole correctness of this. There is ONE PT_LOAD with p_offset 0, so a virtual
+  address IS `LOAD_ADDR + a file offset` — `dataBase := LOAD_ADDR + codeOffset +
+  CodeLen`, and the data's file offset is `codeOffset + CodeLen`. Aligning
+  dataBase on its own would desynchronise the two and every emitted data
+  reference would read 0..4095 bytes early. That version would also pass the
+  self-host fixedpoint, because a uniformly-wrong compiler reproduces itself
+  perfectly — the gate proves reproduction, not correctness.
+
+  Why it is worth up to 4 KiB per binary: with code and data adjacent, the
+  boundary page holds both, and a hot write to a mutable word on that page makes
+  a qemu-user-style emulator invalidate the translations it made from that page,
+  on every store. Measured 83x on aarch64 and, for the SAME binary that runs in
+  0.009s natively, 1600x on x86-64 under qemu-x86_64. The controls that make it
+  a mechanism: removing the mutable word removes it, and so does moving the word
+  off the shared page while keeping everything else.
+  bug-a-a-hot-write-to-a-data-page-that-shares-with-code-costs-1600x-under-qemu
+
+  Fixed HERE rather than in the pass that first put a mutable word beside code
+  (a string literal's refcount, feature-opt-o3-static-string-literals), because
+  the hazard belongs to the layout and not to that pass: it is any mutable word
+  beside code, and the next one would be found the same expensive way.
+
+  4096 IS WHAT THE MEASURED CASES NEED, NOT A PROOF. An emulator's granularity
+  follows the target page size, and a host configured for 16 KiB pages would
+  still leave a residual shared page. Stated rather than left for a reader to
+  take "page-aligned" as "solved everywhere".
+
+  The padding is APPENDED and never inserted: the out-of-line import thunk is
+  placed just before this dispatch and its rel32 call sites are already patched
+  against its position, so anything but a tail append moves every one of them.
+  Appending at the tail is also the one growth that cannot arm the rel8
+  truncation of bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows,
+  since it lengthens no span between a patch site and its target.
+
+  Zero-filled and unreachable: the bytes sit past the last emitted instruction
+  and nothing falls through to them, and zero is `udf #0` on aarch64 and faults
+  on x86-64 — so a stray jump into the padding dies loudly instead of running.
+
+  EMIT THE BYTES WITH EmitB. `Code` is a DYNAMIC array grown on demand by
+  GrowCode, so `Code[CodeLen] := 0; Inc(CodeLen)` writes past CodeCapacity the
+  moment the padding crosses it — out of bounds, into whatever heap block
+  follows. The first version did exactly that and the symptom was nowhere near
+  the cause: it landed in GlobFix, whose entries came back ZEROED, so the ELF
+  writer then patched every 4-byte global reference with `bssBase + 0` at code
+  offset 0 instead of at its own site. The binary died with SIGILL on its first
+  instruction, with a fixup array that had been correct 200 lines earlier
+  (measured: gf0.pos 1 before the loop, 0 after). MAX_CODE (32 MiB) is NOT the
+  bound that matters here — CodeCapacity is, and it starts at 64 KiB. }
+const
+  ELF_DATA_PAGE = 4096;
+
+procedure PadCodeToPageBoundary(codeOffset: Int64);
+begin
+  while ((codeOffset + CodeLen) mod ELF_DATA_PAGE) <> 0 do
+    EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note above }
+end;
+
 {$ifdef FPC}
 procedure writeELF(const outPath: AnsiString);
 var f: File; i: Integer;
@@ -1556,6 +1617,7 @@ begin
     phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
+  PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
@@ -1698,6 +1760,7 @@ begin
     phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
+  PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
@@ -1897,6 +1960,10 @@ begin
     loadBase := SocIramBase(TargetSoc);
   end
   else loadBase := LOAD_ADDR32;
+  { NOT for a bare-metal ESP image: it loads into SoC SRAM measured in
+    hundreds of KB, where 4 KiB is a real cost — and nothing is translating
+    from that page there, so the hazard does not exist to be avoided. }
+  if not EspBareBoot then PadCodeToPageBoundary(codeOffset);
   dataBase := loadBase + codeOffset + CodeLen;
   { BSS holds word-sized globals laid out with AlignTo offsets, so the base
     itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on
