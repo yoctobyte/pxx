@@ -8439,3 +8439,65 @@ whether the header's stated reason applies to its case. It does. But it got ther
 argument**, and 181's whole claim is that the argument is what stops being re-run once a
 header looks authoritative. **Flagged as a thing done, not a thing avoided**, which is
 what makes it usable.
+
+### 186 — A SWALLOWED FAILURE IN A TIMING HARNESS REPORTS A SPEEDUP
+
+frankA, 2026-08-30, catching a live instance of the exit-status hole in its own work
+minutes after the warning arrived. It had claimed *"the stripped pair compiles"* on the
+strength of an `echo "exit=$?"` placed after a `| head -20` — **that was `head`'s
+status.** The claim happened to be true (the `ok:` line carried it), but *the evidence
+cited was not evidence*.
+
+The sharpening is frankA's and it is worse than the general form:
+
+> **In a timing harness a silently-red configuration does not merely report success — it
+> reports a SPEEDUP.** A compile that fails reports a beautifully fast time. The
+> swallowed failure manufactures exactly the result you were hoping for.
+
+So the general rule (*anything appended after the thing you are measuring becomes the
+thing that reports*, frankC) has a polarity term: **wherever the measurement's units make
+failure look like success, the hole is not neutral, it is confirmatory.** Same family as
+the RSS sweep where eleven probes read a flat 392 KB because the programs were not
+running — the number was stable, plausible, and produced by nothing.
+
+Re-run with `rc=$?` captured immediately and an assertion that each compile printed
+`ok:`. Note which half was fixed: not the conclusion, the **evidence for** the
+conclusion, on a claim already known to be true.
+
+### 186a — MEASURING THE ARM YOU RECOMMENDED, AND REFUTING IT
+
+Same session. frankA had recommended the defer-bodies route (**B**) over the
+serialise-the-image route (**A**) on the grounds that B's ceiling was large enough to be
+worth avoiding A's 176-array permanent maintenance hazard (182a). Given a time-boxed,
+measurement-first, explicitly-not-a-landing authorisation, it **prototyped B at the
+source level and killed its own recommendation.**
+
+A 2.78s compile of a zero-byte `.npy` decomposes as:
+
+| band | cost | who can reach it |
+| --- | --- | --- |
+| routine bodies (parse+lower+emit) | **1.63s / 59%** | B's entire territory |
+| runtime declaration + interface parsing | **0.78s / 28%** | **invisible to B by construction** |
+| fixed compiler floor | 0.37s / 13% | neither |
+
+B claims only the *dead* share of its 59%: ≈0.98s / ~35%, and optimistic, since dead
+bodies are the smaller ones. A removes bodies and declarations together — ceiling 2.41s /
+**87%**. *A's realistic reach is roughly twice B's ceiling*, and **the 28% band is
+precisely what makes A unconditional and precisely what B cannot see.**
+
+> The recommendation was not wrong about B. It was wrong about the **band it had not
+> partitioned** — and no amount of care about B would have surfaced it, because the
+> missing band is defined by being outside B's reach.
+
+Method worth copying: measured under load 15.6 against the ticket's baseline of 2.76, so
+**the recorded absolutes were thrown away** and everything re-measured interleaved
+(full, stripped, full, …), with only within-sweep differences claimed. Fidelity checked
+rather than assumed — both configurations report `procs=1859`, so every symbol still
+registers and only bodies vanish. One confound measured (comment text of the same byte
+volume costs the same as stripping, so the 1.63s is parse+lower+emit and not I/O) and one
+declared uncovered (tokenisation — both variants skip it, a real B would not, and it can
+only make B worse, so it does not rescue the comparison).
+
+**Nothing implemented, nothing to revert, `compiler/builtin/**` restored byte-exact by
+sha256 against pre-experiment copies.** A measurement that changes a recommendation is a
+cheaper deliverable than the implementation it prevents.
