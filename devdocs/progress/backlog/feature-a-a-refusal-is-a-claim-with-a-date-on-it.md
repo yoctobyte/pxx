@@ -9537,3 +9537,86 @@ cliff: the static refcount starts at 2^30, so **no reachable iteration count cou
 the reference is taken** — it was a smoke row all along. The proof that the test was not
 weakened is that **all four arms still produce byte-identical output against one expectation**;
 if the count were being asserted, they could not.
+
+---
+
+## 200 — THE REPORTING HALF DRIFTS FROM THE DECIDING HALF, AND NOTHING COUPLES THEM
+
+*(pxx-a5, 2026-08-30, `8ab56be6e` — the second instance of 197's shape found within the hour,
+in the fuzz rate limiter itself.)*
+
+One mechanism, two halves, **two files with no import between them**:
+
+- **deciding**: `twatch.open_actionable_count()` sets the backoff, and already discounts
+  `NONACTIONABLE_CLASSES = {"fpc-self"}` — an external bug can never be resolved locally and
+  would otherwise pin the fuzzer in permanent backoff.
+- **reporting**: `pasmith_run.ledger_status()`, what a human reads, printed unconditionally:
+
+```
+22 finding(s), 7 open. Fuzzing is throttled while any are open
+```
+
+**Both halves of that sentence are false.** Every throttle-relevant entry in the published
+ledger is class `fpc-self`, so the deciding half computes **0**; and the 7 counts rows that the
+table *on the same page* labels `ticketed`. **The summary and the table disagreed about the
+same rows, one screen apart.**
+
+197 went silent about its denominator. This one **asserted a number that was governed
+elsewhere** — the more dangerous of the two, because silence at least prompts a question.
+Common family: *the reporting half of a mechanism drifting from the deciding half, with nothing
+structural keeping them honest.* Two files, one behaviour, no import — the coupling existed
+only in whoever wrote both.
+
+### 200a — the polarity that MANUFACTURES work
+
+191a says a silent failure looks like *the result you wanted*. This is the mirror and it is not
+covered by that:
+
+> **It was false in the direction that manufactures work.** A reader triages five FPC
+> optimizer bugs to un-throttle a fuzzer **that is already at full speed** — and no pxx commit
+> can retire any of them.
+
+And the state actually worth knowing was the one it hid: *every `pxx-vs-fpc_*` signature fixed,
+nothing throttling, full speed.* So the error cost twice — invented a queue of unfixable work,
+and concealed a genuinely good result that would have redirected the effort.
+
+Both polarities share one cause: **a report is a claim, and nobody re-derives a claim that
+reads as routine.** The optimistic direction stops you looking; the pessimistic direction sends
+you somewhere useless. Neither announces itself.
+
+### 200b — refusing to collapse two questions that share one table
+
+The fix left `ledger_open()` **deliberately unchanged**, and the reasoning is the transferable
+part: it is *also* the recheck population, and `fpc-self_trace-length` reached `fixed` through
+exactly that path.
+
+> *"Can the fuzzer trip over it" and "does it hold the fuzzer back" are different questions
+> over one table. The defect was answering the second with the first — and collapsing them the
+> other way would have lost a real transition.*
+
+The tempting fix (make `open` mean what the throttle means) would have been a **second**
+instance of the same defect, in the opposite direction, and would have retired a path that had
+already paid for itself. Compare 187b: the two-guard split was the same defect committed inside
+its own fix. **When one table answers two questions, name both; do not pick a winner.**
+
+### 200c — a guard that survives its own negative control needs its SCOPE written down
+
+8 guards, `pasmith_ledger_throttle_devtest.py`, with the empty-tree discipline applied: emptying
+`pasmith_run`'s copy of the constant turns **3 guards red**; restore is sha-identical at **0
+red**. **Guard 8 stays green under that control** — it checks the report against the *computed*
+number, which stays consistent when both drift **together**.
+
+pxx-a5 did not delete it. It wrote into the docstring that **guard 1 is the correctness anchor
+and 8 is only consistency**:
+
+> **A guard that survives its own control needs its scope written down, not deleted.**
+
+That is the correct third option, and it is the one nobody reaches for — the reflexes are
+"strengthen it" or "drop it", and both destroy information. A consistency check is real and is
+*not* a correctness check, and the failure is leaving a reader to assume which one it is.
+Sibling of 190a (an instrument that could not have failed) with the opposite disposal: 190a's
+check was dead and should go; this one is alive and merely narrow, so it gets a label.
+
+Guard 1 itself is the right shape too — it asserts the two files' constants are **equal**, by
+parsing `twatch` with `ast` rather than importing a daemon for one constant. That equality is
+the **only** thing coupling the two halves, so it is the whole guard.
