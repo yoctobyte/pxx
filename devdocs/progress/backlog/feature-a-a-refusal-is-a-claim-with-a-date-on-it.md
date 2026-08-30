@@ -11890,3 +11890,59 @@ line of `line_buffering=True` fixed it; 4 lines in 6 seconds after, 0 in an hour
 
 Worth guarding precisely because it has **no local effect**: buffering is invisible interactively,
 which is the only place anyone would notice it missing.
+### 228 — a check that disagrees with a recorded claim is not automatically the better measurement (frankB, 2026-08-30)
+
+The count of Pascal rows where FPC built the binary but it **emitted no output**
+moved **3 → 1 → 4** in one hour. The 4 is right. What is worth recording is that
+the **1 was newer than the 3, disagreed with it, and was worse** — and that it was
+persuasive *because* it disagreed.
+
+Everything in this index above points the other way: measure rather than reason,
+distrust the recorded number, spend the check on the claim you doubt. That advice
+is right and it is what produced the bad middle step. The 3 came from a judge
+script with a 6-line diff cap — a silent truncation, the failure I had fixed in the
+audit tool minutes earlier and reproduced in the script auditing it. The 1 came
+from a detector that counted a bare `+` line as output. Neither number was a
+measurement of the corpus. **All of the disagreement lived in the definition of
+"emitted nothing", and the corpus never moved.**
+
+The tell was not available from either number, and this is the whole entry:
+**both the claim and the check have to be able to say what they counted, and
+neither of mine could until the third attempt.** A count is not a measurement
+until its predicate is stated; two counts of an unstated predicate disagreeing
+tells you nothing about the world, only that you wrote two predicates. The 4
+survives because it says what it counts — a diff line that is `+`, is not `+++`,
+and has non-whitespace content after the marker.
+
+The operational form, and the reason it is a counterweight rather than an
+exception: **when a new check disagrees with a recorded one, the first question
+is not which is right but whether they are counting the same thing.** If neither
+can state its predicate, resolving the disagreement between them is not possible
+and any winner is arbitrary. An index that only says *trust the newer
+measurement* is wrong in exactly this case.
+
+### 228a — a fix that changes no number is the failure it was written to catch (frankB, 2026-08-30)
+
+The sharper half, in the same commit, and I reported it as done before it was.
+
+My first repair of the no-output detector tested the **recipe's** stdout for
+emptiness. But `expect_same.sh` writes its diff to stdout, so on a mismatch that
+stream is never empty — **the check could not fire, and did not fire once**. The
+code was present, correct-looking, exercised on every row, and inert.
+
+What caught it was a full re-run printing counts **identical to the pre-fix run**.
+That is the detector, and it is positive, cheap, and universal:
+
+> **After a fix, if the numbers do not move, either the defect was not there or
+> your fix did not run — and both need explaining.**
+
+It costs one re-run and needs no insight into the fix. Note it is stronger than
+"verify your fix": verifying tends to mean re-reading the changed lines, which is
+exactly the evidence a wrong-stream defect survives — the lines were right about
+the wrong stream. The unchanged number is evidence from outside the change.
+
+Both entries share a shape with 225 and with the silent cap that produced the 3:
+**the instrument was measuring something adjacent to the question and returning a
+confident answer.** Adjacent is the dangerous distance. A wholly wrong instrument
+fails loudly; an adjacent one answers a nearby question fluently and never says
+which question it answered.
