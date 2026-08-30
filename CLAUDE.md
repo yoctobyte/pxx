@@ -167,46 +167,31 @@ flag or lands incrementally, never on a long-lived branch.
   limbo**, `-O2` the de-facto stable default, `-O3` **experimental by design** —
   where a pass lives while it earns `-O2`, not a staging area that ought to be
   empty.
-  **What counts as proof is ruled, and it is exhaustive: self-host + all tests
-  passed.** *"We have no more proof until we have a counterproof."* The reasoning
-  is that **the compiler and the target set are themselves complex enough to
-  constitute the proof** — a pass that miscompiles anything real will not survive
-  a compiler that compiles itself plus a corpus of third-party C and Pascal
-  across seven targets. Nothing stronger is obtainable, so an extra benchmark,
-  tier or approval stacked on a green full gate is ceremony, not rigour —
-  **promote it.** The back edge comes with it and is what makes the bar
-  affordable: a later regression IS the counterproof, and it demotes the pass.
-  **The qualifier that rule DEPENDS on, and it is checkable: "all tests passed"
-  means a full-tier run with `skip_holes == 0`.** A skip is scored **passlike**,
-  so a job that never ran is invisible in the verdict — the run report says so in
-  its own banner (*"a RED here speaks for the jobs that ran, not for the
-  suite"*), and the `skip_holes` count is in every `tstate/runs-*.ndjson` row.
-  **Cite a hole-free run, or you are citing a suite that skipped the thing you
-  broke.** Measured 2026-08-30: 1.4% of GREEN runs carry a hole, and the five
-  corpora plexus was missing were invisible until two boxes were diffed by hand.
-  **Who runs "all tests" — the existing machinery already answers this, add
-  nothing.** The promoting agent cannot: the hook denies it `gate.sh full` and
-  `testmgr --tier full|limited`, deliberately. So **land the promotion, then ask
-  Track T to sweep that exact sha with full + cross** — one pass, which is what T
-  exists for. Its own self-host plus a handful of programs is *evidence, not a
-  gate*.
-  **The line that matters is the PIN, not the push.** Landing an unproven `-O2`
-  default is the ordinary land-non-green case the repo already accepts, and the
-  counterproof demotes it. **Pinning it is what moves every lane's ground** — so
-  a promoted pass is eligible to be pinned only once T's sweep of its sha is
-  green. That is the whole additional discipline; there is no new gate.
-  **Promote and measure ONE AT A TIME — the batch is not the sum.** All `-O3`
-  gates at once measured *worse* than the single best pass alone (18.06 s vs
-  16.23 s); the passes interfere. And that best pass, `EmitStaticLitHandle`
-  (`ir_codegen.inc:3480`), is ~71% of the tier on its own — per-pass promotion is
-  a pass, not a campaign.
-  **Do NOT build the dev loop's compiler at `-O3`**: it makes the artifact under
-  test a product of an untested tier.
-  **The one boundary, and it is about the instrument, not an extra hurdle:** the
-  ruling says a passing suite is all the proof there is; it does not make a suite
-  see what it cannot. Where a change leaves the corpus *self-consistent before and
-  after* — the C-ABI fork is the live case, the cross suites pass either way —
-  green is **no measurement**, not a null, and you need a differential oracle.
+  **Proof is ruled and exhaustive: self-host + all tests passed.** *"We have no
+  more proof until we have a counterproof."* The reasoning is that **the compiler
+  and the target set ARE the proof** — a pass that miscompiles anything real does
+  not survive a compiler that compiles itself plus third-party C and Pascal across
+  seven targets. So an extra tier or approval on a green gate is ceremony —
+  **promote it** — and a later regression is the counterproof that demotes it.
+  **Three things that rule depends on, all measured 2026-08-30:**
+  1. **"All tests passed" means a full-tier run with `skip_holes == 0`.** A skip
+     is scored *passlike*, so a job that never ran is invisible in the verdict —
+     the report says so itself (*"a RED here speaks for the jobs that ran, not for
+     the suite"*). Cite a hole-free run or you are citing a suite that skipped the
+     thing you broke.
+  2. **The O-level sweep is `optdiff` (tier `opt`), and it is DISJOINT from the
+     quick<native<limited<full chain** — idle watcher work only, so no gate
+     verdict speaks for it. 690 of 2296 gated shas had ever been swept. Ask
+     `tools/trackt.py` for a sha's `opt` coverage rather than assuming a green
+     full run covered `-O3`.
+  3. **A benchmark is NOT ceremony — it answers a different question.** `optdiff`
+     is a *correctness* instrument: green proves the pass is not **wrong**. It
+     cannot prove the pass **fires**, because a pass that silently stopped firing
+     passes every level identically. The suite says "not wrong", never "works".
+  **Promote and measure ONE AT A TIME — the batch is not the sum** (all gates at
+  once measured *worse* than the best pass alone, 18.06 s vs 16.23 s; they
+  interfere). **Do NOT build the dev loop's compiler at `-O3`.**
+  Detail, numbers and the C-ABI-shaped boundary where a green is *no measurement*:
   `decided/decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`.
 - **D — verify snippets by compiling them.** Don't invent behaviour, don't touch
   `compiler/**` or `lib/**`.
