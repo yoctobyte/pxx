@@ -2608,6 +2608,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-665 | T | 70 | regression | regression: test-core#665 red at 8d1e694a9d8d (auto-filed by twatch) | — |
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
+| regression-test-core-c-crtl-tempfile-and-unlocked | C | 70 | regression | regression: test-core#src:test/c_crtl_tempfile_and_unlocked.c red at 7227f3e0f1f8 (auto-filed by twatch) | — |
 | regression-test-core-callbacks-2 | N | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-callbacks | T | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 410b7a40b516 (auto-filed by twatch) | — |
 | regression-test-core-cfnptr-deref-call-b241 | C | 70 | regression | regression: test-core#src:test/cfnptr_deref_call_b241.c red at b645e1b2aff7 (auto-filed by twatch) | — |
@@ -2621,6 +2622,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
 | regression-test-core-csocket-loopback-b88 | B | 70 | regression | csocket_loopback_b88.c includes \"socket.c\", which 8d7c47f8f moved to sys/socket.c — the test has not compiled since | — |
 | regression-test-core-cstatic-init-cast | T | 70 | regression | regression: test-core#src:test/cstatic_init_cast.c red at 6995a1a0d618 (auto-filed by twatch) | — |
+| regression-test-core-cstatic-same-module-dup-2 | C | 70 | regression | regression: test-core#src:test/cstatic_same_module_dup.c red at 7227f3e0f1f8 (auto-filed by twatch) | — |
 | regression-test-core-cstatic-same-module-dup | C | 70 | regression | regression: test-core#src:test/cstatic_same_module_dup.c red at 99dcac2a2ade (auto-filed by twatch) | — |
 | regression-test-core-cstr-table-2d-rows | T | 70 | regression | regression: test-core#src:test/cstr_table_2d_rows.c red at 7eef29e052d2 (auto-filed by twatch) | — |
 | regression-test-core-csystem-libs-granular-libc-b113 | T | 70 | regression | regression: test-core#src:test/csystem_libs_granular_libc_b113.c red at b39ac8f02003 (auto-filed by twatch) | — |

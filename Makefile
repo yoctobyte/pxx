@@ -4233,8 +4233,14 @@ test-threads: $(COMPILER)
 	# Deliberate break verified: dropping REX.R from EmitMovEaxRegD makes r8-r15
 	# read rax instead, and -O3 answered acc=374503906869 -- a plausible wrong
 	# number, no crash. Note what that break did NOT do: the compiler still
-	# self-hosted byte-identically with the encoding broken, so the fixedpoint is
-	# not coverage for this pass and these rows are the only thing that is.
+	# self-hosted byte-identically with the encoding broken -- and that is a
+	# property of the TIER, not of this pass. The self-host fixedpoint builds at
+	# the default -O2 (compiler.pas:838 `OptLevel := 2`; PXXFLAGS is empty above
+	# and tools/selfhost_fixedpoint.sh passes no -O either), so NO -O3-gated pass
+	# executes during it. A green `converged after N round(s)` is not weak
+	# evidence about anything behind `if OptLevel < 3 then Exit` -- it is no
+	# evidence, because that code was never compiled. These rows are the only
+	# coverage this pass has.
 	# feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64
 	./$(COMPILER) -O3 test/test_shr_resident_zeroext.pas $(TESTTMP)/test_shrzext326
 	tools/expect_same.sh test_shrzext326 "$$($(TESTTMP)/test_shrzext326)" "$$(printf 'acc=1299819431187\none=433273143729\ndone')"

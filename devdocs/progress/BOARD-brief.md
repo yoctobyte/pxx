@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:32 blocked:9 backlog:393 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2885 rejected:68`
+`working:3 unfinished:32 blocked:9 backlog:391 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2887 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -60,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 
-## Ready — top 30 of 434, ranked
+## Ready — top 30 of 432, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -70,8 +70,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [C]` regression-lib-test-crtl-reachability-5
 - `[p 70] [P]` regression-test-asm-compiler-3
-- `[p 70] [C]` regression-test-core-c-crtl-tempfile-and-unlocked
-- `[p 70] [C]` regression-test-core-cstatic-same-module-dup-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
@@ -92,5 +90,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
+- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [A]` bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds
 
-_404 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
