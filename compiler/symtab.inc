@@ -12961,6 +12961,33 @@ begin
 end;
 
 
+{ The class index a SYMBOL's metaclass value refers to, or -1 when the symbol is
+  not a `class of T`.
+
+  SPLIT OUT OF NodeMetaclassCi's AN_IDENT arm, which is now one line of
+  delegation, because there are callers that have a SYMBOL and no node.
+  TryParseParenlessMethodRef is the first: it must decide whether `mc.Pick` is a
+  method reference BEFORE it commits to anything, and it deliberately allocates
+  no AST node until it is committed -- so passing a node to NodeMetaclassCi would
+  mean building an AN_IDENT for every `something.field` in Delphi mode that turns
+  out not to be a method reference, and orphaning it.
+
+  The alternative was to inline the three-line tyPointer/PtrElemTk/PtrElemRec
+  test at the new caller, which is precisely the duplication NodeMetaclassCi's
+  own header says it exists to end ("one predicate instead of five arms, so the
+  next spelling is added once"). The split keeps that property: one place still
+  knows what a metaclass value looks like, and it now answers for a symbol as
+  well as for a node.
+  bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings }
+function SymMetaclassCi(si: Integer): Integer;
+begin
+  Result := -1;
+  if (si < 0) or (si >= SymCount) then Exit;
+  if (Syms[si].TypeKind = tyPointer) and (Syms[si].PtrElemTk = tyClass) and
+     (Syms[si].PtrElemRec >= REC_UCLASS_BASE) then
+    Result := Syms[si].PtrElemRec - REC_UCLASS_BASE;
+end;
+
 function NodeMetaclassCi(node: Integer): Integer;
 { The class index a node's METACLASS VALUE refers to, or -1 when the node is not
   one. A metaclass value is a `class of T` — a tyPointer whose pointee is a class
@@ -12984,12 +13011,7 @@ begin
   Result := -1;
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
-  begin
-    si := Integer(ASTIVal[node]);
-    if (si >= 0) and (si < SymCount) and (Syms[si].TypeKind = tyPointer) and
-       (Syms[si].PtrElemTk = tyClass) and (Syms[si].PtrElemRec >= REC_UCLASS_BASE) then
-      Result := Syms[si].PtrElemRec - REC_UCLASS_BASE;
-  end
+    Result := SymMetaclassCi(Integer(ASTIVal[node]))
   else if ASTKind[node] = AN_PTR_CAST then
   begin
     si := Integer(ASTIVal[node]);

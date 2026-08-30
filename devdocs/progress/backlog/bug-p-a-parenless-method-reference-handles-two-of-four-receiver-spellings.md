@@ -162,12 +162,50 @@ function in every mode goes through. Filed as
 [[bug-p-result-is-not-a-method-pointer-lvalue]]; the new test uses locals
 throughout and says so in its header.
 
-## Arm C — unchanged, and the recommendation stands
+## ARM C DONE TOO — and it was TWO defects, not one
 
-Metaclass VARIABLE receiver (`mc: class of TSvc; TSel(mc.Pick)`). Option (2) from
-the fork above: split a sym-level `SymMetaclassCi(si)` out of `NodeMetaclassCi`'s
-`AN_IDENT` arm in `symtab.inc` and have `NodeMetaclassCi` delegate to it. frankA
-has cleared it with two conditions: `git pull --rebase` immediately before
-writing (that file is under repeated concurrent edit), and verify the `AN_IDENT`
-arm reads nothing off the node but the sym index. Arm A needed no such clearance
-and is done.
+Option (2) from the fork was the right call and is what landed: `SymMetaclassCi(si)`
+split out of `NodeMetaclassCi`'s `AN_IDENT` arm, `NodeMetaclassCi` delegating to
+it in one line, and `TryParseParenlessMethodRef` asking it for a third receiver
+arm. frankA's two conditions were met — the `AN_IDENT` arm reads nothing off the
+node but the sym index (checked by reading, so the split is exact rather than
+approximate), and the pull happened immediately before the write.
+
+**But the receiver arm alone would have shipped a wrong code pointer.**
+`IRMethodRefCode` decides where the VMT lives by asking whether the receiver node
+is spelled `AN_CLASSREF`. A class method's Self is the class RTTI BLOB, whose VMT
+sits at +24 because a blob's +0 is its NAME pointer — and a metaclass VARIABLE
+carries that identical blob in an `AN_IDENT`. So the new arm took the instance
+path and indexed off the name pointer: compiled clean, SIGSEGV on the first call
+through. Measured directly, on the binary with the receiver arm and not the VMT
+fix: `svc.plain` printed and the next line died.
+
+Fixed by asking what the receiver IS rather than how it is spelled:
+
+```pascal
+  if (ASTKind[ASTLeft[mref]] = AN_CLASSREF) or
+     (NodeMetaclassCi(ASTLeft[mref]) >= 0) then
+```
+
+`NodeMetaclassCi` has no `AN_CLASSREF` arm, so the `or` is a union of two
+disjoint questions, not a widening of one.
+
+**And it was an OUTLIER, not half of a pair** — which is the opposite of what the
+comment there led me to guess. The `AN_CLASS_VIRTUAL_CALL` arm it cross-references
+adds +24 **unconditionally**; its node kind already encodes "the receiver is a
+blob", so it has no sibling test to keep in step. frankA checked this by grepping
+`AN_CLASSREF` across the IR layer: exactly one node-kind test decides a VMT
+location, and it was this one. So the change REMOVES the last place that asked
+about spelling where everything else asks about meaning —
+`normalise-dont-special-case.md` is satisfied by the edit rather than strained by
+it. Recording that here because the cross-reference invites the wrong guess, and
+I made it.
+
+**The virtual rows are the test, and that is frankA's condition, not decoration.**
+A non-virtual class method takes `IR_PROCADDR` and reads no VMT at all, so a test
+containing only `mc.Plain` passes with the VMT defect fully in place. Three of the
+five rows of `test/test_method_ref_through_a_metaclass_variable.pas` are virtual,
+and the last dispatches through a DERIVED metaclass so the override is proved
+captured rather than the pointer merely proved non-nil. Three-stage measurement is
+in the file header: compile error on `pinned`, SIGSEGV with the receiver arm alone,
+matches FPC with both.

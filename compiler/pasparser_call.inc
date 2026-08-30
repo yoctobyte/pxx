@@ -826,6 +826,13 @@ begin
   else if (rsym < 0) and (FindUClass(CurTok.SVal) >= 0) and
           (not UClsIsRecord[FindUClass(CurTok.SVal)]) then
     rci := FindUClass(CurTok.SVal)
+  else if (rsym >= 0) and (SymMetaclassCi(rsym) >= 0) then
+    { a METACLASS VARIABLE receiver -- `mc: class of TSvc; TSel(mc.Pick)`. It is
+      a tyPointer whose POINTEE is a class, not a symbol whose RecName is one, so
+      it misses both arms above. Asked through SymMetaclassCi, which is
+      NodeMetaclassCi's AN_IDENT arm split to sym level precisely so this site
+      does not have to allocate a node before it is committed. }
+    rci := SymMetaclassCi(rsym)
   else
     Exit;
 
@@ -838,7 +845,10 @@ begin
   begin
     opNode := AllocNode(AN_IDENT);
     ASTIVal[opNode] := rsym;
-    ASTTk[opNode] := Ord(tyClass);
+    if SymMetaclassCi(rsym) >= 0 then
+      ASTTk[opNode] := Ord(tyPointer)   { the variable holds the RTTI blob }
+    else
+      ASTTk[opNode] := Ord(tyClass);
   end
   else
   begin

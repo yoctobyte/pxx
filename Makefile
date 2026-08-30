@@ -2756,6 +2756,19 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_method_pointer_bare_receiver_and_call_reading.pas $(TESTTMP)/test_mpbare26
 	@$(TESTTMP)/test_mpbare26 | diff -u test/test_method_pointer_bare_receiver_and_call_reading.expected - \
 	  || { echo 'test_method_pointer_bare_receiver_and_call_reading: FAIL - a bare method receiver or the call-vs-reference rule'; exit 1; }
+	@# ...and the METACLASS VARIABLE receiver, `mc: class of TSvc; f := TSel(mc.Virt)`.
+	@# TWO defects in one program: the receiver was not recognised at all (a tyPointer
+	@# whose POINTEE is a class matches neither the instance nor the class-name arm),
+	@# and once it was, IRMethodRefCode read the VMT from [Self+0] because it decided
+	@# blob-vs-object by NODE KIND (AN_CLASSREF) -- a metaclass variable carries the
+	@# same blob in an AN_IDENT, so it indexed off the blob's NAME pointer, compiled
+	@# clean, and SIGSEGV'd. The VIRTUAL rows are the point: a non-virtual class method
+	@# takes IR_PROCADDR and reads no VMT, so a test without them passes with the
+	@# second defect intact. Last row goes through a DERIVED metaclass so the override
+	@# is proved captured, not merely non-nil. Oracle: FPC.
+	@./$(COMPILER) test/test_method_ref_through_a_metaclass_variable.pas $(TESTTMP)/test_mcvar26
+	@$(TESTTMP)/test_mcvar26 | diff -u test/test_method_ref_through_a_metaclass_variable.expected - \
+	  || { echo 'test_method_ref_through_a_metaclass_variable: FAIL - a metaclass-variable receiver or its VMT lookup'; exit 1; }
 	@# A method may be NAMED `Default` -- rtl-generics' central idiom, and a
 	@# collision with nothing to do with generics. Exercises the property
 	@# `default` MODIFIER alongside it, since that is what a too-eager fix breaks.

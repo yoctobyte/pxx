@@ -5441,8 +5441,26 @@ begin
     above, which cannot reuse IR_VIRTUAL_CALL for exactly this. Dereferencing a
     blob as though it were an object reads the name pointer as a VMT and indexes
     off it.
-    bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
-  if ASTKind[ASTLeft[mref]] = AN_CLASSREF then
+    bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults
+
+    ASK WHAT THE RECEIVER IS, NOT HOW IT IS SPELLED. The test read
+    `ASTKind = AN_CLASSREF` -- a class NAME -- which is one of two ways a blob
+    gets here: `mc: class of TSvc; TSel(mc.Pick)` puts the same blob in an
+    AN_IDENT, took the instance path, and dereferenced the blob's +0 (its NAME
+    pointer) as a VMT. Compiled clean; SIGSEGV on the first call through.
+    NodeMetaclassCi is the predicate that already answers "is this a metaclass
+    VALUE" for all five of its spellings, and it has no AN_CLASSREF arm, so the
+    `or` is a union of two disjoint questions and not a widening of one.
+
+    This site was the OUTLIER, not half of a pair: the AN_CLASS_VIRTUAL_CALL arm
+    the note above cross-references adds +24 UNCONDITIONALLY -- its node kind
+    already encodes "the receiver is a blob", whatever spelling produced it -- so
+    it has no sibling test to keep in step. Verified by frankA before this
+    landed: `grep AN_CLASSREF` over the IR layer finds exactly one node-kind test
+    deciding a VMT location, and this was it.
+    bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings }
+  if (ASTKind[ASTLeft[mref]] = AN_CLASSREF) or
+     (NodeMetaclassCi(ASTLeft[mref]) >= 0) then
     selfVal := IRAppend(IR_BINOP, selfVal,
                  IRAppend(IR_CONST_INT, -1, -1, -1, 24, Ord(tyInteger)),
                  Ord(tkPlus), 0, Ord(tyPointer));
