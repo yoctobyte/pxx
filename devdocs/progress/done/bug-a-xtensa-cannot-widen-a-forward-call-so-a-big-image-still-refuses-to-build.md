@@ -4,7 +4,7 @@ track: A+S
 prio: 55
 type: bug
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: f6660111e
 status: working
 found: 2026-08-30
 found-by: frankS
