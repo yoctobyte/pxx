@@ -11186,17 +11186,24 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-27T23:25:33Z",
+  "date": "2026-08-30T01:54:53Z",
   "red": [
-   "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy",
+   "lib-test#src:tools/crtl_reachability.py",
+   "test-core#src:test/test_mgmt_operators.pas",
+   "test-nilpy#src:test/test_nilpy_relative_import_in_package.npy",
    "test-nilpy#src:test/test_nilpy_startswith_tuple.npy",
-   "test-emit-obj#src:test/cxtensa_obj.c@1",
-   "tools-devtest#00"
+   "demos#00"
   ],
-  "sha": "83468c5462d40294a7e7a5885a61fbac20077285",
+  "sha": "1fb9774b741733ad4666af964255404d4dab4b5f",
   "tier": "full",
-  "ver": "v389",
-  "verdict": "RED"
+  "ver": "v393",
+  "verdict": "RED",
+  "why": {
+   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | OK    examples/tui/menudemo.pas | OK    examples/vm/vmdemo.pas | === demos: 32/35 built into build/demos/ (esp3",
+   "lib-test#src:tools/crtl_reachability.py": "pascal26:88: warning: #include <dirent.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:88: warni",
+   "test-core#src:test/test_mgmt_operators.pas": "ok: $TMP  [code=297749B  data=24744B  bss=75692B  procs=730] | FAIL: an array of a managed record compiled",
+   "test-nilpy#src:test/test_nilpy_relative_import_in_package.npy": "pascal26:10: error: undefined variable (RENAMED) | near: A   U  RENAMED >>>"
+  }
  },
  "renamed_from": [
   "xeon"
