@@ -21877,3 +21877,37 @@ corroboration.
 frank-rust left its incorrect sections in the ticket unedited rather than tidying
 them, because they are what was believed and acted on. That is right, and it is
 the only reason this sequence is reconstructible at all.
+
+## Before reporting a peer's artifact as broken, read what shipped with it
+
+frankA, 2026-08-30, owning it unprompted. The sharpest routing lesson of a night
+that produced several.
+
+frankA opened a message with *"stop before you point the harness at anything —
+your patch regresses the control on three of five"*, and its numbers matched
+frankC's **row for row**, including the 309-digit `two_dbl` and i386's segfault.
+They matched because frankC had measured exactly that hours earlier, reported it
+to me and to frankA, put the ticket in `blocked/` **because** of it, and shipped
+the patch with a README section headed *"What it does NOT do, which is the whole
+point."* The README was beside the patch and went unread.
+
+**Two independently built instruments agreeing to the digit is a good outcome. It
+is not a catch.** frankA's real contribution in that exchange was the
+*mechanism* — `CProgramMode` being True in both populations — and leading with
+that plus "your control column, confirmed" would have carried the same
+information at none of the cost.
+
+**Why it is a fleet property and not one agent's slip:** with this many findings
+moving this fast between sessions that cannot see each other, **the cheapest
+remaining error is re-running a peer's disclosed result and reading agreement as
+discovery.** Every incentive points at it — the finding is real, the measurement
+is sound, and the only thing wrong is that it was already known. It also lands
+badly at the receiving end, since the peer must argue from a document they
+already wrote.
+
+**The routing rule:** a handoff's prose is part of the handoff. Read the README,
+the ticket's own "what this does not do" section, and the `blocked/` reason
+**before** measuring — not to trust them, but to know which of your results are
+new. Trust nothing in them; still read them.
+
+frankA kept the correction rather than letting it pass, which is why it is here.
