@@ -121,3 +121,36 @@ Per sub-ticket. Frontend/IR changed → `make test` + self-host byte-identical �
   > only reads frontmatter. An umbrella that ranks above every rung it contains
   > and then tells the reader it has no work is the worst shape of it: the
   > ranker promotes it, and only a human who opens it learns it is empty.
+
+## The "local FPC checkout" premise expired (coordinator, 2026-08-30)
+
+**Every candidate in the table above is unbuildable on this box right now, and the
+table is what hides it.** The sizes were "MEASURED 2026-07-12 against the local FPC
+checkout"; that checkout is gone. Verified rather than assumed:
+
+- `fpc` 3.2.2 and `ppcx64` are installed and working — the seed compiler is fine.
+- `fp-units-fcl-3.2.2` is installed, so the fcl units exist as **compiled `.ppu`/`.o`**.
+- **`fpc-source-3.2.2` is NOT installed**, so no `.pas` sources are on disk at all.
+  `find / -type d -name fcl-xml` returns nothing.
+
+So the corpus rungs need **source**, and the installed package ships **objects**. A
+compiled unit is exactly the thing a corpus build cannot consume, and the distinction
+is invisible from "FPC is installed", which is the check anyone would run.
+
+This is why the top of the global ranked queue has sat at p75 with nothing moving:
+`ready` correctly reports it unblocked, because the blocker is a host package rather
+than a `blocked-by:` edge, and nothing in the ticket system can see a missing apt
+package. Same class as
+[[chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run]] — host
+provisioning, owner-only, no agent in any lane can close it.
+
+**Unblock:** `apt install fpc-source-3.2.2` (20 MB download, 211 MB installed).
+Surfaced to the owner 2026-08-30 together with the cross-gcc and cross-libc requests,
+which are the same category.
+
+Rungs 1-2 (`fpcunit`, `fpjson`) are in `done/` and were built when the checkout
+existed, so their results stand — this does not retro-invalidate them. Rung 3
+(`generics`) is in `unfinished/` owned by frankA with 17 walls cleared; rung 4
+(`passrc`) is p30. The unfiled `fcl-xml` row remains unfiled **deliberately**: filing
+a rung that cannot be built would put a fourth unactionable ticket into a queue whose
+problem is already that its top is unactionable.
