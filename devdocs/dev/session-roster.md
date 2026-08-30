@@ -20479,3 +20479,68 @@ on this axis and merely honest about a gap that predates it.
 frank-user is **not starting the fix** — five constraint forms, combinable,
 per-parameter storage, a real feature rather than a patch — and holds the T → P
 re-lane.
+
+## THE WAIT IS SATISFIED, 2026-08-30 ~12:1x — all six lanes clean and pushed
+
+**frankwasm is clean, 0 unpushed** (`ff1bc4787` 11:54, branch `wasm`). That was the
+last outstanding half of the owner's *"wait for everything to finish and push."*
+
+| | |
+| --- | --- |
+| lanes clean + 0 unpushed | frankA · frankC · b4 · frank-rust · frank-user · **frankwasm** |
+| `working/` | **zero locks** (`.gitkeep` only) |
+| seed | green — `no use-before-declaration … and no duplicate forward`, 219552 lines |
+| pin | v394 `53800fbeb0b66e11`, unchanged |
+| load | **12.9**, down from 18.5 |
+| full tier | RED, **10 jobs, `new=0`** on the three newest — the set is stable, not growing |
+
+Before stopping, frankwasm **filed its open fault rather than carrying it**:
+`910b92613 docs(progress): file the wasm-hosted compiler's garbage-handle fault,
+with the five hypotheses already ruled out`. Ruled-out hypotheses are the
+expensive half of a debugging session and the half that never survives a stop.
+
+### TRACK T BISECTED ONE OF MY TWO OLD REDS TO A SINGLE COMMIT
+
+`b347147c9`: `test_opt_store_reload` — bad `10c869750675`, last good `08cbfa20a11d`,
+**1 commit in range**. Exact attribution, not a range.
+
+```
+10c869750 07:48 fix(O): -O3 store->reload elimination elided a load the emitter had reordered
+```
+
+**And that commit added 45 lines to `test/test_opt_store_reload.pas` itself.** So
+the two causes I had written into the ticket — *expectation never regenerated* vs
+*the new `WriteLn`s expose a real difference* — are **one commit apart and the
+bisect cannot separate them**, because the same commit changed the optimizer and
+grew the test.
+
+The ticket now says to read the Makefile recipe before choosing, because
+`tools/expect_same.sh` is a generic `<label> <actual> <expected>` assert — *what*
+is compared lives in the recipe. If the operands are one program at two `-O`
+levels, regenerating the expectation **deletes the detector** (face 195); if it is
+a recorded file, regeneration is correct. **Do not pick the cheap one because it
+is cheap.**
+
+### THE 38-JOB CASCADE IS A STALE BASELINE, NOT AN EVENT
+
+`regression-cascade-fc01c8094434` [p70], auto-filed 09:59Z: *"38 jobs newly red in
+`5dbcc861e3fc..fc01c8094434` (87 commits) — treat as ONE root cause until triage
+proves otherwise."* Measured before believing it:
+
+- host is **plexus**, not seven; **plexus's newest report is 04:33Z**, five and a
+  half hours before the filing;
+- the range is **87 commits**;
+- two of the 38 already have exact, unrelated causes — `store_reload` (bisected to
+  one commit) and `rv32` (an `AIntToStr` include-order fault).
+
+**A cascade filing counts jobs that changed state since THIS BOX last looked**,
+which over a long gap is a different quantity from *jobs one commit broke*. The
+"one root cause" rule is right for a real cascade and wrong for a catch-up sweep,
+and **the filing cannot tell which it is** — its own header says so: *"nothing in
+this filing looked at the build, the box or the range."* Ticket now says to
+subtract what is already attributed before treating the remainder as one cause.
+
+**And the finding nobody files: a box that stops sweeping for six hours.** The
+reports plexus did not write are not in `tstate/` to be counted, so its silence is
+invisible to every check that reads `tstate/`. Same shape as `twatch --status`
+reading a local checkout — **absence of evidence is stored as absence.**
