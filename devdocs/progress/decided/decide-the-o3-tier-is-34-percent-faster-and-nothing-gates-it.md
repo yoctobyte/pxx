@@ -530,3 +530,64 @@ So the rest is the **W1/W2 scratch-register work** — ~27k push/pop pairs
 replaced by register moves — plus sign-extension elimination. Note that this is
 a large *instruction* change for a small *time* change, which is the same trap
 this ticket already fell into once: **an instruction count is not a cost.**
+
+---
+
+# TWO GATES — ruled by the owner, 2026-08-30
+
+> *"About Track O: it needs promise. Full Track T proof that suggested
+> optimizations are safe. If so, yes, proceed."*
+
+**Both required, and they are different questions:**
+
+| gate | question | who answers |
+| --- | --- | --- |
+| **PROMISE** | does it deliver measurable value? | the author, with a bench |
+| **PROOF** | is it safe? | **Track T's full tier**, not the author's gate |
+
+**Promise means DELIVERED, not opportunity.** The distinction is not academic:
+`feature-opt-o3-register-pressure` advertises ~37% in its opportunity section and
+delivers **~5-7%**, because that section priced an instruction census while
+nothing ever priced the output. The slices did exactly what they claimed —
+**53,930 fewer push/pop, 24.1% of the push population** — and eliminated stack
+traffic converted to time far worse than its instruction share implied, since the
+core was already hiding most of it behind store-forwarding. **A correct
+prediction about instructions is not a prediction about time.**
+
+**Proof is Track T's**, which the author cannot run: the hook denies `gate.sh
+full` and `testmgr --tier full|limited` to every lane but T, and
+`PXX_ALLOW_FULL_SUITE=1` is the owner's to grant. Land, then ask frankT to sweep
+that sha.
+
+## What this settles, immediately
+
+- **`EmitStaticLitHandle` proceeds.** Promise is measured (20% of a 28% gap,
+  min-of-5, reported as a sign test rather than a mean). Proof is queued at
+  `2b072df50`. Nothing further is needed from anyone.
+- **W2's linear-scan allocator does NOT proceed on its current justification.**
+  It is the keystone-sized piece — a week — and its promise is priced from a
+  census. Re-justify against **delivered time on a quiet box**, then it is
+  eligible like anything else. This is not a rejection of the work.
+- **The "should we stop the `-O3` campaign?" question is retired without a
+  separate ruling.** The remaining gates are worth ~6% **collectively**, so no
+  individual pass can demonstrate promise, and the rule declines them one by one.
+  Nothing to close, no campaign to cancel.
+
+## The exposure this creates, and it is frankT's warning
+
+*"Full Track T proof"* is only worth what the proof-grade check is worth — and
+this file already leans on one: **a run is proof-grade when `tier == "full"` and
+`skip_holes == 0`.**
+
+frankT measured the failure mode in his own tooling the same day: a saturation
+guard scored **0.000 under all three metrics, including the one it exists to
+reject**, and had never been able to fail for its entire life while printing
+PASS. **A flag that cannot come out false is the same animal as a guard that
+cannot fail.**
+
+**So whoever implements the proof-grade flag must ship a POSITIVE CONTROL with
+it** — a run that MUST be classified not-proof-grade, asserted. frankT's first
+rewrite of his own guard passed the bad metric too, green and testing nothing;
+the control caught it and reasoning would not have. `b5108da21` is the pattern
+(verify the sha off origin before citing it — it was not on origin/master when
+checked).

@@ -182,6 +182,16 @@ flag or lands incrementally, never on a long-lived branch.
   is a different axis and stays a **named flag**: an author chooses WHICH trade,
   not HOW MUCH (`-Ofast`, `-Os`, `-funroll-loops` are sideways, not "more than
   `-O3`"). A mature pass that is merely not universally beneficial is a flag.
+  **TWO gates, both required, ruled 2026-08-30: PROMISE and PROOF.** *"It needs
+  promise. Full Track T proof that suggested optimizations are safe. If so, yes,
+  proceed."* **Promise** is delivered value, measured — not opportunity inferred
+  from an instruction census, which is how a campaign came to advertise ~37% and
+  deliver ~5-7%. **Proof** is safety, and it is Track T's full tier, not the
+  author's own gate. A pass missing either does not proceed; a pass with both
+  needs no further permission.
+  **This retires the "should we stop the `-O3` campaign?" question without a
+  separate ruling** — the remaining gates are worth ~6% *collectively*, so none
+  can show promise individually, and the rule stops them. Nothing to close.
   **Proof for a promotion is ruled and exhaustive: self-host + all tests passed**
   — *"no more proof until we have a counterproof"*, and the counterproof demotes.
   Three things it depends on: **(1)** "all tests passed" means a full run with
@@ -341,6 +351,20 @@ never-seen-before, the suspect commit touching no code — that it read as a
 satisfying answer. **"Not X" is half a finding. Name who owns "then what?"
 before you close it.**
 
+**And its instrument-shaped form, frankT's, which is the one that bites US:
+A GUARD THAT CANNOT FAIL IS NOT A GUARD, AND IT PRINTS PASS.** Measured
+2026-08-30: a saturation check picked the longest ticket and scored its 11-token
+*head*, sharing zero tokens with the query — **0.000 under all three metrics,
+including the one it exists to reject.** It had never been able to fail, for its
+whole life, while reporting PASS. Its neighbour silently tested slugs because no
+ticket carries the field it thought it was reading.
+**So every guard needs a POSITIVE CONTROL — a case it must reject, asserted.**
+That earned itself immediately: frankT's first rewrite passed the bad metric too,
+green and testing nothing, and the control caught it where reasoning would not
+have. **The same exposure applies to any "proof-grade" flag**, including the
+`tier == full and skip_holes == 0` one this file now leans on: a flag that cannot
+come out false is the same animal as a guard that cannot fail.
+
 ## Debugging — measure, do not reason
 
 **Read `devdocs/dev/debugging-playbook.md` before hand-patching a probe or
@@ -469,6 +493,18 @@ a full-tier sweep that would have returned a clean verdict for a sha using a
 `touch -d '2000-01-01'` the seed), and do not accept the build until you have
 seen `converged after N round(s)` and confirmed the binary's sha256 differs from
 `pinned`.** Absence of that line is the tell; there is no error to wait for.
+
+**And the MIRROR, which is the more dangerous half** (frankT, 2026-08-30): a seed
+too **old** fails *loudly*, with a real file, line and mechanism — his was
+`LoadFile expects string variables in IR codegen` in `compiler/cpreproc.inc`,
+which reads exactly like **Track C broke master's self-host gate.** He was one
+command from reporting it. It was his own thirteen-hour-old binary; `pinned`
+built HEAD fine. **The silent direction costs you a verdict; the loud one costs
+another lane a false accusation, fully evidenced.** So "grep for `converged`, not
+for a zero exit" is right and not enough — **a NONZERO exit needs the same
+suspicion.** The free tell: **grep the tree for the exact error string.** If the
+source does not contain it, the compiler that printed it is not the one you think
+you are running.
 
 **A CLEAN TREE IS NOT EVIDENCE ABOUT THE BINARY. The `converged after N round(s)`
 line is.** `compiler/pascal26` is untracked, so `git status` says nothing about
