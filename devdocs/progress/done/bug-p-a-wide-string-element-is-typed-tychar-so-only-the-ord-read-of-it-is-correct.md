@@ -155,4 +155,4 @@ UTF-8. Measured, and quoted in the file.
 widestring/sysutils tests green.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 836fd27f7.
