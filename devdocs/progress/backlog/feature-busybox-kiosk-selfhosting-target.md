@@ -8,7 +8,7 @@ blocked-by: []
 status: new
 created: 2026-08-30
 owner: ""
-summary: "Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- the work lives in the rungs below, each of which is filed or exists. ONE host dependency the fleet cannot satisfy: qemu-system is NOT installed (only qemu-user), see decide-install-qemu-system-and-a-freebsd-image-on-plexus."
+summary: "Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- the work lives in the rungs below, each of which is filed or exists. HOST DEPENDENCY RESOLVED 2026-08-30: the owner granted sudo and qemu-system is now installed for EVERY pxx target -- aarch64, arm, riscv32, riscv64, xtensa, x86_64, i386 -- plus /dev/kvm. Rungs 1-2 (busybox) and rung 3 (image) can all proceed."
 ---
 
 # The target, in the owner's words
@@ -45,15 +45,24 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
 5. **The kiosk application** — not yet filed; file it when rung 3 resolves, since
    its shape depends on what the image can do.
 
-## The one thing the fleet cannot do
+## Host dependency: RESOLVED 2026-08-30
 
-**`qemu-system` is not installed on this box** — `ls /usr/bin/qemu-system-*`
-returns nothing; only qemu-user is present, which is what `tools/run_target.sh`
-drives. Rungs 3-5 cannot start without it, and installing a system emulator plus
-fetching a kernel/rootfs is a change to the owner's workstation.
+The owner granted sudo and **`qemu-system` is installed**, verified running
+(10.2.1). Coverage is better than the target needs — **every pxx backend has a
+system emulator**:
 
-`decide-install-qemu-system-and-a-freebsd-image-on-plexus` [p55] already asks
-this for the FreeBSD port. **Same host dependency, second consumer** — worth
-answering once for both, and the answer now unblocks more than it did when filed.
+    qemu-system-aarch64  qemu-system-arm      qemu-system-riscv32
+    qemu-system-riscv64  qemu-system-xtensa   qemu-system-x86_64  qemu-system-i386
 
-**Rungs 1 and 2 need none of it.** Start there.
+`/dev/kvm` is present, so the x86-64 image runs at native speed and the cross
+images run emulated. **"Random kernel on random CPU" is now a real choice rather
+than an aspiration** — and `qemu-system-xtensa` in particular is new ground for
+Track S, which had qemu-user only.
+
+**Still open, and NOT resolved by the install:** which kernel + rootfs. Building
+a kernel is a large job; fetching one is a download. That is rung 3's first
+decision and it should be made with a measurement, not a preference.
+
+`decide-install-qemu-system-and-a-freebsd-image-on-plexus` [p55] asked for this
+emulator **and** a FreeBSD image. **The emulator half is now done**; the
+multi-GB FreeBSD image is a separate call and stays open.
