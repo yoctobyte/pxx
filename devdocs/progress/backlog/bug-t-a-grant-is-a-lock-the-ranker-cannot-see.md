@@ -32,7 +32,12 @@ summary: "NARROWED 2026-08-30 by frankC, which found the suppression mechanism a
 > under its H1 carrying the marker and **measured** the effect rather than
 > asserting it: `next --track A` skipped 6 before and 7 after, with the ticket
 > live in the queue at p60 — one point under the head — before, and suppressed
-> after. Landed `eaf3a9705` + `03fefeb55`, docs only, `compiler/` byte-identical.
+> after. Landed as `3ab3658b7` (make the grant visible to the RANKER) plus `e89700f22`
+> (release the slot), docs only, `compiler/` byte-identical. *(frankC reported
+> these as `eaf3a9705` + `03fefeb55`; those are pre-rebase shas from its own
+> reflog and are on no remote ref — the exact hazard
+> `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` describes. Corrected here
+> against origin/master with `git merge-base --is-ancestor`.)*
 >
 > **So the residual gap is narrower than this ticket's title.** It is not that
 > grants are invisible; it is that the marker is **body text a human must

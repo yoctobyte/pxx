@@ -201,6 +201,26 @@ into the work. Ones that have actually gone wrong:
   independently declined to use it on the grounds that it is the user's to grant,
   and they were right: a coordinator cannot grant it either. If a worker asks,
   the answer is to escalate to the owner, not to authorise it.
+- **RUN `tools/progress.sh check` BEFORE DISPATCHING. It already knew.** On
+  2026-08-30 the coordinator dispatched
+  `bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64` **twice** —
+  once queued for frankA, once actually sent to frank-optimize — for work frankB
+  had finished on 2026-08-29 at `0d91dc88f`. `check` was reporting it verbatim
+  the whole time: `DUPLICATE-SLUG: ... exists in 2 status folders (backlog_new/,
+  done/) — the folder is the lock, so the copy in the earlier folder reads as a
+  live claim on finished work.` **`next` and `ready` do not run `check`**, and the
+  coordinator was reading only those. The fix is one command in the dispatch
+  loop, not new tooling.
+- **A long-lived branch landing can RE-FILE tickets master already closed.**
+  Provenance of the duplicate above: `4af569658` (branch `wasm`, 08-28) filed the
+  ticket; `0d91dc88f` (master, 08-29) fixed it and correctly moved
+  `backlog_new/` → `done/`; and `4af569658` is not an ancestor of `0d91dc88f`.
+  The `wasm` branch carried its own still-in-`backlog_new` copy across three
+  `Merge origin/master into wasm` commits and re-filed it on landing. **A branch
+  that outlives a ticket's whole lifecycle resurrects it on merge.** Sweep for
+  `DUPLICATE-SLUG` after any long-lived branch lands. frank-optimize swept every
+  slug across all status folders after this one: exactly one duplicate, so this
+  was an instance and not a class.
 - **A file-lock and a DESIGNATION are two different things, and conflating them
   is what generates the near-miss.** frankC separated them on 2026-08-30 and the
   distinction is right: the *file-lock* on `compiler/ir.inc` is released the
