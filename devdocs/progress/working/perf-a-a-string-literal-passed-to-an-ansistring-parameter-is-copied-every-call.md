@@ -4,9 +4,9 @@ track: A
 prio: 70
 type: perf
 blocked-by: []
-status: backlog
+status: working
 created: 2026-08-30
-owner: ""
+owner: frankB
 summary: "Passing a string LITERAL to an AnsiString parameter allocates and copies it on every call — 28x slower than passing a typed constant, and the cost scales with the literal's length. `const` does not help, though by definition it needs no copy. Comparing against a literal INLINE is free, so this is parameter marshalling specifically. Compiler-wide: every CaseEqual(x,'lit') pays it, and so does every pxx program. Found while diagnosing perf-p-parsefactorcore, whose 9.4% is this defect rather than the 92-arm walk the ticket describes."
 ---
 
@@ -133,7 +133,48 @@ what it does and does not prove here: a marshalling change must leave the
 emitted *program* byte-identical while changing the code that marshals. If the
 `cmp` differs, the change altered semantics, not just cost.
 
-## Gate — and which direction of the result is a FAILURE, named in advance
+## Gate — CORRECTED 2026-08-30 (frankB). My first version was inverted.
+
+> **I wrote the gate below as "`cmp` identical = pass, `cmp` differs = the change
+> altered semantics, a failure", and the coordinator endorsed it. It is WRONG
+> for this ticket, and I caught it while taking the baseline rather than after.**
+>
+> That oracle was inherited from the *ParseFactorCore dispatch* ticket, where it
+> is exactly right: a dispatch change resolves the same arm and must emit the
+> same bytes. **This change is the opposite kind.** It is a marshalling change —
+> it replaces an allocate-and-copy sequence with a pointer pass at every
+> literal-argument call site. **Altering emitted bytes IS the change.** So:
+>
+> - `cmp` **differs** — expected, and says nothing about correctness on its own.
+> - `cmp` **identical** — the change did **not take effect**. That is the
+>   failure this gate should be watching for, and my version called it the pass.
+>
+> Two oracles of one name, one per ticket, and I carried the wrong one across.
+> Naming the failing direction in advance is still right; I named the wrong one.
+
+### What actually gates this change
+
+1. **Self-host fixedpoint** (`make compiler/pascal26`). The strongest available
+   behavioural oracle: the modified compiler must still compile itself to a
+   fixedpoint. A marshalling bug that corrupts a string argument cannot survive
+   a compiler compiling itself.
+2. **Behavioural equality on emitted PROGRAMS, not bytes.** Compile the same
+   sources with the pre- and post-change compilers and diff the **programs'
+   output**. Bytes are expected to differ; behaviour must not.
+3. **`test/test_widestring_lowering`** — `argLW = TakesWide('abcdef')` must stay
+   **6**. This is the canary frankwasm pinned for exactly this interaction: their
+   element-width conversion sits at the single tail of `IRLowerCallArg` on the
+   assumption that every managed-string argument reaches `Result := value`. **If
+   the literal arm is routed through an early `Exit`, that conversion silently
+   stops firing and a literal into a wide parameter returns the wrong number of
+   code units — no error, no crash.** Both hunks merge clean; this test is the
+   only thing that says so. `test_widestring_element_positions` covers the same
+   boundary from the element side.
+4. **The harness ratio** (below): row 1 approaches row 3, rows 2 and 3 unchanged.
+
+### The original wording, kept because the reasoning transfers to its own ticket
+
+
 
 `make compiler/pascal26` byte-identical fixedpoint, then `compiler.pas` in and
 `cmp` the two emitted binaries.
