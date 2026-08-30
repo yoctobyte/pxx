@@ -14703,6 +14703,23 @@ test-xtensa: $(COMPILER)
 	# exact fault address on xtensa, x86-64 and riscv32 alike. Measuring the
 	# controlled case is what separates those two readings; the uncontrolled one
 	# alone cannot.
+	# A STACK FRAME LARGER THAN 32 KB, on BOTH ABIS, and they failed differently
+	# -- which is why one row is not enough. ADDMI's immediate is a multiple of
+	# 256 reaching only -32768, so one instruction cannot allocate this frame.
+	# Call0 raised a clean "stack frame too large" error and refused; WINDOWED
+	# had NO check, and EncodeXtensaAddmi masks with `(imm div 256) and $$FF`, so
+	# it COMPILED and the binary SEGFAULTED -- measured on the pre-fix compiler,
+	# which is what makes the windowed row the load-bearing one here. The sums
+	# catch a wrong adjustment rather than a rejected one, and `outer` is in the
+	# caller so a frame allocated short or upward corrupts something observable.
+	# The compiler itself has exactly ONE such procedure (136448 bytes), which is
+	# what `pascal26 --target=xtensa compiler/compiler.pas` hit.
+	# bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_xtensa_frame_over_32k.pas $(TESTTMP)/test_xtensa_frame32k
+	./$(COMPILER) test/test_xtensa_frame_over_32k.pas $(TESTTMP)/test_xtensa_frame32k_x64
+	tools/expect_same.sh xtensa/test_xtensa_frame32k "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_frame32k; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_frame32k_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_xtensa_frame_over_32k.pas $(TESTTMP)/test_xtensa_frame32k_w
+	tools/expect_same.sh xtensa/test_xtensa_frame32k_w "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_frame32k_w; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_frame32k_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_altstack.pas $(TESTTMP)/test_xtensa_sigalt
 	tools/expect_same.sh xtensa/test_xtensa_sigalt "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigalt; echo "exit=$$?")" "$$(printf 'recursing\ncode=2\nhandler-off-faulting-stack=TRUE\nexit=0')"
 	# The proc exception CLEANUP FRAME (Call0 only). Neither of these is in the

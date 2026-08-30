@@ -10789,8 +10789,72 @@ end;
 
 { ===== Prologue/Epilogue ===== }
 
+const
+  XT_FRAME_SLOT_INSNS = 6;
+  { 3-byte instruction slots reserved in EVERY xtensa prologue for the frame
+    adjustment, patched by PatchXtensaFrameAdjust once the body's size is known.
+    Six ADDMIs reach 192 KB. ONE reserved slot was the old shape and it bounded
+    the frame at 32 KB, which is what `pascal26 --target=xtensa
+    compiler/compiler.pas` hit (bug-a-xtensa-frame-larger-than-32kb-...).
+
+    SIX, not four and not sixteen, and the number is measured rather than
+    chosen: exactly ONE procedure in the whole compiler exceeds 32 KB and it
+    wants 136448 bytes, so five ADDMIs are the requirement and the sixth is the
+    headroom. Widening this is one constant and costs 3 bytes per proc; the
+    error below names the actual size and the bound, so a program that needs
+    more says so rather than failing obscurely. }
+  XT_NOP24 = $0020F0;   { NOP, LE bytes F0 20 00 -- see xtensa_nop }
+
+procedure PatchXtensaFrameAdjust(patchPos, want: Integer);
+{ Lower sp by `want` bytes into the reserved slot, whichever ABI, padding the
+  unused slots with NOPs.
+
+  ONE HELPER FOR BOTH ABIS ON PURPOSE. The Call0 arm raised a clean error past
+  32 KB; the WINDOWED arm had no check at all, and EncodeXtensaAddmi masks its
+  immediate with `(imm div 256) and $FF` -- so a windowed frame over 32 KB
+  silently encoded a different, smaller (or positive) adjustment and the
+  prologue quietly handed the body a frame that was not there. A loud bound and
+  a silent wrap are the same defect wearing two faces, which is what happens
+  when one rule is written out twice (normalise-dont-special-case.md).
+
+  ADDI reaches -128 with byte granularity and is the same 3 bytes as ADDMI,
+  whose immediate is a multiple of 256, so small frames still pay only what they
+  need. Beyond that the adjustment is a CHAIN: each ADDMI moves at most -32768,
+  so a big frame is several of them and the leftover slots become NOPs that cost
+  three bytes and no cycles worth counting in a prologue. }
+var used, chunk, i: Integer;
+begin
+  used := 0;
+  if want <= 128 then
+  begin
+    want := ((want + 15) div 16) * 16;
+    if want = 0 then want := 16;
+    Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -want));
+    used := 1;
+  end
+  else
+  begin
+    want := ((want + 255) div 256) * 256;
+    if want > XT_FRAME_SLOT_INSNS * 32768 then
+      Error('target xtensa: stack frame of ' + AIntToStr(want)
+            + ' bytes exceeds the ' + AIntToStr(XT_FRAME_SLOT_INSNS * 32768)
+            + ' the prologue reserves (raise XT_FRAME_SLOT_INSNS in symtab.inc)');
+    while want > 0 do
+    begin
+      if want > 32768 then chunk := 32768 else chunk := want;
+      Patch24(patchPos + used * 3,
+              EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -chunk));
+      want := want - chunk;
+      Inc(used);
+    end;
+  end;
+  for i := used to XT_FRAME_SLOT_INSNS - 1 do
+    Patch24(patchPos + i * 3, XT_NOP24);
+end;
+
 function EmitProcPrologue: Integer;
 { Returns patch position for sub rsp/esp imm32 }
+var xtFrameSlot: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -10838,7 +10902,8 @@ begin
       XtSpillMax := XtSpillDepth;
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
       Result := CodeLen;
-      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
+      for xtFrameSlot := 1 to XT_FRAME_SLOT_INSNS do
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
     end
     else
     begin
@@ -10865,7 +10930,8 @@ begin
       xtensa_s32i(reg_xtensa_a15, reg_xtensa_sp, 8);
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
       Result := CodeLen;
-      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
+      for xtFrameSlot := 1 to XT_FRAME_SLOT_INSNS do
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
     end;
     Exit;
   end;
@@ -10928,18 +10994,7 @@ begin
       whose immediate is a multiple of 256 — so small frames use ADDI and pay
       only what they need, and everything else rounds up to ADDMI's step. The
       stack stays 16-byte aligned either way. }
-    aligned := size + XtSpillMax;
-    if aligned <= 128 then
-    begin
-      aligned := ((aligned + 15) div 16) * 16;
-      if aligned = 0 then aligned := 16;
-      Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
-    end
-    else
-    begin
-      aligned := ((aligned + 255) div 256) * 256;
-      Patch24(patchPos, EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
-    end;
+    PatchXtensaFrameAdjust(patchPos, size + XtSpillMax);
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then
@@ -10966,15 +11021,7 @@ begin
       Keep the exact ADDI encoding for small frames, and for anything beyond its
       reach round up to 256 and lower sp with a single ADDMI (imm8<<8, reaching
       -32768), mirroring the windowed path. }
-    if aligned <= 128 then
-      Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -aligned))
-    else
-    begin
-      aligned := ((aligned + 255) div 256) * 256;
-      if aligned > 32768 then
-        Error('target xtensa (call0): stack frame too large (> 32 KB) for a single ADDMI');
-      Patch24(patchPos, EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
-    end;
+    PatchXtensaFrameAdjust(patchPos, aligned);
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
