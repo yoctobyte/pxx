@@ -129,3 +129,18 @@ separately, so it failed on the first run.
 
 ## Log
 - 2026-08-30 — resolved, commit c1a8e092c.
+
+### Folded from a duplicate copy that was sitting in `backlog/`
+
+`check`'s DUPLICATE-SLUG scan caught this ticket existing in `backlog/` **and**
+`done/` — the backlog copy was a headless fragment (no frontmatter, so
+NO-FRONTMATTER flagged it too) holding my closing note. Diffed before removing, per
+the scan's own instruction; the `done/` write-up above is strictly the fuller one.
+The single framing worth keeping from the fragment:
+
+> 23 of the 43 are `regression-`/`decide-`/`grant-` slugs whose resolution **is** a
+> verdict — that is **caution 3, in live data, at 53% of findings.**
+
+Naming the fraction is what makes caution 3 an argument rather than a worry. Noted
+also that my own coordinator check flagged my own duplicate within an hour of my
+filing it, which is the check working on its author.

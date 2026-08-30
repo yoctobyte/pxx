@@ -7149,10 +7149,16 @@ fixed-on-one-arm-only bug that is itself applied to one arm is not a partial fix
 bug, re-committed by someone who has just read the rule. The two 32-bit backends land the
 rule together, by the lane holding the model.
 
-Note the asymmetry that hid it: riscv32's diagnostic is the generic *"standard builtin
-calls not supported in bare-metal stage 1"* bucket — **face 144 still live on that
-backend** — so the gap was invisible there while xtensa at least failed loudly enough to be
-classified.
+**CORRECTED 2026-08-30, by frankS, measuring the thing I asserted.** I wrote that
+riscv32's diagnostic is the generic *"standard builtin calls not supported in bare-metal
+stage 1"* bucket and called it face 144 still live. **It is not an unspecific bucket: it
+appends `(builtin id 999)`, so the subject IS named.** What is wrong with it is different
+and smaller — the sentence promises a bare-metal stage that does not exist under a hosted
+cross compile, i.e. a stale message, not an unidentifiable one. My claim came from the
+category label in a classification table rather than from the emitted string; **I read the
+bucket's name and reported the bucket's contents.** Left in place with the correction
+attached, because the mis-citation of face 144 is itself a face-144 shape: I merged a stale
+diagnostic into the unspecific-diagnostic bucket because both are "bad message".
 
 ### 162 — NINETEEN OF FIFTY CELLS PASSED BY ARITHMETIC, AND A PASS BY ARITHMETIC IS INDISTINGUISHABLE FROM A PASS BY CORRECTNESS
 

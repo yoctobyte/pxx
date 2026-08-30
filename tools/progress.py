@@ -1634,6 +1634,63 @@ pre code{background:none;padding:0}
                         f"{', '.join(rest)}"
                     )
 
+        # THE PROSE HALF, for the PARKED population only.
+        #
+        # The aperture note below used to say the prose half "cannot be"
+        # checked, reasoning that a body-grep for slug mentions would be
+        # "mostly noise". That prediction is correct for the scan it imagined
+        # and wrong for this one, and the difference is the SCOPE, not the
+        # cleverness. Measured 2026-08-30, after frankwasm found a ticket
+        # parked twelve days on four blockers that had all resolved the day
+        # the park was written:
+        #
+        #   all 376 live tickets, slug-mention only ......... ~50, mostly noise
+        #   all 376 live, mention near a condition word ..... ~35, still noise
+        #   the 35 PARKED tickets, mention near a condition ... 10  <- signal
+        #
+        # A live ticket citing a done ticket is NORMAL -- that is how the
+        # record works, and it is what floods the wide scan. A PARKED ticket
+        # citing a done ticket is a candidate stale resume condition, because
+        # parking is the only state where "X must land first" is load-bearing.
+        # The signal was never "names a resolved slug"; it is "names a
+        # resolved slug AND is not moving".
+        #
+        # Frontmatter edges are excluded: the scan above owns those, and
+        # reporting both would double-count the tickets that do it correctly.
+        PARK_COND = re.compile(
+            r"blocked on|blocked by|waiting on|wait for|resume|depends on|"
+            r"prerequisite|gated on|once .{0,40}land|after .{0,40}land|park",
+            re.I)
+        SLUGISH = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+){3,}")
+        for t in self.tickets:
+            if t.status not in ("unfinished", "blocked"):
+                continue
+            rows = t.text.splitlines()
+            hits: set[str] = set()
+            for i, line in enumerate(rows):
+                if not PARK_COND.search(line):
+                    continue
+                for j in range(max(0, i - 2), min(len(rows), i + 3)):
+                    for m in SLUGISH.finditer(rows[j]):
+                        s = m.group(0)
+                        if s == t.slug or s in t.blockers:
+                            continue
+                        o = self.by_slug.get(s)
+                        if o is not None and o.status in closed_st:
+                            hits.add(s)
+            if hits:
+                warning_count += 1
+                shown = sorted(hits)[:4]
+                more = f" (+{len(hits) - 4} more)" if len(hits) > 4 else ""
+                lines.append(
+                    f"STALE-PARK: {t.slug} [{t.track} p{t.prio}] is parked in "
+                    f"{t.status}/ and its PROSE names {len(hits)} now-resolved "
+                    f"ticket(s) near a blocking phrase ({', '.join(shown)}"
+                    f"{more}) — the resume condition may already be met. "
+                    f"Read the park; a prose condition has no owner and "
+                    f"nothing else re-checks it"
+                )
+
         # The mirror: filed as a decision without writing DOWN the answer.
         # Dependents reach the decision by following their blocked-by slug into
         # decided/ (or legacy done/), so a decide- ticket parked there without
@@ -1885,21 +1942,26 @@ pre code{background:none;padding:0}
         # the same file. Six instances in one day across four sessions is a
         # rate, not a run of bad luck.
         #
-        # Deliberately NOT a second query. There is no reliable scan for "a
-        # paragraph that is no longer true", and a body-grep for slug mentions
-        # would be mostly noise plus one more instrument whose reach nobody can
-        # see. So the reach of THIS one is stated instead — an instrument that
-        # does not report its own aperture is how "no findings" and "did not
-        # look" come to print the same thing.
+        # WAS "deliberately NOT a second query", on the reasoning that a
+        # body-grep for slug mentions "would be mostly noise". Half right, and
+        # the wrong half was load-bearing: it is noise over all 376 live
+        # tickets (~50 hits, nearly all ordinary citations) and signal over the
+        # 35 PARKED ones (10 hits). STALE-PARK above is that second query. The
+        # general case remains unscannable — there is still no reliable test
+        # for "a paragraph that is no longer true" — so the reach of both is
+        # stated in the note: an instrument that does not report its own
+        # aperture is how "no findings" and "did not look" come to print the
+        # same thing, and a note that says CANNOT is how nobody tries.
         #
         # The prose half is the expensive half: a stale edge is SILENT and
         # merely hides a ticket, while stale prose is BELIEVED — it reads as
         # prior investigation and pre-empts the check that would have caught
         # it.
         lines.append(
-            "NOTE stale-edge scan reads FRONTMATTER only. A blocking claim "
-            "made in a ticket's PROSE is not checked and cannot be; a clean "
-            "run means the frontmatter half is clean, not the family. "
+            "NOTE stale-edge reads FRONTMATTER; STALE-PARK reads PROSE but "
+            "only in unfinished/ and blocked/, where a resume condition is "
+            "load-bearing. Prose in a RANKED folder is still unchecked — a "
+            "clean run means those two apertures are clean, not the family. "
             "Convention that keeps them in sync: prose stating a blocking "
             "relationship must also carry the frontmatter edge, and the commit "
             "that closes a blocker marks its dependents' prose."
