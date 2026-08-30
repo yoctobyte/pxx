@@ -182,7 +182,6 @@ _none_
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-lint-fall-open-target-chains-without-the-false-positives | T | 30 | chore | A per-target {$ifdef CPU_x} run with no terminal arm is the shape behind bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open (5 instances, fixed). Sweeping the tree finds 21 more such runs — and 5 of 5 inspected are NOT defects: they are const tables (an armless target gets an undefined-identifier COMPILE ERROR, i.e. fail-closed) or function bodies with a pre-chain initialiser that is deliberate and documented. A naive lint would have filed 21 phantom tickets, two of them into Track A. The ticket is the three distinctions, not the grep. | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 45 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
-| chore-t-sweep-for-rows-that-assert-stdout-when-the-subject-is-an-exit-code | T | 55 | chore | Sweep for differential rows that assert stdout when the subject is an exit code | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 35 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it | T | 25 | chore |  | — |
 | chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion | T | 40 | chore | chore(T): re-measure the tier ladder ratio — the matrix grew 37% and the default's own trigger has fired | — |
@@ -390,11 +389,12 @@ _none_
 | regression-test-core-test-c-gtk-window-2 | P | 70 | regression | regression: test-core#src:test/test_c_gtk_window.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk | P | 70 | regression | regression: test-core#src:test/test_c_gtk.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk3-stock | P | 70 | regression | regression: test-core#src:test/test_c_gtk3_stock.pas red at bfec13534396 (auto-filed by twatch) | — |
+| regression-test-emit-obj-test-emit-obj | P | 70 | regression | regression: test-emit-obj#src:test/test_emit_obj.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 red at 30c06db1ae4e (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (12)
+## backlog_new (13)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -406,6 +406,7 @@ _none_
 | bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step | T | 45 | bug | A test job takes its name from its FIRST source file, but the red is usually a later step -- so the auto-filed regression stub's `track:` guess is derived from a filename that has nothing to do with the failure. Wrong three times on one job: crtl-reachability -1 (red was crtl-map), -3, and -4 (red was lib/pcl's GTK3 guard, Track B). The stub says `track GUESSED from the test path` but the path is not evidence about the defect at all. | — |
 | bug-t-concurrent-sync-runs-can-squash-two-commits-into-one | T | 45 | bug | With several checkouts syncing at once, tools/sync.sh's rebase-and-retry loop squashed two separate commits into one: the second commit's content survived, its message and its `resolves:` line did not. Silent — the tree is clean, the push succeeds, and the only tell is a `git log` one shorter than expected. | — |
 | chore-t-board-html-render-is-13s-of-every-ticket-move | T | 40 | chore | tools/progress.sh board-md takes 18.7s, of which ~87% is BOARD.html — a 26MB render every lane pays on every ticket move. Hoisting six re.sub pattern literals out of the inline() hot loop is measured at 18.66s -> 12.99s with byte-identical output. Not landed: progress.py is shared tooling, not Track T's. | — |
+| chore-t-make-every-cross-target-row-assert-the-exit-code | T | 45 | chore | 536 cross-target differential rows compare stdout only; 5 capture the exit code. Both operands are runs of the same program, so the exit code is free to add — but run_target.sh returns the EMULATOR's status and signal deaths do not encode identically under qemu-user and a native shell, so a blanket rollout can manufacture diffs on exactly the rows most worth checking. Wants a piloted rollout, one arch at a time, verified against Track T's matrix. | — |
 | feature-t-check-flags-a-lane-blocker-that-has-no-in-edges | T | 40 | feature | prio propagates down dependency edges, so a ticket with in-degree zero inherits nothing — and a ticket that blocks a LANE rather than a ticket never gets an edge, because blocked-by: would be a false claim. Such a ticket under-ranks itself permanently and no checker sees it: from the ranker's side an in-degree of zero is indistinguishable from a leaf. Proposal: `progress.sh check` flags a ticket whose body names a track as its beneficiary and has no in-edges. Threshold MUST be calibrated against the live board before landing. | — |
 | refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering | A | 40 | refactor | ir.inc:10426 reads `(CProgramMode or IsNodePChar(dest))` -- one rule expressed two ways at two different strictnesses, with the dialect flag standing in for the property it implies. Normalising it DELETES an entry from the C carve-out inventory rather than moving one, so it makes that refactor smaller. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
@@ -641,9 +642,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2691)
+## done (2692)
 
-2691 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2692 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -718,6 +719,7 @@ _none_
 - [p 70] [P] regression-test-core-test-c-gtk-types [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-c-gtk-window-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-c-gtk3-stock [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-emit-obj-test-emit-obj [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-2
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
@@ -787,7 +789,6 @@ _none_
 - [p 55] [P] bug-p-the-delphi-generic-rewrite-injects-specialize-before-a-declaration-in-an-include
 - [p 55] [T] bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
-- [p 55] [T] chore-t-sweep-for-rows-that-assert-stdout-when-the-subject-is-an-exit-code
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
 - [p 55] [U] decide-settextbuf-needs-buffered-text-io-or-stays-missing
 - [p 55] [U] decide-should-forwardlint-join-the-mandatory-per-fix-loop
@@ -844,6 +845,7 @@ _none_
 - [p 45] [T] bug-t-concurrent-sync-runs-can-squash-two-commits-into-one
 - [p 45] [T] bug-t-progress-check-cannot-see-an-orphan-fragment-or-a-duplicated-slug
 - [p 45] [A] chore-a-typesize-answers-8-for-a-record-and-the-warning-is-where-no-caller-looks
+- [p 45] [T] chore-t-make-every-cross-target-row-assert-the-exit-code
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 45] [T] chore-t-tools-devtest-is-one-job-that-runs-86-guards
 - [p 45] [U] decide-t-refuse-unscoped-pattern-kills-in-a-hook
