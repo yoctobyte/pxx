@@ -5,6 +5,24 @@ track: P
 prio: 25
 ---
 
+> **`prio: 25` is correct and must not be raised to match the ranked output.**
+> This ticket shows as **P p70** in `ready`/`next`, and the gap is not a mistake:
+> effective rank is a human `prio:` **propagated down dependency edges**, so a
+> blocker inherits the priority of what it unblocks. The single edge is
+> [[feature-pascal-typed-and-untyped-files]] [P p70], whose frontmatter declares
+> `blocked-by` on this ticket. `file of T` is standard Pascal that real code uses
+> heavily, so p70 is right *for that goal*, and this ticket inherits it.
+>
+> **25 is this ticket's own intrinsic worth** — verified 2026-08-30, see the note
+> at the bottom: nothing in pxx computes a wrong value, `packed` is honoured, and
+> the byte-exact layout is expressible today with explicit widths. Editing either
+> number to make them agree is the tempting wrong move: raising `prio:` overstates
+> the intrinsic worth, and lowering the goal drops a genuine p70 feature out of
+> the queue. Leave both; the ranker is doing what it was built to do.
+>
+> Direction is settled too: sizes come **before** a typed-file on-disk format,
+> because settling layout afterwards would silently invalidate written data.
+
 # Four type sizes disagree with FPC — and every value agrees
 
 **Umbrella, opened 2026-08-26.** Four tickets from the same 2026-08-16/20 FPC

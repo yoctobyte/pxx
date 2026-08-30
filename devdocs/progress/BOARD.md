@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen | A+O | 55 | feature | -O3: the W1 operand folds are x86-64-only — aarch64 has 4 gate sites to x86-64's 15 | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
@@ -61,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (337)
+## backlog (336)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -155,7 +156,6 @@ _none_
 | bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected | P | 50 | bug | `TD<T> = class abstract(TEnumBase<T>);` — a bodiless generic class with the `abstract` modifier and a generic parent — is rejected with `unexpected token in a unit interface section`. All three ingredients are required: dropping `abstract`, or making the parent non-generic, compiles. FPC compiles it. rtl-generics uses this exact shape. | — |
 | bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface | P | 65 | bug | A unit that specializes another unit's generic IN ITS INTERFACE gets the template's method bodies streamed into the interface section, where a method implementation is not a declaration: `unexpected token in a unit interface section` pointing at the TEMPLATE's file. Pre-existing on pinned, objfpc binder form, no Delphi surface involved — the same-file and the program-level cases both work, and a template with only FIELDS works cross-unit too. This is the next wall for `uses Generics.Collections`, because real templates have methods. Named as tgeneric91 in test/test_generic_spec_per_unit.pas's own header but never ticketed. | — |
 | bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name | P | 45 | bug | A program declaring `TBox<T>` while also importing a unit that declares `TBox<T>` now parses, but every use resolves to the IMPORTED template: `b.Local` answers `no such member`. FPC takes the local declaration and prints 42. The declaration is parsed and then loses to the import. | — |
-| bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
 | bug-p-a-qualified-type-name-cannot-be-a-generic-argument | P | 65 | bug | `specialize TEnum<TOuter.TPair>` is rejected — `Expected: >, but got: .`. FPC compiles and runs it. A generic ARGUMENT is modelled as exactly one token everywhere in the frontend, and a qualified type name is three. Standalone 22-line repro, no nesting of generics involved. Also the blocker under bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument, whose remaining half needs to emit exactly this form. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
@@ -729,7 +729,6 @@ _none_
 - [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-none [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
-- [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - [p 65] [P] bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
 - [p 65] [A+S] bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
