@@ -291,6 +291,64 @@ fix as **unexercised** rather than as verified. The model is a probe that moves 
 number: breaking a saturation floor to 0 and watching peak RSS go 392 KB → 13824
 KB proves reachability and effect in one step, where a green run proves neither.
 
+## The instrument answered, correctly, about something else
+
+**The dominant failure of 2026-08-30 — ten measured instances across four
+agents, and not one of them produced an error.** Every probe ran, returned, and
+was right. About a different question than the one asked.
+
+It is not the same as a broken tool. A broken tool announces itself. This
+returns a clean, plausible, *true* answer, which is why it survives review: the
+reader checks whether the instrument worked, and it did.
+
+| what was asked | what the instrument answered | how it read |
+| --- | --- | --- |
+| does `AllocMem` zero-fill? | does this allocator hand back zeroed pages? (it does, even for a recycled block, even under `-dPXX_HEAP_DEBUG`) | **green — and plain `GetMem` passes identically** |
+| does pxx accept a property on an interface? | does it accept one in a body it never parses? (an uninstantiated generic) | **green — fails the moment you instantiate** |
+| did the cross-build succeed? | did the output contain the string `error:`? (`unknown option: --target=riscv64` does not) | **"BUILDS" — no artifact existed** |
+| did the probe pass? | did it print anything? (`ok: ...` is the SUCCESS line) | every row **FAIL** |
+| is this sha a ghost? | is it in *my* object store? (unfetched) | **"not a valid object"** — it was real |
+| is the bug still there? | is it there in *my* HEAD? (missing one of two fix commits) | **"still broken"** — half-pulled |
+| does FPC disagree with us? | does my source have duplicate identifiers? | **"oracle failed"** — my bug |
+| where is this parse error? | what text sits at a token index past the unit's end? (`Tokens[]` is shared; it lands in a *neighbouring unit*) | a plausible Pascal declaration in an **innocent file** |
+| did this test pass? | did `diff` exit 0 against a **missing** `.expected`? | **FAIL** — output was identical to pinned |
+| is `sizeof(*p)` right? | is it right for struct, union and scalar pointees? (`csizeof_deref_ptr_b79.c` has no array pointee) | **green test sitting on top of an open gap** |
+
+### The four shapes
+
+1. **Wrong scope** — the answer is about your tree, your object store, your
+   checkout. Staleness is the commonest, and *the tell is a partial result*: crash
+   rows fixed while the silent row fails is what a half-pull looks like **and**
+   what a half-fix looks like. Same signature, two causes, so prove the tree is
+   current *before* reporting a not-fixed.
+2. **Wrong predicate** — grepping for `error:`, treating any output as failure,
+   exit codes where the failure is a wrong *value*. Judge a build on the **exit
+   code and the artifact**; judge a behaviour by **comparing the value against an
+   oracle**.
+3. **Vacuous subject** — the code under test was never reached. An uninstantiated
+   generic body is not parsed; a suite that stops at the first tier never runs the
+   rest. A green here is *no measurement*, not a null.
+4. **Missing input scored as a result** — no `.expected`, an empty archive, a
+   truncated log tail. Absence enters the arithmetic as data.
+
+### The habit that defeats all four
+
+**Say out loud what question the instrument actually answers, then check it is
+the one you asked.** "Verify it" does not help — every agent above *did* verify.
+
+Then: **pair every green with a row that would have gone red.** Not a second
+test — a specific row you can point at and say *this one fails if the bug is
+present*. `GetMem` passing the `AllocMem` zero-check is that row. An instantiating
+probe beside the uninstantiated one is that row. Its absence is what makes a
+green unfalsifiable, and an unfalsifiable green is the most expensive artifact in
+this repo.
+
+**And the sharpest case, because it inverts the intuition:** in
+`bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds`,
+fixing the crashing rows is what **exposed** a second silent arm (a 264-byte
+stride for a 15-byte slot). A sweep that stops when the segfaults stop is not an
+incomplete sweep — it has *guaranteed* it cannot see what remains.
+
 ## Do not read a green as coverage
 
 **One shape passing is not the shape space passing.** arm32 passed five of six
