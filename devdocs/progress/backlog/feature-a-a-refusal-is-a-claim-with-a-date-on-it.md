@@ -10883,3 +10883,73 @@ contain the word "guessed", while the new note legitimately uses that word in a 
 explaining why guessing from the source would be wrong. **The guard was cruder than the property
 it defended**; it now checks the exact `**Track guessed as` opener the other arms use. A guard
 whose first failure is its own over-breadth is the cheapest possible way to discover it.
+
+---
+
+## 216 — A GREP NAMES A SHAPE; THE DEFECT LIVES IN A DISTINCTION THE SHAPE DOES NOT CARRY
+
+*(frankB, 2026-08-30, auditing whether the silent PChar-alias arm had frozen any test expectation.
+Clean negative — and the first pass was wrong in the instructive direction.)*
+
+Searching for "pointer aliases" matched **180** declarations and looked like a real audit surface.
+Nearly all were `PRec = ^TRec`, which **defines a new pointer type**. The defect needed
+`LocalPC = PChar` — an **alias of an existing pointer type**, which inherits the element type that
+was resolving wrongly. Only the second can carry the bug. The true surface is **8**.
+
+> **Two constructs that read identically to a grep and are opposites for the purposes of the bug.**
+
+The failure mode is not a miss — it is **172 false positives**, and that is worse than a miss. A
+real hit buried in that many near-identical lines is not found, it is *skimmed*; and a negative
+result drawn from the 180-line surface would have been worthless while looking exhaustive. 22×
+inflation is the number, but the shape is the point: **a search term names a syntactic form, and
+the defect can live in a semantic distinction that form does not carry.** Before trusting a
+survey, ask whether the pattern separates the thing from its look-alike, not merely whether it
+finds the thing.
+
+The result once the surface was right: seven of the eight alias `Pointer` or a pointer-to-record
+and are never indexed — and `Pointer` has no element type, so indexing it is not even legal. The
+single indexed use is `LocalPC = PChar` in `test_pointer_alias_identity.pas`, **the regression
+test for this very defect**, written against the fixed compiler. Its expectation is `pchar pxx`,
+derived from `lc := 'pxx'` two lines above; a captured one would have read `pchar 378951523`. No
+library, example or application code uses the construct at all.
+
+### 216a — AMENDS 214a: degenerate output is readable only against a property the reduction cannot fake
+
+214a said *the reducer's degenerate output is the signal, not the noise*. As written that would get
+someone to trust garbage. frankB supplied the missing precondition:
+
+> **the collapsed file was readable as signal only because it still hung at 120s.**
+
+Without an independent property surviving the reduction, a degenerate output is genuinely
+indistinguishable from the tool overshooting, and discarding it is correct. So the rule is not
+"trust degenerate output" — it is **carry a property the reduction cannot fake, and degenerate
+output becomes readable.** The delta-debugger's own acceptance predicate is that property when it
+is a real observable (still hangs, still segfaults, still prints the wrong value) and is worthless
+when it is "still fails somehow" — which is 212's collapsed-outcome problem re-entering through
+the reducer.
+
+### 216b — captured expectations defend the bug they captured
+
+Filed here as an open risk, not a finding. `test_alloca26 = 7088718` was the only one of four
+bare-large-integer Makefile expectations that was not self-evident, so frankB did not reason about
+it — it re-derived the arithmetic in Python **and** separately built `test/test_alloca.c` with gcc.
+Both print 7088718. Three independent sources for the one value that could not be seen through,
+and no check spent on the three that could.
+
+The general risk it names:
+
+> **An expectation captured from output records whatever the compiler did that day, bug included,
+> and then defends it after the fix.**
+
+That is a mechanism by which a test suite converts a defect into a requirement. `test_alloca26` is
+the model of the safe form — **a value reproducible from the source by anyone, in any language,
+without running our compiler at all** — and that sentence is the acceptance criterion for the
+audit, which is larger than tonight and stays open.
+
+### 216c — the scope limit, written in the honest direction
+
+frankB wrote the limit into the ticket: *this clears **this** defect; it is not a general audit of
+captured-vs-derived expectations.* A false limit is quieter than a false fix and survives longer —
+but that hazard is about limits asserted **beyond** what was measured. A limit stating exactly
+what a narrow negative does *not* cover is the same care pointed the other way, and it is what
+stops a clean negative being cited later as the general one.
