@@ -1,0 +1,14 @@
+var   len=4 [2]=b out=abcd
+alias len=4 [2]=b out=abcd
+field len=4 [2]=b out=abcd
+ucode len=4 [2]=b out=abcd
+array len=2 out=xyzw
+func  len=6 out=result
+cat   len=8 out=abcdabcd
+mixL  len=6 out=abcdNS
+mixR  len=6 out=NSabcd
+mixLit len=6 out=abcd!!
+narrow len=4 out=abcd
+rewide len=4 out=abcd
+units: 97 98 99
+empty len=0 out=[]

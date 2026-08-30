@@ -1,0 +1,6 @@
+units=2
+  u1=55357
+  u2=56832
+utf8: 240 159 152 128
+doubled units=4
+doubled utf8 bytes=8

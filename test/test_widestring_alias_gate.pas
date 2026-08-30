@@ -6,10 +6,12 @@ program test_widestring_alias_gate;
   {$define PXX_WIDE_PAYLOAD}. This test pins the DEFAULT direction, which is the
   one every existing program depends on.
 
-  It is deliberately not a test of wideness: the payload is still UTF-8 and the
-  lowering that would make it UTF-16 does not exist yet, so under the define
-  Length answers in half-byte-counts rather than characters. Asserting that here
-  would freeze a number the lowering is supposed to change. }
+  It is deliberately not a test of wideness: this file has no define, so the
+  payload here is UTF-8 and Length counts its bytes. The wide side is pinned by
+  test_widestring_lowering, which turns the define on and asserts the same six
+  carriers against an FPC oracle; keeping the two apart is what makes a leak of
+  the width into a DEFAULT build show up as this test failing rather than as a
+  number quietly changing in that one. }
 type
   TWAlias = WideString;
   TRecW   = record w: WideString; n: Integer; end;
