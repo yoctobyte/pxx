@@ -6517,3 +6517,75 @@ Same shape as the 531-row refusal (132b): the blanket edit is wrong on exactly t
 whose correctness is load-bearing, and its failure is silent. **Dispatch it as per-line
 work, not a batch** — which is now recorded on the ticket rather than left as a tempting
 one-liner for whoever reads it next.
+
+### 152 — A GATE IS THE ONE KIND OF CLAIM THAT IS ALMOST ALWAYS PESSIMISTIC, SO GATE DOCS ROT UNIFORMLY
+
+*frankD, 2026-08-30, closing a 41-of-42 sweep of the live docs.*
+
+**150a was stated and then confirmed on a fresh set within the hour**, which almost never
+happens here and is the strongest thing that can be said for a rule. It predicted:
+*an over-tight rule costs its reader ten minutes and produces nothing wrong, so nobody
+files a bug about it.* The closing sweep then found **six stale gates**, and **every one
+is tighter than the rule that replaced it.** None had ever been reported.
+
+The mechanism, now specific: **a gate is a claim about what you must do before you are
+allowed to proceed, so its errors are almost always in the pessimistic direction** — and
+pessimism is never contradicted by use. That is why the *gate* docs rotted uniformly
+(`parallel-tracks`, `autonomy`, `fpc-optional-workflow`, `debugging-tips`,
+`ir-as-substrate`, `optimization-architecture`) while the *principle* docs came back
+clean. Not a coincidence and not six separate lapses: one selection pressure acting on one
+category.
+
+**And the worst copy sat where readership is highest.** `parallel-tracks.md` said, in
+bold, *"the **authoritative gate is unchanged**: [the full suite] + self-host fixedpoint.
+A feature is not 'done' until it passes that"* — while CLAUDE.md names that file directly
+and tells every agent to **read it before starting your track**. So the first thing a new
+agent read about gating asserted as authoritative a command the hook now **denies
+outright**. Its pin recipe also led with plain `stabilize` (~25 min, repo lock held) where
+`stabilize-fast` (~35s) is the default.
+
+**High readership preserved the error rather than exposing it**, and that is the part
+worth carrying: everyone obeyed, obedience cost ten minutes and a denial, and neither
+produces the failure that would make someone check. The docs most likely to be stale are
+the ones most likely to be read.
+
+### 152a — and TIDYING the stale gate language would have DELETED the only check that catches a real hole
+
+The near-miss inside the fix, and the reason two files were **reframed rather than
+corrected**. `optimization-architecture.md`'s "per-pass rhythm (never skip a step)" names
+denied targets — and its **step 3 closes a hole nothing else does**:
+
+`make compiler/pascal26` builds `compiler.pas` at the **default** `-O` level, so the
+ordinary fixedpoint proves self-compilation at **one** level. A `-O0`-only self-compile
+failure **passed the entire gate on 2026-08-19** and was found by a benchmark.
+
+> **Deleting that step to tidy the gate language would have removed the only check that
+> catches it.**
+
+A cleanup pass aimed at *stale text* is aimed at a property of the words, and it cannot
+see which of them is load-bearing. Same shape as 142c's over-broad landmine, inverted:
+there an overclaiming caveat cost designs not taken; here an under-considered *deletion*
+would have cost a live guard — and both are invisible afterwards, because a removed check
+leaves no artefact either.
+
+`fpc-optional-workflow.md` got the same treatment for the same reason: its subject —
+which checks need a system FPC — is still exactly true, so it became a description of what
+the targets *contain* rather than instructions to run them. **When only the framing has
+rotted, reframe; correcting the content would have been the error.**
+
+### 152b — and the auditor declined the one file it was best placed to audit
+
+`session-roster.md` was the 42nd, and the reason given was *"auditing it would be
+auditing you."*
+
+**That reason is exactly backwards, and it is worth stating because the instinct is a good
+one pointed the wrong way.** The coordinator is the one seat whose context is guaranteed
+not to persist across the work it coordinates — so the roster is precisely the artefact
+carrying what the seat cannot, and its author is *the worst available auditor of it*: it
+was written by a session that no longer exists, and re-read by sessions that assume it.
+18,339 lines, 1.1 MB, 209 sections, rewritten continuously by design.
+
+**Deference to the party who cannot check their own work removes the only check
+available.** By 150a it should be among the most rotted files in the tree, and by 152 the
+same readership argument applies — every tick reads it, and reading is what preserves an
+error rather than exposing it.
