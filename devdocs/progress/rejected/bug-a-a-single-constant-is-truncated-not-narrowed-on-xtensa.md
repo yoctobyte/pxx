@@ -3,12 +3,13 @@ slug: bug-a-a-single-constant-is-truncated-not-narrowed-on-xtensa
 title: "xtensa's IR_CONST_INT truncates a Single constant, the defect riscv32 was just fixed for"
 track: A+S
 prio: 25
+resolved: 4b6f21d68
 type: bug
 blocked-by: []
-status: new
+status: rejected
 owner: ""
 created: 2026-08-30
-summary: "LATENT, and measured to be latent: ir_codegen_xtensa.inc's IR_CONST_INT has no tySingle arm, so a Single constant takes Low32 of its DOUBLE bit pattern -- the low mantissa half -- exactly as riscv32 did before frankC fixed it. Is64BitXtensa and Is64BitRISCV32 are character-identical, both excluding tySingle. It cannot fire today because NO float program compiles for xtensa at all: softfloat.pas needs calloc and the backend emits no dynamic segment. Filed rather than fixed because the fix is unverifiable while that holds."
+summary: "REJECTED, superseded within minutes by frankC's 4b6f21d68, which fixed it. The finding was right — xtensa shared riscv32's truncation, being the other soft-float ILP32 backend — but this ticket's REASON for filing instead of fixing was false: it claimed the fix was unverifiable because no float program compiles for xtensa (softfloat needs calloc). That describes the probe I tried, not the target. Reading the constant's BITS through a pointer needs no softfloat and runs on xtensa under qemu, which is how frankC measured 0 before and 1056964608 after."
 ---
 
 # The arm
@@ -75,3 +76,38 @@ Track A: `make compiler/pascal26` + `tools/gate.sh quick`, and — the point of
 the whole ticket — `test/test_single_const_value.pas` **run** on xtensa against
 the native oracle, which requires the softfloat/calloc dependency resolved
 first.
+
+
+---
+
+# Rejected — fixed by `4b6f21d68`, and this ticket's limit was the wrong one
+
+**2026-08-30, frankA, same evening it was filed.** The defect was real and the
+sibling analysis above holds (arm32 and i386 unaffected, xtensa the only backend
+sharing riscv32's soft-float ILP32 value model). frankC fixed it independently
+in `4b6f21d68`, with `test/test_single_const_bits.pas` enrolled on the cross
+target.
+
+**What I got wrong is the part worth keeping.** I wrote "the arm is unreachable,
+so a fix could be read but not run" and filed on that basis. It is false. I
+measured that a program which *writes* a Single cannot be built for xtensa —
+softfloat pulls `calloc`, the backend emits no dynamic segment — and then stated
+that as a fact about the target. A program that reads the constant's **bits**
+through a pointer needs no softfloat at all, builds, and runs under
+`qemu-xtensa`:
+
+```
+BEFORE   0            0
+AFTER    1056964608   -1077936128     ($3F000000, $BFC00000)
+```
+
+**"I could not construct a probe" is a statement about my probe.** I had the
+emulator installed and had already used it in this session. The failure was
+accepting the first probe's error as the boundary of what the target can run,
+which is exactly the shape of a false limit: it reads like diligence, it gets
+believed, and it converted a fixable bug into a parked ticket. A limit deserves
+the same scepticism as a result — more, because nobody re-tests it.
+
+Kept in `rejected/` rather than deleted: the arm32/i386 exclusions were checked
+rather than assumed and are worth not re-deriving, and the ticket is the record
+of how a correct finding still produced the wrong action.
