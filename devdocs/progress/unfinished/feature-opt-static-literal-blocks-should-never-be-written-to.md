@@ -142,3 +142,87 @@ rather than a silence.
 five backends landed and clean; the x86-64 half was built, measured 2.3% slower at 1/11 pairs and dropped. What remains is a design fork, not implementation: x86-64 -O2 still writes its static blocks and a per-release floor test is the priced-and-rejected answer.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+---
+
+## 2026-08-30, later — the x86-64 half RE-MEASURED: mechanism confirmed, net SLOWER, and it belongs behind `-Os` that does not exist yet
+
+**Prompted by frankwasm, who was right to push**: my first report gave one
+program's result and a mechanism story, and a story attached to a real number is
+the most durable kind of wrong, because nobody re-measures a confirmed result.
+Four shapes, then the real workload. HEAD `238a545c19f8` vs guarded
+`af64bbba52cc` — the two differ **only** in the x86-64 guard.
+
+| shape | what it isolates | delta | guard faster in |
+| --- | --- | ---: | ---: |
+| 4 managed copies, **zero literals** | the guard as PURE COST | +3.66% | 2/15 |
+| 4 literal stores, nothing else | its SAVING at maximum | −3.96% | 12/15 |
+| mixed | a realistic ratio | −3.04% | 10/15 |
+| no strings at all | am I measuring the box? | +6.27% | 7/15 |
+| **`compiler.pas`, the real workload** | **the population that ships** | **+6.95%** | **3/9** |
+
+**The mechanism is confirmed by the two extremes**: cost tracks retain density,
+saving tracks literal density, exactly as predicted. **The net on real code is
+slower**, because compiler-shaped code is retain-heavy — that is the 3-of-9 row,
+on a 16-second workload where noise matters least in relative terms.
+
+**Two honesty notes that matter more than the table.**
+
+**The mixed microbenchmark flipped SIGN between runs** — `+2.3%` at 1/11 earlier,
+`−3.04%` at 10/15 here, same program, same isolated change. Not a contradiction:
+its literal/retain ratio sits near break-even, so it is a bad net indicator and
+neither run was wrong. **My earlier "+2.3% slower, direction solid at p≈0.006" is
+withdrawn** — that p-value assumed independence and stationarity and this box is
+neither.
+
+**The no-strings control moved 6.27% while its sign test said 7/15**, i.e. a coin
+flip. That is the noise floor made visible: at this load, min-of-15 on a 5 ms
+program carries ~6% of noise, so **no magnitude below that is resolved here** and
+only the sign counts mean anything. Quote the signs, not the percentages.
+
+## Recommendation: `-Os`, and note what that actually costs
+
+Per the O charter — *"a mature pass that is merely not universally beneficial is a
+flag"*, and *"an author chooses WHICH trade, not HOW MUCH"* — a change that costs
+single-digit percent on retain-heavy code and buys **36,864 bytes** of `code` is
+the textbook named-flag case, not a `-O2` candidate and not a design fork.
+
+**But `-Os` does not exist.** There is no `-Os`, no `-Ofast`, no
+`-funroll-loops` — the charter names them as the shape a trade-off takes, and
+none has been built. So this is the **first candidate for the first named
+trade-off flag**, which makes the open question *"do we introduce that axis, and
+what is the bar for putting something behind it"* rather than anything about this
+pass. That is a bigger question than a p40 optimisation ticket and should not be
+settled inside one.
+
+## Regenerating the change
+
+Five hand-emitted x86-64 sites take a floor test — the two `*RetainLocked`
+sequences (restructured from an `EmitAsmX64` `.done` label to manual rel8
+patches, so the guard's jump can share the target), the two `*ReleaseLocked`
+sequences, and the `AnsiStrReleaseAddr` blob — plus deletion of the four-byte
+`inc qword [rax-16]` in `EmitStaticLitHandle`. The only non-obvious part:
+
+```pascal
+procedure EmitStaticRCGuardX64(var patchPos: Integer);
+begin
+  EmitB($48); EmitB($81); EmitB($78); EmitB($F0);   { cmp qword [rax-16], imm32 }
+  EmitB(MSTR_STATIC_RC and $FF);
+  EmitB((MSTR_STATIC_RC shr 8) and $FF);
+  EmitB((MSTR_STATIC_RC shr 16) and $FF);
+  EmitB((MSTR_STATIC_RC shr 24) and $FF);
+  EmitB($7D); patchPos := CodeLen; EmitB(0);        { jge done }
+end;
+```
+
+Built from `MSTR_STATIC_RC` rather than spelled `00 00 00 40` so there is one
+spelling of "is this static" per arch. Verified by disassembly to decode as
+`cmpq $0x40000000,-0x10(%rax)`. `PatchRel8` calls `CheckRel8` and errors loudly,
+so the rel8 hazard this ticket was split out for cannot bite silently.
+
+**Provenance of every number above:** the compilers were rebuilt from a `pinned`
+seed and converged to the same sha as builds seeded from their own output — the
+**anti-Thompson agreement** property (`tools/selfhost_fixedpoint.sh:23`), which
+`make compiler/pascal26` cannot give you and `gate.sh` can. Sources define ONE
+fixedpoint, so the binaries these numbers came from are not carrying anything the
+sources do not.
