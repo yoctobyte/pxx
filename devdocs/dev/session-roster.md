@@ -21074,3 +21074,68 @@ Filed as `decide-one-managed-string-kind-with-an-element-width-or-a-second-kind`
 available the whole time; nobody, me included, ran the count until frankwasm went to write
 the lockstep cases. Note this is the *same* mistake as the file-list one two hours earlier:
 I reasoned about what the change is *about* instead of measuring where it has to *happen*.
+
+### THE OPERATIONAL FORM: "I looked again" is not a check
+
+frank-optimize's sharpening of the rule above, and it is the version an agent can apply to
+itself mid-task rather than recognise afterwards:
+
+> **If you can describe how you double-checked and it was "I looked again", you have not
+> checked.**
+
+Three parts, and they must travel together or the rule degrades into "be more careful",
+which is the advice it exists to replace:
+
+1. **The incentive** (why care cannot fix it) — an alarming reading *is* the deliverable,
+   so the investigation terminates; a reassuring reading is never a deliverable, so it
+   continues and gets checked for free.
+2. **The remedy** — an alarming measurement earns a second **instrument**, not a ticket.
+3. **The self-test** — the sentence above.
+
+Care is what produced the first reading, so more of it reproduces the failure.
+
+### THE CHEERFUL COUNTER-CASE, kept deliberately
+
+frank-optimize's first act after the half-A grant was to **break the build**: `Expected: }`
+inside a `{ }` comment terminates the comment. Caught in **12 seconds** by the fixedpoint,
+one rebuild, fixed by spelling it `<close-brace>` — which `cparser.inc:6259` already does
+for the same reason.
+
+Loud, immediate, located, cost nothing. The four expensive artefacts today were silent and
+plausible. **This is what `make compiler/pascal26` buys**: it converts a class of errors
+into the good failure mode. A write-up that records only the elegant parts teaches less, so
+it stays in the ticket.
+
+### AN OBSERVABLE GATE WHERE NOTHING CURRENTLY FAILS
+
+Half B (`bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings`, p60) has a
+hazard no suite can cover: nothing currently fails, so **a partial fix produces output that
+looks equally plausible and the suite stays green either way.** frank-optimize gave it an
+observable gate instead — `near:` for `x := (1 ;` must render `begin x := ( 1 >>> ; end`,
+not `begin x    >>>  end`.
+
+**There is currently no test anywhere on `near:` content**, which is precisely how it stayed
+broken for the life of the code. So the assertion is arguably the deliverable and the lexer
+change is the means. Land the assertion EARLY — with the first lexer — so each subsequent
+one is measured rather than taken on faith.
+
+Sliced per lexer, Pascal first, `clexer.inc` sequenced with frankC. Slicing is safe *because*
+the if/else is hand-copied eleven times: the thing that makes the bug a smell is what makes
+the schedule work.
+
+### THE THREE-ARM CORRECTION — an absence measured is not an absence located
+
+frankwasm measured "no AST node carries an element slot" and then, editing `ir.inc:1794`,
+found the site derives its type from **three** entities: `AN_IDENT` → `Syms[].ElemType`
+(exists), `AN_FIELD` → `RecFieldType` (none), else → `ASTTk` (none). So `rec.w[i]` and
+`(a + b)[i]` index at stride 1 **silently** — and the expression arm is load-bearing,
+because the wall is `WideChar(u1) + WideChar(u2)`.
+
+The first measurement said the slot was absent. It did not say the absence was on the
+critical path. **Enumerate the arms of the site you are editing, not the site.**
+
+Step 2 itself added **zero** mechanisms: `symtab.inc:4169` already records a managed
+string's element type at the `AllocVar` chokepoint (`a.symptr`: `kind=23 elemType=3`).
+frankwasm looked for the existing slot before building one — the direction of
+`root-cause-over-microfix` that is easy to skip, since it is far more natural to ask whether
+a mechanism is *sufficient* than whether one already *exists*.
