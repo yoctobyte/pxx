@@ -453,7 +453,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (27)
+## backlog_new (28)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -479,6 +479,7 @@ _none_
 | chore-t-make-every-cross-target-row-assert-the-exit-code | T | 45 | chore | 536 cross-target differential rows compare stdout only; 5 capture the exit code. Both operands are runs of the same program, so the exit code is free to add — but run_target.sh returns the EMULATOR's status and signal deaths do not encode identically under qemu-user and a native shell, so a blanket rollout can manufacture diffs on exactly the rows most worth checking. Wants a piloted rollout, one arch at a time, verified against Track T's matrix. | — |
 | compat-n-repr-does-not-escape-non-printables-above-u007f | N | 15 | compat | `repr()` escapes only below U+0080, so C1 controls, NBSP and non-printable astral characters print raw where CPython escapes them: repr(chr(0x80)) is the raw byte here and '\\x80' in CPython. Everything below 0x80 is already correct. Output FORMATTING of a non-float value, so compat at low prio by CLAUDE.md's table. | — |
 | feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython | O | 55 | feature | Container subscript is NilPy's worst primitive against CPython by a wide margin: b[2] costs 234 ns against CPython's 12 (19x) and d['k'] 495 against 30 (16x), while pxx BEATS CPython at isinstance (0.39x), len (0.14x), exec (0.92x) and a zero-argument call (0.10x). Subscript is the largest single gap and the one with an obvious mechanism; it is also on the per-token path of every interpreter-shaped NilPy program. | — |
+| feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | — |
 | feature-t-check-flags-a-lane-blocker-that-has-no-in-edges | T | 40 | feature | prio propagates down dependency edges, so a ticket with in-degree zero inherits nothing — and a ticket that blocks a LANE rather than a ticket never gets an edge, because blocked-by: would be a false claim. Such a ticket under-ranks itself permanently and no checker sees it: from the ranker's side an in-degree of zero is indistinguishable from a leaf. Proposal: `progress.sh check` flags a ticket whose body names a track as its beneficiary and has no in-edges. Threshold MUST be calibrated against the live board before landing. | — |
 | refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering | A | 40 | refactor | ir.inc:10426 reads `(CProgramMode or IsNodePChar(dest))` -- one rule expressed two ways at two different strictnesses, with the dialect flag standing in for the property it implies. Normalising it DELETES an entry from the C carve-out inventory rather than moving one, so it makes that refactor smaller. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
@@ -1028,6 +1029,7 @@ _none_
 - [p 40] [A+O] feature-opt-dynarray-grows-in-place
 - [p 40] [A+O] feature-opt-o3-now-has-differential-coverage-and-it-should-be-standing
 - [p 40] [A+O] feature-opt-static-literal-blocks-should-never-be-written-to
+- [p 40] [B+S] feature-random-esp-hw-tier [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 40] [A] feature-rtl-libc-frontend-sites-and-thread-errno
 - [p 40] [T] feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets
 - [p 40] [T] feature-t-audit-tests-that-pass-with-the-implementation-removed
