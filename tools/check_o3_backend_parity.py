@@ -102,8 +102,15 @@ def strip_comments(src):
 # out of scope, and the zeros are the scope statement made executable:
 #   386 / arm32 / riscv32 / xtensa
 EXPECTED = {
-    "ir_codegen.inc": 23,
-    "ir_codegen_aarch64.inc": 11,
+    # 2026-08-30: both counts dropped by one when EmitStaticLitHandle /
+    # EmitStaticLitHandleA64 were re-spelled from `OptLevel < 3` to `< 2`
+    # (promoted to -O2 under the owner's prove-then-promote ruling). A gate
+    # re-spelled, not a pass removed -- and BOTH backends moved together, on
+    # purpose: promoting only x86-64 would make the proven default emit
+    # different memory behaviour per backend, which is the drift this file
+    # exists to catch.
+    "ir_codegen.inc": 22,
+    "ir_codegen_aarch64.inc": 10,
     "ir_codegen386.inc": 0,
     "ir_codegen_arm32.inc": 0,
     "ir_codegen_riscv32.inc": 0,

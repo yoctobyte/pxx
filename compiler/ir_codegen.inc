@@ -3477,7 +3477,7 @@ function EmitStaticLitHandle(node: Integer): Boolean;
 var si: Integer;
 begin
   EmitStaticLitHandle := False;
-  if OptLevel < 3 then Exit;
+  if OptLevel < 2 then Exit;
   if node < 0 then Exit;
   if IRKind[node] <> IR_CONST_STR then Exit;
   si := InternStr(GetTokenStrFromRaw(IRA[node], IRB[node]));
