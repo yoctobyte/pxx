@@ -126,4 +126,28 @@ while n < 4:
     n = n + 1
 chk(23, w == 6)
 
-print("total ok " + str(ok) + " / 23")
+# --- string literal handles -------------------------------------------------
+# A string literal is a HANDLE, and several passes now hand back a shared,
+# refcounted .data block instead of a fresh allocation per evaluation
+# (EmitStaticLitHandle / EmitStaticLitHandleA64, promoted to -O2 2026-08-30).
+# This section exists because that whole class can pass every gate available at
+# PUSH time and still be broken: `make test-nilpy` is full-tier only, so a
+# literal-handle bug reaches the pin shadow before anything sees it. It cost 24
+# red jobs on 2026-08-30 (`x = "a" * 3` gave 285, reverted in 72b4c47a7), and
+# the failing line was two characters long.
+chk(24, len("a" * 3) == 3)              # the exact 24-job repro
+lit_v = "a"
+chk(25, len(lit_v * 3) == 3)            # ...and via a variable, which stayed correct
+
+
+def take_lit(s):
+    return len(s)
+
+
+chk(26, take_lit("hello") == 5)         # a literal reaching a callee's parameter
+tmp = ""
+for _ in range(200):
+    tmp = "loop literal"                # re-evaluated; must not walk a shared
+chk(27, tmp == "loop literal" and len(tmp) == 12)   # refcount down to a free
+
+print("total ok " + str(ok) + " / 27")

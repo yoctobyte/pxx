@@ -6139,7 +6139,7 @@ test-core: $(COMPILER)
 	# `writeln(f, pu)` with pu: PtrUInt printed -1 too. All three paths now use the
 	# stdout path's plain `not TypeSigned`. The pinned binary scores 17/23.
 	./$(COMPILER) test/test_str_of_unsigned.pas $(TESTTMP)/test_strunsigned26
-	cd $(TESTTMP) && ./test_strunsigned26 | tail -1 | grep -qx "total ok 23 / 23"
+	cd $(TESTTMP) && ./test_strunsigned26 | tail -1 | grep -qx "total ok 27 / 27"
 	# Arithmetic on a Variant holding a STRING read the payload as a number: a
 	# char's ordinal ('5' - 3 was 50) and, for a longer string, the ANSISTRING
 	# HANDLE ('15' - 3 was a heap address, different every run). And `+` took the
@@ -7343,7 +7343,7 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_high_low_aliases26 "$$($(TESTTMP)/test_high_low_aliases26 | tail -1)" "total ok 12 / 12"
 	# FPC-compat: Val's radix prefixes ($ff/xFF/0xFF/&17/%1011) and its optional code arg
 	./$(COMPILER) test/test_val_radix_and_optional_code.pas $(TESTTMP)/test_val_radix26
-	tools/expect_same.sh test_val_radix26 "$$($(TESTTMP)/test_val_radix26 | tail -1)" "total ok 23 / 23"
+	tools/expect_same.sh test_val_radix26 "$$($(TESTTMP)/test_val_radix26 | tail -1)" "total ok 27 / 27"
 	# FPC-compat: class function/procedure members in a generic class (fgl's ItemIsManaged shape)
 	./$(COMPILER) test/test_generic_class_methods.pas $(TESTTMP)/test_generic_class_methods26
 	tools/expect_same.sh test_generic_class_methods26 "$$($(TESTTMP)/test_generic_class_methods26 | tail -1)" "total ok 5 / 5"
@@ -7403,7 +7403,7 @@ test-core: $(COMPILER)
 	# along; the expectation could not be.
 	tools/expect_same.sh fpcv26 "$$($(TESTTMP)/fpcv26)" "$$(printf 'int of \04742\047  = 42\nint of \047abc\047 EXC: EVariantError\ndbl of \0472.5\047 = 2.50\nbool of \047\047    EXC: EVariantError\nbool of 0.0   = FALSE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
-	tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" "total ok 23 / 23"
+	tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" "total ok 27 / 27"
 	# WriteLn of a WideChar prints the CHARACTER, not its ordinal. WideChar used
 	# to collapse to tyUInt16, and every string context but writeln could work
 	# around that ("a Word here can only mean a widechar"); writeln cannot,
@@ -16117,7 +16117,7 @@ test-quick: $(COMPILER)
 	# fast check at all between "it built" and the 554s suite.
 	# qc_* names deliberately avoid the smoke_* namespace these recipes share.
 	./$(COMPILER) test/quick_canary_nilpy.npy $(TESTTMP)/qc_nilpy26
-	tools/expect_same.sh qc_nilpy26 "$$($(TESTTMP)/qc_nilpy26 | tail -1)" "total ok 23 / 23"
+	tools/expect_same.sh qc_nilpy26 "$$($(TESTTMP)/qc_nilpy26 | tail -1)" "total ok 27 / 27"
 	# NAMESPACE SCOPE, both directions. Deep on purpose where the rest of this
 	# tier is broad: when `uses` went non-transitive, quick stayed green while
 	# five corpus sources went red, because nothing here imported deeply enough
