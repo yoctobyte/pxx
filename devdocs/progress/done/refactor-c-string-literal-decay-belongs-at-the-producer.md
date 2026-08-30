@@ -191,3 +191,11 @@ value-keyed ones alone because they are the design being converged on.
 ## Log
 - 2026-08-30 — opened at HEAD, found live (not latent), fixed, resolved, commit 31a3e6172.
 - 2026-08-30 — resolved, commit 31a3e6172.
+- 2026-08-30 — the citation above was wrapped and needed a manual fill. My
+  commit message for that fill cites a slug that does not exist and describes
+  the tool as blind; both are wrong, and correcting them here is the only
+  discoverable place. The real ticket is
+  `done/bug-t-a-wrapped-resolve-citation-is-invisible-to-both-check-and-fill`,
+  it is FIXED, and `sync.sh` did exactly what the fix added: it printed a NOTE
+  telling me a wrapped citation would never be filled. The tool caught my
+  mistake; I then mis-credited it.
