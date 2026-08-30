@@ -23572,3 +23572,103 @@ sat in `backlog/` as the head of `next --track A` at effective 70 while frankC h
 the fix locally. Verified against a freshly pulled tree — `ir.inc:13793` still read
 *"for ANY frontend"* — and warned frankA off it. **An unpushed fix to an open queue
 head is worse than invisible: it is bait**, and nothing reserves a ticket.
+
+## Four duplicates in one night, one cause — and the guard that landed
+
+2026-08-30, late. frankA and frankC both wrote the const-`if` fix. frankA and
+frankS collided on the carrier-set bug. frankT was about to rewrite a
+noise-floor playbook section frank-optimize had already committed. And I sent
+frankT that finding without knowing its finder had banked it.
+
+**Every one is the same shape, and nobody erred.** The work existed, the claim
+existed, and neither had left the author's disk — so `next`, `ready`, `git log`
+and `owner:` all correctly reported nothing. frankA's formulation:
+
+> **A pull is a snapshot, and every check we have reads the snapshot.**
+
+frankT's, one level up, on its own near-duplicate with frank-optimize:
+*"neither of us could have known from any check we have — the difference is only
+that mine landed first, which is luck rather than process."*
+
+**The guard I proposed: claim, push the claim, then work.** One `sync.sh` before
+the first edit. Not a lock, no ceremony. `working/` is a status hint and **a hint
+only works if it is published.**
+
+**frankT built something better** (`a5f47dfb0`, `tools/progress.py:3049`,
+verified live) — and split it into two messages for two jobs, which I would not
+have:
+
+- **unconditional, informational** — *explains the state you are in*: this claim
+  is not on origin, so `ready`/`next` will keep offering the ticket.
+- **conditional, with teeth** — *prevents the collision*: origin's copy is
+  already in `working/` under a different owner.
+
+**Its positive control is the design lesson.** The second must NOT fire when the
+owner on origin is *you* — re-claiming your own parked work is the documented
+courtesy, and warning there would train the reader to ignore the banner, **which
+is how a guard stops being one without ever failing.** First time I have seen
+that rule used as a design input rather than a post-mortem.
+
+**It deliberately does not push.** frank-optimize was holding a commit to avoid a
+rebase under a running `gate.sh` — legitimate, and a reason the tool cannot know.
+Correct scope for a guard: cover the cases you understand, stay out of the one
+where the author has a reason you do not.
+
+## A RELAY IS LOSSY AND THE LOSS IS SILENT — my defect, caught by frankT
+
+I relayed *"`gate.sh:104` says it must not rebuild before comparing, or it loses
+the anti-Thompson check."* True. **And I had read the surrounding comment**,
+which also records that the staleness case reads as **flakiness** — the gate's
+own testmgr step rebuilds as a side effect, so the first run after a sibling's
+commit always fails and the re-run always passes. **Two full gate runs on
+consecutive days (2026-08-12, -13) before anyone saw the pattern.** I kept the
+neat half and dropped the expensive one. frankT went to the source: *"the
+relayed version would have had me write the weaker half."*
+
+> **A wrong fact gets challenged, because it collides with something the
+> recipient knows. A MISSING fact collides with nothing.**
+
+So a compression failure is invisible from both ends — I think I relayed it, they
+think they have it. Same family as *a verification claim scopes to exactly what
+was checked*, except the casualty is what I chose not to say.
+
+**The fix, and it is cheap: give the LOCATION, not only the conclusion.**
+`gate.sh:92-107`, not "gate.sh says". The pointer costs nothing and lets the
+recipient outgrow my summary — which is precisely what frankT did anyway. And
+when a relay is about to become a written artifact — a playbook section, a
+ticket, public copy — say **"read the source, I compressed it"** out loud.
+
+## Two Track U forks filed, both genuine, neither mine to settle
+
+- **`229229653` [U p70]** — `decide-is-deleting-a-provably-unreachable-branch-an-optimization-or-a-correctness-requirement`.
+  frankC's fix landed and `-O0` still fails at LOAD. Verified the mechanism
+  myself: `ir_codegen.inc:11332` is `if OptLevel >= 1 then IROptimize`, commented
+  *"gated here so -O0 emits the raw lowering byte-identically"* — the O charter's
+  `-O0 = source 1:1`. gcc links and runs at every level. **Two independent fix
+  approaches hit the same wall for the same cause**, which is what turns it from
+  a bug into a fork between two ruled properties. frankA measured it and stood
+  down rather than resolve it.
+- **`b99b28df7` [U p55]** — `decide-do-we-introduce-the-named-trade-off-flag-axis-and-what-is-the-bar`.
+  `-Os`, `-Ofast`, `-funroll-loops` are named in the charter and **none exists**;
+  the axis is described and empty, so "make it a flag" has been an empty gesture.
+  frank-optimize declined to file it while holding a candidate — correct — so it
+  carries no author's pass. The part needing a ruling either way: **promise and
+  proof were ruled for `-O` LEVELS, and a trade-off flag cannot show net promise
+  by construction; if it could, it would be a level.**
+
+## The noise floor, measured — and I published a number that was under it
+
+frank-optimize ran a control sharing **no mechanism** with its change (a program
+with no strings at all). It moved **+6.27%, sign test 7/15** — a coin flip.
+**That is the noise floor: ~6% for min-of-15 on a ~5 ms program at this load.**
+Its line: *the controls were doing more work than the treatments.*
+
+It then withdrew **"10 of 11, p≈0.006"** — assumed independence and stationarity,
+and this box is neither — **while the conclusion that statistic supported
+survived** on a different row (`compiler.pas`, +6.95%). Withdrawing a number that
+points the right way is the case nothing prompts.
+
+**I had already quoted the retracted +2.3% to the owner, so the correction was
+mine to make, and I made it.** The rule I take from it: **a relayed measurement
+inherits my credibility and not its own error bars** — quote the floor beside the
+number, or do not quote the number.
