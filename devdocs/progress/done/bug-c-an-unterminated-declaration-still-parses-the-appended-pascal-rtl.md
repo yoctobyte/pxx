@@ -237,4 +237,4 @@ before/afters** against `pinned`: `cunterm`, `cunterm_pull`, `cunterm_struct`,
 `cunterm_enum`, `cnomain`.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 46110bf37.
