@@ -10054,12 +10054,45 @@ begin
   end;
 end;
 
+{ Did the declaration whose type token sits at `typeIdx` carry a `static`
+  specifier? Scans BACKWARD over the storage-class / function specifiers that
+  the top-level walks skip without recording (CIsTopLevelSkipIdent), stopping
+  at the first token that is not one of them.
+
+  Backward rather than a flag threaded through the callers because those
+  specifiers are skipped in three separate top-level loops (program pass 1,
+  the crtl pull, and the header walk) and a flag would have to be set and
+  cleared correctly in all three; the token stream already holds the answer.
+
+  Deliberately conservative: an intervening `__attribute__((...))` or any
+  shape this does not model makes it answer False, which keeps the caller on
+  the pre-existing behaviour. A missed `static` is a bug that stays; a
+  hallucinated one would compile a body that should have been imported. }
+function CDeclSawStatic(typeIdx: Integer): Boolean;
+var k: Integer; s: AnsiString;
+begin
+  Result := False;
+  k := typeIdx - 1;
+  while (k >= 0) and (Tokens[k].Kind = tkIdent) do
+  begin
+    s := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+    if s = 'static' then
+    begin
+      Result := True;
+      Exit;
+    end;
+    if not CIsTopLevelSkipIdent(s) then Exit;
+    Dec(k);
+  end;
+end;
+
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
   name, extLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
+  hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
@@ -10086,6 +10119,32 @@ var
   apDims: array[0..MAX_ARR_DIMS-1] of Integer;   { `T name[][A][B]` param: the bracket dims }
   apN, apK, apProd: Integer;
 begin
+  { A `static`/`static inline` function DEFINED in a header reached by `uses`.
+    The header path assumed a header "declares and defines nothing", so it
+    dropped such a body, marked the proc external, and synthesised a soname
+    from the header's own stem -- producing a binary with a DT_NEEDED on a
+    lib<header>.so that cannot exist, dead at load. That invariant is right for
+    an FFI surface (sqlite3.h declares, libsqlite3.so defines) and simply false
+    for `static`, which has INTERNAL linkage: there is no library to import
+    from, because the definition IS the header.
+
+    THE PROVENANCE TERM IS THE WHOLE FIX, and its absence is why the first
+    attempt was reverted. This walk is not reached only by the user's own
+    `uses <header>`: crtl's own modules flow through it too — `uses gtk` pulls
+    gtk.h, which pulls stdlib.h, which brings lib/crtl/src/stdlib.c into the
+    same token buffer and the same walk. Compiling THOSE bodies uncovered two
+    dependencies the header path cannot satisfy (file-scope statics are never
+    reserved here, and the body then wants the crtl two-pass Pascal bridge for
+    __pxx_open), and it broke five gtk tests. So the question is not
+    header-vs-.c mode, it is *whose tokens are these*: CModuleOfTok is < 0 for
+    the header the user named and >= 0 once we are inside a crtl `.c` pull,
+    which already has a path that works and must keep it.
+
+    Computed here, before any Next moves TokPos past the type token.
+    bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead }
+  hdrStaticBody := CHeaderMode and (not CProgramMode) and
+                   (CModuleOfTok(TokPos - 1) < 0) and
+                   CDeclSawStatic(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
   extLib := 'libc.so.6';
@@ -10576,7 +10635,14 @@ begin
   if paramsOverflow then
     Error('C function definition: more than 16 parameters not supported (MAX_PROC_PARAMS)');
 
-  if CHeaderMode then
+  { ...EXCEPT a bodied `static` from the header the user actually named, which
+    falls through to ordinary compilation below: it has internal linkage, so
+    there is no library it could be imported from, and dropping its body is what
+    made the binary unloadable. A non-static bodied function in a header keeps
+    the old treatment -- that one at least matches the FFI intent, and changing
+    it is not what this ticket measured.
+    bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead }
+  if CHeaderMode and not hdrStaticBody then
   begin
     { A bodied function in a C program is a local definition compiled in pass 2;
       mark it internal now so a caller compiled earlier emits a fixup (internal)

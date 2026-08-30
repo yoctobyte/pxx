@@ -6275,6 +6275,22 @@ test-core: $(COMPILER)
 	# Every value here matches gcc on the same file, and all six differ pre-fix.
 	./$(COMPILER) test/chas_include.c $(TESTTMP)/chas_include26
 	tools/expect_same.sh chas_include26 "$$($(TESTTMP)/chas_include26)" "$$(printf 'ifdef 1\ndefined 1\nstdio 1\nbogus 0\nrel 1\npdfgen little')"
+	# A `static` DEFINED in a header reached by `uses`. The header walk dropped
+	# the body, marked it external and synthesised a soname from the header's own
+	# stem, so calling it produced a DT_NEEDED on a lib<header>.so that cannot
+	# exist. THE PAIR IS THE INVARIANT: the same source text must behave the same
+	# whichever extension it is given, so both halves run and both print 4242/42.
+	# The soname assertion is a NEGATED grep -q, never `grep -qv` -- the latter
+	# passes whenever any line fails to match, i.e. on every ELF, i.e. it can
+	# never fail. Validated in both directions: the pre-fix compiler's binary has
+	# the soname and dies at load.
+	./$(COMPILER) -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body.pas $(TESTTMP)/hdrstatic_h26
+	tools/expect_same.sh hdrstatic_h26 "$$($(TESTTMP)/hdrstatic_h26)" "$$(printf '4242\n42')"
+	./$(COMPILER) -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_c.pas $(TESTTMP)/hdrstatic_c26
+	tools/expect_same.sh hdrstatic_c26 "$$($(TESTTMP)/hdrstatic_c26)" "$$(printf '4242\n42')"
+	@if readelf -d $(TESTTMP)/hdrstatic_h26 2>/dev/null | grep -q 'libhdrstatic\.so'; then \
+	  echo "FAIL: hdrstatic_h26 links a DT_NEEDED on libhdrstatic.so, which cannot exist"; exit 1; \
+	else echo "ok: hdrstatic_h26 has no invented libhdrstatic.so"; fi
 	# Rust chess FULL legality (feature-rust-corpus-chess): Move packed into one i64
 	# (from|to<<6|flags<<12) replaces the engine's Move struct + ArrayVec; EP, castling,
 	# promotion, underpromotion + check detection. Node counts match the reference perft

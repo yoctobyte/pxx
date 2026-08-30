@@ -3,15 +3,28 @@ slug: bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-i
 track: C
 type: bug
 prio: 55
-status: backlog
+blocked-by: [bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull]
+status: unfinished
 found: 2026-08-29
 found-by: pxx-a5
-summary: "A `static`/`static inline` function DEFINED in a .h reached through `uses` has its body discarded and becomes an external, so the program links a DT_NEEDED on a lib<header>.so that does not exist and dies at load. The identical function in a .c compiles and runs. REOPENED 2026-08-30: a first fix was landed and REVERTED -- it was correct for a user's own header and wrong for the crtl modules that reach the same walk. Read the reopen section before attempting it again."
+summary: "A `static`/`static inline` DEFINED in a .h reached through `uses` had its body discarded and became an external, so the program linked a DT_NEEDED on a lib<header>.so that does not exist and died at load. PARTIALLY FIXED 2026-08-30 with the provenance scope term the reverted first attempt was missing (gtk green, .h/.c pair test in the gate). STILL BROKEN for the common shape -- a header that includes <stdio.h>/<string.h> or anything else with a crtl src/*.c sibling above the static -- because CModuleOfTok never resets when an include returns to its parent. Blocked on bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull; do not attempt the rest before that lands."
+owner: frankC
 ---
 
 # `uses <header>` throws away the header's function bodies, then imports them
 
-> **NOT UNTOUCHED — one fix has been TRIED AND REVERTED.** The shape that
+> **PARTIALLY FIXED 2026-08-30, and still open on purpose.** The scope term the
+> reverted attempt was missing is now in (`CModuleOfTok(TokPos - 1) < 0` —
+> compile the body only when the tokens are not inside a crtl `.c` pull), the
+> five gtk tests it broke are green, and the `.h`/`.c` pair test is in the gate.
+> **What is still broken is the common shape**: a header that includes
+> `<stdio.h>`/`<string.h>` — anything with a crtl `src/*.c` sibling — above the
+> static, because the module attribution goes sticky and never comes back. That
+> half is `bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull`, filed
+> against Track A because the table lives in `dbg_filetable.inc`. See "Where it
+> stands" below for the measured boundary.
+
+> **HISTORY — one earlier fix was TRIED AND REVERTED.** The shape that
 > failed was *"detect a bodied `static` by scanning back over the specifiers
 > (`CDeclSawStatic`) and let it fall through to ordinary compilation whenever
 > we are in header-import mode."* That is correct for a user's own header and
@@ -147,12 +160,64 @@ behaviour and it passed for a user's own header:
 programs binding a C header; nothing in the C test corpus exercises that path,
 which is why the change looked clean on 37 named C tests and a quick gate.
 
+## Where it stands after 2026-08-30 — the measured boundary
+
+The fix compiles a bodied `static` from a `uses`d header **only when the token
+is not attributed to a crtl `.c` module**. Measured, varying only what the
+header includes above the static:
+
+| the header includes above the static | result |
+| --- | --- |
+| nothing | **fixed** |
+| `"user.h"` (a header with no crtl impl) | **fixed** |
+| `<stddef.h>`, `<stdint.h>`, `<stdbool.h>`, `<limits.h>`, `<errno.h>` | **fixed** |
+| **`<stdio.h>`, `<string.h>`** and any other header with a crtl `src/*.c` | **still broken** |
+| `<stdio.h>` placed *below* the static | **fixed** |
+
+The scope term is *necessary* — without it the walk compiles crtl's own module
+bodies, which is what broke five gtk tests and got the first attempt reverted —
+and it is *not sufficient*, because `CModuleOfTok` never resets when an include
+returns to its parent. `stddef.h` and `stdio.h` differ in exactly one thing:
+whether crtl has an impl to auto-pull. Nothing about the static changes.
+
+So the remaining work is not in this lane's files at all. It is
+`bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull`, which carries the
+measurement, the reason the current consumer is not regressed by fixing it, and
+the shape to build. **Do not attempt the rest of this ticket before that one
+lands** — a third scoping mechanism over the same walk is the failure mode this
+ticket has already produced once.
+
+### One methodology note worth keeping
+
+I reached the wrong boundary twice before this table was right.
+
+- First by reasoning about `CModuleOfTok` instead of printing it, which is what
+  the debugging playbook says not to do.
+- Then by printing it through `IncSmallIntStr`, whose contract is *"small
+  NON-NEGATIVE int"* — it renders `-1` as `0`, so the one value that meant "no
+  module" was indistinguishable from a real module id. That is
+  `differential-probes.md`'s *"a probe that FORMATS its output can answer a
+  different question than you asked"*, met in the wild.
+- And a whole round of "every include defeats it" measurements was an artifact
+  of my own harness: I had named the test program and the test header the same
+  stem, so `uses foo` resolved to `foo.pas` — the program itself — rather than
+  to `foo.h`. The compiler was reporting a genuine error and I read it as the
+  bug under investigation.
+
+Each of those produced a confident, wrong sentence that would have gone into
+this ticket. The table above is from the third measurement, with distinct names
+and a formatter that can represent the answer.
+
 ## Gate
 
 Track C's, plus the `.h`/`.c` pair, plus **at least one gtk binding test**
 (`test_c_gtk` needs no X server and reproduces the breakage on its own).
 
 ## Log
+- 2026-08-30 — **partially fixed** by frankC: the provenance scope term landed
+  with the `.h`/`.c` pair test, gtk green. Parked to `unfinished/` blocked on
+  `bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull`, which is the
+  rest of it. Commit PENDING-COMMIT.
 - 2026-08-29 — filed by pxx-a5, split out of the unit-resolution ticket.
 - 2026-08-30 — fixed by frankC (`eefa85d70`), then **reverted** the same night
   after it broke five gtk tests. Reopened with the diagnosis above.

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:337 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2719 rejected:56`
+`working:5 unfinished:28 blocked:7 backlog:337 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2719 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -15,10 +15,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
+- `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead` [C] — blocked-by: bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
