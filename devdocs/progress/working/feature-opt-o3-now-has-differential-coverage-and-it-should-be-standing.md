@@ -2,9 +2,9 @@
 track: A
 prio: 40
 type: feature
-status: backlog
+status: working
 blocked-by: []
-owner: ""
+owner: frank-optimize
 summary: "-O3 is the free tier for new passes precisely because nothing gates OptLevel>=3. As of 2026-08-30 it has 443 programs of csmith self-differential coverage (pxx -O0 vs -O2 vs -O3, zero MISCOMPILE_OPT) -- an oracle-free check no gcc-disagreement argument can touch. Proposes making it standing per new -O3 pass rather than a one-off."
 ---
 
