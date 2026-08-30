@@ -4,7 +4,8 @@ prio: 55
 type: feature
 blocked-by: []   # NOT blocked overall; ONE configuration is — see "Read this first"
 summary: "Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it."
-status: unfinished
+status: working
+owner: frankA
 ---
 
 # Build a reduced compiler by selecting frontends and targets
