@@ -1222,6 +1222,59 @@ begin
     IREmitNodeRISCV32(node);
 end;
 
+procedure EmitSysBuiltinRISCV32(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd: Boolean);
+{ The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family: evaluate the builtin's
+  arguments and issue one raw syscall. Twin of EmitSysBuiltinXtensa, landed in
+  the same pass and deliberately the same shape.
+
+  ONE routine, not five sequences. arm32 open-codes all five (~90 lines of svc
+  blocks) and that is what this does not copy -- the five differ only in a
+  number and an arity (devdocs/dev/normalise-dont-special-case.md).
+
+  Args are pushed in order and then read back at sp-relative offsets, which is
+  the marshalling the IR_SYSCALL arm in this file already uses; a7 = number,
+  a0..a5 = arguments, result in a0.
+
+  `atFdCwd` prepends AT_FDCWD and `nZeroTail` appends zero words, which is how
+  SysOpen reaches openat(2) -- rv32 is asm-generic and has NO plain open. }
+var argNode, i, total: Integer;
+begin
+  total := 0;
+  if atFdCwd then
+  begin
+    EmitLoadImmRISCV32(reg_a0, -100);                { AT_FDCWD }
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+    Inc(total);
+  end;
+  argNode := IRB[node];
+  i := 0;
+  while (argNode <> -1) and (i < nArgs) do
+  begin
+    IREmitNodeRISCV32(IRA[argNode]);
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+    Inc(total); Inc(i);
+    argNode := IRB[argNode];
+  end;
+  if i < nArgs then
+    Error('target riscv32: a syscall builtin was reached with fewer arguments '
+          + 'than its arity -- the parser should have rejected this call');
+  for i := 1 to nZeroTail do
+  begin
+    EmitLoadImmRISCV32(reg_a0, 0);
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+    Inc(total);
+  end;
+  if total > 6 then
+    Error('target riscv32: a syscall builtin needs more than six argument words');
+  { Argument k sits at sp + (total-1-k)*4 -- pushed first is deepest. Read them
+    all BEFORE moving sp, so no offset has to account for a partial pop. }
+  for i := 0 to total - 1 do
+    rv32_lw(reg_a0 + i, reg_sp, (total - 1 - i) * 4);
+  rv32_addi(reg_sp, reg_sp, total * 4);
+  EmitLoadImmRISCV32(reg_a7, sysNr);
+  EmitI32($00000073);                                { ecall }
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
@@ -2620,6 +2673,35 @@ begin
               argNode := IRB[argNode];
             end;
             rv32_addi(reg_a0, reg_a3, 0);     { a0 = result }
+            Exit;
+          end;
+          { The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family. rv32 linux is
+            the asm-generic table: read=63, write=64, close=57, fchmod=52,
+            openat=56. There is NO plain open in that table, so SysOpen lowers
+            to openat(AT_FDCWD, path, flags, 0) -- which is also the shape the
+            xtensa twin uses, so the two backends landed in this pass share one
+            spelling rather than two.
+
+            mode is 0 because the public builtin takes no mode argument; the
+            family's own test creates with mode 0 and then chmods through
+            SysFchmod, which is why SysFchmod is in the family at all.
+
+            This backend has no bare-metal/hosted split on this path: unlike
+            xtensa's IR_SYSCALL there is no PLATFORM_ESP arm here to mirror. }
+          if (procIdx = -Ord(tkSysOpen)) or (procIdx = -Ord(tkSysRead)) or
+             (procIdx = -Ord(tkSyswrite)) or (procIdx = -Ord(tkSysClose)) or
+             (procIdx = -Ord(tkSysFchmod)) then
+          begin
+            if procIdx = -Ord(tkSysOpen) then
+              EmitSysBuiltinRISCV32(node, 56, 2, 1, True)   { openat(AT_FDCWD,path,flags,0) }
+            else if procIdx = -Ord(tkSysRead) then
+              EmitSysBuiltinRISCV32(node, 63, 3, 0, False)  { read(fd,buf,count) }
+            else if procIdx = -Ord(tkSyswrite) then
+              EmitSysBuiltinRISCV32(node, 64, 3, 0, False)  { write(fd,buf,count) }
+            else if procIdx = -Ord(tkSysClose) then
+              EmitSysBuiltinRISCV32(node, 57, 1, 0, False)  { close(fd) }
+            else
+              EmitSysBuiltinRISCV32(node, 52, 2, 0, False); { fchmod(fd,mode) }
             Exit;
           end;
           begin

@@ -1335,6 +1335,74 @@ begin
     IREmitNodeXtensa(node);
 end;
 
+procedure EmitSysBuiltinXtensa(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd: Boolean);
+{ The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family: evaluate the builtin's
+  arguments and issue one raw syscall.
+
+  This is ONE routine rather than five hand-written sequences because the five
+  differ only in a number and an argument count. arm32 open-codes all five (its
+  `svc` blocks run ~90 lines) and that is the shape this file deliberately does
+  not copy: the register map below is the part that is easy to get wrong, and
+  five copies of it is five chances (devdocs/dev/normalise-dont-special-case.md).
+
+  The map is NOT "argument registers in order" -- it is the IR_SYSCALL arm's map,
+  read from arch/xtensa/kernel/entry.S rather than guessed:
+
+    nr -> a2,  arg0 -> a6, arg1 -> a3, arg2 -> a4, arg3 -> a5, arg4 -> a8,
+    arg5 -> a9,  result -> a2
+
+  Args travel via XtensaPushA2/XtensaPopA2 for the same reason IR_SYSCALL does:
+  it is the one spelling correct under BOTH ABIs (windowed keeps sp fixed and
+  walks XtSpillDepth, Call0 moves sp), so popping in reverse avoids open-coding
+  two offset schemes.
+
+  `atFdCwd` prepends AT_FDCWD and `nZeroTail` appends zero words, which is how
+  SysOpen reaches openat(2). See the SysOpen arm for why it is openat and not
+  open on this target. }
+var argNode, i, total: Integer;
+begin
+  total := 0;
+  if atFdCwd then
+  begin
+    EmitLoadConstXtensa(reg_xtensa_a2, -100);        { AT_FDCWD }
+    XtensaPushA2; Inc(total);
+  end;
+  argNode := IRB[node];
+  i := 0;
+  while (argNode <> -1) and (i < nArgs) do
+  begin
+    IREmitNodeXtensa(IRA[argNode]);
+    XtensaPushA2; Inc(total); Inc(i);
+    argNode := IRB[argNode];
+  end;
+  if i < nArgs then
+    Error('target xtensa: a syscall builtin was reached with fewer arguments '
+          + 'than its arity -- the parser should have rejected this call');
+  for i := 1 to nZeroTail do
+  begin
+    EmitLoadConstXtensa(reg_xtensa_a2, 0);
+    XtensaPushA2; Inc(total);
+  end;
+  if total > 6 then
+    Error('target xtensa: a syscall builtin needs more than six argument words');
+  { Reverse: the last pushed is the highest-numbered argument. Nothing maps to
+    a2, so the running pop register is never also a target. }
+  for i := total - 1 downto 0 do
+  begin
+    XtensaPopA2;
+    case i of
+      0: xtensa_mov(reg_xtensa_a6, reg_xtensa_a2);
+      1: xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+      2: xtensa_mov(reg_xtensa_a4, reg_xtensa_a2);
+      3: xtensa_mov(reg_xtensa_a5, reg_xtensa_a2);
+      4: xtensa_mov(reg_xtensa_a8, reg_xtensa_a2);
+      5: xtensa_mov(reg_xtensa_a9, reg_xtensa_a2);
+    end;
+  end;
+  EmitLoadConstXtensa(reg_xtensa_a2, sysNr);
+  xtensa_syscall;
+end;
+
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
@@ -2564,6 +2632,58 @@ begin
               argNode := IRB[argNode];
             end;
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);
+            Exit;
+          end;
+          { The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family. Numbers are
+            xtensa's OWN table (arch/xtensa/include/uapi/asm/unistd.h), which is
+            neither x86-64's nor asm-generic's: read=12, write=13, close=9,
+            fchmod=52, openat=288. Getting these from the wrong table is not a
+            compile error anywhere -- it is a different syscall at runtime.
+
+            SysOpen lowers to openat(AT_FDCWD, path, flags, 0) and NOT to open,
+            even though xtensa does still carry a legacy open (8), because
+            riscv32 -- landed in the same pass -- is asm-generic and has NO open
+            at all. One shape across both backends beats two, and openat is what
+            the C library issues on every target here anyway. mode is 0 because
+            the public builtin takes no mode argument; the family's own test
+            creates with mode 0 and then chmods via SysFchmod, which is exactly
+            why SysFchmod is in the family.
+
+            Under --platform=esp there is no kernel. This mirrors the IR_SYSCALL
+            arm in this file rather than inventing a second convention: emit the
+            arguments (they are arbitrary expressions and may have side effects),
+            discard them, and answer -ENOSYS = -38 = PAL_ERR_UNSUPPORTED. Its
+            reasoning applies unchanged -- refusing at RUNTIME keeps genuinely
+            reachable misuse detectable while letting statically-unreachable
+            calls compile away, where a codegen Error takes whole portable units
+            out of the target. NOTE this arm is structural, not measured: the
+            hosted arms below are verified against the x86-64 oracle under
+            qemu-xtensa, the ESP arm is not executed by anything in my loop. }
+          if (procIdx = -Ord(tkSysOpen)) or (procIdx = -Ord(tkSysRead)) or
+             (procIdx = -Ord(tkSyswrite)) or (procIdx = -Ord(tkSysClose)) or
+             (procIdx = -Ord(tkSysFchmod)) then
+          begin
+            if TargetPlatform = PLATFORM_ESP then
+            begin
+              argNode := IRB[node];
+              while argNode <> -1 do
+              begin
+                IREmitNodeXtensa(IRA[argNode]);
+                argNode := IRB[argNode];
+              end;
+              EmitLoadConstXtensa(reg_xtensa_a2, -38);
+              Exit;
+            end;
+            if procIdx = -Ord(tkSysOpen) then
+              EmitSysBuiltinXtensa(node, 288, 2, 1, True)    { openat(AT_FDCWD,path,flags,0) }
+            else if procIdx = -Ord(tkSysRead) then
+              EmitSysBuiltinXtensa(node, 12, 3, 0, False)    { read(fd,buf,count) }
+            else if procIdx = -Ord(tkSyswrite) then
+              EmitSysBuiltinXtensa(node, 13, 3, 0, False)    { write(fd,buf,count) }
+            else if procIdx = -Ord(tkSysClose) then
+              EmitSysBuiltinXtensa(node, 9, 1, 0, False)     { close(fd) }
+            else
+              EmitSysBuiltinXtensa(node, 52, 2, 0, False);   { fchmod(fd,mode) }
             Exit;
           end;
           { Names the builtin. The message used to read "builtin calls not

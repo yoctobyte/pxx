@@ -12804,8 +12804,19 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in_x64
 	tools/expect_same.sh riscv32/test_rv32_in "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_in)" "$$($(TESTTMP)/test_rv32_in_x64)"
 	# SKIP test/test_cross_managed_aggregate_locals.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_cross_loadfile.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_cross_sysopen_family.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_cross_loadfile.pas on riscv32: the CODEGEN arm is written and
+	#      banked, but PXXSysOpenRO/PXXSysLseek/PXXSysClose in
+	#      compiler/builtin/builtinheap.pas have no riscv32 or xtensa arm and
+	#      their {$else} returns -1, so LoadFile would compile and hand back an
+	#      EMPTY string. That is strictly worse than this block: the block is
+	#      the safety property here, and it stays until the runtime lands.
+	#      bug-a-loadfile-runtime-wrappers-have-no-riscv32-or-xtensa-arm
+	# by-value SysOpen/SysRead/SysWrite/SysClose/SysFchmod: the family had no arm
+	# on either 32-bit generic backend. rv32 is asm-generic and has NO plain
+	# open, so SysOpen lowers to openat(AT_FDCWD, path, flags, 0).
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_sysopen_family.pas $(TESTTMP)/test_rv32_sysopen_family
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_rv32_sysopen_family_x64
+	tools/expect_same.sh riscv32/test_rv32_sysopen_family "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_sysopen_family)" "$$($(TESTTMP)/test_rv32_sysopen_family_x64)"
 	# string COW — same SPECIAL_IN gap; it uses `in [..]` on a character.
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow_x64
@@ -13417,6 +13428,15 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide
 	./$(COMPILER) test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide_x64
 	tools/expect_same.sh xtensa/test_xtensa_recwide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_recwide)" "$$($(TESTTMP)/test_xtensa_recwide_x64)"
+	# SysOpen/SysRead/SysWrite/SysClose/SysFchmod. xtensa's syscall numbers are
+	# its OWN table (read=12, write=13, close=9, fchmod=52, openat=288) -- neither
+	# x86-64's nor asm-generic's, and a number from the wrong table is not a
+	# compile error, it is a different syscall at runtime. SysOpen lowers to
+	# openat even though xtensa still carries a legacy open(8), so this backend
+	# and riscv32 share one spelling. LoadFile is NOT here: see the riscv32 SKIP.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_sysopen_family.pas $(TESTTMP)/test_xtensa_sysopen_family
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_xtensa_sysopen_family_x64
+	tools/expect_same.sh xtensa/test_xtensa_sysopen_family "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sysopen_family)" "$$($(TESTTMP)/test_xtensa_sysopen_family_x64)"
 	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
 	# which answered FALSE while b printed BBBB with Length 4 -- the equality
 	# guard was gated on tyAnsiString only, so both-frozen fell through to the
