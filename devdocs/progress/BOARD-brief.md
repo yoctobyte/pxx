@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:6 unfinished:26 blocked:7 backlog:338 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2731 rejected:56`
+`urgent:1 working:6 unfinished:27 blocked:7 backlog:337 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2731 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -20,8 +20,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts` [P]
 
-## unfinished (26) — parked mid-flight; re-claim, do not duplicate
+## unfinished (27) — parked mid-flight; re-claim, do not duplicate
 
+- `bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address` [A+S]
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead` [C] — blocked-by: bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
