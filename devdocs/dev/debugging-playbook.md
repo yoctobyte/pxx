@@ -440,6 +440,29 @@ They put the finding at the Makefile rows rather than in the commit message,
 which is right and worth copying: it lands where someone deciding whether to
 trust a green will read it, not in a log nobody greps before trusting one.
 
+#### Build the deliberately-broken compiler to a SCRATCH path
+
+The control this whole section rests on — break the pass on purpose, confirm the
+test goes red — has a trap in it, and the fix is one argument:
+
+```
+./compiler/pascal26 compiler/compiler.pas $SCRATCH/p26-break     # yes
+make compiler/pascal26                                            # no
+```
+
+Building the broken emitter **with the good compiler, to a path that is not
+`compiler/pascal26`**, confines the damage to the programs it emits. Overwrite
+`compiler/pascal26` instead and the breakage is now in the tool doing the
+building. Measured 2026-08-30: the same experiment at `MSTR_STATIC_RC=4` **hung
+`make compiler/pascal26` for six minutes**, because a compiler that frees its own
+`.data` literals cannot reach a fixedpoint — a hang, so no error text, which is
+the worst shape to debug into.
+
+Restore with `git checkout -- <file>`, never a copy-back (CLAUDE.md's parking
+rule, and the hazard is in the *revert*), and **print `sha256sum
+compiler/pascal26` before and after**: unchanged is the assertion that the
+experiment stayed where you put it.
+
 ## Where is the time going — profiling on these boxes
 
 **`perf` is dead here** (`perf_event_paranoid=4`) and that is NOT the same as
@@ -690,6 +713,9 @@ name.
 - ``## A ticket's prescription is a hypothesis, and it can rule out the answer``
   -- when a fix does not take, re-read what the ticket EXCLUDED
 - `## A comment is an unverified claim, and tickets inherit it`
+- `## A CENSUS is a predicate, not a number` -- six counts of the same thing,
+  13 to 45, all correct about what they measured; relay the predicate and the
+  command, never the number
 - `## A STANDING-RULES block is skipped by whoever has landed the most slices`
   -- not buried, not stale, not hard to find; skipped by the reader most
   confident he knows the campaign, which is the one with the most slices landed
@@ -1717,6 +1743,63 @@ compiles **with no import at all** and the from-import binds nothing.
 
 The companion habit, from the same fix: **when you disprove a comment, correct
 it in place, and grep for its copies.** That one had two.
+
+## A CENSUS is a predicate, not a number — and the number is what gets relayed
+
+Measured 2026-08-30, when a count of `-O3` gate sites was about to be adopted as
+a checksum for "how much code sits behind the self-host blind spot". **Six counts
+existed. Every one was correct about what it measured. They range from 13 to 45.**
+
+| count | predicate | scope | |
+| ---: | --- | --- | --- |
+| **13** | literal `OptLevel < 3`, comments stripped | `compiler/**` | correct |
+| **14** | literal `OptLevel < 3`, raw grep | `compiler/**` | the extra is *prose*: `inline_expand.inc:138` is a sentence **about** the gates |
+| **32** | any spelling, comments stripped, **backend emitter files only** | 2 files | correct — this is `tools/check_o3_backend_parity.py`, and it is GREEN |
+| **41** | any spelling, comments stripped | `compiler/**` | correct |
+| **44** | any spelling, "comment-leading lines dropped" | `compiler/**` | **wrong by 3** — see below |
+| **45** | any spelling, raw grep | `compiler/**` | correct |
+
+The thing being counted never changed. What changed was **the spelling admitted**
+(`if OptLevel < 3 then Exit` is the minority form; the inline `(OptLevel >= 3)
+and …` clause is far more common), **whether prose counts as code**, and **which
+files are in scope**. Three axes, and a bare number carries none of them.
+
+**The 44 is mine and it is the instructive one, because the bug is the section's
+own subject.** My filter dropped "comment-leading" lines by matching a leading
+`{`, `//` or **`(`** — and `(` is not a comment in Pascal, it is a continuation
+of a multi-clause condition. So the filter deleted one **real gate**
+(`ir.inc:11086`) and kept three prose lines, landing on 44 by two errors pointing
+opposite ways. A number that looks plausible and is wrong in both directions at
+once is the exact failure this file keeps recording: *it was correct about
+something else.*
+
+**The positive control that settled it, and it was free:** an independent
+comment-stripper, run over the two backend files, must reproduce
+`check_o3_backend_parity.py`'s own numbers. It does — 22 and 10, matching
+`EXPECTED` exactly. That agreement is what licenses the 41 for the other five
+files; without it the 41 would have been a seventh number with no more standing
+than the 44.
+
+**And the substantive answer the checksum was wanted for survives all of this:
+41 gate sites exist, 32 are inside the parity tool's scope, and 9 are outside it**
+— `symtab.inc` 3, `inline_expand.inc` 2, `ir.inc` 2, `emit.inc` 1,
+`compiler.pas` 1. That is not a defect in the tool: its scope is CLAUDE.md's
+per-backend rule ("x86-64 + aarch64 only") and those nine are not backend files.
+**The tool is right about its question. The error would be borrowing its number
+to answer a different one.**
+
+**The fourth axis is TIME, and it is the one that makes a count unusable as a
+checksum here.** At `d8ec3553a`, 24 hours earlier, the same two predicates gave
+**11** and **36**; they are **13** and **45** now. At ~1900 commits/day a census
+is stale within hours of being taken, so a relayed number is a claim about a tree
+nobody still has. `check_o3_backend_parity.py` is the right shape for exactly
+this reason: it does not relay a number, it **re-derives** it and fails when it
+moves.
+
+**The rule:** never relay a census as a number. Relay the **predicate and the
+command**, or relay a check that re-derives it. If you are given one, ask what
+was counted before asking whether it is right — and expect the answer to change
+the number by a factor of three.
 
 ## A STANDING-RULES block is skipped by whoever has landed the most slices
 
