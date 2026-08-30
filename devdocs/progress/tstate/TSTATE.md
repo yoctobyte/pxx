@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `3fd296c6b38d` | 2026-08-30T12:15:02Z | RED (full) | 643.0s | `3fd296c6b38d` RED |
+| seven | `94492d162332` | 2026-08-30T12:18:01Z | RED (native) | 100.8s | `3fd296c6b38d` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -45,3 +45,4 @@
 - **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
+- **test-asm#src:test/test_asm_emit_x64.pas** — test/test_asm_emit_x64.pas tools/expect_same.sh (seven): bad `94492d162332`, last good `3fd296c6b38d`, 2 commit(s) in range
