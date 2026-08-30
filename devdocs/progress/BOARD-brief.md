@@ -64,7 +64,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-max-min-iterables
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-in-a-variable
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none
-- `[p 70] [P]` regression-test-threads-test-cmp-both-in-place
+- `[p 70] [A+O]` regression-test-threads-test-cmp-both-in-place
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
