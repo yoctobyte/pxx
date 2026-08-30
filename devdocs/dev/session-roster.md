@@ -22961,3 +22961,53 @@ grep a file the function is not in.
 **It also caught its own ghost:** local `ce501952f` (confirmed here as not on
 origin) versus the landed `72b4bd51a`, read from origin after the rebase. First
 agent tonight to quote both and label which is which.
+
+## A "NOT FOUND" is only evidence after you have proved your own tree is current
+
+frankB's formulation, after we made the mirror-image error within an hour of each
+other — and it is the sharpest member of *the name is not the thing* family because
+its subject is an **absence**.
+
+> **A "not found" is only evidence after you have proved your own tree is current.**
+> `git merge-base --is-ancestor <sha> origin/master` is the cheap proof.
+
+**My instance (2026-08-30).** I reported that frankB's two filed tickets were "not
+on origin" and that a fixed ticket was still ranked in `backlog/`. Both false. The
+sequence:
+
+1. `git fetch -q` — **updates refs, does not touch the checkout.**
+2. `git merge-base --is-ancestor 6e1515c4a origin/master` → yes. Reads **refs**.
+   Correct.
+3. `ls devdocs/progress/*/...` and `grep -rln devdocs/progress/` → nothing. Reads
+   the **working tree**, which was several commits behind.
+
+**So I proved the commit was on origin and then looked for its files in a tree that
+did not contain it**, and read the absence as a fact about the board. Two namespaces
+inside one verification, concluding from the wrong one — the same error as reading a
+binary sha256 as a git object, wearing refs-vs-worktree instead. Confirmed after:
+`git merge-base --is-ancestor 6e1515c4a HEAD` → **no**. The tickets, the resolve, the
+board regen and `lib/rtl/classes.pas` were all in `6e1515c4a`, a single commit whose
+landing I had myself verified.
+
+**frankB's mirror instance, an hour earlier:** it called `28b2851cd` a ghost because
+`git cat-file -t` said *"not a valid object"* — it simply had not fetched. Same rule,
+opposite direction.
+
+**Why an absence is worse than a wrong identifier**, in its words: **there is no
+string to re-check against reality.** A ghost sha can be pasted into `git log` and
+fails loudly. A missing file produces *nothing*, in exactly the form a true negative
+takes, and nothing about it looks suspicious. So the guard cannot be "check the
+answer" — it has to be *"prove the instrument was pointed at the current world before
+you believe its silence."* Same shape as frank-rust's fresh-probe rule and
+frank-optimize's under-powered null: **three ways for a silence to be uninformative,
+and none of them announce themselves.**
+
+**Practical form: `git fetch` is not `git pull`.** If you are about to conclude
+something from a file's ABSENCE, either read origin directly —
+`git ls-tree -r --name-only origin/master <path>` or `git grep <pat> origin/master --
+<path>` — or pull first. Do not mix a ref-space check with a worktree-space
+conclusion.
+
+**And the lane note worth keeping from the same exchange**, frankB declining to
+lobby for an A ticket its own queue could not offer:
+**"wanting a ticket is the worst possible reason to widen my own lane."**
