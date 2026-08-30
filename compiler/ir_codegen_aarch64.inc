@@ -1519,6 +1519,14 @@ end;
   two sites emitted before the fold existed. }
 procedure EmitWidenLeftA64(kind, reg: Integer);
 begin
+  { PXXDBG=a.w1exta64 -- did slice 10's aarch64 twin FIRE? reg<>0 is the fused
+    form: the resident read and the widen are one instruction. reg=0 is the
+    unfolded x0 path, which is the SAME encoding, so a disassembly cannot tell
+    them apart and this is the only instrument that can. Same reason a.w2 has
+    one. }
+  if PxxDbgEnabled('a.w1exta64') then
+    WriteLn('PXXDBG a.w1exta64 proc=', Procs[CurProc].Name,
+            ' kind=', kind, ' reg=x', reg, ' fused=', reg <> 0);
   if kind = 1 then
     EmitI32($93407C00 or (reg shl 5))      { sxtw x0, w0|wN }
   else
@@ -1533,6 +1541,14 @@ end;
 procedure EmitCmpRegsA64(lreg, rreg: Integer);
 var rm: Integer;
 begin
+  { PXXDBG=a.w1cmpa64 -- slices 5 and 7 on aarch64, which collapse into this one
+    arm. lreg<>0 means the left stayed home; rreg<>0 the right. 0/0 emits
+    exactly the $EB01001F this replaced, so again the encoding alone cannot say
+    whether the fold fired. }
+  if PxxDbgEnabled('a.w1cmpa64') then
+    WriteLn('PXXDBG a.w1cmpa64 proc=', Procs[CurProc].Name,
+            ' lreg=x', lreg, ' rreg=x', rreg,
+            ' folded=', (lreg <> 0) or (rreg <> 0));
   if rreg = 0 then rm := 1 else rm := rreg;
   EmitI32($EB00001F or (rm shl 16) or (lreg shl 5));
 end;
