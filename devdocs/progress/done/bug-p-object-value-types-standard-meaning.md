@@ -100,7 +100,7 @@ Breadth is Track T's against the pushed sha.
   rewrite to this scope or close in favour of this ticket.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 50d341cd9.
 
 ## Resolution (2026-08-30)
 
