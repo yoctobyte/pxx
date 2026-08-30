@@ -193,4 +193,4 @@ undocumented until now.
 ## Log
 - 2026-08-29 — filed by pxx-a5, split out of the unit-resolution ticket.
 - 2026-08-30 — reproduced at HEAD before claiming (all three cells), then fixed.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit eefa85d70.
