@@ -138,4 +138,4 @@ above are x86-64, and the aarch64/arm32/riscv32/i386/xtensa arms of this pass
 remain covered only by whatever T's matrix already sweeps.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 4ecc48823.
