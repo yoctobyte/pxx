@@ -931,3 +931,107 @@ the programs that ask for it.
 
 Remaining: **6c** (param/return carriers), then **6d** (`^WideString`, blocks
 7b), then **7b/7c** (the alias break + sysutils, one commit).
+
+## 6c-params — landed (`1557a2d47`)
+
+`ProcParamStrElemTk`, the param half of the fifth carrier. Inert: nothing reads
+the column yet, every width written today is `Ord(tyChar)`, and a string-param
+matrix (by-value / `var` / `const` / alias / defaulted / open-array / method /
+multi-param, 20 output lines) is byte-identical to `pinned`.
+
+### The enumeration, counted by reading
+
+The "~72 references across two files" I sized this at was a raw grep over the
+pointer family **including doc comments and prose** — `ProcRetPtrElemTk` alone
+contributes 37 refs of which ~a dozen are commentary. Read-verified it is **~25
+real edit sites across five files**, and the file-count error was the one that
+mattered: it hid `pasparser_proc.inc`, which was not in the grant and is where
+essentially all of 6c-params lives.
+
+**`ptypesSetEnum` is the template, not `ptypesPtrElemTk`.** Mine is a
+*conditional per-kind* fact; the pointer array is an *always-present* one. That
+difference is two real sites:
+
+- the **whole-array prologue reset** (`:758`) — "a local array is stack garbage
+  until written, and the Self/capture insertion paths below fill some slots
+  without going through the typed-param branch". **No grep keyed on my own
+  identifier could have surfaced this**; only reading a sibling's whole
+  lifecycle finds it.
+- **three** durable-copy paths where the pointer array has one.
+
+**Both Self-insertion shifts** (`:1384`, `:1525`) carry the new column. Skipping
+one is not theoretical — the block's own comment records `pconst` as "the ONE
+omission here", which wrote a method's real `const` param into Self's slot and
+misregistered it for every method.
+
+### Three registration paths, and why all three are written
+
+`ParseSubroutine` registers params on three paths — `external` (which `Exit`s),
+forward/interface, and the body path where param symbols are allocated.
+`ProcParamPtrElemTk` is written on **the body path only**, which is a live
+fail-open bug filed separately as `49b6936c3`
+(`bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-...`).
+6c-params writes all three deliberately: mirroring the template's *bug* along
+with its shape is the failure mode this campaign keeps finding.
+
+Same reasoning drove **normalising the width on the way in** (`tyUnknown` →
+`Ord(tyChar)`) instead of storing raw as `SymStrElemTk` does. It keeps `0`
+meaning exactly one thing — *not a managed string* — rather than also meaning
+*narrow*. Note what this does and does not buy: a reader asking "is this param
+wide?" still gets False from a forgotten store, so it does not eliminate
+fail-narrow; it only lets a reader distinguish "no managed string here" from "a
+narrow one", which the pointer twin's sentinel could not.
+
+### The symbol stamp cost a self-host regression — the array/scalar collision
+
+A string parameter must also resolve inside **its own body**, where
+`ASTStrElemTkOf` goes through the AN_IDENT arm and reads `Syms[].ElemType`.
+`AllocParam` stamps `ElemType := tk` and cannot do better: a param's type is
+parsed long before its symbol is allocated, so `LastTypeStrElemTk`'s window
+(see the window rule in `defs.inc`) closed long ago. The staged value is the
+only live copy — which is what the staging array is for.
+
+Stamping it for every `tyAnsiString` param **broke the self-host fixedpoint**
+(no convergence after 4 rounds). Cause:
+
+> `ptypes[i]` for an array param is the **ELEMENT** kind. `array of AnsiString`
+> arrives at that line with `ptypes[i] = tyAnsiString` *exactly as a scalar
+> string does* — and for an array, `Syms[].ElemType` legitimately **is**
+> `tyAnsiString`, which every backend's dyn-array arm reads to pick an 8-byte
+> managed stride. The stamp retyped the elements to a 1-byte char.
+
+The backends say so in their own words: *"for `array of string` the symbol's
+TypeKind IS tyAnsiString (it names the ELEMENT)"* (`ir_codegen_aarch64.inc:1590`
+and three siblings).
+
+Confirmed **positively**, not just by removal: the same stamp guarded with
+`(not parr[i]) and (pDynDepth[i] = 0)` converges in 1 round (`965236b0f5ab`).
+An array of managed strings keeps its elements' width in 6b's `SymStrElemTk` —
+the `IsArray` split `defs.inc:2502` already documents.
+
+**Generalisation worth carrying into 6c-returns and step 7:** every
+`if <kind> = tyAnsiString` guard in a param/element context is ambiguous between
+"a string" and "an array whose elements are strings". 6b's carrier resolved that
+for symbols with `IsArray`; the same split has to be made deliberately at each
+new site rather than assumed.
+
+## 6c-returns — enumerated, not started
+
+`ir.inc` is back (frankC released it unedited — its signature change turned out
+unnecessary, both bitfield bodies overwrite `storageTk` before use). Sites, read-verified:
+
+| file | sites |
+| --- | --- |
+| `defs.inc` | declare `ProcRetStrElemTk` |
+| `symtab.inc` | `SetLength` (:9776 region), per-proc init (:9838 region) |
+| `pasparser_proc.inc` | local `retStrElemTk` (:560), reset (:760), two harvests (:1028 from `ArrTypeStrElemTk`, :1093 from the channel), **three** durable stores (:1314, :1657, :1691) |
+| `pasparser_decl.inc` | **four** method-return durable writes (:3394, :4024, :4375, :5022) — `mRetPtrElemTk` covers only two of them; :3394 uses a different local and :4024 reads `LastTypePointerElemTk` directly |
+| `ir.inc` | one new AN_CALL arm in `ASTStrElemTkOf` (~:1423) |
+
+Two notes for whoever takes it:
+
+- the return family **does** write all three paths already, so it has no
+  `external` hole — the params bug is specific to the param column.
+- **`ProcRetStrCap` does not exist.** There is no frozen-string return carrier at
+  all, so `function f: string[20]` has no durable capacity either. Pre-existing,
+  out of scope here, and not yet checked for whether any program can observe it.
