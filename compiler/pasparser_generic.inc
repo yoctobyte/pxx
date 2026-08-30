@@ -3122,7 +3122,24 @@ begin
   Inc(cur);
   while (cur < TokCount) and (depth > 0) do
   begin
-    if Tokens[cur].Kind in [tkBegin, tkCase] then
+    { `try` and `asm` each close with an `end`, so a counter that knows only
+      begin/case runs out of depth one `end` EARLY and hands back a SHORT body.
+      The routine's own closing `end` is then left in the token stream, the unit
+      loop's silent tkEnd arm eats it, and the unit terminates in the wrong
+      place -- reported at EOF, for a defect anywhere above it.
+
+      Both arms are MEASURED against the pinned binary, separately: a generic
+      method containing `try`, and one containing `asm`, each alone.
+
+      This set is deliberately NOT identical to PreScanSkipRoutineBody's
+      (pasparser_proc.inc:324), which also counts tkRecord. That one scans from
+      the routine HEADER and so walks the local declaration part; this one skips
+      to the first `begin` (see the loop above) and starts counting after it, and
+      Pascal has no record inside a statement part. tkRecord here would be a
+      token that can never fire -- measured: a generic method with a local
+      `type R = record ... end` compiles correctly on the PRE-FIX binary.
+      bug-p-a-generic-method-body-with-try-loses-its-closing-end }
+    if Tokens[cur].Kind in [tkBegin, tkCase, tkTry, tkAsm] then
       Inc(depth)
     else if Tokens[cur].Kind = tkEnd then
       Dec(depth);
@@ -3367,7 +3384,16 @@ begin
   depth := 1; Inc(cur);
   while (cur < TokCount) and (depth > 0) do
   begin
-    if Tokens[cur].Kind in [tkBegin, tkCase] then Inc(depth)
+    { Same opener set as GenericMethodBodyEnd -- see the note there. A generic
+      FUNCTION's body has the same shapes as a method's.
+
+      UNVERIFIED, and the reason is worth recording: no program reaches this
+      miscount today. pxx rejects a `generic function` in a unit INTERFACE and
+      in a unit IMPLEMENTATION alike, and those are the only places a short body
+      could be mis-terminated; at program level the pre-fix binary is already
+      correct. Corrected for consistency, with no positive control available.
+      bug-p-a-generic-function-cannot-be-declared-in-a-unit }
+    if Tokens[cur].Kind in [tkBegin, tkCase, tkTry, tkAsm] then Inc(depth)
     else if Tokens[cur].Kind = tkEnd then Dec(depth);
     Inc(cur);
   end;

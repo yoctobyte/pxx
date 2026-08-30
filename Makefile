@@ -7802,6 +7802,15 @@ test-core: $(COMPILER)
 	# two units, same specialization, same alias name, neither using the other
 	./$(COMPILER) -Futest/generic_spec_units test/test_generic_spec_per_unit.pas $(TESTTMP)/test_generic_spec_per_unit26
 	tools/expect_same.sh test_generic_spec_per_unit26 "$$($(TESTTMP)/test_generic_spec_per_unit26 | tail -1)" "total ok 4 / 4"
+	# A generic METHOD's body extent is found by counting `end`s, and the counter
+	# knew only begin/case. `try` and `asm` also close with an `end`, so each
+	# ended the body one `end` EARLY; the leftover `end` was eaten by the unit
+	# loop's silent tkEnd arm and the unit terminated in the wrong place, reported
+	# at the file's LAST LINE. This was the rtl-generics rung-6b wall. The subject
+	# has to be a UNIT -- the same code in a program compiles correctly even on the
+	# broken binary, which is how the first draft of this test passed pre-fix.
+	./$(COMPILER) -Futest/generic_bodyend_units test/test_generic_body_end_counting.pas $(TESTTMP)/test_generic_bodyend26
+	tools/expect_same.sh test_generic_bodyend26 "$$($(TESTTMP)/test_generic_bodyend26)" "9 9 7 5 9 100"
 	# a mode-Delphi generic declared in a USED UNIT, specialized with the angle-bracket
 	# surface from the program and from a third unit (the desugar used to sweep only
 	# forward from the template, and the program is lexed BEFORE the unit)
