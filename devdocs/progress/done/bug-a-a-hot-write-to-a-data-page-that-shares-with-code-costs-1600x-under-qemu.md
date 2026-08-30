@@ -187,4 +187,4 @@ shared *page*, not the shared *segment*, and 4096 is what the measured emulators
 use rather than a proof.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 75d2ba662.
