@@ -40,13 +40,38 @@ export PXX_TMP
 # Per-invocation scratch root for the TEST recipes' OUTPUTS (see PXX_TMP above,
 # which covers the self-host BUILD's intermediates).
 #
-# Default is plain /tmp, i.e. behaviour-identical, and deliberately NOT a
-# per-invocation mktemp like PXX_TMP: tools/testmgr.py privatizes a job's /tmp
-# paths by PREFIX SUBSTITUTION (/tmp/foo -> /tmp/testmgr-scratch-<pid>/foo), so
-# a nested default would expand to <scratch>/pxx-test-<pid>/foo -- a directory
-# nothing creates, breaking every job. Isolation is the CALLER's to ask for, by
-# passing TESTTMP=$$(mktemp -d) on the command line.
-TESTTMP ?= /tmp
+# PER-CHECKOUT, and stable within one. The old default was plain /tmp, which is
+# not per-checkout, not per-user and not per-PID: every tree on this box built
+# its test binaries to the SAME absolute paths, derived from the tests' own
+# names. Two bare `make` runs in two trees then overwrite each other's
+# artefacts, and the loser executes the winner's binary while comparing it
+# against its own expectation. The result is a VERDICT about the wrong binary --
+# a red that sends someone bisecting a defect that does not exist, or a green
+# that retires a real one. bug-a-testtmp-defaults-to-a-path-every-checkout-shares
+#
+# Keyed on $(CURDIR) (hashed, so the path stays short and cannot collide) and
+# on the uid, so two users on one box cannot land in a directory the other
+# owns. The checkout's BASENAME is carried in front of the hash purely so a
+# human can tell whose scratch a leftover directory is: a hash alone is
+# unattributable, and nothing can reap these by liveness (the tree they
+# belong to may be gone, and the hash does not name it).
+#
+# STABLE within a checkout, and deliberately NOT a per-invocation mktemp like
+# PXX_TMP: separate `make` invocations in one tree hand artefacts to each other
+# by path, and a fresh root each time would break that producer/consumer pairing
+# rather than isolate it.
+#
+# WHY THIS IS NOW SAFE, and it was not before. tools/testmgr.py privatizes a
+# job's paths by PREFIX SUBSTITUTION ($(TESTTMP)/foo -> $(TESTTMP)/testmgr-
+# scratch-<pid>/foo) and derives every matcher from TESTTMP. It also now PINS
+# the value into the environment of the make it spawns (BASE_ENV_KEEP), so
+# under testmgr this `?=` never fires and the producer cannot disagree with the
+# matchers. Do not move testmgr's own default off /tmp: its stale-scratch
+# reapers find abandoned runs by globbing that root.
+#
+# So this default governs BARE `make` only -- which is exactly the exposure the
+# ticket measured, testmgr-driven runs having been per-PID private all along.
+TESTTMP ?= /tmp/pxx-testtmp-$(shell id -u)-$(notdir $(CURDIR))-$(shell printf '%s' '$(CURDIR)' | sha1sum | cut -c1-10)
 $(shell mkdir -p $(TESTTMP))
 export TESTTMP
 # Named with a -<pid> suffix on the ROOT so tools/testmgr.py's sweep can reap an

@@ -919,6 +919,23 @@ def kill_run(pid, why):
 #            silent either way.
 TESTTMP = (os.environ.get("TESTTMP") or "/tmp").rstrip("/") or "/tmp"
 TESTTMP_RE = re.escape(TESTTMP)
+# ...and write it BACK, so every `make` this process starts expands $(TESTTMP)
+# to the value the matchers above were built from. Reading it is not enough:
+# make_dry_run() runs `make -n` with no env= and so inherits THIS environment,
+# and if the variable is absent make applies its own default instead. Once that
+# default stopped being /tmp (bug-a-testtmp-defaults-to-a-path-every-checkout-
+# shares) the dry-run text named a root TMP_RE still matched -- so the
+# privatizing rewrite prefixed RUN_TMP onto an ALREADY-per-checkout path and
+# produced /tmp/testmgr-scratch-<pid>/pxx-testtmp-<...>/qc_nilpy26: compiled
+# there, then `not found` at exec. Measured by tools/gate.sh quick, 2026-08-30.
+#
+# Set here rather than at each call site because there are four `make`
+# invocations in this file and the next one must not have to know: an
+# environment the whole process shares cannot go out of step with itself, where
+# a per-call env= can. job_env()'s allowlist still drops it, so the job half is
+# pinned separately in BASE_ENV_KEEP -- two mechanisms because there are two
+# environments, not two policies.
+os.environ["TESTTMP"] = TESTTMP
 
 
 def reap_stale(info):
@@ -2799,6 +2816,25 @@ ENV_ALLOW_PREFIXES = ("PXX_", "TESTMGR_", "LC_", "QEMU_")
 BASE_ENV_KEEP = {
     "NO_AT_BRIDGE": "1",       # GTK2/3: do not start the a11y bridge
     "GTK_A11Y": "none",        # GTK3+: same, newer spelling
+    # PIN the scratch root into the make we spawn, rather than passing it
+    # through. Reading TESTTMP (line ~920) taught the MATCHERS the value; it did
+    # not teach the PRODUCER, and this environment is an allowlist that TESTTMP
+    # was not on -- so `TESTTMP=/foo tools/testmgr.py ...` rebuilt TMP_RE, the
+    # three make_dry_run expressions, _REASON_TMP_RE and RUN_TMP around /foo
+    # while make, stripped of the variable, kept emitting /tmp. Every matcher
+    # then hunted a prefix no recipe produced: all four blind at once, silently,
+    # which is the exact failure the comment on them describes. Measured
+    # 2026-08-30: job_env() returned no TESTTMP and `make -s print-TESTTMP`
+    # under that environment printed /tmp.
+    #
+    # Setting it (not allowlisting it) is what makes the agreement structural:
+    # `?=` in the Makefile means our value always wins, so the producer cannot
+    # disagree with the matchers even when the Makefile's own DEFAULT moves --
+    # which is what bug-a-testtmp-defaults-to-a-path-every-checkout-shares does.
+    # Our default stays /tmp deliberately: reap_stale() and sweep_stale() find
+    # abandoned scratch by globbing this root, and a per-checkout root would
+    # scatter them where no run looks.
+    "TESTTMP": TESTTMP,
 }
 # The session/desktop family. A job gets these ONLY if its own recipe names one
 # of them -- see job_env_for(). Kept as an explicit set so the report can say
