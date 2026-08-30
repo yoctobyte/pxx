@@ -11374,8 +11374,10 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-30T12:29:51Z",
+  "date": "2026-08-30T14:57:36Z",
   "red": [
+   "test-core#src:test/test_warn_ignored_directives.pas",
+   "test-asm#src:test/test_asm_emit_x64.pas",
    "test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint",
    "tools-devtest#00",
    "test-pascal-conformance#shard0/6",
@@ -11383,19 +11385,17 @@
    "test-pascal-conformance#shard2/6",
    "test-pascal-conformance#shard3/6",
    "test-pascal-conformance#shard4/6",
-   "test-pascal-conformance#shard5/6"
+   "test-pascal-conformance#shard5/6",
+   "size-canary#src:tools/size_canary.py"
   ],
-  "sha": "acec6c192f14ec77db34453c7d9eb658e3fb0e1d",
+  "sha": "26cbbf4169fda4136bb6960233e38ebe454044fc",
   "tier": "full",
-  "ver": "v395",
+  "ver": "v396",
   "verdict": "RED",
   "why": {
-   "test-pascal-conformance#shard0/6": "SKIP tover1.pp \u2014 gap: overload resolution across shortstring/ansistring/widestring/pchar params | SKIP tprocvar3.pp \u2014 gap: delphi-mode procvar of object, @-less proc assignment, codepointer method add",
-   "test-pascal-conformance#shard1/6": "SKIP tprop1.pp \u2014 gap: global `property` section in a program (FPC-mode global properties) | SKIP tset2b.pp \u2014 gap: explicit enum ordinal values (dA:=8) + {$packset 2} packed-set semantics | SKIP tstati",
-   "test-pascal-conformance#shard2/6": "SKIP toperator94.pp \u2014 gap: objfpc `class operator :=` implicit conversion to shortstring types \u2014 the duplicate-conversion check (parser.inc ~1860) falsely collides distinct frozen-string result kinds;",
-   "test-pascal-conformance#shard3/6": "SKIP tpropdef.pp \u2014 wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault) | SKIP trange5.pp \u2014 gap: `with` over a record typecast (int64rec(q)) plus 64-bit {$R+",
-   "test-pascal-conformance#shard4/6": "SKIP tgeneric7.pp \u2014 gap: generics across units + $R range-check state per unit (expects runtime error 201) | SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the ",
-   "test-pascal-conformance#shard5/6": "SKIP tprocvar2.pp \u2014 gap: typed const procvar initialized with bare proc name (TP mode), procvar via move() | SKIP tsetsize.pp \u2014 wontfix: asserts FPC's exact set-size/packing layout (SizeOf(set of subr"
+   "size-canary#src:tools/size_canary.py": "esp32s3-bare.code: 43452 -> 56684 (+13232, +30.5%), over the allowed 47797 | esp32s2-bare.code: 43452 -> 56684 (+13232, +30.5%), over the allowed 47797 | esp32-bare.code: 43452 -> 56684 (+13232, +30.5",
+   "test-asm#src:test/test_asm_emit_x64.pas": "pascal26:1052: error: undefined variable (PxxDbgWants) | in: compiler/asmtext.inc | near: , ' no-room=' , AsmMemoNoRoom , ' pool=' >>> , AsmMemoPoolLen , | pascal26:1075: error: undefined variable (Px",
+   "test-core#src:test/test_warn_ignored_directives.pas": "expect_same: MISMATCH [test_warn_ignored_directives26.1] | --- expected | +++ actual | @@ -1 +1 @@ | -6 | +5"
   }
  }
 }
