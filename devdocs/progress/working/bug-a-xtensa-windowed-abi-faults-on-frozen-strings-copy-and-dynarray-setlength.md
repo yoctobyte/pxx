@@ -121,3 +121,92 @@ All three repros were run as written rather than the two the alignment
 hypothesis predicted. Had the hypothesis picked, `Copy` would have been swept
 into the alignment ticket and closed with the other two — a live SIGBUS filed as
 fixed by a commit that does not fix it.
+
+## MEASURED 2026-08-30 (frankS), round 2 — it is a WINDOW UNDERFLOW, not an address `Copy` forms
+
+Bound: HEAD `f17cd5607`, compiler binary sha256 **`cf30672a934e`** (self-host
+fixedpoint verified, and confirmed unmoved only because no compiler source changed
+since it was built), `qemu-xtensa`, `--platform=posix --xtensa-soft-mulhigh`.
+Call0 and x86-64 both print `bcd`; windowed exits **135** (SIGBUS).
+
+### 1. The alignment hypothesis is FALSIFIED
+
+The obvious next suspect after the data-section story was misaligned word copying —
+`PXXWordCopyOk` exists precisely to gate that, and SIGBUS is what a misaligned
+32-bit access raises. It is wrong. Every `(index, count)` pair in a 5x5 sweep
+faults, **including `Copy(s,1,4)`** — word-aligned start, whole number of words,
+the case a misaligned word loop cannot reach:
+
+| | n=1 | n=2 | n=3 | n=4 | n=8 |
+| --- | --- | --- | --- | --- | --- |
+| i=1..5 | SIGBUS | SIGBUS | SIGBUS | SIGBUS | SIGBUS |
+
+The fault is **unconditional in `Copy`** and does not depend on the data at all.
+`PXXWordCopyOk` reads correctly for non-x86 (`(n >= SizeOf(NativeInt)) and
+(((d or s) and (SizeOf(NativeInt)-1)) = 0)`) and is not implicated.
+
+### 2. It is not "any string helper", and the result is never consumed
+
+| program | windowed |
+| --- | --- |
+| `r := Copy(s,2,3);` — **result never used** | **SIGBUS** |
+| `WriteLn(Copy(s,2,3))` | SIGBUS |
+| `r := Copy(s,n,3)` (variable index) | SIGBUS |
+| `i := Pos('cd', s)` | ok, `3` |
+| `r := s + 'x'` | ok, `abcdefx` |
+| `WriteLn(s)` | ok, `abcdef` |
+
+The result-unused row is the one that matters: it removes `WriteLn`, `Length` and
+every consumer from the picture. Concat and `Pos` both marshal string arguments
+through the same expression stack and both survive, so the defect is not the
+string-helper calling convention in general.
+
+### 3. What actually faults, measured rather than inferred
+
+`qemu-xtensa -d in_asm,cpu`, final CPU state:
+
+```
+EPC1=08057bdc   EXCCAUSE=00000001
+WINDOWBASE=00000002   WINDOWSTART=00000004
+```
+
+`0x08057bdc` is a **`retw.n`**. `WINDOWSTART=4` (binary `100`) says exactly one
+frame is live, so the `retw` needs the caller's registers reloaded from the stack —
+a **window underflow** — and the reload is what dies.
+
+**So the fault is in the register-window machinery, not in a pointer `Copy`
+computes.** That redirects this ticket's own starting question:
+
+> *what address does the windowed arm form for the source or destination buffer
+> that the Call0 arm forms differently*
+
+It forms none. There is no bad data address; there is a `retw` whose underflow
+handler cannot reload through the frame it was given.
+
+*(The post-fault A-register view shows `A07=00000001` where a7 is the windowed
+frame pointer, and a following block would compute `addi a2, a7, -32`. That is
+downstream of a failed window restore and is NOT load-bearing evidence — recorded
+so the next reader does not chase it as the cause.)*
+
+### 4. The invariant at stake, and where the audit should start
+
+The windowed contract is documented three times in `ir_codegen_xtensa.inc`, in the
+headers of `XtensaPushA2`, `XtensaSlotOff` and `XtensaDropSlots`:
+
+> *Windowed keeps sp fixed — moving it desyncs the window spill area at `[sp-16]`.*
+
+That is exactly the area a window underflow reloads from. **A stray sp move under
+windowed produces precisely this failure**, and it produces it at a `retw` that can
+be an arbitrary distance from the offending code — the classic "plausible wrong
+state far from the cause" shape.
+
+The three expression-stack helpers honour the invariant correctly. So the suspect
+is an **unguarded `sp` adjustment on `Copy`'s path**. There are ~20
+`xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, …)` sites in the file; the two sampled
+(`:1155`, `:3011`) sit correctly inside Call0-only branches, and **the rest are not
+yet audited**. That audit is the next step, and the ticket's own caution still
+applies to it — the arms are two disciplines, and the windowed one being the
+failing arm does not make every difference between them the cause.
+
+Not yet established: which site, and why `Copy` reaches it while `Pos` and concat
+do not.
