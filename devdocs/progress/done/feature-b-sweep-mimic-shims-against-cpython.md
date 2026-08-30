@@ -321,4 +321,4 @@ assertion. That is an argument for writing differentials in the ordinary
 style and only then working around what breaks — loudly.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6893ffd2e.
