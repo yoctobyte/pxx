@@ -2533,9 +2533,13 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-asm-test-asm-emit-x64 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 31198d3674df (auto-filed by twatch) | — |
 | regression-test-asm-test-asmcore-x64 | A | 70 | regression | regression: test-asm#src:test/test_asmcore_x64.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
 | regression-test-asm-test-x64enc | A | 70 | regression | regression: test-asm#src:test/test_x64enc.pas red at 31198d3674df (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard0-6-2 | A | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard0-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at e530da678bc9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard1-6-2 | A | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard1-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard2-6 | A | 70 | regression | regression: test-c-conformance-aarch64#shard2/6 red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard3-6 | A | 70 | regression | regression: test-c-conformance-aarch64#shard3/6 red at 90ae846bda82 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard5-6 | A | 70 | regression | regression: test-c-conformance-aarch64#shard5/6 red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-c-conformance-arm32-shard2-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-arm32-shard3-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard3/6 red at e6844ff49085 (auto-filed by twatch) | — |
 | regression-test-c-conformance-arm32-shard5-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
@@ -2697,6 +2701,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-i386-test-scheduler | T | 70 | regression | regression: test-i386#src:test/test_scheduler.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-i386-test-timer | T | 70 | regression | regression: test-i386#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-lua-00 | T | 70 | regression | regression: test-lua#00 red at 074e902b62ef (auto-filed by twatch) | — |
+| regression-test-lua-cross-pascal26 | A | 70 | regression | regression: test-lua-cross#src:compiler/.pascal26.fixedpoint red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-lua-cross-runner | T | 70 | regression | regression: test-lua-cross#src:test/lua/runner.c red at 940b261f8678 (auto-filed by twatch) | — |
 | regression-test-nilpy-callbacks | N | 70 | regression | regression: test-nilpy#src:examples/tk/callbacks.npy red at 8f629af38632 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-args-errors | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |

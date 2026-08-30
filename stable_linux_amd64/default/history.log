@@ -393,3 +393,4 @@
 2026-08-29T20:28:51Z  v393  1d69760deabe2865b534920a31578473d191a5c1da81c8a6c7df52dfa6c0ad01  1fb9774b741733ad4666af964255404d4dab4b5f  Merge branch 'master' of github.com:yoctobyte/pxx
 2026-08-30T04:12:12Z  v394  53800fbeb0b66e117077982d5c4bd056ae7c73a964a01586bff517c7ae7102ca  43c8e341204989508a12734ad437c0c4d63ff5c3  fix(tools): DANGLING-SHA tests REACHABILITY, not object existence
 2026-08-30T12:05:37Z  v395  aa78a7faf63ad5c1aa05c6484a56e5c0f59b2b8b54d0401c9345414d3b93d7e1  acec6c192f14ec77db34453c7d9eb658e3fb0e1d  docs(progress): record the shas the resolves landed as
+2026-08-30T14:38:09Z  v396  abece5150983d95e392ef76bc2162e9af5613ef77672b3d2e26071c6a4d44151  26cbbf4169fda4136bb6960233e38ebe454044fc  test(B): urllib.error gets the differential it never had — .filename was '' not None

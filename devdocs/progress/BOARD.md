@@ -64,7 +64,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (388)
+## backlog (383)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -439,12 +439,7 @@ _none_
 | regression-size-canary-size-canary | T | 40 | regression | advisory: size-canary#src:tools/size_canary.py red at 83fb0ef72419 (auto-filed by twatch) | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-x64-2 | P | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 94492d162332 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard0-6-2 | A | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at b695bcb4b192 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard1-6-2 | A | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at b695bcb4b192 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard2-6 | A | 70 | regression | regression: test-c-conformance-aarch64#shard2/6 red at b695bcb4b192 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard5-6 | A | 70 | regression | regression: test-c-conformance-aarch64#shard5/6 red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-core-test-warn-ignored-directives | P | 70 | regression | regression: test-core#src:test/test_warn_ignored_directives.pas red at 83fb0ef72419 (auto-filed by twatch) | — |
-| regression-test-lua-cross-pascal26 | A | 70 | regression | regression: test-lua-cross#src:compiler/.pascal26.fixedpoint red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
@@ -722,9 +717,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2817)
+## done (2822)
 
-2817 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2822 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -800,12 +795,7 @@ _none_
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-asm-test-asm-emit-x64-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [A] regression-test-c-conformance-aarch64-shard0-6-2
-- [p 70] [A] regression-test-c-conformance-aarch64-shard1-6-2
-- [p 70] [A] regression-test-c-conformance-aarch64-shard2-6
-- [p 70] [A] regression-test-c-conformance-aarch64-shard5-6
 - [p 70] [P] regression-test-core-test-warn-ignored-directives [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [A] regression-test-lua-cross-pascal26
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
