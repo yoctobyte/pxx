@@ -66,6 +66,27 @@ begin
   Result := Length(s);
 end;
 
+{ Mock of compiler/util.inc's AIntToStr — the compiler's own IntToStr, which
+  the harness cannot get by including util.inc (that file opens on AppendChar,
+  defined in lexer.inc, so pulling it in drags the lexer behind it; AppendChar
+  is mocked directly above for the same reason). SysUtils.IntToStr is exact for
+  the Integer range, and these bodies only ever run inside a diagnostic string.
+
+  Added 2026-08-30 after this harness went red on `undefined variable
+  (AIntToStr)`: 2f81d8008 gave rv32enc.inc its RISCVRelCheck range guard, whose
+  Error() text formats the offset. That is the THIRD time an included compiler
+  file grew a call the mock environment did not have — AsmRv32ProcessInlineLine
+  and InlineAsmLineHoleN below are the other two — and the first time the suite
+  said so on the day it happened rather than silently, because
+  chore-a-sweep-the-unwired-tests-into-the-suite finally wired these harnesses
+  into `make test-asm`. Swept the other six harness-included compiler files at
+  the same sha: rv32enc.inc is the only one that calls anything from util.inc.
+  regression-test-asm-test-asm-emit-rv32 }
+function AIntToStr(n: Integer): AnsiString;
+begin
+  Result := IntToStr(n);
+end;
+
 { Inline helpers normally in compiler/asmtext.inc }
 function AsmTextCStr(p: Pointer): AnsiString;
 begin

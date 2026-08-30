@@ -391,6 +391,7 @@ _none_
 | grant-ir-codegen-xtensa-cleanup-arm-to-franks-b4-verified-off | A+S | 55 | grant | Discharges grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s. frankS may edit the `if TargetArch = TARGET_XTENSA then` block inside EmitManagedLocalCleanupForTarget at ir_codegen.inc:10680 and nothing else in that file. b4's release verified three independent ways, not relayed from its word alone. | — |
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 5 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
+| idea-a-fold-the-asm-emit-harness-mock-preludes-into-one | A | 15 | idea | Fold the five asm-emit harnesses' mock preludes into one shared include | — |
 | idea-adaptive-heap-growth | A | 5 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
 | idea-c-realworld-test-targets | C | 60 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | idea-cross-namespace-ambiguity-warning | A | 15 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
@@ -426,7 +427,6 @@ _none_
 | regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
-| regression-test-asm-test-asm-emit-rv32 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_rv32.pas red at 108ac182bed6 (auto-filed by twatch) | — |
 | regression-test-core-test-opt-store-reload | A | 70 | regression | regression: test-core#src:test/test_opt_store_reload.pas red at c951ec710b33 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
@@ -697,9 +697,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2787)
+## done (2788)
 
-2787 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2788 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -775,7 +775,6 @@ _none_
 - [p 70] [A+O] feature-opt-o3-register-pressure [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [A] regression-test-asm-test-asm-emit-rv32
 - [p 70] [A] regression-test-core-test-opt-store-reload
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
@@ -1151,6 +1150,7 @@ _none_
 - [p 15] [P] feature-p-tobject-api-classparent-instancesize-tostring
 - [p 15] [W] feature-promo-launch-plan
 - [p 15] [T] feature-t-uforth-bench-restore-the-elfhash-outlier
+- [p 15] [A] idea-a-fold-the-asm-emit-harness-mock-preludes-into-one [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 15] [A] idea-cross-namespace-ambiguity-warning [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 15] [P] task-pascal-conformance-long-tail
 - [p 12] [A] bug-a-riscv32-sa-onstack-has-no-effect-under-qemu

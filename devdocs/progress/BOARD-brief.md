@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:30 blocked:7 backlog:376 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2787 rejected:58`
+`unfinished:30 blocked:7 backlog:376 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2788 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -65,7 +65,6 @@ _none — no lane is locked._
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
-- `[p 70] [A]` regression-test-asm-test-asm-emit-rv32
 - `[p 70] [A]` regression-test-core-test-opt-store-reload
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
@@ -86,5 +85,6 @@ _none — no lane is locked._
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
+- `[p 62] [A]` feature-unicodestring-model
 
 _373 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
