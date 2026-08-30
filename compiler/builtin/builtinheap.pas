@@ -254,6 +254,30 @@ const
     reason. See bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython. }
   PXX_FLAG_APPENDABLE = $2000;
 
+  { The refcount a compiler-built static block is born with, and the floor that
+    identifies one at runtime. MUST equal MSTR_STATIC_RC in compiler/defs.inc —
+    the same deliberate duplication as the header constants above (that file is
+    included into the compiler; this one is COMPILED by it), pinned by
+    test_static_string_literals asserting a runtime VALUE rather than the
+    constants themselves, so a drift shows up as a wrong answer and not as a
+    silent agreement.
+
+    Read as a FLOOR, not as an equality, and the difference is what makes the
+    guard safe to roll out one site at a time. x86-64 hand-emits its retain and
+    release sequences and does not go through the two routines below, so for a
+    while some operations on a static block are guarded and some are not. That
+    cannot run away, because the guard un-arms itself: an unguarded decrement
+    takes rc to FLOOR-1, at which point every guarded increment stops being
+    skipped and behaves exactly as it does today. rc therefore oscillates just
+    under the floor instead of drifting toward zero — bounded by the number of
+    simultaneously live references, never by elapsed time.
+
+    That distinction is worth stating because this ticket's own motivation says
+    2^30 IS reachable: 2.5M literal stores a second for 400 seconds. True, and
+    it is about *removing the increment unconditionally*, which nets -1 per
+    store/overwrite cycle forever. A floor test is not that change. }
+  PXX_STATIC_RC_FLOOR = $40000000;
+
   { KindData0, bits 16-23: text encoding. A small enum, NOT a codepage —
     CP_UTF8 (65001) would not fit, and this is the field pxx actually wants. }
   PXX_ENC_BYTES = 0;
@@ -2413,9 +2437,17 @@ var rcAddr: Int64;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
+  { A static literal block must never be WRITTEN, not merely never freed: it
+    lives in the data section, so a store to it dirties a page shared with code
+    (1600x under qemu — see the parent ticket) and defeats ever placing these
+    blocks in a non-writable segment. The read below is already on this path;
+    the guard costs a compare and a branch and removes a store. }
+  if PWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
 {$ifdef PXX_TS_SOFTLOCK}
   { threadsafe: atomic increment of the low refcount word (the count never
-    approaches 2^32, so the 8-byte header's high dword stays zero). }
+    approaches 2^32, so the 8-byte header's high dword stays zero). The plain
+    read above is sound under contention for the one thing it decides: a
+    saturated block's count is immutable, and a real one cannot reach 2^30. }
   tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
   PWord(rcAddr)^ := PWord(rcAddr)^ + 1;
@@ -2427,6 +2459,10 @@ var rcAddr, rc: Int64;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
+  { Saturated: no write, and no free to consider. Same guard as PXXStrIncRef —
+    they must move together, because suppressing one direction only is what
+    would let a static block's count drift. }
+  if PWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}

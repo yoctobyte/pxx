@@ -4256,16 +4256,22 @@ test-threads: $(COMPILER)
 	# row therefore reads the literal AGAIN after doing something to a copy,
 	# and prints both -- a mutated static block shows up as the SECOND read
 	# being wrong, never as a crash.
-	# -O0 is the control: the path is -O3-gated, so it provably cannot be
-	# taken there, and one expectation covers both. Checked non-vacuous by
-	# setting MSTR_STATIC_RC to 0 -- -O3 then printed `b=Zbcdef`, the static
-	# block edited in place, while -O0 stayed correct AND the compiler still
-	# self-hosted byte-identically, because it builds at the default -O level.
+	# -O0 is the control: the pass cannot run there, so one expectation covers
+	# every level. Checked non-vacuous by setting MSTR_STATIC_RC to 0 -- the
+	# gated levels then printed `b=Zbcdef`, the static block edited in place,
+	# while -O0 stayed correct AND the compiler still self-hosted
+	# byte-identically, because it builds at the default -O level.
+	# -O2 IS NOT REDUNDANT with -O3, and stopped being so on 2026-08-30: the
+	# pass was promoted out of -O3 into -O2 (440c822e6a80), so -O2 is now the
+	# level that every ordinary build of every program takes. This comment
+	# said "the path is -O3-gated" for as long as it took to notice.
 	# bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 	./$(COMPILER) -O3 test/test_static_string_literals.pas $(TESTTMP)/test_ssl326
 	tools/expect_same.sh test_ssl326 "$$($(TESTTMP)/test_ssl326)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
 	./$(COMPILER) -O0 test/test_static_string_literals.pas $(TESTTMP)/test_ssl026
 	tools/expect_same.sh test_ssl026 "$$($(TESTTMP)/test_ssl026)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
+	./$(COMPILER) -O2 test/test_static_string_literals.pas $(TESTTMP)/test_ssl226
+	tools/expect_same.sh test_ssl226 "$$($(TESTTMP)/test_ssl226)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
 	# aarch64 carries the same pass through the same shared representation --
 	# the header is in the POOL, so the port is one predicate and three emit
 	# sites, not a second shim. It takes its reference with a call to
