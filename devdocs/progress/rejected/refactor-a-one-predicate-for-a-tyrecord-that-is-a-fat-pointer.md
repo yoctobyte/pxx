@@ -3,12 +3,13 @@ slug: refactor-a-one-predicate-for-a-tyrecord-that-is-a-fat-pointer
 title: "Two places answer 'this tyRecord is a fat pointer, not a record', and one of them has drifted"
 track: A
 prio: 35
+resolved: d5fd2a6ca
 type: refactor
 blocked-by: []
-status: new
+status: rejected
 owner: ""
 created: 2026-08-30
-summary: "An interface and a method pointer are both spelled tyRecord and neither is one, so any rule keyed on tyRecord has to stand down for both. symtab.inc:8130-8141 asks the pair together for a PARAMETER. AssignSideKind (ir.inc:87) asks it for an ASSIGNMENT DESTINATION and, until the methodptr-nil fix, carried only the interface half -- which is how `OnClick := nil` became a compile error for a field, an array element and a loop-written element while it kept working for a plain variable. Two copies, one already drifted, before either had a name."
+summary: "REJECTED — already done in d5fd2a6ca, forty minutes before this was filed. frankS extracted RecIsReferenceShaped (symtab.inc:8116, methodptr OR interface) and routed ProcParamIsNilable and BOTH AssignSideKind arms through it. Verified by rebuilding at HEAD and running test_methodptr_nil_assign.pas: it compiles and passes. The ticket was filed off a symtab.inc read at the sha in my checkout, without pulling first."
 ---
 
 # The question
@@ -57,3 +58,35 @@ Track A: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick`, pinned
 by `test/test_methodptr_nil_assign.pas` and the assign fail/ok pair
 (`test_assign_lvalue_shapes_fail` / `_ok`, whose 12-row count is itself the
 assertion).
+
+
+---
+
+# Rejected — it had already landed when this was written
+
+**2026-08-30, frankA, the same hour.** `d5fd2a6ca` (frankS) is exactly the shape
+this ticket asked for:
+
+- `symtab.inc:8116` — `RecIsReferenceShaped(rec)`, `MethodPtrRecId` **or**
+  `UClsIsInterface`, one name for the pair.
+- `symtab.inc:8170` — `ProcParamIsNilable` delegates to it.
+- `ir.inc:106` and `ir.inc:151` — **both** `AssignSideKind` arms call it, so the
+  drift this ticket was about is gone rather than documented.
+
+Measured rather than read off the diff: rebuilt at HEAD (fixedpoint, 2 rounds)
+and ran `test/test_methodptr_nil_assign.pas` — compiles, and all three cleared
+shapes report `assigned=FALSE` after being armed and called.
+
+## Why it was filed anyway, which is the part worth keeping
+
+I read `symtab.inc:8130-8141` **at the sha in my checkout** and wrote the ticket
+from it. The predicate had existed for forty minutes. `git fetch`/`pull` before
+*filing* — not merely before *writing* — is the cheap fix, and it is the same
+error the coordinator made tonight from the other side: an absence read as a
+fact about the repo when it was a fact about one working tree.
+
+**A ticket asserts a present-tense claim about the codebase.** That makes filing
+one a measurement, subject to the same staleness rule as any other, and the
+board is where a stale claim is most expensive: nobody re-derives it, they act
+on it. This one would have sent its resolver to write a predicate that was
+already three call sites deep.
