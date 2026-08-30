@@ -1225,6 +1225,7 @@ end;
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
+  itemNode, hi: Integer;   { `x in [consts]` — SPECIAL_IN's item walk }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
@@ -2563,6 +2564,62 @@ begin
             procIdx := FindProc('PXXStdinEof');
             if procIdx < 0 then Error('compiler error: PXXStdinEof not found');
             EmitCallProc(procIdx);
+            Exit;
+          end;
+          if procIdx = -SPECIAL_IN then
+          begin
+            { `x in [items]` where EVERY item is constant. The second shape `in`
+              arrives in: a set literal containing any RUNTIME element routes
+              through ParseSetLiteralAST and becomes an ordinary AN_BINOP tkIn,
+              while an all-constant literal never becomes a set at all — the
+              parser emits an AN_CALL with -SPECIAL_IN and the backend compares
+              inline. ir_codegen.inc, aarch64, arm32 and i386 carried this arm;
+              riscv32 and xtensa did not, and both were found in the same pass
+              rather than one being left for the next lane
+              (devdocs/dev/normalise-dont-special-case.md — grep for the sibling
+              BEFORE closing the first arm, which includes the sibling BACKEND).
+
+              arm32's model accumulates with conditional execution and xtensa's
+              has to branch, but riscv has `slt`, so this arm is branchless: no
+              labels, no forward patching, one straight run of ALU ops. Same
+              rule, each backend's own idiom — which is what normalising a
+              construct across targets is supposed to look like. }
+            argNode := IRB[node];             { arg1 = the test value (IR_ARG) }
+            IREmitNodeRISCV32(IRA[argNode]);  { a0 = test value }
+            rv32_addi(reg_a2, reg_a0, 0);     { a2 = x }
+            rv32_addi(reg_a3, reg_zero, 0);   { a3 = membership accumulator }
+            argNode := IRB[argNode];          { first set item }
+            while argNode <> -1 do
+            begin
+              itemNode := IRA[argNode];
+              if IRKind[itemNode] = IR_BLOCK then
+              begin
+                { [lo..hi]  ->  (x >= lo) and (x <= hi) }
+                lo := Integer(IRIVal[IRA[itemNode]]);
+                hi := Integer(IRIVal[IRB[itemNode]]);
+                EmitLoadImmRISCV32(reg_a4, lo);
+                rv32_slt(reg_a4, reg_a2, reg_a4);   { a4 = x < lo }
+                rv32_xori(reg_a4, reg_a4, 1);       { a4 = x >= lo }
+                EmitLoadImmRISCV32(reg_a5, hi);
+                rv32_slt(reg_a5, reg_a5, reg_a2);   { a5 = hi < x }
+                rv32_xori(reg_a5, reg_a5, 1);       { a5 = x <= hi }
+                rv32_and(reg_a4, reg_a4, reg_a5);
+              end
+              else
+              begin
+                if IRKind[itemNode] <> IR_CONST_INT then
+                  Error('target riscv32: `in [..]` reached the constant-only path '
+                        + 'with a non-constant element; a runtime element must '
+                        + 'lower to a set binop (ParseSetMembershipAST)');
+                lo := Integer(IRIVal[itemNode]);
+                EmitLoadImmRISCV32(reg_a4, lo);
+                rv32_xor(reg_a4, reg_a2, reg_a4);   { 0 iff equal }
+                rv32_sltiu(reg_a4, reg_a4, 1);      { a4 = x = v }
+              end;
+              rv32_or(reg_a3, reg_a3, reg_a4);
+              argNode := IRB[argNode];
+            end;
+            rv32_addi(reg_a0, reg_a3, 0);     { a0 = result }
             Exit;
           end;
           begin

@@ -12571,11 +12571,21 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_str_length_index.pas $(TESTTMP)/test_rv32x_str_li
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_str_length_index.pas $(TESTTMP)/test_rv32x_str_li_x64
 	tools/expect_same.sh riscv32/test_rv32x_str_li "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_str_li)" "$$($(TESTTMP)/test_rv32x_str_li_x64)"
-	# SKIP test/test_cross_in_operator.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# `x in [consts]` — un-SKIPped: the gap was a missing SPECIAL_IN arm, which
+	# ir_codegen.inc, aarch64, arm32 and i386 all carried and the two 32-bit
+	# cross backends did not. Both were fixed in one change rather than one being
+	# left for the next lane, because the ticket being repaired IS a
+	# fixed-one-arm-only bug.
+	./$(COMPILER) --target=riscv32 test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in
+	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in_x64
+	tools/expect_same.sh riscv32/test_rv32_in "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_in)" "$$($(TESTTMP)/test_rv32_in_x64)"
 	# SKIP test/test_cross_managed_aggregate_locals.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_cross_loadfile.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_cross_sysopen_family.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_cross_string_cow.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# string COW — same SPECIAL_IN gap; it uses `in [..]` on a character.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow_x64
+	tools/expect_same.sh riscv32/test_rv32_string_cow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_string_cow)" "$$($(TESTTMP)/test_rv32_string_cow_x64)"
 	# SKIP test/test_cross_var_string_param.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string_x64
@@ -13147,6 +13157,15 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin_x64
 	tools/expect_same.sh xtensa/test_eof_stdin "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_eof_stdin)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_xtensa_eof_stdin_x64)"
+	# `x in [consts]` and the string-COW program that uses it. Same SPECIAL_IN
+	# arm as the riscv32 rows above; xtensa has no conditional execution, so its
+	# version branches over a `movi` where arm32 uses `moveq` and riscv uses slt.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_in_operator.pas $(TESTTMP)/test_xtensa_in
+	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_xtensa_in_x64
+	tools/expect_same.sh xtensa/test_xtensa_in "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_in)" "$$($(TESTTMP)/test_xtensa_in_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow_x64
+	tools/expect_same.sh xtensa/test_xtensa_string_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_string_cow)" "$$($(TESTTMP)/test_xtensa_string_cow_x64)"
 	# The first row the xtensa syscall table unblocked. ASSERTS THE EXIT STATUS,
 	# not stdout: the program's whole subject is dying by SIGTERM (-> 143) once
 	# the dispatch stub restores SIG_DFL and re-raises, and its stdout is one
@@ -13155,7 +13174,7 @@ test-xtensa: $(COMPILER)
 	# asserts the wrong observable is a green that means nothing.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_xtensa_sigdfl
 	tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigdfl > /dev/null 2>&1; tools/expect_same.sh xtensa/test_xtensa_sigdfl-rc "$$?" "143"
-	@echo "hosted xtensa: 98 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	@echo "hosted xtensa: 100 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

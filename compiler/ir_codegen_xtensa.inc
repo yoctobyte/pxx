@@ -1338,6 +1338,7 @@ end;
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
+  itemNode, hi: Integer;   { `x in [consts]` — SPECIAL_IN's item walk }
   isOrd: Boolean;   { managed-string compare: ordered (PXXStrCmp3) vs equality }
   argFree: Integer;   { Call0: bytes of argument block to pop AFTER the call
                         (0 = the block was already freed before it) }
@@ -2445,6 +2446,72 @@ begin
             procIdx := FindProc('PXXStdinEof');
             if procIdx < 0 then Error('compiler error: PXXStdinEof not found');
             EmitCallProc(procIdx);
+            Exit;
+          end;
+          if procIdx = -SPECIAL_IN then
+          begin
+            { `x in [items]` where EVERY item is constant. This is the SECOND
+              shape `in` arrives in and it is the one I missed: a set literal
+              with any runtime element routes through ParseSetLiteralAST and
+              becomes an ordinary AN_BINOP tkIn (the arm added earlier tonight),
+              while an all-constant literal never becomes a set at all — the
+              parser emits an AN_CALL with -SPECIAL_IN and the backend compares
+              inline. Two shapes for one construct is exactly what
+              devdocs/dev/normalise-dont-special-case.md says to grep for before
+              closing the first arm, and the parser's own comment records that
+              these two paths had already diverged once (`writeln(e in [a,b])`
+              printed 1 instead of TRUE, because only the binop arm was typed
+              tyBoolean).
+
+              ir_codegen.inc, aarch64, arm32 and i386 carry this; riscv32 and
+              xtensa did not. Modelled on arm32, which is the closest 32-bit
+              arm — but arm32 accumulates with conditional execution (`moveq
+              r4, #1`), which xtensa does not have, so every test becomes a
+              branch over a `movi`, the same way the tkIn arm had to become a
+              branch for want of `sltiu`.
+
+              Constants go through EmitLoadConstXtensa, never a bare `movi`:
+              xtensa_movi masks to 12 bits with no range check, so a set element
+              above 2047 would silently encode as something else. The literal-
+              pool fallback is why each item is its own EmitAsmXtensa block —
+              EmitLoadConstXtensa can emit a jump over a literal, and labels are
+              scoped per block, so nothing branches across one.
+
+              Registers avoid a7 (the frame pointer under the windowed ABI) and
+              a15 (the frame pointer under Call0): a3 holds the test value, a4
+              the accumulator, a5 the item constant, a6 a per-range temp. }
+            argNode := IRB[node];             { arg1 = the test value (IR_ARG) }
+            IREmitNodeXtensa(IRA[argNode]);   { a2 = test value }
+            EmitAsmXtensa(['mov a3, a2', 'movi a4, 0']);
+            argNode := IRB[argNode];          { first set item }
+            while argNode <> -1 do
+            begin
+              itemNode := IRA[argNode];
+              if IRKind[itemNode] = IR_BLOCK then
+              begin
+                { [lo..hi]: a6 := 1, cleared by either bound that fails. }
+                lo := Integer(IRIVal[IRA[itemNode]]);
+                hi := Integer(IRIVal[IRB[itemNode]]);
+                EmitAsmXtensa(['movi a6, 1']);
+                EmitLoadConstXtensa(reg_xtensa_a5, lo);
+                EmitAsmXtensa(['bge a3, a5, .ok', 'movi a6, 0', '.ok:']);
+                EmitLoadConstXtensa(reg_xtensa_a5, hi);
+                EmitAsmXtensa(['bge a5, a3, .ok', 'movi a6, 0', '.ok:']);
+                EmitAsmXtensa(['or a4, a4, a6']);
+              end
+              else
+              begin
+                if IRKind[itemNode] <> IR_CONST_INT then
+                  Error('target xtensa: `in [..]` reached the constant-only path '
+                        + 'with a non-constant element; a runtime element must '
+                        + 'lower to a set binop (ParseSetMembershipAST)');
+                lo := Integer(IRIVal[itemNode]);
+                EmitLoadConstXtensa(reg_xtensa_a5, lo);
+                EmitAsmXtensa(['bne a3, a5, .skip', 'movi a4, 1', '.skip:']);
+              end;
+              argNode := IRB[argNode];
+            end;
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);
             Exit;
           end;
           { Names the builtin. The message used to read "builtin calls not
