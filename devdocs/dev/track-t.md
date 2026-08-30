@@ -395,10 +395,30 @@ and only the second one decays. Scanning for "old numbers" and treating the coun
 as a backlog manufactures 19 items of work out of 2 — the polarity that sends
 effort somewhere useless rather than stopping you looking.
 
-The two real ones are unverified as of this writing; re-deriving them needs a
-build and was deferred off a loaded box. **The enumeration is cheap and the
-re-derivation is not, so they are separate jobs** — do the counting whenever, and
-spend cores only on the residue.
+**Both re-derived, same day. One held, one had rotted — which is the ratio the
+partition exists to find.**
+
+- `ADDLINE=10` (`dwarf_smoke.sh`): **correct.** Line 10 of the generated heredoc
+  is `local := a + b;`, the first statement of `Add`. Verified by counting the
+  heredoc — the constant indexes a source that lives in the same file, so no
+  build was needed at all.
+- `BLANK_MAX=4000` (`gui_shot.sh`): **rotted.** An empty Xvfb display at the
+  script's own default 1100x700 captures at **4013 bytes** under ffmpeg 8.0.1,
+  five samples, no variance. The test is `-le BLANK_MAX`, so every blank frame
+  now passes as a real window, and the Xvfb restart-and-retry path it guards is
+  unreachable. Filed as `bug-b-gui-shot-blank-frame-detector-no-longer-detects-
+  a-blank-frame`.
+
+The rotted one is the shape worth remembering: **the number was right when it was
+written.** Nobody edited it and nobody was careless — ffmpeg's encoder or the
+default size moved underneath it, and a prose comment ("a blank frame is ~1-3
+KB") is not something that re-checks itself. **A measured constant needs its
+derivation recorded beside it**, or the only thing left asserting it is the
+memory of whoever measured it.
+
+**The enumeration is cheap and the re-derivation is not, so they are separate
+jobs** — do the counting whenever, and spend cores only on the residue. Here the
+residue was two, and one of them turned out to need no cores either.
 
 ## Rule: "filed", "done", "already handled" are CLAIMS — and `ls` settles them
 
