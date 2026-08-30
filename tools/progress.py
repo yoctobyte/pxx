@@ -1781,6 +1781,35 @@ pre code{background:none;padding:0}
                 f"the ticket look taken to everyone who opens it"
             )
 
+        # DUPLICATE-SLUG: one slug present in two status folders. The folder IS
+        # the lock, so a stray copy in working/ is a phantom lock on a ticket that
+        # may already be finished -- and it is indistinguishable from a real lock,
+        # because every ownership scan reads the folder and there is nothing else
+        # to read. Found 2026-08-30 only because a `git mv` refused to overwrite;
+        # it had held a Track A lock for four hours after the fix landed, and the
+        # stray copy carried no frontmatter, so it answered no question about who
+        # held it either.
+        #
+        # The remedy is CONCATENATE, never delete: that pair was complementary,
+        # not identical -- done/ held the ticket, working/ held a 28-line
+        # resolution write-up that existed nowhere else. Deleting "the duplicate"
+        # would have destroyed the only record of how it was fixed.
+        by_slug: dict = {}
+        for t in self.tickets:
+            by_slug.setdefault(t.slug, []).append(t)
+        for slug, ts in sorted(by_slug.items()):
+            if len(ts) < 2:
+                continue
+            problems = 1
+            where = ", ".join(sorted(x.status + "/" for x in ts))
+            lines.append(
+                f"DUPLICATE-SLUG: {slug} exists in {len(ts)} status folders "
+                f"({where}) — the folder is the lock, so the copy in the "
+                f"earlier folder reads as a live claim on finished work. "
+                f"CONCATENATE the copies and keep one; they are usually "
+                f"complementary, not identical, so never delete before diffing."
+            )
+
         pending, dead, bookkeeping = self._audit_citations()
         for slug in pending:
             warning_count += 1
