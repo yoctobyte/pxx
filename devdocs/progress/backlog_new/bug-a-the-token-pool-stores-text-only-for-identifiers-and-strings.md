@@ -1,10 +1,10 @@
 ---
 track: A
-prio: 60
+prio: 25
 type: bug
 blocked-by: []
-status: working
-owner: frank-optimize
+status: backlog_new
+owner: ""
 found: 2026-08-30
 found-by: frank-optimize, doing bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path
 summary: "RE-SCOPED 2026-08-30 after an attempt: this is NOT eleven mechanical lexer edits. SOffset/SLen is an OVERLOADED channel, not a text field -- for tkInteger, SLen>0 MEANS 'wider than Int64', so giving ordinary tokens their text makes every integer literal promotable and `writeln(42)` fails to compile. A correct fix needs a SEPARATE span channel, i.e. new parallel arrays in defs.inc, before any lexer is touched. Original finding stands: every lexer stores token text for tkIdent and tkString only; keywords, punctuation, operators and numbers get SOffset := 0. That if/else is hand-copied across eleven lexers. So the `near:` window under EVERY diagnostic in the compiler prints the identifiers and silently discards the syntax -- `near: begin x >>> end` for `x := (1 ;` -- and no diagnostic can name an offending keyword. Sized: 3.24 MiB of token text against a fixed 8 MiB STRING_CAP, 40.5%, so this is a mechanical change to eleven files, not a pool redesign."
@@ -340,3 +340,87 @@ attempt costing twelve seconds of build.
 `make compiler/pascal26` -> converged after 1 round(s), `379ffffc4151`;
 `tools/gate.sh quick` GREEN 7/7; twelve-program emitted-code A/B identical; both
 new assertions shown to fail on the pre-change binary.
+
+## Slice 2 (NilPy) landed, and the ticket is RE-SCOPED (2026-08-30, frank-optimize)
+
+```
+NilPy, before:  near:   m  self  >>>   pass
+NilPy, after:   near:  def m ( self ) >>>   pass
+```
+
+**The denominator was never eleven.** Pascal carried the compiler's own
+diagnostics and NilPy is mainline with a gated suite and real users; those two
+were the value and both are done. What remains is not a campaign:
+
+| lexer | status |
+| --- | --- |
+| Pascal (`lexer.inc`) | **DONE** — slice 1 |
+| NilPy (`pylexer.inc`) | **DONE** — slice 2 |
+| C (`clexer.inc`) | **GATED** on the pool measurement below — do not start without it |
+| `rlexer`, `zlexer` | X-tagged experimental: optional, never a prio, by CLAUDE.md's own rule |
+| `blexer`, `elexer`, `flexer`, `glexer`, `llexer`, `alexer` | **opportunistic** — one line each, take one when you are already in that file for another reason |
+
+**Prio dropped 60 -> 25 to match.** 60 was right when this was "every frontend's
+diagnostics are broken"; the two that mattered are fixed, and leaving it at 60
+would keep offering the ranker work whose value stopped after slice 2. The
+coordinator may re-rank.
+
+### Each remaining lexer is now one line
+
+`RecordTokSpan(idx, startPos, endPos)` in `lexer.inc` is THE implementation —
+pool write, byte-sharing, cap check, bounds clamp. A lexer's slice is: know where
+its token began, and call it. That extraction is deliberate: writing the block
+per lexer would have rebuilt the exact eleven-hand-copies situation this ticket
+exists to repair. What stays per-language is deciding where a token starts and
+ends — that is the lexer's own business
+(`devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`: duplicate parsers,
+share substrate; this is substrate).
+
+NilPy shows the shape for a lexer whose emitter has many call sites: `PyEmitToken`
+has **65**, and several are synthetic (the complex-literal expansion, the
+inline-suite INDENT/DEDENT pair) with no source text at all. None were touched.
+The span is taken where the scanner knows a real token began and finalised at the
+top of the next iteration, and **only when the branch appended exactly one
+token** — a multi-token expansion leaves `TokSrcLen` at 0 and the diagnostics fall
+back, which is correct, because those tokens are not in the source.
+
+### The C measurement: TAKEABLE, not taken — the file is not in this checkout
+
+`library_candidates/` does not exist here (gitignored scratch; `SQLITE_SRC ?=
+library_candidates/sqlite`, and the sqlite rows skip when it is absent). So the
+number cannot be produced from this tree, and no estimate of it belongs in this
+ticket — a guess at the quantity is what went wrong twice already.
+
+What was done instead is to make it **one command** for anyone who has the file.
+`PXXDBG=a.tokpool:*` was moved out of the Pascal lexer into `TokPoolReport`,
+called at end of compile, so it reads the same number for **every** frontend:
+
+```
+$ PXXDBG='a.tokpool:*' ./compiler/pascal26 library_candidates/sqlite/sqlite3.c /tmp/o
+PXXDBG a.tokpool bytes=... cap=8388608 pct=... tokens=... spellings=... other=...
+```
+
+Validated on what is here — Pascal `pct=52`, NilPy `pct=7`, small C `pct=1`:
+
+**The decision rule for the C slice.** Run it on the amalgamation *before* the
+slice, to get C's baseline. The slice adds roughly the TU's code bytes minus what
+byte-sharing recovers; on Pascal the total landed at 52%. If C's post-slice
+projection clears ~75%, the slice is schedulable. If not, `STRING_CAP` must
+become dynamic first — the `DbgBuf` treatment from
+`bug-a-g-with-o2-or-o3-overflows-the-dwarf-buffer-on-compiler-pas` — as its own
+prerequisite ticket, and `defs.inc` records that a fixed cap is exactly what
+sqlite's 257k-line amalgamation broke once already. **Pascal's 52% does not
+generalise; do not assume it.**
+
+One thing the measurement already shows, free: a C compile reports
+`spellings=112715` even with `clexer` untouched, because it pulls Pascal RTL
+units through `LexAppend`. That is the fallback working as designed — C's own
+tokens contribute nothing to the new channel and its `near:` windows are
+unchanged — but it means a naive reading of `spellings` on a C file is NOT C's
+cost. Subtract the RTL's.
+
+### Gate
+
+`make compiler/pascal26` -> converged after 1 round(s), `c528c6cddda7`;
+`tools/gate.sh quick` GREEN 7/7; three assertions (two Pascal, one NilPy) pass
+and each was shown to fail against the binary from before its own slice.

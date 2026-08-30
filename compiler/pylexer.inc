@@ -792,6 +792,17 @@ end;
 procedure PyLexAll(SupportLineNumbers: Boolean);
 var
   P: Integer;
+  { The pending token's source span. NilPy has 65 PyEmitToken call sites and
+    some of them are SYNTHETIC (the complex-literal expansion, the inline-suite
+    INDENT/DEDENT pair), which have no source text at all -- so the span is
+    taken here, in the one place the scanner knows where a real token began,
+    and finalised at the top of the next iteration once P has moved past it.
+    Only when the branch appended EXACTLY ONE token: a multi-token expansion
+    leaves TokSrcLen at 0 and the diagnostics fall back, which is right --
+    those tokens are not in the source.
+    bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
+  pyTokStart, pyTokBase: Integer;
+  pyTokPending: Boolean;
   IndentStack: array[0..1024] of Integer;
   IndentStackTop: Integer;
   parenDepth: Integer;
@@ -859,6 +870,7 @@ begin
   inlineSuite := False;
   HasSpaceIndent := False;
   HasTabIndent := False;
+  pyTokPending := False;
 
   while P <= Length(Source) do
   begin
@@ -933,6 +945,11 @@ begin
     end;
     while (P <= Length(Source)) and (Source[P] <> #10) and (Source[P] <> #13) do
     begin
+      if pyTokPending then
+      begin
+        if TokCount = pyTokBase + 1 then RecordTokSpan(pyTokBase, pyTokStart, P);
+        pyTokPending := False;
+      end;
       c := Source[P];
 
       { Skip non-newline whitespace }
@@ -952,6 +969,9 @@ begin
 
       { An actual token is about to be read, making this a logical line }
       IsLogicalLine := True;
+      pyTokStart := P;
+      pyTokBase := TokCount;
+      pyTokPending := True;
 
       { A RAW string prefix: r'...' / R"..." keeps every backslash literal, which
         is what regex patterns are written with (`re.match(r'^([A-G][b#]?)')`).
@@ -1456,6 +1476,11 @@ begin
           Error('unexpected character: ' + c);
         end;
       end;
+    end;
+    if pyTokPending then
+    begin
+      if TokCount = pyTokBase + 1 then RecordTokSpan(pyTokBase, pyTokStart, P);
+      pyTokPending := False;
     end;
 
     { 4. End of physical line: emit tkNewline if logical line and paren depth is 0 }

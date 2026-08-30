@@ -2260,6 +2260,7 @@ begin
   end;
 
   AsmMemoReport;
+  TokPoolReport;
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
           'B  bss=',BSSSize,'B  procs=',ProcCount,']');
 end.

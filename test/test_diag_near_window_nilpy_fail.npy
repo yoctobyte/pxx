@@ -1,0 +1,8 @@
+# MUST NOT COMPILE. The point of this file is the DIAGNOSTIC, not the program.
+# NilPy half of bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings:
+# the `near:` window used to render this as `m  self  >>>   pass`, dropping the
+# `def`, the parentheses -- every token that is not an identifier. NilPy is
+# mainline and its users are real, so its window is asserted like Pascal's.
+class A:
+    def m(self)
+        pass

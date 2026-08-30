@@ -5540,6 +5540,12 @@ test-core: $(COMPILER)
 	# only identifiers and strings do -- so before the source-span channel this
 	# read "expected ')'" with the culprit omitted.
 	tools/expect_same.sh test_diagnear_msg26 "$$(grep -c "error: expected ')' before ';'" $(TESTTMP)/test_diagnear.log)" "1"
+	# Same window, NilPy — mainline, gated, real users. Rendered `m  self  >>>`
+	# before its lexer filled the source-span channel: the `def` and both parens
+	# gone. Asserted here beside the Pascal row rather than in test-nilpy so the
+	# two halves of one guard cannot drift into different tiers.
+	! ./$(COMPILER) test/test_diag_near_window_nilpy_fail.npy $(TESTTMP)/test_diagnearpy26 > $(TESTTMP)/test_diagnearpy.log 2>&1
+	tools/expect_same.sh test_diagnearpy26 "$$(grep '  near:' $(TESTTMP)/test_diagnearpy.log | sed 's/ *$$//')" "  near:  def m ( self ) >>>   pass"
 	# generic record/array/procvar templates (feature-pascal-generic-nonclass-templates)
 	./$(COMPILER) test/test_generic_nonclass.pas $(TESTTMP)/test_generic_nonclass26
 	tools/expect_same.sh test_generic_nonclass26 "$$($(TESTTMP)/test_generic_nonclass26)" "$$(printf '7\n20\n42')"

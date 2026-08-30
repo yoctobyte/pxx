@@ -222,6 +222,89 @@ begin
   TokCapacity := n;
 end;
 
+procedure RecordTokSpan(idx, startPos, endPos: Integer);
+{ Record token `idx`'s SOURCE SPELLING -- Source[startPos..endPos-1] -- into
+  TokSrcOff/TokSrcLen. THE one implementation, called by every frontend's lexer.
+
+  Shared deliberately, and it is the one thing in this feature that is shared.
+  The bug being fixed exists because eleven lexers hand-copied the same "which
+  tokens keep their text" if/else and the copies could not be fixed in one
+  place; writing this out per lexer would rebuild that exact situation while
+  claiming to repair it. What must stay per-language is the DECISION of where a
+  token starts and ends -- that is the lexer's own business, and the reason
+  `devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md` says to duplicate
+  parsers and share substrate. This is substrate.
+
+  Shares the bytes already written for the token's SVal when the two are the
+  same text, which for an identifier they almost always are. Copying both
+  unconditionally took the char pool from 38% to 86% of a FIXED cap on
+  compiler.pas; sharing puts it at 51%. Measure with PXXDBG=a.tokpool:*, never
+  by counting source bytes -- that proxy has now been wrong twice, in opposite
+  directions.
+  bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
+var n, i: Integer; reuse: Boolean;
+begin
+  n := endPos - startPos;
+  if n < 0 then n := 0;
+  if startPos + n - 1 > Length(Source) then n := Length(Source) - startPos + 1;
+  if n <= 0 then Exit;
+  reuse := (Tokens[idx].SLen = n);
+  if reuse then
+  begin
+    i := 1;
+    while i <= n do
+    begin
+      if TokChars[Tokens[idx].SOffset + i - 1] <> Source[startPos + i - 1] then
+      begin
+        reuse := False;
+        i := n;
+      end;
+      Inc(i);
+    end;
+  end;
+  if reuse then
+  begin
+    TokSrcOff[idx] := Tokens[idx].SOffset;
+    TokSrcLen[idx] := n;
+    Exit;
+  end;
+  if TokCharLen + n > STRING_CAP then Error('token char pool overflow');
+  TokSrcOff[idx] := TokCharLen;
+  TokSrcLen[idx] := n;
+  i := 1;
+  while i <= n do
+  begin
+    TokChars[TokCharLen] := Source[startPos + i - 1];
+    Inc(TokCharLen);
+    Inc(i);
+  end;
+end;
+
+procedure TokPoolReport;
+{ PXXDBG=a.tokpool — what the token char pool actually holds, against its cap.
+  STRING_CAP is FIXED and overflowing it is a hard Error, so anyone sizing a
+  change against it needs the real number rather than a proxy for it. Sizing the
+  source-spelling channel from SOURCE bytes gave 7.52 MB (94% of cap) and would
+  have killed the feature; sizing it as an ADDITION gave 40% and would have
+  waved through something that measured 86%. The quantity is TOKEN bytes, this
+  repo is ~68% comment bytes, and only the compiler can count them.
+
+  Deliberately NOT in a lexer: it must read the same number for every frontend,
+  and the frontend whose headroom is actually in question is C, whose largest
+  real input (sqlite's 257k-line amalgamation) is the file that broke a fixed
+  table cap once already.
+  bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
+var i, spell: Integer;
+begin
+  if not PxxDbgWants('a.tokpool', '*') then Exit;
+  spell := 0;
+  for i := 0 to TokCount - 1 do spell := spell + TokSrcLen[i];
+  writeln('PXXDBG a.tokpool bytes=', TokCharLen, ' cap=', STRING_CAP,
+          ' pct=', (TokCharLen * 100) div STRING_CAP,
+          ' tokens=', TokCount, ' spellings=', spell,
+          ' other=', TokCharLen - spell);
+end;
+
 { Non-fatal diagnostic for accepted-but-suspect constructs (a case-insensitive
   C-import match, a narrowing, an ignored attribute). Prints
   `pascal26:<line>: warning: ...` to stdout, in the same shape as Error, and
@@ -2679,7 +2762,7 @@ begin
 end;
 
 procedure LexAll;
-var len, i, tokStart, srcLen: Integer; sval: AnsiString; reuse: Boolean;
+var len, i, tokStart: Integer; sval: AnsiString;
 begin
   TokCharLen := 0;
   TokCount   := 0;
@@ -2712,75 +2795,19 @@ begin
       Inc(TokCharLen);
       Inc(i);
     end;
-    { and the SOURCE SPELLING, for every token, in its own channel — see
-      TokSrcOff/TokSrcLen in defs.inc for why it cannot share SOffset/SLen.
-
-      SHARES the SVal bytes when the two are the same text, which for an
-      identifier they almost always are. Storing both unconditionally more than
-      doubled the pool -- measured on compiler.pas at 3,219,348 existing bytes
-      plus 4,001,848 of spellings, i.e. 86% of a FIXED 8 MB STRING_CAP whose
-      overflow is a hard error. Sharing gives the identifiers back. }
-    srcLen := SrcPos - tokStart;
-    if srcLen < 0 then srcLen := 0;
-    if tokStart + srcLen - 1 > Length(Source) then srcLen := Length(Source) - tokStart + 1;
-    if srcLen < 0 then srcLen := 0;
-    reuse := (srcLen = len) and (srcLen > 0);
-    if reuse then
-    begin
-      i := 1;
-      while i <= len do
-      begin
-        if TokChars[Tokens[TokCount].SOffset + i - 1] <> Source[tokStart + i - 1] then
-        begin
-          reuse := False;
-          i := len;
-        end;
-        Inc(i);
-      end;
-    end;
-    if reuse then
-    begin
-      TokSrcOff[TokCount] := Tokens[TokCount].SOffset;
-      TokSrcLen[TokCount] := len;
-    end
-    else
-    begin
-      if TokCharLen + srcLen > STRING_CAP then Error('token char pool overflow');
-      TokSrcOff[TokCount] := TokCharLen;
-      TokSrcLen[TokCount] := srcLen;
-      i := 1;
-      while i <= srcLen do
-      begin
-        TokChars[TokCharLen] := Source[tokStart + i - 1];
-        Inc(TokCharLen);
-        Inc(i);
-      end;
-    end;
+    { and the SOURCE SPELLING, in its own channel — see TokSrcOff/TokSrcLen in
+      defs.inc for why it cannot share SOffset/SLen. }
+    RecordTokSpan(TokCount, tokStart, SrcPos);
     Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until CurTok.Kind = tkEOF;
-  { PXXDBG=a.tokpool — what the token char pool actually holds, against its cap.
-    STRING_CAP is FIXED and overflowing it is a hard Error, so anyone sizing a
-    change against it needs the real number. Sizing this feature from SOURCE
-    bytes gave 7.52 MiB (94% of cap) and would have killed it; the quantity that
-    matters is TOKEN bytes, and comments are ~68% of this repo's source. Measure
-    with the instrument, not with a proxy.
-    bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
-  if PxxDbgWants('a.tokpool', '*') then
-  begin
-    len := 0;
-    for i := 0 to TokCount - 1 do len := len + TokSrcLen[i];
-    writeln('PXXDBG a.tokpool bytes=', TokCharLen, ' cap=', STRING_CAP,
-            ' tokens=', TokCount, ' spellings=', len,
-            ' other=', TokCharLen - len);
-  end;
   Lexing := False;
 end;
 
 function LexAppend(const srcText: AnsiString): Integer;
 var
   savedSrcPos, savedSrcLine: Integer;
-  len, i, unitStart, tokStart, srcLen: Integer;
-  savedMarkDbg, savedLexing, reuse: Boolean;
+  len, i, unitStart, tokStart: Integer;
+  savedMarkDbg, savedLexing: Boolean;
   sval: AnsiString;
 begin
   SavedLexSource := Source;
@@ -2830,50 +2857,9 @@ begin
       Inc(TokCharLen);
       Inc(i);
     end;
-    { and the SOURCE SPELLING, for every token, in its own channel — see
-      TokSrcOff/TokSrcLen in defs.inc for why it cannot share SOffset/SLen.
-
-      SHARES the SVal bytes when the two are the same text, which for an
-      identifier they almost always are. Storing both unconditionally more than
-      doubled the pool -- measured on compiler.pas at 3,219,348 existing bytes
-      plus 4,001,848 of spellings, i.e. 86% of a FIXED 8 MB STRING_CAP whose
-      overflow is a hard error. Sharing gives the identifiers back. }
-    srcLen := SrcPos - tokStart;
-    if srcLen < 0 then srcLen := 0;
-    if tokStart + srcLen - 1 > Length(Source) then srcLen := Length(Source) - tokStart + 1;
-    if srcLen < 0 then srcLen := 0;
-    reuse := (srcLen = len) and (srcLen > 0);
-    if reuse then
-    begin
-      i := 1;
-      while i <= len do
-      begin
-        if TokChars[Tokens[TokCount].SOffset + i - 1] <> Source[tokStart + i - 1] then
-        begin
-          reuse := False;
-          i := len;
-        end;
-        Inc(i);
-      end;
-    end;
-    if reuse then
-    begin
-      TokSrcOff[TokCount] := Tokens[TokCount].SOffset;
-      TokSrcLen[TokCount] := len;
-    end
-    else
-    begin
-      if TokCharLen + srcLen > STRING_CAP then Error('token char pool overflow');
-      TokSrcOff[TokCount] := TokCharLen;
-      TokSrcLen[TokCount] := srcLen;
-      i := 1;
-      while i <= srcLen do
-      begin
-        TokChars[TokCharLen] := Source[tokStart + i - 1];
-        Inc(TokCharLen);
-        Inc(i);
-      end;
-    end;
+    { and the SOURCE SPELLING, in its own channel — see TokSrcOff/TokSrcLen in
+      defs.inc for why it cannot share SOffset/SLen. }
+    RecordTokSpan(TokCount, tokStart, SrcPos);
     Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until CurTok.Kind = tkEOF;
 
