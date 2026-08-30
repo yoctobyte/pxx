@@ -20978,3 +20978,99 @@ because* it was once hardcoded to `Ord(tyBool8)` and **silently failed every kin
 appended after it** — and the comment says so. That is what a repaired guard should look
 like: it left a tombstone, so the next appender did not have to rediscover the failure.
 Best in-repo example of a fix documenting its own failure mode.
+
+### AN ALARMING MEASUREMENT EARNS A SECOND INSTRUMENT, NOT A TICKET
+
+frank-optimize's observation, and it is the sharpest thing produced today because it
+explains the day's whole family rather than adding to it:
+
+> an artefact that says "there is a problem here" gets written into a ticket, and an
+> artefact that says "all clear" gets checked. That asymmetry is probably why this family
+> keeps surfacing rather than being caught.
+
+An alarming reading **terminates** the investigation — it *is* the finding, so there is
+nothing left to do but record it. A reassuring reading **continues** it, because "all
+clear" is never a deliverable. So the scrutiny lands exactly where it is least needed.
+Structurally identical to frank-optimize's own `but got:` finding — the field populates
+for identifiers, which the reader could already identify, and goes blank for keywords and
+punctuation, which they could not. The instrument and the bug it found share a defect.
+
+**The rule: an alarming measurement earns a second INSTRUMENT, not more care.** Care is
+what produced the first reading. All four of today's were caught by changing instruments:
+
+| artefact | wrong instrument | right instrument |
+| --- | --- | --- |
+| lexer.inc:2481 "next link in the chain" | `fpc -Crtoi` from memory | the flags the build actually uses (`-Crit`) |
+| ELF_DATA_ALIGN | one constant driving pad **and** assertion modulus | separate the two |
+| "these grants are released" | recalling grants given | `ls devdocs/progress/backlog/grant-*` |
+| STRING_CAP 94% full | source bytes as a proxy for token bytes | strip comments (this repo is ~68% comment bytes) |
+
+Every wrong reading was the alarming one. The STRING_CAP proxy was **2.3x** the true
+quantity (7.52 MiB vs 3.24 MiB against an 8 MiB cap) and pointed at the opposite
+conclusion — it would have made half B look like it needed a dynamic-buffer redesign
+first, re-ranking it as a two-stage job and probably parking it.
+
+Recall does not degrade toward obviously-missing; **it degrades toward plausibly-complete**,
+which is why being careful reproduces the failure — care makes the recalled version feel
+earned.
+
+### THE lexer.inc COLLISION I CREATED, AND WHAT HALF B TURNED OUT TO BE
+
+I told frank-optimize `lexer.inc` was its own without enumerating my grants. frankC holds
+it bounded to `WriteDiagSourceFile`, and frank-optimize's Expect ticket is literally *"no
+error prefix and no source path"* — two agents about to change what a diagnostic prints,
+in the one function whose job is deciding what a diagnostic prints. Second enumeration
+failure of the hour; frankS caught the first.
+
+It resolved to a **deliberate dual occupancy** rather than a queue, because
+frank-optimize measured that it needs neither half of `WriteDiagSourceFile`: the raw dump
+is a second output path that skipped the first, and the fix is to fold it into the
+`Error(...)` call **already on the next line**. `normalise-dont-special-case` applied
+literally.
+
+Three findings came out of that measurement that the ticket did not contain:
+
+1. **The ticket's premise is false.** It says to name the token by its spelling, "which
+   the lexer has". The lexer does **not** — text is stored only for `tkIdent`/`tkString`,
+   in an if/else hand-copied across **eleven** lexers. So the ordinal is not printed
+   *instead of* the name; there is no name. Identifiers do print, so **the field works
+   exactly when it is least needed.**
+2. **Every `near:` window in the compiler is silently degraded** by the same pool — it
+   prints the identifiers and discards the syntax, i.e. drops exactly the characters a
+   syntax error is about. `lexer.inc` calls that window "the difference between a findable
+   error and an unfindable one". *"Nobody has noticed because it still looks like
+   output."* Largest instance of the day's family: it degrades every frontend's primary
+   user-facing signal, and has for the life of the code.
+3. **A kind→spelling table is refuted by one grep** and must never be added:
+   `cparser.inc:3271 Expect(tkEnd, '}')` vs `pasparser_stmt.inc:2832 Expect(tkEnd,
+   'end')`. One kind, two spellings, because kinds are shared across frontends — which is
+   *why* `Expect` takes a `name` parameter. A shared table would confidently print the
+   other language's keyword. `the-substrate-is-ast-and-ir-not-the-parser.md` in one grep.
+
+Split: half A (Expect call site, ~10 lines, granted, zero corpus impact) and half B (the
+eleven lexers record text for all tokens, filed at **p60** not p30 — it buys every `near:`
+window, and measured to fit at 40.5% of `STRING_CAP`). Half B collides with frankC on
+`clexer.inc`; sequenced later.
+
+**Blast radius done right, and I will ask for it in this form now:** three fragments
+counted separately, then each hit classified by kind — all six Makefile hits are `#`
+comments, zero `{%FAIL}`, zero `.expected`, test/ hits are file-header prose. Raw total
+would have read as ~50 and meant nothing; split-then-classified it is a nil.
+
+### THE STRING FORK IS NOW A REAL TRACK U ITEM, AND MY OWN RESOLUTION CAUSED IT
+
+I resolved the UTF-16 model as a distinct `tyWideString` kind. frankwasm then counted what
+that costs: **636 code-level `tyAnsiString` kind tests** against a **five-call** chokepoint
+(`TypeIsManagedStr`, whose whole body is `Result := (tk = tyAnsiString)`). Each of the 636
+that means "is this a string" needs a third arm, added individually, and a miss does not
+fail loudly — it treats a wide string as not-a-string, i.e. a leak or a silent wrong value.
+
+That contradicts the constraint the owner actually stated — *"implementing new string types
+is (almost) free"* — so option B (one managed-string kind carrying an element width) is now
+the presumptive default and A is the option requiring the owner to revise their premise.
+Filed as `decide-one-managed-string-kind-with-an-element-width-or-a-second-kind`.
+
+**I resolved a design question before anyone counted the sites it touched.** The 636 was
+available the whole time; nobody, me included, ran the count until frankwasm went to write
+the lockstep cases. Note this is the *same* mistake as the file-list one two hours earlier:
+I reasoned about what the change is *about* instead of measuring where it has to *happen*.
