@@ -77,9 +77,10 @@ order to read them in. Route by what you are holding:
   anything under it is unresolved however many pairs agree
 - `## The natural repair action can destroy the diagnostic` -- rebuilding a
   suspicious binary erases the anti-Thompson check
-- `## A DELIBERATELY BROKEN backend self-hosted byte-identically` -- the
-  fixedpoint's coverage is a property of the CONSTRUCT, not of the change's
-  size; `converged after 1 round(s)` reads identically with the backend sabotaged
+- ``## The self-host fixedpoint builds at `-O2`, so it is ZERO coverage for
+  every `-O3`-gated pass`` -- decidable from the Makefile without running
+  anything; a green `converged` on a `-O3` pass is not weak evidence, the code
+  under test was never compiled
 - `## A job name is a promise, not a description of what ran` -- two hosts can
   report the same job list, count and verdict and check different things
 - `## A/B the hunk, bisect the window` -- with a named suspect, one build beats
@@ -348,63 +349,84 @@ a Rust and a Zig sample as individual commands. Twenty seconds, catches a
 false-reject class the fixedpoint cannot see, and goes nowhere near the
 no-full-suite hook.
 
-### A DELIBERATELY BROKEN backend self-hosted byte-identically
+### The self-host fixedpoint builds at `-O2`, so it is ZERO coverage for every `-O3`-gated pass
 
-Measured 2026-08-30 by frank-optimize, and it is the sharpest instance of this
-chapter because the sabotage was intentional and the gate still went green.
+Measured 2026-08-30 by frank-optimize, then corrected by them the same night —
+and **the correction is the more useful half, so read past the anecdote.**
 
-Landing the x86-64 zero-extend fusion, they broke the new emitter on purpose to
-prove the test fires — dropped `REX.R`, so `r8`–`r15` read `rax` instead. The
-test did fire, in the expensive way rather than the cheap one: `acc=374503906869`
-against `1299819431187`. A plausible wrong number, no crash, exactly the shape
-this playbook's first rule is about. And then:
+The anecdote first, because it is what made anyone look. Landing the x86-64
+zero-extend fusion, they broke the new emitter on purpose to prove the test
+fires — dropped `REX.R`, so `r8`–`r15` read `rax`. The test did fire, in the
+expensive way: `acc=374503906869` against `1299819431187`, a plausible wrong
+number with no crash. And then:
 
 ```
 make compiler/pascal26   ->   converged after 1 round(s), e4a7919b39b4
 ```
 
-**The compiler reproduced itself byte-identically while emitting a wrong register
-read.** The anti-Thompson agreement check would not have caught it either — both
-properties are about *reproduction*, and a miscompile that never reaches the
-compiler's own emitted bytes is invisible to both, by construction rather than by
-bad luck.
+**The compiler reproduced itself byte-identically with a deliberately broken
+encoder in it.** The anti-Thompson agreement check would not have caught it
+either — both properties are about *reproduction*.
 
-**CLAUDE.md names two scope limits on the fixedpoint — the optimisation level and
-the language surface. This is a THIRD and it is not either of them.** The language-surface
-limit is about a construct being **absent** from `compiler.pas` (the `property`
-case). This one is about **propagation**: the emitted code can be wrong without
-the wrongness reaching the output that gets compared.
+**The reason is not subtle and it is decidable without running anything**, which
+is the part worth carrying:
 
-**The one-line form, and it is frank-optimize's: the fixedpoint's coverage is a
-property of the CONSTRUCT, not of the change's size or riskiness.** Retain/release
-around `AnsiString` is a shape `compiler.pas` writes on nearly every line, so for
-that work the fixedpoint is unusually *strong* cover — the coordinator said so the
-same night and was right. A resident zero-extend feeding a shift is *no* cover at
-all. Both halves are true simultaneously, and **`converged after 1 round(s)` reads
-identically in both cases.** There is nothing in the output that tells you which
-one you are in; you have to know it about your own change.
+| | |
+| --- | --- |
+| `compiler/compiler.pas:838` | `OptLevel := 2;` is the default, `OptLevelExplicit := False` on the next line |
+| the pass | gates on `if OptLevel < 3 then Exit;` — **nine** sites: `ir_codegen.inc:2800,2937,10236,11000,11181,11196`, `ir_codegen_aarch64.inc:758,912,1509` |
+| `tools/selfhost_fixedpoint.sh:78-79` | invokes `"$cur" "$SRC" "$a"` bare; `grep -- -O[0-9]` returns **0 hits** |
+| `Makefile:281-282` | invokes `"$$cur" $(PXXFLAGS) …` with `PXXFLAGS :=` **empty** at `:119` (overridden only by `bootstrap-frozen`, `test-managed`, `test-frozen` — none of them the fixedpoint rule) |
+| `compiler.pas:971` | the only other write is `-O<n>` on the command line; there is no env path |
 
-**The residual question, named rather than answered, because I did not measure it
-and neither did they:** two different mechanisms produce this result and they are
-not equally alarming.
+So the fixedpoint compiles the compiler at `-O2`, and **no `-O3`-gated pass can
+execute during it at all.** Zero firings — and zero was never in doubt, because
+there is no path by which it could have been nonzero.
 
-1. The pass **never fires** during a self-compile. Then this is the known
-   language-surface limit wearing new clothes, and the interesting fact is only
-   that an optimisation can be absent from the one build everybody trusts.
-2. The pass **fires**, and the wrong register read does not change the bytes.
-   That is the much worse case, because it means the fixedpoint can watch a
-   miscompile execute and still agree with itself.
+**The claim to carry is about the TIER, not about that one construct: a green
+`converged after N round(s)` is not weak evidence for a `-O3` pass, it is NO
+evidence, because the code under test was never compiled.** That covers all nine
+gate sites, the whole W1 register-pressure campaign, and every `-O3` slice
+landed. The Makefile rows for this pass ask for it explicitly — `./$(COMPILER)
+-O3 test/test_shr_resident_zeroext.pas` at `Makefile:4239` — which is exactly
+why the fixedpoint had nothing to say about it.
 
-**The check that separates them is free and nobody has run it:** count the pass's
-firings during one self-compile. Zero means (1). Nonzero with a clean `converged`
-means (2), and that belongs in a ticket rather than in a playbook section. Whoever
-next touches that pass owns this question — recorded here so it has an owner
-rather than a satisfying ending (*"not X" is half a finding*).
+**This sharpens CLAUDE.md's two scope limits into a third, and it is the widest
+of the three because it is decidable from the build configuration rather than
+from the code.** The optimisation-level limit is stated there as "the claim holds
+at the default `-O` only"; this is that sentence with teeth on it — the default
+`-O` does not merely *weaken* the guarantee for a higher tier, it removes it
+entirely, and the removal is total, permanent and greppable.
+
+#### And the wrong reading I published in between, which is the reason this subsection was rewritten
+
+When I first placed this I asserted a mechanism nobody had measured: that the
+limit here was one of **propagation** — the emitted code being wrong without the
+wrongness reaching the bytes that get compared. It read well and it was wrong.
+The pass was never compiled in, so nothing propagated or failed to; propagation
+never entered it.
+
+I did name the alternative — "the pass never fires" — and I even wrote that the
+separating check was free and unrun. **Then I ranked the interesting mechanism
+first anyway and let the dull one sit as a caveat.** The correction cost three
+greps, from someone who did not need to count firings because the gate condition
+settles it.
+
+The guard that would have caught me is this file's own: **ask what this would be
+if it were false.** For propagation to be the mechanism, the pass would have to
+be able to *run* at the fixedpoint's `-O` level — one grep for its gate, two
+minutes, and it does not. I had a measured observation and I converted it into a
+mechanism claim by choosing, not by checking.
+
+Its companion, and frank-optimize volunteered it about their own half without
+being asked: this makes their `converged after 1 round(s)` **duller** than
+reported, not sharper. It was not a surprising survival, it was the only possible
+outcome. Both errors point the same way — a real measurement acquires a story on
+the way to being written down, and the story is the part nobody measures.
 
 They put the finding at the Makefile rows rather than in the commit message,
-which is the right call and worth copying: it lands where someone deciding
-whether to trust a green will actually read it, instead of in a log nobody greps
-before trusting one.
+which is right and worth copying: it lands where someone deciding whether to
+trust a green will read it, not in a log nobody greps before trusting one.
 
 ## Where is the time going — profiling on these boxes
 
@@ -629,6 +651,10 @@ name.
   not a gap; compile it standalone before filing
 - ``## "The pinned binary reproduces it" may be a claim about a MIXED compiler``
 - `## A silent assertion makes the harness report something else, confidently`
+- ``## The self-host fixedpoint builds at `-O2` `` -- I named PROPAGATION as the
+  mechanism when the pass was simply never compiled in; I had written that the
+  separating check was free and unrun, then ranked the interesting mechanism
+  first anyway. Three greps settled it
 - `## When you are about to conclude something`
 
 **A check exists, passes, and you are trusting it**
