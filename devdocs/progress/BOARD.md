@@ -63,7 +63,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (382)
+## backlog (383)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ _none_
 | bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc | A | 55 | bug | A csmith program compiles clean and then HANGS at runtime under pxx at -O0/-O1/-O2/-O3 alike, where a gcc-built binary of the same source runs and prints its checksum. Localized to func_58 by entry instrumentation: gcc enters all 10 generated functions, pxx enters 8 and spins in the 8th. Not an optimizer bug (every level hangs) and not a wrong builtin (all 15 verified equal to gcc individually). Repro preserved verbatim at test/csmith/hang_builtins_700082.c -- found via the --builtins axis, which csmith disables by default and no run in this repo had ever enabled. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
+| bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted | A | 55 | bug | A routine declared `external` never reaches the durable param-pointee store, so `ProcParamPtrElemTk` stays at the `tyUnknown` sentinel for every one of its pointer params — and the narrowing guard that sentinel feeds fails OPEN. Identical signature, body vs `external`, is the whole difference: `procedure g(p: PInteger)` with a body correctly rejects a class argument; the same line declared `external 'c' name 'abs'` compiles clean and passes an object pointer to libc `abs`. FPC rejects it. This is the SAME fail-open as bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching, on the one registration path that fix did not cover. | — |
 | bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa | A+S | 45 | bug | ArgStr reads past argv into the environment on riscv32 and xtensa | — |
 | bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets | A | 50 | bug | x86-64's argv->frozen-string copy is now clamped and riscv32/xtensa clamp via PXXCStrToFrozen, but aarch64, arm32 and i386 were never checked — the parent ticket listed them and I did not close that gap. Also: the clamp is duplicated per path rather than shared, so a new target gets a new copy. | — |
 | bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area | A | 45 | bug | arm32 cdecl refuses any argument block over 4 core registers — so arm32 only HALF-joins the cdecl campaign | — |
@@ -850,6 +851,7 @@ _none_
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 55] [A] bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc
+- [p 55] [A] bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted
 - [p 55] [C] bug-c-a-c-function-s-calling-convention-depends-on-the-target
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
