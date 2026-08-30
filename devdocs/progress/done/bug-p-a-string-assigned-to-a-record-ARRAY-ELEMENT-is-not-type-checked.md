@@ -3,9 +3,9 @@ track: P
 prio: 60
 type: bug
 blocked-by: []
-summary: "A record-typed lvalue assigned an AnsiString is type-checked in exactly ONE of its six forms. Only `r := s` (plain variable) is rejected; the dyn-array element, fixed-array element, record FIELD, class FIELD and pointer DEREF all compile clean and segfault. FPC rejects all six. Root cause measured 2026-08-30: the check at the AN_ASSIGN funnel (ir.inc:9349) is correct and correctly placed, but AssignSideKind (ir.inc:75) types only AN_IDENT and literals, so for AN_INDEX/AN_FIELD/AN_DEREF it returns False, the `and` chain short-circuits and the check is SILENTLY SKIPPED — it never runs. TRAP for the implementer: defs.inc:422 documents AN_INDEX.Left as a base SYM index while ir.inc:1544 reads it as a NODE; a wrong reading turns a false-accept into a false-REJECT, which looks like progress and is a regression. The var/out neighbour is a separate question (AssignSideKind IsRef bail)."
-status: working
-owner: ""
+summary: "FIXED. `r := s` was refused but `rs[1] := s`, `fx[0] := s`, `o.Inner := s`, `c.F := s` and `p^ := s` compiled to a byte move of a string HANDLE over a record and segfaulted at scope exit -- five of six lvalue shapes. The check never RAN on them: AssignSideKind (ir.inc:75) answered only AN_IDENT, so the guard's `and` chain short-circuited. AN_INDEX/AN_FIELD/AN_DEREF added, kind read off the NODE (defs.inc's `Left = base sym idx` is FALSE -- all 196 builders assign a node) with an interface bail measured to be load-bearing. 12 rows now rejected, same lines and directions as fpc 3.2.2."
+status: done
+owner: frankS
 ---
 
 # A string assigned to a record ARRAY ELEMENT is not type-checked
@@ -167,3 +167,72 @@ guessed. Diagnosis above is complete enough to hand to whoever holds A.
 `make compiler/pascal26` + all six forms rejected, with a `{%FAIL}` case per
 shape. **Include form 1 in the regression** — it works today and is the arm that
 proves a fix did not break the path that already worked.
+
+## 2026-08-30 (frankS) — FIXED, and the two traps frankB flagged were both real
+
+Landed in `compiler/ir.inc` (+ a corrected `defs.inc` comment, logged not filed).
+Self-host fixedpoint `b0a33778470d`; `tools/gate.sh quick` GREEN.
+
+### The fix
+
+`AssignSideKind` gains `AN_INDEX` / `AN_FIELD` / `AN_DEREF`, reading the kind
+off the **node** (`ASTTk`), and `AssignSideRecOf` gains the same three through
+`ResolveNodeRec` — otherwise an operator lookup on those shapes is keyed on
+`REC_NONE` and stands a declared conversion down. Unset stays *silent* rather
+than wrong: `ASTTk` 0 is `tyUnknown`, on which `AssignKindsIncompatible` already
+stands down, so a shape this cannot type falls back to the old accept.
+
+### Trap 1 — `defs.inc:422` was the false source, and it was the tempting one
+
+`{ Left = base sym idx }` would have made a symbol walk nearly free. Swept all
+**196 builders** of the three node kinds in `compiler/*.inc` — `AN_INDEX` 52,
+`AN_FIELD` 88, `AN_DEREF` 56 — and **every one assigns a NODE**: `node`, `idn`,
+`tmpN`, `CloneAST(target)`, `RMakeIdent(sym)`, `PyMakeIdent(sym)`,
+`GenMakeIdent(sym, tk)`. Not one assigns a bare symbol index; the `*MakeIdent`
+helpers exist precisely to wrap one in a node. `ir.inc:1544` and
+`ResolveNodeRec` are right. frankwasm corroborated it from the other end
+(`ASTStrElemTkOf` dispatches on `ASTKind[ASTLeft[node]]`, nonsense on a symbol
+index). Comment corrected in the same commit, logged to `LOGBOOK.md`.
+
+### Trap 2 — the false reject frankB predicted, found by measuring not reasoning
+
+An **interface is spelled `tyRecord`** (a 16-byte fat pointer `{IMT, instance}`),
+so `(dstTk = tyRecord) <> (srcTk = tyRecord)` would refuse `ptr := o.I`, which
+FPC accepts. `PXXDBG=a.ast` on the probe prints the `AN_FIELD` for `rr.I` as
+`kind=11 tk=5` against a `tk=17` destination — the record-XOR pair, firing. The
+`AN_IDENT` arm already carried this bail for the same *measured* reason (one
+regression in a 625-pair FPC differential). Without it the fix would have
+converted a false accept into a false reject on every interface field and
+interface array element.
+
+### Result — 12 rows, and the oracle agrees line for line
+
+`test/test_assign_lvalue_shapes_fail.pas`: all six shapes, plus the mirror
+direction and the scalar/handle confusions on the same shapes, plus
+`rs[0].N := s` (a field OF an element — two node kinds at once). pxx rejects 12;
+fpc 3.2.2 rejects the same 12 lines in the same directions. The **count** is the
+Makefile assertion, so recovery is proven too. **Form 1 is in the file**, as the
+ticket required.
+
+`test/test_assign_lvalue_shapes_ok.pas` is the half that matters more: it
+compiles **and runs**, and its stdout matches fpc's byte for byte. Interfaces,
+class-typed fields, sets in records, array-typed fields, ShortString/AnsiString
+interchange, Char-into-string in every shape.
+
+Wider evidence: the self-host build is ~40k lines of dense Pascal and converged;
+the three widestring tests frankwasm named still match `.expected`; the
+pre-existing assign fail/ok pair is unchanged (13 rows, same output); four Rust
+and two Zig samples, plus `examples/chess` and `examples/raytracer`, compile
+clean. **What that swept and what it did not:** Rust and Zig are under this
+guard (C and NilPy are excluded by the guard's own `not CProgramMode and not
+PyProgramMode`), and six samples is a sample, not the population — the matrix is
+Track T's.
+
+### NOT fixed, deliberately
+
+`var` / `out` parameters. frankB was right that it is a separate question: a
+by-ref slot holds an **address**, and `AssignSideKind`'s `IsRef` bail is what
+stands down there. It did not fall out of this fix and no gate here claims it.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
