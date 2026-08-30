@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (369)
+## backlog (370)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -385,6 +385,7 @@ _none_
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | grant-builtinheap-pxxsys-wrappers-to-franks | A | 45 | grant | frankS gets compiler/builtin/builtinheap.pas bounded to riscv32/xtensa arms on PXXSysOpenRO, PXXSysLseek and PXXSysClose, for bug-a-loadfile-runtime-wrappers-have-no-riscv32-or-xtensa-arm. Cleared against BOTH other interests by asking each for a footprint rather than a permission: frankA does not touch the file at all, and b4's census edits are landed and ~300 lines away. | — |
+| grant-compiler-pas-c-branch-tok-unbounded-to-frankc | A+C | 50 | grant | Bounded one-line grant: frankC may set MainProgramTokCount := TOK_UNBOUNDED in the C branch of compiler.pas (~:1923), as its own commit, with tools/forwardlint.py clean before the push. Nothing else in compiler.pas. Granted because routing one line costs a full context transfer to a busy Track A agent for a line whose semantics only the C lane understands. | — |
 | grant-ir-codegen-call0-cleanup-frame-to-franks | A+S | 50 | grant | frankS may edit ir_codegen.inc as the narrowed Call0 cleanup-frame work requires -- wire the existing enter/leave under Call0, keep TargetHasProcCleanupFrame false under windowed, and delete the stale clause in the comment above that predicate. Wider than the block-level grant it supersedes. File verified clear: b4 moved to elfwriter.inc, frankA is in symtab.inc. | — |
 | grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm | A | 55 | grant | GRANT: `ir_codegen_riscv32.inc` → frankS (Track S), scoped to the `SPECIAL_IN` arm | — |
 | grant-ir-codegen-xtensa-cleanup-arm-to-franks-b4-verified-off | A+S | 55 | grant | Discharges grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s. frankS may edit the `if TargetArch = TARGET_XTENSA then` block inside EmitManagedLocalCleanupForTarget at ir_codegen.inc:10680 and nothing else in that file. b4's release verified three independent ways, not relayed from its word alone. | — |
@@ -872,6 +873,7 @@ _none_
 - [p 50] [A] feature-nested-routine-fixed-array-capture
 - [p 50] [A] feature-port-openbsd-libc
 - [p 50] [A] feature-release-checksums-repro
+- [p 50] [A+C] grant-compiler-pas-c-branch-tok-unbounded-to-frankc
 - [p 50] [A+S] grant-ir-codegen-call0-cleanup-frame-to-franks
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 50] [N] regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload
