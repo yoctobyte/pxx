@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `f487ba6f27fe` | 2026-08-30T19:38:48Z | GREEN (native) | 109.0s | `d24df3f09efb` RED |
+| seven | `7227f3e0f1f8` | 2026-08-30T19:49:26Z | RED (full) | 567.6s | `7227f3e0f1f8` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -41,31 +41,6 @@
   </details>
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
-- **CASCADE 24 jobs** (seven): bad `d24df3f09efb`, last good `fc9e258e1b71`, 22 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy`
-  - `test-nilpy#src:test/test_nilpy_calling_a_non_callable.npy`
-  - `test-nilpy#src:test/test_nilpy_catchable_runtime_errors.npy`
-  - `test-nilpy#src:test/test_nilpy_dunder_index_sites.npy`
-  - `test-nilpy#src:test/test_nilpy_dunder_reflected.npy`
-  - `test-nilpy#src:test/test_nilpy_exception_no_leak.npy`
-  - `test-nilpy#src:test/test_nilpy_file_write_text.npy`
-  - `test-nilpy#src:test/test_nilpy_infer_return.npy`
-  - `test-nilpy#src:test/test_nilpy_int_float_dunders.npy`
-  - `test-nilpy#src:test/test_nilpy_int_of_an_expression.npy`
-  - `test-nilpy#src:test/test_nilpy_int_of_string_is_arbitrary_precision.npy`
-  - `test-nilpy#src:test/test_nilpy_int_promotion_default.npy`
-  - `test-nilpy#src:test/test_nilpy_int_str_builtins.npy`
-  - `test-nilpy#src:test/test_nilpy_one_char_string.npy`
-  - `test-nilpy#src:test/test_nilpy_operand_clash_messages.npy`
-  - `test-nilpy#src:test/test_nilpy_pathlib.npy`
-  - `test-nilpy#src:test/test_nilpy_pyexpr_semantics.npy`
-  - `test-nilpy#src:test/test_nilpy_static_mixed_type_guard.npy`
-  - `test-nilpy#src:test/test_nilpy_str_ascii_cache.npy`
-  - `test-nilpy#src:test/test_nilpy_str_mul_str_undefined.npy`
-  - `test-nilpy#src:test/test_nilpy_str_repeat_linear.npy`
-  - `test-nilpy#src:test/test_nilpy_to_bytes.npy`
-  - `test-nilpy#src:test/test_nilpy_typeerror_is_catchable.npy`
-  - `test-nilpy#src:test/test_nilpy_variant_operator_sweep.npy`
-  </details>
+- **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +37 (seven): bad `7227f3e0f1f8`, last good `d24df3f09efb`, 27 commit(s) in range
+- **test-core#src:test/c_crtl_tempfile_and_unlocked.c** — test/c_crtl_tempfile_and_unlocked.c tools/expect_same.sh (seven): bad `7227f3e0f1f8`, last good `unknown`, 0 commit(s) in range
+- **test-core#src:test/cstatic_same_module_dup.c** — test/cstatic_same_module_dup.c tools/expect_same.sh (seven): bad `7227f3e0f1f8`, last good `f487ba6f27fe`, 3 commit(s) in range
