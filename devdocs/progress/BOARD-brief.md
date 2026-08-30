@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:26 blocked:8 backlog:347 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2737 rejected:56`
+`working:5 unfinished:26 blocked:8 backlog:348 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2737 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -55,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 366, ranked
+## Ready — top 30 of 367, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -84,8 +84,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [A+S]` bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
-- `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 
-_336 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_337 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
