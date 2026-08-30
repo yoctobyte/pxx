@@ -174,4 +174,4 @@ this ticket exists to unblock, arriving as a side effect rather than as that
 ticket's own change. It is deliberate, it is measured, and the gtk set — the
 population that reaches this hardest, and the one whose five tests broke the
 last time this area moved — is unchanged in behaviour.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 8ba3425d1.
