@@ -258,3 +258,104 @@ is QEMU-verifiable today.
 
 `examples/esp32/hello-s3` therefore stays unchanged for now — deferred pending a
 real `qemu-system-xtensa -M esp32s3` boot, not written off.
+
+## 2026-08-30 — BUILT and verified under QEMU (frankB, Track B+S)
+
+Implemented as the settled design specifies: a **binding difference inside
+`dns_libc`**, not a new backend. Built and booted against pin v393
+(`1d69760deabe2865`); the compiler was never rebuilt.
+
+### What landed
+
+| file | change |
+| --- | --- |
+| `lib/rtl/dns_libc.pas` | `{$ifdef PXX_ESP_IDF}{$define PXX_DNS_LWIP}{$endif}`; direct `external 'lwip_getaddrinfo'` / `'lwip_freeaddrinfo'`; `LibcInit` binds them instead of dlopen/dlsym; `dynlibs` dropped from `uses` on that arm; **lwIP's own `EAI_*` table and its own `EaiToRcode`** |
+| `lib/rtl/dns.pas` | the `PXX_DNS_LIBC` → `PXX_DYNLIB_LIBC` guard now exempts `PXX_ESP_IDF` |
+| `examples/esp32/dns-c3/**` | new IDF project + QEMU smoke, modelled on `net-c3` |
+
+`Lookup`, `DnsLibcResolveHost`, `DnsLibcResolveHost6` and the `TCAddrInfo`
+decoding are **untouched** — which was the point of siting this at `dns_libc`.
+
+### The ticket's ABI analysis was right on every count — verified independently
+
+Read out of the installed IDF's own headers rather than trusted:
+`struct addrinfo` has glibc's field order exactly, `ai_addr` before
+`ai_canonname` included (`lwip/netdb.h:103`). `sockaddr_in` is BSD-style with a
+leading `u8_t sin_len` glibc lacks, but lwIP's `sa_family_t` is *also* `u8_t`
+(`sockets.h:68`), so `sin_len(1)+sin_family(1)+sin_port(2)` puts `sin_addr` at
+**4** — where glibc's `family(2)+port(2)` puts it. `sin6_addr` coincides at
+**8** the same way. The coincidence holds.
+
+### One thing the design did NOT have, and it was the only real hazard
+
+**lwIP's `EAI_*` codes are positive 200-204; glibc's are negative -2..-5**, and
+the sets differ — lwIP has no `EAI_AGAIN` and no `EAI_NODATA`
+(`lwip/netdb.h:68-72`). Reusing glibc's numbers would have compiled, linked, and
+resolved every valid name correctly, while misreporting every *failure*:
+`EAI_NONAME` (200) misses every arm of `EaiToRcode`, falls out as
+`DNS_ERR_LIBC_UNAVAIL`, and makes the facade fall back to `dns_wire` — which on
+ESP has no nameserver config and answers `DNS_ERR_NOCONFIG`. **A name that does
+not exist would be reported as "resolver unavailable."** Plausible, wrong, and
+nowhere near the cause. `EaiToRcode` therefore has its own lwIP arm.
+
+### Measured, under `qemu-system-riscv32` (Espressif fork), esp32c3
+
+```
+PXX-dns diag v4-rc=0        PXX-dns diag v6-rc=0        PXX-dns diag nx-rc=2
+PXX-dns diag v4-count=1     PXX-dns diag v6-count=1
+                            PXX-dns diag v6-loopback=1
+PXX-dns-smoke status=0  ->  esp32c3 lwIP resolver smoke: PASS
+```
+
+`nx-rc=2` is the unplanned confirmation of the riskiest change: lwIP returned
+`EAI_FAIL` (202) and it became SERVFAIL. With glibc's table the same run prints
+`-22`. The v6 row was written as *non-gated* (a `CONFIG_LWIP_IPV6=n` device
+answers `EAI_FAMILY`, a configuration fact rather than a defect) and passed
+anyway, so the `sin6_addr@8` arm is exercised, not merely allowed for.
+
+### Sufficiency and negative controls — the green is not vacuous
+
+- **Symbol spelled right:** the emitted riscv32 object carries
+  `U lwip_getaddrinfo` / `U lwip_freeaddrinfo` and **no bare `getaddrinfo`** —
+  a wrong name would compile identically and fail only at link.
+- **Both sides of the link:** `liblwip.a` defines `T lwip_getaddrinfo` /
+  `T lwip_freeaddrinfo`.
+- **The backend is what answered:** the smoke calls `DnsLibcResolveHost`
+  *directly*, because the facade falls back on unavailability and a facade-level
+  green cannot tell "lwIP answered" from "lwIP was skipped".
+- **The assertions are live:** poisoning the expected loopback constant
+  (`$7F000001` → `$7F000002`) and rebuilding gave `status=48` — bit 16 (wrong
+  value) + bit 32 (facade disagrees), exactly the two bits that should light —
+  and `status=0` returned when restored.
+- **Host arms unaffected:** glibc backend still resolves (`rc=0 n=2`), the
+  loader guard still fires on a hosted build without `-dPXX_DYNLIB_LIBC`, and
+  the default wire path is unchanged.
+
+### Scope — what is NOT done, stated plainly
+
+**This is the binding and the ABI. It is not "DNS works on ESP".** The smoke
+resolves *numeric literals*, which `getaddrinfo` converts locally with no query
+and no server — which is precisely why they work under QEMU with no network. Not
+covered: a real DNS query, the DHCP-supplied nameservers, lwIP's cache. Closing
+that needs a device on real Wi-Fi, and the ticket's Gate anticipated this by
+saying "against a name the lwIP resolver can answer".
+
+**xtensa is untouched** and remains blocked by
+[[feature-xtensa-stack-args-over-6-words]] (the 6-parameter-word cap;
+riscv32's is 8, which is why C3 works and S3 does not). Nothing here changes
+that, and the user's ruling that xtensa is the primary ESP target still stands —
+this is the riscv32 half of the destination, not the destination.
+
+**Half 1 of the split stays open.** The ticket says it "is really two", and the
+settled design put the nameserver question *second*, with the opt-in wire path.
+That half is now filed separately as
+[[feature-dns-esp-wire-nameservers-from-lwip]] so this one can close on what it
+actually delivered.
+
+### Gate
+
+Per the ticket's own note, the normal x86-64 lib gate cannot cover this and
+saying so plainly was required. What was actually run: `make lib-test` for the
+host side (the shared `dns.pas` / `dns_libc.pas` edits), plus the QEMU boot above
+for the ESP side. The compiler was not rebuilt; everything used
+`$(PXX_STABLE)`.

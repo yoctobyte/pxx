@@ -33,7 +33,14 @@ interface
   falls back on every lookup — so it is refused here instead. }
 {$ifdef PXX_DNS_LIBC}
   {$ifndef PXX_DYNLIB_LIBC}
-    {$error PXX_DNS_LIBC needs the runtime loader too: add -dPXX_DYNLIB_LIBC (it is opt-in because it makes the binary depend on glibc)}
+    { ESP-IDF is exempt, and the guard would be actively wrong there: dns_libc
+      binds lwIP's getaddrinfo as a DIRECT external, statically linked by
+      idf.py, so there is nothing to dlopen and no glibc to depend on. Narrow on
+      purpose -- the compiler sets PXX_ESP_IDF only for --platform=esp on an ESP
+      ISA, so a hosted build cannot reach the exemption. }
+    {$ifndef PXX_ESP_IDF}
+      {$error PXX_DNS_LIBC needs the runtime loader too: add -dPXX_DYNLIB_LIBC (it is opt-in because it makes the binary depend on glibc)}
+    {$endif}
   {$endif}
 {$endif}
 
