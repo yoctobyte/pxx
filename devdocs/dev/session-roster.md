@@ -21647,3 +21647,45 @@ was already in the frame and answered it immediately.
 the copied-in-seed and same-second-mtime routes in the per-fix-loop section. All
 three are the same failure — a provenance check that returns a confident wrong
 answer with no error — and the section currently names only one of them.
+
+## Specify a test's INVARIANT, not its expected answer — I specified the answer and it was wrong
+
+frank-rust, 2026-08-30, overriding a gate I had written into a dispatch.
+
+I told it the wrong-file diagnostic's test should assert that the error names the
+**instantiating** file. That is wrong. The line number reported is the
+**template's**, and the token genuinely lives in the template's file, so naming
+the instantiator produces a *second* inconsistent pair — `uerrinst.pas:22`, which
+in its reduction is a padded comment saying it is not the error site. The
+program-shaped variant already names the template file and is correct.
+
+What it asserted instead: **the named file contains the reported line, and that
+line contains the symbol.** True under either answer, and it leaves open whether
+an instantiation-context note should also be printed (FPC prints one) — the test
+is written not to forbid it.
+
+**The rule.** A coordinator specifying a gate is specifying it for someone with
+more of the problem in front of them. Name the *property that must hold*, not the
+output you expect — an expected output silently decides open design questions,
+and this one would have frozen a wrong answer into `test/` as the definition of
+correct. The invariant form also survives the fix changing shape.
+
+**Two more from the same message, both worth keeping:**
+
+**"Widening is how a check quietly becomes a no-op."** The early-bail guard in
+`CheckTemplateConstraint` already covers unresolved and forward classes;
+frank-rust's suspicion is a third state neither covers (a class whose declaration
+has started but whose IMT is not populated). Its instruction to frankS was to
+prefer **deferring the check to the end of the type section** over widening the
+guard a third time. A guard widened once per bug converges on `if False`, and each
+widening looks locally correct.
+
+**A red test that lands before its fix should be committed inert.** frank-rust
+committed the Makefile recipe **commented out**, to be uncommented in the same
+commit as the fix, with the reason stated at the site and in the ticket. "Build
+the failing test first" and "keep master green" genuinely conflict when the fix
+belongs to another agent: a live red in `test-core` turns **every** lane's gate
+red and reads to Track T as a regression against whatever sha touches it next —
+a real cost to five sessions for a p60. Inert-plus-a-note is the resolution, and
+the discipline that makes it safe is verifying the assertion chain by hand first
+(exactly one assertion red, and it is the intended one).
