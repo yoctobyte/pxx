@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `0c99981669b7` | 2026-08-30T03:49:19Z | GREEN (native) | 377.9s | `e46dbffaa80d` RED |
-| seven | `cd152a0c9017` | 2026-08-30T03:41:43Z | GREEN (native) | 112.3s | `9ced9bbc3e2d` RED |
+| seven | `cd152a0c9017` | 2026-08-30T03:56:47Z | RED (full) | 886.5s | `cd152a0c9017` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -36,4 +36,3 @@
 - **test-nilpy#src:test/test_nilpy_max_min_iterables.npy** — test/test_nilpy_max_min_iterables.npy test/test_nilpy_max_min_iterables.expected (seven): bad `0200df7eabcd`, last good `3f854c927aac`, 6 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy** — test/test_nilpy_min_max_key_in_a_variable.npy test/test_nilpy_min_max_key_in_a_variable.expected (seven): bad `0200df7eabcd`, last good `3f854c927aac`, 6 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_min_max_key_none.npy** — test/test_nilpy_min_max_key_none.npy test/test_nilpy_min_max_key_none.expected (seven): bad `0200df7eabcd`, last good `3f854c927aac`, 6 commit(s) in range
-- **test-core#src:tools/expect_same.sh@276** — tools/expect_same.sh (seven): bad `9ced9bbc3e2d`, last good `unknown`, 0 commit(s) in range
