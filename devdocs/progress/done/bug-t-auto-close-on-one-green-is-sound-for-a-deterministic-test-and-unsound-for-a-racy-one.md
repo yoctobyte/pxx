@@ -158,4 +158,4 @@ twatch/tstate devtests green plus the new 6. `tools-devtest` collects the file,
 and testmgr runs that in the `quick` and `limited` tiers.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 5e8153919.
