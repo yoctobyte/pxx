@@ -138,3 +138,30 @@ to prose — the last deliberately, and it must stay that way.
 
 ## Log
 - 2026-08-30 — resolved, commit ad4db86ed.
+
+### Correction, same night: the first cut failed on its own commit
+
+The guard shipped and immediately cried **FILL FAILED** at a successful fill —
+on the very push that introduced it.
+
+Condition (a) was written as *"`pending` named this file **before** the fill, and
+the literal is present **now**"*. A ticket that carried a real placeholder **and
+quotes the placeholder in its write-up** satisfies both while being entirely
+healthy: the citation filled, the prose stayed. This ticket quotes it five times,
+so it was the first file the guard ever looked at and the first thing it got
+wrong.
+
+Fixed by asking `progress.py pending` **again, after the fill** — which is the
+only honest form of "still owed". Before-state plus present-state is not the same
+question, and the difference only shows on a file that has both.
+
+**Nothing short of running it would have found this.** Every fixture in the
+devtest had a real placeholder *or* prose, never both, so 19 guards passed on a
+broken condition. Section 5 is now exactly that fixture, and it is the guard that
+would have caught it.
+
+That is the night's shape once more, one turn further in: I built an independent
+oracle *because* aligned implementations stop disagreeing — and then wrote its
+first condition against state I already had rather than the state it was asking
+about. The guard was right to exist and wrong on its first input, and it is the
+guard itself that reported it.

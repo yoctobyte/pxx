@@ -29,6 +29,16 @@ placeholder — the exact false-positive set that cost two lanes an evening. It
 looks only at ticket files THIS RUN'S COMMITS TOUCHED, so it fires once, on the
 sync that resolved the ticket, and never again.
 
+SECTION 5 IS THE ONE THAT EARNS ITS KEEP, and it exists because the first cut of
+this guard shipped and failed on its own commit. Condition (a) asked whether
+`pending` had named the file BEFORE the fill and whether the literal is present
+NOW — and a ticket that carried a real placeholder AND quotes the placeholder in
+its write-up satisfies both while being perfectly healthy. It cried FILL FAILED
+at a successful fill. Every fixture here had one or the other; the bug lives only
+where a file has both, so nothing short of running it could have caught it.
+Condition (a) now re-asks `pending` AFTER the fill, which is the only honest form
+of "still owed".
+
 TWO CONDITIONS, tested separately because conflating them hides the interesting
 one: `pending` named the file and the literal survived (the fill is broken —
 exit 1), versus `pending` never named it (the regex may be blind, or the line is
@@ -78,19 +88,25 @@ def sh_func(name):
     return m.group(0)
 
 
-def run_guard(cwd, tickets, seen):
-    """Run verify_citations_landed with its two inputs, and nothing else."""
+def run_guard(cwd, tickets, still_owed):
+    """Run verify_citations_landed for real, with a stub `progress.py pending`.
+
+    The function asks `pending` AFTER the fill, so the stub is what makes the
+    two conditions distinguishable — and it has to be a real subprocess,
+    because that call is the thing under test. `$(dirname "$0")` is `.` under
+    `sh -c`, so the stub goes in cwd.
+    """
+    stub = pathlib.Path(cwd) / "progress.py"
+    payload = "".join("%s\tdeadbee\n" % f for f in still_owed)
+    stub.write_text("import sys\nsys.stdout.write(%r)\n" % payload)
     script = (
         "PLACEHOLDER='PENDING-COMMIT'\n"
-        "manifest_tickets='%s'\n"
-        "pending_seen='%s'\n" % ("\n".join(tickets), "\n".join(seen))
+        "manifest_tickets='%s'\n" % "\n".join(tickets)
         + sh_func("verify_citations_landed")
         + "\nverify_citations_landed\n")
     r = subprocess.run(["sh", "-c", script], cwd=cwd, capture_output=True,
                        text=True, timeout=60)
     return r.returncode, r.stderr
-
-
 def ticket(td, rel, body):
     p = pathlib.Path(td) / rel
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -144,7 +160,20 @@ def main():
         check("if it is" in err and "prose" in err,
               "and the message tells the reader how to decide")
 
-        print("5. the OTHER condition: pending named it and the fill failed")
+        print("5. BOTH in one file — the case that broke this guard live")
+        both = ticket(td, "devdocs/progress/done/bug-about-and-resolved.md",
+                      "- 2026-08-30 — resolved, commit deadbeef1.\n\n"
+                      "The write-up quotes `PENDING-COMMIT` while explaining "
+                      "it, five times over.\n")
+        rc, err = run_guard(td, [both], [])
+        check(rc == 0, "a filled citation beside prose is NOT a fill failure",
+              "rc=%d" % rc)
+        check("FILL FAILED" not in err,
+              "which is what the first cut got wrong, on its own commit")
+        check("bug-about-and-resolved.md" in err,
+              "it is still named, so the prose is there for one glance")
+
+        print("6. the OTHER condition: STILL OWED after the fill")
         rc, err = run_guard(td, [flat], [flat])
         check(rc == 1, "that one exits non-zero", "rc=%d" % rc)
         check("FILL FAILED" in err, "and says the fill is at fault, not the ticket")
@@ -155,12 +184,12 @@ def main():
               "while the unseen case is NOT reported as a fill failure — "
               "conflating them would hide the interesting one")
 
-        print("6. a file the run touched and then removed is not an error")
+        print("7. a file the run touched and then removed is not an error")
         rc, err = run_guard(td, ["devdocs/progress/done/gone.md"], [])
         check(rc == 0 and err.strip() == "",
               "a renamed or deleted ticket is skipped, not reported missing")
 
-    print("7. the wiring, in sync.sh itself")
+    print("8. the wiring, in sync.sh itself")
     check("verify_citations_landed" in SYNC.split("fill_pending_commits\n")[-1],
           "the guard runs AFTER fill_pending_commits, not before")
     check("'devdocs/progress/*/*.md'" in SYNC,
@@ -170,8 +199,12 @@ def main():
           "the literal has exactly one definition in this file")
     check("grep -qF" in SYNC,
           "and the search is a fixed-string grep, sharing nothing with PENDING_RE")
+    check(SYNC.count("pending_seen") == 0,
+          "the pre-fill recording is gone, not left dead beside its replacement")
+    check("still_owed=$(python3" in SYNC,
+          "and condition (a) re-asks `pending` AFTER the fill, not before")
 
-    print("\n  %d guard(s), %d FAIL" % (19, len(fails)))
+    print("\n  %d guard(s), %d FAIL" % (24, len(fails)))
     return 1 if fails else 0
 
 

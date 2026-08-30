@@ -293,10 +293,6 @@ fill_pending_commits() {
     # (bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two).
     # `pending` prints "<path>\t<sha>" per ticket, sha empty if undeterminable.
     pending=$(python3 "$(dirname "$0")/progress.py" pending 2>/dev/null || true)
-    # Recorded for verify_citations_landed below, which needs to tell "the
-    # regex saw it and the fill failed" from "the regex never saw it at all".
-    # Those are different bugs and only the first is this function's fault.
-    pending_seen=$(printf '%s\n' "$pending" | cut -f1)
     [ -n "$pending" ] || return 0
 
     filled=""
@@ -465,11 +461,24 @@ EOF
 # hat, and the defect here is silence -- a line that names the file ends it.
 verify_citations_landed() {
     [ -n "$manifest_tickets" ] || return 0
+    # STILL OWED, not "was owed". Asking `pending` again AFTER the fill is the
+    # only honest form of condition (a), and the first cut got it wrong in a way
+    # its own devtest could not see: it asked whether `pending` had named the
+    # file BEFORE, and whether the literal is present NOW. A ticket that carried
+    # a real placeholder AND quotes the placeholder in its prose satisfies both
+    # while being perfectly healthy -- the citation filled, the prose stayed.
+    #
+    # It fired on the very commit that introduced it, whose write-up quotes the
+    # literal five times, and cried FILL FAILED at a successful fill. Caught by
+    # running it, not by reading it: every fixture had one or the other, and the
+    # bug lives only where a file has both.
+    still_owed=$(python3 "$(dirname "$0")/progress.py" pending 2>/dev/null \
+                 | cut -f1 || true)
     broken="" ; unseen=""
     for f in $manifest_tickets; do
         [ -f "$f" ] || continue          # renamed or removed since; nothing to read
         grep -qF "$PLACEHOLDER" "$f" 2>/dev/null || continue
-        if printf '%s\n' "$pending_seen" | grep -qxF "$f"; then
+        if printf '%s\n' "$still_owed" | grep -qxF "$f"; then
             broken="$broken
   $f"
         else
