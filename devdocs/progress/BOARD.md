@@ -365,6 +365,7 @@ _none_
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
+| grant-builtinheap-pxxsys-wrappers-to-franks | A | 45 | grant | frankS gets compiler/builtin/builtinheap.pas bounded to riscv32/xtensa arms on PXXSysOpenRO, PXXSysLseek and PXXSysClose, for bug-a-loadfile-runtime-wrappers-have-no-riscv32-or-xtensa-arm. Cleared against BOTH other interests by asking each for a footprint rather than a permission: frankA does not touch the file at all, and b4's census edits are landed and ~300 lines away. | — |
 | grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm | A | 55 | grant | GRANT: `ir_codegen_riscv32.inc` → frankS (Track S), scoped to the `SPECIAL_IN` arm | — |
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s | A+S | 55 | grant | GRANT: the xtensa arm of `EmitManagedLocalCleanupForTarget` → Track S | — |
@@ -404,7 +405,6 @@ _none_
 | regression-test-nilpy-test-nilpy-max-min-iterables | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_max_min_iterables.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-in-a-variable | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | — |
-| regression-test-threads-test-static-string-literals | T | 70 | regression | regression: test-threads#src:test/test_static_string_literals.pas@2 red at 5bb3e120d3f7 (auto-filed by twatch) | — |
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
@@ -658,9 +658,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2735)
+## done (2736)
 
-2735 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2736 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -734,7 +734,6 @@ _none_
 - [p 70] [N] regression-test-nilpy-test-nilpy-max-min-iterables [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-in-a-variable [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-none [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-threads-test-static-string-literals
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
@@ -882,6 +881,7 @@ _none_
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
 - [p 45] [B] feature-random-library [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
+- [p 45] [A] grant-builtinheap-pxxsys-wrappers-to-franks
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [A] refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
