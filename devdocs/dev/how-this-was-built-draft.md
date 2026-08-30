@@ -18,18 +18,36 @@ rather than trusted.
 
 ## Part 1 — The fact sheet [VERIFIED]
 
-All measured at `HEAD` on **2026-08-30**. **Re-run before publishing** — and this
-is no longer a caution, it is a measurement: the table below was first taken on
-2026-08-14 and **every single number had moved sixteen days later**, commits by
+Measured at **`d1e2f3ee6`**. **Re-run before publishing** — and this is no longer
+a caution, it is a measurement taken twice. The table was first taken on
+2026-08-14, and **every single number had moved sixteen days later**: commits by
 42%, `done/` tickets by 49%, compiler lines by 33%. A launch post carrying the
 August-14 figures would have been wrong in ten places at once.
+
+Then it was re-taken the same morning it was written up, and **nine of the ten
+had moved again within hours** — +501 commits, +74 `done/`, +5 `rejected/`,
++2.7k compiler lines. Only the pin count held. So the drift is not a fortnightly
+thing to check before publishing; it is the daily weather, and the table is a
+photograph.
+
+(The backlog row moved further still, 316 to 351, but that one is **not**
+evidence of drift and is not quoted as such: 13 of those 35 are the undercount
+fixed below, not tickets that were filed. A delta measured across a changed
+method is not a delta.)
+
+**And note what could not be said about that.** The earlier table was stamped
+with a *date*, so how far apart the two measurements actually were is now
+unrecoverable — same morning, but four hours or ten? **The first thing a date
+stamp costs you is the ability to measure your own drift.** That is the rule the
+second bullet below already stated, and the line above it was breaking. It now
+carries a sha.
 
 **Re-measure with `tools/factsheet.sh` and do not hand-edit a single number** —
 hand-editing one is how the other nine stay stale. It prints the table, the sha
 it measured at, and the qualifiers that have to travel with three of the figures.
 
 Track T owns it, and it exists because the first version of this paragraph
-referenced a path that did not exist. Two notes from its first run, both worth
+referenced a path that did not exist. Three notes from its two runs, all worth
 knowing before you quote anything it prints:
 
 - **It disagreed with the hand count above on three of ten numbers, and the hand
@@ -43,37 +61,61 @@ knowing before you quote anything it prints:
 - Its header stamps the **HEAD commit's** date, not the day you ran it. Usually
   the same; say "measured at `<sha>`" rather than "as of `<date>`" and the
   distinction stops mattering.
+- **On the second run the disagreement reversed: the script was right and two of
+  the ten re-measure commands printed in the table below were wrong**, both
+  undercounting. `ls devdocs/progress/backlog/*.md` missed `backlog_new/` and was
+  13 light (338 against 351); `ls devdocs/progress/decided/*.md` missed the one
+  resolved decision that landed in `done/` and was 1 light (116 against 117).
+  Both are fixed in the table.
+
+  **A wrong invocation is worse than a wrong number**, and this section is where
+  that matters most, because its whole advice is *quote the invocation, not the
+  table*. A stale number is wrong once and looks it. A wrong command is wrong
+  every time anyone runs it, agrees with itself on every run, and therefore reads
+  as **verification** — the reader does the responsible thing, gets a reproducible
+  answer, and is reproducibly misled. Publish no command you have not run against
+  a second method.
 
 | claim | value | how to re-measure |
 | --- | --- | --- |
-| Commits | 16,848 | `git rev-list --count HEAD` |
+| Commits | 17,349 | `git rev-list --count HEAD` |
 | Elapsed | 2026-05-24 → 2026-08-30, ~14 weeks | `git log --reverse --format=%ad --date=short \| head -1` |
-| Commits with an agent co-author trailer | 7,668 | `git log --format=%b \| grep -ci "Co-Authored-By: Claude"` |
+| Commits with an agent co-author trailer | 7,793 | `git log --format=%b \| grep -ci "Co-Authored-By: Claude"` |
 | Pinned stable versions | 393 (`v1`…`v393`) | `cat stable_linux_amd64/default/VERSION`; the log is `stable_linux_amd64/default/history.log` |
-| Tickets resolved | 2,652 | `ls devdocs/progress/done/*.md \| wc -l` |
-| Tickets **rejected** | 51 | `ls devdocs/progress/rejected/*.md \| wc -l` |
-| Decisions recorded | 116 | `ls devdocs/progress/decided/*.md \| wc -l` |
-| Open backlog | 316 | `ls devdocs/progress/backlog/*.md \| wc -l` |
-| Compiler source | ~250.2k lines | `find compiler -name "*.inc" -o -name "*.pas" \| xargs wc -l` |
-| Library source | ~75.3k lines | `find lib -name "*.pas" -o -name "*.c" -o -name "*.h" \| xargs wc -l` |
+| Tickets resolved | 2,726 | `ls devdocs/progress/done/*.md \| wc -l` |
+| Tickets **rejected** | 56 | `ls devdocs/progress/rejected/*.md \| wc -l` |
+| Decisions recorded | 117 | `ls devdocs/progress/decided/*.md devdocs/progress/done/decide-*.md \| wc -l` — **not** `decided/` alone |
+| Open backlog | 351 | `ls devdocs/progress/{backlog,backlog_new}/*.md \| wc -l` — **not** `backlog/` alone |
+| Compiler source | ~253.0k lines | `find compiler -name "*.inc" -o -name "*.pas" \| xargs wc -l` |
+| Library source | ~75.6k lines | `find lib -name "*.pas" -o -name "*.c" -o -name "*.h" \| xargs wc -l` |
 
 ### Numbers that need a qualifier, not a footnote
 
 Three of the above will be misread if stated bare. Say the qualifier in the same
 sentence:
 
-- **7,668 of 16,848 commits carry an agent trailer** — that is 46%, not 100%.
+- **7,793 of 17,349 commits carry an agent trailer** — that is 45%, not 100%.
   Do not round it to "written by AI"; the split *is* the story the ticket says
-  must survive editing. (Worth noting the ratio has held at 46% across sixteen
-  days and five thousand commits, which makes it a real property rather than a
-  snapshot — say so, it is more convincing than the raw count.)
-- **Track counts in `done/` cover 1,687 tickets, not 2,652.** Only tickets filed
+  must survive editing. The ratio has sat **between 45% and 46% across sixteen
+  days and five thousand commits**, which makes it a real property rather than a
+  snapshot — say so, it is more convincing than the raw count.
+
+  **State it as a band.** It read "held at 46%" until this line was re-measured
+  and found to be 45%, which is the same error the table above makes, one level
+  up: this section correctly identifies that raw counts rot and promotes the
+  ratio as the durable figure, then quotes the durable figure to a precision that
+  rots too. What is stable is the *band*; a post that says "held at 46%" gets
+  falsified by the next fortnight exactly like the counts did.
+- **Track counts in `done/` cover 1,760 tickets, not 2,726.** Only tickets filed
   after the `track:` frontmatter convention landed carry the field, so
   `grep -h "^track:" devdocs/progress/done/*.md | sort | uniq -c` under-reports
-  the early months. Current split of the ones that have it: N 676, A 402, P 234,
-  B 133, T 129, C 73, D 20, R 5, W 3, O 2, S 1, plus 9 combined-track
-  spellings (`A+S`, `A+T`, `A+N`). Quote it as "of the tickets that record a
-  track", or not at all.
+  the early months. Current split of the ones that have it: N 682, A 416, P 242,
+  T 140, B 140, C 86, D 21, R 5, W 3, O 2, S 1, U 1, plus 21 combined-track
+  spellings (`A+S` 16, `A+T` 2, `A+N`, `A+O`, `B+S`). Quote it as "of the tickets
+  that record a track", or not at all — the uncovered 966 are not a rounding
+  error, they are 35% of the finished work and they are the *early* months, so
+  any per-track story told from this table is a story about the second half of
+  the project.
 - **393 pins is not 393 releases.** A pin blesses a self-host-verified binary
   that other tracks then build against; it is an internal checkpoint. The
   interesting property is that all 393 are in git with their sha256 and their

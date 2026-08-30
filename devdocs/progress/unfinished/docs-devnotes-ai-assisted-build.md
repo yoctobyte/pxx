@@ -143,3 +143,36 @@ the project already runs.
   **Nothing here moves the ticket off the user either.** Back to `unfinished/`:
   `working/` is a live lock and what remains is substance only the user can
   write.
+- 2026-08-30, third pass (frankD) — **two of the fact sheet's ten re-measure
+  commands were wrong, and the table went stale again in hours. Still parked on
+  the user.**
+  Re-measured at `d1e2f3ee6` with `tools/factsheet.sh`. **Nine of the ten
+  numbers had moved since the same morning** — +501 commits, +74 `done/`, +2.7k
+  compiler lines — so the drift the draft called a fortnightly hazard is the
+  daily weather. Only the pin count held.
+  **The find that matters is not the staleness, it is the method.** Cross-checking
+  the script against the commands printed beside each figure, the script won
+  twice: `ls devdocs/progress/backlog/*.md` misses `backlog_new/` (338 against
+  351) and `ls devdocs/progress/decided/*.md` misses the one resolved decision
+  sitting in `done/` (116 against 117). Both corrected, and both replacements
+  were **run** before being written down.
+  **A wrong invocation is worse than a wrong number**, which is precisely the
+  hazard for a section whose advice is *quote the invocation, not the table*: a
+  stale number is wrong once and looks it, while a wrong command is wrong on
+  every run, agrees with itself every time, and therefore reads as
+  *verification* — the reader does the responsible thing and is reproducibly
+  misled.
+  Two smaller corrections of the same recursive shape. The header stamped a
+  **date** while the bullet two paragraphs below it says to stamp a **sha** — and
+  the cost was immediate: how far apart the two measurements were is now
+  unrecoverable, so the first thing a date stamp buys you is the loss of your own
+  drift measurement. And the qualifier section, which correctly identifies that
+  raw counts rot and promotes the agent-trailer *ratio* as the durable figure,
+  then quoted that ratio to a precision that rots too ("held at 46%", now 45%);
+  it states a band now.
+  Also declined to quote the backlog delta as evidence of drift: 13 of its 35
+  are the undercount being fixed, and **a delta measured across a changed method
+  is not a delta**.
+  **Still nothing here moves the ticket off the user** — Part 1 is fact-checking,
+  which is the agent's half of scope item 2. The four questions in Part 3 and
+  every user-voice section remain untouched. Stays in `unfinished/`.
