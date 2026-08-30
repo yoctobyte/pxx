@@ -230,4 +230,4 @@ the destination". `CProcUsesCAbi` is that single place: if Track U answers
 "always the C ABI", it changes in one function body.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit b4ff9adea.
