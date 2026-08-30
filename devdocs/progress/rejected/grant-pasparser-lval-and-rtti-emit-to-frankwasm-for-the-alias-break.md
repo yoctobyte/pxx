@@ -255,6 +255,7 @@ rule, arriving sideways: reading the interface and inferring the behaviour is no
 reading the code.
 
 
+
 ---
 
 # Closed 2026-08-30: the mechanism is gone, the correction is not
@@ -294,3 +295,22 @@ Three more `grant-*` tickets remain in `backlog/` under other owners
 `grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy`,
 `chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping`) and are stale
 in exactly this way. They are not mine to close.
+
+## The three it names as "not mine to close" are closed too, 2026-08-30
+
+This ticket's author correctly stopped at the boundary of what they owned and
+listed five siblings instead. All five have since been closed, and the same
+reasoning applied — **but one of them was not the same ticket.**
+
+`chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping` was 80% grant
+bookkeeping and 20% a measured seven-site design flaw in `ir.inc`'s
+managed-string arg-temp decision, carried in **no other ticket**. Closing the six
+by slug shape would have deleted it. It is refiled as
+`bug-a-managed-string-arg-temp-predicate-is-duplicated-seven-times-and-guarded-nowhere`.
+Likewise `grant-lexer-writediagsourcefile-*` carried a correctness condition on
+`WriteDiagSourceFile` — engineering in a grant's clothes — now in the C ticket it
+constrains.
+
+**A dead mechanism is not the same as a dead ticket.** Six tickets shared a slug
+prefix, a filing agent and a retired mechanism; two of them still held the only
+copy of something true. Open the ticket.

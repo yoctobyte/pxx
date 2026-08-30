@@ -126,3 +126,26 @@ Filed to **T** because `tools/progress.sh` is T's by practice — its recent his
 is `feat(T)` / `feat(tools)` (`944a7fccb`, `1c60a8214`, `e59189d0c`,
 `0a87cb4ce`, `1ff974d9c`). If T reads the board tooling as outside its charter,
 re-file to A rather than closing it; the defect is real either way.
+
+---
+
+## CLOSED 2026-08-30 — the system this models no longer exists
+
+The **grant system was cut** (`91380f04b`): nothing reserves a file, there is no
+sole-A guard, and `working/` is a status hint rather than a lock. This ticket
+describes, instruments, or *is* a grant, so there is nothing left for it to be
+right about.
+
+Closing rather than fixing, and the reason is worth keeping: two of these three
+asked for `progress.py check` apertures that would detect **stale grants** and
+**absent grant holders**. Both were correct problems. The measurement that
+retired the grants answered them at the root instead — over a night of ten
+concurrent agents there were **zero code collisions**, `symtab.inc` took commits
+from seven lanes, and the guard fired twice indefensibly at a cost of two lost
+dispatches. An aperture for a stale lock is strictly less valuable than not
+having the lock. Evidence: `devdocs/dev/coordination-overhead-2026-08-30.md`.
+
+Its sibling `grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break`
+was the actively harmful one — `ready`/`next` were showing every idle Track A
+agent a p50 ticket whose summary reads *"DO NOT CLAIM these files."* A dead lock
+that still prints is worse than a lock, because nothing will ever release it.

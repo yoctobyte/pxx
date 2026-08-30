@@ -106,3 +106,22 @@ not told their own file is somewhere else. The module row asserts the *shape*
 `lib/crtl/src/*.c` rather than which module defines `memchr`, so it is not
 coupled to crtl's internals; if the trigger ever stops erroring, the row fails
 loudly (no `in:` line) rather than passing vacuously.
+
+## Correctness condition on the `lexer.inc` change (extracted 2026-08-30)
+
+This lived in a *grant* ticket, which is why it is being moved rather than lost:
+the grant mechanism was cut with the rest of the reservation system, but this half
+of that ticket was never about permission.
+
+**The Pascal arm of `WriteDiagSourceFile` must stay reachable in exactly the
+states it was before.** The C answer is consulted only where the Pascal table
+returns nothing, so it is not enough that Pascal diagnostics still work — a
+fallback that fires **one state too early** is invisible to every Pascal test that
+has an answer, because those tests only check that the answer is right, never that
+it came from the Pascal path. Establish the reachability, don't infer it from a
+green suite.
+
+`lexer.inc` is still shared A/P ground — the one file Track P did not get when
+`parser.inc` was sliced into `pasparser_*`. Under the current rules that is a
+reason to say what you are touching and to keep the change to
+`WriteDiagSourceFile`, not a reason to ask.

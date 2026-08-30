@@ -108,3 +108,23 @@ condition — `check` has STALE-PARK for prose park conditions and nothing at al
 Candidate T ticket: a `GRANT-NO-HOLDER` / `GRANT-STALE` aperture keyed on the `owner:` field
 against the live session list, which is the one thing a human coordinator cannot hold in
 their head across a day.
+
+
+---
+
+## CLOSED 2026-08-30 — the system this models no longer exists
+
+The grant mechanism — a coordinator authorising a named agent to touch a named
+shared file, filed as a ticket so the authorisation was visible — was cut on
+2026-08-30 along with the rest of the reservation system, after ten concurrent
+agents produced exactly one unmergeable rollback in a night. Lane letters are now
+informative and advisory; nobody needs permission to touch a file, so there is
+nothing here to grant and nothing to release.
+
+Closed rather than resolved: the work was never done, and the reason it will not
+be is that the question stopped existing. Evidence for the cut:
+`devdocs/dev/coordination-overhead-2026-08-30.md`.
+
+**Nothing was extracted from this one before closing** — it is bookkeeping end to
+end. The engineering it points at (`feature-a-a-general-x86-64-relocatable-object-writer`)
+has its own ticket and is untouched.

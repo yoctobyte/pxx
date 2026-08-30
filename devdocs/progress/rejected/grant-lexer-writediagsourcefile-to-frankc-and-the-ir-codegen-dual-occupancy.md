@@ -120,3 +120,26 @@ a disposition at a moment, and nothing re-checks it — the same defect as a pro
 condition, which `check`'s STALE-PARK aperture exists to catch and which has no equivalent for
 grants. Fourth expired premise of the day, and the second one found inside a document about
 expired premises.
+
+
+---
+
+## CLOSED 2026-08-30 — the system this models no longer exists
+
+The grant mechanism — a coordinator authorising a named agent to touch a named
+shared file, filed as a ticket so the authorisation was visible — was cut on
+2026-08-30 along with the rest of the reservation system, after ten concurrent
+agents produced exactly one unmergeable rollback in a night. Lane letters are now
+informative and advisory; nobody needs permission to touch a file, so there is
+nothing here to grant and nothing to release.
+
+Closed rather than resolved: the work was never done, and the reason it will not
+be is that the question stopped existing. Evidence for the cut:
+`devdocs/dev/coordination-overhead-2026-08-30.md`.
+
+**One thing WAS extracted before closing**, because it was engineering wearing a
+grant's clothes: the requirement that the Pascal arm of `WriteDiagSourceFile` stay
+reachable in exactly the states it was before — a fallback that fires one state
+early is invisible to every Pascal test that has an answer. That is a correctness
+condition on the change, not a permission, and it now lives in
+`feature-c-diagnostics-name-the-module-they-are-in`, the ticket it constrains.

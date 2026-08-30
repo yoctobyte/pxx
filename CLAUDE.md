@@ -594,11 +594,18 @@ fix the doc, not the loop.
   model: `devdocs/progress/README.md`.
 - **The same trap applies to every sha you QUOTE, not just `resolve`'s.** A sha
   from `git log -1` straight after `git commit` is pre-rebase and usually dies in
-  the sync. **Read landed shas off `git log origin/master` after the push** —
+  the sync. **Read landed shas off `git log origin/master` AFTER the push** —
   `git log origin/master --grep='<subject>' -1` is the reliable form. Measured
   2026-08-30: eight of nine shas quoted in one session were ghosts, and nine
-  agents were briefed with one of them. A sha that resolves to nothing is worse
-  than no sha, because the reader cannot tell it is wrong.
+  agents were briefed with one of them.
+  **"Confirm it landed" and "read the sha it landed as" are TWO steps, and doing
+  the first does not cover the second.** `sync.sh` printing *"pushed 2 commit(s),
+  all verified on origin"* is a true statement about the **content**; it says
+  nothing about the id you wrote down beforehand. An agent who *did* verify — at
+  the wrong moment — still published a ghost, because his sync had hit a conflict
+  he finished by hand and the rebase rewrote the commit. So the rule is not
+  "verify your shas", it is **read them afterwards**. A sha that resolves to
+  nothing is worse than no sha, because the reader cannot tell it is wrong.
 - **Cold start — "continue on tickets" (no track named):** self-dispatch,
   auto-pick the global top.
   1. `git pull --rebase` (origin is truth).
@@ -624,6 +631,12 @@ fix the doc, not the loop.
   A** one still matters (a half-applied compiler change can break the
   stable-binary / self-host gate) and `tools/progress.sh check` flags it until it
   is resolved or reverted.
+- **`owner:` on a parked ticket is ATTRIBUTION, not a claim** (frankS,
+  2026-08-30) — it records who measured the thing, not who is in it right now.
+  A ticket in `unfinished/` or `backlog/` with an `owner:` is **free to take**;
+  message them for context, do not treat the field as a hold. This is the same
+  two-jobs-in-one-field conflation `working/` had before it was demoted, and it
+  is why a census must ask "who is live" rather than read `owner:`.
 - **Re-`claim` when you resume parked work**, so the board says who is on it —
   a courtesy that keeps the status hint honest, not a lock you must take. Picking
   up something from `backlog/` or `unfinished/` is the one transition with no

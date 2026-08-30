@@ -67,7 +67,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (385)
+## backlog (381)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,6 +95,7 @@ _none_
 | bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown | A | 45 | bug | `IROpName` names 68 of 75 IR ops, so a missing backend arm for the other seven reports `unknown` | — |
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
+| bug-a-managed-string-arg-temp-predicate-is-duplicated-seven-times-and-guarded-nowhere | A | 20 | bug |  | — |
 | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-paramsize-and-allocparam-disagree-about-a-5-8-byte-byvalue-record | A | 40 | bug | ParamSize and AllocParam disagree about a 5-8 byte by-value record | — |
@@ -200,12 +201,10 @@ _none_
 | bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in | T | 45 | bug | A container ticket for an active campaign has nowhere correct to live. working/ is a per-agent live LOCK, and an umbrella held there for the length of a campaign is a lock that never clears; every other status ready/next scans is claimable, so parking it invites a second agent onto files the campaign owns. The status vocabulary has no term for 'this is a container, not a unit of work'. | — |
 | bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference | T | 25 | bug | test-core's language-skeleton loop runs the plain compile with a bare ';' while the very next compile has '\|\| exit 1'. A failing plain compile does not stop the loop -- it falls through to comparing an empty 'plain' against 'ts' and still fails, but reports '--threadsafe changes the output' for a defect that has nothing to do with --threadsafe. Not a status hole; a diagnosis-quality one. | — |
 | bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix | T | 45 | bug | The csmith campaign cites findings by SEED. A seed only reproduces the same program against an identical generator version AND identical --csmith-args, so a later `seed N passes` is equally consistent with `fixed` and with `today's csmith emits a different program`. Three named open findings (901, 1502, 5004) now pass at HEAD and NONE of them can be closed on that evidence. | — |
-| bug-t-a-grant-is-a-lock-the-ranker-cannot-see | T | 55 | bug | NARROWED 2026-08-30 by frankC, which found the suppression mechanism already exists and had simply not been used -- read the correction block before working this. Original framing: tools/progress.sh ready/next rank a ticket from frontmatter and print slug/prio/track. A GRANT — a coordinator handing one shared file to a named lane for the duration of a campaign — lives in the ticket BODY, so the ranker cannot see it and offers the granted file to every idle agent in that track. working/ does not cover the gap either: a lane that works in slices correctly releases the lock between them. Measured 2026-08-30: the coordinator dispatched frankA onto refactor-a-c-exclusive-lowering while frankC held a written grant on compiler/ir.inc and had four slices landed; both the ranked queue and working/ were clean, and correctly so. | — |
 | bug-t-a-present-corpus-is-never-checked-against-its-pinned-commit | T | 45 | bug | T: `present()` compares existence, not the commit the corpus was pinned to | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | A+T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
 | bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets | T | 50 | bug | 117 $(TESTTMP) binary names are written from more than one TARGET, and testmgr runs different targets' jobs concurrently in one scratch root — so two compiles race on one path, which is the ETXTBSY/half-written-binary window the self-host chain already solved with compile-to-unique-name + rename. 15 names are written by two different SOURCES, 6 of those from two targets, where the loser's assertion runs the winner's program. Not a backlog to clean by sweep: the fix is per-recipe and the population is frozen by a devtest so it cannot grow. | — |
-| bug-t-check-has-no-aperture-for-a-stale-grant-or-an-absent-holder | T | 45 | bug | A grant ticket is a file lock the ranker cannot see. Filing one makes it ENUMERABLE but not CURRENT, and nothing notices when its holder's session ends. Asks for two apertures in progress.py check: GRANT-STALE (the grant's parent work is resolved) and GRANT-NO-HOLDER (owner: names no live session). Three measured instances on 2026-08-30, two of which produced a real dispatch error. | — |
 | bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion | T | 45 | bug | `progress.sh check` finds prose blockers whose ticket has CLOSED (STALE-PARK) and prose edges never wired into frontmatter (PROSE-EDGE-NOT-IN-FRONTMATTER). It has no aperture for the mirror case: a ticket whose own BODY records the work as finished while its frontmatter and status line still advertise it as open. Cost a dispatch on 2026-08-30 -- feature-random-library was dispatched on a status line reading 'HW tiers and thread-safe state' when its own log recorded the thread-safe half landing 2026-07-20 and a 2026-08-28 pass concluding 'Nothing here is Track B work. Tier 1 is closed.' | — |
 | bug-t-forward-decl-lint-counts-nested-functions-as-globals | T | 45 | bug | gate.sh's `fpc seed compiles (forward decls)` step treats a NESTED function's name as a global, so any later file using that name as a parameter, local or field is failed for calling something FPC has not seen. Measured: a parameter named argName failed against rparser.inc's ArgName, nested inside RResultClassForRec and invisible outside it. False positive, and it fails the gate. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
@@ -219,7 +218,6 @@ _none_
 | bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile | A | 25 | bug | The residual after the WASI u64-alignment defect was fixed. On the SAME module, wasmtime compiles a program to a byte-identical ELF five times out of five at exit 0; node segfaults five times out of five, leaving a 0-3 byte artifact. Node handles --version, --where and --list-libraries (a directory walk) at exit 0 and dies only on a full compile. A sandboxed guest cannot fault its host, only trap, so this is host-side — and unlike the predecessor ticket that inference now has a control behind it. LOW PRIO: wasmtime is the campaign's host and the milestone is met without node. | — |
 | chore-a-adopt-allocrecvar-at-the-twenty-remaining-record-temp-sites | A | 35 | chore | chore(A): adopt AllocRecVar at the 20 remaining `AllocVar(…, tyRecord)` sites | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
-| chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping | A | 20 | chore | Grant: frankwasm holds `compiler/ir.inc` for the `:11207` mistyping fix | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 20 | chore | PAUSED 2026-08-21 after batch 4 with 15 of the original 98 files left, and all 15 are in lanes the user has DEFERRED (13 Track N pyeval/pyexec, 2 Track F softfloat) — resume when either is un-deferred; nothing is half-applied. DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
@@ -404,8 +402,6 @@ _none_
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
-| grant-elf-writer-and-object-writers-to-b4 | A | 50 | grant | frankA holds Track A. frank-optimize-b4 keeps a bounded file slice under A's gate: compiler/elfwriter.inc, defs.inc's ELF constants, and the object writers (writeELFRelX64 / writeELF32Rel). Dispatched by ticket, not by lane. Disjoint from symtab.inc and every frontend. | — |
-| grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 5 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
 | idea-a-fold-the-asm-emit-harness-mock-preludes-into-one | A | 35 | idea | Fold the five asm-emit harnesses' mock preludes into one shared include | — |
 | idea-adaptive-heap-growth | A | 5 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
@@ -732,7 +728,7 @@ _none_
 
 2856 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (61)
+## rejected (65)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -759,7 +755,9 @@ _none_
 | bug-pascal-local-var-not-registered-wrong-sym | P | 0 | bug | REJECTED — "a method's local is not registered" — my evidence was wrong | — |
 | bug-r-fpc-seed-drift-rexprrecid-needs-a-forward | R | 60 | bug | FPC seed canary RED: rparser.inc calls RExprRecId at :1416, defined at :1754, no forward. pxx self-hosts fine (it does not require the forward); FPC does, so the cold-start bootstrap is broken. One-line fix, Track R's file. | — |
 | bug-str-float-broken-by-copy-shadow | A | 50 | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
+| bug-t-a-grant-is-a-lock-the-ranker-cannot-see | T | 55 | bug | NARROWED 2026-08-30 by frankC, which found the suppression mechanism already exists and had simply not been used -- read the correction block before working this. Original framing: tools/progress.sh ready/next rank a ticket from frontmatter and print slug/prio/track. A GRANT — a coordinator handing one shared file to a named lane for the duration of a campaign — lives in the ticket BODY, so the ranker cannot see it and offers the granted file to every idle agent in that track. working/ does not cover the gap either: a lane that works in slices correctly releases the lock between them. Measured 2026-08-30: the coordinator dispatched frankA onto refactor-a-c-exclusive-lowering while frankC held a written grant on compiler/ir.inc and had four slices landed; both the ranked queue and working/ were clean, and correctly so. | — |
 | bug-t-a-resolve-that-never-wrote-a-placeholder-is-uncited-and-nothing-says-so | T | 45 | bug | check counts tickets that say PENDING-COMMIT. It has nothing to say about a resolved ticket that cites no commit AT ALL — no placeholder, no sha — which is the strictly worse state, because the placeholder is the thing that announces itself. 3 of 681 tickets resolved 2026-08-16..31 are in it, all resolved by a hand-written Log line rather than `progress.sh resolve`. | — |
+| bug-t-check-has-no-aperture-for-a-stale-grant-or-an-absent-holder | T | 45 | bug | A grant ticket is a file lock the ranker cannot see. Filing one makes it ENUMERABLE but not CURRENT, and nothing notices when its holder's session ends. Asks for two apertures in progress.py check: GRANT-STALE (the grant's parent work is resolved) and GRANT-NO-HOLDER (owner: names no live session). Three measured instances on 2026-08-30, two of which produced a real dispatch error. | — |
 | bugfix-cfront-bitfield-packing-gcc-compat | A+C | 50 | bugfix | bugfix: C front — bitfield packing GCC-compatibility | — |
 | chore-inc-to-units | A | 50 | chore | `.inc` → real `.pas` units refactor | — |
 | chore-register-pxxc-domain-variants | W | 55 | chore | Register the pxxc domain variants (.com, .nl, .eu) — REJECTED | — |
@@ -786,6 +784,8 @@ _none_
 | feature-t-bench-record-host-hardware-specs | T | 55 | feature | Benchmarks record the host *name*, but nothing about the hardware | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | grant-compiler-pas-c-branch-tok-unbounded-to-frankc | A+C | 50 | grant | Bounded one-line grant: frankC may set MainProgramTokCount := TOK_UNBOUNDED in the C branch of compiler.pas (~:1923), as its own commit, with tools/forwardlint.py clean before the push. Nothing else in compiler.pas. Granted because routing one line costs a full context transfer to a busy Track A agent for a line whose semantics only the C lane understands. | — |
+| grant-elf-writer-and-object-writers-to-b4 | A | 50 | grant | frankA holds Track A. frank-optimize-b4 keeps a bounded file slice under A's gate: compiler/elfwriter.inc, defs.inc's ELF constants, and the object writers (writeELFRelX64 / writeELF32Rel). Dispatched by ticket, not by lane. Disjoint from symtab.inc and every frontend. | — |
+| grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break | A+P | 0 | grant | HISTORICAL RECORD — the grant system was cut on 2026-08-30 and nothing in here is an instruction any more. Kept for the correction it contains: symtab.inc makes a type well-formed, pasparser_lval.inc is what makes one EXIST, and a file list that named only the first would have landed an unnameable type. | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 18 | refactor | DUPLICATE of refactor-a-seven-frontends-borrow-rust-parser-helpers. Tombstone kept so citations resolve; the 123-places-in-zparser measurement and the substrate-doc framing were merged into the survivor. | — |
 | regression-cascade-110774a14648 | T | 70 | regression | regression CASCADE: 17 jobs newly red at 110774a14648 (auto-filed by twatch) | — |
@@ -879,7 +879,6 @@ _none_
 - [p 55] [N] bug-nilpy-calling-a-duplicated-ordinary-method-segfaults
 - [p 55] [P] bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
-- [p 55] [T] bug-t-a-grant-is-a-lock-the-ranker-cannot-see [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 55] [T] bug-t-test-fgl-skips-silently-when-the-corpus-is-absent-so-its-gate-row-passes-by-not-running
 - [p 55] [T] bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test
 - [p 55] [U] decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable
@@ -927,7 +926,6 @@ _none_
 - [p 50] [A] feature-nested-routine-fixed-array-capture
 - [p 50] [A] feature-port-openbsd-libc
 - [p 50] [A] feature-release-checksums-repro
-- [p 50] [A] grant-elf-writer-and-object-writers-to-b4
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
@@ -960,7 +958,6 @@ _none_
 - [p 45] [T] bug-t-a-present-corpus-is-never-checked-against-its-pinned-commit
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
 - [p 45] [T] bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident
-- [p 45] [T] bug-t-check-has-no-aperture-for-a-stale-grant-or-an-absent-holder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion
 - [p 45] [T] bug-t-concurrent-sync-runs-can-squash-two-commits-into-one
 - [p 45] [T] bug-t-forward-decl-lint-counts-nested-functions-as-globals
@@ -1040,7 +1037,6 @@ _none_
 - [p 40] [T] feature-t-check-flags-a-lane-blocker-that-has-no-in-edges
 - [p 40] [W] feature-web-machine-readable-project-metadata
 - [p 40] [A] feature-writeln-as-library
-- [p 40] [A] grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy
 - [p 40] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 40] [A] refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
@@ -1173,13 +1169,13 @@ _none_
 - [p 22] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
 - [p 20] [A] bug-a-defs-inc-vt-promo-comment-describes-the-slot-not-the-variant
 - [p 20] [A] bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k
+- [p 20] [A] bug-a-managed-string-arg-temp-predicate-is-duplicated-seven-times-and-guarded-nowhere
 - [p 20] [A] bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets
 - [p 20] [A] bug-a-shr-reaches-the-ir-spelled-as-tkident
 - [p 20] [A] bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 20] [A] chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
 - [p 20] [B] chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 20] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
