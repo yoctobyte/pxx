@@ -1,15 +1,18 @@
 ---
 slug: bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body
 track: P
-prio: 55
+prio: 60
 type: bug
 status: backlog
 blocked-by: []
-summary: "The rtl-generics corpus wall, as of binary d5a35c8de13a: `unknown type: TKey` raised while replaying a `TList<T>` method body, where `TKey` is not a parameter of `TList<T>` and the surrounding tokens still show `SizeOf(T)` with `T` un-substituted. Symptom recorded from a measurement; the mechanism is NOT diagnosed and the obvious story (a body replayed against another template's parameter set) is a hypothesis only. Unmoved by the cross-unit interface-splice fix — it fires before splice placement can matter, so it is the thing actually holding `uses Generics.Collections`."
+summary: "DIAGNOSED 2026-08-30 — the title is wrong and the diagnostic was right all along. `IEqualityComparer<TKey>` (inc/generics.dictionariesh.inc:56) is a nested specialization of a generics.defaults.pas template using `TKey`, a parameter of the ENCLOSING template `TCustomDictionary<CUSTOM_DICTIONARY_CONSTRAINTS>` whose parameter list arrives from a `{$DEFINE}` macro. It is minted as a concrete specialization instead of being deferred, so `TKey` is passed as a real type and is not one. Nothing to do with TList, nothing to do with file attribution. Original framing: The rtl-generics corpus wall, as of binary d5a35c8de13a: `unknown type: TKey` raised while replaying a `TList<T>` method body, where `TKey` is not a parameter of `TList<T>` and the surrounding tokens still show `SizeOf(T)` with `T` un-substituted. Symptom recorded from a measurement; the mechanism is NOT diagnosed and the obvious story (a body replayed against another template's parameter set) is a hypothesis only. Unmoved by the cross-unit interface-splice fix — it fires before splice placement can matter, so it is the thing actually holding `uses Generics.Collections`."
 owner: unassigned
 ---
 
-# The rtl-generics corpus stops on `TKey` inside a `TList<T>` body
+# The rtl-generics corpus stops on `TKey` ~~inside a `TList<T>` body~~
+
+> **Title is wrong — see the DIAGNOSED section at the bottom.** It is not `TList`,
+> and there is no mis-attribution. Slug kept because other tickets cite it.
 
 This is the current wall for the `Generics.Collections` corpus. Recorded as a
 **symptom with a measurement**, deliberately without a root cause — see the
@@ -86,3 +89,74 @@ small standalone case first, and vary the shape — one template vs two in a uni
 `TList<T>` alone, a dictionary alone — before believing any of it. The repo's
 history of wrong root causes is entirely made of plausible stories nobody
 diffed against an oracle; `tools/fpc_diff_probe.sh` is the oracle here.
+
+---
+
+# DIAGNOSED — and both the title and the original framing are wrong
+
+Keeping the original text above unedited; this section replaces its conclusions.
+
+## The diagnostic was correct. All of it.
+
+`PXXDBG=a.srcmap:*`, binary `a9a4818ab6c8`:
+
+```
+PXXDBG a.srcmap SPLICE start=42607 count=27 src=.../generics.defaults.pas resumes=3
+PXXDBG a.srcmap tok=42616 srcline=78 -> .../generics.defaults.pas
+pascal26:78: error: unknown type: TKey
+  in: .../generics.defaults.pas
+```
+
+Token 42616 is inside `[42607, 42634)`, a body spliced from
+`generics.defaults.pas`. **File right, line right.** `generics.defaults.pas:78`
+is inside `IEqualityComparer<T>`, and the error is in its specialized body.
+
+`TKey` occurs zero times in that file because it is the **substituted
+argument**, not because the attribution is wrong. That grep — the one piece of
+"coordinate-free" evidence two agents relied on — measured the expected state of
+every specialization there has ever been.
+
+## The actual mechanism
+
+`inc/generics.dictionariesh.inc`:
+
+```pascal
+{$DEFINE CUSTOM_DICTIONARY_CONSTRAINTS := TKey, TValue, THashFactory}   { collections.pas:32 }
+
+  TCustomDictionary<CUSTOM_DICTIONARY_CONSTRAINTS> = class abstract    { :47 }
+  ...
+    FEqualityComparer: IEqualityComparer<TKey>;                        { :56 }
+```
+
+`IEqualityComparer<TKey>` is a nested specialization whose argument is a
+**parameter of the enclosing template**. That must be deferred, not minted as a
+concrete alias — the case
+[[bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument]]
+exists for and `test_generic_arg_is_enclosing_template_param` covers. Here it is
+minted, `TKey` is handed to `IEqualityComparer<T>`'s body as a real type, and it
+is not one.
+
+**The hypothesis for why the existing guard misses it — NOT confirmed:** the
+enclosing template's parameter list arrives through a `{$DEFINE}` value macro,
+so the "is this name one of my own parameters?" check may never see `TKey` as a
+parameter. frankB ruled out the macro-as-declaration-parameter-list shape *on
+its own*, with a control; it did not test that shape **combined with a nested
+specialization on one of those parameters. That combination is the experiment.**
+
+## Retitle
+
+The title says `TList` and it is not `TList` — that came from the stale `near:`
+window. Slug kept: it is an address and other tickets cite it.
+
+## What the reduction should be
+
+Three shapes, smallest first, each with a control:
+
+1. enclosing template with a literal parameter list, nested specialization on a
+   parameter — expected to WORK (this is the covered case);
+2. enclosing template whose parameter list comes from a macro, **no** nested
+   specialization — expected to WORK (frankB measured this);
+3. **(1) and (2) together** — the corpus shape, expected to FAIL.
+
+If 3 fails and 1 and 2 pass, the macro-defeats-the-parameter-check story is
+established rather than assumed, and the fix belongs beside the existing guard.

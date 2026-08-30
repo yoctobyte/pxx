@@ -69,7 +69,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (389)
+## backlog (387)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -198,8 +198,7 @@ _none_
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered | P | 55 | bug | The address of a virtual class method cannot be lowered (`AN_CLASS_VIRTUAL_CALL`, kind 88) | — |
-| bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix | P | 45 | bug | rtl-generics still reports `unknown type: TKey` in `generics.defaults.pas:78`, a file where `TKey` occurs zero times, on binary a9a4818ab6c8 — AFTER the fix that closed bug-p-a-specialized-body-reports-errors-in-the-wrong-file. The reduction that ticket isolated is genuinely fixed and gated; the corpus instance is not. Two instances were merged on SIGNATURE similarity (same wrong file, same shape, two corpora) and the merge now looks wrong: one reduction's fix does nothing for the other. Do not re-merge on signature. | — |
-| bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body | P | 55 | bug | The rtl-generics corpus wall, as of binary d5a35c8de13a: `unknown type: TKey` raised while replaying a `TList<T>` method body, where `TKey` is not a parameter of `TList<T>` and the surrounding tokens still show `SizeOf(T)` with `T` un-substituted. Symptom recorded from a measurement; the mechanism is NOT diagnosed and the obvious story (a body replayed against another template's parameter set) is a hypothesis only. Unmoved by the cross-unit interface-splice fix — it fires before splice placement can matter, so it is the thing actually holding `uses Generics.Collections`. | — |
+| bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body | P | 60 | bug | DIAGNOSED 2026-08-30 — the title is wrong and the diagnostic was right all along. `IEqualityComparer<TKey>` (inc/generics.dictionariesh.inc:56) is a nested specialization of a generics.defaults.pas template using `TKey`, a parameter of the ENCLOSING template `TCustomDictionary<CUSTOM_DICTIONARY_CONSTRAINTS>` whose parameter list arrives from a `{$DEFINE}` macro. It is minted as a concrete specialization instead of being deferred, so `TKey` is passed as a real type and is not one. Nothing to do with TList, nothing to do with file attribution. Original framing: The rtl-generics corpus wall, as of binary d5a35c8de13a: `unknown type: TKey` raised while replaying a `TList<T>` method body, where `TKey` is not a parameter of `TList<T>` and the surrounding tokens still show `SizeOf(T)` with `T` un-substituted. Symptom recorded from a measurement; the mechanism is NOT diagnosed and the obvious story (a body replayed against another template's parameter set) is a hypothesis only. Unmoved by the cross-unit interface-splice fix — it fires before splice placement can matter, so it is the thing actually holding `uses Generics.Collections`. | — |
 | bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does | A+S | 35 | bug | `ir_codegen_xtensa.inc` has no IR_SET_SIGNAL case, so any program installing a signal handler dies with `unsupported node in IR codegen: unknown`. riscv32 has the arm; xtensa is the only hosted backend without it. The op is also one of the seven IROpName does not name, which is why the message says `unknown` instead of naming it. | — |
 | bug-t-36-ranked-tickets-have-no-track-field-and-their-lane-rests-on-the-filename | T | 45 | bug | tools/progress.sh infers a track from the slug when frontmatter does not declare one. It infers CORRECTLY today -- this is latent, not live -- but the declaration then rests on the filename, so renaming a slug moves the ticket's lane with no diff that says so. Measured across urgent/backlog/backlog_new/unfinished/blocked: 36 of the ranked set carry no track: line at all. check does not report it. | — |
 | bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in | T | 45 | bug | A container ticket for an active campaign has nowhere correct to live. working/ is a per-agent live LOCK, and an umbrella held there for the length of a campaign is a lock that never clears; every other status ready/next scans is claimable, so parking it invites a second agent onto files the campaign owns. The status vocabulary has no term for 'this is a container, not a unit of work'. | — |
@@ -450,7 +449,6 @@ _none_
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
 | regression-test-core-test-warn-ignored-directives | P | 70 | regression | regression: test-core#src:test/test_warn_ignored_directives.pas red at 83fb0ef72419 (auto-filed by twatch) | — |
-| regression-test-fgl-pascal26 | P | 70 | regression | regression: test-fgl#src:compiler/.pascal26.fixedpoint red at 719bef10ea68 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
@@ -733,11 +731,11 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2846)
+## done (2847)
 
-2846 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2847 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (59)
+## rejected (60)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -760,6 +758,7 @@ _none_
 | bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line | P | 60 | bug | Duplicate. Filed by the coordinator from frankB's rung-6b evidence within minutes of frank-rust filing the same defect from the rtl-generics probe, neither having seen the other. Merged into bug-p-a-specialized-body-reports-errors-in-the-wrong-file, which now carries both instances and is raised to p60. | — |
 | bug-p-a-generic-template-cannot-be-an-object-type | P | 0 | bug | `TCustomPointersCollection<T, PT> = object` is rejected with `generic templates must be class, record, interface, array or procedure declarations`. FPC accepts a generic over an OBJECT type; the frontend's template-kind check simply has no arm for it. This is the CURRENT stop for `uses Generics.Collections` (generics.collections.pas:146) — measured on both HEAD and pinned, so it is not a recent regression. | — |
 | bug-p-lowercase-resolves-to-a-different-implementation-in-the-seed-build | P | 45 | bug | DUPLICATE of bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed, filed 2026-08-28. Tombstone kept so citations resolve; the surviving ticket carries this one's analysis. | — |
+| bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix | P | 0 | bug | REJECTED — the premise is false, measured. The corpus diagnostic is CORRECT: `PXXDBG=a.srcmap:*` shows the error token inside `SPLICE start=42607 count=27 src=generics.defaults.pas`, so the tokens really did come from that file. `TKey` occurs zero times there because it is the SUBSTITUTED ARGUMENT, pasted in from a macro in generics.collections.pas — which is what a specialization does. Original (wrong) claim: rtl-generics still reports `unknown type: TKey` in `generics.defaults.pas:78`, a file where `TKey` occurs zero times, on binary a9a4818ab6c8 — AFTER the fix that closed bug-p-a-specialized-body-reports-errors-in-the-wrong-file. The reduction that ticket isolated is genuinely fixed and gated; the corpus instance is not. Two instances were merged on SIGNATURE similarity (same wrong file, same shape, two corpora) and the merge now looks wrong: one reduction's fix does nothing for the other. Do not re-merge on signature. | — |
 | bug-pascal-local-var-not-registered-wrong-sym | P | 0 | bug | REJECTED — "a method's local is not registered" — my evidence was wrong | — |
 | bug-r-fpc-seed-drift-rexprrecid-needs-a-forward | R | 60 | bug | FPC seed canary RED: rparser.inc calls RExprRecId at :1416, defined at :1754, no forward. pxx self-hosts fine (it does not require the forward); FPC does, so the cold-start bootstrap is broken. One-line fix, Track R's file. | — |
 | bug-str-float-broken-by-copy-shadow | A | 50 | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
@@ -813,7 +812,6 @@ _none_
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-warn-ignored-directives [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-fgl-pascal26 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
@@ -843,6 +841,7 @@ _none_
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
+- [p 60] [P] bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body
 - [p 60] [U] decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane
 - [p 60] [U] decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
@@ -883,7 +882,6 @@ _none_
 - [p 55] [P] bug-p-length-of-a-dynamic-array-of-char-returns-1
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
-- [p 55] [P] bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body
 - [p 55] [T] bug-t-a-grant-is-a-lock-the-ranker-cannot-see [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 55] [T] bug-t-test-fgl-skips-silently-when-the-corpus-is-absent-so-its-gate-row-passes-by-not-running
 - [p 55] [T] bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test
@@ -959,7 +957,6 @@ _none_
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [P] bug-p-a-forward-interface-declaration-is-not-parsed
 - [p 45] [P] bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name
-- [p 45] [P] bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix
 - [p 45] [T] bug-t-36-ranked-tickets-have-no-track-field-and-their-lane-rests-on-the-filename
 - [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix

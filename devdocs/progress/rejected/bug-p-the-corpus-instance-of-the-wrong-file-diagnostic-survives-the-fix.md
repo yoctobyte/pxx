@@ -1,11 +1,11 @@
 ---
 slug: bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix
 track: P
-prio: 45
+prio: 0
 type: bug
-status: backlog
+status: rejected
 blocked-by: []
-summary: "rtl-generics still reports `unknown type: TKey` in `generics.defaults.pas:78`, a file where `TKey` occurs zero times, on binary a9a4818ab6c8 — AFTER the fix that closed bug-p-a-specialized-body-reports-errors-in-the-wrong-file. The reduction that ticket isolated is genuinely fixed and gated; the corpus instance is not. Two instances were merged on SIGNATURE similarity (same wrong file, same shape, two corpora) and the merge now looks wrong: one reduction's fix does nothing for the other. Do not re-merge on signature."
+summary: "REJECTED — the premise is false, measured. The corpus diagnostic is CORRECT: `PXXDBG=a.srcmap:*` shows the error token inside `SPLICE start=42607 count=27 src=generics.defaults.pas`, so the tokens really did come from that file. `TKey` occurs zero times there because it is the SUBSTITUTED ARGUMENT, pasted in from a macro in generics.collections.pas — which is what a specialization does. Original (wrong) claim: rtl-generics still reports `unknown type: TKey` in `generics.defaults.pas:78`, a file where `TKey` occurs zero times, on binary a9a4818ab6c8 — AFTER the fix that closed bug-p-a-specialized-body-reports-errors-in-the-wrong-file. The reduction that ticket isolated is genuinely fixed and gated; the corpus instance is not. Two instances were merged on SIGNATURE similarity (same wrong file, same shape, two corpora) and the merge now looks wrong: one reduction's fix does nothing for the other. Do not re-merge on signature."
 owner: unassigned
 ---
 
@@ -74,3 +74,54 @@ ticket's fix is visible in that dump as a second SPLICE line; if the corpus dump
 shows a splice covering the error token and the answer is still wrong, the range
 table is being corrupted after the plant rather than never planted — a different
 bug with a different owner.
+
+---
+
+# REJECTED — measured, and the premise is false
+
+`PXXDBG=a.srcmap:*` on the corpus probe, binary `a9a4818ab6c8`:
+
+```
+PXXDBG a.srcmap SPLICE start=42607 count=27 src=.../generics.defaults.pas resumes=3
+PXXDBG a.srcmap tok=42616 srcline=78 -> .../generics.defaults.pas
+pascal26:78: error: unknown type: TKey
+  in: .../generics.defaults.pas
+```
+
+Token 42616 sits inside `[42607, 42634)` — a body **spliced from
+generics.defaults.pas**. The file is right. The line is right. The diagnostic
+was correct all along, before this fix and after it.
+
+## Why the grep looked like proof and was not
+
+`TKey` occurs zero times in `generics.defaults.pas` **because it is the
+substituted argument**, pasted into that file's template from
+`generics.collections.pas`. A specialization argument is by definition not in
+the template's own text. The grep measured the wrong thing: absence of the
+argument in the template file is the expected state, not evidence of
+mis-attribution.
+
+Both frankB and I used that grep as the coordinate-free evidence that survived
+when line and `near:` were discredited. It was coordinate-free and also
+uninformative.
+
+## What manufactured the illusion
+
+The `near:` window
+([[bug-a-the-near-context-window-is-stale-after-a-token-splice]]) printed
+`ACount * SizeOf(T)` and `[ANewIndex], SizeOf(T)`, which do sit at
+`generics.collections.pas:1631`/`:1687`. That is the **stale pre-splice
+spelling** at those indices, not the tokens the parser was reading. It pointed
+at a real place in the wrong unit, which is the most convincing possible way to
+be wrong — a plausible location in a file that really does contain `TKey` 65
+times.
+
+So the entire "the corpus names a third unrelated file" story was an artifact of
+one broken instrument plus one grep whose null result was preordained.
+
+## Where the real bug went
+
+`bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body` — retitled and
+re-diagnosed with this evidence. The `TKey` is a nested specialization
+`IEqualityComparer<TKey>` inside a template whose parameter list arrives from a
+macro. Nothing about file attribution is involved.

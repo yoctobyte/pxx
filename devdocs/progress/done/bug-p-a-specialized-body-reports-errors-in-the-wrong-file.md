@@ -332,3 +332,50 @@ to record. Separate by MECHANISM: does the corpus dump show a SPLICE covering th
 token index the diagnostic reports? If it does and the answer is still wrong, the
 range table is being corrupted after the plant rather than never planted — a
 different bug with a different owner.
+
+## RETRACTION — the corpus was never an instance of this bug
+
+Everything above about "the corpus instance is not fixed" and "the merge is in
+doubt" is **wrong, and I am leaving it in place rather than editing it** because
+it is what was believed and acted on for two hours.
+
+`PXXDBG=a.srcmap:*` on the corpus probe, binary `a9a4818ab6c8`:
+
+```
+SPLICE start=42607 count=27 src=.../generics.defaults.pas resumes=3
+tok=42616 srcline=78 -> .../generics.defaults.pas
+```
+
+The error token sits **inside** a body spliced from `generics.defaults.pas`.
+The file is right, the line is right, and it was right before this fix too —
+which is exactly why the output was byte-identical across the fix. There was
+never a second mechanism, because there was never a first one on the corpus.
+
+**`TKey` occurs zero times in that file because it is the substituted
+ARGUMENT**, pasted in from a macro in `generics.collections.pas`. A
+specialization argument is not in the template's own text; that is what
+specialization means. The grep both frankB and I leaned on measured the
+expected state and read it as a defect.
+
+**The coordinator's merge was fine.** I put it in doubt on the strength of the
+corpus not moving; the corpus did not move because it was never broken in this
+way. The merge of two instances was wrong for a different and smaller reason —
+one of them was not an instance of anything.
+
+### What made this so convincing
+
+`near:` printed `ACount * SizeOf(T)` and `[ANewIndex], SizeOf(T)`, which really
+do occur at `generics.collections.pas:1631`/`:1687`. That is the stale
+pre-splice spelling at those indices
+([[bug-a-the-near-context-window-is-stale-after-a-token-splice]]), and it named
+a real place in a file that really does contain `TKey` 65 times. A broken
+instrument pointing at a plausible location, plus a grep whose null result was
+preordained, produced a fully coherent wrong story that survived two agents and
+a coordinator.
+
+The reduction and the fix above stand on their own: they were built from a
+constructed case, not from the corpus, and their evidence never depended on
+either broken field. That is the only reason this ticket's core result is
+unaffected.
+
+Follow-up rejected: `bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix`.
