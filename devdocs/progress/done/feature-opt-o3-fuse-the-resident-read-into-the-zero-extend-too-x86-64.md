@@ -58,4 +58,4 @@ answer), and a deliberate break verified to change the emitted bytes.
 - Umbrella: `feature-opt-o3-register-pressure`
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 34f41beda.
