@@ -837,9 +837,7 @@ begin
           param was scalar and indexing it read garbage.) }
         tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
         LastTypeRecId := ArrTypeElemRec[paramAi];
-        LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
-        LastTypePointerStrElemTk := ArrTypePtrElemStrTk[paramAi];
-        LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
+        LoadPointeeFromArrType(paramAi);
         isArr := True;
         { Named dynamic-array type param (`TDynArr = array of T`): mark it a real
           dynamic array so SetLength routes to -102 and (when var/out) the
@@ -903,9 +901,7 @@ begin
           begin
             tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
             LastTypeRecId := ArrTypeElemRec[paramAi];
-            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
-            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[paramAi];
-            LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
+            LoadPointeeFromArrType(paramAi);
             if (tk = tyAnsiString) or (tk = tyString) or
                (tk = tyFixedString) or (tk = tyShortString) or
                ((tk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
@@ -928,9 +924,7 @@ begin
               pointer-sized stride and tags m[i] as a handle. }
             tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
             LastTypeRecId := ArrTypeElemRec[paramAi];
-            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
-            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[paramAi];
-            LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
+            LoadPointeeFromArrType(paramAi);
             paramElemDynDepth := ArrTypeDynDepth[paramAi];
             if paramElemDynDepth <= 0 then paramElemDynDepth := 1;
             Next;             { consume the named array type }
@@ -1051,9 +1045,19 @@ begin
       if retDynDepth < 1 then retDynDepth := 1;
       retElemTk := IntToTypeKind(ArrTypeElemTk[paramAi]);
       retElemRec := ArrTypeElemRec[paramAi];
+      { The one restore that lands in LOCALS rather than the LastTypePointer*
+        channel, so it cannot use LoadPointeeFromArrType -- but it wants the
+        same six facts, and it was carrying three. retPtrDepth/BaseTk/BaseRec
+        are declared beside the others and threaded to ProcRetPtr* below; a
+        `function F: TPtrArr` returning `array of PPC` answered depth 0 over
+        tyUnknown for its elements without these.
+        bug-a-an-unused-pointer-to-record-alias-changes-an-unrelated-deref }
       retPtrElemTk  := ArrTypePtrElemTk[paramAi];
       retPtrStrElemTk := ArrTypePtrElemStrTk[paramAi];
       retPtrElemRec := ArrTypePtrElemRec[paramAi];
+      retPtrDepth   := ArrTypePtrDepth[paramAi];
+      retPtrBaseTk  := ArrTypePtrBaseTk[paramAi];
+      retPtrBaseRec := ArrTypePtrBaseRec[paramAi];
     end
     else
     begin
@@ -1093,9 +1097,7 @@ begin
           ArrType entry, as ParseVarSection does for a variable of the alias. }
         retType := IntToTypeKind(ArrTypeElemTk[retArrAi]);
         LastTypeRecId := ArrTypeElemRec[retArrAi];
-        LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[retArrAi]);
-        LastTypePointerStrElemTk := ArrTypePtrElemStrTk[retArrAi];
-        LastTypePointerElemRec := ArrTypePtrElemRec[retArrAi];
+        LoadPointeeFromArrType(retArrAi);
         if (retType = tyFixedString) or (retType = tyShortString) then
           LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
         { NOT nested under the frozen-string guard above -- deliberately a

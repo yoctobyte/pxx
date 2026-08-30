@@ -4904,9 +4904,7 @@ begin
       variable-declaration path reads for exactly this reason. }
     tk := IntToTypeKind(ArrTypeElemTk[arrAi]);
     LastTypeRecId := ArrTypeElemRec[arrAi];
-    LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[arrAi]);
-    LastTypePointerStrElemTk := ArrTypePtrElemStrTk[arrAi];
-    LastTypePointerElemRec := ArrTypePtrElemRec[arrAi];
+    LoadPointeeFromArrType(arrAi);
     if (tk = tyFixedString) or (tk = tyShortString) then
       LastTypeStrCap := ArrTypeElemStrCap[arrAi];
       if ArrTypeStrElemTk[arrAi] <> 0 then

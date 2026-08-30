@@ -4683,6 +4683,49 @@ begin
   Result := True;
 end;
 
+{ ===== The POINTEE carrier set of a named ARRAY type =====
+
+  `TAp = array[0..1] of PPC` where `PPC = ^PChar` has to remember, on the TYPE
+  row, everything ParseTypeKind worked out about the element's pointee -- kind,
+  record id, managed-string width, depth and ultimate base. A USE of the named
+  type is arbitrarily far from where the type was parsed, and by then the
+  LastTypePointer* return channel describes something else entirely: whatever
+  pointer declaration the unit happened to parse last.
+
+  These two are the ONLY reader and writer of that set. That is the point of
+  them. The set grew one column per ticket -- ArrTypePtrElemRec, then
+  ArrTypePtrElemTk, then ArrTypePtrElemStrTk, then the depth/base triple -- and
+  each addition meant finding ~19 restore sites by hand, which is how the
+  triple came to be missing everywhere at once while the other three were
+  present. Enumerating a field list is the failure ArrTypeAliasOf's own comment
+  warns about; one call site per direction cannot go stale.
+
+  NO BOUNDS GUARD, deliberately: every caller has already established its row
+  index (an `ai >= 0` test, or a FindArrayType that answered), and the direct
+  indexing here is exactly what the nineteen inline blocks did. A silent Exit
+  would convert a caller's bug into a wrong VALUE, which is the class of defect
+  this set exists to stop.
+  bug-a-an-unused-pointer-to-record-alias-changes-an-unrelated-deref }
+procedure LoadPointeeFromArrType(ai: Integer);
+begin
+  LastTypePointerElemTk    := IntToTypeKind(ArrTypePtrElemTk[ai]);
+  LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
+  LastTypePointerElemRec   := ArrTypePtrElemRec[ai];
+  LastTypePointerDepth     := ArrTypePtrDepth[ai];
+  LastTypePointerBaseTk    := ArrTypePtrBaseTk[ai];
+  LastTypePointerBaseRec   := ArrTypePtrBaseRec[ai];
+end;
+
+procedure StorePointeeToArrType(row: Integer);
+begin
+  ArrTypePtrElemRec[row]   := LastTypePointerElemRec;
+  ArrTypePtrElemTk[row]    := Ord(LastTypePointerElemTk);
+  ArrTypePtrElemStrTk[row] := LastTypePointerStrElemTk;
+  ArrTypePtrDepth[row]     := LastTypePointerDepth;
+  ArrTypePtrBaseTk[row]    := LastTypePointerBaseTk;
+  ArrTypePtrBaseRec[row]   := LastTypePointerBaseRec;
+end;
+
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
 var elemSize, totalSize, align: Integer; ptrArrDimI: Integer;
 begin

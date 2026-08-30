@@ -4801,6 +4801,31 @@ var
     LastTypePointerElemTk -- the reads are the cost here, not the writes.
     feature-unicodestring-model }
   ArrTypePtrElemStrTk : array[0..MAX_TYPEALIAS-1] of Integer;
+  { ...and the pointee's DEPTH and ULTIMATE BASE, the last two members of the
+    carrier set, dropped in exactly the same way as the Rec and Tk halves above
+    and for exactly as long. `PPC = ^PChar` is depth 2 over tyChar, and a
+    `TGrid = array[..] of array[..] of PPC` recorded neither -- so every USE of
+    the named type read whatever LastTypePointerDepth/BaseTk the last unrelated
+    pointer declaration anywhere in the unit had left behind.
+
+    That made an UNUSED type line change an unrelated expression: adding
+    `PInt = ^Integer` (or `PRec = ^TRec`) after the array type, and never
+    mentioning it again, made `g[1][0]^` print the POINTER instead of the
+    string, because the globals now described PInt's pointee rather than PPC's.
+    Deleting the line fixed it. Measured; `pinned` agrees, so it predates the
+    2026-08-30 deref work that found it.
+    bug-a-an-unused-pointer-to-record-alias-changes-an-unrelated-deref
+
+    THE SIXTH COLUMN IS WHY THE PAIR OF HELPERS EXISTS. Three columns were
+    added one ticket at a time, each with ~19 read sites to update, and each
+    time one site was missed or a later column was added and the sites diverged
+    -- which is exactly the failure ArrTypeAliasOf's comment predicts for a
+    field list that has to be enumerated. LoadPointeeFromArrType /
+    StorePointeeToArrType (symtab.inc) are now the only readers and writers of
+    this whole set, so a SEVENTH column costs two lines and no sweep. }
+  ArrTypePtrDepth   : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypePtrBaseTk  : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypePtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeNDims  : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeDimLo  : array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;

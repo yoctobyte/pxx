@@ -32,6 +32,20 @@ type
   TRow  = array[0..1] of PPC;
   TGrid = array[0..1] of TRow;
   TDyn  = array of array of PPC;
+  { UNUSED, AND THAT IS THE POINT. A named array type used to record its
+    element's pointee KIND, RECORD and string width but not its DEPTH or
+    ULTIMATE BASE, so every use of TGrid/TDyn below read those two from the
+    LastTypePointer* globals -- i.e. from whichever pointer type the unit
+    parsed LAST. Declaring one more pointer alias here, and never mentioning
+    it again, made rows d, e and f print a raw ADDRESS instead of 'alpha' on
+    the binary that predates the fix. Deleting these two lines made them pass.
+
+    Keep them. They cost nothing and they are the only thing in the suite that
+    would catch the carrier set losing a column again -- which has now happened
+    four times, once per column added.
+    bug-a-an-unused-pointer-to-record-alias-changes-an-unrelated-deref }
+  TRec  = record g: TGrid; end;
+  PRec  = ^TRec;
 var g: TGrid; dy: TDyn; q: PPC; pa: PPPC; s1: PChar; i, j: Integer;
 begin
   s1 := 'alpha'; q := @s1; i := 0; j := 1;

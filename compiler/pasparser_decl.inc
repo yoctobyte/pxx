@@ -853,9 +853,7 @@ begin
       VDElemEnumId := ArrTypeElemEnumId[ai];
       VDIdxTk := ArrTypeIdxTk[ai]; VDIdxEnumId := ArrTypeIdxEnumId[ai];
       LastTypeRecId := ArrTypeElemRec[ai];
-      LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
-      LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
-      LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+      LoadPointeeFromArrType(ai);
       { The alias records its frozen-string element width; LastTypeStrCap here
         is whatever the last unrelated `string[N]` anywhere left behind. }
       if (VDElemTk = tyFixedString) or (VDElemTk = tyShortString) then
@@ -965,9 +963,7 @@ begin
           VDElemEnumId := ArrTypeElemEnumId[ai];
             VDElemEnumId := ArrTypeElemEnumId[ai];
             LastTypeRecId := ArrTypeElemRec[ai];
-            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
-            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
-            LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+            LoadPointeeFromArrType(ai);
             VDDynDepth := VDDynDepth + ArrTypeDynDepth[ai];
             Next;                 { consume the alias name }
             VDTk := VDElemTk;
@@ -988,9 +984,7 @@ begin
           VDElemEnumId := ArrTypeElemEnumId[ai];
             VDElemEnumId := ArrTypeElemEnumId[ai];
             LastTypeRecId := ArrTypeElemRec[ai];
-            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
-            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
-            LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+            LoadPointeeFromArrType(ai);
             if (VDElemTk = tyAnsiString) or (VDElemTk = tyString) or
                (VDElemTk = tyFixedString) or (VDElemTk = tyShortString) or
                ((VDElemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
@@ -1017,9 +1011,7 @@ begin
           VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
           VDElemEnumId := ArrTypeElemEnumId[ai];
           LastTypeRecId := ArrTypeElemRec[ai];
-          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
-          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
-          LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+          LoadPointeeFromArrType(ai);
           VDElemDynDepth := ArrTypeDynDepth[ai];
           Next;                 { consume the alias name }
           VDTk := VDElemTk;
@@ -1056,9 +1048,7 @@ begin
           VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
           VDElemEnumId := ArrTypeElemEnumId[ai];
           LastTypeRecId := ArrTypeElemRec[ai];
-          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
-          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
-          LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+          LoadPointeeFromArrType(ai);
           VDTk := VDElemTk;
           elemResolved := True;
           Next;                 { consume the named array type }
@@ -2278,9 +2268,7 @@ begin
           end;
           cElemTk := IntToTypeKind(ArrTypeElemTk[cAi]);
           LastTypeRecId := ArrTypeElemRec[cAi];
-          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[cAi]);
-          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[cAi];
-          LastTypePointerElemRec := ArrTypePtrElemRec[cAi];
+          LoadPointeeFromArrType(cAi);
         end
         else
         begin
@@ -3817,9 +3805,7 @@ begin
           { AddUField reads the pointee record for a tyPointer field straight off
             the LastTypePointerElemRec global -- prime it here (see
             ArrTypePtrElemRec's comment in defs.inc for the general landmine). }
-          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
-          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
-          LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+          LoadPointeeFromArrType(fAi);
           Next;   { consume the named array type }
         end
         else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
@@ -3833,9 +3819,7 @@ begin
           fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
           fRec := ArrTypeElemRec[fAi];
           fEnumId := ArrTypeElemEnumId[fAi];
-          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
-          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
-          LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+          LoadPointeeFromArrType(fAi);
           if ArrTypeNDims[fAi] >= 2 then
           begin
             fNDims := ArrTypeNDims[fAi];
@@ -5613,9 +5597,7 @@ begin
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
                 fEnumId2 := ArrTypeElemEnumId[fAi];
-                LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
-                LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
-                LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+                LoadPointeeFromArrType(fAi);
                 Next;   { consume the named array type }
               end
               else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
@@ -5629,9 +5611,7 @@ begin
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
                 fEnumId2 := ArrTypeElemEnumId[fAi];
-                LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
-                LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
-                LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+                LoadPointeeFromArrType(fAi);
                 if ArrTypeNDims[fAi] >= 2 then
                 begin
                   fNDims := ArrTypeNDims[fAi];
@@ -6036,9 +6016,7 @@ begin
             aElemEnumId := ArrTypeElemEnumId[fAi];
             aElemStrCap := ArrTypeElemStrCap[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
-            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
-            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
-            LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+            LoadPointeeFromArrType(fAi);
             aElemDynDepth := ArrTypeDynDepth[fAi];
             Next;   { consume the alias name }
           end
@@ -6088,9 +6066,7 @@ begin
           ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
           ArrTypeElemEnumId[ArrTypeCount] := aElemEnumId;
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
-          ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
-          ArrTypePtrElemTk[ArrTypeCount]  := Ord(LastTypePointerElemTk);
-          ArrTypePtrElemStrTk[ArrTypeCount] := LastTypePointerStrElemTk;
+          StorePointeeToArrType(ArrTypeCount);
           ArrTypeIdxTk[ArrTypeCount]      := tdIdxTk;
           ArrTypeIdxEnumId[ArrTypeCount]  := tdIdxEnumId;
           if tdCnt >= 2 then ArrTypeNDims[ArrTypeCount] := tdCnt
@@ -6153,9 +6129,7 @@ begin
             aElemEnumId := ArrTypeElemEnumId[fAi];
             aElemStrCap := ArrTypeElemStrCap[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
-            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
-            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
-            LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+            LoadPointeeFromArrType(fAi);
             tdCnt := tdCnt + ArrTypeDynDepth[fAi];
             Next;               { consume the alias name }
           end
@@ -6166,9 +6140,7 @@ begin
             aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
             aElemEnumId := ArrTypeElemEnumId[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
-            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
-            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
-            LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+            LoadPointeeFromArrType(fAi);
             if (aElemTk = tyAnsiString) or (aElemTk = tyString) or
                (aElemTk = tyFixedString) or (aElemTk = tyShortString) or
                ((aElemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
@@ -6195,9 +6167,7 @@ begin
           else
             ArrTypeStrElemTk[ArrTypeCount] := 0;
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
-          ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
-          ArrTypePtrElemTk[ArrTypeCount]  := Ord(LastTypePointerElemTk);
-          ArrTypePtrElemStrTk[ArrTypeCount] := LastTypePointerStrElemTk;
+          StorePointeeToArrType(ArrTypeCount);
           ArrTypeNDims[ArrTypeCount] := 0;
           ArrTypeIsDyn[ArrTypeCount] := True;
           ArrTypeElemDynDepth[ArrTypeCount] := 0;
