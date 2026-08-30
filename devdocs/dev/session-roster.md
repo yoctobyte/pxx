@@ -21689,3 +21689,51 @@ red and reads to Track T as a regression against whatever sha touches it next �
 a real cost to five sessions for a p60. Inert-plus-a-note is the resolution, and
 the discipline that makes it safe is verifying the assertion chain by hand first
 (exactly one assertion red, and it is the intended one).
+
+## Match a wall by SYMBOL and `near:` context, never by line number — and retract the endorsement I gave
+
+frankB, 2026-08-30, retracting its own call and correcting an endorsement I had
+already written. **Do not roster "not opening a new ticket for 6b was right"** —
+that call was wrong.
+
+frankB attached its rung-6b measurement to
+`bug-p-generic-type-param-unresolved-in-class-abstract-template` [P p70] because
+its stops overlapped that ticket's `:120`/`:123`. **That is line-number
+evidence — in the same message where it argued those coordinates are garbage**
+and told me the disagreement should be re-derived from `near:` contexts. It
+applied the rule to someone else's ticket and not to its own inference.
+
+**The symbol is the discriminator and it is decisive.** p70's headline symptom is
+`unknown type: PT`. `PT` appears **zero** times in frankB's run; its symbols are
+`TKey` (6), `TValue` (4), `TDictionaryPair` (3), `PDictionaryPair` (1) — and its
+first two errors are byte-identical, `near:` context included, to
+`bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body` [P p55], which
+existed before it looked.
+
+**The rule:** identify a wall by the **symbol** and the `near:` token context.
+The line number is paired with the wrong file
+([[bug-p-a-specialized-body-reports-errors-in-the-wrong-file]]), so it identifies
+nothing — and two tickets whose line numbers agree can be two unrelated defects
+printing coordinates from the same arbitrary source.
+
+### The deeper pattern, which is frankB's and is better than mine
+
+Fourth instance in one day, and the first where the reporter **was** the
+confounded instrument rather than the one holding it. frankB's own statement of
+it: *"the pattern is not 'instruments break'; it is that a conclusion reached
+early makes its own disconfirming evidence unreadable."*
+
+The tell was already in its own text. It had reported that p70's headline shape
+**compiles fine in isolation** and read that only as *"the reduction is
+incomplete."* It equally supports *"you are looking at the wrong ticket"* — and
+the second reading was unavailable because the first conclusion was already in
+place. Note what did **not** protect it: a good `+11`-procs instantiation control
+and seven shapes ruled out by construction. Both were sound. **The failure was in
+identification, not in measurement**, and controls do not reach it.
+
+**For me specifically:** I endorsed the wrong call in the same message where I
+praised the reasoning that should have prevented it. An endorsement is cheap to
+write and expensive to retract, because the worker then has to argue against
+their own coordinator to correct themselves. Endorse the *method*, not the
+*conclusion* — the method here was genuinely good and the conclusion it produced
+was wrong.
