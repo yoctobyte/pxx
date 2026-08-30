@@ -22708,3 +22708,59 @@ stamps the symbol while `LastTypePointerStrElemTk` is live); `TArr = array[0..1]
 PW` named needs a real row, because a *use* of a named type is arbitrarily far from
 where it was parsed. Same declaration, two answers, measured 4 and 8 before a line
 was written.
+
+## A "double case" had FOUR hand-rolled copies — and the outer arm's own comment undercounted them
+
+frank-rust, `28b2851cd` (verified on origin). The rtl-generics `TKey` wall is fixed,
+and the shape is the one CLAUDE.md warns about, one level worse than it words it.
+
+**Mechanism.** `TList<T>`'s template capture overran by **10,914 tokens** and
+swallowed `TCustomDictionary` whole. The dictionary's `IEqualityComparer<TKey>` was
+then registered as a nested prerequisite **of TList**, under TList's substitution
+set — where `TKey` is not a parameter. So it stayed literal, was minted as the alias
+`IEqualityComparer$TKey`, and surfaced **1,100 lines away** in
+`generics.defaults.pas` as `unknown type: TKey`. The classic profile: no crash, a
+plausible wrong value, far from the cause.
+
+**Cause:** `ParseGenericTemplateNamed`'s depth loop asked *"does this `class` token
+open a body?"* with a copy that knew about member prefixes (`class function`, `class
+var`) and not about **bodiless declarations**. rtl-generics writes `TEnumerator =
+class(TCustomListEnumerator<T>);` inside TList's own `type` section — no body, no
+`end`, depth one too high, TList's own `end` closes the wrong level.
+
+**The part to carry: this was the NESTED arm of a bug whose OUTER arm was already
+fixed** (`bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section`).
+The question had **four** hand-rolled copies — and the outer arm's own comment said
+*"one decision, two hand-rolled copies."* **The comment undercounted the duplication
+it was written to warn about.** So "grep for the sibling before closing the ticket"
+is necessary and not sufficient: **grep for the CONCEPT and count, do not trust a
+prior fixer's count.** Now `ClassTokOpensBody`, used by the depth loop and by
+`CollectNestedTypeNames`; the other two are deliberately not routed there, with the
+reason in the comment.
+
+**The control is what makes it a finding rather than a fix.** `--debug` prints each
+template's capture span:
+
+| template | before | after |
+| --- | --- | --- |
+| TList | 10,914 | **515** |
+| TExtendedHashService | 1,677 | 1,677 |
+| THashService | 1,495 | 1,495 |
+
+**Only the template with a bodiless nested class moved.** `unknown type: TKey` on
+the corpus: 2 → 0. Regression test's first family is a **bodied** nested class — the
+control that isolates *bodilessness* rather than nesting.
+
+**And the extend-the-probe rule earned its keep a third time.** `p.mint` gave
+`deferred alias=IEqualityComparer$TKey args=TKey`; `p.nspec` gave `under=TList$UInt32
+subs=T->UInt32` — registered under the wrong template. At that point *"TList's
+substitution set is wrong"* and *"TList's range is too big"* produce **byte-identical
+output**, so it extended `p.nspec` to print `ts`/`tc` and the range's first tokens
+before re-running: `ts=10517 tc=10914 head=class specialize TCustomListWithPointers`.
+Four lines of probe, one run, settled. Both documented in `debug-switches.md`.
+
+**The wall MOVED and left its lane** — Generics.Collections now stops only on
+`unknown type: IEnumerable`, which FPC supplies from the implicit ObjPas unit and our
+RTL does not declare. Filed `bug-b-rtl-provides-no-ienumerable-generic-interface`
+[B p55], unclaimed, with a control proving the compiler handles the shape. **A Track
+P wall resolving into a Track B gap is the cross-lane routing the ranker cannot do.**
