@@ -24,6 +24,8 @@ test/my_pas_lib.pas  helper library compiled by test/test_basic_comprehensive.ba
 test/test_pal_signal.pas  helper unit for test/test_signal_handler_callback_b336.pas (wired)
 test/carray_field_decay_exprlist_b120.c  included by test/carray_field_decay_nested_item_b120.c (wired)
 test/cbridge_via_unit.c  pulled in by test/unit_c_bridge.pas via `uses './cbridge_via_unit.c'`
+test/cabi_bridge.c  implementation of test/unit_cabi_bridge.pas via `uses './cabi_bridge.c'`; reached by the wired test/test_c_abi_pascal_caller.pas. Same path-form blind spot as test/relpath/* above -- the checker matches by stem. Compiling it standalone would test a shape that never occurs: its whole subject is a Pascal caller reaching a bodied C callee, which needs the Pascal unit around it
+test/cabi_intra.c  implementation of test/unit_cabi_intra.pas via `uses './cabi_intra.c'`; reached by the wired test/test_c_abi_intra_c_calls.pas. Same path-form blind spot. Its subject is a C-to-C call INSIDE a translation unit that a Pascal program uses (CProgramMode and CUnitOfPascalProgram both True), a state no standalone compile of this file can enter
 # NOTE: check_test_wiring reports the next line as a STALE exemption. It is
 # not — tools/testmgr_hardcoded_tmp_devtest.py merely NAMES this path as data
 # (it asserts the file's hardcoded /tmp path), and the checker's "referenced by
@@ -90,4 +92,3 @@ test/strhelperprobe.pas  Pascal unit imported by test/test_nilpy_str_method_vs_p
 # bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
 # and delete this line -- the two Makefile lines are given in
 # feature-b-a-real-minidom-is-an-implementation-not-a-shim.
-test/lib_mimic_xml_dom_minidom.npy  CPython differential for the minidom shim; the shim itself hangs the compiler (bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever), so wiring this would hang any lane running a lib gate

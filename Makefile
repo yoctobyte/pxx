@@ -11001,6 +11001,42 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_pyeval_trampoline_shapes.pas $(TESTTMP)/sweep_pyeval_trampoline_shapes
 	$(TESTTMP)/sweep_pyeval_trampoline_shapes > $(TESTTMP)/sweep_pyeval_trampoline_shapes.log
 	tools/expect_same.sh sweep_pyeval_trampoline_shapes "$$(tail -1 $(TESTTMP)/sweep_pyeval_trampoline_shapes.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_trampoline_shapes.log)" "ALL PASS 5"
+	# --- batch 5, 2026-08-30 (frankwasm). chore-a-sweep-the-unwired-tests-into-the-suite
+	# Six subjects, ALL EIGHT of the top-level unwired files having been created
+	# THAT SAME DAY (--diff-filter=A on every one). That is the batch's actual
+	# finding: this ticket was priced as a drain of 15 deferred files and is a
+	# LEAK of roughly eight a day, which is what its own 2026-08-19 batch-1 note
+	# already said -- "the orphan population grows faster than it drains".
+	#
+	# EVERY expectation below is an ORACLE and each was PROVEN equal to it, not
+	# eyeballed: five diffed byte-for-byte against FPC 3.2.2 (-Mobjfpc) output,
+	# and the LoadFile one is `wc -c` of its own .data file (14 bytes), which is
+	# a better oracle than FPC could be since FPC has no LoadFile.
+	# The rule matters more here than in any earlier batch: these six came from
+	# fix commits that landed HOURS earlier, so recording today's output would
+	# pin whatever those fixes happened to leave behind -- including a bug. Two
+	# files in an earlier batch shipped AS THE REGRESSION TEST FOR THEIR OWN FIX
+	# (042bcbb32, 7ee75329e) and had exactly that exposure.
+	#
+	# The two remaining top-level files, test/cabi_bridge.c and
+	# test/cabi_intra.c, are NOT wired here and must not be: they are the
+	# implementations of test/unit_cabi_bridge.pas and test/unit_cabi_intra.pas,
+	# reached by `uses './cabi_bridge.c'`. Compiling them standalone would test
+	# a shape that never occurs. They are exempted in test/UNWIRED.txt for the
+	# same reason test/relpath/* already is -- the checker matches by STEM and
+	# cannot see a path-form uses.
+	./$(COMPILER) test/test_array_type_alias_chain.pas $(TESTTMP)/sweep_arralias26
+	tools/expect_same.sh sweep_arralias26 "$$($(TESTTMP)/sweep_arralias26)" "$$(printf 'dyn   8 8 8\nstatic 16 16\nsums  3 7 11\nlen   2 2 2\nstat  7 8 4\nnested 19 1')"
+	./$(COMPILER) test/test_frozen_str_array_elem_cap.pas $(TESTTMP)/sweep_frozencap26
+	tools/expect_same.sh sweep_frozencap26 "$$($(TESTTMP)/sweep_frozencap26)" "$$(printf 'global   abcdefgh 8\nlocal    abcdefgh 8\nparam    abcdefgh 8\nreturn   abcdefgh 8\nplainfld abcdefgh 8\naliasfld abcdefgh 8\ninlinefld abcdefgh 8\nnested   abcdefgh 8\narrofrec abcdefgh 8\ndynarr   abcdefgh 8\noverrun  abcdefgh 8\nneighbour-elem  ZZZ\nneighbour-field 12345\nnested t1=222 t2=111 arr t1=333')"
+	./$(COMPILER) test/test_generic_constraint_tobject_root.pas $(TESTTMP)/sweep_gentobj26
+	tools/expect_same.sh sweep_gentobj26 "$$($(TESTTMP)/sweep_gentobj26)" "$$(printf 'implicit 1\nexplicit 2\ndeep     3\ntobject  TRUE\nlater    5\nuserbase 6')"
+	./$(COMPILER) test/test_length_of_a_dynamic_array_of_char.pas $(TESTTMP)/sweep_dynchar26
+	tools/expect_same.sh sweep_dynchar26 "$$($(TESTTMP)/sweep_dynchar26)" "$$(printf 'dyn char  =6\nstatic char=8\nbare char =1\nlit       =5\nwidechar  =3\nbyte      =6\nhigh dyn  =5\nelems     =AF\nopenparam=6')"
+	./$(COMPILER) test/test_ptr_depth2_bases.pas $(TESTTMP)/sweep_ptrd226
+	tools/expect_same.sh sweep_ptrd226 "$$($(TESTTMP)/sweep_ptrd226)" "$$(printf 'c1=alpha\nb1=200\ni1=-42\nc2=alpha\nb2=200\ni2=-42\nceq=TRUE beq=TRUE ieq=TRUE')"
+	./$(COMPILER) test/test_loadfile_into_element_and_field.pas $(TESTTMP)/sweep_loadfile26
+	tools/expect_same.sh sweep_loadfile26 "$$($(TESTTMP)/sweep_loadfile26)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14')"
 	./$(COMPILER) test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives26
 	tools/expect_same.sh test_pascal_directives26 "$$($(TESTTMP)/test_pascal_directives26)" "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_comment_directive.pas $(TESTTMP)/test_comment_directive26

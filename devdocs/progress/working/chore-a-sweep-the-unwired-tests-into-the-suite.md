@@ -1,11 +1,11 @@
 ---
 track: A
-prio: 20
+prio: 40
 type: chore
-owner: —
+owner: frankwasm
 blocked-by: []
-summary: "RESUMABLE 2026-08-30 and the PAUSE REASON IS GONE: the 15 files it parked on (13 Track N pyeval/pyexec, 2 Track F softfloat) are all WIRED now, and 45 NEW unwired files have accumulated behind them — 37 under test/wasm/, 8 at top level, and every one of those 8 was created TODAY. This is a LEAK, not a backlog: `tools-devtest#00` (which runs check_test_wiring) is STILL-RED in the full tier. DECIDED 2026-08-19: SWEEP them into the suite — one job, not 45 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation."
-status: backlog
+summary: "BATCH 5 LANDED 2026-08-30 (frankwasm): 6 top-level subjects wired against PROVEN oracles, 2 C helpers exempted, 1 stale exemption removed — 45 unwired down to 37, and ALL 37 REMAINING ARE test/wasm/**, i.e. one campaign's staging and not a general backlog. RE-PRICED 20 -> 40 with the measurement, not as a bare frontmatter edit: p20 priced a DRAIN OF 15 DEFERRED FILES, and the object is a LEAK — every one of batch 5's eight top-level files was created THAT DAY (--diff-filter=A), while `tools-devtest#00`, which runs check_test_wiring, has been STILL-RED in the full tier since 49bd043. DECIDED 2026-08-19: sweep them in — one job, not 45 tickets. Track A, not T, precisely because A can FIX a red in place. These are repro tests from fix commits, so the bug already has a ticket in done/ — reference it, do not re-file. NEVER record current output as the expectation; a file with no constructible oracle is left UNWIRED WITH A STATED REASON, which is the honest form of a skip."
+status: working
 ---
 
 # Sweep the unwired tests into the suite
@@ -441,3 +441,88 @@ REGRESSION TEST FOR THEIR OWN FIX, so transcribing what the compiler prints
 would have pinned whatever the fix happened to leave behind — including a bug.
 That risk is higher for these eight than for any earlier batch, because they are
 hours old and came from fix commits landed today.
+
+## Batch 5 — 2026-08-30 (frankwasm). 45 -> 37, and the remainder is one campaign's
+
+Six subjects wired, two exempted, one stale exemption removed.
+
+| file | disposition | oracle |
+| --- | --- | --- |
+| `test_array_type_alias_chain.pas` | wired | FPC 3.2.2, diffed |
+| `test_frozen_str_array_elem_cap.pas` | wired | FPC 3.2.2, diffed |
+| `test_generic_constraint_tobject_root.pas` | wired | FPC 3.2.2, diffed |
+| `test_length_of_a_dynamic_array_of_char.pas` | wired | FPC 3.2.2, diffed |
+| `test_ptr_depth2_bases.pas` | wired | FPC 3.2.2, diffed |
+| `test_loadfile_into_element_and_field.pas` | wired | `wc -c` of its own `.data` = 14 |
+| `cabi_bridge.c` | **UNWIRED.txt** | — |
+| `cabi_intra.c` | **UNWIRED.txt** | — |
+| `lib_mimic_xml_dom_minidom.npy` | exemption **removed** | it is wired now |
+
+**"Diffed", not "checked".** Each recorded string was proven equal to its oracle
+by `diff <(fpc-built) <(pxx-built)`, not by reading two outputs side by side.
+That distinction is the whole content of the hard rule: a transcription that
+*looks* right is what pins a bug.
+
+The `LoadFile` one has no FPC oracle — FPC has no `LoadFile` — and `wc -c` of
+the data file is a **better** one than FPC would have been, because it is
+independent of every compiler. Worth noting for the next drainer: "no FPC" is
+not the same as "no oracle", and reaching for the recording is a step you take
+only after asking what the program is actually asserting. Here it asserts a byte
+count that is sitting in the filesystem.
+
+### The two C files must NOT be wired, and that is the finding
+
+`cabi_bridge.c` and `cabi_intra.c` are the implementations of
+`unit_cabi_bridge.pas` / `unit_cabi_intra.pas`, reached by `uses
+'./cabi_bridge.c'` from wired subjects. **Compiling either standalone would test
+a shape that never occurs** — `cabi_intra.c`'s entire subject is a C-to-C call
+inside a translation unit that a Pascal program uses (`CProgramMode` and
+`CUnitOfPascalProgram` both True), a state no standalone compile can enter.
+
+Same path-form blind spot `test/relpath/*` is already exempted for: the checker
+matches by STEM and cannot see `uses './x.c'`. **An exemption with a reason is
+the correct end state here, not a concession** — and it is also the honest form
+of a skip for the *other* case, a file whose expectation cannot be constructed.
+Leaving such a file unwired with a stated reason keeps it findable; wiring it
+against its own output makes it permanently green and permanently silent, and it
+then gets cited as coverage.
+
+### Re-priced 20 -> 40, and the reason is the mechanism rather than the incident
+
+**p20 was not a wrong judgment. It was a correct judgment about a different
+object.** The ticket described a drain of 15 files blocked on deferred lanes,
+and at that description p20 is generous. The object is a leak: all eight
+top-level files in this batch were created the same day, verified individually
+with `--diff-filter=A`, and nine more (the whole `feature-unicodestring-model`
+family, including that campaign's ACCEPTANCE test) were unwired until the same
+evening and are absent from the count only because they were wired first.
+
+`prio:` is downstream of the `summary`, so the two go stale together and the
+ranker keeps faithfully rendering a correct judgment about an object that no
+longer exists. The countermeasure used here: **the number lands in the same
+commit as the evidence**, never as a bare frontmatter edit.
+
+40 rather than higher because the *drain* is mechanical and the valuable half is
+not in this ticket at all — see below.
+
+### What is left is 37 files and they are all `test/wasm/**`
+
+Not a general backlog any more. That is one campaign's staging set
+(`feature-target-wasm`), and whether those files should be rules, a script, or
+exemptions is a question for whoever holds that campaign — not for a sweep. The
+top-level population is **zero** for the first time this ticket has existed.
+
+### The inflow is the real problem and it is not this ticket's to fix
+
+Draining 45 does nothing about eight a day. `tools/test_wiring_gate_devtest.py`
+exits 1 today and `tools-devtest` collects it into limited+full, deliberately
+**not** `native`, because native is what dev boxes gate pushes on and harness
+guards must not inflate that number. That reasoning is right. The consequence is
+that an agent who adds an unwired test gets no signal for days.
+
+Suggested to frankT directly (a sentence in a ticket is not a message, which is
+exactly how a checker exiting 1 stayed unread all day): have `gate.sh quick` ask
+the cheap per-push question — *did THIS push add a file under `test/` that no
+rule references?* — rather than the expensive census. One push's diff, instant
+checker, native's number stays honest, and the signal lands on the person who
+still has the oracle in their head.
