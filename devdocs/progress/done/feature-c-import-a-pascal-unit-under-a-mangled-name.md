@@ -4,7 +4,7 @@ prio: 50
 type: feature
 blocked-by: []
 summary: "Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion."
-status: working
+status: done
 owner: frankC
 ---
 
@@ -567,3 +567,6 @@ coverage on every box that has not fetched the tree.
 **So §6 is landed but not yet fully measured, and the gap is named.** Lua and
 zlib will answer for themselves on the next sweep of this sha; quickjs and tcc
 cannot answer until T's ticket lands.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
