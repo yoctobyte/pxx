@@ -1,4 +1,92 @@
-# Track U digest — 21 distinct questions
+# Track U digest
+
+## CURRENT QUEUE — 33 open, measured 2026-08-30 ~11:1x
+
+**This section supersedes the "21 distinct questions" page below**, which was
+measured at 01:10 and covers 20 of these. **Thirteen are newer than it** and are
+marked NEW; the older page's prose on the other twenty still stands.
+
+**Read the warning first if you are working these in `~/frank-user`: that
+checkout is 1469 commits behind `origin/master`, last commit 27 hours old.** Six
+of the thirteen NEW tickets do not exist in that tree at all, and several of the
+older twenty have been edited since. `git pull --rebase` there before reading
+anything.
+
+**Ordered by prio, with what the answer formally releases.** Treat `unblocks` as
+a FLOOR, not a count: it reads `blocked-by:` frontmatter only, and this board's
+recurring defect is dependencies stated in prose that never became edges. Four
+of the six ranked chains that stalled overnight were prose-only.
+
+| prio | unblocks | ticket |
+| ---: | ---: | --- |
+| 70 | 2 | `decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal` |
+| 70 | 0 | `decide-revisit-object-types-rtl-generics-fired-the-trigger` — **NEW** |
+| 70 | 0 | `decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop` — **NEW** |
+| 65 | 1 | `decide-is-the-2026-07-12-esp-park-still-in-force` — **NEW** |
+| 62 | 0 | `decide-nilpy-what-version-does-sys-version-info-claim` |
+| 60 | 0 | `decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused` — **NEW** |
+| 60 | 1 | `decide-does-nilpy-random-seed-itself-at-import` |
+| 60 | 0 | `decide-does-track-r-work-on-master-like-every-other-lane` |
+| 60 | 0 | `decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies` — **NEW** |
+| 60 | 0 | `decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one` — **NEW** |
+| 55 | 1 | `decide-install-qemu-system-and-a-freebsd-image-on-plexus` |
+| 55 | 0 | `decide-may-a-lane-be-given-the-full-suite-escape-for-four-corpus-builds` — **NEW** |
+| 55 | 0 | `decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample` |
+| 55 | 0 | `decide-settextbuf-needs-buffered-text-io-or-stays-missing` |
+| 55 | 0 | `decide-should-forwardlint-join-the-mandatory-per-fix-loop` |
+| 55 | 0 | `decide-should-forwardlint-run-in-the-build-not-only-the-gate` — **NEW** |
+| 55 | 0 | `decide-what-a-reduced-compiler-must-still-self-host` — **NEW** |
+| 55 | 1 | `decide-which-gtk-a-bare-gtk-gtk-h-means` |
+| 50 | 0 | `decide-does-the-legacy-gtk-alias-still-point-at-gtk-2` |
+| 50 | 0 | `decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work` — **NEW** |
+| 45 | 0 | `decide-t-refuse-unscoped-pattern-kills-in-a-hook` |
+| 40 | 0 | `decide-c-crtl-rand-max-is-conforming-but-breaks-real-code` |
+| 40 | 0 | `decide-nilpy-deepcopy-over-the-container-subset` |
+| 40 | 0 | `decide-two-threading-docs-disagreed-for-seven-weeks` — **NEW** |
+| 30 | 0 | `decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check` |
+| 30 | 0 | `decide-is-real-a-double-or-fpcs-80-bit-extended` |
+| 30 | 0 | `decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation` |
+| 30 | 0 | `decide-where-a-persistent-fpc-trunk-oracle-lives` |
+| 25 | 1 | `decide-posix-master-vs-fpc-named-master-for-the-socket-facades` — **NEW** |
+| 25 | 0 | `decide-release-signing-key-custody` |
+| 25 | 1 | `decide-t-per-assertion-subjects-or-accept-the-file-level-label` |
+| 25 | 0 | `decide-t-should-a-skip-close-an-open-regression` |
+| 20 | 0 | `decide-should-writeableconst-off-be-honoured` |
+
+### Clusters — several of these are one answer wearing three slugs
+
+Answering a cluster head usually settles the rest, and reading them together is
+much cheaper than reading them apart:
+
+- **GTK, three tickets**: `which-gtk-a-bare-gtk-gtk-h-means` (p55, unblocks 1),
+  `does-the-legacy-gtk-alias-still-point-at-gtk-2` (p50), and the GTK 2-vs-3
+  install question already recorded as an owner item. One answer.
+- **forwardlint, two tickets**: `join-the-mandatory-per-fix-loop` and
+  `run-in-the-build-not-only-the-gate` (both p55). Same subject, two placements;
+  answering the first constrains the second.
+- **Gate policy, three tickets**: `may-a-lane-be-given-the-full-suite-escape`
+  (p55), `what-should-a-shared-gate-do-when-its-watched-number-grows` (p50),
+  `t-refuse-unscoped-pattern-kills-in-a-hook` (p45). All three are "how strict is
+  the shared gate, and who may step outside it".
+- **Track R's home, two tickets**: `does-track-r-work-on-master-like-every-other-lane`
+  (p60) plus the two rust-branch questions filed overnight. The 136-commit branch
+  is the real subject.
+- **Pin bookkeeping, two tickets**: `does-a-withdrawn-pin-leave-a-trace` (p60,
+  coordinator-filed) and `t-should-a-skip-close-an-open-regression` (p25).
+
+### If you only answer three
+
+`decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`
+(p70, formally unblocks 2, and it is what has the wasm lane idle),
+`decide-revisit-object-types-rtl-generics-fired-the-trigger` (p70 — it is the
+sole live gate on `feature-pascal-corpus-expansion` [P p75], the top-ranked
+Pascal item, and that dependency is a dated `Status:` line rather than an edge),
+and `decide-is-the-2026-07-12-esp-park-still-in-force` (p65, heads Track S's
+whole ranked queue and every agent is told not to claim it).
+
+---
+
+## Earlier page — 21 distinct questions, measured at 01:10
 
 **Measured at `64758a5c2`, 2026-08-30. Revised the same day** after the triage
 found duplicates: **23 tickets were 21 questions**, and the two collapses are
