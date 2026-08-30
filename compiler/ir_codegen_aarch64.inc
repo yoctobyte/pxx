@@ -3012,7 +3012,9 @@ begin
             Corrected here at the same time so aarch64 never ships that state. }
           for i := 0 to Procs[procIdx].ParamCount - 1 do
             if TypeIsFloat(Procs[procIdx].Params[i].TypeKind) and
-               (not Procs[procIdx].Params[i].IsRef) then Inc(hi) else Inc(lo);
+               (not ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
+                                          Procs[procIdx].Params[i].IsRef,
+                                          Procs[procIdx].Params[i].IsArray)) then Inc(hi) else Inc(lo);
           if (lo > 8) or (hi > 8) then
             Error('target aarch64: external call exceeds 8 int or 8 fp argument registers');
           argNode := IRB[node];
@@ -3046,10 +3048,14 @@ begin
             lo := 0; hi := 0;
             for j := 0 to i - 1 do
               if TypeIsFloat(Procs[procIdx].Params[j].TypeKind) and
-                 (not Procs[procIdx].Params[j].IsRef) then Inc(hi) else Inc(lo);
+                 (not ABIParamSlotIsPointer(Procs[procIdx].Params[j].TypeKind,
+                                            Procs[procIdx].Params[j].IsRef,
+                                            Procs[procIdx].Params[j].IsArray)) then Inc(hi) else Inc(lo);
             EmitI32($F84107E9);                  { ldr x9, [sp], #16 }
             if TypeIsFloat(Procs[procIdx].Params[i].TypeKind) and
-               (not Procs[procIdx].Params[i].IsRef) then
+               (not ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
+                                          Procs[procIdx].Params[i].IsRef,
+                                          Procs[procIdx].Params[i].IsArray)) then
             begin
               EmitI32($9E670120 + hi);           { fmov d[hi], x9 }
               if Procs[procIdx].Params[i].TypeKind = tySingle then

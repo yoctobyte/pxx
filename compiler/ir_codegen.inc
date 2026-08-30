@@ -1172,7 +1172,8 @@ begin
       begin
         idx := Procs[procIdx].Params[i].SymIdx;
         if TypeIsFloat(Syms[idx].TypeKind) and
-           (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+           (not ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef,
+                                      Syms[idx].IsArray)) then
           Inc(sseIdx)
         else
           Inc(intIdx);
@@ -1189,7 +1190,8 @@ begin
         EmitLoadImmA64(9, Syms[idx].Offset);
         EmitI32($8B0903A8);                       { add x8, x29, x9 (slot addr) }
         if TypeIsFloat(Syms[idx].TypeKind) and
-           (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+           (not ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef,
+                                      Syms[idx].IsArray)) then
         begin
           if Syms[idx].TypeKind = tySingle then
             EmitI32($BD000100 + sseIdx)           { str s[n], [x8] }
@@ -1299,8 +1301,9 @@ begin
                     (Procs[procIdx].Params[i].TypeKind = tyUInt64) or
                     (Procs[procIdx].Params[i].TypeKind = tyDouble) or
                     (Procs[procIdx].Params[i].TypeKind = tyExtended)) and
-                   (not Procs[procIdx].Params[i].IsRef) and
-                   (not Procs[procIdx].Params[i].IsArray);
+                   (not ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
+                                              Procs[procIdx].Params[i].IsRef,
+                                              Procs[procIdx].Params[i].IsArray));
         if isEight then
         begin
           if (pnWords and 1) <> 0 then Inc(pnWords);   { 8-byte align }
@@ -1320,7 +1323,8 @@ begin
         sz := ParamSize(idx);
         isEight := ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
                     (Syms[idx].TypeKind = tyDouble) or (Syms[idx].TypeKind = tyExtended)) and
-                   (not Syms[idx].IsRef) and (not Syms[idx].IsArray);
+                   (not ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef,
+                                              Syms[idx].IsArray));
         if isEight and ((pw and 1) <> 0) then Inc(pw);   { skip the odd word }
         EmitLoadImmArm32(9, Syms[idx].Offset);
         EmitI32($E08B9009);                              { add r9, fp, r9 }

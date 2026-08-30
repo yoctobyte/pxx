@@ -2679,7 +2679,9 @@ begin
               Double` as an 8-byte double desynchronised every later param and
               SEGFAULTED. Fourth target, one predicate, four symptoms --
               bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse }
-            if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then
+            if ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
+                                     Procs[procIdx].Params[i].IsRef,
+                                     Procs[procIdx].Params[i].IsArray) then
               tk := tyInteger;
             if (tk = tyDouble) or (tk = tyExtended) or (tk = tyInt64) or (tk = tyUInt64) then
             begin
@@ -2699,9 +2701,10 @@ begin
           while argNode <> -1 do
           begin
             tk := Procs[procIdx].Params[nArgs].TypeKind;
-            if Procs[procIdx].Params[nArgs].IsRef or
-               Procs[procIdx].Params[nArgs].IsArray then
-              tk := tyInteger;              { by-ref = pointer = one word }
+            if ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
+                                     Procs[procIdx].Params[nArgs].IsRef,
+                                     Procs[procIdx].Params[nArgs].IsArray) then
+              tk := tyInteger;              { pointer slot = one word }
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
               if (j and 4) <> 0 then Inc(j, 4);
@@ -2987,9 +2990,10 @@ begin
             if nArgs < Procs[procIdx].ParamCount then
             begin
               tk := Procs[procIdx].Params[nArgs].TypeKind;
-              if Procs[procIdx].Params[nArgs].IsRef or
-                 Procs[procIdx].Params[nArgs].IsArray then
-                tk := tyInteger;            { by-ref = pointer = one word }
+              if ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
+                                       Procs[procIdx].Params[nArgs].IsRef,
+                                       Procs[procIdx].Params[nArgs].IsArray) then
+                tk := tyInteger;            { pointer slot = one word }
             end
             else if TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
               tk := tyDouble                        { variadic float -> double }
