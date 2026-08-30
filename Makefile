@@ -2790,6 +2790,13 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_pwidechar_cast.pas $(TESTTMP)/test_pwcast26
 	@$(TESTTMP)/test_pwcast26 | diff -u test/test_pwidechar_cast.expected - \
 	  || { echo 'test_pwidechar_cast: FAIL - PWideChar cast or its PChar control'; exit 1; }
+	@# Under PXX_WIDE_PAYLOAD, a USED UNIT naming WideString while the program
+	@# does not. The builtinwide token scan sees only the program's tokens, so
+	@# this was a compiler error from a four-line program. The body must NOT
+	@# name WideString — naming it is what used to be required.
+	@./$(COMPILER) test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas $(TESTTMP)/test_widepull26
+	@$(TESTTMP)/test_widepull26 | diff -u test/test_wide_payload_pulls_builtinwide_for_a_used_unit.expected - \
+	  || { echo 'test_wide_payload_pulls_builtinwide_for_a_used_unit: FAIL - builtinwide not pulled for a used unit'; exit 1; }
 	@# A method may be NAMED `Default` -- rtl-generics' central idiom, and a
 	@# collision with nothing to do with generics. Exercises the property
 	@# `default` MODIFIER alongside it, since that is what a too-eager fix breaks.

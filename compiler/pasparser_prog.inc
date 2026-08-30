@@ -734,7 +734,35 @@ begin
     the way `ln` is, so the false-positive that rule exists to prevent cannot
     arise. A false POSITIVE here costs 4 KB in a program that mentioned the
     word; a false negative is a link failure. }
-  if not NoDefaultRtl then
+  { THE SCAN SEES THE PROGRAM'S TOKENS AND NOTHING ELSE. Used units are parsed
+    later, so a unit that names `widestring` while the program does not sets off
+    no trigger -- and under PXX_WIDE_PAYLOAD that is a hard compiler error, not
+    the link failure the note below anticipates:
+
+      {$define PXX_WIDE_PAYLOAD}
+      program p; uses SysUtils; begin WriteLn(1); end.
+      => compiler error: UTF-16 width conversion needs builtinwide
+
+    lib/rtl/sysutils.pas has widestring functions; adding `var w: WideString` to
+    the PROGRAM makes the identical build succeed, which is what identified the
+    scope as the cause. IRStrWidthConv's comment calls this unreachable through
+    a normal compile -- true before the define existed, false now, and corrected
+    there.
+
+    Without the define it genuinely cannot happen: widestring IS ansistring, so
+    dstWide = srcWide and no conversion is ever synthesised. The define gates
+    its own blocker, which is why this survived unmet -- and it blocks the
+    define's own blast-radius measurement
+    (chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload
+    step 1: force the define on and build lib/**, which cannot even start).
+
+    So under the define, pull unconditionally. That is the same trade the note
+    below already makes, at a setting where it is not close: a false positive
+    costs 4 KB in a non-default opt-in build, and the alternative is scanning
+    every used unit's source before parsing it. }
+  if (not NoDefaultRtl) and PasDefineExists('PXX_WIDE_PAYLOAD') then
+    needsWide := True;
+  if (not NoDefaultRtl) and (not needsWide) then
     for i := 0 to TokCount - 1 do
       if Tokens[i].Kind = tkIdent then
       begin

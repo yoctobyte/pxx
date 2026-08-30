@@ -1617,11 +1617,17 @@ begin
   if dstWide = srcWide then Exit;
   if dstWide then cpi := FindProc('PXXWideFromStr')
   else cpi := FindProc('PXXStrFromWide');
-  { Unreachable through a normal compile: the token scan in pasparser_prog.inc
-    pulls builtinwide for any program that NAMES widestring/unicodestring, and
-    a program with no such name cannot have produced a wide width here. It is
-    reachable with --no-rtl or on a bare-ESP profile, where a compiler error
-    naming the missing helper beats a link failure naming a mangled symbol. }
+  { Reachable with --no-rtl or on a bare-ESP profile, where a compiler error
+    naming the missing helper beats a link failure naming a mangled symbol.
+
+    This said "unreachable through a normal compile" and that was true only
+    before PXX_WIDE_PAYLOAD existed. The token scan sees the PROGRAM's tokens
+    and not its used units', so `{$define PXX_WIDE_PAYLOAD}` + `uses SysUtils`
+    -- a unit that names widestring while the program does not -- landed here
+    with no --no-rtl in sight. Fixed at the scan (pasparser_prog.inc pulls
+    builtinwide unconditionally under the define); the note is corrected rather
+    than deleted because "how did this become reachable" is the question the
+    next reader will have. }
   if cpi < 0 then
     Error('compiler error: UTF-16 width conversion needs builtinwide (widestring with no RTL?)');
   argSym := AllocVar('', tyAnsiString);

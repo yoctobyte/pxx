@@ -216,8 +216,19 @@ which pulls `xmlutils` and therefore `names.inc`.
 | --- | --- |
 | 1. `property` in an `interface` (`IXmlLineInfo`) | **CLEARED** — [[bug-p-a-property-in-an-interface-declaration-is-rejected]], `0f0fd6642`. Two defects: the parse, and eleven copies of accessor dispatch that did not know an interface receiver needs `AN_INTF_CALL`. The parse fix alone compiles and then segfaults, so "the corpus got further" would have been a false green here. |
 | 2. `const namingBitmap: array[0..$0C] of TSetOfByte` | **CLEARED** — [[bug-p-a-const-array-of-sets-is-rejected-as-too-many-elements]]. |
-| 3. `undefined variable (PWideChar)`, `xmlutils.pp:285` | **OPEN**, not filed — a missing TYPE, used as a cast. |
-| 4. `undefined variable (AllocMem)`, `xmlutils.pp:478` | **OPEN**, not filed — an RTL gap, Track B. |
+| 3. `PWideChar(Value)` cast, `xmlutils.pp:285` | **CLEARED under `PXX_WIDE_PAYLOAD`, deliberately REFUSED without it** — `5b31f4647`. Not a missing type: `var p: PWideChar` always declared fine, only the cast was absent. It is refused by default because on the UTF-8 payload it steps two bytes and yields packed byte pairs on plain ASCII (26984 for `PWideChar('hi')[0]` where FPC gives 104) — a NEW divergence, not an inherited one. |
+| 4. `AllocMem`, `xmlutils.pp:478` (also `:589`, `:922`) | **CLEARED** — frankB, `3decbf0c4`, in `lib/rtl/sysutils.pas`. |
+| 5. `"List": no such member`, `xmlutils.pp:760` | **OPEN**, not filed — `TList.List`, the internal pointer array. RTL gap, Track B. Reached only under `PXX_WIDE_PAYLOAD`. |
+
+**The wide-payload gate is the real rung-3 blocker, and it is now measurable.**
+Under `{$define PXX_WIDE_PAYLOAD}` this probe goes from `:285` to `:760` — 475
+lines further — so the define is buying reach and costing nothing here. Getting
+that number required fixing a bug that blocked the gate's own blast-radius
+measurement: `builtinwide` is pulled by a token scan over the PROGRAM's tokens
+only, so `{$define PXX_WIDE_PAYLOAD}` + `uses SysUtils` was a hard compiler
+error from a four-line program. Fixed, and both measurements are recorded on
+[[chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload]],
+which is where the decision lives.
 
 **I sized wall 2 wrong in this very table an hour earlier and the correction is
 worth more than the entry.** It said the fix was "not a parser arm's worth of
