@@ -4,10 +4,10 @@ track: P
 prio: 70
 type: bug
 blocked-by: []
-status: working
+status: unfinished
 created: 2026-08-30
 summary: "Generic constraint checking runs inside ParseSpecialization, which the Delphi rewriter reaches BEFORE the argument's class is parsed, so any argument that is not already a fully declared class must be skipped. Cost: tgenconstraint4 (`LongInt`) and 5 (`TClass`) are still wrongly accepted, and no constraint is enforced against a forward-declared class. The fix is to check at end of type section; the hook exists but its call site is guarded."
-owner: frankwasm
+owner: ""
 ---
 
 # P: generic constraints are checked before the type section closes
@@ -113,3 +113,39 @@ This is the second time today that a carrier nothing read turned out to be wrong
 the instant a reader existed (the other: `UFldStrElemTk` hardwired to
 `Ord(tyChar)` under a comment justifying it as safe *today*). Same shape: correct
 when written, false the moment something consumed it.
+
+## 2026-08-30 (frankwasm) — claimed, NOT written: it is not one line in `pasparser_decl.inc`
+
+Routed to me as "one line in the same file" while I held `pasparser_decl.inc`.
+Read before writing, and the framing does not survive it.
+
+**The one line is the call. The call has nothing to drain.** There is a pending
+**specialization** list (`PendingSpecTi`/`PendingSpecIdx`/`PendingSpecCount`,
+`pasparser_generic.inc:2778-2781`, drained by
+`FlushPendingClassSpecializations` at `:2808`) — but there is **no pending
+*constraint* list**. `CheckTemplateConstraint` is still called inline at
+`pasparser_generic.inc:2551`, which is the whole defect.
+
+So the fix has three parts, not one:
+
+| part | file | holder |
+| --- | --- | --- |
+| a pending-constraint list (`ti`, `k`, `argName`, `argKind`, `line`) | `defs.inc` | frankwasm |
+| **record instead of check** at `pasparser_generic.inc:2551` | `pasparser_generic.inc` | **frank-rust** |
+| unconditional drain at `TypeSectionDepth = 0` | `pasparser_decl.inc` | frankwasm |
+
+**I did not write my two parts.** A drain with nothing to record into it is a
+**guard that cannot fire** — the same shape this campaign has catalogued four
+times today, and adding a fifth deliberately, in a file whose owner would then
+inherit a half-built mechanism with no failing test to explain it, is worse than
+leaving the ticket whole. The middle row is where the behaviour changes, and it
+is the row I do not own.
+
+**Sequencing when someone takes it:** the middle part is the ticket. Whoever
+holds `pasparser_generic.inc` should write all three, or take the two
+`frankwasm` rows by grant — they are mechanical once the list's shape is
+decided, and the shape is decided by the recording site. Splitting them across
+two agents costs more coordination than the change is worth.
+
+Nothing in the original diagnosis is disputed; only the sizing. Parked rather
+than half-done, and unclaimed so the ranker offers it again.
