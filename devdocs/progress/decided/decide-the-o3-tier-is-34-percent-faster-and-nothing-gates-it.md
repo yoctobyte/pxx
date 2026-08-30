@@ -204,3 +204,76 @@ zero always looks like the result you were hoping for.
 
 None proposed — this is a decision, not work. The work that follows it depends
 on which option is chosen, and options 1 and 2 have very different gates.
+
+---
+
+# RULED, 2026-08-30, by the owner
+
+> *"About O3 — once things proven stable and are reasonable O2, they are allowed
+> to move. We discussed that in the past already. So yes, this makes O3 sortof
+> experimental and O2 the de-facto stable, leaving O0 for debugging and O1 in
+> limbo."*
+
+## What the ruling settles
+
+**The principle is prove-then-promote, and proof is the only ceremony.** A pass
+that is stable and sensible as a default is *allowed* to move to `-O2`. Nothing
+else stands between it and promotion — no campaign, no per-pass approval, no
+queue.
+
+**The tier semantics are now named, and they were previously only implied:**
+
+| tier | what it means |
+| --- | --- |
+| `-O0` | debugging |
+| `-O1` | **in limbo** — the owner's own word; nothing targets it and nothing defends it |
+| `-O2` | the de-facto stable default |
+| `-O3` | **experimental** — deliberately, not accidentally |
+
+`-O3` being *experimental by design* is the part worth carrying forward. It is
+not a staging area that ought to be empty; it is where a pass lives while it
+earns `-O2`.
+
+## What the ruling does NOT settle, and the honest reading
+
+**The ruling is about the PRINCIPLE, not the granularity.** It says stable things
+may move. It does not say they must move one at a time — and that matters here,
+because of a fact measured after this ticket was filed and which the owner did
+not have in view when ruling:
+
+> **No individual pass reproduces the 23-34% win.** Measured 2026-08-30. The gain
+> is an interaction effect across the ~25 `OptLevel >= 3` sites, not a sum of
+> separable wins.
+
+So **option 1 taken literally satisfies the ruling and never delivers the 34%**:
+each pass, measured alone, looks not worth promoting, and the tier stays where it
+is forever. That is not the owner overruling the measurement — it is the
+measurement arriving after the rule.
+
+**Therefore: option 2 is the reading that satisfies the ruling.** Gate the tier as
+a unit — ask Track T for its full and cross matrices against an `-O3` build — and
+promote what comes back green. That IS prove-then-promote; the unit of proof is
+the tier rather than the pass, because the tier is the unit the win exists in.
+It costs one Track T request instead of a multi-session campaign.
+
+**Option 3 stays rejected, and the ticket's own argument is why:** building the
+dev loop's compiler at `-O3` makes the artifact under test a product of an
+untested tier, so an `-O3`-only miscompile surfaces as a mystery in someone
+else's lane. A known cost traded for an unbounded one. The owner's ruling does
+not license this and should not be read as licensing it.
+
+**Flagged rather than assumed:** the inference from *"stable things may move"* to
+*"gate the tier as a unit"* is mine, not the owner's words. If Track T's matrix
+comes back green and someone still wants per-pass promotion before the default
+changes, that is a legitimate reading of the same sentence and the owner should
+be asked directly. What is NOT open is doing nothing: the ruling makes promotion
+the expected outcome of proof.
+
+## Next action
+
+**One Track T request** — full and cross matrices against an `-O3`-built
+compiler. Green means the tier promotes; red names the pass that must not.
+
+`-O1`'s limbo is a real finding and not this ticket's: nothing targets it,
+nothing defends it, and no one has priced deleting it or filling it. If it ever
+matters it needs its own ticket.

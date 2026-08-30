@@ -163,10 +163,16 @@ flag or lands incrementally, never on a long-lived branch.
 - **N — NilPy is UPWARD compatible with CPython**, one direction: code that works
   on CPython must work here. Accepting something CPython rejects is a feature,
   not a defect (`devdocs/dev/nilpy-semantics-divergences.md`).
-- **O — new passes land behind `-O3`**, promote to `-O2` per-pass after the full
-  gate. `-O2` is the proven default. (Under review: measured 2026-08-30, no
-  individual pass reproduces `-O3`'s 23-34% win, so per-pass promotion may never
-  deliver it.)
+- **O — the tiers, ruled by the owner 2026-08-30:** `-O0` debugging, `-O1` **in
+  limbo**, `-O2` the de-facto stable default, `-O3` **experimental by design**.
+  New passes land behind `-O3`, and **anything proven stable and sensible as a
+  default is ALLOWED to move to `-O2` — proof is the only ceremony.** The catch,
+  measured the same day: no *individual* pass reproduces `-O3`'s 23-34% win, so
+  per-pass promotion alone would never deliver it. The unit of proof is therefore
+  the tier, gated by Track T's full + cross matrices against an `-O3` build.
+  **Do NOT build the dev loop's compiler at `-O3`** — that makes the artifact
+  under test a product of an untested tier.
+  `decided/decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`.
 - **D — verify snippets by compiling them.** Don't invent behaviour, don't touch
   `compiler/**` or `lib/**`.
 - **Claims discipline** — "self-host fixedpoint" (our binary reproduces itself,

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:34 blocked:9 backlog:386 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:126 done:2860 rejected:65`
+`working:1 unfinished:34 blocked:9 backlog:386 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:127 done:2860 rejected:65`
 
 ## Held now (working/ — do not touch these files)
 
@@ -60,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 
-## Ready — top 30 of 430, ranked
+## Ready — top 30 of 429, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -89,8 +89,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - `[p 65] [U]` decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
-- `[p 65] [U]` decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
+- `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 
-_400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
