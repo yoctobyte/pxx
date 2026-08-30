@@ -245,3 +245,4 @@
 2026-08-30T12:53:53Z	seven	2ddc53676995aaf62eaed4c7ffdd80efa37f5fce	would NOT pin 2ddc53676995 — 1 red(s) the current pin does not have, 8 inherited from the current pin: test-asm#src:test/test_asm_emit_x64.pas
 2026-08-30T13:07:47Z	seven	f278ddaca2327d69475f2c295a8220bf2655da38	would NOT pin f278ddaca232 — 1 red(s) the current pin does not have, 8 inherited from the current pin: test-asm#src:test/test_asm_emit_x64.pas
 2026-08-30T13:21:38Z	seven	42fde2a7e02586c2452d9a64c1a3924a6cf5919f	would NOT pin 42fde2a7e025 — 1 red(s) the current pin does not have, 8 inherited from the current pin: test-asm#src:test/test_asm_emit_x64.pas
+2026-08-30T13:35:49Z	seven	83fb0ef72419b46cf22dd1ce57885950574d69ef	would NOT pin 83fb0ef72419 — 3 red(s) the current pin does not have, 8 inherited from the current pin: size-canary#src:tools/size_canary.py, test-asm#src:test/test_asm_emit_x64.pas, test-core#src:test/test_warn_ignored_directives.pas
