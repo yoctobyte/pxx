@@ -18729,3 +18729,66 @@ is a loud "not yet supported" on i386/aarch64/arm32. One missing case in an
 otherwise-complete lowering, ~4 instructions per backend, neighbouring arms
 implemented everywhere. Low prio because it is a refusal, not silent wrong code.
 Waiting on A capacity, not on a decision.
+
+## Tick 2026-08-30 ~09:1x — the partition, and two dangling-link outcomes that were whole clusters
+
+**frankS partitioned the two open xtensa SIGBUS tickets against the alignment
+boundary and hit THREE buckets, not one** — because it ran all four repros as
+written rather than the two the hypothesis predicted.
+
+| repro | `75d2ba662^` | `75d2ba662` | HEAD |
+| --- | --- | --- | --- |
+| `WriteLn('B ', d)` Double, Call0 | ok | ok | ok |
+| `a: string[8]; WriteLn(Length(a))` windowed | SIGBUS | ok | ok |
+| `WriteLn(Copy(s,2,3))` windowed | SIGBUS | **SIGBUS** | **SIGBUS** |
+| `SetLength(a,50); WriteLn(a[49])` windowed | SIGBUS | ok | ok |
+
+- `bug-a-xtensa-write-of-any-real-sigbuses…` — passes at ALL THREE builds. Not
+  the data-section defect at all; already fixed by frankC's frame-slot alignment
+  floor. **There are TWO alignment defects with the same symptom on the same
+  target — one in the FRAME, one in the DATA SECTION** — and this ticket was the
+  first. Resolved on its own retirement test; the float-width divergence was NOT
+  allowed to be absorbed and stays open.
+- frozen-string and dynarray-SetLength — green on the side effect, **not
+  resolved**, cross-referenced both ways. Closing them would mark a live
+  exposure fixed.
+- **`Copy` under windowed SIGBUSes at HEAD.** Deterministic, windowed-only
+  (Call0 prints `bcd` and matches). The alignment story never explained it.
+  **Had the hypothesis picked the repros, this would have been swept into the
+  alignment ticket and closed by a commit that does not fix it** — a live SIGBUS
+  filed as resolved. Ticket narrowed to `Copy` alone, re-priced 40 → 50.
+
+**frankD measured the three post-aperture dangles, and #3 was a whole cluster.**
+`bug-pascal-subclass-inherited-members` — cited four times, credited with a
+prio-60 filing it never had, two modules scheduled around it — **all four arms
+are FIXED at HEAD**, landed under three other names in `done/`. Six programs
+byte-identical to CPython, including the two reported consumers in their own
+shapes (`Counter(dict)`, and `Base.put()` dispatching into an override =
+configparser's `optionxform`). **`Counter` need not ship as a dict mode;
+`feature-nilpy-configparser` is not blocked in practice.** The deliberate dangle
+was right for a reason that survives agreement: a re-point at the [A p70] ticket
+would have **asserted this measurement without taking it** — correct by luck,
+with three arms marked resolved on evidence covering one.
+
+Also from frankD: **`--strict-fpc` is accepted, documented at `defs.inc:2189-2191`
+and changes behaviour, and is NOT in `--help`; 67 markdown files name flags
+`--help` omits.** Filed `bug-a-help-does-not-advertise-flags-the-compiler-accepts`
+[A p35]. It is a bug, not a docs chore: `--help` does not produce "I am not
+sure", it produces "that flag does not exist", and the next move after that
+conclusion is to delete a true reference. **Do not fix it by adding one flag** —
+that retires the detector for the other 66; enumerate the set from the parser.
+
+**Sha-proximity as a DANGLING-LINK filter: measured and refuted.** 55 dangles
+board-wide, 5 with a sha within ±1 line, 50 without; all 55 in `done/`/`rejected/`.
+It would suppress ~1 in 11 and the folder rule does the rest. Not landed. The
+honest caveat is that the live folders are at **zero**, so tonight any refinement
+would be calibrated against an empty set. frankD's sixth flavour stands anyway:
+**the remembered thing was a commit, not a ticket** — a slug reproducing
+`4eadf7f54`'s subject line, which no rename can fix — and *a slug next to its sha
+is self-repairing; a slug alone is not*.
+
+**Box: load 17-21 on 12 cores.** pxx-a5 filed
+`feature-t-a-second-oracle-dimension-section-alignment` [T p35] with an explicit
+anti-goal (do not answer it by running everything under xtensa, which makes the
+faulting target the oracle for a property all targets share) and the requirement
+that it hold at `-O0`, where the accidental padding does not apply.
