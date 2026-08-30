@@ -2,7 +2,7 @@
 track: A+S
 type: bug
 prio: 55
-status: open
+status: done
 found: 2026-08-30
 found-by: frankS
 ---
@@ -96,3 +96,42 @@ Call0, `--xtensa-soft-mulhigh`, at `37171a6b1`, against x86-64 and riscv32 built
 from the same source. The per-arm table was produced by parsing the procedure at
 both revisions, not by reading it. Windowed not checked; not checked on real or
 emulated ESP silicon.
+
+## RESOLVED — six of seven, and the seventh is not a miss
+
+Ported from riscv32's arm kind for kind. Measured before/after, both compilers
+self-host fixedpoints of the same tree:
+
+| | before `7c4f7ce26297` | after `a0932f7f68dd` |
+| --- | --- | --- |
+| `test_managed_local_release_reuse` | 1 / 5 | **4 / 5** |
+| `test_interface_arc` | `freed=1` | **`freed=3`** — matches the oracle |
+
+**The dynamic-array row is deliberately still absent**, on the same rule
+riscv32's own arm records: a scope-exit release is safe only once EVERY store
+that can publish a handle into the local retains it. Xtensa is still the one
+target taking the non-retaining `IR_STORE_MEM` share path for `obj.f := a`, so
+adding the release half alone converts a silent leak into a double free — which
+is what it did on aarch64 when it was tried there. That row lands with
+`IR_STORE_DYN`, on
+[[feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45]], and the
+comment in the arm says so at the point of use.
+
+`XtensaArgRegN(n)` was added to `ir_codegen_xtensa.inc` for the multi-argument
+calls: Call0 passes arg0.. in a2.., windowed in a10.. because `call8` rotates
+the window. A function rather than two spellings at each of the eleven new call
+sites, on `XtensaSlotOff`'s grounds — the Call0 half is the one that is silently
+wrong when it is missed, a plausible register rather than a fault.
+
+### Bound on the verdict
+
+Hosted xtensa, `--platform=posix --xtensa-soft-mulhigh`, qemu-xtensa user mode,
+**Call0**. Windowed SIGBUSes on both tests and did so **identically before the
+change** — that is
+[[bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength]],
+measured, not inferred. Not checked on real or emulated ESP silicon. The change
+is inside `if TargetArch = TARGET_XTENSA`, so no other target can reach it;
+`gate.sh quick` GREEN and the fixedpoint converged in one round.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
