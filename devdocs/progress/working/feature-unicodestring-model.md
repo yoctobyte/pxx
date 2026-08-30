@@ -371,10 +371,10 @@ existing program. That is what lets them land one at a time, green, without
 holding every lock at once:
 
     1. ir.inc:1794 SYMBOL arm                             DONE 12111b1f2
-    2. AST-node element slot          (ast_arena.inc)
-    3. record-field element slot      (pasparser_decl.inc)
-    4. the SIX per-backend COW guards (ir_codegen*.inc)
-    5. Length — a frontend shift over the existing byte count
+    2. AST-node element slot          (ast_arena.inc)     DONE 526f86cc9
+    3. record-field element slot      (pasparser_decl.inc) DONE 526f86cc9
+    4. the SIX per-backend COW guards (ir_codegen*.inc)   <- needs an atomic window
+    5. Length — a frontend shift over the existing byte count  DONE 8b35b2d60
     ---- only then ----
     6. break the alias in pasparser_lval.inc:6322/6424    <- LAST
        (and change sysutils' UTF8Encode/Decode in the SAME commit: they are
@@ -394,8 +394,11 @@ And the AST-node slot is not optional polish: the wall this ticket exists to
 remove is `WideChar(u1) + WideChar(u2)`, which is an EXPRESSION, so step 2 is
 load-bearing for the actual goal.
 
-**Why step 4 must precede step 5, stated as a reason so nobody reorders it
-innocently.** Each backend guards copy-on-write with
+**Why step 4 must precede step 6, stated as a reason so nobody reorders it
+innocently.** (This paragraph said "step 5" until 2026-08-30; that was a
+numbering slip in the list above it, not a second constraint. Step 5 is
+`Length`, which is inert like every other pre-6 step. The hazard below is the
+ALIAS BREAK's, and the alias break is step 6.) Each backend guards copy-on-write with
 `(IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)`. A wide index has
 `elemSize = 2`, so an unguarded backend silently skips COW and mutating a
 SHARED wide string corrupts its aliases. If the alias were broken first, that
@@ -406,3 +409,64 @@ that survives to production. The ordering is the entire mitigation.
 
 Everything before step 5 is inert by construction, which is also why a
 half-finished migration here is safe to park.
+
+## 2026-08-30 (frankwasm) — steps 2, 3 and 5 landed; only step 4 is left before the switch
+
+`526f86cc9` (2, 3) and `8b35b2d60` (5). Step 1 was `12111b1f2`. What remains
+before the alias break is **step 4 alone**: six identical one-line guards in six
+backend files.
+
+### The width lookup is now ONE function, not three inline arms
+
+Step 2 and 3 gave `AN_FIELD` and the expression case the element slot the symbol
+arm already had. Step 5 needed the same three-arm lookup, which is where a fourth
+spelling of it would have appeared — so it was extracted first:
+
+```pascal
+function ASTStrElemTkOf(node: Integer): Integer;   { ir.inc, above IRLowerAddress }
+```
+
+    AN_IDENT -> Syms[].ElemType         (symtab.inc:4169, the pre-existing slot)
+    AN_FIELD -> RecFieldStrElemTk()     (UFldStrElemTk, added by step 3)
+    else     -> ASTStrElemTk[node]      (added by step 2)
+
+Both the index site and `Length` now read that one function. Extraction verified
+behaviour-preserving before step 5 was written on top of it: `idx` and `fld` both
+still match fpc, transcode still passes.
+
+### Step 5 needed no backend arm, as predicted
+
+The `tkLength` call RESULT is wrapped in `shr 1` when the argument is a managed
+string whose element is `tyWideChar`. The header's length word is a BYTE count —
+that is what it has always held and what all six backends' `tyAnsiString` Length
+arms load — so the character count is that count halved, and the halving is a
+frontend fact the IR never has to carry down.
+
+**Guarded on the argument being `tyAnsiString`**, which is not pedantry: a
+dynamic `array of WideChar` also has `Syms[].ElemType = tyWideChar`, and its
+`Length` is an element count that must not be touched. Without that guard the
+first thing step 5 would have broken is a type that has nothing to do with this
+ticket.
+
+### Neutrality was measured, not assumed
+
+Every step so far is inert by construction — nothing stamps `tyWideChar` as a
+string's element type until step 6 — but "inert by construction" is a claim about
+code I just wrote, so it was checked against `pinned`: identical output on
+`Length` over strings, `ps^`, string fields, dynamic and static arrays of `Char`,
+`WideChar` and `Byte`, and over concat and `Copy` results.
+
+That sweep found a **pre-existing** bug on a neighbouring row —
+`Length(dynamic array of Char)` answers 1 where fpc answers 6, while `High` on
+the same variable is correct — wrong on `pinned` too, so not this work. Filed as
+[[bug-p-length-of-a-dynamic-array-of-char-returns-1]], not fixed here.
+
+### What step 4 needs from the coordinator
+
+Six files, one line each, no logic: add `and (elemSize = 1)` beside the existing
+`IRTk[left] = Ord(tyAnsiString)` COW test in `ir_codegen.inc:5969`,
+`ir_codegen_wasm32.inc:1133`, `ir_codegen_arm32.inc:3295`,
+`ir_codegen386.inc:3902`, `ir_codegen_riscv32.inc:1673`,
+`ir_codegen_xtensa.inc:1677`. It wants one short window across all six rather
+than six negotiations, because a partial application is the one state the
+ordering constraint above exists to prevent.
