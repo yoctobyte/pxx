@@ -3,10 +3,10 @@ slug: bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template
 track: P
 prio: 55
 type: bug
-status: backlog
+status: working
 blocked-by: []
 summary: "In mode Delphi, `TE = TBox<TOuter>;` fails with `unknown type: TOuter` when TOuter is declared AFTER TBox in the same type section — reorder the two declarations and the identical program compiles and runs. FPC accepts both orders. DelphiRewriteGenericUses splices its minted alias declarations immediately behind the TEMPLATE, so they can only name types already declared at that point. objfpc is unaffected (its aliases are emitted at the use). 20-line repro, both orders."
-owner: unassigned
+owner: frankP
 ---
 
 # A mode-Delphi generic argument must be declared before the template
@@ -73,15 +73,58 @@ a SILENT-shaped failure from the author's point of view: the diagnostic points
 into the TEMPLATE's body, at a line the author did not write, so the reported
 location and the fixable location are nowhere near each other.
 
-## Sketch, not a prescription
+## The sketch below was WRONG. Measured 2026-08-30 (frankP), all three positions.
 
-The alias declarations want to go at the END of the enclosing type section
-rather than behind the template — which is what `EmitLateNestedSpecDecls`
-already does for nested specializations, so the shape exists in this file and
-should be reused rather than reinvented. The catch is that the rewrite runs
-BEFORE the section is parsed and does not know where it ends; whoever takes this
-should check whether the pattern-A caller can defer its splice to the point
-`EmitLateNestedSpecDecls` uses, and say in the ticket which it chose.
+**Struck through rather than deleted, because the wrong idea is the obvious one
+and the next reader will have it too.** The sketch said: put the alias
+declarations at the END of the enclosing type section, reusing
+`EmitLateNestedSpecDecls`. That does not work, and the reason is visible the
+moment it is tried instead of reasoned about — **the alias's own USE is inside
+the same section, before the end of it.**
+
+Three hand-written positions for the identical program, minted name spelled
+`TBox_TOuter` because `$` is not lexable in source:
+
+| # | where the alias declaration goes | result |
+| --- | --- | --- |
+| A | behind the TEMPLATE — **what pxx does today** | `unknown type: TOuter` |
+| B | immediately before **the declaration that uses it** | **compiles, prints `8`** |
+| C | at the END of the type section — **the sketch** | `unknown type: TBox_TOuter` |
+
+A fails because the alias names a type declared later; C fails because the alias
+is named by a declaration that comes earlier. **Only B satisfies both
+constraints, and it is the only anchor that can** — the use site is legal Pascal,
+so everything the group names is already declared there by construction, and
+inserting immediately ahead of that declaration cannot outrun anything that
+refers to the alias.
+
+So the anchor is **the use site's own enclosing declaration**, not the section
+end and not the template.
+
+### What is left, and it is positional bookkeeping rather than design
+
+The rewrite has the use's token index; it needs the start of the top-level
+declaration containing it. That is not "scan back to the previous `;`" — a use
+can sit in a class-body field (`F: TBox<TOuter>;`), where the nearest preceding
+`;` is inside the class and a type declaration spliced there is nonsense. The
+workable form is a FORWARD walk from the template's end to the use index,
+tracking class/record/case depth, remembering the position after each depth-0
+`;`; the last such position at or before the use is the anchor.
+
+Cases that still need an answer before this is finished, none of them looked at:
+
+- a use in a `var` / `const` section after the type section closed — there is no
+  open type section to splice a bare `X = specialize ...;` into, so this needs
+  the leading `type` keyword `EmitLateNestedSpecDecls` adds for exactly that
+  reason;
+- a use in a procedure body or parameter list;
+- several tuples whose first uses are in different declarations — today they are
+  emitted as one run at one point, and per-tuple anchoring makes them separate
+  splices, each of which shifts every later index.
+
+That last one is the reason this is not a small change: `insertAt` is a single
+`var` cursor the fixed-point loop advances, and per-use anchoring turns one
+ordered splice into several.
 
 ## Gate
 
