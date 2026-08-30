@@ -1,7 +1,7 @@
 ---
 slug: bug-p-generic-constraints-are-checked-before-the-type-section-closes
 track: P
-prio: 40
+prio: 70
 type: bug
 blocked-by: []
 status: open
@@ -92,3 +92,23 @@ new unconditional call, not a widened guard.
   its one blind spot is a class redundantly listing both a derived interface and
   its ancestor in that order. Recording `implOrig` in `defs.inc` would make it
   exact — also a frankwasm-file change, so also deferred here.
+
+## Raised 40 -> 70: this is now a live regression, not a latent one-liner (coordinator, 2026-08-30)
+
+`f4fb9d31b` (*"generic type constraints are recorded and checked"*) made
+constraints load-bearing for the first time — correctly; 35 FAIL-marked
+`tgenconstraint` tests were being wrongly accepted. The moment it landed, this
+ticket stopped being a timing curiosity nothing could observe and became the
+mechanism behind a **NEW-RED on `test-fgl`**, on real FPC-corpus code:
+`TFPGObjectList<TThing>` is rejected because `TThing` — a bare `class`, i.e. an
+implicit `TObject` descendant — is declared in the **same type section** as the
+specialization.
+
+Tracked as [[regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section]],
+which carries the repro and a 30-second discriminating test. **Do not fix by
+loosening the check** — the 35 tests are the arm that would silently undo.
+
+This is the second time today that a carrier nothing read turned out to be wrong
+the instant a reader existed (the other: `UFldStrElemTk` hardwired to
+`Ord(tyChar)` under a comment justifying it as safe *today*). Same shape: correct
+when written, false the moment something consumed it.
