@@ -2260,6 +2260,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-pcl-widgetset-select | B | 25→30 | feature | PCL: compile-time widgetset selection (--widgetset=) + sparse widgetset×OS matrix that HARD-FAILS unsupported cells with a clear reason (copy LCL -ws) | — |
 | feature-platform-abstraction-layer | B | 50 | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 | feature-png-decoder-library | B | 50 | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
+| feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-procedural-types | A | 50 | feature | Procedural types and method pointers | — |
 | feature-progress-check-makefile | A | 50 | feature | Wire `progress.sh check` into a make target | — |
 | feature-progress-transition-helpers | A | 50 | feature | Progress transition helpers (`claim` / `resolve`) | — |

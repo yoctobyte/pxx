@@ -8,7 +8,7 @@ prio: 55
 # RTL-over-libc — the portability force multiplier
 
 - **Type:** feature (Track A — RTL lowering / codegen / linking). Portability campaign.
-- **Status:** working
+- **Status:** done
   acceptance instrument landed, no compiler changes made. See the dated note below.
 - **Owner:** frankA
 - **Opened:** 2026-07-17, from the OS-portability mapping session. Full analysis in
@@ -582,15 +582,52 @@ offset and sail through a fixedpoint.)
 ### What is left, honestly
 
 Not "done to zero", and it should not be. Still raw, by design: `rt_sigreturn`;
-`thread_emit.inc`'s clone stub (child runs on a fresh stack, and libc's errno
-path would touch the *parent's* TLS); user inline asm. Still **unconverted and
-untested**, because no hello-world reaches them: the frontend sites
-(`cparser`/`eparser`/`rparser`/`zparser`) and the majority of the 17 that need
-threads, fork/exec or richer signal use to be emitted at all. **`--rtl-libc` is
-exercised on Pascal hello/div0/signal paths only** — that is the honest scope of
-the green above.
+`thread_emit.inc`'s clone stub; user inline asm.
+
+**Tested population, after deliberately widening it** — the first scope line here
+said "hello / div0 / signal only" and was too pessimistic, which I found by
+running the tests rather than by reasoning:
+
+| program | default | `--rtl-libc` |
+| --- | --- | --- |
+| hello | `hello`, rc=0 | identical |
+| div0 stub | rc=200 + message | identical |
+| SIGTERM delivery | rc=143 | identical |
+| `test_multithreading.pas` | passes | **passes** |
+| `test_io_checks_iplus.pas` (failing I/O → errno) | `ioresult=TRUE caught=1` | identical |
+
+The last two matter most: threads exercise the raw `clone` stub alongside
+thunked syscalls, and the I/O test exercises the thunk's **errno fixup**, which
+is its most delicate part. Both were in the "untested" bucket an hour ago.
+
+(`test_palthread.pas` fails to compile in **both** modes — pre-existing, not a
+libc-mode regression. Noted so the next reader does not re-derive it.)
+
+**Still unconverted:** the frontend sites (`cparser`/`eparser`/`rparser`/
+`zparser`). No Pascal program reaches them.
+
+### A latent hazard, reasoned but NOT observed
+
+The `clone` child stub is raw, so a pxx-created thread **inherits the parent's
+FS base**. The thunk's errno fixup calls libc's `__errno_location`, which is
+FS-relative — so on a pxx thread it resolves to the **main thread's** errno slot.
+Within one thread this is invisible (the write succeeds to a valid address and
+the read-back is correct); the symptom is a worker's failing syscall silently
+overwriting *another* thread's errno.
+
+`test_multithreading.pas` passes, and does not refute this: its syscalls
+succeed, so the fixup never fires. **The trigger is a FAILING syscall on a
+pxx-created thread**, which nothing tested reaches.
+
+Recorded as a prediction with its exact trigger, not as a bug — it is reasoned
+and unobserved, and the counterpart to this ticket's other unexplained item is
+the discipline that a story without a measurement does not get written down as
+a mechanism. Whoever converts the frontend sites should build that test first.
 
 Track B's `InternStr` caution still applies to any future work that reorders
 data emission: the static managed-string header lives at **negative** offsets
 from `Strs[].Offset`, 24 bytes are written into `Data[]` before the offset is
 recorded, and the entry is 8-aligned before that write.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
