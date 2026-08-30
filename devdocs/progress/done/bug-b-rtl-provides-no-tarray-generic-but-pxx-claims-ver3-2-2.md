@@ -150,3 +150,27 @@ narrow check would not have been enough.
 
 ## Log
 - 2026-08-30 — resolved, commit 72d3d69eb.
+
+---
+
+### CORRECTION 2026-08-30 — the `-dVER3_0_0` "hang" above is wrong
+
+Left standing rather than edited, because it is a record of what this session
+actually ran; this note is the correction, not a rewrite.
+
+**The scaffold does not hang.** frank-rust re-timed it at `b3c6858bdfbb`:
+**1m12s, completing normally**, reaching `generics.defaults.pas:78 unknown
+type: TKey` exactly as this ticket documents. It reproduces as written and
+there is nothing to chase.
+
+My ">45 s, killed" was **slow, not hung** — the box was at load 8-11 with five
+sessions compiling. The control I ran (stashing the change and re-timing) was
+sound as far as it went and correctly showed the slowness was not mine, but it
+could not distinguish *slow* from *hung*, and I reported the stronger of the
+two.
+
+**A timeout measures the BOX, not the program.** With several agents sharing
+one machine, the load average at the moment of the kill is part of the result
+and belongs in any report that leans on a timeout. The cheap discrimination is
+to re-run once the box is quiet, or to raise the bound until it either
+completes or stops scaling with load — not to conclude from a single kill.
