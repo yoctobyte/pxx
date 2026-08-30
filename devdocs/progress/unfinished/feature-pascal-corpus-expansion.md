@@ -310,6 +310,15 @@ and `(to file / relay to frankB)` in another while it was actually **done**.
 > Probe timing rose **75s -> 118s** across these fixes. Worth recording because a
 > longer run reads as a hang: here it is the compiler getting *further*, and a
 > 2-minute harness timeout will cut it off mid-success.
+>
+> **CORRECTED 2026-08-30, later: that number is already stale and the advice it
+> implied was dangerous.** With `MAX_TEMPLATE_PARAMS` at 6 (`0fc18aad6`) the probe
+> takes **~450 s**, and I measured 447 s on a loaded box. So "give it 480 s" —
+> which is what 118 s suggested — truncates a *success* with almost no margin.
+> **Use 2400 s.** The general form is the reusable part: on this corpus wall-clock
+> is a function of how far the compile gets, so **every wall that falls makes the
+> timeout advice in this ticket wrong in the same direction**, and a stale figure
+> here produces a false hang rather than a slow pass.
 
 > **RE-COMPILED 2026-08-30, LATER (frankB) — the TKey wall is DOWN and rung 6b
 > now stops on ONE thing.** This supersedes the `4f42b78b9` note below, which is
