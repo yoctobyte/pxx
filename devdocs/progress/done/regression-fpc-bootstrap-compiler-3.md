@@ -68,3 +68,6 @@ Error: /usr/bin/ppcx64 returned an error exitcode
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-30 — auto-closed by the plexus watcher: `fpc-bootstrap#src:compiler/compiler.pas` passes at 739594783143 (tier native); it was red at d35f9dbc31b0. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
