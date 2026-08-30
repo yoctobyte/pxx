@@ -185,3 +185,100 @@ the other general probes like `gcc_diff_probe.sh`. Flagged rather than assumed.
   rewards it, keeps the libc-free identity). libc mode is for the OSes that mandate it.
 - Land incrementally behind the flag; never a long-lived branch (same discipline as the
   experimental frontends).
+
+## 2026-08-30 (frankA) — re-claimed; exposure measured, the unsized piece sized, and the design proven from Pascal before any compiler change
+
+### File exposure — it does NOT reach `ir.inc`
+
+Measured because the parked note points at `ir.inc:6107` and `ir.inc` is held by
+another lane. `IR_SYSCALL` has **3** references in `ir.inc` and **none of them
+matter here**: `:255` is the debug-name string, `:540` is an IR *validator* arm
+(`IRRequireNode(IRA[i], 'syscall number arg')`), `:7220` is the AST→IR
+*constructor*. All three concern the node's existence and shape; this ticket
+changes only how it is **lowered**, which lives entirely at
+**`ir_codegen.inc:4888`**. The grep count is 3 and the relevant count is 0 —
+worth stating, because reporting the grep number would have sequenced this work
+behind a lane it does not touch.
+
+| file | exposure |
+| --- | --- |
+| `ir.inc` | **none** (3 refs, all irrelevant to lowering) |
+| `ir_codegen.inc` | the lowering, ~4888 |
+| `emit.inc` | the `_start` stub's raw syscall — increment 2 |
+| `elfwriter.inc` | see below: probably nothing |
+| `defs.inc` / `compiler.pas` | the mode flag |
+
+### The "unsized piece" is smaller than it looked
+
+frank2 parked because *"the compiler must emit PLT imports for `syscall` and
+`__errno_location` that no Pascal `external` declared, i.e. synthesise a dynamic
+import from codegen"*, and could not size it. Traced: the import tables are
+driven entirely by **`ExternalProc[]` / `ProcLibrary[]`**, populated by ordinary
+`Procs[]` entries carrying `ProcExternal := True`, `ProcLibrary := InternStr(lib)`,
+`ProcExtName := InternStr(sym)` (`pasparser_proc.inc:1325`), with
+`RegisterExternal(procIdx)` (`symtab.inc:11711`) handing out the GOT/PLT slot at
+call-emission time. So synthesising an import is **manufacturing one `Procs[]`
+entry and reusing the existing external-call emitter** — not new `elfwriter`
+machinery. `elfwriter.inc` may need no change at all.
+
+### The design is proven end-to-end from Pascal, with no compiler change
+
+Rather than reason about the ABI, the whole lowering was written as ordinary
+Pascal `external` declarations and run:
+
+```pascal
+function c_syscall(nr, a0, a1, a2: PtrInt): PtrInt; cdecl;
+  external 'libc.so.6' name 'syscall';
+function c_errno_loc: Pointer; cdecl;
+  external 'libc.so.6' name '__errno_location';
+```
+
+| call | result |
+| --- | --- |
+| `c_syscall(1, 1, @s[1], Length(s))` | wrote `via libc syscall`, returned **17** = the byte count |
+| `c_syscall(1, -7, ...)` (bad fd) | returned **-1**, `errno` = **9** (EBADF), so `-errno` = **-9** |
+
+Both halves confirmed:
+
+1. **The register mapping is a shift, not a remap.** libc's `long syscall(long
+   nr, ...)` takes the number as its FIRST C argument, so the raw convention
+   (nr in rax; args in rdi, rsi, rdx, r10, r8, r9) becomes the SysV C
+   convention by moving every argument one place right. No per-primitive table.
+2. **The error convention maps at one site.** Raw returns `-errno`; libc returns
+   `-1` and sets `errno`. `if result = -1 then result := -errno` at the single
+   lowering site reproduces the raw convention exactly, so **no RTL error check
+   changes and program output is byte-identical by construction** rather than by
+   inspection — which is what makes the acceptance criterion structural.
+
+### The inherited instrument re-verified, and its baselines have moved
+
+`tools/syscall_scan.py` is what every acceptance claim here rests on, and it was
+written by a session that is gone with its own bug-fix story attached, so its
+numbers were re-established rather than assumed:
+
+| binary | frank2, 2026-08-17 | measured now |
+| --- | ---: | ---: |
+| pxx hello-world | 57 | **73** |
+| `/bin/true` (control) | 0 | **0** |
+
+The 57 → 73 drift is the RTL growing over two weeks, not a tool fault. Two
+properties re-checked directly, because they are the ones being relied on:
+
+- **It refuses rather than reporting 0** — a non-ELF file and a `.pas` file both
+  produce `not an ELF file`, never a count.
+- **It disassembles rather than byte-greps.** Independent cross-check: a naive
+  `0f05` byte count over the whole file gives **73** for the pxx binary (agreeing)
+  but **1** for `/bin/true`, where the tool correctly reports **0**. It is
+  rejecting a byte pair that is not an instruction, which is exactly the
+  discrimination a grep cannot make and the reason the original `objdump`
+  criterion was vacuous.
+
+### Plan
+
+1. **Increment 1** — mode flag + lower `IR_SYSCALL` to the synthetic `syscall`
+   import with the errno fixup, x86-64 only. Expected effect: 73 → a small
+   non-zero (the `_start` stub remains).
+2. **Increment 2** — `emit.inc`'s `_start` stub, which is what stands between
+   that residue and 0.
+
+Raw-syscall stays the default and must stay bit-identical; libc mode is opt-in.
