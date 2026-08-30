@@ -2,7 +2,7 @@
 track: A
 prio: 40
 type: feature
-status: working
+status: done
 blocked-by: []
 owner: frank-optimize
 summary: "-O3 is the free tier for new passes precisely because nothing gates OptLevel>=3. As of 2026-08-30 it has 443 programs of csmith self-differential coverage (pxx -O0 vs -O2 vs -O3, zero MISCOMPILE_OPT) -- an oracle-free check no gcc-disagreement argument can touch. Proposes making it standing per new -O3 pass rather than a one-off."
@@ -334,3 +334,6 @@ technique *always* puts them at different paths. Compare `.text`
 section-by-section, or invoke both through equal-length paths. I was one step
 from reporting "my debug-only probe changed codegen", and the thing that caught
 it was refusing to accept a whole-file `cmp` as an answer about code.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
