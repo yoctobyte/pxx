@@ -1,11 +1,11 @@
 ---
 track: C
-prio: 40
+prio: 50
 type: bug
 status: backlog
 blocked-by: []
 owner: ""
-summary: "`unsigned a:1; unsigned long long b:33;` starts a second allocation unit where gcc packs one: sizeof 16 vs 8. Worse, with a following member the SIZES MATCH (16 both) while offsetof differs (12 vs 8) -- a real member at the wrong offset, invisible to any sizeof check. Values are always correct, so the csmith checksum oracle is structurally blind to it."
+summary: "MEASURED 2026-08-30: not one shape -- 135 of 400 random bitfield structs lay out differently from gcc (34%), in BOTH directions (72 larger, 27 smaller), and 36 have an identical sizeof with different member offsets. Root cause is a MODEL difference (pxx storage-unit vs gcc bit-cursor), not a bad condition, and it is entangled with the bitfield ACCESS WIDTH -- so the fix spans cparser.inc + cir.inc (C) and IRLowerBitFieldRead's signature in ir.inc (A). Diagnosis banked, deliberately not microfixed. Values are always correct; blast radius is pxx/gcc interop only."
 ---
 
 # A `long long` bitfield after a smaller-typed one puts later members at the wrong offset
@@ -119,3 +119,169 @@ weeks.
 Re-run the eight `cbitfield_*` tests: this changes layout, so anything asserting
 a current size will move, and each such change needs checking against gcc rather
 than updating to match.
+
+
+## SCALE AND ROOT CAUSE — frankC, 2026-08-30. Diagnosed, deliberately NOT fixed.
+
+I built a layout differential (`sizeof` + `offsetof` of every named non-bitfield
+member, pxx vs gcc) and pointed it at 400 randomly generated bitfield structs.
+
+**135 of 400 diverge — 34%, with 0 errors.** This is not a corner case and the
+title under-reports it: the `unsigned`-then-`long long` shape is one visible
+instance of a systemic difference.
+
+A first, ad-hoc corpus gave 95/400 (24%); the reproducible generator published
+below gives **135/400** because it mixes in more anonymous `:0` breaks and plain
+members between bitfields. **Cite the 135** — it is the one anyone can regenerate
+(`genlayout.py 20260830 400`), measured at `239142c9b`, binary `83a767151ffa`,
+`converged after 1 round(s)`.
+
+Breakdown of the 135, and the last row is why this ticket needed a new instrument:
+
+| | count |
+| --- | ---: |
+| pxx struct LARGER than gcc | 72 |
+| pxx struct SMALLER than gcc | 27 |
+| **identical `sizeof`, different member offsets** | **36** |
+
+The 27-vs-72 split is the bidirectionality that kills the one-line fix. The 36
+are the ones no size assertion can ever catch — a struct that measures right and
+is laid out wrong.
+
+### It is a MODEL difference, not a bad condition — and the divergence runs both ways
+
+The tempting fix is `cparser.inc:12702`'s third clause:
+
+```pascal
+if (bitUnitOff < 0) or (bitUnitUsed + bitWidth > bitUnitSize * 8) or
+   (sz > bitUnitSize) then            { start a fresh unit when the type widens }
+```
+
+**That clause is not the bug, and patching it would break rows that pass today.**
+pxx is smaller than gcc as often as it is larger:
+
+| shape | pxx | gcc |
+| --- | ---: | ---: |
+| `unsigned a:1; unsigned long long b:33;` | 16 | 8 |
+| `unsigned a:2; unsigned long long b:63;` | 16 | **24** |
+| `unsigned a:30; unsigned long long b:40;` | 16 | **24** |
+
+A one-directional "widen the unit instead of starting a new one" makes the first
+row right and the other two worse.
+
+**The two compilers use different allocation models:**
+
+- **pxx: a storage-unit model.** `bitUnitOff` / `bitUnitSize` / `bitUnitUsed` —
+  a unit is opened at a declared-type width and fields are packed into it. A
+  following member is placed after **the whole unit**.
+- **gcc: a bit cursor with per-type alignment constraints.** Bits are allocated
+  continuously; a field of declared type `T` is advanced only if it would cross a
+  `T`-alignment boundary; and a following non-bitfield member goes at the next
+  suitably-aligned byte **after the last used bit**, not after a reserved unit.
+
+The clearest single piece of evidence is `unsigned long long a:1,b:1,c:1,d:1;
+int tail;` — four bits used out of a 64-bit declared type:
+
+```
+gcc:  sizeof 8,  offsetof(tail) = 4      <- 4 bits used, tail at the next int boundary
+pxx:  sizeof 16, offsetof(tail) = 8      <- the whole 8-byte unit is reserved first
+```
+
+No adjustment to *when a unit opens* produces gcc's answer there, because gcc
+never reserved a unit to begin with.
+
+### Why I am banking this rather than fixing it
+
+Per `root-cause-over-microfix`: the honest fix is replacing the unit model with a
+bit cursor, and that is a change to a **working ABI** with cited bug-fix history
+in its own comments — `bug-c-long-long-bitfield-promotion` (the `:40` field read
+through only its low 32 bits), quickjs's `JSString` header (`uint8_t wide:1`
+after `uint32_t len:31`), c-testsuite 00218 (enum bitfield signedness). Those
+were paid for, and a model swap re-opens all of them.
+
+It is also the exact shape the playbook warns against finishing badly: a
+one-clause change would turn some of the 95 green, leave others, silently move
+rows that pass today, and close the ticket. **Microfix as a consolation is
+explicitly the thing not to do here.**
+
+What is needed before the model is replaced is the instrument, not more
+opinion — see the harness handed to Track T below. With it the change becomes
+measurable in one command instead of arguable.
+
+### The instrument exists and is the deliverable of this pass
+
+The differential is written up in
+`feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets` [T p40],
+including the script, so it can be lifted rather than rebuilt. **Its baseline is
+`pass=265 diff=135 error=0`** over `genlayout.py 20260830 400` at `239142c9b` —
+the number any fix must move toward 400/0 without regressing the 265 that pass.
+
+Note one property it must keep: it separates **ERROR** (a compiler could not
+build the probe) from **DIFF** (both built and disagreed). My first version
+conflated them and reported 20 spurious diffs, because `offsetof` on a bit-field
+member is illegal C and gcc was failing to compile the probe at all — "could not
+look" printing as "ruled out", inside the very tool built to catch that class.
+
+### Prio raised 40 -> 50
+
+24% of random bitfield structs, not one shape. Still layout-only — values are
+always correct and no pure-pxx program misbehaves — so it stays below a
+wrong-value bug, but it is far broader than the original filing implied.
+
+## THE FIX REACHES OUTSIDE cparser.inc — layout is entangled with ACCESS WIDTH
+
+This is the part that changes who owns the ticket, and I nearly missed it by
+reading only the placement code. The reason pxx reserves a whole unit is not a
+layout opinion — it is a **codegen constraint**, stated outright at
+`cparser.inc`'s unit-advance:
+
+```pascal
+{ A long-long bitfield unit is LOADED/STORED as 8 bytes (IRBitStorageTk),
+  so it occupies a full 8-byte unit -- reserve that much or the next field's
+  unit overlaps it and an 8-byte store clobbers this one. }
+if sz >= 8 then bitUnitBytes := 8 else bitUnitBytes := bitBytes;
+```
+
+So `unsigned long long a:1,b:1,c:1,d:1; int tail;` reserves 8 bytes for 4 bits
+and puts `tail` at 8; gcc uses a narrower access and puts it at 4. **pxx cannot
+simply adopt gcc's offset**: with the current lowering, an 8-byte store to the
+unit at offset 0 would clobber a `tail` sitting at offset 4. The layout is
+correct FOR THE ACCESS WIDTH IT USES.
+
+That makes this a two-part change:
+
+1. **Placement** (`cparser.inc`, Track C) — bit cursor instead of storage units.
+2. **Access lowering** (`cir.inc`, Track C) — the load/store width must derive
+   from the field's actual bit span, not its declared type.
+3. **The seam** (`ir.inc`, **Track A**) — `IRLowerBitFieldRead` is forward-declared
+   at `ir.inc:686` and called at `ir.inc:7040` and `ir.inc:10117`, taking
+   `storageTk: TTypeKind` **from the caller**. A per-field byte span is not a
+   `TTypeKind`, so that signature changes, and with it two Track A call sites.
+
+**Reporting this per the coordinator's request: yes, the fix reaches outside**
+**`cparser.inc`, into `ir.inc` (Track A).** Under the file-lane rules that is a
+Track A ticket to be filed and handed off, not something to edit under C — and
+it is a further reason this is not a session-sized microfix.
+
+### Pinned rows — a model change must NOT move these
+
+`test/cbitfield_mixed_type_pack_b373.c` (the quickjs `JSString` header) asserts
+`sizeof == 24`. I re-checked it against gcc rather than trusting it:
+
+```
+gcc:  sizeof=24 len=123456 wide=1 hash=777 atype=2 next=9   exit=42
+pxx:  sizeof=24 len=123456 wide=1 hash=777 atype=2 next=9   exit=42
+```
+
+Identical. That test was blessed correctly and is a pinned row, not a candidate
+for updating-to-match. Same for the three sibling `cbitfield_*` tests (values,
+not layout) and c-testsuite 00218's enum-bitfield signedness.
+
+### One severity bound, measured
+
+pxx packs differently but does **not** misalign: in `r36`
+(`unsigned char b0:7; int b1:30; unsigned short :0; short p; int t`) pxx places
+the plain `short` at offset 6 vs gcc's 8 — different, but still 2-aligned and
+legal. Across the corpus I saw no case of a plain member landing at an offset
+its own type could not tolerate. So the blast radius is **interop only**
+(a struct crossing a pxx/gcc boundary), never a self-inconsistent pxx program.
