@@ -7,8 +7,8 @@ status: done
 found: 2026-08-30
 found-by: frankS
 owner: frankS
-resolved: 0d21318a2
-summary: "FIXED 2026-08-31. The prologue reserves six 3-byte slots and PatchXtensaFrameAdjust writes a CHAIN of ADDMIs into them, NOPping the rest -- six because exactly ONE procedure in the whole compiler exceeds 32 KB and it wants 136448 bytes. The Call0 error was only the visible half: the WINDOWED arm had NO check and EncodeXtensaAddmi masks its immediate, so it silently miscompiled -- measured, the pre-fix compiler ACCEPTS a 40 KB frame under --xtensa-abi=windowed and the binary SEGFAULTS. One helper now serves both ABIs. xtensa still cannot build the compiler: it now reaches the NEXT wall, `j displacement -169568 outside -131072..131071`."
+resolved: 0d21318a2  # implementation replaced in a follow-up; see the section at the end
+summary: "FIXED 2026-08-31, and the implementation was REPLACED the same night. The frame is now a patched 32-bit LITERAL (EmitXtensaFrameReserve: XtensaEmitLitHeader + l32r a8 + sub sp,sp,a8), the shape arm32 in the same function has always used -- no bound and no rounding. It replaced a chain of ADDMIs in six reserved slots (frankS, 0d21318a2), by that author's own call: the chain was a second mechanism for a rule the function already had, and its 196608 bound was chosen by taste. The Call0 error was only the visible half: the WINDOWED arm had NO check and EncodeXtensaAddmi masks its immediate, so it silently miscompiled -- the pre-fix compiler ACCEPTS a 40 KB windowed frame and the binary SEGFAULTS. Exact frames also retire the 256-byte windowed rounding. xtensa still cannot build the compiler: the NEXT wall is `j displacement -169568 outside -131072..131071`."
 ---
 
 # An xtensa frame larger than 32 KB needs more than one ADDMI
@@ -142,3 +142,76 @@ Positive control asserted in the table above.
 
 Gate: fixedpoint converged; `tools/gate.sh quick` GREEN; both new rows executed
 exactly as written.
+
+
+## The implementation was replaced the same night (frankA, 2026-08-31)
+
+Two sessions fixed this independently within minutes of each other — frankS's
+claim never reached origin, so the ranker correctly offered an unclaimed p55 to
+frankA. Reported rather than raced; frankS's chain had landed as `0d21318a2` and
+frankS called it for the literal form. **Everything above stands as the record of
+how the defect was found and measured. Only the lowering changed.**
+
+### What it is now
+
+```pascal
+XtensaEmitLitHeader;                 { j over a 4-aligned literal slot }
+patchPos := CodeLen;
+EmitI32(0);                          { the frame size, patched at end of body }
+xtensa_l32r(reg_xtensa_a8, $FFFF);
+xtensa_sub(reg_xtensa_sp, reg_xtensa_sp, reg_xtensa_a8);
+```
+
+`PatchProcPrologue` then writes a plain number on both ABIs. This is what the
+**arm32 arm three lines below has always done** (`ldr r9, [pc]` over a patched
+word, then `sub sp,sp,r9`) — which is the whole argument: the chain was a second
+mechanism for a rule the function already carried.
+
+### Why, in the order the two authors agreed on
+
+1. **The bound goes away.** Six slots reach 196608. Five ADDMIs is what the
+   compiler needs *today*; there is no argument for six over five or eight
+   beyond taste, and a limit chosen by taste is one the next large routine meets
+   with no explanation of why it sits where it does.
+2. **Windowed frames become EXACT**, because a literal has no step. That removes
+   the 256-byte rounding and with it the ~11 levels of recursion on a 3584-byte
+   ESP-IDF task stack measured in
+   [[bug-a-xtensa-windowed-frame-minimum-256-bytes]] — a fix that makes another
+   measured defect's cost disappear.
+3. **Cheaper per procedure:** +12.1 bytes against the chain's +15.
+
+### Measured
+
+- **Size: +2456 B on `hello`, +1.13%** (.text 218064 → 220520). Read out of an
+  `--emit-obj` build with `readelf -S`, because the compiler's `code=` line is
+  **page-quantised** and reported this change as costing *nothing*. Both authors
+  hit that instrument independently; the row is now in
+  `devdocs/dev/debugging-playbook.md`.
+- **`test_xtensa_frame_over_32k.pas` gained a `Huge` row: one 260004-byte
+  frame**, deliberately past 6 × 32768 = 196608. It is the positive control for
+  the bound being gone, and it was verified to DISCRIMINATE rather than assumed
+  to: built against the chain implementation it refuses with that
+  implementation's own message —
+
+  ```
+  error: target xtensa: stack frame of 260096 bytes exceeds the 196608 the
+    prologue reserves (raise XT_FRAME_SLOT_INSNS in symtab.inc)
+  ```
+
+  and against this one it compiles and prints the x86-64 oracle's answer. Without
+  it the file's largest frame is 80 KB, inside every bound anyone proposed.
+- Call0, windowed and riscv32 (control, untouched) all match the native oracle
+  on the full file.
+- Gate: `make compiler/pascal26` converged 1 round (3504e22a9b3a);
+  `tools/gate.sh quick` GREEN.
+
+### One process note worth keeping
+
+The discriminating measurement above was obtained by accident, from a mistake
+worth naming: an A/B check run as `git stash; make; …; git stash pop` left
+**frankS's binary on disk** while the sources were mine again, and the next run
+reported a wrong answer (`huge 36`, the previous revision's value) that read
+exactly like a miscompile. `stash pop` restores sources, not binaries. The tell
+was the error text naming `XT_FRAME_SLOT_INSNS`, a constant that no longer
+exists in the tree — the same "grep the tree for the exact error string" check
+CLAUDE.md prescribes for a stale seed.

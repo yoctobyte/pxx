@@ -6,7 +6,7 @@ type: bug
 status: done
 found: 2026-08-30
 found-by: frankS
-summary: "FIXED. It was not a CALL -- the site was tagged and measured: the refusal came from the intra-body LABEL FIXUP in ir_codegen_riscv32.inc, a forward jump inside ParseFactorCore, one procedure spanning 2.20 MB (offsets 4199288..6396484). A second, larger one sat behind it: the program ENTRY jump, asked for 20089124. Both reserved a single 4-byte JAL for a forward reference. Fixed by reserving the wide slot for a forward jump and letting the REACH TEST pick jal+nop or auipc+jalr at patch time; backward jumps keep the bare 4-byte JAL whenever it reaches. `pascal26 --target=riscv32 compiler/compiler.pas` now produces a 20.2 MB rv32 image that runs under qemu and compiles Pascal to both x86-64 and riscv32. Cost: +1.67% rv32 code (hello 245612 -> 249708); other targets byte-identical."
+summary: "FIXED. It was not a CALL -- the site was tagged and measured: the refusal came from the intra-body LABEL FIXUP in ir_codegen_riscv32.inc, a forward jump inside ParseFactorCore, one procedure spanning 2.20 MB (offsets 4199288..6396484). A second, larger one sat behind it: the program ENTRY jump, asked for 20089124. Both reserved a single 4-byte JAL for a forward reference. Fixed by reserving the wide slot for a forward jump and letting the REACH TEST pick jal+nop or auipc+jalr at patch time; backward jumps keep the bare 4-byte JAL whenever it reaches. `pascal26 --target=riscv32 compiler/compiler.pas` now produces a 20.2 MB rv32 image that runs under qemu and compiles Pascal to both x86-64 and riscv32. Cost: +2.14% rv32 code (hello .text 243060 -> 248252, measured via --emit-obj; the first figure published here, +1.67%, was read off the compiler's `code=` line, which is PAGE-QUANTIZED and cannot resolve this)."
 owner: frankA
 ---
 
@@ -120,10 +120,29 @@ Five copies of the same if-known-else-record-a-fixup block collapsed into
   `test_exception_typed`, `test_exception_finally`,
   `test_except_derived_caught_by_base`,
   `test_div_by_zero_raises_on_every_target` -- all MATCH.
-- Untouched-target control: `hello` for arm32, aarch64 and i386 is
-  byte-identical in size to the pinned compiler's output; x86-64 is the
-  self-host fixedpoint. Only riscv32 moved: 245612 -> 249708 B, **+1.67%**,
-  which is 1024 forward jumps x 4 bytes.
+- Size cost, and a **CORRECTION to the first figure published here.** The
+  original row said "245612 -> 249708 B, +1.67%, which is 1024 forward jumps x
+  4 bytes", read off the compiler's `code=` line. **That line is quantized to
+  4096.** Swept across programs with 1..101 procedures, `code=` moves only in
+  4096-byte steps, so it cannot resolve a change of this size and the tidy
+  "1024 x 4" arithmetic was a coincidence fitted to a rounded number.
+  Found while measuring the xtensa frame change, where the same instrument
+  reported a delta of **zero** for a change that provably alters 161 prologues.
+
+  The exact instrument is `--emit-obj` plus `readelf -S`'s `.text` size, which
+  is not page-padded. Re-measured on `hello`:
+
+  | | .text before | after | delta |
+  | --- | --- | --- | --- |
+  | riscv32 | 243060 | 248252 | **+5192 (+2.14%)** |
+
+  The untouched-target control was ALSO taken with the quantized instrument and
+  is withdrawn: comparing `hello` against the **pinned** compiler byte-for-byte
+  shows arm32/aarch64/i386 (and x86-64) all differing, because `pinned` is many
+  commits behind and those differences are other people's. A real control here
+  needs an ablation build, which was not run. What does stand is that this
+  change is inside `if TargetArch = TARGET_RISCV32` arms only, and that the
+  x86-64 self-host fixedpoint converged.
 - Gate: `make compiler/pascal26` converged 1 round (6b9d17ec4961),
   `tools/gate.sh quick` GREEN.
 

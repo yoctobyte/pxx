@@ -39,6 +39,26 @@ begin
   Bigger := acc;
 end;
 
+{ PAST ANY CHAIN, and the size is chosen to be past a SPECIFIC one. 260004 bytes
+  is more than 6 x 32768 = 196608, the bound of the six reserved ADDMI slots this
+  ticket first shipped -- so this row REFUSES to compile under that
+  implementation and compiles here. Without it the file's largest frame is 80 KB,
+  comfortably inside every bound anyone has proposed, and the test would go on
+  passing if a bounded form were reintroduced.
+
+  The frame is a patched 32-bit literal, so there is no bound left to sit under.
+  For scale: the largest frame in the compiler itself is 136448 bytes
+  (DelphiRewriteGenericUses), which is five ADDMIs and fits the old six. }
+function Huge(seed: Integer): Integer;
+var
+  h: array[0..65000] of Integer;   { 260004 bytes in one frame }
+  i, acc: Integer;
+begin
+  for i := 0 to 65000 do h[i] := (i * 3 + seed) mod 251;
+  acc := h[0] + h[32500] + h[65000];
+  Huge := acc;
+end;
+
 { the small-frame boundary row: ADDI's own reach, which must not regress }
 function Small(seed: Integer): Integer;
 var t: array[0..7] of Byte; i, acc: Integer;
@@ -53,6 +73,7 @@ begin
   for i := 0 to 15 do outer[i] := 1000 + i;
   WriteLn('big    ', Big(1));
   WriteLn('bigger ', Bigger(1));
+  WriteLn('huge   ', Huge(1));
   WriteLn('small  ', Small(1));
   { the caller's locals must be untouched by any of the three frames }
   WriteLn('outer  ', outer[0], ' ', outer[15]);

@@ -10789,72 +10789,59 @@ end;
 
 { ===== Prologue/Epilogue ===== }
 
-const
-  XT_FRAME_SLOT_INSNS = 6;
-  { 3-byte instruction slots reserved in EVERY xtensa prologue for the frame
-    adjustment, patched by PatchXtensaFrameAdjust once the body's size is known.
-    Six ADDMIs reach 192 KB. ONE reserved slot was the old shape and it bounded
-    the frame at 32 KB, which is what `pascal26 --target=xtensa
-    compiler/compiler.pas` hit (bug-a-xtensa-frame-larger-than-32kb-...).
+procedure EmitXtensaFrameReserve(var patchPos: Integer);
+{ Lower sp by a frame size that is not known yet, WITHOUT an immediate.
 
-    SIX, not four and not sixteen, and the number is measured rather than
-    chosen: exactly ONE procedure in the whole compiler exceeds 32 KB and it
-    wants 136448 bytes, so five ADDMIs are the requirement and the sixth is the
-    headroom. Widening this is one constant and costs 3 bytes per proc; the
-    error below names the actual size and the bound, so a program that needs
-    more says so rather than failing obscurely. }
-  XT_NOP24 = $0020F0;   { NOP, LE bytes F0 20 00 -- see xtensa_nop }
+  It used to be one patchable ADDI, widened at patch time to ADDMI. Neither
+  reaches: ADDI's immediate is 8-bit signed (+-128) and ADDMI's is 8 bits scaled
+  by 256, so one instruction covers at most 32 KB in 256-byte steps. Call0
+  refused past that (`stack frame too large (> 32 KB) for a single ADDMI`) and
+  WINDOWED did not even check -- EncodeXtensaAddmi simply truncated, which is a
+  frame allocated at the wrong size with no diagnostic anywhere.
 
-procedure PatchXtensaFrameAdjust(patchPos, want: Integer);
-{ Lower sp by `want` bytes into the reserved slot, whichever ABI, padding the
-  unused slots with NOPs.
+  Measured: `pascal26 --target=xtensa --platform=posix compiler/compiler.pas`
+  has exactly ONE frame over the line, DelphiRewriteGenericUses at 136448 bytes
+  (its `seenArg: array[0..512*MAX_TEMPLATE_PARAMS-1] of TRawToken`). 136448
+  needs FIVE chained ADDMIs, so a chain is not the answer either -- it just moves
+  the cap somewhere equally arbitrary and equally breakable.
 
-  ONE HELPER FOR BOTH ABIS ON PURPOSE. The Call0 arm raised a clean error past
-  32 KB; the WINDOWED arm had no check at all, and EncodeXtensaAddmi masks its
-  immediate with `(imm div 256) and $FF` -- so a windowed frame over 32 KB
-  silently encoded a different, smaller (or positive) adjustment and the
-  prologue quietly handed the body a frame that was not there. A loud bound and
-  a silent wrap are the same defect wearing two faces, which is what happens
-  when one rule is written out twice (normalise-dont-special-case.md).
+  So: load the size from a patchable 32-bit LITERAL and subtract it, which is
+  what ARM32 in this same file has always done for the same reason (`ldr r9,
+  [pc]` over a patched word, then `sub sp,sp,r9`). Full 32-bit range, no cap, no
+  rounding -- and the patch position is the LITERAL rather than an instruction,
+  so PatchProcPrologue writes a plain number.
 
-  ADDI reaches -128 with byte granularity and is the same 3 bytes as ADDMI,
-  whose immediate is a multiple of 256, so small frames still pay only what they
-  need. Beyond that the adjustment is a CHAIN: each ADDMI moves at most -32768,
-  so a big frame is several of them and the leftover slots become NOPs that cost
-  three bytes and no cycles worth counting in a prologue. }
-var used, chunk, i: Integer;
+  a8 is the scratch EmitCallProc already uses for an indirect call on both ABIs,
+  and nothing is live in it here: on Call0 this runs after a0/a15 are saved and
+  before the parameter spill, and under WINDOWED the frame's a8..a15 are the
+  outgoing-call window, untouched until the first call.
+
+  It costs 13-16 bytes and two extra instructions per procedure against the old
+  single ADDI -- +2456 bytes on hello, +1.13%, measured as .text out of an
+  --emit-obj build because the compiler's own `code=` line is page-quantised and
+  reported this change as costing NOTHING. That is the arm32 trade, taken here
+  for the same reason: the alternative is a cap that a large enough routine
+  walks straight through.
+
+  THIS REPLACED A CHAIN OF ADDMIs (frankS, `0d21318a2`, landed hours earlier and
+  reverted here by its own author's call). Six 3-byte slots, patched with as many
+  ADDMIs as the frame needed and NOPs for the rest, reaching 192 KB. It was
+  correct and it was measured -- and it was a SECOND mechanism for a rule this
+  function already had three lines below, in the arm32 arm. The bound is the
+  other half: five ADDMIs is what the compiler needs today, and there is no
+  argument for six over five or eight beyond taste, so it is a limit the next
+  large routine meets with no explanation of why it sits where it does.
+  bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi }
 begin
-  used := 0;
-  if want <= 128 then
-  begin
-    want := ((want + 15) div 16) * 16;
-    if want = 0 then want := 16;
-    Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -want));
-    used := 1;
-  end
-  else
-  begin
-    want := ((want + 255) div 256) * 256;
-    if want > XT_FRAME_SLOT_INSNS * 32768 then
-      Error('target xtensa: stack frame of ' + AIntToStr(want)
-            + ' bytes exceeds the ' + AIntToStr(XT_FRAME_SLOT_INSNS * 32768)
-            + ' the prologue reserves (raise XT_FRAME_SLOT_INSNS in symtab.inc)');
-    while want > 0 do
-    begin
-      if want > 32768 then chunk := 32768 else chunk := want;
-      Patch24(patchPos + used * 3,
-              EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -chunk));
-      want := want - chunk;
-      Inc(used);
-    end;
-  end;
-  for i := used to XT_FRAME_SLOT_INSNS - 1 do
-    Patch24(patchPos + i * 3, XT_NOP24);
+  XtensaEmitLitHeader;
+  patchPos := CodeLen;
+  EmitI32(0);                            { frame-size literal, patched below }
+  xtensa_l32r(reg_xtensa_a8, $FFFF);
+  xtensa_sub(reg_xtensa_sp, reg_xtensa_sp, reg_xtensa_a8);
 end;
 
 function EmitProcPrologue: Integer;
 { Returns patch position for sub rsp/esp imm32 }
-var xtFrameSlot: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -10901,9 +10888,7 @@ begin
       XtSpillDepth := XT_OUTARG_REGION;
       XtSpillMax := XtSpillDepth;
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
-      Result := CodeLen;
-      for xtFrameSlot := 1 to XT_FRAME_SLOT_INSNS do
-        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
+      EmitXtensaFrameReserve(Result);
     end
     else
     begin
@@ -10929,9 +10914,7 @@ begin
       xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 12);
       xtensa_s32i(reg_xtensa_a15, reg_xtensa_sp, 8);
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
-      Result := CodeLen;
-      for xtFrameSlot := 1 to XT_FRAME_SLOT_INSNS do
-        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
+      EmitXtensaFrameReserve(Result);
     end;
     Exit;
   end;
@@ -10978,9 +10961,12 @@ var aligned, a64imm, rvLo, rvHi: Integer;
 begin
   aligned := ((size + 15) div 16) * 16;
   { Windowed xtensa keeps sp constant and runs its expression/argument stack in
-    a reserved region below the locals. Round the one-shot frame (locals +
-    region) up to 256 and lower sp with a single ADDMI — ADDI's +-128 immediate
-    cannot reach it, and a too-large ADDI silently truncates. }
+    a reserved region below the locals. The frame is a patched 32-bit LITERAL
+    (EmitXtensaFrameReserve), so this is EXACT: no 256-byte rounding and no
+    immediate to overflow. That matters twice over -- the old ADDMI path
+    silently TRUNCATED a frame over 32 KB here, with no error on this arm at
+    all, and its 256-byte step cost ~11 levels of recursion on a 3584-byte
+    ESP-IDF task stack (bug-a-xtensa-windowed-frame-minimum-256-bytes). }
   if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin
     { Reserve the locals plus what this routine's expression/argument stack
@@ -10994,7 +10980,9 @@ begin
       whose immediate is a multiple of 256 — so small frames use ADDI and pay
       only what they need, and everything else rounds up to ADDMI's step. The
       stack stays 16-byte aligned either way. }
-    PatchXtensaFrameAdjust(patchPos, size + XtSpillMax);
+    aligned := ((size + XtSpillMax + 15) div 16) * 16;
+    if aligned = 0 then aligned := 16;
+    Patch32(patchPos, aligned);
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then
@@ -11016,12 +11004,11 @@ begin
   else if TargetArch = TARGET_XTENSA then
   begin
     { Call0 ABI: the prologue saved a0/a15 and set a15 as a frame pointer; the
-      epilog restores via `mov sp, a15`, so over-reserving the frame is harmless.
-      ADDI's immediate is 8-bit signed (+-128); a larger frame silently wraps.
-      Keep the exact ADDI encoding for small frames, and for anything beyond its
-      reach round up to 256 and lower sp with a single ADDMI (imm8<<8, reaching
-      -32768), mirroring the windowed path. }
-    PatchXtensaFrameAdjust(patchPos, aligned);
+      epilog restores via `mov sp, a15`. The frame is a patched 32-bit literal
+      (EmitXtensaFrameReserve), so there is no immediate to overflow and no
+      rounding: this arm used to refuse anything past 32 KB, which is what
+      `compiler.pas` walked into. }
+    Patch32(patchPos, aligned);
   end
   else if TargetArch = TARGET_RISCV32 then
   begin

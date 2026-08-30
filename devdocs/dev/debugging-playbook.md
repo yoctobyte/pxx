@@ -3160,3 +3160,43 @@ This belongs with the tool-aperture entries above rather than the measurement
 ones: nothing was mismeasured, the instrument reported correctly on what it was
 given, and the input had been corrupted by an edit that looked inert. A comment
 is the one construct you edit while believing it cannot change behaviour.
+
+### `code=` is page-quantized — for a real code size, ask the object file
+
+The compiler's summary line (`ok: out [code=221036B data=... bss=...]`) reports
+the **page-padded** text size. Swept over programs with 1, 2, 4, 8, 16, 32, 64
+and 101 procedures, it moves only in **4096-byte steps** — so it will report a
+delta of **zero** for a change that alters every prologue in the image, and it
+will report **+4096** for one that added 1944 bytes.
+
+Measured 2026-08-30, twice, in opposite directions on the same day: a riscv32
+change was published as "+1.67%, which is 1024 forward jumps x 4 bytes" (the
+arithmetic fitted a rounded number and was a coincidence — the true figure is
++2.14%), and an xtensa change that provably rewrites 161 prologues measured as
+**no change at all**. The second is the dangerous one: a null result from an
+instrument that cannot see the effect looks exactly like a fix that does
+nothing, and the natural next move is to go looking for why the change did not
+take.
+
+The exact instrument, and it costs one command:
+
+```
+pascal26 --emit-obj --target=<t> prog.pas out.o
+readelf -S out.o | awk '$3==".text"{print $7}'      # hex, NOT page-padded
+```
+
+`--emit-obj` is supported for xtensa and riscv32. For the linked executables the
+same padding shows up in `readelf -l`'s `FileSiz` (0x3c000 for a 243060-byte
+text), so that is no better. When neither is available, count the instruction
+pattern you changed straight out of the artifact — that is what settled which
+of the two riscv32 jump forms was firing, and what frankS used independently on
+the same xtensa change (the emitted NOP count moved 243 -> 428 -> 1072 while
+`code=` sat flat at 221036).
+
+**When you have no command at all, the general shape is frankS's: force the
+input somewhere the output MUST move, and check that it does.** Setting the
+reserved-slot count to an absurd 20 finally shifted the number — by exactly 8192
+— and that is what proved the instrument had a floor rather than the change
+having no cost. A measurement that cannot come out different is not a
+measurement. The command above is the reusable part; this is what you do when
+you do not have one.
