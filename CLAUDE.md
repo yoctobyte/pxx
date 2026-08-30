@@ -271,6 +271,13 @@ compilers, whose inequality "proved" a RED published against an untested sha and
 is evidence of nothing. Full ledger:
 `devdocs/dev/coordination-overhead-2026-08-30.md`.
 
+**An 80%-accurate name is worse than a 0%-accurate one**, because the part you
+sample confirms it: the wasm ticket above really *was* mostly grant bookkeeping,
+so a reader who skimmed it was right about most of what was there and wrong about
+the only part that mattered. And a stale imperative can be **obeyed by the tooling
+while false in the world** — the ranker was already skipping that ticket as
+do-not-claim, so nothing looked broken from either end.
+
 **In every case the identifier WAS checked — against something, just not against
 the thing it stood for.** That is why "verify it" is the wrong instruction: each
 of these agents did verify. Ask instead **what would this be if it were false**,

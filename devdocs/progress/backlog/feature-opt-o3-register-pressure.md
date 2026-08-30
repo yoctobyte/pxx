@@ -39,20 +39,26 @@ owner: ""
 > transition has a `claim` in front of it. If you pick this campaign back up
 > after a park, claim it first.
 >
-> **!! DO NOT CLAIM — 2026-08-30, coordinator.** This ticket is in `backlog/` and
-> is being **actively worked**. It was legitimately released from `working/` on
-> 2026-08-29 ("frank-optimize-b4 parked, four of four landed"), and then the
-> campaign **resumed without re-claiming it**: eight commits since 22:33, the last
-> at 02:02. They edit `compiler/ir_codegen.inc`, the hottest shared file in Track A.
+> **SUPERSEDED 2026-08-30 — this block carried the ranker's not-dispatchable marker.** It was
+> written under the file-reservation system, which was cut the same day
+> (`91380f04b`): nothing reserves a file, `working/` is a status hint rather than
+> a lock, and *"do not open `ir_codegen.inc`"* is no longer something anyone can
+> say. It was also, by then, arguing with the release note three lines above it —
+> one block saying the ticket was released and nobody was on it, the other saying
+> it was actively worked, both dated 2026-08-30.
 >
-> So the ranker offers this as the top Track A item to every idle agent, and the
-> lock protocol says nothing, because the lock lives in the folder and the folder
-> says backlog. frankA ran `next --track A`, got aimed here, and caught it only by
-> opening the ticket at HEAD before claiming.
+> **What was true in it, and still is:** an O campaign has been putting commits
+> into `compiler/ir_codegen.inc`, the hottest shared file in Track A, and the
+> board did not say so because the lock lived in the folder and the folder said
+> `backlog`. frankA ran `next --track A`, was aimed straight here, and caught it
+> only by opening the ticket at HEAD.
 >
-> Whoever is on the O campaign: **move this back to `working/`.** Until then this
-> note is the only guard. Anyone else: do not claim it, and do not open
-> `ir_codegen.inc` for register-pressure work.
+> **So this is now information, not a prohibition.** Taking this ticket is fine.
+> Before you edit `ir_codegen.inc` for register-pressure work, say so to whoever
+> is on the O campaign and read the recent history of the file — not because you
+> need permission, but because two people rewriting a register allocator from
+> different ends is one of the few cases git merges cleanly and wrongly. Telling
+> them is not asking them; name what you are touching and proceed.
 
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
