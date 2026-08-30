@@ -294,6 +294,28 @@ Whoever records the corpus figure should state the probe, the sha AND the binary
    command cannot emit `:120`/`:123`/`:135`. Something else produced them and it
    is for the lane that ran it to say what.
 
+**Four explanations eliminated, each with the command that killed it**, so the
+next person narrows instead of restarting. All on HEAD `ea5a8ef96` /
+`6319b892f517`:
+
+| candidate | check | result |
+| --- | --- | --- |
+| the program's `{$mode delphi}` | same probe with the directive removed | still `:135` |
+| the program's mode FLAG | `-Mobjfpc` added | still `:135` |
+| a compiler change between the two runs | `git log d23f52948..ea5a8ef96 -- compiler/` | **0 commits** — the binaries are the same compiler |
+| a different copy of the corpus | 3 copies on this box (`~/pxx`, `~/frankA`, `~/frankB`) | all `sha256 5a3402725ab53181`, byte-identical |
+
+**And the shape of the disagreement points away from the probe.** The other
+lane's run reported `:120`, `:123` AND `:135` — a list. Mine reports `:135` only.
+**Mine is a strict subset**: the same wall, minus two earlier ones. A different
+*probe* would generally produce a different first error, not the same error with
+two extra ones in front of it; a different *binary* — one that reports semantic
+errors mine does not reach or does not emit — produces exactly this. That is a
+weak signal, not a proof, and it is recorded as such.
+
+What is left is an unrecorded flag or a binary that was not the sha its lane
+believed, and only that lane has the shell history. Not chased further from here.
+
 So the only corpus stops with a reproducible invocation attached are the two in
 the table above. **A recorded command that nobody re-executes is not evidence —
 it is a claim with a `$` in front of it**, and that check is free. It is the same
