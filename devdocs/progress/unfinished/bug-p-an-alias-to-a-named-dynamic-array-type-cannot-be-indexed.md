@@ -4,8 +4,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`type TA = array of Integer; TB = TA;` — indexing a TB is `error: this value cannot be indexed`, while indexing a TA is fine. One extra level of naming loses the array-ness. Six-line repro, same file, no generics and no units involved; it is not about TArray, which is only how it was found. SetLength on the alias is accepted, so the type is array enough to resize and not array enough to read."
-status: working
-owner: frankR
+status: unfinished
+owner: 
 ---
 
 # An alias to a named dynamic-array type cannot be indexed
@@ -191,3 +191,48 @@ Reported to the coordinator rather than taken.
 Keep the `x: TA` line, as the ticket says — and add `WriteLn(SizeOf(y))`
 expecting 8, plus a static-array pair. `SizeOf` is the assertion that fails
 *silently* today; the indexing errors are merely the loud symptom.
+
+## PARKED 2026-08-30 (frankR) — DIAGNOSIS IS COMPLETE. DO NOT RE-MEASURE.
+
+Everything above the parking line is measured, on binary `b3c6858bdfbb`. What
+remains is **the write only**, and it is one branch:
+
+1. `pasparser_decl.inc:6154`, the `{ Named simple type alias: PFoo = BaseType }`
+   fallthrough. Before it: if the RHS is a bare identifier and
+   `FindArrayType(CurTok.SVal) >= 0`, copy that `ArrType*` row under the new
+   name, `Inc(ArrTypeCount)`, `Next` — instead of `ParseTypeKind` +
+   `RegisterGeneralAlias`, which files the alias as a scalar of the ELEMENT
+   kind.
+2. `FindArrayType` (`symtab.inc:352`) already exists and already applies the
+   visibility / latest-unit-wins rule. Nothing is needed there.
+3. The ~20-field row copy should be a **helper** shared with the two existing
+   registration sites (`pasparser_decl.inc:5974`, `:6071`), not a third
+   open-coded copy.
+
+**Point 3 is why this is parked rather than written.** A visitor either
+open-codes the copy — creating the third instance of the smell — or refactors
+two sites it does not own. `pasparser_decl.inc` is not this lane's file and its
+owner was mid-refactor. The placement wants the file's owner independently of
+any lock.
+
+Do not re-derive the following; they are settled and each cost a probe:
+
+- it is **every** array, not dynamic ones — `array[0..3] of Integer` fails
+  identically, so does array-of-array, so does a third level;
+- strings and pointers are unaffected **because** they have their own alias
+  carriers (`AliasStrElemTk`, `AliasElemTk`) and arrays have none — that names
+  what the fix must ADD, rather than what it must repair;
+- `SizeOf(y)` is **4**, not 8: the variable is an Integer, not a broken array;
+- **`SetLength` is NOT accepted.** It fails at IR codegen; it only looks
+  accepted in the original repro because the parse-stage indexing errors stop
+  the compile first. There is no resize-vs-read split.
+
+Regression test when written: keep the one-level `x: TA` line, add a
+fixed-size pair, and assert `SizeOf(y) = 8` — that is the assertion that fails
+SILENTLY today; the indexing errors are only the loud symptom.
+
+## Parked 2026-08-30
+
+diagnosis complete, write only; the fix is one branch in pasparser_decl.inc:6154 plus an ArrType row-copy helper that belongs beside the two existing registration sites — that file's owner should write it. Do not re-measure: root cause, exact site and fix sketch are all in the ticket.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
