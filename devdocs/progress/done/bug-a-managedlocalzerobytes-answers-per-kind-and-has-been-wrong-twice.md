@@ -179,4 +179,4 @@ cleanup chain — but it needs a runtime change in `promocore.pas` and a new
 base-kind number, so it is not folded in.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f4bc4cc54.
