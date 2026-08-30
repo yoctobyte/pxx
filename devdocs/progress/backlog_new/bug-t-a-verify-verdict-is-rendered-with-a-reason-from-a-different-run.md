@@ -110,10 +110,20 @@ inference from the open-regression records, not measurement.
   and `git diff --stat 06034addd a6d68191f -- compiler/ lib/ tools/ Makefile` is
   **empty**. Same sources, same binary. That was a claim about a build product,
   never about a git object — worth recording because it was briefly relayed as a
-  category error, and the reproducibility that makes both true is the same
-  property that makes a fixedpoint sha a usable provenance key at all.
+  category error. **The general fact is worth more than either identification: a
+  fixedpoint sha is a good provenance key precisely because it is reproducible,
+  which is exactly why one key can name more than one commit.** A provenance
+  check must therefore compare a sha against *what the requested commit builds*,
+  never against a commit identity.
 - 2026-08-30 frankC: corrected my own body. I had written "no `pin: v398` row in
   `runs-seven.ndjson`" on a peer's report without checking it; the row is there
   at line 249 with `wall: 638.5`. Checked after frank-coordinator flagged it.
   Taking a second-hand negative into a ticket unchecked is the same defect the
   ticket describes, one layer further out.
+- 2026-08-30 frankT closed both gaps at the source. `400fe9ee5`: **no pin verify
+  has ever written a report** — 35 of 40 rows for the life of the mechanism, 26
+  of them RED, while `twatch.py`'s own publish contract promised a full report on
+  RED. `write_report_md` had one call site and the pin path was not it; the five
+  rows that do have a report are coincidences where an ordinary run at the same
+  sha produced one. `c38e53ff8`: the `new_red` literal, above. Both in Track T's
+  lane, neither mine to touch.
