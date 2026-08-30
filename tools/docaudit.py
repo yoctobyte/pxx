@@ -320,10 +320,28 @@ def check_targets(paths, show_all=False):
     RANKING, and it is the whole precision story (frank-optimize-b4, over all of
     compiler/**: 58 mismatches, 2 real, both from the smallest bucket):
 
-      comment SUBSET of code   the widening shape. BOTH real findings were here.
+      comment SUBSET of code   the widening shape. Highest yield; read first.
       partial overlap          possible, needs a read
-      comment SUPERSET of code often an over-broad comment; occasionally real
+      comment SUPERSET of code low yield, NOT empty -- see below
       DISJOINT                 almost always an artefact, NOT a strong signal
+
+    SUPERSET stays in the default output. Measured over compiler/**: 20 read,
+    0 new findings -- but the bucket holds a confirmed one already
+    (bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use:
+    comment names five targets, code tests riscv32). A sample of two real
+    findings both landing in SUBSET says where to START. It does not say where
+    to stop, and treating it as a bound is the same error as calling an
+    enumeration complete because the grep had good recall.
+
+    The benign SUPERSET shape is specific, and it is NOT "the comment
+    over-claims scope" -- it is a comment that names targets for a reason other
+    than gating: a per-target VALUE table (`GLOB_DAT: x86-64=6, aarch64=1025`),
+    a psABI FACT table (`signed on x86-64 and i386, unsigned on aarch64`), a
+    CONTRAST (`instead of x86-64's hand-emitted lock blobs`), or -- the sharpest
+    -- a target named in order to EXCLUDE it (`esp (bare/xtensa/riscv32) is
+    excluded`). By set arithmetic alone, naming a target to exclude it is
+    indistinguishable from over-claiming it. That is not filterable without
+    reading the sentence, and this tool does not try.
 
     Disjointness reads as the loudest hit and is the reliable signature of the
     false positive, which is exactly backwards from how it looks. Its source is
@@ -338,6 +356,15 @@ def check_targets(paths, show_all=False):
     So the window now looks BEHIND as well: a comment whose targets intersect a
     condition just above it is governed by that condition and is not reported.
     That removes the chain artefacts at the root instead of ranking them down.
+
+    VERIFIED to cost no recall, and verified the hard way: a content-keyed diff
+    of the before/after runs showed 9 suppressed, 8 plainly benign and 1 that
+    LOOKED like a real finding lost. It was not -- that comment had been fixed
+    between the two runs -- and the check that settled it was extracting the
+    file at the commit BEFORE the fix and re-running. It still flags, in SUBSET.
+    Worth recording because the first diff was keyed on LINE NUMBER and produced
+    garbage: edits and pulls had moved every line. A tool for finding stale
+    citations was itself verified by a method that had to stop citing lines.
     """
     buckets = {'subset': [], 'partial': [], 'superset': [], 'disjoint': []}
     for path in paths:
