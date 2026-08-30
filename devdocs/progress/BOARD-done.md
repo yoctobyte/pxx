@@ -2251,6 +2251,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-nested-comprehension | N | 60 | feature | nilpy: a comprehension INSIDE another comprehension's expression | — |
 | feature-nilpy-nested-defs | N | 70 | feature | NilPy: nested `def` | — |
 | feature-nilpy-none-variant | N | 45 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
+| feature-nilpy-object-reclamation | A | 55 | feature | RESOLVED 2026-08-31: uforth doloop RSS is 16.7 MB against CPython's 24.8 MB, from 595 MB — the gate asked for <40 MB and near-CPython. Two fixes closed the last of it: the instance finalizer hook was installed only by pylib's CONTAINER constructors (410 MB -> 980 kB), and a construction stored into a VARIANT was retained twice on all three backends with an inline object arm (22932 kB -> 1044 kB). The old NEXT list is stale: items 2, 3 and 5 were already done and item 1's three named symptoms measure flat. Residual tail is three separate tickets, named in the RESOLVED section. | — |
 | feature-nilpy-operators | N | 55 | feature | NilPy: bitwise operators + augmented assignment | — |
 | feature-nilpy-optional-return-annotation | N | 55 | feature | NilPy: `-> ret` is MANDATORY on every def; Python makes it optional | — |
 | feature-nilpy-optional-string-param-accepts-none | N | 50 | feature | nilpy: passing None to an Optional[str] / str\|None PARAMETER does not match the overload | — |

@@ -3,8 +3,8 @@ track: A
 prio: 55
 type: feature
 owner: frankS
-status: working
-summary: "NilPy object lifetime. Slices 1-4 landed 2026-07-23; 2026-08-31 added the two that made the rest look undone — the instance finalizer hook was installed only by pylib's CONTAINER constructors (410 MB -> 980 kB), and a construction stored into a VARIANT was retained twice on all three backends with an inline object arm (22932 kB -> 1044 kB). NEXT items 3 and 5 are DONE and were already done; item 4's aarch64 half is unreachable until NilPy builds for aarch64. Remaining: literal-chain ownership, pyeval per-exec leaks."
+status: done
+summary: "RESOLVED 2026-08-31: uforth doloop RSS is 16.7 MB against CPython's 24.8 MB, from 595 MB — the gate asked for <40 MB and near-CPython. Two fixes closed the last of it: the instance finalizer hook was installed only by pylib's CONTAINER constructors (410 MB -> 980 kB), and a construction stored into a VARIANT was retained twice on all three backends with an inline object arm (22932 kB -> 1044 kB). The old NEXT list is stale: items 2, 3 and 5 were already done and item 1's three named symptoms measure flat. Residual tail is three separate tickets, named in the RESOLVED section."
 ---
 
 # NilPy object reclamation — dict/list/instance/bound-method lifetime
@@ -188,6 +188,56 @@ NEXT (ranked):
    tyClass release arm (leak-only asymmetry today).
 5. `d = None` (RHS non-class) rebind leaks the old binding's ref.
 
+## RESOLVED 2026-08-31 (frankS) — the driver is met and exceeded, measured
+
+**`make bench-uforth` at `041204c7a`, host plexus, uforth `07ffdb1`:**
+
+| | wall | max RSS |
+| --- | --- | --- |
+| microbench-doloop, cpython | 13068.7 ms | **24.8 MB** |
+| microbench-doloop, **pxx** | 19328.2 ms | **16.7 MB** |
+
+The gate was *"uforth doloop RSS bounded and near-CPython"* against a starting
+point of **595 MB** and a stated target of **<40 MB**. It is 16.7 MB, which is
+**below CPython's own 24.8 MB**, and flat across prelim and core too. 595 -> 413
+-> 16.7.
+
+Wall time is 0.68x CPython on that row and is NOT this ticket — it belongs to
+`bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython`. Saying so
+explicitly because a reader who wants this ticket to stay open will reach for
+that number.
+
+**What was verified, named exactly:** `make compiler/pascal26` byte-identical
+self-host at every step; `gate.sh quick` GREEN three times; nine named .npy
+canaries against the CPython oracle; the two new tests; an object-into-variant
+Pascal probe RUN on i386, aarch64, arm32 and riscv32; `bench-uforth`.
+**NOT verified here:** `test-nilpy` in full, which is full-tier and Track T's
+sweep, not this lane's gate (CLAUDE.md's per-fix loop supersedes this ticket's
+own `Gate:` line).
+
+**The residual tail, all of it, now has somewhere to live** — none of it is
+carried by this ticket any more:
+
+- `bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign`
+  [A p55] — found underneath these fixes: both hold under `--threadsafe`, but
+  `PXX_TS_HARDLOCK` gates `PXXClassFinalize`'s managed-field pass off entirely,
+  and plain Pascal goes 392 kB -> 398336 kB. Pascal-wide, not NilPy.
+- `bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together`
+  [A p35] — item 4's epilogue half, plus the coupling that makes the obvious
+  first move a UAF.
+- `bug-a-aarch64-has-no-stack-argument-passing-for-five-of-six-call-kinds`
+  [A p55] — what makes item 4's aarch64 half untestable. frankA is taking it.
+- Item 1 (literal-chain ownership) is **not carried forward as a ticket**: its
+  three named symptoms — arg-position dict/list literals, the genexp-join
+  wrapper, `exec(src, {...})` — all measure FLAT at HEAD over 10x the
+  iterations, against `pinned` which leaks all three (16728 kB / 24536 kB at
+  200k). Attributed by control: they were already flat with `ca8153b6c`'s arm
+  reverted, so an earlier commit closed them, not tonight's. File a new ticket
+  if a leaking shape is found; do not reopen this one on the strength of the
+  prose above, which describes 2026-07-22.
+- pyeval-side pinning: `bug-n-pyeval-per-exec-leaks` is already in `done/`, and
+  its `exec` probe measures flat here.
+
 ## Log
 - 2026-08-02 — moved working/ -> unfinished/ by `claude@xeon` during T-queue
   triage. Last substantive commit 2026-07-23 (`485c25c21`, doloop RSS 369 MB
@@ -195,3 +245,4 @@ NEXT (ranked):
   no agent on it. The remaining numbered items at the end of this ticket are
   real and unstarted. Owner `fable-a-n` left in place: this frees the lock, it
   does not reassign the work — re-claim to resume.
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

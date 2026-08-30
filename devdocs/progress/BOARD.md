@@ -8,13 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-no-cross-target-can-build-the-compiler-itself | A | 60 | bug | PARTLY FIXED 2026-08-30. i386, aarch64 and arm32 now BUILD the compiler, and the i386 and aarch64 binaries RUN under qemu and compile a working program -- their shared blocker was `LoadFile` with an array-element destination (cpreproc.inc), fixed by normalising in the frontend rather than teaching five backends a slot-address shape. TWO TARGETS REMAIN, with DIFFERENT causes, neither related to the first: riscv32 `jal displacement 2197196 is outside the encodable range` (reach) and xtensa `stack frame too large (> 32 KB) for a single ADDMI` (frame size) -- the latter is a THIRD defect this ticket originally missed. And the title claim was too strong: wasm32 built the compiler all along and was never measured. arm32 builds but its cross-built compiler SEGFAULTS, which is a fourth, separate defect. | — |
 | feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64. | — |
-| feature-nilpy-object-reclamation | A | 55 | feature | NilPy object lifetime. Slices 1-4 landed 2026-07-23; 2026-08-31 added the two that made the rest look undone — the instance finalizer hook was installed only by pylib's CONTAINER constructors (410 MB -> 980 kB), and a construction stored into a VARIANT was retained twice on all three backends with an inline object arm (22932 kB -> 1044 kB). NEXT items 3 and 5 are DONE and were already done; item 4's aarch64 half is unreachable until NilPy builds for aarch64. Remaining: literal-chain ownership, pyeval per-exec leaks. | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current` near TOpenAddressing<TKey,TValue,THashFactory>, which is the LIVE EDGE and is not yet reduced. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit. | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 
@@ -738,9 +737,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2901)
+## done (2902)
 
-2901 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2902 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -1088,6 +1087,7 @@ _none_
 - [p 35] [A] feature-c-package-namespace-decision
 - [p 35] [E] feature-demo-portable-userland
 - [p 35] [N] feature-nilpy-counter-api-beyond-the-constructor
+- [p 35] [A] feature-nilpy-cycle-collector
 - [p 35] [N] feature-nilpy-walrus-operator
 - [p 35] [P] feature-pascal-management-operators-nested-and-array
 - [p 35] [T] feature-t-lint-token-text-compared-against-a-keyword
@@ -1269,7 +1269,6 @@ _none_
 - **1** — decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - **1** — decide-tobject-classinfo-blob-or-refusal
 - **1** — decide-which-gtk-a-bare-gtk-gtk-h-means
-- **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac
 - **1** — feature-pal-esp-posix-fd-semantics
