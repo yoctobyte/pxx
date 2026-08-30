@@ -136,4 +136,4 @@ three-line deletion, and it is filed rather than shrugged at for precisely the
 reason this ticket exists.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 06b9617d9.
