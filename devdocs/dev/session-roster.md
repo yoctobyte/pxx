@@ -23262,3 +23262,64 @@ sign-extension elimination. **And it flagged in its own ticket that this is a la
 INSTRUCTION change for a small TIME change**, because that is the exact trap the
 ticket already fell into once: **an instruction count is a very good way to FIND a
 candidate and a very bad way to PRICE one.**
+
+## If raising a limit moves the failure to the NEW limit, the limit was never the constraint
+
+frankC, `1672aeaad` (verified on origin; its local `3ffc8f3bc` was rewritten by the
+rebase and it **caught that itself before sending** — first clean catch of the night
+after three misses).
+
+Raising the C preprocessor's include-nesting cap from **17 to 128** moved the error
+from level 17 to **level 129**. The depth was *tracking the cap*: **runaway recursion
+wearing a nesting error's clothes.**
+
+**Real cause:** `CPSearchInclude` searched the including file's own directory for
+**every** include, quoted or angled. glibc ships one-line forwarders —
+`/usr/include/sys/signal.h` is literally `#include <signal.h>` (confirmed here; it is
+a symlink into the triple directory) — so an angled `<signal.h>` from inside
+`/usr/include/sys/` resolved to itself. **C 6.10.2 gives the including file's
+directory to `"..."` only.** busybox's `libbb.h` now compiles and all 145 TUs are
+reachable; `feature-c-corpus-busybox-applet` is `blocked-by: []` at p60, ordinary
+compile-the-TU-set work.
+
+**Relayed to frankA immediately**, since it is raising `MAX_TEMPLATE_PARAMS` right
+now — and the discrimination has a worked precedent two lines from its own constant:
+`MAX_NESTED_SPECS` went 24 → 96 with the comment *"Not a runaway; raising it moved
+the frontier ~1200 lines further into the unit."* **Someone already ran this exact
+test and recorded which side it fell on.**
+
+## When you make an unconditional step CONDITIONAL, ask what else that step was doing
+
+Same fix, and the sharper of the two. frankC's guard was **correct** and still broke
+`<endian.h>`. Step 1 of the include search had been unconditional, so **its load
+doubled as the reset** — every later loop is `while length = 0`. Guarding step 1 left
+the slot holding the **previous** search's file, all three loops became no-ops, and
+the new name silently resolved to the old file's text. `__BYTE_ORDER` went undefined;
+busybox failed with *"Can't determine endianness"*, **three files from the cause.**
+
+**A reset hidden in a side effect is invisible at the call site**, and the failure
+surfaces somewhere else entirely — the expensive profile again: no crash, a plausible
+wrong value, far from the cause.
+
+## The tool was already there — and the control was clean for ONE host layout
+
+**Two things about the busybox report worth keeping.**
+
+The ticket said *"start by printing what the host fallback resolves it to."*
+`--debug` **already** printed `C preprocessor: include <path>` at the resolution site.
+One run: **140 consecutive lines of the same path.** No probe written, nothing
+hand-patched into the compiler. The playbook's claim — that the failure mode is not
+reaching for the tools — held exactly.
+
+**And two claims in that report are host-layout artifacts**, both contradicted on
+this box: *"`/usr/include/sys/` does not exist here"* (it does; `sys/param.h` is a
+symlink into the triple directory, and the runaway happens anyway, so the missing
+directory was never the mechanism), and *"with `-I/usr/include/x86_64-linux-gnu` the
+identical header compiles fine"* (it **also fails** — that directory has its own
+forwarder).
+
+> **The control that looked clean was clean only for one host layout.**
+
+Same family as every green tonight: a fact about the *experiment* read as a fact
+about the *code*. It is why the regression test is a **self-contained fixture**
+rather than `<sys/param.h>` itself — the portable form of the lesson.
