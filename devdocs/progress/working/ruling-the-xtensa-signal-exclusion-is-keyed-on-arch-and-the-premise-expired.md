@@ -265,3 +265,85 @@ which test carries the property.
 `ir_codegen_xtensa.inc` (the 156-line port target) is mine and clear.
 `ir_codegen.inc` is frankA's. Per the coordinator's standing instruction I have
 not taken it on my own read; sequencing request sent.
+
+## Addendum 4 (frankS, 2026-08-30): the port's two biggest unknowns are MEASURED, and both came back favourable
+
+Coordinator dispatched the `ir_codegen_xtensa.inc` port body (the file is mine and
+clear; `ir_codegen.inc` stays frankA's and is untouched). Before writing 156 lines
+of hand-encoded stub, two facts the port rests on and which nothing in the tree
+answered. Both measured under `qemu-xtensa`, compiler binary **sha256 2f88481adc6b**,
+self-host fixedpoint verified (`converged after 2 round(s)`) at **HEAD 6e20c989f**.
+
+### 1. The ABI fork does not exist — Call0 is the DEFAULT, measured
+
+`compiler.pas:862` initialises `XtensaABI := XTENSA_ABI_CALL0`; `:1142`/`:1147` are
+the `--xtensa-abi=` overrides. So hosted xtensa is **Call0 unless asked otherwise**,
+and a Call0-only signal runtime serves the default path rather than a corner of it.
+
+That settles what looked like a design fork by measurement: the runtime follows
+`TargetHasProcCleanupFrame`'s existing shape — **Call0 gets it, windowed keeps
+refusing** — and the windowed question stays the separate S ticket it already is.
+No Track U escalation needed.
+
+### 2. The kernel DOES enter a plain Call0 Pascal proc as a handler — end to end
+
+This was the real risk: xtensa Linux userland is conventionally windowed, and the
+kernel's `setup_frame` is written for it. If a Call0 proc could not be entered, the
+whole port would have needed a windowed spill preamble and the ticket would have
+been a campaign rather than a session.
+
+Probe (`scratchpad/xhandler.pas`, no compiler change): build a `struct sigaction` by
+hand, install it through `__pxxrawsyscall(226, ...)`, fault by dereferencing nil, and
+have the handler `Halt(7)` rather than return — so the ENTRY question is answered
+without depending on the trampoline/restorer answer as well.
+
+```
+sigaction=0
+faulting
+HANDLER ENTERED
+exit=7
+```
+
+Three facts fall out of that one run:
+
+- **`rt_sigaction` on xtensa is 226**, confirmed by a working install and not merely
+  by an errno signature. This corroborates the ruling's own step 2, which asserted
+  226 — it was right, and is now measured rather than asserted.
+- **The `struct sigaction` layout is riscv/arm64-shaped**: `{handler(0), flags(4),
+  mask(8,12)}` with `sigsetsize = 8` and **no SA_RESTORER slot**. The riscv32 model's
+  contract transfers; i386/arm32's does not.
+- **Call0 entry works.** No windowed preamble, no register-spill dance.
+
+### 3. How 226 was pinned, since the obvious probe is ambiguous
+
+Worth recording because the first answer was wrong-looking and the second
+discriminator is the reusable part. Scanning 0..459 for the sigsetsize signature
+(`size=8 -> 0`, `size=7 -> -EINVAL`) returns **two** numbers, 226 and 227:
+`rt_sigprocmask` validates a sigsetsize too.
+
+The separator is the FIRST argument. With a nil `set`, `rt_sigprocmask` ignores
+`how` entirely, while `rt_sigaction` always validates the signal number:
+
+| n | `n(100, nil, buf, 8)` | verdict |
+| --- | --- | --- |
+| 226 | `-22` (EINVAL) | **rt_sigaction** — it validated the signal |
+| 227 | `0` | rt_sigprocmask — `how=100` ignored under a nil set |
+
+A nil `act` throughout means the scan cannot arm a handler by accident.
+
+### 4. Still open: three numbers, and the ucontext offsets
+
+`getpid`, `kill` and `sigaltstack` are not yet pinned — xtensa's table is its own
+(`write=13`, not the generic 64; the tree knows only read/write/close/openat/fchmod)
+and a resumable scan is still walking. `sigaltstack` matters most: it is half of the
+stack-overflow-SIGSEGV property that
+`bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack` exists for,
+and SA_ONSTACK without it is inert.
+
+The `ir.inc` ucontext offsets (addendum 3) remain unmeasured, and the circularity
+flagged there is now **partly broken**: a handler can be entered without any of this
+ticket's runtime existing, so a probe CAN read a ucontext before
+`EmitSignalRuntimeXtensa` lands. What it still needs is a few instructions to park
+the kernel's `a4` where Pascal can read it — far less than the runtime, and the
+altstack-scan trick (dump a known buffer and match the sentinel) may avoid even that.
+Not yet attempted; recorded so the next session does not re-derive it.
