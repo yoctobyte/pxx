@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:26 blocked:8 backlog:351 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2739 rejected:56`
+`working:4 unfinished:26 blocked:8 backlog:354 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2739 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -54,7 +54,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 372, ranked
+## Ready — top 30 of 375, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -63,6 +63,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp
 - `[p 70] [U]` decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
+- `[p 70] [P]` regression-test-asm-test-asm-emit-x64
+- `[p 70] [P]` regression-test-asm-test-x64enc
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-max-min-iterables
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-in-a-variable
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none
@@ -84,7 +86,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [A+S]` bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards
-- `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
-- `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 
-_342 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_345 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
