@@ -78,22 +78,41 @@ def main():
     wakeup = next((g for g in GRID if g >= truth), None)
     print("  true duration ~%.1f ms; next poll wakeup at %.1f ms" % (truth, wakeup))
 
-    # This used to assert `max(old) - min(old) < 3.0` — a SPREAD, which measures
-    # the machine and not the code. Caught red on 2026-08-19 at load average 14
-    # (the watcher running a full tier on the same box): samples came back
-    # [117.4, 166.1, 115.8, 116.0, 116.0], one scheduling stall in five, and the
-    # guard failed while the claim it names was still true — min(old) was 2.3 ms
-    # from the grid point, exactly as the bug predicts.
+    # TWICE this guard measured the machine instead of the code, and the second
+    # attempt failed on a stated invariant that is not true. Worth the space,
+    # because the correction is the same one both times and it is not "widen
+    # the tolerance".
     #
-    # The grid claim does not need a spread. A stall can only push a sample to a
-    # LATER poll wakeup, never off the schedule, so "most samples sit on a grid
-    # point" is the same statement made about the code. A continuous clock puts
-    # none of them there (the new path scores 0/5), so it still discriminates.
-    on_grid = sum(1 for v in old if near_grid(v, 4.0))
-    check("the old path snaps to ONE poll wakeup, not the duration",
-          on_grid >= 4 and abs(min(old) - wakeup) < 4.0,
-          "%d/5 on the grid; min %.1f is %+.1f from %.1f"
-          % (on_grid, min(old), min(old) - wakeup, wakeup))
+    # v1 asserted `max(old) - min(old) < 3.0` -- a SPREAD, which is a property
+    # of the box. Red on 2026-08-19 at load average 14.
+    #
+    # v2 replaced it with a COUNT, `on_grid >= 4`, on this reasoning: "a stall
+    # can only push a sample to a LATER poll wakeup, never off the schedule."
+    # That is FALSE, and the failure is the sentence, not the threshold. The
+    # stall does not have to land in the child or between wakeups -- it lands
+    # in THIS process, between the poll wakeup and the clock read that follows
+    # it, and that delay is not quantized by anything. Measured 2026-08-30 at
+    # load ~9.5 on a box running eight agents:
+    #
+    #     old [169.4, 119.0, 115.8, 119.1, 117.1]   -> 2/5 within 4 ms of a grid point
+    #
+    # min(old) was 115.8, i.e. +2.3 from 113.5: the claim the guard NAMES was
+    # true, and the guard said FAIL. A count of contaminated samples is a
+    # measurement of contamination.
+    #
+    # v3, which is what is below: scheduling noise is ONE-SIDED and ADDITIVE --
+    # it can only make a sample later, never earlier -- so the MINIMUM over
+    # samples is the least-contaminated estimate of each path's real behaviour,
+    # and it is the only statistic here that does not get worse as the box gets
+    # busier. More samples improve a minimum; they degrade a count and a spread.
+    # So both halves are stated about minima, and the pair is what
+    # discriminates: min(old) sits ON the grid, min(new) is 8 ms+ below it. A
+    # continuous clock cannot satisfy the first (TARGET_MS is chosen to sit
+    # between 63.5 and 113.5) and a grid cannot satisfy the second.
+    check("the old path snaps to a poll wakeup, not the duration",
+          near_grid(min(old), 4.0) and abs(min(old) - wakeup) < 4.0,
+          "min %.1f is %+.1f from %.1f (all: %s)"
+          % (min(old), min(old) - wakeup, wakeup, [round(v, 1) for v in old]))
     check("the old path overstates the truth by most of a grid step",
           min(old) - truth > 8.0, round(min(old) - truth, 1))
     check("the new path is not pinned to that wakeup",
