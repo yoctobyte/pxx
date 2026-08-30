@@ -6209,40 +6209,18 @@ begin
   Result := blk;
 end;
 
-function CTokIsPastCSource: Boolean;
-{ Has the parser walked out of the C token stream and into the PASCAL units
-  appended after it?
-
-  There is ONE shared token array. A C program's tokens are lexed first, its
-  tkEOF is then DELETED (clexer.inc's CLexAppend does `Dec(TokCount)` when
-  MainProgramTokCount = TOK_UNBOUNDED), and the pulled units are appended in its
-  place so pass 1/2 walk straight into the crtl prototypes. That is deliberate
-  and it is what makes the pull work -- but it also leaves an UNTERMINATED C
-  construct with no EOF to stop at. A `main` whose body opens and never closes
-  reported `expected C expression`, `in: ./compiler/builtin/builtinheap.pas`
-  and a near: window reading `unit builtinheap`: the parser had reached token 9,
-  which really IS builtinheap's first token, so every part of that diagnostic was
-  correct about a place the user has never seen.
-
-  The test is the PASCAL SOURCE RANGE, not a token index. CLexAppend plants
-  PasMarkTokFile(unitStart, '') over every appended C region for exactly this
-  reason, so an empty answer means "still C" for the user's text AND for the
-  pulled crtl modules, while an appended Pascal unit carries its real path. The
-  table is populated in every build, not only under -g. }
-begin
-  Result := PasSrcOfTok(TokPos - 1) <> '';
-end;
-
 function CLastCSourceLine: Integer;
-{ The line of the last token that was still C -- the end of the user's file, for
-  a diagnostic raised once the cursor is past it. CurTok.Line would be a line of
-  builtinheap.pas, and that number is a parsed interface: the IDE keys
-  jump-to-error off it (see WriteDiagSourceFile's note). }
+{ The line of the last token that carried source -- the end of the user's file,
+  for a diagnostic raised at EOF. Not CurTok.Line: the cursor is ON the tkEOF
+  token, whose Line is one PAST the last line of the file, so the error would
+  name a line the user cannot open. That number is a parsed interface -- the IDE
+  keys jump-to-error off it (see WriteDiagSourceFile's note) -- so being one out
+  is not cosmetic. }
 var t: Integer;
 begin
   Result := 0;
   t := TokPos - 1;
-  while (t > 0) and (PasSrcOfTok(t) <> '') do Dec(t);
+  while (t > 0) and (Tokens[t].Kind = tkEOF) do Dec(t);
   if t >= 0 then Result := Tokens[t].Line;
 end;
 
@@ -6267,15 +6245,27 @@ function CBlockContinues: Boolean;
 { The loop condition for every braced list in the C parser: struct and enum
   members, initializers, statement blocks, asm sections. Was written out
   fourteen times as `(CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF)`, and all
-  fourteen shared the same hole -- the C stream's tkEOF is deleted when units are
-  appended, so `tkEOF` is a test that cannot fire until the Pascal RTL has been
-  parsed as C. An unterminated struct whose member list never closes consumed
-  RTL and then failed with `main function not found` at line 1313 of
-  platform_backend.pas. Fourteen copies of a condition is fourteen chances to
-  fix one of them; this is the one place. }
+  fourteen were wrong in the same two ways.
+
+  The second term did nothing: the C stream's tkEOF used to be DELETED when
+  units were appended, so `tkEOF` could not fire until the whole Pascal RTL had
+  been parsed as C. That is fixed at the source now -- CLexAll sets
+  MainProgramTokCount, so the EOF survives -- and the term finally means
+  something.
+
+  And what it should mean is not "stop". A braced list that reaches END OF FILE
+  is UNTERMINATED, always: no C construct is well-formed with an open brace and
+  no closing one. Returning False there just hands the raw Expect(tkEnd) a token
+  it cannot name -- `Expected: <close-brace>, but got:  (Kind: 0)`, which is what
+  this printed for one build. So EOF refuses, and only a close brace ends the
+  loop.
+
+  (Braces are spelled out in this comment on purpose: pxx and FPC both NEST
+  comments, so a literal one inside the text terminates it early. Three builds
+  paid for that tonight.) }
 begin
-  if CTokIsPastCSource then CRefuseUnterminated;
-  Result := (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF);
+  if CurTok.Kind = tkEOF then CRefuseUnterminated;
+  Result := CurTok.Kind <> tkEnd;
 end;
 
 function ParseCStatementAST: Integer;
@@ -6283,19 +6273,7 @@ var node, exprNode, seq, seq2, blk: Integer;
     asmSections, asmDepth: Integer; asmEmpty: Boolean;   { GCC inline asm }
 begin
   Result := -1;
-  if CurTok.Kind = tkEOF then Exit;
-  { The C text ended without closing this construct, and the next token belongs
-    to an appended Pascal unit -- see CTokIsPastCSource. Raised HERE, at the one
-    place every statement context funnels through, rather than in the fourteen
-    `while CurTok.Kind <> tkEnd` loops that would each need their own copy. It
-    must ERROR and not Exit: returning -1 without consuming would spin those
-    loops forever, since the kind is not tkEOF. ErrorAt, so the line is the
-    user's last C line and the `in:`/`near:` context -- both of which would
-    describe Pascal from here -- is suppressed. }
-  if CTokIsPastCSource then
-  begin
-    CRefuseUnterminated;
-  end;
+  if CurTok.Kind = tkEOF then Exit;   { the enclosing CBlockContinues refuses it }
 
   { empty statement }
   if CurTok.Kind = tkSemicolon then
@@ -10120,7 +10098,17 @@ begin
   CWarnImplicitSystemImports;
 
   mainIdx := FindProc('main');
-  if mainIdx < 0 then Error('main function not found');
+  if mainIdx < 0 then
+  begin
+    { ErrorAt: this runs AFTER both passes, with the cursor sitting past every
+      appended unit, so plain Error would print a `near:` window of Pascal RTL
+      source and an `in:` naming a builtin -- for a C program that simply has no
+      main. Same reasoning as CRefuseUnterminated: a diagnostic raised once the
+      parser is out of the C region must not read its context from where the
+      parser happens to be. }
+    ErrorIdent := '';
+    ErrorAt(CLastCSourceLine, 'main function not found');
+  end;
   { Patch the entry stub's call-to-main with main's body address. }
   CPatchStubCall(callPatch, Procs[mainIdx].BodyAddr);
 
@@ -11415,6 +11403,11 @@ end;
 { Consume a balanced brace-delimited block. CurTok must be at the opening
   tkBegin; on return CurTok is just past the matching closing brace. }
 procedure SkipBraceBlock;
+{ Skip a braced body without parsing it (an opaque struct, a duplicate tag, a
+  function body in pass 1). Reaching EOF with depth still open means the body
+  never closed -- the same refusal every braced list makes, and the reason an
+  unterminated `struct S` used to consume the appended RTL and then fail with
+  `main function not found` pointing at a Pascal line. }
 var depth: Integer;
 begin
   depth := 0;
@@ -11422,6 +11415,7 @@ begin
     if CurTok.Kind = tkBegin then Inc(depth)
     else if CurTok.Kind = tkEnd then Dec(depth);
     Next;
+    if (CurTok.Kind = tkEOF) and (depth > 0) then CRefuseUnterminated;
   until (depth = 0) or (CurTok.Kind = tkEOF);
 end;
 

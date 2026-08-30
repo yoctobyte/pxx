@@ -5,7 +5,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "The statement half of bug-c-an-unterminated-construct-parses-past-eof is fixed; the DECLARATION half is not. An unterminated `struct`/`enum`/initializer still swallows the appended Pascal RTL and fails with `main function not found` at line 1313 of platform_backend.pas."
-status: backlog
+status: done
+owner: frankC
 ---
 
 # An unterminated C declaration still parses the appended Pascal RTL
@@ -167,3 +168,73 @@ That design planted a sentinel and shifted every token index, which would have
 touched `CModRange*`, `PasSrcRange*` and `DbgRange*` through `AdjustSrcRanges`.
 None of that is needed: **the sentinel already exists and is being deleted.**
 The work is to stop deleting it, then remove what grew around its absence.
+
+## Fixed at the root: the C region now HAS an end. frankC, 2026-08-30
+
+**One line, and it is not in `compiler.pas`.** `CLexAll` (`clexer.inc`, Track C's
+own file, one caller) now ends with `MainProgramTokCount := TokCount;`. Both
+appenders delete a trailing `tkEOF` only while that global is still
+`TOK_UNBOUNDED`, so saying where the C program ends is what keeps its EOF alive.
+The `compiler.pas` grant (`grant-compiler-pas-c-branch-tok-unbounded-to-frankc`)
+was **not needed and not used** — the lexer is a better place for it than the
+driver anyway, because the lexer is what knows it has finished the main source.
+
+| shape | `pinned` 53800fbeb0b6 | now |
+| --- | --- | --- |
+| `struct S { int a;` | `1313: main function not found` (platform_backend.pas) | `1: unterminated C construct` |
+| `enum E { A, B` | same | `1: unterminated C construct` |
+| `int main(void) { return 1;` | `2: expected C expression` + `in: builtinheap.pas` | `1: unterminated C construct` |
+| a C program with **no main at all** | `1313: main function not found` + a `near:` of Pascal RTL | `1: main function not found` |
+
+**No C diagnostic quotes Pascal any more**, which is the property the tests
+assert directly (`grep -qi 'builtinheap\|platform_backend\|\.pas'` must NOT
+match).
+
+### Both guards deleted, as predicted
+
+`CTokIsPastCSource` is **gone** — the boundary is a real token again, so a
+source-range lookup is not needed to find it. `ParseCStatementAST`'s entry guard
+is gone; its plain `if CurTok.Kind = tkEOF then Exit` works again because the
+enclosing loop now refuses. What remains is one line in `CBlockContinues`:
+
+> **A braced list that reaches end of file is UNTERMINATED, always.** No C
+> construct is well-formed with an open brace and no closing one, so `tkEOF`
+> there is not "stop", it is "refuse". Returning False handed the raw
+> `Expect(tkEnd)` a token it cannot name — `Expected: ..., but got:  (Kind: 0)`,
+> which is what one intermediate build printed.
+
+Same one-line refusal added to `SkipBraceBlock` (depth still open at EOF) and to
+the missing-main error, which ran *after* both passes with the cursor past every
+appended unit and so read its `in:`/`near:` context from the RTL.
+
+### An off-by-one the fix itself created, and caught
+
+With a real `tkEOF` the cursor sits **on** it, and its `Line` is one past the
+last line of the file — so every unterminated-construct error moved from line 1
+to line 2. `CLastCSourceLine` now walks back over `tkEOF` tokens. That number is
+a parsed interface (the IDE keys jump-to-error off it), so one out is not
+cosmetic. Caught because the two `cunterm` rows assert the exact line.
+
+### Two residual defects, and neither is this one
+
+Filed separately rather than stretched into this ticket:
+
+1. **`struct S { int a;` followed by `int main(void) { ... }`** is *not*
+   unterminated: `main`'s closing brace closes the STRUCT, and `main` is
+   swallowed as a member. gcc: `expected ':', ',', ';', '}' or '__attribute__'
+   before '{' token`. A member declarator followed by a brace should be an
+   error. → [[bug-c-a-function-definition-after-an-unclosed-struct-is-eaten-as-a-member]]
+2. **`int a[] = { 1, 2` alone** reports `main function not found` (true — there
+   is no main) rather than naming the unclosed initializer. The initializer
+   walkers do stop at EOF; they just do not complain.
+   → [[bug-c-an-unclosed-initializer-list-reports-the-next-error-instead-of-itself]]
+
+### Gate
+
+Self-host converged, 1 round, `231433050493`. forwardlint clean of C-lane
+failures. 12 C corpus programs compile. Five `test-core` rows, **all five real
+before/afters** against `pinned`: `cunterm`, `cunterm_pull`, `cunterm_struct`,
+`cunterm_enum`, `cnomain`.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

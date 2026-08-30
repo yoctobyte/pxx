@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (370)
+## backlog (371)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -118,7 +118,8 @@ _none_
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
 | bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 40 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 50 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
-| bug-c-an-unterminated-declaration-still-parses-the-appended-pascal-rtl | C | 50 | bug | The statement half of bug-c-an-unterminated-construct-parses-past-eof is fixed; the DECLARATION half is not. An unterminated `struct`/`enum`/initializer still swallows the appended Pascal RTL and fails with `main function not found` at line 1313 of platform_backend.pas. | — |
+| bug-c-a-function-definition-after-an-unclosed-struct-is-eaten-as-a-member | C | 35 | bug | `struct S { int a;` followed by a function definition is not detected as unterminated: the function's closing brace closes the STRUCT, the function is swallowed as a member, and the program fails with `main function not found`. gcc errors at the `{` that opens the body. | — |
+| bug-c-an-unclosed-initializer-list-reports-the-next-error-instead-of-itself | C | 30 | bug | `int a[] = { 1, 2` with no closing brace reports `main function not found` — true, but not the error. The initializer walkers stop at EOF correctly; they simply do not say the list never closed, so the user is told about the second consequence. | — |
 | bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
@@ -684,9 +685,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2769)
+## done (2770)
 
-2769 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2770 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -860,7 +861,6 @@ _none_
 - [p 50] [A] bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
 - [p 50] [A+S] bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength
-- [p 50] [C] bug-c-an-unterminated-declaration-still-parses-the-appended-pascal-rtl
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
@@ -985,6 +985,7 @@ _none_
 - [p 35] [A] bug-a-help-does-not-advertise-flags-the-compiler-accepts
 - [p 35] [A] bug-a-pxx-home-is-advertised-but-not-honoured
 - [p 35] [A] bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one
+- [p 35] [C] bug-c-a-function-definition-after-an-unclosed-struct-is-eaten-as-a-member
 - [p 35] [D] bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep
 - [p 35] [N] bug-n-pypal-ppoll-passes-a-64-bit-timespec-on-32-bit-targets
 - [p 35] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
@@ -1021,6 +1022,7 @@ _none_
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
 - [p 30] [A] bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code
 - [p 30] [A] bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc
+- [p 30] [C] bug-c-an-unclosed-initializer-list-reports-the-next-error-instead-of-itself
 - [p 30] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
 - [p 30] [N] bug-n-property-works-as-a-decorator-but-is-not-a-builtin-name
 - [p 30] [N] bug-n-pypal-arm32-getdents64-is-unfilled

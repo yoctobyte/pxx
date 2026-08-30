@@ -6517,6 +6517,33 @@ test-core: $(COMPILER)
 	 echo "$$out" | grep -q '^pascal26:2: error: unterminated C construct' \
 	  || { echo 'cunterm_pull: FAIL - expected the error on C source line 2, after the crtl pull'; echo "$$out"; exit 1; }; \
 	 echo 'ok: cunterm_pull stops at the end of the C text after a crtl pull'
+	# ...and the DECLARATION side, which used to consume the appended Pascal RTL
+	# and fail with `main function not found` at platform_backend.pas:1313. Both
+	# rows are real before/afters. The cause was not fourteen loops: the C
+	# stream's tkEOF was DELETED, because both appenders only keep it when the
+	# frontend has set MainProgramTokCount and the C branch never did.
+	@printf 'struct S { int a;\n' > $(TESTTMP)/cunterm_struct.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cunterm_struct.c $(TESTTMP)/cunterm_struct26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:1: error: unterminated C construct' \
+	  || { echo 'cunterm_struct: FAIL - an unterminated struct must say so, on its own line'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -qi 'builtinheap\|platform_backend\|\.pas' \
+	  && { echo 'cunterm_struct: FAIL - a C diagnostic must not mention a Pascal source'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cunterm_struct names the construct, not the RTL'
+	@printf 'enum E { A, B\n' > $(TESTTMP)/cunterm_enum.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cunterm_enum.c $(TESTTMP)/cunterm_enum26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:1: error: unterminated C construct' \
+	  || { echo 'cunterm_enum: FAIL - an unterminated enum must say so, on its own line'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cunterm_enum names the construct'
+	# A C program with no main is a C error and must be reported as one: this ran
+	# after both passes with the cursor past every appended unit, so it printed a
+	# `near:` window of Pascal RTL source under a message about a missing main.
+	@printf 'int nomain(void) { return 0; }\n' > $(TESTTMP)/cnomain.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cnomain.c $(TESTTMP)/cnomain26 2>&1); \
+	 echo "$$out" | grep -q 'main function not found' \
+	  || { echo 'cnomain: FAIL - expected the missing-main error'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -qi 'builtinheap\|unit \|\.pas' \
+	  && { echo 'cnomain: FAIL - the missing-main error must not quote Pascal RTL source'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cnomain reports a C error without a Pascal context window'
 	# Include nesting: the depth limit must be REPORTED, never silently applied.
 	# The preprocessor has sixteen include buffers, dispatched by a hand-written
 	# `case depth of 0..15`; MAX_CPREP_INCLUDES said 128, so 16..127 fell through

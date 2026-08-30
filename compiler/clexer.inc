@@ -851,6 +851,21 @@ begin
     end;
     Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until k = tkEOF;
+  { The C region ENDS HERE, and saying so is what keeps its tkEOF alive.
+
+    Both appenders -- CLexAppend below and its Pascal twin in lexer.inc -- delete
+    a trailing tkEOF, and both guard that on `MainProgramTokCount =
+    TOK_UNBOUNDED`, i.e. on the frontend never having said where its program
+    ends. compiler.pas sets that sentinel once, commented "= not set yet; the
+    frontends overwrite it". The NilPy branch overwrites it. The C branch did
+    not, so every C program's EOF was deleted the moment a unit was appended --
+    which made `while CurTok.Kind <> tkEOF` a test that CANNOT FIRE until the
+    whole appended Pascal RTL has been parsed as C, and each of the C parser's
+    three loop families grew its own substitute for the missing end.
+
+    Set here rather than in compiler.pas beside the NilPy line: the lexer is what
+    knows it has finished the main source, and CLexAll has exactly one caller. }
+  MainProgramTokCount := TokCount;
 end;
 
 function CLexAppend(const srcText: AnsiString): Integer;
