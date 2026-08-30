@@ -10980,6 +10980,23 @@ test-core: $(COMPILER)
 	# vanished and read as an undefined variable in the Pascal caller.
 	./$(COMPILER) -Futest test/test_c_unit_pulled_via_pascal_unit.pas $(TESTTMP)/test_c_unit_pulled_via_pascal_unit26
 	tools/expect_same.sh test_c_unit_pulled_via_pascal_unit26 "$$($(TESTTMP)/test_c_unit_pulled_via_pascal_unit26)" "42"
+	# THE CALLING CONVENTION a bodied C function is reached by, asserted from the
+	# one shape in which no `not CProgramMode` guard applies: a Pascal caller
+	# meeting a C callee, so the C prologue and the Pascal call site must already
+	# agree. Green here on x86-64 and on riscv32; RED on aarch64, arm32 and i386,
+	# each by a different mechanism -- see the file's header. The cross rows are
+	# `make test-c-abi-cross`, deliberately NOT wired into this target while they
+	# are red.
+	# The pure-C control beside it is the half that is green on all five TODAY and
+	# must stay green: fixing the Pascal-caller path is only correct if the C-mode
+	# call sites move with the prologue, and changing the prologue alone was
+	# MEASURED to take the control from clean to wrong-on-aarch64,
+	# compile-fail-on-arm32 and segfault-on-i386.
+	# bug-c-a-c-function-s-calling-convention-depends-on-the-target
+	./$(COMPILER) -Futest test/test_c_abi_pascal_caller.pas $(TESTTMP)/test_c_abi_pascal_caller26
+	tools/expect_same.sh test_c_abi_pascal_caller26 "$$($(TESTTMP)/test_c_abi_pascal_caller26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"
+	./$(COMPILER) test/c_abi_pure_c_control.c $(TESTTMP)/c_abi_pure_c_control26
+	tools/expect_same.sh c_abi_pure_c_control26 "$$($(TESTTMP)/c_abi_pure_c_control26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"
 	# feature-c-import-a-pascal-unit-under-a-mangled-name: `#include "x.pas"` is
 	# an IMPORT SITE, not textual inclusion -- the unit's routines arrive as
 	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
@@ -14852,6 +14869,43 @@ test-c-conformance: $(COMPILER)
 # of the base pxx.skip; anything else failing = cross regression, exit 1.
 test-c-conformance-i386: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target i386
+# The behavioural gate for
+# bug-c-a-c-function-s-calling-convention-depends-on-the-target. RED TODAY, on
+# purpose: it is the red that a convention fix turns green, and the cross
+# suites cannot serve as that gate -- a pure C program is self-consistent both
+# before and after a convention change (positional on both sides, or C-ABI on
+# both), so test-c-conformance-* and test-lua-cross can detect a REGRESSION here
+# but can never go red-to-green.
+#
+# Expected today (compiler at faf762981c3c, measured 2026-08-30):
+#   aarch64  dbl_first 0.00, two_dbl 27.50, flt 0.00   -- the float bank
+#   arm32    int_first 0.00                            -- the even-register pair
+#   i386     all five, three_ints 321                  -- argument ORDER
+#   riscv32  clean
+# Three targets, three different mechanisms, and no single shape finds all
+# three -- which is why the file asserts five and not one.
+#
+# NOT a dependency of `test`. Run it directly; it is for whoever takes the
+# ticket, and c_abi_pure_c_control.c (wired into the ordinary C tests) is the
+# regression half that must stay green while this one goes from red to green.
+.PHONY: test-c-abi-cross
+test-c-abi-cross: $(COMPILER)
+	@overall=0; \
+	exp="$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"; \
+	for t in aarch64 arm32 riscv32 i386; do \
+	  if [ "$$t" != "i386" ] && ! command -v qemu-$$t >/dev/null 2>&1 && \
+	     ! { [ "$$t" = "arm32" ] && command -v qemu-arm >/dev/null 2>&1; }; then \
+	    echo "test-c-abi-cross: SKIP $$t (qemu absent)"; continue; \
+	  fi; \
+	  if ! ./$(COMPILER) --target=$$t -Futest test/test_c_abi_pascal_caller.pas $(TESTTMP)/test_c_abi_$$t >$(TESTTMP)/test_c_abi_$$t.err 2>&1; then \
+	    echo "test-c-abi-cross: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/test_c_abi_$$t.err; overall=1; continue; \
+	  fi; \
+	  got="$$(tools/run_target.sh $$t $(TESTTMP)/test_c_abi_$$t 2>&1)"; \
+	  if [ "$$got" = "$$exp" ]; then echo "test-c-abi-cross: PASS $$t"; \
+	  else echo "test-c-abi-cross: FAIL $$t"; printf '%s\n' "$$got" | sed 's/^/    /'; overall=1; fi; \
+	done; \
+	test "$$overall" = "0" || { echo "test-c-abi-cross: RED (expected until bug-c-a-c-function-s-calling-convention-depends-on-the-target lands)"; exit 1; }
+
 test-c-conformance-aarch64: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target aarch64
 test-c-conformance-arm32: $(COMPILER)
