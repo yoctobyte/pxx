@@ -46,13 +46,24 @@ verification system is where a silent-provenance bug is least visible: the row
 did print a `converged` line, and it was true — of a binary that was not the
 subject. A green here would have been the same defect wearing the harmless face.
 
-## The half neither of us can close from tstate
+## What the archive does and does not hold — checked, because I got this wrong once
 
-There is **no report file for `c8e132a0`** and **no `pin: v398` row in
-`runs-seven.ndjson`** — the newest pin row in the archive is plexus v393. So the
-verify published a verdict and left no independent artifact to check it against.
-That is unfalsifiable by construction. If this ticket keeps one sentence, keep
-that one.
+I wrote a stronger version of this section from a peer's report without checking
+it, which is the exact failure the rest of the ticket is about. Measured:
+
+- **The `pin: v398` row EXISTS.** `runs-seven.ndjson` line 249:
+  `{"date": "2026-08-30T17:50:58Z", "fixed": [], "full": true, "new_red": [],
+  "pin": "v398", "sha": "c8e132a02b92...", "tier": "full", "verdict": "RED",
+  "wall": 638.5}`. A 638-second wall says the verify genuinely ran; it did not
+  inherit a verdict. (`new_red: []` is NOT evidence that none of the five reds
+  were new — an unrecorded baseline produces the identical empty list.)
+- **There is no report file for `c8e132a0`.** `ls reports/ | grep c8e132a0` is
+  empty; the neighbouring shas all have one.
+- **The row that exists carries no per-job reason and no compiler sha.** So the
+  artifact proving the verify ran is not an artifact of *what it ran against*.
+
+Net: the run is attested, its binary is not. That is a narrower gap than "no
+artifact at all", and it is the gap the fix below closes.
 
 ## What it cost
 
@@ -101,3 +112,8 @@ inference from the open-regression records, not measurement.
   never about a git object — worth recording because it was briefly relayed as a
   category error, and the reproducibility that makes both true is the same
   property that makes a fixedpoint sha a usable provenance key at all.
+- 2026-08-30 frankC: corrected my own body. I had written "no `pin: v398` row in
+  `runs-seven.ndjson`" on a peer's report without checking it; the row is there
+  at line 249 with `wall: 638.5`. Checked after frank-coordinator flagged it.
+  Taking a second-hand negative into a ticket unchecked is the same defect the
+  ticket describes, one layer further out.
