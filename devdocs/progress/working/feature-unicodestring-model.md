@@ -370,11 +370,13 @@ stops resolving to `tyAnsiString`, no program can construct a wide string, so
 existing program. That is what lets them land one at a time, green, without
 holding every lock at once:
 
-    1. ir.inc:1794 SYMBOL arm                             DONE 12111b1f2
-    2. AST-node element slot          (ast_arena.inc)     DONE 526f86cc9
-    3. record-field element slot      (pasparser_decl.inc) DONE 526f86cc9
-    4. the SIX per-backend COW guards (ir_codegen*.inc)   <- needs an atomic window
-    5. Length — a frontend shift over the existing byte count  DONE 8b35b2d60
+    1. ir.inc:1794 SYMBOL arm                             DONE 100d68f51
+    2. AST-node element slot          (ast_arena.inc)     DONE 533877ec7
+    3. record-field element slot      (pasparser_decl.inc) DONE f4587a2e4
+    4. the SEVEN per-backend COW guards (ir_codegen*.inc) DONE 1dd30255b
+    5. Length — a frontend shift over the existing byte count  DONE 6a3407207
+    ---- and, out of step 4's findings ----
+       tyWideString deleted (dead option-A residue)       DONE de9c53613
     ---- only then ----
     6. break the alias in pasparser_lval.inc:6322/6424    <- LAST
        (and change sysutils' UTF8Encode/Decode in the SAME commit: they are
@@ -412,7 +414,7 @@ half-finished migration here is safe to park.
 
 ## 2026-08-30 (frankwasm) — steps 2, 3 and 5 landed; only step 4 is left before the switch
 
-`526f86cc9` (2, 3) and `8b35b2d60` (5). Step 1 was `12111b1f2`. What remains
+`533877ec7/f4587a2e4` (2, 3) and `6a3407207` (5). Step 1 was `100d68f51`. What remains
 before the alias break is **step 4 alone**: six identical one-line guards in six
 backend files.
 
@@ -513,7 +515,7 @@ filed AFTER step 4 lands, so the window is not held up by paperwork.
 
 ## 2026-08-30 (frankwasm) — step 4 landed; only the switch is left
 
-`e2dba4293`, one commit, seven files, in a window the coordinator held open
+`1dd30255b`, one commit, seven files, in a window the coordinator held open
 across three other agents. Steps 1-5 are now all in and **step 6 is the only
 thing left**.
 
@@ -574,3 +576,22 @@ rather than in `defs.inc`. It is last in the enum, so nothing renumbers, and
 re-adding it costs nothing if A is ever revisited. Raised with the coordinator
 rather than done unilaterally: `defs.inc` is dual-occupied, and deleting a type
 kind is closer to a decision than to cleanup.
+
+### Sha citations here were rewritten once — these are the landed ones
+
+Every sha this ticket cited before 2026-08-30 was a PRE-REBASE sha and none of
+them exist in history. `tools/sync.sh` rebases on nearly every push (the watcher
+publishes tstate continuously), so a sha read from `git log` before the push
+names a commit that survives only in the local reflog — exactly
+[[bug-t-resolve-cites-a-sha-the-rebase-then-rewrites]]. They have been corrected
+in place above. The mapping, for anyone holding the old numbers:
+
+    12111b1f2 -> 100d68f51   step 1
+    526f86cc9 -> 533877ec7   step 2   (and f4587a2e4 for step 3 — it was TWO
+                                       commits, not one, as recorded)
+    8b35b2d60 -> 6a3407207   step 5
+    e2dba4293 -> 1dd30255b   step 4
+
+The general lesson is the one CLAUDE.md already states for `resolve`: do not
+write a sha you have not seen on origin. I wrote four, in a ticket AND in
+messages to the coordinator, before the push that renamed them.
