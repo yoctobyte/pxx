@@ -8,13 +8,14 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path | A | 30 | bug | A failed Expect() writeln's `Expected: X, but got:  (Kind: 57, Line: 2)` -- a token ORDINAL, no source path, and no `error:` prefix, so anything keying on `error:` does not see it as an error at all. lexer.inc:2838, shared by every frontend. Reached from C by an unclosed initializer followed by a real declaration. | — |
 | bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets | A | 50 | bug | The cdecl soundness reject still has its argument-shaped door on i386/arm32/aarch64/riscv32 | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
+| ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 
 ## unfinished (28)
 
@@ -61,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (377)
+## backlog (376)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -436,7 +437,6 @@ _none_
 | regression-test-pascal-conformance-shard4-6-4 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6-4 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |
-| ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-a-fix-on-one-backend-should-name-what-it-checked-on-the-others | A | 40 | task | Three fixed-on-one-target-left-on-the-others defects surfaced in one night, all by the same mechanism: a fix is written where the bug was observed, and the sibling backends have no observer. normalise-dont-special-case.md already says to grep for the sibling before closing; it is not being followed, and one of the three shows why -- the unfixed sibling's own comment ADMITTED the gap and nothing routed a reader to it. | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
@@ -869,7 +869,6 @@ _none_
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
-- [p 55] [A+S] ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets

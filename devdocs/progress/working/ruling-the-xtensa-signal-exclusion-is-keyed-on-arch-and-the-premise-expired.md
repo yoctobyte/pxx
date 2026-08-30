@@ -3,8 +3,9 @@ slug: ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expire
 track: A+S
 prio: 55
 type: ruling
-status: open
+status: working
 found: 2026-08-30
+owner: frankS
 ---
 
 # RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork
@@ -161,3 +162,106 @@ was *broader* than the stated one, so the stale comment was hiding a refusal tha
 is correct on both platforms rather than one that is wrong on one. The cheap
 check is the one above — ask what the guard protects and whether it exists yet,
 not just whether the sentence beside it still parses.
+
+## Addendum 3 (frankS, 2026-08-30): re-ran the evidence at HEAD before building. The PREMISE holds; the FILE LIST and the CONTENTION GATE do not.
+
+Dispatched by the coordinator with the instruction to re-run this ticket's own
+evidence first, on the reasoning that **a ticket whose subject is an expired
+premise is the most likely kind to have had its own premise expire while it sat.**
+All measurements below at **HEAD = 5e6230ebc**, clean tree.
+
+### 1. The central claim SURVIVES its re-check — do not flip the axis yet
+
+Addendum 2's measurement is still true at HEAD. `EmitSignalRuntimeForTarget`
+(`ir_codegen.inc:812`) dispatches x86-64 / aarch64 / arm32 / i386 unconditionally,
+riscv32 under `if not EspBareBoot then`, and **has no xtensa arm at all**.
+`EmitDefaultSignalInstallForTarget` (`:830`) likewise: five per-arch install
+blocks, no xtensa. So the refusal is still protecting a runtime that does not
+exist, on both platforms, and re-keying it on `not EspBareBoot` ahead of
+`EmitSignalRuntimeXtensa` would still open the hole addendum 2 describes.
+
+This is the outcome the dispatch was hoping to rule out and it did not happen:
+**no close-on-evidence is available.** The ruling stands as written.
+
+The port model also holds — `EmitSignalRuntimeRISCV32` measures **156 lines**
+(`ir_codegen_riscv32.inc:47`), against the ruling's estimate of ~155.
+
+### 2. The contention gate HAS expired, and it names the wrong file
+
+The ruling gates dispatch on one sentence: *"The slot opens when the P files are
+free."* That was the binding constraint when written. It is not now.
+
+Both shared-file edits this work requires are in **`ir_codegen.inc`** — the
+dispatcher arm at `:812` and the default-install arm at `:830`. That file is
+held **whole-file by frankA** for `EmitParamSpillsForTarget` (coordinator,
+2026-08-30). `pasparser_expr.inc:4382` is still needed and still Track P, but it
+is no longer the *binding* blocker; `ir_codegen.inc` is, and the ruling does not
+mention it as contended ground at all.
+
+Same species as the ruling's own finding, one level out: **a gate keyed on a file
+set that stopped describing the collision.** The ruling did not get this wrong —
+it expired, exactly as its own step 2 says premises do.
+
+### 3. The file list misses TWO more sites, in a file nobody has named — and one of them is a MEASUREMENT, not an edit
+
+Addendum 1 raised the count from four to five (`pyparser.inc`). Measured now:
+`grep -n "unreachable: the parser refused" compiler/*.inc`.
+
+| file | line | what |
+| --- | --- | --- |
+| `compiler/ir.inc` | 3953 | `UContextPCOffset` → `else Result := -1` |
+| `compiler/ir.inc` | 3993 | `UContextSPOffset` → `else Result := -1` |
+
+Both carry the sentinel comment *"unreachable: the parser refused this target
+already"*, and the header at `:3945` carries the expired sentence a third time:
+*"xtensa never reaches here — the parser refuses every `__pxxSig*` on it, because
+FreeRTOS has no signal runtime at all."*
+
+**These are not two more comment edits, and that is the finding.** The five live
+entries in those tables were **measured by probe**, and the header says so in
+terms that forbid the cheap route: a program was faulted two ways under each
+target's qemu (by writing `$DEAD0000` and by calling it), every `ucontext` word
+equal to the sentinel was dumped, and the answer cross-checked against the
+kernel's struct definitions so two independent sources agree. i386's SP offset
+could not be settled by the dump at all — `gregs[REG_ESP=7]` and
+`gregs[REG_UESP=17]` hold the same value at fault time — and took a differential
+to decide.
+
+So hosted xtensa needs its own probe run for both offsets. **By this ticket's own
+recorded standard they cannot be read off a header**, and that work is not in the
+ruling's estimate.
+
+**And the `-1` is a live wrong-value hazard the moment the guard moves.** Its
+"unreachable" justification *is* the parser refusal that this work removes — so
+the commit that lifts the refusal makes the sentinel reachable in the same
+breath, and a handler would rewrite at offset `-1`. That is precisely the
+plausible-wrong-value failure the refusal was protecting against, relocated
+rather than removed. It is the same shape as addendum 2's finding and it lands on
+the same commit boundary: **the offsets must be measured and filled in the same
+change as the axis flip, or the flip is worse than the refusal.**
+
+Revised scope: **seven sites, in five files, across three lanes (A / P / N), plus
+one qemu probe run.** Ordering dependency worth stating because it may be
+circular: dumping xtensa's `ucontext` needs a signal delivered to a handler, and
+installing a handler is the runtime this ticket is building — so the probe may
+not be runnable before `EmitSignalRuntimeXtensa` exists in some throwaway form.
+Not yet established; flagged rather than assumed.
+
+### 4. The trap named in the ruling has a counterpart that IS real evidence
+
+The ruling warns that `test_signal_default_revert_b336` is a green row in the
+signal family that proves nothing about the signal family (it installs no
+handler; it dies 143 on the default disposition, which needs `kill`).
+
+Its opposite exists and should be the acceptance check here: **`test_signal_sp_rewrite`
+runs on all five targets** and is described as the guard that makes a wrong
+`UContextSPOffset` entry *"fail loudly rather than quietly clobbering an unrelated
+register."* A new xtensa row there is what would make item 3's measured offsets
+trustworthy. Naming it now so the eventual landing is not gated on re-deriving
+which test carries the property.
+
+### Status: NOT blocked on a decision — blocked on one file, and the ask is with the coordinator
+
+`ir_codegen_xtensa.inc` (the 156-line port target) is mine and clear.
+`ir_codegen.inc` is frankA's. Per the coordinator's standing instruction I have
+not taken it on my own read; sequencing request sent.
