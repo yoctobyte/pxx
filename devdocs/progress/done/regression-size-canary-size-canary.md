@@ -200,4 +200,4 @@ exported** — exporting `PWord` would silently re-type a user's own. Duplicatin
 a type alias is not a second code path; getting `PWord` wrong is.
 
 Resolves at `c59bcb7f0`.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 16c10cf17.
