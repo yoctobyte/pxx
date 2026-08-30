@@ -5,12 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:24 blocked:9 backlog:321 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2686 rejected:55`
+`working:4 unfinished:24 blocked:9 backlog:320 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2686 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead` [C] — owner: frankC
 - `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45` [A+S] — owner: frankS
+- `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (24) — parked mid-flight; re-claim, do not duplicate
@@ -52,12 +53,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 340, ranked
+## Ready — top 30 of 339, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
@@ -84,5 +84,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 
-_310 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_309 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

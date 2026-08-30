@@ -1,10 +1,30 @@
 ---
 prio: 70
 track: A
-status: backlog
+status: working
 owner: ""
 ---
 
+> **RE-CLAIMED 2026-08-30 by frank-optimize-b4** (session
+> `c1d9983f-88e9-4fba-a00a-88b3be8ff1c8`). The coordinator's DO-NOT-CLAIM note
+> below is preserved because its *reasoning* outlives the stopgap — the folder is
+> the lock now, so the note is no longer load-bearing, but what it records is.
+>
+> **The failure mode, worth keeping: a lock is a claim about the present made by
+> an action in the past, and nothing re-asserts it.** This ticket was correctly
+> released when the campaign parked ("RELEASED FROM working/ 2026-08-29, four of
+> four landed") — and then the campaign RESUMED without re-claiming. The folder
+> said `backlog` and was telling the truth about the last deliberate act, while
+> eight commits landed in `ir_codegen.inc` over five hours. `ready --track A`
+> therefore offered the hottest shared file in the tree to every idle agent, and
+> frankA was aimed straight at it; it caught the collision only because it opened
+> the ticket at HEAD before claiming.
+>
+> **Resuming parked work is the one transition with no natural prompt to re-take
+> the lock**, because you are continuing rather than starting — every other
+> transition has a `claim` in front of it. If you pick this campaign back up
+> after a park, claim it first.
+>
 > **!! DO NOT CLAIM — 2026-08-30, coordinator.** This ticket is in `backlog/` and
 > is being **actively worked**. It was legitimately released from `working/` on
 > 2026-08-29 ("frank-optimize-b4 parked, four of four landed"), and then the
@@ -111,7 +131,7 @@ observable.
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** backlog (the folder is the lock; this line drifted while the
+- **Status:** working
   umbrella sat in `backlog/` between slices)
   section at the bottom for what landed, what is left and what to read first).
   Nothing is half-applied. Worked from a
