@@ -169,4 +169,4 @@ guard nobody has seen fail is not a guard. Each arm was reverted and rebuilt:
 `tools/gate.sh quick` -> GREEN (7/7, self-host fixedpoint 41s).
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit c95698b17.
