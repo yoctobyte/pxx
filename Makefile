@@ -5531,6 +5531,17 @@ test-core: $(COMPILER)
 	# scores 4 / 8 on this file.
 	./$(COMPILER) test/test_variant_local_array_zero_init.pas $(TESTTMP)/test_vararrzi26
 	tools/expect_same.sh test_vararrzi26 "$$($(TESTTMP)/test_vararrzi26 | tail -1)" "total ok 8 / 8"
+	# …and the THIRD arm of ManagedLocalZeroBytes to ship without asking IsArray,
+	# after interfaces and Variants. The promo-int arm said `not IsArray`, left in
+	# place when the Variant one was fixed because no reachable case could be
+	# constructed then. `promoint64` IS a spellable Pascal type name, so
+	# `array[0..3] of promoint64` is an ordinary local — and it was zeroed NOT AT
+	# ALL, while the cleanup arm still called PXXPromoClear on element 0. That
+	# routine releases the payload as a managed string when the tag reads
+	# PROMO_TAG_HEAP, so a dirty frame freed a block the slot never owned: the
+	# pre-fix compiler SEGFAULTS on this test.
+	./$(COMPILER) test/test_promoint_local_array_zero_init.pas $(TESTTMP)/test_promoarrzi26
+	tools/expect_same.sh test_promoarrzi26 "$$($(TESTTMP)/test_promoarrzi26 | tail -1)" "promoint-array-zero-init 6/6"
 	# A record holding an interface field, both halves of the same design fault:
 	# RecordHasManagedFields excluded a COM interface field because FINALIZING one
 	# under the non-reentrant record heap lock deadlocks -- and that single

@@ -33,23 +33,38 @@ procedure ParseFactor; forward;
   fall through every arm at once
   (bug-a-a-for-in-container-temp-is-not-zero-initialised). }
 function ManagedLocalZeroBytes(i: Integer): Integer;
-var zeroBytes: Integer;
+var zeroBytes, elemCount: Integer;
 begin
-  { Fixed array whose elements are dynamic-array handles (`array[..] of TA`):
-    nil every pointer-sized slot so SetLength on an element does not release
-    a garbage "old" handle. }
+  { ASK IsArray ONCE. Every arm below answers PER ELEMENT and the count is
+    applied at the end, because nine arms each remembering to multiply is how
+    three of them shipped without it -- interfaces, then Variants, then promo
+    ints, each found from the outside as a use-after-free far from its cause.
+    A new arm that supplies only a per-element size is now correct for arrays
+    by construction rather than by remembering; that is the point
+    (devdocs/dev/normalise-dont-special-case.md -- the second path is the one
+    that stays broken, and here there were nine).
+
+    The two HANDLE-level shapes come FIRST and are deliberately NOT
+    per-element: those slots hold a pointer, not a payload, so they answer in
+    full and keep elemCount at 1. Everything after them is per-element. }
   zeroBytes := 0;
+  elemCount := 1;
   if Syms[i].IsArray and (Syms[i].ArrLen <> -1) and (SymElemDynDepth[i] > 0) then
+    { Fixed array whose elements are dynamic-array HANDLES (`array[..] of TA`):
+      nil every pointer-sized slot so SetLength on an element does not release
+      a garbage "old" handle. Answers in full — the count is the array's, but
+      the size is a pointer, not the element type's. }
     zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE
   else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
     zeroBytes := TARGET_PTR_SIZE                          { dyn-array handle }
-  else if Syms[i].TypeKind = tyAnsiString then
+  else
   begin
-    if Syms[i].IsArray then
-      zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE       { static array of AnsiString }
-    else
-      zeroBytes := TARGET_PTR_SIZE;                       { scalar AnsiString }
-  end
+    { From here every arm answers PER ELEMENT. count = elements in a STATIC
+      array, else 1; applied once, at the bottom. }
+    if Syms[i].IsArray and (Syms[i].ArrLen <> -1) then elemCount := Syms[i].ArrLen;
+
+    if Syms[i].TypeKind = tyAnsiString then
+    zeroBytes := TARGET_PTR_SIZE
   else if Syms[i].TypeKind = tyVariant then
   begin
     { STATIC ARRAY of Variant -- `av: array[0..3] of Variant`. Exactly the
@@ -74,10 +89,7 @@ begin
       unrelated routine changes the frame in front of it -- which is why it
       surfaced as a NilPy regression with no NilPy change behind it.
       regression-test-nilpy-test-nilpy-star-operand-in-a-variant }
-    if Syms[i].IsArray then
-      zeroBytes := Syms[i].ArrLen * TypeSize(tyVariant)
-    else
-      zeroBytes := TypeSize(tyVariant);
+    zeroBytes := TypeSize(tyVariant);
   end
   { RecordNeedsZeroInit, not RecordHasManagedFields: an interface FIELD is
     excluded from the finalization predicate on purpose (releasing it under
@@ -93,7 +105,11 @@ begin
     zeroBytes := RecSize(Syms[i].RecName)
   else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
           RecordNeedsZeroInit(Syms[i].ElemRecName) then
-    zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName)
+    { The record arms keep their own IsArray test, and must: they differ in
+      WHICH rec id they read (RecName vs ElemRecName), not merely in count --
+      and each falls THROUGH to the COM arms when RecordNeedsZeroInit says no,
+      which a merged arm would swallow. }
+    zeroBytes := RecSize(Syms[i].ElemRecName)
   else if SymIsComInterface(i) then
     { COM/ARC interface fat pointer: must start nil so the ARC release at
       first overwrite / scope exit sees an empty slot, not stale stack bytes
@@ -116,14 +132,13 @@ begin
       invisible because the garbage happens to be zero. A constant index and
       a global array both "worked" for the same accidental reason.
       bug-a-a-local-array-of-interfaces-is-not-zero-initialised }
-    zeroBytes := Syms[i].ArrLen * RecSize(SymTR[i].ElemRec)
-  else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-          NilPyUserCode then
+    zeroBytes := RecSize(SymTR[i].ElemRec)
+  else if (Syms[i].TypeKind = tyClass) and NilPyUserCode then
     { NilPy-user class local: refcounted binding — must start nil so the
       rebind release and the scope-exit release see an empty slot
       (feature-nilpy-object-reclamation slice 4). }
     zeroBytes := TARGET_PTR_SIZE
-  else if TypeIsPromoInt(Syms[i].TypeKind) and (not Syms[i].IsArray) then
+  else if TypeIsPromoInt(Syms[i].TypeKind) then
     { Promotable int: a {tag, payload} pair whose tag MUST start
       PROMO_TAG_INLINE (0). The scope-exit cleanup calls PXXPromoClear on
       every promo local unconditionally (EmitManagedLocalCleanup), and that
@@ -144,8 +159,62 @@ begin
       `word.native(vm)` through that object jumped into the string data —
       three layers and thousands of lines from the cause, with the object
       still refcount-alive the whole time.
-      bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field }
+      bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field
+
+      ...and the ARRAY shape, which this arm refused with `not IsArray` — the
+      THIRD arm of this chain to ship without asking. `promoint64` is a
+      spellable Pascal type name (pasparser_decl.inc:543), so
+      `a: array[0..3] of promoint64` is an ordinary Pascal local and the guard
+      was an omission, not the deliberate decision it was left as. It zeroed
+      NOTHING for the whole array — not one element's worth, as the Variant arm
+      had — while EmitManagedLocalCleanup's promo arm, which has the same
+      missing IsArray, still called PXXPromoClear on the slot address at scope
+      exit. So element 0 was cleared from stack garbage, and PXXPromoClear
+      releases the payload as a managed string whenever the tag reads
+      PROMO_TAG_HEAP: a frame carrying {1, <pointer-shaped bytes>} freed a
+      block the slot never owned. test_promoint_local_array_zero_init
+      segfaults on the pre-fix compiler.
+      bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice }
     zeroBytes := TypeSize(Syms[i].TypeKind);
+
+  end;
+
+  { Apply the count ONCE, here, for every per-element arm above. }
+  zeroBytes := elemCount * zeroBytes;
+
+  { PXXDBG a.mlzero -- the chain above is nine independent arms, each of which
+    has to remember to ask IsArray for itself, and two have already SHIPPED
+    without it (interfaces, then Variants). Both were found from the outside,
+    as a use-after-free three layers from the cause, because a missed zero is
+    invisible on a clean stack. This channel makes the table answer for itself
+    instead: every local the chain looked at, what it decided, and -- the line
+    that matters -- MISS, for a local of a kind the chain HANDLES that still
+    came out zeroBytes=0. A third omission is one grep of this output away
+    rather than one memory-corruption report away.
+    bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice }
+  if PxxDbgEnabled('a.mlzero') then
+  begin
+    if (zeroBytes = 0) and
+       ((Syms[i].TypeKind = tyAnsiString) or (Syms[i].TypeKind = tyVariant) or
+        (Syms[i].TypeKind = tyClass) or TypeIsPromoInt(Syms[i].TypeKind) or
+        SymIsComInterface(i) or SymElemIsComInterface(i) or
+        ((Syms[i].TypeKind = tyRecord) and Syms[i].IsArray) or
+        ((Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray)) then
+    begin
+      Write('PXXDBG a.mlzero MISS sym=', Syms[i].Name, ' tk=', Ord(Syms[i].TypeKind));
+      if Syms[i].IsArray then Write(' ARRAY len=', Syms[i].ArrLen)
+      else Write(' scalar');
+      if TypeIsPromoInt(Syms[i].TypeKind) then Write(' promoint');
+      if Syms[i].TypeKind = tyClass then Write(' class nilpyuser=', NilPyUserCode);
+      if (Syms[i].TypeKind = tyRecord) then
+        Write(' recname=', Syms[i].RecName, ' elemrec=', Syms[i].ElemRecName);
+      WriteLn(' -> zeroBytes=0');
+    end
+    else
+      WriteLn('PXXDBG a.mlzero sym=', Syms[i].Name, ' tk=', Ord(Syms[i].TypeKind),
+              ' isarray=', Syms[i].IsArray, ' arrlen=', Syms[i].ArrLen,
+              ' -> ', zeroBytes);
+  end;
   ManagedLocalZeroBytes := zeroBytes;
 end;
 
