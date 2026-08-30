@@ -167,4 +167,4 @@ either** and fails to link that file outright. gcc is the oracle here, not FPC,
 and the C file is what diffs against it.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit c9a1f6f2a.
