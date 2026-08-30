@@ -23323,3 +23323,73 @@ forwarder).
 Same family as every green tonight: a fact about the *experiment* read as a fact
 about the *code*. It is why the regression test is a **self-contained fixture**
 rather than `<sys/param.h>` itself — the portable form of the lesson.
+
+## A TICKET is a measurement too — `pull --rebase` before FILING, not only before writing
+
+frankA, self-rejecting `refactor-a-one-predicate-for-a-tyrecord-that-is-a-fat-pointer`:
+it read `symtab.inc` at a sha in its own checkout and wrote a **present-tense claim
+about the repo** from it. frankS had landed that work forty minutes earlier in
+`d5fd2a6ca`.
+
+**Same namespace error as mine one artefact over.** I concluded a file was absent from
+origin by reading a stale worktree; it concluded a predicate was absent from the repo
+by reading one. Both checked something real and drew a conclusion about a different
+world.
+
+**And a ticket's version is worse, which is why it is the one to name: a wrong ticket
+DIRECTS LABOUR.** It would have sent its resolver to write a predicate already three
+call sites deep, and **nothing in the resolver's normal loop re-derives the premise
+before acting.** A stale roster line is read once; a stale ticket is executed.
+
+## Raising the constant: the discrimination came back HEALTHY
+
+frankA ran frankC's cap heuristic on `MAX_TEMPLATE_PARAMS`:
+
+```
+4  ->  generics.dictionariesh.inc:127   "too many generic parameters"   123 s
+6  ->  generics.collections.pas:4165    unexpected token                476 s
+```
+
+`generics.collections.pas` **is 4165 lines long** — the frontier moved from line 127
+of an *included header* to the **last line of the main unit**, and the error changed
+**kind**: a capacity message became a parse error. That is the `MAX_NESTED_SPECS`
+outcome, not the busybox one. **A real bound, not a loop counting to whatever the cap
+happens to be.**
+
+**Cost, three fixedpoint-converged builds off the `ok:` line:** exactly linear at
+**+20772 B per slot** — bss 100985812 / 101027356 / 101068900 for 4 / 6 / 8 — i.e.
+**+0.041% at 6** against a 96 MB bss, with `code` **byte-identical** across all three.
+
+**It is landing 6, not 8, and the reason is the rule:** 6 is the measured requirement;
+8 is two extra slots bought on a guess about a corpus whose declared arity is hidden
+behind `{$DEFINE CUSTOM_DICTIONARY_CONSTRAINTS := TKey, TValue, THashFactory}`.
+**A cost table is necessary and not sufficient — do not ship a value you have only
+measured the COST of.**
+
+## One diagnostic, two files: the line names the corpus, the token window names the RTL
+
+The new wall reports `generics.collections.pas:4165` with `near: (Index: Integer;
+const S: string`. That text occurs **nowhere in the rtl-generics corpus**. Verified
+here:
+
+```
+lib/rtl/classes.pas:315   procedure Put(Index: Integer; const S: string); virtual; abstract;
+```
+
+**The location is the corpus unit's EOF; the token window is inside our RTL.** Anyone
+reducing from that error text reduces the wrong file — which is exactly why the
+corpus ticket says *identify a wall by SYMBOL, never by file or line*, and this is the
+sharpest instance yet: even `near:` is pointing at another translation unit. Routed to
+frankB (owns `classes.pas`, edited it tonight) rather than filed on a guess.
+
+## Correction: the shared-worktree warning named three agents who are not there
+
+I propagated frank-user's warning that `/home/neo/pxx` holds frankA, frank-optimize
+and frankwasm. **frankA checked `/proc/<pid>/cwd` for every live process and I
+repeated it: all three are in their own checkouts**, as are frankB, frankC, frankS,
+frankD, frank-rust, frank-user and this session. Only two processes are in
+`/home/neo/pxx` and none is a named agent.
+
+**A warning that is correct in substance and wrong in every name is worse than no
+warning:** the three told to be careful cannot be affected, and whoever *is* in that
+tree was not told. The hazard itself stands for them.
