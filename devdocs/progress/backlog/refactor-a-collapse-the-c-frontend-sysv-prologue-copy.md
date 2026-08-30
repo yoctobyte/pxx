@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 40
+prio: 60
 type: refactor
 status: open
 found: 2026-08-30
@@ -51,3 +51,52 @@ Two things to preserve, both load-bearing:
 binary, built at one HEAD. The collapse should change **no** emitted byte; if it
 does, the two copies had already drifted, and that divergence is the real finding
 and deserves its own ticket.
+
+
+---
+
+# UPGRADED 2026-08-30: this is the ROOT CAUSE of a five-red incident, not tidiness
+
+Filed as a duplication smell. It is more than that. `cparser.inc` does not have
+*one* prologue spill with a copy — it has **three per-target spills that disagree
+with each other about which convention a C function uses**:
+
+| target | cparser's prologue spill | so a C function is... |
+| --- | --- | --- |
+| x86-64 | `cparser.inc:11282` — genuine SysV, independent int/SSE counters | **C-ABI** |
+| aarch64 | `cparser.inc:11178` — positional, *"mirrors the Pascal aarch64 spill"* | **internal** |
+| arm32 | `cparser.inc:11128` — positional, word-based | **internal** |
+
+**A C function's calling convention therefore depends on the target**, and
+nothing names that fact in one place. Every call site that wants to know "is this
+proc reached by the C ABI?" has to encode the answer per target, and it is not
+the same answer.
+
+## What that cost
+
+`bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32` — five
+p70 NEW-REDs (four `test-c-conformance-aarch64` shards and `test-lua-cross`).
+`ProcExternal[p] or ProcCdecl[p]` is **correct on x86-64 and wrong on
+aarch64/arm32**, purely because of the table above, and the same expression had
+already been paid for once at `b362` on the indirect arm.
+
+The `and (not CProgramMode)` guards now present on the aarch64 and arm32 call
+arms are **compensating for this table**. They are correct, and they are a
+workaround: they exist to stop a C-mode callee being called by a convention its
+own prologue does not implement. Collapse the spills onto
+`EmitParamSpillsForTarget` and C functions use one convention per target *by
+construction*, the guards describe something real instead of patching something
+accidental, and `ProcCdecl` means the same thing everywhere.
+
+Three strikes on this predicate so far: `b362` (indirect, lua + sqlite),
+`eeb51710e` (aarch64 direct), `6d2939f38` (arm32 direct).
+
+## Sequencing note
+
+`EmitParamSpillsForTarget` now has C-ABI arms for x86-64, aarch64 and arm32 (from
+`bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets`),
+so the shared destination for the collapse **already exists on three of five
+targets** and grows as that campaign finishes. Doing this after that campaign is
+cheaper than doing it now, and doing it at all is what stops strike four.
+
+Still blocked on `cparser.inc` being held by the csmith campaign.
