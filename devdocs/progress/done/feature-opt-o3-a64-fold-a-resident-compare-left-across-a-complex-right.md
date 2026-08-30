@@ -81,4 +81,4 @@ Verify non-vacuity by breaking the encoding on purpose and confirming the
 - Umbrella: `feature-opt-o3-register-pressure` (W1)
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 77eab0593.
