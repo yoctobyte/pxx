@@ -97,3 +97,6 @@ simply was not considered.
 
 Owner: `compiler/elfwriter.inc` is b4's file. Diagnosis only from here; no edit
 made.
+
+## Log
+- 2026-08-30 — auto-closed by the seven watcher: `test-asm#src:compiler/compiler.pas` passes at 4afd5cd0fd36 (tier native); it was red at 97c5fba007f9. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
