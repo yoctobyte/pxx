@@ -6,7 +6,7 @@ type: bug
 status: backlog
 owner:
 blocked-by: []
-summary: "`p^[i]` where p is a pointer to an array whose ELEMENT TYPE is pointer-kind (Pointer, PChar, PInteger) segfaults, on read AND write, in a plain default build. The identical code with an Integer or Int64 element type is correct, and FPC gets all of it right. It compiles clean and dies at run time, so it is a false green for any build-only check. This is the REAL blocker behind bug-b-tlist-has-no-list-property: adding FPC's `property List: PPointerList` to TList would compile and then segfault at the documented idiom `L.List^[i]`, so that ticket is blocked on this one rather than being an RTL gap."
+summary: "`p^[i]` where p points to an ARRAY segfaults for some element types, on read AND write, in a plain default build; it compiles clean and dies at run time, so a build-only check reports success. DIAGNOSED at the IR by frank-rust (2eb6f76b4): it is a BAD BASE, not a bad index -- the arm emits an extra load_mem and size=1, so `ppa^[1]` computes [[ppa]] + 1*1, taking element 0s CONTENTS as the base address. Root cause is an AMBIGUOUS TAG: tk=tyPointer on a deref node means both \"the pointee is a pointer\" and \"the pointee is an array of pointers\", and the p^[i] arm in pasparser_lval.inc resolves the element from pointer DEPTH. CORRECTION: my original element-type table was misleading -- this is NOT about pointer-kind elements. AnsiString SEGFAULTS and TObject WORKS, which inverts that reading; Integer/Double/Boolean escape only because their tag cannot collide with the test. A second, SEPARABLE Track P defect (a pointer alias to a named fixed array loses AliasPtrBaseTk) is measured NOT to cause the crash on its own."
 ---
 
 # `p^[i]` segfaults when the array's element type is a pointer
@@ -176,3 +176,69 @@ same stated reason, not by one of them missing a test.
 **Not started.** I have no measurement of which of the two sites is the right
 one to change, and guessing between them is how a plausible-looking fix that
 moves the crash somewhere else gets written.
+
+
+---
+
+## 2026-08-30 (frank-rust, extended by frankB) — diagnosed, and my table was misleading
+
+**The crash is a bad BASE, not a bad index.** frank-rust dumped both rows:
+
+```
+array of Int64 (works)        array of Pointer (segfault)
+2: load_sym  pia              3: load_sym  ppa
+                              4: load_mem  a=3          <-- extra deref
+4: index [lo=0 size=8]        5: index [lo=0 size=1]    <-- and size 1
+5: load_mem                   6: load_mem
+```
+
+`ppa^[1]` computes `[[ppa]] + 1*1` — element 0's *contents* used as the base
+address. Root cause: `tk = tyPointer` on a deref node means **two** things
+("the pointee is a pointer" / "the pointee is an array whose elements are
+pointers") and the `p^[i]` arm reads it as the first, resolving the element from
+pointer **depth**. `PXXDBG=a.symptr` shows `ptrElemArrLen=4` on both symbols, so
+the information to disambiguate exists and is correct — the arm does not ask.
+
+### My element-type table was the wrong frame, and two more rows prove it
+
+I reported this as "pointer-KIND elements break". **That reading is wrong**, and
+the two element types neither of us had tried are the ones that break it:
+
+| element type | result | |
+| --- | --- | --- |
+| `Integer` `Int64` `Double` `Boolean` | **work** | tag cannot collide |
+| `TObject` | **works** | and it *is* a pointer at runtime |
+| `AnsiString` | **SEGFAULT** | and it is not what anyone calls pointer-kind |
+| `Pointer` `PChar` `PInteger` | **SEGFAULT** | |
+
+`AnsiString` breaking while `TObject` works kills "pointer-kind" as the
+predicate in both directions at once. What survives is frank-rust's model: it is
+about **pointer depth as the tag reports it**, not about the element being a
+pointer in any representational sense. The working rows are not "the working
+element types" — they escape only because their tag cannot collide with the test.
+
+**The general form is this ticket's real content:** an enumeration of symptoms
+looked like a cause. A type list is a plausible-looking classification, and it
+had 5 of 5 rows right while being the wrong axis entirely — which is exactly the
+80%-accurate-name failure, since the part I sampled confirmed it.
+
+### Two defects, and the second does NOT cause this
+
+frank-rust measured a **separable Track P** defect — a pointer alias whose
+pointee is a named fixed array loses `AliasPtrBaseTk` (`var ppa: PPtrArr` gives
+`baseTk=0`; `var ppa: ^TPtrArr` gives `baseTk=17` for the same pointee) — and
+confirmed **fixing it alone does not fix the crash**: with the inline spelling
+the element resolves correctly and it still segfaults, because the extra
+`load_mem` is independent.
+
+### A hypothesis already RULED OUT — do not spend a build on it
+
+`ParseTypeKind`'s `tkCaret` arm reads a stale `childDepth` after a branch that
+never calls `ParseTypeKind`. Real smell, plausible story: setting it to 0 produced
+**byte-identical IR and the identical segfault**.
+
+### No fix started, deliberately
+
+There is no measurement saying whether the parser arm or `IRLowerAddress` is the
+right site, and guessing between two plausible sites is how a fix moves a crash
+instead of removing it.
