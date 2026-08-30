@@ -319,3 +319,16 @@ with the wrong file; `near:` is paired with the wrong token generation.** The on
 coordinate-free evidence is the **symbol** — `PT` occurs zero times in this run,
 therefore it is not that defect. Identify a wall by symbol alone until
 `bug-a-the-near-context-window-is-stale-after-a-token-splice` lands.
+
+### Follow-up ticket, and the one instruction that matters
+
+Filed as
+[[bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix]] [P p45],
+carrying the measurement and the `PXXDBG=a.srcmap:*` first move.
+
+**Do not re-merge it into this ticket on signature.** Signature is precisely what
+this class of bug counterfeits, and re-merging is the mistake this section exists
+to record. Separate by MECHANISM: does the corpus dump show a SPLICE covering the
+token index the diagnostic reports? If it does and the answer is still wrong, the
+range table is being corrupted after the plant rather than never planted — a
+different bug with a different owner.

@@ -25,9 +25,22 @@ pascal26:79: error: unknown type: TKey
   near: [ ANewIndex ] , SizeOf ( >>> T ) ,
 ```
 
-`-dVER3_0_0` is required to get this far — it supplies `TArray`, which the RTL
-otherwise lacks (see
-[[bug-b-rtl-provides-no-tarray-generic-but-pxx-claims-ver3-2-2]]). Runtime 1m12s.
+~~`-dVER3_0_0` is required to get this far~~ — **NO LONGER TRUE, re-measured
+2026-08-30 on binary `a9a4818ab6c8`.** Without the flag the corpus reaches the
+*identical* wall, with zero `TArray` errors:
+
+```
+$ pascal26 -Fu<rtl-generics/src> gcprobe.pas        # no -dVER3_0_0
+pascal26:78: error: unknown type: TKey
+pascal26:79: error: unknown type: TKey
+```
+
+flagged by frankB and confirmed here rather than inherited. Two candidate
+reasons, **not separated**: frankB landed `TArray<T>` in `lib/rtl/sysutils.pas`
+on 2026-08-30, and `generics.collections.pas:57` declares its own `TArray<T>`.
+Either way the flag is now a free variable — drop it when reducing.
+[[bug-b-rtl-provides-no-tarray-generic-but-pxx-claims-ver3-2-2]] should be
+re-checked against this before anyone works it. Runtime ~1m10s either way.
 
 The reported file/line are not the real ones; the `near:` text places both
 errors in `generics.collections.pas` (`:1631`/`:1635` and `:1687`), inside
@@ -47,13 +60,22 @@ together and why neither is a conclusion:
    tokens the error points at. Substitution either did not run over this range
    or ran with the wrong table.
 
-## It did not move with the interface-splice fix
+## It did not move with EITHER generic fix
+
+Two fixes have now landed without touching it:
 
 Same probe, same flags, pre-fix `b3c6858bdfbb` and post-fix `d5a35c8de13a`:
 byte-identical output. The cross-unit interface splice
 ([[bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface]])
 is a real fix with its own passing gates, but this failure fires before splice
 placement can matter, so it — not that — is what holds the corpus.
+
+And [[bug-p-a-specialized-body-reports-errors-in-the-wrong-file]] (fixed at
+`a9a4818ab6c8`) does not move it either: the corpus still names
+`generics.defaults.pas`, byte-identically, which is its own finding —
+[[bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix]].
+So the wrong `in:` you see when reducing this ticket is still wrong; do not
+open the file it names.
 
 ## Do not write a cause into this ticket from the above
 

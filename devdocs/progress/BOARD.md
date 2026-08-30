@@ -68,7 +68,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (389)
+## backlog (390)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -197,6 +197,7 @@ _none_
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered | P | 55 | bug | The address of a virtual class method cannot be lowered (`AN_CLASS_VIRTUAL_CALL`, kind 88) | — |
+| bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix | P | 45 | bug | rtl-generics still reports `unknown type: TKey` in `generics.defaults.pas:78`, a file where `TKey` occurs zero times, on binary a9a4818ab6c8 — AFTER the fix that closed bug-p-a-specialized-body-reports-errors-in-the-wrong-file. The reduction that ticket isolated is genuinely fixed and gated; the corpus instance is not. Two instances were merged on SIGNATURE similarity (same wrong file, same shape, two corpora) and the merge now looks wrong: one reduction's fix does nothing for the other. Do not re-merge on signature. | — |
 | bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body | P | 55 | bug | The rtl-generics corpus wall, as of binary d5a35c8de13a: `unknown type: TKey` raised while replaying a `TList<T>` method body, where `TKey` is not a parameter of `TList<T>` and the surrounding tokens still show `SizeOf(T)` with `T` un-substituted. Symptom recorded from a measurement; the mechanism is NOT diagnosed and the obvious story (a body replayed against another template's parameter set) is a hypothesis only. Unmoved by the cross-unit interface-splice fix — it fires before splice placement can matter, so it is the thing actually holding `uses Generics.Collections`. | — |
 | bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does | A+S | 35 | bug | `ir_codegen_xtensa.inc` has no IR_SET_SIGNAL case, so any program installing a signal handler dies with `unsupported node in IR codegen: unknown`. riscv32 has the arm; xtensa is the only hosted backend without it. The op is also one of the seven IROpName does not name, which is why the message says `unknown` instead of naming it. | — |
 | bug-t-36-ranked-tickets-have-no-track-field-and-their-lane-rests-on-the-filename | T | 45 | bug | tools/progress.sh infers a track from the slug when frontmatter does not declare one. It infers CORRECTLY today -- this is latent, not live -- but the declaration then rests on the filename, so renaming a slug moves the ticket's lane with no diff that says so. Measured across urgent/backlog/backlog_new/unfinished/blocked: 36 of the ranked set carry no track: line at all. check does not report it. | — |
@@ -958,6 +959,7 @@ _none_
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [P] bug-p-a-forward-interface-declaration-is-not-parsed
 - [p 45] [P] bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name
+- [p 45] [P] bug-p-the-corpus-instance-of-the-wrong-file-diagnostic-survives-the-fix
 - [p 45] [T] bug-t-36-ranked-tickets-have-no-track-field-and-their-lane-rests-on-the-filename
 - [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix
