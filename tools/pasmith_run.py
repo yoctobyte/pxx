@@ -449,6 +449,35 @@ def ledger_open(led):
             if e.get("status") in ("open", "ticketed")}
 
 
+# Must equal twatch.NONACTIONABLE_CLASSES, which is the DECIDING half: the
+# backoff is applied by twatch.open_actionable_count(), and it already discounts
+# these. This copy is the REPORTING half, and the two are guarded equal by
+# tools/pasmith_ledger_throttle_devtest.py because nothing else couples them --
+# twatch does not import this module, so a class added on one side is silently
+# absent on the other.
+NONACTIONABLE_CLASSES = {"fpc-self"}
+
+
+def ledger_throttling(led):
+    """The open findings that ACTUALLY hold the fuzzer back.
+
+    `ledger_open()` answers "can the fuzzer still trip over this", which is the
+    right population to RECHECK -- fpc-self_trace-length was marked fixed from
+    exactly that path, so dropping them from recheck would lose a real transition.
+    It is the wrong population to REPORT as a throttle, because an external bug
+    can never be resolved locally and would pin the fuzzer in permanent backoff;
+    twatch discounts them for precisely that reason.
+
+    Measured 2026-08-30: every throttle-relevant entry in the published ledger is
+    class `fpc-self`, so the deciding half computed 0 while the status line said
+    "7 open. Fuzzing is throttled while any are open". Both halves of that
+    sentence were false, and it was false in the direction that creates work --
+    a reader triages five FPC bugs to un-throttle a fuzzer already at full speed.
+    """
+    return {s: e for s, e in ledger_open(led).items()
+            if e.get("class") not in NONACTIONABLE_CLASSES}
+
+
 def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha):
     """Fold one divergence into the ledger. Returns True if the SIGNATURE is new
     (or has reopened after being marked fixed) -- i.e. if this is news."""
@@ -567,10 +596,23 @@ def ledger_status(led):
         print("%-28s %-7s %6d  %-20s %s"
               % (sig, e.get("status", "?"), e.get("hits", 0),
                  (e.get("opened") or "")[:19], e.get("ticket") or "-"))
-    n_open = len(ledger_open(led))
-    print("\n%d finding(s), %d open. Fuzzing is throttled while any are open; each "
-          "is rechecked\nat every new sha and reopens the tap by itself once it stops "
-          "reproducing." % (len(fs), n_open))
+    n_open = sum(1 for e in fs.values() if e.get("status") == "open")
+    n_tick = sum(1 for e in fs.values() if e.get("status") == "ticketed")
+    n_thr = len(ledger_throttling(led))
+    ext = len(ledger_open(led)) - n_thr
+    print("\n%d finding(s): %d open, %d ticketed." % (len(fs), n_open, n_tick))
+    if n_thr:
+        print("Fuzzing is THROTTLED by %d of them; each is rechecked at every new sha "
+              "and\nreopens the tap by itself once it stops reproducing." % n_thr)
+    else:
+        print("Fuzzing is at FULL SPEED -- nothing throttling.")
+    if ext:
+        # Say why the two numbers differ, or the next reader re-derives it. These
+        # are the oracle's own bugs; no pxx commit can retire them, so counting
+        # them as a throttle would mean permanent backoff.
+        print("%d unfixed finding(s) are class %s -- the oracle's own bugs, which "
+              "no\npxx commit can retire, so they are rechecked but never throttle."
+              % (ext, "/".join(sorted(NONACTIONABLE_CLASSES))))
     return 0
 
 
