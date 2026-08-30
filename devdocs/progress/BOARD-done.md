@@ -2582,6 +2582,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-tkinter-facade | T | 70 | regression | regression: test-core#src:examples/tk/tkinter_facade.npy red at f8b8a7eb5ed2 (auto-filed by twatch) | — |
 | regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
 | regression-test-emit-obj-cxtensa-obj | A+S | 70 | regression | regression: `--target=xtensa` on a C source selects the POSIX platform backend | — |
+| regression-test-emit-obj-test-emit-obj | A+S | 70 | regression | regression: test-emit-obj#src:test/test_emit_obj.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-fpjson-install-lib-candidates | B | 70 | regression | regression: test-fpjson#src:tools/install_lib_candidates.sh red at 99f1dc81a039 (auto-filed by twatch) | — |
 | regression-test-i386-httpdemo | T | 70 | regression | regression: test-i386#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-i386-test-asyncecho | T | 70 | regression | regression: test-i386#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
