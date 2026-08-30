@@ -142,3 +142,52 @@ The fix is in `pyparser.inc`, and Track N is now held by frankB after the owner'
 concurrency cut. I have no fix to land, only a narrowed search, so parking beats
 opening that file speculatively. Priority unchanged at 50: a literal `str` receiver
 with `key=` is real but narrow, and the named spelling works.
+
+---
+
+## The callee, measured (2026-08-30) — it reaches no `min`/`max` overload at all
+
+Earlier notes here inferred the destination from the error text. It is now
+**named**, by tagging every implementation arm with a `writeln` marker and
+running the shapes (both `pyeval.pas` and `pylib.pas` are consumed when compiling
+a `.npy`, so this probe costs a test recompile, not a compiler rebuild — and both
+files were restored and verified clean afterwards, `git diff` empty):
+
+| shape | arm actually entered | result |
+| --- | --- | --- |
+| `max(s, key=...)` NAMED receiver | `max(const s: AnsiString; key: Pointer)` -> `max(l: TPyList; key)` | correct |
+| `max("bca", key=None)` | **`max(const a: Variant; const b: Variant)`** (`pylib.pas:10062`) | TypeError |
+| `max("bca", key=f)` named def | **`max(const a: Variant; const b: Variant)`** | TypeError |
+| `max("bca", key=lambda c: c)` | (keyed path) | correct |
+
+So the literal receiver does not merely miss the *keyed* overload — it never
+reaches any `min`/`max` receiver overload. The `key=` keyword is **positionalized**
+into the two-argument scalar form, i.e. `max("bca", <the key itself>)`, and the
+`int` vs `str` in the message is the string being compared against the key value.
+That also explains the older `expected a number, got object` spelling: same
+callee, different second argument.
+
+## The axis is narrower than this ticket's title
+
+| receiver | `key=None` | `key=k` (var) | `key=f` (named def) | `key=lambda ...` (inline) |
+| --- | --- | --- | --- | --- |
+| literal `"bca"` | FAIL | FAIL | FAIL | **ok** |
+| named `s` | ok | ok | ok | ok |
+
+The inline lambda is genuinely correct, not accidentally so: checked with an
+*inverting* key (`key=lambda c: -ord(c)`), where the keyed and unkeyed answers
+differ — pxx returns `a`, CPython returns `a`. A control whose two answers
+coincide would have proved nothing here
+(`a-control-from-the-same-idea-as-the-fix-tests-the-idea`).
+
+So the trigger is **literal receiver AND a key that is not an inline lambda**.
+Whatever routes an inline lambda to the keyed path is the thing the other three
+key forms miss; `PyPromoteProcOverloadByKwAt` (matches on parameter NAME only)
+and `bug-nilpy-keyword-arg-vs-overload-set` are where to start.
+
+**Now ranked at 70 by propagation** — it blocks
+`regression-test-nilpy-test-nilpy-min-max-key-none` (p70), whose row 4 is exactly
+this shape.
+
+*Not attempted in this session: the fix is in the frontend, and the session's
+remaining budget went to a fleet-wide FPC seed break.*

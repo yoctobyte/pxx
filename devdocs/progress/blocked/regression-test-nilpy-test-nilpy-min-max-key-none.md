@@ -1,6 +1,9 @@
 ---
 prio: 70
 track: N
+status: blocked
+owner: frankA
+blocked-by: regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload
 ---
 
 > **Track guessed as N** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -115,3 +118,26 @@ writing a cause into either ticket. The named sha `0200df7eabcd` remains
 impossible (it touches no buildable file). A plausible attribution nobody diffed
 is the failure this repo has recorded most often, and this ticket is reachable
 without ever reading the sibling that says so.
+
+---
+
+## Triaged — two defects, one fixed, one blocking
+
+Rows 1-3 were the **variant-receiver** defect and are fixed by the `Variant`
+keyed pair in `compiler/builtin/pyeval.pas` (see
+`regression-test-nilpy-test-nilpy-min-max-key-in-a-variable`, same session).
+The test now reaches **row 4** and dies there:
+
+```python
+print(min("cab", key=None), max("cab", key=None))   # line 16
+# TypeError: '<' not supported between instances of 'int' and 'str'
+```
+
+That row is a **literal str receiver**, which is the parked frontend defect
+`regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload`
+— unchanged by the library fix, and failing **identically on the baseline**
+(A/B'd with `pyeval.pas` stashed), so it is not a regression from that fix.
+
+Blocked rather than closed: the last five rows are still unproven, because a
+baseline run stops at the first hard failure
+(`a-loud-defect-masks-the-quiet-one-behind-it`).

@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: N
+status: done
+owner: frankA
 ---
 
 > **Track guessed as N** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -121,3 +123,59 @@ spellings, plus `sorted` with the same keys as the control (its overloads are al
 throughout). The two existing `.npy` tests already cover most of it; add the
 variant-receiver rows for `key=None`, which is the column neither test exercises
 outside a helper.
+
+---
+
+## Resolved — the `Variant` keyed receiver was missing from the `min`/`max` set
+
+**Cause, by diff and not by adjacency.** Built both sides of the suspect commit
+with per-commit reseeding (each from its own `stable_pinned`, `converged after`
+required in the log before any verdict was accepted):
+
+```
+7b73a385d^ (30f18eb55)   all 8 rows pass
+7b73a385d                module rows pass, then: TypeError: expected a number, got object
+```
+
+`7b73a385d` moved the callable->Pointer coercion into `PyBindKwArgs`. After it, a
+receiver whose static type is `Variant` — which is what a **function parameter**
+holding a list is — had no keyed overload to bind to, so the call fell through to
+the two-argument scalar form and compared the list against the key.
+
+**Fix:** `compiler/builtin/pyeval.pas` grows the `Variant` keyed pair, completing
+the receiver set `sorted` already had (TPyList / TPyDict / AnsiString / Variant /
+TPyIter / TPyRange). Both arms dispatch on `pyvartag`: 7 -> `pyseq_of_obj`,
+6 -> `pystr_of`, else raise. `key: Pointer = nil` — the **default matters**, it is
+what lets `key=None` reach the same arm instead of degrading.
+
+**Why this arm was removed once and had to come back.** An earlier measurement in
+this session concluded the Variant pair "buys nothing". That measurement was
+**vacuous**: it used only module-level *literal* receivers, which are never
+variant-typed, so the population could not contain the case the overload serves.
+Re-measured against a function parameter — the true-variant receiver — it is the
+whole fix. See `a-zero-can-be-vacuous-check-the-population`.
+
+**Verified** (`pyeval.pas` is consumed when compiling a `.npy`, not linked into
+the compiler, so each A/B is a recompile of the test only — no rebuild, and the
+compiler sha is unchanged at `495f325004e0`):
+
+| | before | after |
+| --- | --- | --- |
+| `test_nilpy_min_max_key_in_a_variable` | FAIL (`expected a number, got object`) | **PASS** |
+| `test_nilpy_min_max_key_none` | FAIL at row 2 | advances to row 4 (see below) |
+
+Receiver x key matrix, all 8 rows green: {module, parameter} x {lambda, named
+def, variable, None}. Nine neighbours re-run green (`max_min_iterables`,
+`list_sort_key`, `list_sort_method`, `sort_lt_dunder`, `sorted_dict_key`,
+`sorted_key_dispatch`, `sorted_key_none`, `sorted_pairs`, `sorted_sequences`),
+plus the scalar surface the new overload could have shadowed — `min(1,2)`,
+3- and 4-argument forms, `min("ab")`, dict receivers, `sorted` — no ambiguity
+error and no changed answer.
+
+`test_nilpy_min_max_key_none` is NOT closed by this and is filed blocked: its
+row 4 is `min("cab", key=None)`, a **literal** str receiver, which is a separate
+frontend defect — see
+`regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload`.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
+
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

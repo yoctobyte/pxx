@@ -140,6 +140,14 @@ function min(d: TPyDict; key: Pointer = nil): Variant; overload;
 function max(d: TPyDict; key: Pointer = nil): Variant; overload;
 function min(const s: AnsiString; key: Pointer = nil): Variant; overload;
 function max(const s: AnsiString; key: Pointer = nil): Variant; overload;
+{ ...and over a VARIANT receiver, which is what a function PARAMETER holding a
+  list is. Without this arm the variant bound a CLASS-typed keyed overload
+  (TPyList) and was walked as a list: `min(xs, key=pk)` inside a def answered
+  "expected a number, got object" while the identical call at module level, where
+  xs has a static list type, worked.
+  regression-test-nilpy-test-nilpy-min-max-key-in-a-variable }
+function min(const v: Variant; key: Pointer = nil): Variant; overload;
+function max(const v: Variant; key: Pointer = nil): Variant; overload;
 { ...and over a CURSOR: drain, then the routine that already exists. Declared
   AFTER the others on purpose — declaration order decides which class overload
   a VARIANT argument unwraps into, and putting these first made sum(v)/min(v)
@@ -5408,6 +5416,36 @@ end;
 function max(const s: AnsiString; key: Pointer): Variant; overload;
 begin
   Result := max(pystr_charlist(s), key);
+end;
+
+{ Dispatch on the runtime tag through pylib's ONE object->sequence chain
+  (pyseq_of_obj), exactly as sorted(const v: Variant) does, so a user __iter__,
+  a tuple and a generator reach min/max by the route that already serves sorted
+  and a dict still yields its KEYS. }
+function min(const v: Variant; key: Pointer): Variant; overload;
+var o: TObject; seq: TPyList;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    seq := pyseq_of_obj(o);
+    if seq <> nil then begin Result := min(seq, key); Exit; end;
+  end;
+  if pyvartag(v) = 6 then begin Result := min(pystr_of(v), key); Exit; end;
+  raise ValueError.Create('min() iterable argument is empty');
+end;
+
+function max(const v: Variant; key: Pointer): Variant; overload;
+var o: TObject; seq: TPyList;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    seq := pyseq_of_obj(o);
+    if seq <> nil then begin Result := max(seq, key); Exit; end;
+  end;
+  if pyvartag(v) = 6 then begin Result := max(pystr_of(v), key); Exit; end;
+  raise ValueError.Create('max() iterable argument is empty');
 end;
 
 function sorted(d: TPyDict; key: Pointer; reverse: Boolean): TPyList; overload;
