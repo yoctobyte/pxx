@@ -1657,6 +1657,8 @@ pre code{background:none;padding:0}
         #
         # Frontmatter edges are excluded: the scan above owns those, and
         # reporting both would double-count the tickets that do it correctly.
+        PROSE_EDGE_PHRASE = re.compile(
+            r"\b(?:blocked\s+(?:on|by)|gated\s+on|waiting\s+on|depends\s+on)\b", re.I)
         PARK_COND = re.compile(
             r"blocked on|blocked by|waiting on|wait for|resume|depends on|"
             r"prerequisite|gated on|once .{0,40}land|after .{0,40}land|park",
@@ -1930,6 +1932,96 @@ pre code{background:none;padding:0}
                         f"nothing else re-checks it. THE SLUG MATCHED, NOT THE "
                         f"QUESTION — see the NOTE below"
                     )
+
+        # PROSE EDGE THAT SHOULD HAVE BEEN FRONTMATTER.
+        #
+        # The ranker propagates priority down `blocked-by` edges and reads
+        # NOTHING ELSE. So a blocking relationship stated only in prose is
+        # invisible to it: the blocker does not inherit what it unblocks, and
+        # the blocked ticket keeps its own number as if nothing gated it.
+        #
+        # Measured 2026-08-30 (frank-user + coordinator):
+        # feature-pascal-corpus-expansion [P p75] carries
+        #   "Status: unfinished (parked -- rung 6 blocked on
+        #    decide-revisit-object-types-rtl-generics-fired-the-trigger)"
+        # ONE LINE ABOVE frontmatter reading only `prio: 75`. The decide item
+        # therefore sat at 40 while a 75 waited on it, and the coordinator
+        # found it BY HAND -- the third time that umbrella went stale on its
+        # own prose.
+        #
+        # This is the exact complement of STALE-PARK, which sees a prose edge
+        # whose named ticket has CLOSED. That one catches a condition that
+        # expired; this one catches a condition that was never wired up. The
+        # two apertures together are "prose and frontmatter disagree", and
+        # neither alone reports the family.
+        #
+        # POPULATION, dated: every ticket outside done/ and rejected/, as of
+        # 2026-08-30. Same-line only -- STALE-PARK's +/-2-line window is right
+        # for a park banner and too loose here, where a nearby slug in an
+        # unrelated sentence would read as an edge. Reported only when the
+        # named ticket is still OPEN; a closed one is STALE-PARK's.
+        prose_edges = []
+        for t in self.tickets:
+            if t.status in ("done", "rejected"):
+                continue
+            if "PROSE EDGES BY DESIGN" in t.text.upper():
+                continue
+            rows = t.text.splitlines()
+            missing = {}
+            for line in rows:
+                # A TIGHTER PHRASE SET THAN STALE-PARK'S, and measured that way.
+                # Reusing PARK_COND gave 18 hits of which several were noise
+                # from `until` and `resume` -- the face index tripped on
+                # "off `PATH` until ...", a sentence with no dependency in it
+                # at all. Same-line matching needs a phrase that means an edge
+                # and nothing else.
+                mp = PROSE_EDGE_PHRASE.search(line)
+                if not mp:
+                    continue
+                # DIRECTION. "X is blocked on Y" and "Y blocks X" are the same
+                # sentence to a slug scanner, and the second one is somebody
+                # ELSE's edge quoted here. A slug BEFORE the phrase is the
+                # subject, so the line is about that ticket, not this one --
+                # measured on decide-install-qemu-system... (quoting
+                # feature-port-freebsd-native's status) and on a table row in
+                # refactor-a-c-exclusive-lowering... Only slugs AFTER the
+                # phrase, and only when nothing slug-shaped precedes it.
+                if SLUGISH.search(line[:mp.start()]):
+                    continue
+                for m in SLUGISH.finditer(line[mp.end():]):
+                    nm = m.group(0)
+                    if nm == t.slug or nm in t.blockers:
+                        continue
+                    other = self.by_slug.get(nm)
+                    if other is None or other.status in ("done", "rejected"):
+                        continue
+                    missing.setdefault(nm, other)
+            if missing:
+                prose_edges.append((t, missing))
+        for t, missing in prose_edges:
+            warning_count += 1
+            shown = sorted(missing)[:3]
+            more = f" (+{len(missing) - 3} more)" if len(missing) > 3 else ""
+            worst = max(missing.values(), key=lambda o: o.prio)
+            lines.append(
+                f"PROSE-EDGE-NOT-IN-FRONTMATTER: {t.slug} [{t.track} p{t.prio}] "
+                f"states in PROSE that it is blocked by {len(missing)} still-OPEN "
+                f"ticket(s) ({', '.join(shown)}{more}) that its `blocked-by` "
+                f"frontmatter does not name. THE RANKER READS FRONTMATTER AND "
+                f"NOTHING ELSE, so no priority propagates: `{worst.slug}` sits at "
+                f"p{worst.prio} while this p{t.prio} waits on it, and `ready`/"
+                f"`next` will offer this ticket as though nothing gated it. Two "
+                f"different repairs and they are NOT interchangeable -- if the "
+                f"edge is real, add it to `blocked-by` (the prose was right and "
+                f"the ticket was mis-ranked); if it is stale or was only ever a "
+                f"remark, rewrite the sentence (the frontmatter was right and the "
+                f"prose is lying to every reader). Deciding which requires reading "
+                f"it. This is the COMPLEMENT of STALE-PARK: that one finds a prose "
+                f"edge whose ticket has closed, this one finds one that was never "
+                f"wired up, and neither aperture reports the other's half. If a "
+                f"sentence names a ticket without gating on it, put PROSE EDGES BY "
+                f"DESIGN in the body"
+            )
 
         # DUPLICATE FACE NUMBERS -- an append-only index that numbers its
         # entries from its own tail CANNOT BE WRITTEN CONCURRENTLY. Found by
