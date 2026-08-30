@@ -8,7 +8,7 @@ found: 2026-08-31
 found-by: frankA
 owner: "frankA"
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: dd417a986
 summary: "FIXED by relaxation: IREmitMachineCodeXtensa emits the body, and if a three-byte forward slot turned out not to reach, marks that label wide and emits the body AGAIN. Two passes settle every case (the long form reaches +-2 GB); it costs NOTHING below 128 KiB of body, where it never fires. Verified both ABIs against the x64 oracle, with PXXDBG=a.xtrelax:* as the positive control. THE HEADLINE OF THE ORIGINAL SUMMARY WAS WRONG and is corrected here: this was NOT the last wall. The compiler now gets past every jump and stops on the forward CALL instead -- see bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build, which is the actual last wall and is re-ranked to 55."
 ---
 
