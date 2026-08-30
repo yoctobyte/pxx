@@ -108,4 +108,4 @@ Object-level plus a real link, at `f19e16b67bad`, with
 `~/.espressif`. The 23-commit bisect range was never used: the cause was found by
 reading the recipe against its own assertions, so nothing here rules on the other
 22 commits — only on this failure.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 2d875d40d.
