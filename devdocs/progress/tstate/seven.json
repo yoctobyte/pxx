@@ -11279,21 +11279,17 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-08-30T16:49:11Z",
+  "date": "2026-08-30T17:50:58Z",
   "red": [
    "test-core#src:test/test_warn_ignored_directives.pas",
-   "test-fgl#src:compiler/.pascal26.fixedpoint",
    "test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint",
    "tools-devtest#00",
    "test-pascal-conformance#shard4/6",
    "test-pascal-conformance#shard5/6"
   ],
-  "sha": "00779811b91295da6269e441d8a2800d34f278e6",
+  "sha": "c8e132a02b9279707213d41c970c00f96dfaddf5",
   "tier": "full",
-  "ver": "v397",
-  "verdict": "RED",
-  "why": {
-   "test-fgl#src:compiler/.pascal26.fixedpoint": "PASS map_str.pas | FAIL objectlist.pas -- compile error: | pascal26:9: error: generic constraint violated: TFPGObjectList<T> is constrained to `TObject`, but TThing is not TObject or a descendant of i"
-  }
+  "ver": "v398",
+  "verdict": "RED"
  }
 }
