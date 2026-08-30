@@ -12439,6 +12439,16 @@ test-core: $(COMPILER)
 	# refactor-a-two-predicates-answer-what-a-caret-yields
 	./$(COMPILER) $(PXXFLAGS) test/test_deref_shape_through_arith_and_nonident_base.pas $(TESTTMP)/test_deref_shape_arith26
 	$(TESTTMP)/test_deref_shape_arith26 | diff -u test/test_deref_shape_through_arith_and_nonident_base.expected -
+	# ...and the two spellings the rows above cannot reach. A DYNAMIC 2-D index
+	# is a genuinely NESTED AN_INDEX while a FIXED one is a SINGLE AN_INDEX with
+	# a computed subscript (measured with PXXDBG=a.ast), so `g[j][i]^` never
+	# exercises the nested-base arm; and every arithmetic row above derefs ONCE,
+	# so the arm could carry the pointee and still drop the remaining depth
+	# unnoticed. Rows f and c are the controls that made both gaps look covered.
+	# Non-vacuous: d and e print raw addresses on `pinned`.
+	# refactor-a-two-predicates-answer-what-a-caret-yields
+	./$(COMPILER) $(PXXFLAGS) test/test_deref_shape_dynarray_and_double.pas $(TESTTMP)/test_deref_dyndbl26
+	$(TESTTMP)/test_deref_dyndbl26 | diff -u test/test_deref_shape_dynarray_and_double.expected -
 	@echo "=== progress board check (non-fatal) ==="
 	@./tools/progress.sh check || echo "WARNING: progress board stale or invalid — run 'tools/progress.sh board-md' (non-fatal)"
 
