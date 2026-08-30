@@ -1034,6 +1034,51 @@ the tickets do not say so — each carries a stale plexus range of 88 commits an
   "bad sha touches no buildable file" case: unlocalizable as printed. Not
   dispatched, and it should not start a bisect on that sha.
 
+### STANDING — loop ticks are the expensive callback; prefer events (owner, 2026-08-30)
+
+Owner, this session: *"our loop callbacks use a lot of tokens.. see if you can
+limit that a bit please. maybe running less frequent, or avoid loading all
+context."*
+
+**Why a tick is expensive, stated once so nobody has to rediscover it.** A `/loop`
+tick is not a cheap poll — it re-enters the model with the session's WHOLE
+transcript. So the cost of a tick is not the work it does, it is the length of
+the conversation it is attached to, and it therefore GROWS the longer a session
+is useful. A five-minute loop on a mature session is the single most expensive
+thing the fleet can do while doing nothing, and it looks like diligence.
+
+**The rule, in priority order:**
+
+1. **Prefer an event to a tick.** A worker that MESSAGES the coordinator when it
+   lands is free until it lands. `SendMessage` with `notify_when_idle: true` and
+   no message body is a pure subscription that costs the watched session nothing
+   — that is the coordinator's default instrument for "tell me when frankA is
+   done", not a loop.
+2. **Never poll a background job you started.** The harness re-invokes you when
+   tracked work finishes. `sleep N; tail log` in a loop burns a turn per poll and
+   learns nothing — the same rule CLAUDE.md already states for `make`.
+3. **If you genuinely must pace yourself, pace slowly.** 20-30 minutes for an
+   idle check, not 5. Reserve short intervals for external state the harness
+   cannot notify you about (a CI run, a remote queue), and match the interval to
+   how fast that state actually changes.
+4. **A long-lived looping session should shed context, not just tick less.** Ticks
+   times transcript is the product that matters; halving the interval on a
+   session that never clears only halves a number that is still growing.
+
+**Audited 2026-08-30 after the reboot:** no loop is running anywhere in the fleet
+— `CronList` empty, `crontab -l` empty, no ScheduleWakeup state, and none of the
+nine systemd user timers (`trackt-health`, `trackt-regressions`,
+`xeon-away-monitor`, `xeon-pet-selfcheck`, …) invokes `claude` at all; they are
+shell scripts and cost nothing in tokens. `frank.sh` launches bare
+`claude --remote-control <name>` with no prompt and no loop, and
+`frank-watchdog.sh` is pure bash. So the cost the owner is describing came from
+loops that individual sessions were driven with before the reboot, and the fix is
+this policy plus dispatch discipline — there is no scheduler to turn down.
+
+**Dispatch briefs should say it.** The three Track A briefs of this session end
+with "message me rather than self-dispatching" for exactly this reason: an
+event-driven fleet has no ticks to pay for.
+
 ### plexus's own watcher is FAILED, and it is staying down
 
 `trackt-watcher.service` crash-looped 11 times after the reboot and systemd gave
