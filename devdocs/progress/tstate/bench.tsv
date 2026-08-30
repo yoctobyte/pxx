@@ -17176,3 +17176,12 @@
 2026-08-28T21:01:32Z	plexus	eb1b200ee92f	selfcompile	-O2	18142.1
 2026-08-28T21:01:32Z	plexus	eb1b200ee92f	selfcompile	-O3	16660.2
 2026-08-28T21:01:32Z	plexus	eb1b200ee92f	selfcompile	fpc	9674.2
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-microbench-doloop	cpython	13068.7	07ffdb1	25352
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-microbench-doloop	cpython-O	13549.6	07ffdb1	32464
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-microbench-doloop	pxx	19328.2	07ffdb1	17144
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-prelim	cpython	452.1	07ffdb1	25632
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-prelim	cpython-O	705.3	07ffdb1	32524
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-prelim	pxx	813.7	07ffdb1	17144
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-core	cpython	1277.8	07ffdb1	25900
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-core	cpython-O	1548.7	07ffdb1	32544
+2026-08-30T23:12:40Z	plexus	041204c7a	uforth-core	pxx	2581.6	07ffdb1	17144
