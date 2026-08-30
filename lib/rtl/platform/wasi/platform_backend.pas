@@ -262,7 +262,18 @@ var
   WasiPreLen     : array[0..WASI_PREOPEN_MAX - 1] of Integer;
   WasiPreName    : array[0..WASI_PREOPEN_MAX * WASI_PREOPEN_NAMEMAX - 1] of Byte;
   WasiIov        : array[0..1] of Integer;   { one iovec: [ptr, len] }
-  WasiScratch    : array[0..15] of Byte;     { prestat / nread / newoffset }
+  WasiScratch    : array[0..15] of Byte;     { prestat / nread (u32: align 4) }
+  { The 8-BYTE out-params get their OWN scratch, and the reason is a layout rule
+    rather than a style preference. symtab.inc's TypeAlign aligns a global to its
+    ELEMENT type, so `array[0..15] of Byte` is aligned to ONE -- it landed
+    4-aligned by luck, not by rule. WASI declares fd_seek's `filesize` and
+    clock_time_get's `timestamp` as u64 and a strict host ENFORCES the 8-byte
+    alignment: wasmtime refuses with `Pointer not aligned to 8`, while node's
+    WASI accepted the same pointer and took the process down with SIGSEGV
+    further on. An Int64 global aligns to 8 by that same TypeAlign rule, so this
+    declaration is the guarantee.
+    bug-wasm-hosted-compiler-segfaults-the-host-after-a-successful-parse }
+  WasiScratch64  : Int64;      { fd_seek newoffset / clock_time_get timestamp }
 {$endif}
 
 { WASI errno -> the negative Linux-ish value PAL callers compare against.
@@ -624,11 +635,10 @@ var rc, i: Integer; v: Int64;
 {$endif}
 begin
 {$ifdef CPU_WASM32}
-  for i := 0 to 7 do WasiScratch[i] := 0;
-  rc := wasi_fd_seek(handle, offset, whence, @WasiScratch[0]);
+  WasiScratch64 := 0;
+  rc := wasi_fd_seek(handle, offset, whence, @WasiScratch64);
   if rc <> 0 then begin Result := WasiErr(rc); Exit; end;
-  v := 0;
-  for i := 7 downto 0 do v := (v shl 8) or Int64(WasiScratch[i]);
+  v := WasiScratch64;
   Result := v;
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
@@ -883,11 +893,10 @@ var rc, i: Integer; t: Int64;
 {$endif}
 begin
 {$ifdef CPU_WASM32}
-  for i := 0 to 7 do WasiScratch[i] := 0;
-  rc := wasi_clock_time_get(WASI_CLOCK_REALTIME, 1000, @WasiScratch[0]);
+  WasiScratch64 := 0;
+  rc := wasi_clock_time_get(WASI_CLOCK_REALTIME, 1000, @WasiScratch64);
   if rc <> 0 then begin Result := WasiErr(rc); Exit; end;
-  t := 0;
-  for i := 7 downto 0 do t := (t shl 8) or Int64(WasiScratch[i]);
+  t := WasiScratch64;
   sec := t div 1000000000;
   nsec := t mod 1000000000;
   Result := 0;
@@ -1067,11 +1076,10 @@ var rc, i: Integer; t: Int64;
 {$endif}
 begin
 {$ifdef CPU_WASM32}
-  for i := 0 to 7 do WasiScratch[i] := 0;
-  rc := wasi_clock_time_get(WASI_CLOCK_MONOTONIC, 1000000, @WasiScratch[0]);
+  WasiScratch64 := 0;
+  rc := wasi_clock_time_get(WASI_CLOCK_MONOTONIC, 1000000, @WasiScratch64);
   if rc <> 0 then begin Result := WasiErr(rc); Exit; end;
-  t := 0;
-  for i := 7 downto 0 do t := (t shl 8) or Int64(WasiScratch[i]);
+  t := WasiScratch64;
   Result := t div 1000000;
 {$else}
   Result := PAL_ERR_UNSUPPORTED;

@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (377)
+## backlog (378)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -200,7 +200,7 @@ _none_
 | bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable | T | 40 | bug | CLAUDE.md gates the widen-your-gate exception on `twatch.py --status` exit 1 OR `trackt.py health` DOWN, as if they were two ways to ask one question. They are not: --status reads PUBLISHED tstate (was work swept recently) and health checks for a RUNNING PROCESS (is anything sweeping now). Measured 2026-08-29 during a watcher handover, they returned UP/exit-0 and DOWN simultaneously. Joined by `or`, the disagreement silently resolves to `down`, so every agent widens its gate by ~10 minutes per fix during any handover — the exact cost the rule exists to avoid. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
 | bug-t-two-public-surfaces-answer-how-big-is-the-backlog-differently | T | 30 | bug | The published status dashboard says 338 backlog tickets; tools/factsheet.sh says 351. Both defensible -- factsheet counts backlog_new/, the dashboard appears to break those out alongside '20 experimental'. Not a defect in either, but two public surfaces answer the same question with different numbers and the generator's owner should pick one. | — |
-| bug-wasm-hosted-compiler-segfaults-the-host-after-a-successful-parse | A | 60 | bug | With bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver fixed, compiler.pas under WASI resolves its whole unit chain, parses, and reaches output — then the NODE PROCESS dies with SIGSEGV, not a wasm trap. --version and --where exit 0. A source file with a SYNTAX ERROR prints the correct diagnostic and then also segfaults, so this is not codegen-specific. Non-deterministic: the output file is 0, absent or 3 bytes across identical runs. A guest cannot segfault its host, so this is V8/node crashing, most likely a native-stack overflow from deep guest recursion. | — |
+| bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile | A | 25 | bug | The residual after the WASI u64-alignment defect was fixed. On the SAME module, wasmtime compiles a program to a byte-identical ELF five times out of five at exit 0; node segfaults five times out of five, leaving a 0-3 byte artifact. Node handles --version, --where and --list-libraries (a directory walk) at exit 0 and dies only on a full compile. A sandboxed guest cannot fault its host, only trap, so this is host-side — and unlike the predecessor ticket that inference now has a control behind it. LOW PRIO: wasmtime is the campaign's host and the milestone is met without node. | — |
 | chore-a-adopt-allocrecvar-at-the-twenty-remaining-record-temp-sites | A | 35 | chore | chore(A): adopt AllocRecVar at the 20 remaining `AllocVar(…, tyRecord)` sites | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping | A | 40 | chore | Grant: frankwasm holds `compiler/ir.inc` for the `:11207` mistyping fix | — |
@@ -373,6 +373,7 @@ _none_
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 30 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
 | feature-t-record-host-cpu-features-in-tstate | T | 20 | feature | tstate records host, sha, tier, wall and compiler_sha256 — nothing about the machine. So 'can we emit FMA?' could not be answered from the repo and needed an ssh into plexus. Record CPU model and the x86-64 feature level per host, once, in the host json. | — |
+| feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host | A | 40 | feature | Every check in test/wasm/ runs its module under node's WASI, which does not enforce the pointer alignment WASI preview1 requires of u64 out-params. Measured: with that defect reinstated, the align slice prints every expected line under node and exits 0, and traps under wasmtime before its first line. check_align.sh now covers the specific calls, but the four general WASI slices — sysio, loadfile, pal, wasi — still run under the lenient host only, so the class stays invisible wherever they are the coverage. | — |
 | feature-t-uforth-bench-on-the-watcher-idle-phase | T | 25 | feature | tools/uforth_bench.py is standalone + a make target, so uforth rows only exist when a human types it. Hang it off the watcher's idle bench phase so rows land per-sha automatically — which is also the only way to get the quiet-box baseline the harness has never had, and the instrument for the open slow-creep question. | — |
 | feature-t-uforth-bench-restore-the-elfhash-outlier | T | 15 | feature | blocktest-elfhash SKIPs in the uforth bench: blocktest.fth needs uforth's block-word preamble (FIRST-TEST-BLOCK / LIMIT-TEST-BLOCK / [?IF]) that tester.fr alone does not supply. It is the tracked ~100x-slow outlier, so while it skips the harness has no visibility on the worst case. | — |
 | feature-t-windows-wine-harness | M | 20 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
@@ -702,9 +703,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2793)
+## done (2794)
 
-2793 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2794 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -808,7 +809,6 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
-- [p 60] [A] bug-wasm-hosted-compiler-segfaults-the-host-after-a-successful-parse
 - [p 60] [U] decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane
 - [p 60] [U] decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
@@ -997,6 +997,7 @@ _none_
 - [p 40] [A] feature-rtl-libc-frontend-sites-and-thread-errno
 - [p 40] [T] feature-t-audit-tests-that-pass-with-the-implementation-removed
 - [p 40] [T] feature-t-check-flags-a-lane-blocker-that-has-no-in-edges
+- [p 40] [A] feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - [p 40] [W] feature-web-machine-readable-project-metadata
 - [p 40] [A] feature-writeln-as-library
 - [p 40] [A] grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy
@@ -1102,6 +1103,7 @@ _none_
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
 - [p 25] [P] bug-p-set-membership-item-constant-truncated-to-32-bits
 - [p 25] [T] bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference
+- [p 25] [A] bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [T] chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it
 - [p 25] [T] chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at

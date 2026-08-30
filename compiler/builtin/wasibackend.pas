@@ -205,7 +205,18 @@ var
   WasiPreLen     : array[0..WASI_PREOPEN_MAX - 1] of Integer;
   WasiPreName    : array[0..WASI_PREOPEN_MAX * WASI_PREOPEN_NAMEMAX - 1] of Byte;
   WasiIov        : array[0..1] of Integer;   { one iovec: [ptr, len] }
-  WasiScratch    : array[0..15] of Byte;     { prestat / nread / newoffset }
+  WasiScratch    : array[0..15] of Byte;     { prestat / nread (u32: align 4) }
+  { The 8-BYTE out-params get their OWN scratch, and the reason is a layout rule
+    rather than a style preference. symtab.inc's TypeAlign aligns a global to its
+    ELEMENT type, so `array[0..15] of Byte` is aligned to ONE -- it landed
+    4-aligned in the compiler's own module by luck, not by rule. WASI declares
+    fd_seek's `filesize` and clock_time_get's `timestamp` as u64 and a strict
+    host ENFORCES the 8-byte alignment: wasmtime refuses with `Pointer not
+    aligned to 8`, while node's WASI accepted the same pointer and took the
+    process down with SIGSEGV further on. An Int64 global aligns to 8 by that
+    same TypeAlign rule, so this declaration is the guarantee.
+    bug-wasm-hosted-compiler-segfaults-the-host-after-a-successful-parse }
+  WasiScratch64  : Int64;      { fd_seek newoffset / clock_time_get timestamp }
   { fd_readdir staging. The COOKIE is the whole reason there is state here:
     getdents64 is a resumable walk whose position the kernel keeps in the fd,
     and WASI moved that position into the caller. One slot, not a table,
@@ -569,15 +580,11 @@ begin
   if fd < 0 then Exit;
 
   size := 0;
-  WasiScratch[0] := 0; WasiScratch[1] := 0;
-  WasiScratch[2] := 0; WasiScratch[3] := 0;
-  if wasi_fd_seek(fd, 0, 2, @WasiScratch[0]) = 0 then      { WHENCE_END }
-    size := Integer(WasiScratch[0]) or (Integer(WasiScratch[1]) shl 8)
-            or (Integer(WasiScratch[2]) shl 16)
-            or (Integer(WasiScratch[3]) shl 24);
-  WasiScratch[0] := 0; WasiScratch[1] := 0;
-  WasiScratch[2] := 0; WasiScratch[3] := 0;
-  if wasi_fd_seek(fd, 0, 0, @WasiScratch[0]) <> 0 then     { WHENCE_SET }
+  WasiScratch64 := 0;
+  if wasi_fd_seek(fd, 0, 2, @WasiScratch64) = 0 then       { WHENCE_END }
+    size := WasiScratch64;
+  WasiScratch64 := 0;
+  if wasi_fd_seek(fd, 0, 0, @WasiScratch64) <> 0 then      { WHENCE_SET }
     size := 0;
 
   if size <= 0 then
