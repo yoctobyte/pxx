@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (329)
+## backlog (330)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -146,6 +146,7 @@ _none_
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
+| bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected | P | 50 | bug | `TD<T> = class abstract(TEnumBase<T>);` — a bodiless generic class with the `abstract` modifier and a generic parent — is rejected with `unexpected token in a unit interface section`. All three ingredients are required: dropping `abstract`, or making the parent non-generic, compiles. FPC compiles it. rtl-generics uses this exact shape. | — |
 | bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface | P | 65 | bug | A unit that specializes another unit's generic IN ITS INTERFACE gets the template's method bodies streamed into the interface section, where a method implementation is not a declaration: `unexpected token in a unit interface section` pointing at the TEMPLATE's file. Pre-existing on pinned, objfpc binder form, no Delphi surface involved — the same-file and the program-level cases both work, and a template with only FIELDS works cross-unit too. This is the next wall for `uses Generics.Collections`, because real templates have methods. Named as tgeneric91 in test/test_generic_spec_per_unit.pas's own header but never ticketed. | — |
 | bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name | P | 45 | bug | A program declaring `TBox<T>` while also importing a unit that declares `TBox<T>` now parses, but every use resolves to the IMPORTED template: `b.Local` answers `no such member`. FPC takes the local declaration and prints 42. The declaration is parsed and then loses to the import. | — |
 | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
@@ -813,6 +814,7 @@ _none_
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
+- [p 50] [P] bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected
 - [p 50] [T] bug-t-89-nilpy-expectations-are-duplicated-across-two-targets-with-nothing-keeping-them-in-sync
 - [p 50] [T] bug-t-auto-close-on-one-green-is-sound-for-a-deterministic-test-and-unsound-for-a-racy-one
 - [p 50] [T] bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure

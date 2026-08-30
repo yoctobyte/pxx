@@ -1,9 +1,9 @@
 ---
 track: P
 prio: 65
-owner: unassigned
+owner: frankA
 blocked-by: []
-status: unfinished
+status: working
 type: feature
 ---
 
@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished (parked — the 3341 blocker is cleared; next wall is a new failure class)
+- **Status:** working
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -1157,3 +1157,98 @@ cross-unit Delphi generics, not `TKey` (`81dffa9cb`). Left alone.
 Blocked behind the alias-cast bug, which is Track P's file and was not fixed
 under this corpus dispatch (corpus work files defects into the owning lane, it
 does not fix them). Once it lands, resume at `generics.collections`.
+
+---
+
+## 2026-08-30 (frankA) — the wall MOVED TWICE. Both of this ticket's parking notes were stale
+
+### First: the two notes at the bottom of this file were both false when I read them
+
+| the note said | actual state 2026-08-30 |
+| --- | --- |
+| *"Still parked — blocked behind the alias-cast bug"* | [[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] landed at `6cc4afc17`, 2026-08-29 22:32. Unblocked for hours before I opened this. |
+| *"`generics.collections`' `unknown type: TKey` is already re-diagnosed as cross-unit Delphi generics (`81dffa9cb`). Left alone."* | That re-diagnosis was FIXED at `625991d20` — and **the wall survived it unchanged**. The note sends the next holder to a closed ticket. |
+
+Same shape the umbrella [[feature-pascal-corpus-oop]] already documents: *a
+stalled-because note ages into a false claim, and it ages invisibly*, because
+resolving a blocker is an event on the **blocker**, not on the dependent. Two
+instances in one file.
+
+### The real cause of the `TKey` wall — measured, after three refuted hypotheses
+
+`unknown type: TKey` was raised while parsing `generics.defaults.pas`, a unit
+that compiles perfectly alone. The chain:
+
+1. `CollectSpecializationBoundNamesFromTokens` harvests type-parameter names so
+   a specialization spelled with one takes the *deferred* path instead of
+   minting an alias.
+2. It collected **96** names for this corpus and **`TKey` was not among them** —
+   though 583 `TKey` tokens sat in the stream.
+3. Not the 512-name cap (96 of 512 — refuted). Not the scan abandoning the
+   stream (instrumented for the runaway case; never fired — refuted). Not
+   ordering (the tokens were present the whole time — refuted).
+4. It was `CollectNestedTypeNames` mis-tracking nesting depth. A **bodiless
+   class** opens no body, but only the spelling `= class;` was recognised — the
+   code tested the single token after `class` for `;`, while its own comment
+   claimed `= class(TBase);` worked too. So
+   `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);`
+   left depth at 1 and the scan ran to a *later* declaration's `end`:
+   **one jump swallowed 11,312 tokens**, and with them every parameter those
+   declarations bind.
+
+**Nothing reported any of this.** The names were simply absent; a specialization
+naming one then took the alias path and minted an alias into the TEMPLATE's
+unit, where the parameter does not exist. The error surfaced two units away
+from its cause.
+
+### The fix had a second arm, in the same shape one level down
+
+Handling only the outermost bodiless class was not enough — `TList` nests
+
+```pascal
+type
+  TEnumerator = class(TCustomListEnumerator<T>);
+```
+
+inside its own body, which inflated depth again and swallowed 10,864 tokens. A
+bodiless class opens no body at **any** nesting level, so the fix does not touch
+depth at all rather than special-casing the top. Exactly
+`normalise-dont-special-case`: the first patch was the second path, and the
+second path is the one that stays broken.
+
+### Result — bound names 96 → 293, and the frontier moved ~1200 lines
+
+| stage | bound names | where it stops |
+| --- | ---: | --- |
+| before | 96 (`TKey` absent) | `generics.defaults.pas:46` — `unknown type: TKey` |
+| + outermost bodiless fix | 112 | still `defaults:46` |
+| + nested arm (any depth) | **293** (`TKey` present) | `collections:1313` — `MAX_NESTED_SPECS` |
+| + `MAX_NESTED_SPECS` 24 → 96 | 293 | `collections:120` — `unknown type: PT` |
+
+`MAX_NESTED_SPECS` was a **genuine capacity limit, not a runaway** — confirmed
+by raising it and watching the frontier move rather than the compile explode
+(71s wall, 63 MB peak). Bumped with the measurement recorded at the constant.
+
+### Where rung 3 stands now, and what NOT to assume
+
+`generics.collections` still does not compile. The current wall is
+`unknown type: PT` at `collections:120`, which is the same *family* as the TKey
+one and **must not be assumed to be the same defect** — that assumption is what
+this ticket's stale note got wrong, and what I got wrong once already tonight.
+
+Filed on the way, both reachable only because the scan fix moved the frontier:
+
+- [[bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected]]
+  — the parser rejects `TD<T> = class abstract(TEnumBase<T>);` outright. All
+  three ingredients required; FPC compiles it. rtl-generics uses this shape.
+
+### PARKED 2026-08-30 (frankA) — released from `working/`
+
+The frontier moved twice and `generics.collections` still does not compile, so
+this rung is not done. Released rather than held: a lock over a ticket nobody is
+working reads as "someone is on it", which is the failure measured fleet-wide
+tonight (`decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop`).
+
+Everything is pushed; nothing is half-applied. **Re-measure before trusting the
+table above** — that is the rule this ticket has now taught twice in its own
+history, and this section is a snapshot like every other.

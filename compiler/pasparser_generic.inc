@@ -503,7 +503,7 @@ var
   Not shared with GenericMethodBodyEnd: that one matches begin/case/end over a
   STATEMENT body, which is a different grammar with a different opener set. }
 procedure CollectNestedTypeNames(afterEq: Integer; var resumeAt: Integer);
-var j, depth: Integer;
+var j, depth, k, pdepth: Integer;
     inTypeSec, isModifier: Boolean;
 begin
   j := afterEq;
@@ -543,10 +543,51 @@ begin
                          CaseEqual(GetTokenStr(j + 1), 'destructor'))));
         if not isModifier then
         begin
-          Inc(depth);
-          { `= class;` / `= class(TBase);` with no body closes immediately }
-          if (depth = 1) and (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkSemicolon) then
-          begin resumeAt := j + 1; Exit; end;
+          { A BODILESS class closes immediately. All four spellings count:
+            `= class;`, `= class(TBase);`, `= class abstract(TBase);`,
+            `= class sealed(TBase);`. Only the FIRST was detected -- the test
+            read the single token after `class` and asked if it was `;`, while
+            the comment above it claimed the parent form worked too. So
+            rtl-generics' `TCustomPointersEnumerator<T, PT> = class
+            abstract(TEnumerator<PT>);` left depth at 1, and the scan ran on
+            until some LATER declaration's `end`: one jump swallowed 11,312
+            tokens of generics.collections, and with them every type parameter
+            those declarations bind. Nothing reported it -- the names simply
+            were not there, and a specialization naming one then took the alias
+            path and minted an alias into the TEMPLATE's unit, where the
+            parameter does not exist.
+            bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section }
+          k := j + 1;
+          while (k < TokCount) and (Tokens[k].Kind = tkIdent) and
+                (CaseEqual(GetTokenStr(k), 'abstract') or
+                 CaseEqual(GetTokenStr(k), 'sealed')) do Inc(k);
+          if (k < TokCount) and (Tokens[k].Kind = tkLParen) then
+          begin
+            pdepth := 0;
+            while k < TokCount do
+            begin
+              if Tokens[k].Kind = tkLParen then Inc(pdepth)
+              else if Tokens[k].Kind = tkRParen then
+              begin
+                Dec(pdepth);
+                if pdepth <= 0 then begin Inc(k); Break; end;
+              end;
+              Inc(k);
+            end;
+          end;
+          if (k < TokCount) and (Tokens[k].Kind = tkSemicolon) then
+          begin
+            { Bodiless: it opens NO body, so it must not touch depth -- at ANY
+              nesting level. Handling only the outermost one was the second arm
+              of this same bug: rtl-generics nests
+              `TEnumerator = class(TCustomListEnumerator<T>);` inside TList's
+              `type` section, which inflated depth by one and made TList's own
+              `end` close the wrong level. }
+            if depth = 0 then begin resumeAt := k; Exit; end;
+            j := k;
+          end
+          else
+            Inc(depth);
         end;
       end
       else if Tokens[j].Kind = tkType then inTypeSec := True
@@ -568,6 +609,13 @@ begin
       end;
       Inc(j);
     end;
+    { Ran off the end without depth returning to 0. resumeAt := TokCount makes
+      the CALLER's scan jump to the end of the stream, silently abandoning every
+      declaration after this one. }
+    if PxxDbgEnabled('p.specbound') then
+      writeln('PXXDBG p.specbound RUNAWAY from tok=', afterEq,
+              ' depth=', depth, ' -- rest of stream (', TokCount - afterEq,
+              ' tokens) NOT scanned');
     resumeAt := TokCount;
   end
   else
@@ -629,12 +677,28 @@ begin
       begin
         { a header -- keep the parameter names, then harvest the names its BODY
           declares, and resume past the whole declaration }
+        savedCount := i;
         CollectNestedTypeNames(j + 2, i);
+        if PxxDbgEnabled('p.specbound') and (i > savedCount + 1) then
+          writeln('PXXDBG p.specbound JUMP ', savedCount, ' -> ', i,
+                  ' (skipped ', i - savedCount, ' tokens) header=', GetTokenStr(savedCount));
       end
       else
         SpecBoundNameCount := savedCount;   { a use, or malformed -- forget them }
     end;
     Inc(i);
+  end;
+  { The cap is silent: past MAX_SPEC_BOUND_NAMES a real type-parameter name is
+    simply not recorded, and the only symptom is a specialization later taking
+    the alias path instead of the deferred one -- i.e. an alias minted into the
+    TEMPLATE's unit naming a parameter that does not exist there. Report the
+    occupancy so a near-miss is visible before it becomes a wall. }
+  if PxxDbgEnabled('p.specbound') then
+  begin
+    writeln('PXXDBG p.specbound names=', SpecBoundNameCount,
+            ' cap=', MAX_SPEC_BOUND_NAMES,
+            ' overflow=', Ord(SpecBoundNameCount >= MAX_SPEC_BOUND_NAMES),
+            ' tokcount=', TokCount);
   end;
 end;
 

@@ -1772,7 +1772,10 @@ const
   { distinct nested generic uses (`class(specialize TBase<T>)`, a field of a
     generic type) inside ONE template body -- see the nested-specialization
     note in pasparser_*.inc. The +1 slot holds the declaration being deferred. }
-  MAX_NESTED_SPECS = 24;
+  MAX_NESTED_SPECS = 96;   { was 24 -- MEASURED insufficient: rtl-generics' generics.collections
+                             exhausts 24 at line 1313 and compiles past it at 96. Not a runaway;
+                             raising it moved the frontier ~1200 lines further into the unit.
+                             Cost is 96 AnsiStrings x2 + 96*MAX_TEMPLATE_PARAMS TRawTokens. }
   MAX_OP_OVERLOADS = 64;
 
 type
