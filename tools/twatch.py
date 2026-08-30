@@ -4312,8 +4312,66 @@ TRACK_BY_SRC = (
     (".npy", "N"), ("test_nilpy", "N"), ("pylib", "N"),
     ("lib/crtl", "C"), ("crtl_", "C"), (".c", "C"),
     ("lib/rtl", "B"), ("lib/pcl", "B"), ("lib_", "B"), ("examples/", "B"),
+    # The frontends' own carved-out files, BEFORE the `compiler/` sweep below --
+    # they live under compiler/ and are emphatically not A's. Order is the whole
+    # correctness argument here, so do not sort this tuple.
+    ("pasparser", "P"), ("pylexer", "N"), ("pyparser", "N"),
+    ("clexer", "C"), ("cparser", "C"), ("cpreproc", "C"),
+    # Everything else under compiler/ is Track A (CLAUDE.md: A owns compiler/**,
+    # the shared internals). This entry exists because the `.pas` catch-all below
+    # was routing `compiler/compiler.pas` to P -- the compiler's own source is
+    # not frontend work, and a test whose subject is a compiler file is A's.
+    ("compiler/", "A"),
     ("test/pascal-conformance", "P"), (".pas", "P"),
 )
+
+
+# Job names that name a MECHANISM rather than a SUBJECT.
+#
+# The distinction, and it is the whole reason this table is explicit rather than
+# a heuristic: most job names describe what a job is ABOUT, so their lane depends
+# on the source (`test-core` runs the whole corpus across every lane, and naming
+# it would be a guess). A few name one machine-level mechanism, and then the lane
+# is a property of the NAME and the source is irrelevant -- `test-asm` is the
+# x86-64 text assembler/encoder, so `test-asm#src:test/hello.pas` is Track A
+# precisely BECAUSE hello.pas has nothing to do with what is being tested.
+#
+# Measured cost of not having it: five p70 regressions auto-filed as `track: P`
+# on 2026-08-30 (regression-test-asm-*), one of them reporting `undefined
+# variable (EmitSyscall)` in compiler/x64enc.inc. All five were the test-asm job;
+# none was frontend work; all were invisible to the lane that owns the file until
+# a human re-laned them by hand. Note also five tickets for one cause -- twatch
+# files per source, so one defect became five slugs.
+#
+# KEPT DELIBERATELY SHORT. An entry here overrides evidence, so a wrong one is
+# silent and permanent, where the path guess at least prints "guessed" for a
+# reader to correct. Only names whose lane the SOURCE cannot supply are listed:
+# `test-nilpy` and `test-c-conformance` are absent because their sources (.npy,
+# .c) already answer correctly, and adding them would buy nothing while growing
+# the surface. If a name's lane is arguable, leave it out.
+TRACK_BY_JOB = {
+    # x86-64 emitters and the object/debug writers: A's ground, whatever .pas
+    # file is fed through them.
+    "test-asm": "A", "test-emit-obj": "A", "test-debug-g": "A",
+    # the optimizer and the self-compile -O differential
+    "test-opt": "A", "test-selfcompile-odiff": "A",
+    # cross-target backends -- a test that passes on x86-64 and fails here is a
+    # backend fact, and CLAUDE.md puts cross-target work in A
+    "test-aarch64": "A", "test-arm32": "A", "test-i386": "A",
+    "test-riscv32": "A", "test-xtensa": "A",
+    # Track T's own tooling
+    "tools-devtest": "T", "tools-devtest-sh": "T",
+}
+
+
+def job_family(j):
+    """The job's NAME, without its per-source selector suffix.
+
+    `test-asm#src:test/hello.pas` -> `test-asm`. Falls back to `name` because a
+    cascade entry carries no selector.
+    """
+    s = str(j.get("job") or j.get("name") or "")
+    return s.split("#", 1)[0].strip()
 
 
 # A REFUSAL expectation -- one that records an error rather than a value --
@@ -4398,6 +4456,20 @@ def stub_track(j):
             "`bug-t-a-timeout-bisects-to-an-innocent-commit` was filed to stop, "
             "so a timeout stays T's until someone shows otherwise. Re-lane it "
             "if the budget was not the problem.%s\n\n" % hung)
+    named = TRACK_BY_JOB.get(job_family(j))
+    if named:
+        # BEFORE the step and the src, because for these jobs both are noise:
+        # the sources are whatever .pas file the mechanism was fed. Deliberately
+        # AFTER the timeout arm above -- a timeout is a budget fact, and nothing
+        # about a mechanism's name says its budget is that mechanism's fault.
+        return named, (
+            "> **Track %s from the job NAME `%s`**, not from its source. This "
+            "job names a MECHANISM rather than a subject — the source it was "
+            "fed (`%s`) is what the mechanism was run ON, not what is being "
+            "tested, so a lane guessed from it would be wrong by construction. "
+            "The ranker reads frontmatter, so this line decides who works it; "
+            "re-lane it if this job has changed what it covers.\n\n"
+            % (named, job_family(j), str(j.get("src") or "none").split()[0]))
     # THE FAILING STEP FIRST, and it is not the same evidence as the job's
     # `src`. A job is one script of up to ~200 recipe lines; `src` is every
     # file the whole script mentions, truncated to the first two. So `src`
