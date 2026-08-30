@@ -4,7 +4,7 @@ prio: 15
 type: chore
 blocked-by: []
 summary: "PXXSysLseek's rv32 comment in compiler/builtin/builtinheap.pas ends with a NOTE saying the sibling comment in platform_backend.pas 'still says the plain form is tolerated by qemu-user'. That sibling was corrected on 2026-08-30, so the clause is now false. Three-line deletion in a Track A file; filed rather than edited from Track B."
-status: backlog
+status: done
 owner: unassigned
 ---
 
@@ -54,3 +54,6 @@ finding came from Track B.
 
 Track A's: `make compiler/pascal26` (the self-host fixedpoint) — a
 comment-only change, so nothing else is expected to move.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -2329,12 +2329,7 @@ begin
     -- a size of -1 flowing into read as a count, and LoadFile publishing an
     EMPTY string with no error anywhere. This mirrors PalBackendSeek in
     lib/rtl/platform/posix/platform_backend.pas, which already carries the
-    identical split and the identical reason; the two must not drift.
-
-    NOTE the sibling comment in that same file's rv32 block still says the plain
-    form is tolerated by qemu-user for small offsets. The strace above falsifies
-    that for the RETURN VALUE case, which is the one this helper needs.
-    bug-b-platform-backend-rv32-comment-claims-plain-lseek-is-tolerated }
+    identical split and the identical reason; the two must not drift. }
   res := 0;
   r := __pxxrawsyscall(62, fd, (offset shr 32) and $FFFFFFFF,
                        offset and $FFFFFFFF, Int64(@res), whence);

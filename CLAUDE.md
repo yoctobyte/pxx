@@ -575,6 +575,124 @@ around. Track B's `devdocs/dev/track-b-workarounds.md` (library code that
 stays platonic but sidesteps an open bug, tracked with a revert-when-fixed
 lifecycle) is a separate, deliberate pattern and is unaffected.
 
+## Just fix it — the trivial-fix rule (all tracks)
+
+**User, 2026-08-30:** *"i also see tickets like 'this comment line is wrong and
+confusing'. and then it wastes a whole ticket on it. which someone has to read
+again ... the agents should have felt authorized to just edit the comment line
+and fix it, instead of pushing it through the ticket system ... it's no wonder
+our backlog grows into a bureaucratic monster with tickets like this."*
+
+The backlog stands at ~450 open items. A ticket costs far more than the fix it
+describes: it is written, ranked, re-read at triage, carried through every
+`board-md`, and read again by whoever finally claims it. For a three-line comment
+deletion that is **the most expensive way to change three lines**, and the ticket
+outlives the problem.
+
+**So: if it is small enough to fix with no possible side effect, FIX IT. Do not
+file it.** You are authorized. This is not an exception you must justify — it is
+the expected behaviour, and filing instead is the deviation.
+
+### What qualifies — the test is "can this change behaviour?", not "is it small?"
+
+Qualifies (fix on sight, any lane, any file):
+
+- a comment that is stale, wrong, or misleading
+- a typo in a comment, string, doc, or ticket
+- a dead cross-reference: a cited slug that closed, a renamed file, a moved doc
+- a stale enumeration in prose ("the other four targets" when there are five)
+- obvious `devdocs/**` rot you are already looking at
+
+Does **not** qualify, no matter how few characters it touches:
+
+- anything the compiler reads: code, a directive, a `{$define}`, a test's
+  `.expected`
+- renaming an identifier — it is a behaviour change wearing a cosmetic hat
+- deleting code you believe is dead. Believe is doing a lot of work there; that
+  is a ticket
+- anything you cannot verify by reading, without running something
+
+The boundary is **not size**. A one-character code edit is a ticket; a
+forty-line comment rewrite is not.
+
+### The trap that makes this rule dangerous, and the check that defuses it
+
+**A comment that disagrees with the code is evidence that ONE of them is wrong,
+and you do not yet know which.** Silently "fixing" the comment to match the code
+buries a real defect — and it has already happened here:
+`bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug`
+found exactly that, in a sweep whose whole subject was miscounted comments.
+
+So, before editing a comment that contradicts the code:
+
+1. Decide **which one is wrong.** Read the code; if that is not enough, measure
+   it (`devdocs/dev/debugging-playbook.md`).
+2. **Comment stale, code right** → fix the comment, log it, done. This is the
+   common case.
+3. **Code wrong** → that is a real bug in its own lane, at its own prio. File it.
+   Fixing the comment to match broken code is the worst available outcome: it
+   destroys the evidence *and* closes the question.
+
+If you cannot cheaply tell which is wrong, that uncertainty is itself worth a
+ticket. Say so in it.
+
+### Lanes do not apply to comments
+
+A comment-only edit **cannot break another lane's gate**, so the track rules —
+which exist to stop two agents colliding in one file, and to protect the
+self-host gate — do not bind it. Track B may fix a stale comment in
+`compiler/builtin/**` directly. **Do not file a Track A ticket for a comment.**
+
+This is the second driver of the bureaucracy and it is worth naming:
+`chore-a-trim-the-stale-cross-reference-in-pxxsyslseek-s-rv32-comment` is 56
+lines of ticket for a three-line deletion, and it says so in its own summary —
+*"filed rather than edited from Track B."* The lane rule was followed correctly
+and produced a bad outcome, which means the rule was missing this carve-out.
+
+Two things to still respect:
+
+- **Any edit under `compiler/**` still runs `make compiler/pascal26`** — it is
+  the build and the self-host fixedpoint, it costs ~12s, and the per-fix loop
+  mandates it for every edit regardless of how cosmetic. (Checked 2026-08-30:
+  `compiler/builtin/*.pas` and `lib/rtl/*.pas` appear in the Makefile's
+  `COMPILER_INC` as *dependencies*, not as embedded text, so a comment there does
+  not change the binary — but the build still reruns, and you want to see it pass
+  rather than assume it.)
+- If another agent is *actively editing that file right now*, your comment fix
+  will conflict like any other edit. That is a rebase problem, not a lane
+  problem.
+
+### Log it — `devdocs/progress/LOGBOOK.md`
+
+Append one line. That is the entire bookkeeping cost:
+
+```
+- 2026-08-30 | frankA | compiler/builtin/builtinheap.pas | trimmed PXXSysLseek's rv32 NOTE — the sibling comment it cites was corrected, so the clause was false
+```
+
+Format: `date | agent | file | what and WHY`. The *why* is the part worth
+writing; "fixed comment" tells the next reader nothing.
+
+- Append at the **end**. On a rebase conflict, keep both lines — there is never
+  a reason to drop one.
+- It is **not a ticket**: no frontmatter, no slug, no `board-md`, no
+  status folder, nothing to resolve. Never link a LOGBOOK line as a dependency.
+- Batch freely. Ten comment fixes in one sweep is one commit and ten lines, not
+  ten of anything else.
+- Its purpose is exactly what `git log` cannot give you cheaply: the isolated
+  record of **what bypassed the ticket system**, so the practice stays auditable
+  and nobody later wonders whether a change was ever considered. If the logbook
+  ever fills with things that clearly needed tickets, this rule is being
+  over-read — and that is the signal to tighten it.
+
+### The general form
+
+The ticket system exists to protect work that needs **coordination, ranking or
+memory**. A fix that needs none of the three does not belong in it. When you
+catch yourself writing a ticket whose body is longer than the diff it describes,
+stop and ask whether you are filing it because it needs filing, or because
+filing is the habit.
+
 ## Debugging — measure, do not reason
 
 **Read `devdocs/dev/debugging-playbook.md` before hand-patching a probe or

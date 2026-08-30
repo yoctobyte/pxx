@@ -69,7 +69,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (390)
+## backlog (389)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -228,7 +228,6 @@ _none_
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 20 | chore | PAUSED 2026-08-21 after batch 4 with 15 of the original 98 files left, and all 15 are in lanes the user has DEFERRED (13 Track N pyeval/pyexec, 2 Track F softfloat) — resume when either is un-deferred; nothing is half-applied. DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
-| chore-a-trim-the-stale-cross-reference-in-pxxsyslseek-s-rv32-comment | A | 15 | chore | PXXSysLseek's rv32 comment in compiler/builtin/builtinheap.pas ends with a NOTE saying the sibling comment in platform_backend.pas 'still says the plain form is tolerated by qemu-user'. That sibling was corrected on 2026-08-30, so the clause is now false. Three-line deletion in a Track A file; filed rather than edited from Track B. | — |
 | chore-a-typesize-answers-8-for-a-record-and-the-warning-is-where-no-caller-looks | A | 45 | chore | TypeSize(tyRecord) returns 8, and the warning that a caller must use RecSize() for the full size lives on the return-value line INSIDE symtab.inc, where no caller reads it. One confirmed misuse cost a SIGSEGV and a silently-wrong value in the Rust frontend. There are 319 TypeSize call sites across compiler/**; most are legitimate. This is a classification problem, not a defect list — do not file 319 tickets. | — |
 | chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run | B | 20 | chore | The dlopen loader is unverified by an actual RUN on arm32/aarch64 because this host has no cross ld-linux or cross libc — /usr/arm-linux-gnueabihf/lib and /usr/aarch64-linux-gnu/lib do not exist at all. Host provisioning, not code: no ticket resolving will make a cross libc appear. Split out of feature-real-dynlib-loader so that feature stops resurfacing at p45 with nothing actionable in it. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -734,9 +733,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2845)
+## done (2846)
 
-2845 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2846 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (59)
 
@@ -1209,7 +1208,6 @@ _none_
 - [p 15] [P] bug-p-sysopen-intrinsic-shadows-a-user-function-name
 - [p 15] [T] bug-t-twatch-web-lists-a-target-that-cannot-be-built
 - [p 15] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
-- [p 15] [A] chore-a-trim-the-stale-cross-reference-in-pxxsyslseek-s-rv32-comment
 - [p 15] [N] compat-n-repr-does-not-escape-non-printables-above-u007f
 - [p 15] [P] compat-pascal-the-strict-fpc-flag-family-is-incomplete
 - [p 15] [B+S] feature-dns-esp-wire-nameservers-from-lwip [!! DO NOT CLAIM — the ticket says so; read it]
