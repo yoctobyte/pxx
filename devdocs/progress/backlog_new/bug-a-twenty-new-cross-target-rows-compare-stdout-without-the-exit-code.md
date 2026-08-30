@@ -8,6 +8,14 @@ status: new
 owner: ""
 ---
 
+> **NOT a duplicate of `chore-t-make-every-cross-target-row-assert-the-exit-code` [T p45]** — checked by the
+> coordinator 2026-08-30 after `progress.sh check` raised NEAR-DUP on four shared slug words. They are a
+> **regression** and a **campaign**, and merging them would lose one of the two. THIS ticket is bounded: the
+> ratchet was armed at 531 and reads 551, so **20 specific rows** regressed across four commits in three
+> lanes, and `tools-devtest` is RED in the limited and full tiers until they land. That ticket is the
+> general rollout of all 531, which needs piloting one arch at a time. Fix this one first — it is smaller,
+> it clears a red tier, and it does not depend on the campaign's outcome.
+
 # 20 new cross-target rows compare stdout without the exit code
 
 - **Type:** bug (Track A — the rows are `Makefile` recipe lines).

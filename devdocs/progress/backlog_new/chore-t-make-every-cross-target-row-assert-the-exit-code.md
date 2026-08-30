@@ -9,6 +9,12 @@ found-by: pxx-a5, sweeping chore-t-sweep-for-rows-that-assert-stdout-when-the-su
 summary: "536 cross-target differential rows compare stdout only; 5 capture the exit code. Both operands are runs of the same program, so the exit code is free to add — but run_target.sh returns the EMULATOR's status and signal deaths do not encode identically under qemu-user and a native shell, so a blanket rollout can manufacture diffs on exactly the rows most worth checking. Wants a piloted rollout, one arch at a time, verified against Track T's matrix."
 ---
 
+> **NOT a duplicate of `bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code` [A]** —
+> checked by the coordinator 2026-08-30 after `progress.sh check` raised NEAR-DUP. That one is the bounded
+> **regression** (531 armed → 551 now, 20 rows, a red tier); this is the **campaign** over all 531, and its
+> piloted-per-arch requirement is exactly what makes it a separate unit of work. Neither is redundant and
+> neither blocks the other.
+
 # Make every cross-target row assert the exit code, one arch at a time
 
 ## The measurement (2026-08-30, `Makefile` at `pxx-a5`'s HEAD)
