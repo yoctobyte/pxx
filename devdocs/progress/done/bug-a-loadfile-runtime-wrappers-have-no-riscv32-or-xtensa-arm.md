@@ -4,7 +4,8 @@ track: A
 prio: 45
 type: bug
 found: 2026-08-30
-owner: unassigned
+owner: frankS
+status: done
 ---
 
 # LoadFile's runtime syscall wrappers have no riscv32 or xtensa arm
@@ -79,3 +80,45 @@ the xtensa one — the riscv32 SKIP comment in the Makefile points here by slug.
 Same family as `bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-
 or-array-element`: a rule most targets carry and the two without a working
 oracle were skipped for.
+
+
+## RESOLVED
+
+Landed with the codegen arms in one change, as the ticket required. All three
+wrappers gained riscv32 and xtensa arms; `test_cross_loadfile` goes CFAIL ->
+MATCH on riscv32 and on xtensa in BOTH ABIs, and is wired into `test-riscv32`
+(its SKIP removed) and `test-xtensa`.
+
+**The measured numbers in the table above were right except for rv32 lseek, and
+that one mattered.** The ticket said 62 "is the `_llseek` split-offset question
+the existing riscv32 block already documents -- for source loads the plain form
+is what qemu-user tolerates". That was copied from a comment in
+`platform_backend.pas` and it is **false**:
+
+```
+llseek(3,0,2,NULL,UNKNOWN) = -1 errno=22 (Invalid argument)
+read(3,0x2b2ad050,-22)     = -1 errno=14 (Bad address)
+```
+
+rv32 has no plain lseek at all; 62 is `_llseek(fd, hi, lo, loff_t *result,
+whence)` and the 3-arg form leaves the result pointer NULL. The size comes back
+-1 and LoadFile publishes an empty string — the same silent-wrong-value shape
+this ticket exists to prevent, reached through the ticket's own guidance. Fixed
+by mirroring `PalBackendSeek`, which had the correct split in that same file the
+whole time. The stale comment is filed separately as
+[[bug-b-platform-backend-rv32-comment-claims-plain-lseek-is-tolerated]].
+
+Worth keeping: **a syscall number is two facts, the number and the SIGNATURE**,
+and this ticket carried a careful table of the first while getting the second
+from prose. `PXXSysRead`'s existing arms are what made the numbers look
+sufficient.
+
+Measured, set difference both directions with the totals cross-checked against
+the row sets: xtensa call0 102 -> 103, windowed 52 -> 53, riscv32 110 -> 111,
+zero matches lost on any target. x86-64 emitted output verified byte-identical
+across 11 programs, because `builtinheap.pas` is compiled into every emitted
+program and the self-host fixedpoint cannot see that.
+
+## Log
+
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
