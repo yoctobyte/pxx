@@ -14,7 +14,9 @@ record traps that cost real sessions.
 
 **This index is not self-maintaining; enumerate before you trust it.**
 `ls tools/ | grep -iE 'diff|probe|oracle|sweep'` is the population, minus the
-`*_devtest.py` files (those test the tools, not the compiler). Run it before
+`*_devtest.py` files (those test the tools, not the compiler). Note the
+population is wider than that grep: `docsnip.py` and `doclinks.py` match none of
+those words and are indexed below. Run it before
 concluding no probe exists for your question — see the audit note at the bottom
 of this page for what happened the last time nobody did.
 
@@ -250,6 +252,32 @@ the blocker is an audit with no completion criterion rather than a wrong value.
 It poisons the storage so a surviving reader returns garbage instead of a
 plausible value. Full note, including the rule that the probe must call the same
 predicate as the change it is testing, in `devdocs/dev/debugging-playbook.md`.
+
+## Docs-verification probes — the published claim against the thing it claims
+
+Track D's instruments. Same shape as everything above — a claim checked against an
+oracle that is not the claim's author — but the subject is **prose** rather than a
+compiler, so they were easy to miss when enumerating this page.
+
+| tool | oracle | answers | lane that owns the TOOL |
+| --- | --- | --- | --- |
+| `tools/docsnip.py` | `$(PXX_STABLE)` | does every code snippet in `docs/**` actually compile and print what the page says? | D |
+| `tools/doclinks.py` | the published site | do the external links in `docs/**` resolve, **and does the page behind each one still contain the marker the prose relies on?** | D |
+
+**`doclinks.py`'s second column is the whole point of it.** A plain link check answers
+404-versus-200; this one also asserts a content marker, so it catches the
+**200-but-wrong** case — a status page that still resolves but no longer carries the
+numbers `docs/**` delegates to it. That failure is invisible to any check keyed on
+status codes, and it is the one the tool exists for. All four paths are exercised
+(404 → BROKEN/exit 1; 200-but-wrong → BROKEN/exit 1; offline → SKIP/exit 0), which is
+why it will still be trustworthy in a month.
+
+**Indexed here on 2026-08-30 because they were named in NO reference doc** — not this
+page, not the README, not CLAUDE.md — and nothing ran them but their author. frankD
+reported that itself, on parking, having spent the same night documenting how unowned
+things rot: *"Two unowned tools shipped in a night I spent documenting how unowned
+things rot. They are fine today because I am the only reader."* Indexing them is the
+whole fix; there is nothing else wrong with them.
 
 ## The rules every one of these shares
 

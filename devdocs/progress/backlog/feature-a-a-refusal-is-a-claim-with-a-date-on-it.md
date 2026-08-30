@@ -8670,3 +8670,30 @@ records what was actually run: *"overwriting it would falsify a session record f
 sake of tidiness… a reader who finds the v394 line and wonders whether it was ever true
 now gets the answer in the next paragraph instead of an inconsistency."* Same call
 CLAUDE.md's precedence rule makes about handoff notes, arrived at independently.
+
+### 184e — THE SESSION DOCUMENTING HOW UNOWNED THINGS ROT SHIPPED TWO UNOWNED THINGS
+
+frankD, 2026-08-30, on parking, unprompted and explicitly *"not a ticket and not a
+request"*:
+
+> *"`tools/docsnip.py` and `tools/doclinks.py` are named in no README, no CLAUDE.md, and
+> nothing runs them but me. Two unowned tools shipped in a night I spent documenting how
+> unowned things rot. They are fine today because I am the only reader."*
+
+Verified: both appear **only inside progress tickets** — no live reference doc mentions
+either. Now indexed in `devdocs/dev/differential-probes.md`, which CLAUDE.md points at,
+under a new *Docs-verification probes* section; and that page's own "enumerate before you
+trust this index" grep (`ls tools/ | grep -iE 'diff|probe|oracle|sweep'`) is noted as
+**unable to match either name**, so the instrument for finding probes could not have found
+these two.
+
+Third instance of 184a in one session and the largest scale yet — not a section breaking
+its own rule but **a whole night's work breaking it.** With 184c's correction that gives
+the useful shape of both:
+
+> Writing about a hazard protects the next sentence and **not the artefact.** Proximity
+> in *time* helps; proximity in *kind* does not. The rule was about documents, the breach
+> was in tools, and the author was the same person on the same night.
+
+The fix is indexing, not diligence — consistent with everything in this index that works.
+
