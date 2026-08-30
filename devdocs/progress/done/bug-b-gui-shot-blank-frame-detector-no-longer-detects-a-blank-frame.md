@@ -177,4 +177,4 @@ historically accurate, but the constant no longer exists. Left untouched — it 
 Track T's file, and the sweep record is theirs to update.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit a13e52b21.
