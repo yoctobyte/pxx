@@ -18126,3 +18126,64 @@ says it must**. forwardlint exists for it and is wired only into the optional
 seed red and frankC had fixed it 13 minutes earlier. **Re-check against HEAD before
 routing.** And frankC's cited sha `f877923cb` is not on the branch: the pre-rebase
 sha trap, live, which is why `resolve` takes no sha.
+
+## 2026-08-30 ~03:00 — the tooling cycle: five instruments fixed, three of them mine
+
+**All eight lanes dispatched.** frankA → corpus ladder re-probe (measurement only,
+claimed; landed `--emit-obj` as `87dfc2b4d`). frankB → `bug-b-imagereader-getsize-...`
+[B p68]. frankC → `refactor-c-string-literal-decay-belongs-at-the-producer` [C p50]
+(landed the header-body fix `eefa85d70`). frankD → live doc set, 15 of 42.
+frankS → the 14 missing xtensa IR ops (landed the cleanup arm, 1→6 kinds).
+frankwasm → `render_backend` non-termination. pxx-a5 →
+`bug-t-a-wrapped-resolve-citation-is-invisible-to-both-check-and-fill`.
+frank-optimize-b4 → W1 slices, ticket **re-claimed into `working/`**.
+
+**NEW: `tools/whoholds.py`** — who has been writing to a file and how recently.
+Built because frankA measured **607 commits / 10+ sessions / 3 locks** in six hours:
+the ticket lock is not too weak, it is **the wrong granularity** — a claim/resolve
+round trip per commit is friction nobody pays at a per-minute cadence. Reads a new
+**`Lane: <name>`** trailer (additive; does **not** replace CLAUDE.md's
+`Claude-Session:`, which is the owner's spec). Grammar: letters, digits, `_ . -`,
+leading letter, no `@`, no spaces. **Use the name `ListAgents` shows.**
+
+    tools/whoholds.py compiler/ir_codegen.inc
+    tools/whoholds.py --hot
+
+**Protocol question filed, not decided:**
+`decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop` [U p70].
+Recommends making the trailer mandatory **first** — it does not prevent collisions
+but converts each from escalation-and-inference into a lookup.
+
+**FIVE INSTRUMENT DEFECTS, three of them mine.**
+1. `-40`/`-400` commit-verification windows → false MISSING with `cherry-pick`
+   advice. Unbounded now.
+2. I routed by inferring authorship from a **commit subject line** (`%an` is
+   constant fleet-wide), then banked *"authorship is unanswerable from git"* — a
+   false limit within the hour. Trailer is 42/200.
+3. I endorsed an ESP baseline test that **cannot detect what it asserts** (backend
+   `{$ifdef}`-ed out on x86-64, so `-38` before and after).
+4. I relayed frankA's PENDING-COMMIT count unverified: **0 real, not 5** — and
+   `fill_pending` rewrites files, so it would have written shas into prose.
+5. `whoholds` printed absent and present-but-rejected identically. Fixed.
+
+**A PHANTOM LOCK** — one slug in both `working/` and `done/`, read as a live Track A
+claim for four hours. Copies were **complementary**, so "delete the duplicate" would
+have destroyed the fix record. `progress check` gained **DUPLICATE-SLUG**.
+
+**SPENT-EDGES: built, then REVERTED unbuilt.** `STALE-EDGE-HIDDEN` had already
+considered the case and **deliberately declined** it, with the calibration in its
+comment. frankD's closing note is the durable lesson: *the incumbent did its job
+only because its author wrote the **reasoning** down, not the verdict* — a bare
+"declined" reads as an oversight and gets helpfully corrected.
+
+**Faces 115-128 banked** (index at 128 + amendments; **106 numbered headings** —
+COUNT, never write "all N"). Widest reach:
+- **118** co-location makes drift visible; **only an oracle makes it fail.**
+- **121** a self-differential's **reference is not an oracle** — naming one arm the
+  oracle is a role assignment, not a measurement.
+- **125** (frankD) **pessimism is the direction nobody double-checks** — caution
+  looks like rigour, so it is exempt from audit.
+- **126** an instrument that **cannot see** a defect reads exactly like one
+  reporting its absence (`readelf --dyn-syms` on a section-header-less `.so`).
+- **128** (frankC) unifying two implementations of one rule **deletes an accidental
+  oracle** — their disagreement was a free differential test.
