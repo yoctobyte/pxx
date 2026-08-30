@@ -235,11 +235,45 @@ begin
   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := tk;
-  AliasElemTk[AliasCount] := tk;
-  AliasElemRec[AliasCount] := rec;
-  AliasPtrDepth[AliasCount] := 0;
-  AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
-  AliasPtrBaseRec[AliasCount] := REC_NONE;
+  { `AliasElemTk := tk` is the shortcut this used to take for every alias, and it
+    is a CONFLATION of two different questions: "what kind is T?" and "what does T
+    point AT?". For a non-pointer alias the element is never consulted, so the
+    shortcut was invisible. For a POINTER alias it says `SslPtr = Pointer` has a
+    Pointer element -- i.e. that it is `^Pointer` -- and every general pointer
+    alias collapsed to the same recorded element regardless of its target:
+    `= Pointer`, `= PChar` and `= PRec` all recorded tyPointer, which is correct
+    only for the one spelling `^Pointer` and correct there by coincidence.
+
+    Two measured symptoms, one cause. `p^.field` through an alias of a
+    pointer-to-record failed to compile at all ("a pointer has no members" -- the
+    pointee was erased); and a `Pointer` alias stopped accepting a class instance
+    that plain `Pointer` accepts, because the overload narrowing in
+    MatchParamCompatible permits the untyped sentinel (tyUnknown) and a class
+    element, and an alias presented neither.
+
+    ParseTypeKind has just run for the right-hand side -- the same reason
+    LastTypeStrCap is readable below -- so the TARGET's own pointer facts are
+    live in the LastTypePointer* globals. Record those. Non-pointer aliases keep
+    the previous behaviour exactly; the subrange call site never reaches here
+    with tyPointer.
+    bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts }
+  if tk = Ord(tyPointer) then
+  begin
+    AliasElemTk[AliasCount] := Ord(LastTypePointerElemTk);
+    AliasElemRec[AliasCount] := LastTypePointerElemRec;
+    AliasPtrDepth[AliasCount] := LastTypePointerDepth;
+    AliasPtrBaseTk[AliasCount] := LastTypePointerBaseTk;
+    AliasPtrBaseRec[AliasCount] := LastTypePointerBaseRec;
+    AliasPtrElemArrAi[AliasCount] := LastTypePointerElemArrAi;
+  end
+  else
+  begin
+    AliasElemTk[AliasCount] := tk;
+    AliasElemRec[AliasCount] := rec;
+    AliasPtrDepth[AliasCount] := 0;
+    AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
+    AliasPtrBaseRec[AliasCount] := REC_NONE;
+  end;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := -1;

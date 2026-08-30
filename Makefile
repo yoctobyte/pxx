@@ -5617,6 +5617,19 @@ test-core: $(COMPILER)
 	@# disabling the guard: 2 injections and a failed parse.
 	./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26
 	test "$$($(TESTTMP)/test_genshadow26)" = "shadow 12 10"
+	@# A pointer type ALIAS must be the type it aliases. RegisterGeneralAlias
+	@# recorded `AliasElemTk := tk`, so every general pointer alias claimed a
+	@# tyPointer element regardless of target -- `= Pointer`, `= PChar` and
+	@# `= PRec` all collapsed to the same value, right only for `^Pointer` and
+	@# right there by coincidence. Three symptoms on the pinned v393 binary:
+	@# `p^.f` through the alias would not compile, `c[i]` through a PChar alias
+	@# printed 378951523 instead of `pxx` (silent), and a Pointer alias refused a
+	@# class instance -- the last POSITION-DEPENDENTLY (index 0 accepted, 1 and 2
+	@# rejected, cross-unit accepted), which is why it read as two bugs and why
+	@# the `atpos` arm exists. `ctrl ok` is the control: `^Pointer` genuinely has
+	@# a pointer element and must NOT move.
+	./$(COMPILER) -Futest/units test/test_pointer_alias_identity.pas $(TESTTMP)/test_ptraliasid26
+	tools/expect_same.sh test_ptraliasid26 "$$($(TESTTMP)/test_ptraliasid26 | tr '\n' '|')" "same 3101 3102|atpos 6233|cross 7411 7422 7433|deref 4177 9931 14108|pchar pxx|ctrl ok|"
 	@# The control that a blacklist-style guard needs and that its absence cost:
 	@# `const PC: ^specialize TCell<Integer> = Nil` is a USE whose group is
 	@# followed by `=` and preceded by `specialize`, not `:`. Guarding only the
