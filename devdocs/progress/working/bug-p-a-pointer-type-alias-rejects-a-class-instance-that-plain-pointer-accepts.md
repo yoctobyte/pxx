@@ -108,3 +108,49 @@ this frontmatter got it right.
 - CLAUDE.md's compat table puts this squarely in bug territory rather than
   compat: *"real Pascal source compiles wrong, or not at all → bug."* Synapse is
   vendored third-party Pascal that compiled yesterday.
+
+## The diagnostic is its own tell — the renderer resolves the alias, the checker does not
+
+Spotted by frank-coordinator on an independently-written repro; confirmed here
+against the captured output rather than taken on report. The declaration is
+
+```pascal
+procedure Takes(ctx: Pointer; u: SslPtr);
+```
+
+and the rejection prints
+
+```
+argument types: (Pointer, class)
+candidates:
+  Takes(Pointer, Pointer)
+```
+
+**`SslPtr` has become `Pointer` in the candidate line.** So whatever renders
+candidates already normalises the alias to its underlying type, while the
+assignability check that rejected the call did not reach the same answer. Two
+layers disagreeing about the same type, one of them correctly.
+
+That is a much narrower place to look than "alias resolution": the resolved form
+demonstrably exists and is reachable at diagnostic time. The question is why the
+check is deciding on the unresolved one.
+
+**Binding constraint for whoever fixes it — both arms, or it is not fixed.** The
+same-unit case fails on both pins (table above). A fix that restores only the
+cross-unit path makes Synapse compile and leaves the older arm broken, which is
+exactly the sibling that stays broken in
+`devdocs/dev/normalise-dont-special-case.md`. Grep for the sibling before closing:
+the acceptance is that BOTH the same-unit and cross-unit alias forms accept a
+class instance, verified by value, not that `lib_synapse_ssl` goes green.
+
+## Status: pin reverted, this is no longer blocking
+
+v394 was reverted to v393 as `b8fd07377`, so Track B's gate is green again and
+nothing is blocked on this. It stays **urgent** because the defect is real, older
+than v394, and will re-break the gate the moment a pin carries the change again —
+the revert bought time, it did not fix anything.
+
+Collateral, recorded so it is not discovered later:
+[[feature-lib-tkinter-grid-pad-accepts-a-two-tuple]] was closed against v394 and
+has been **reopened**, verified failing again on the reverted pin. It closes on
+the next pin that carries `51b0753e7`.

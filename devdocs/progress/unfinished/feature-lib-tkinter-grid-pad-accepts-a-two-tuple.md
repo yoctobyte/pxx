@@ -4,7 +4,7 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence."
-status: done
+status: unfinished
 owner: frank-b
 ---
 
@@ -376,3 +376,32 @@ were the close. The close is this section, and its evidence is the pinned binary
 
 ## Log
 - 2026-08-30 — resolved, commit 39c9a2e54.
+
+## 2026-08-30, same day — REOPENED. The pin was reverted; the close is no longer true.
+
+v394 was reverted to v393 (`b8fd07377`) because it broke Track B's gate — an
+unrelated defect, [[bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts]].
+So `$(PXX_STABLE)` no longer carries `51b0753e7`, and the close above rests on a
+binary that is no longer pinned.
+
+**Verified rather than assumed** — re-run on the reverted pin:
+
+```
+grid(padx=(8, 6))                          FAILS: no overload of grid
+pack(padx=(8, 6))                          FAILS: no overload of pack
+configure(scrollregion=(0, 0, 100, 100))   FAILS: no overload of configure
+create_text(1.0, 2.0, "hi", font=(...))    FAILS: no overload of create_text
+grid(row=0, column=0, padx=8)              COMPILES   <- control, still green
+```
+
+Back to `unfinished/`. **The eleven-row close above stands exactly as written and
+should not be re-derived** — it is a correct measurement of v394, which is a real
+binary that really carried the fix. Only the sentence "that is the gate this
+ticket was written against" has stopped being true, because the pin moved back
+underneath it. When the next pin lands with `51b0753e7`, re-run the eleven rows
+and the controls against *that* binary and close again, naming its sha.
+
+This is the third state this ticket has been in today and the distinction between
+them is the whole point: a HEAD pre-answer (known, not closable), a pinned close
+(closable, closed), and a reverted pin (closed prematurely, reopened). Each was
+correct about the binary it named.
