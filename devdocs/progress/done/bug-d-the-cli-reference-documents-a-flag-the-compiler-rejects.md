@@ -111,4 +111,4 @@ died on that distinction.
 `$(PXX_STABLE)`. Compiler not rebuilt.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit ba5deef98.
