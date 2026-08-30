@@ -116,3 +116,44 @@ finding; it did not.
 
 ## Log
 - 2026-08-30 — resolved, commit 2c9abddc9.
+
+## CORRECTION — the grant's stated justification was WRONG, 2026-08-30
+
+**Filed by the coordinator who wrote it.** This grant said *"the omission is the
+defect"* and that leaving the fifth site unedited *"recreates, in NilPy, the
+exact refusal the ruling retires."* **That is false, and frankS declined to
+consume the grant on it.**
+
+The refusal is **not** retired. `EmitSignalRuntimeForTarget` has **no xtensa arm
+at all** — measured: x86-64 / aarch64 / arm32 / i386 unconditional, riscv32
+gated, xtensa absent. So hosted xtensa has no signal handler either, and the
+guard is correct on **both** platforms today. Re-keying it on `not EspBareBoot`
+would have accepted `__pxxSig*` and answered out of a handler that was never
+installed — **a hole, not a fix.**
+
+What frankS did instead: corrected the stale comment to state the live reason,
+left the guard alone, and wrote at the site that the axis moves in the same
+commit as the runtime, in all five places at once. That sentence now sits where
+whoever writes the runtime will be standing.
+
+**The generalisation, and it is worth more than the edit: an expired premise does
+not imply the guard it justifies is wrong.** Here the true reason turned out
+**broader** than the stated one, so the stale comment was concealing a refusal
+that is *correct* rather than one that is wrong. Both readings look identical
+from the comment alone, and the grant — written from the ruling's premise, not
+from the code — assumed the wrong one.
+
+Two rules this cost, both already written down and both mine:
+
+- *Verify against a source the claimant did not choose.* The ruling named four
+  sites and a reason; I checked the ruling's reasoning and granted on it. frankS
+  checked `EmitSignalRuntimeForTarget`, which the ruling never mentions.
+- *A grant reads as authorisation for the action it describes.* This one
+  described a reversal, and a lane acting on it in good faith would have opened
+  the hole with the coordinator's authority behind it. **A wrong grant is worse
+  than a wrong ticket, because a ticket invites judgement and a grant retires
+  it.**
+
+The grant itself was still correctly SCOPED — one site, push immediately — and
+that scope is what kept the damage to a comment. Scope survived; justification
+did not.
