@@ -189,3 +189,38 @@ xml.dom.minidom import ...`, which resolves correctly under both interpreters.
 
 Moved from `working/` to `unfinished/`: `working/` is a live lock, and this
 cannot proceed from any lane until the compiler stops hanging.
+
+## 2026-08-30 — the hang is FIXED, and this stays parked anyway
+
+frankA's `0425a62c8` ("unlink a symbol from the bucket it was FILED in, not from
+its name now") fixes the compiler hang this ticket is blocked by, and reports the
+parked file building in 4.01s with its differential matching CPython on all 36
+checks. That is a Track A measurement against a compiler built at HEAD, and I
+have no reason to doubt it.
+
+**It does not unblock Track B, because Track B does not build with HEAD.** The
+lane builds everything with `$(PXX_STABLE)` = `stable_linux_amd64/default/pinned`,
+and the current pin is **v394 `53800fbeb0b66e11`**, built from `43c8e3412`
+(2026-08-30 06:11). The fix landed at 09:03. `git merge-base --is-ancestor
+0425a62c8 43c8e3412` is false: **the pinned compiler predates the fix.**
+
+Measured rather than inferred, since a sha argument about a binary deserves a
+run: the pinned compiler on the parked source spins for the full 75s timeout at
+100% CPU, exactly as before. Unparking now would put a file into `lib/rtl` that
+`make lib-test` cannot compile, and the failure mode is a hang rather than an
+error — the worst shape for a gate, because it does not fail, it stops.
+
+**Unpark condition, precisely:** a pin whose source commit has `0425a62c8` as an
+ancestor. Check it with
+
+```
+git merge-base --is-ancestor 0425a62c8 $(awk 'END{print $NF}' stable_linux_amd64/default/pin.log)
+```
+
+and confirm with a real compile of the parked file by `$(PXX_STABLE)` before
+renaming. The `blocked-by` edge stays, because the condition it names — *this
+lane can build the file* — is still false; only the reason changed, from "the
+compiler has a bug" to "the compiler Track B is required to use does not yet have
+the fix".
+
+Everything else in the finish list below is unchanged and still correct.
