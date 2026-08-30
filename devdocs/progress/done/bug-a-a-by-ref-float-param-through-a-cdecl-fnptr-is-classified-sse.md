@@ -73,4 +73,4 @@ and wants its own gate; the crash fix should not wait behind a refactor.
 pre-fix binary.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit c63b40c71.
