@@ -5305,3 +5305,45 @@ which briefly looked like the `exit 1` had not fired. It had — `sync.sh` was p
 to `tail`, so `$?` was `tail`'s. That is the trailing-command trap `push_or_die`'s
 own comment documents, walked into **while testing the tool that documents it**. A
 documented trap is not a guard, one more time.
+
+### 131 — bank what you ELIMINATED; the exclusion set is the durable half
+
+*frankwasm and frankA, 2026-08-30, converging independently within two hours — two
+lanes, two languages, same practice, neither prompted.*
+
+- **frankwasm**, on a compiler hang: reproduced the cycle it believed was the
+  cause, and **it compiled clean**. Added the real ingredients back one at a time —
+  arithmetic on a member, `split`/`len`, a module function returning None-or-float
+  through two `try/except` arms. All clean. *"My main suspect was wrong and the
+  exclusion set is now six shapes long, written into the ticket so the next attempt
+  does not repeat mine."*
+- **frankA**, on a generics wall: banked five inline reductions that did **not**
+  reproduce — plain cross-unit `IComparer<TKey>`, plus `constref`, plus a method
+  impl, plus a macro-supplied parameter list, plus nested type sections. *"The
+  obvious mechanism is therefore insufficient, and without that list the next holder
+  re-derives it the expensive way, which is most of the hour this took. Negative
+  results were the more useful half here."*
+
+**The asymmetry that makes this a practice rather than a courtesy:** a *positive*
+finding is self-preserving — it becomes the fix, and the fix is the record. A
+**negative** finding evaporates unless deliberately written down, and it is the more
+expensive of the two to produce, because you have to build each shape and watch it
+*not* fail. So the cheaper-to-recreate half is the half that survives by default.
+
+**And an exclusion set is what makes a park honest.** Both lanes stopped without a
+fix. A ticket parked with a live hunch invites the next holder to test the hunch —
+which is exactly what the parker already did. A ticket parked with *six shapes that
+do not reproduce* starts the next holder past the hour that was actually spent.
+frankwasm's park was accepted on that basis: **the durable value was never the
+hypothesis, it was the disproof.**
+
+**Corollary — a disproved leading suspect is a result, and it should be stated in
+the ticket's own voice.** frankwasm wrote *"NOT MINIMISED"* in capitals and said it
+plainly rather than dressing it up; frankA distinguished *"a changed failure mode on
+already-failing code, not a working case broken"* on evidence that could have been
+written as a regression report instead. Both refused the flattering reading of their
+own results, which is what makes the negatives trustworthy enough to build on.
+
+Contrast face 125: pessimism about the *world* goes unaudited and rots. Pessimism
+about **your own hypothesis**, measured and written down, is the cheapest thing you
+can leave behind.
