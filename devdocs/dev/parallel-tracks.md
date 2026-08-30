@@ -391,3 +391,323 @@ milestone pins, releases, anything touching codegen/ABI/ELF that will move
 (see the push norm above), not by stabilize. `make pin` blesses whichever
 was recorded last, as before.
 New features append a case to `test-smoke` AND their full-suite test.
+
+
+---
+
+# Track charters — the long form
+
+**Moved out of CLAUDE.md on 2026-08-30**, verbatim. CLAUDE.md carries the
+framing plus the one-line-per-track summaries; this is the full description of
+each lane, kept because it holds the *reasoning* behind the letters — what a
+lane owns, why the set is deliberately small, and the file-lane / work-tag
+distinction. Read it when a lane question actually needs settling, not at
+session start.
+
+It was 302 of CLAUDE.md's 938 lines, describing every track a second time
+alongside the one-liners that were already there. The duplication was the
+cost: every agent loaded both, every session, before doing any work.
+Rationale: `devdocs/dev/coordination-overhead-2026-08-30.md`.
+
+## Tracks — coordination lanes, not a taxonomy
+
+The user runs **multiple Claude agents at once** on this repo. A track is a
+**lane to keep concurrent agents from clobbering each other's files, plus the
+gate each must stay green** — it is NOT an ontology of the codebase. So:
+
+- **Default: one lane per session.** Infer a single track from the request and
+  stay in it. This is for *your context*, not git — juggling two topics (say the
+  Pascal frontend and the Rust frontend at once) makes you reason worse, even
+  though their source rarely collides. Mergeable ≠ free to mix: the cost is
+  context confusion, not merge conflicts.
+- **Several tracks only when the user explicitly assigns them** ("you're A+C").
+  Then it's fine — you're free to touch all of them, you just respect every gate
+  you span, and a shared-internals change is still filed as a Track A ticket
+  (combined-track note below). The letters otherwise only matter *when* two
+  agents run at once and must not fight over the same file.
+- **Don't invent new letters.** No Track L for libraries, no "LC" for C
+  libraries. The set below is deliberately small; resist splitting it finer.
+- **Two axes: lanes vs tags.** The letters mix two kinds of thing, and that's
+  fine once you see it. **File-lanes** (exclusive, collision-avoidance): **A**
+  core, **B** libs/demos, **C/N/P/R/Z** frontends — these answer "who owns this
+  file when two agents run at once." **Work-tags** (human grouping, compose
+  freely, each *inherits* a file-lane): **O** optimization (owned by A), **E**
+  examples/apps (owned by B), **F** floating point (owned by whoever owns the
+  file), **S** eSpressif/SoC (owned by A+B), **T**
+  testing, **D** docs, **X** experimental. A
+  tag is not a new file-lane — "Track O" work still lands under A's gate, "Track
+  E" under B's. So pick a new letter on the right axis: a new *place code lives* →
+  new lane (rare, resisted); a new *kind of work* over existing files → tag.
+- **X is a TAG, not a lane: experimental.** Tracks R (Rust) and Z (Zig) are
+  also X — their tickets live in `devdocs/progress/experimental/` (never
+  ranked by `next`/`ready`; see that folder's README for the upscale rule).
+  An X-tagged track keeps its own letter, files, and gate; X only says
+  "optional, never a prio, pick up on user request or for fun". Reserved,
+  unstaffed letter: **J** = JavaScript (currently routed through Track C —
+  the QuickJS corpus ticket — so J may never need staffing).
+- **compat is a TAG (no letter): reference compatibility.** "Behave like the
+  reference implementation" for any frontend — FPC/Delphi for P, gcc/ISO C
+  for C, rustc for R, Zig for Z. One category spanning the whole spectrum:
+  compiling real-world code (fgl, Synapse, FPC itself, zlib whose compressed
+  OUTPUT matches a gcc-built zlib's byte for byte) down to parity diagnostics,
+  strict-mode flags (`--strict-case`,
+  `--strict-overload`) and `{%FAIL}` conformance tests. Mirror image of X:
+  X = *more* than the spec (experimental, unranked); compat = *exactly* the
+  spec (stays ranked — the tag carries no priority, the `prio:` field does:
+  "Synapse must compile" can sit at 60 while conformance-diagnostic parity
+  idles at 15-20). Inherits the owning frontend's file-lane and gate like
+  every tag. Slug convention: `compat-<lang>-*`. Escape rule: a compat
+  finding that means *silent wrong behavior* (e.g. an ignored directive
+  producing wrong values) is promoted to a normal `bug-` ticket in the owning
+  lane — the tag is for parity work, not a place to hide real bugs. PXX's own
+  dialect stays deliberately lax by default; FPC-parity strictness lives
+  behind per-feature strict flags, and the conformance sweep runs with them
+  on (see pxx.skip's `dialect-pass` entries).
+  **A strict flag's scope is COMPILATION, not death** (user, 2026-08-21):
+  `--strict-fpc` / `--mimic-fpc` govern how source is compiled and how output is
+  formatted — number rendering included — and may extend to cosmetic parity such
+  as an RTTI type name. They do NOT govern how a program DIES: runtime-error
+  numbers, exit codes and fault messages stay ours by default, with FPC's
+  conventions opt-in behind the `--fpc-*-errors` flags. *"We seek LANGUAGE
+  compliance, not error-handling compliance"* — so parity work whose subject is
+  error REPORTING is low prio by that same call, the way float accuracy is low
+  prio by Track F's.
+
+  **We do not chase 100% FPC parity** (user, 2026-08-26): *"we don't strive to
+  mimic FPC 100%. We just care for correct compiling pascal code, not emulating
+  every behaviour."* This is the ceiling the two rulings above were each
+  approaching from one side, stated once and generally. The bar a compat ticket
+  must clear is now explicit:
+
+  | the ticket says | verdict |
+  | --- | --- |
+  | real Pascal source compiles wrong, or not at all | **bug** — own lane, own prio, not compat |
+  | real Pascal source compiles but *runs* wrong | **bug** — silent-wrong-behavior escape, as above |
+  | FPC accepts a form we reject | **compat**, ranked by how much real code uses it |
+  | we accept a form FPC rejects | **not a defect** — same call NilPy makes for CPython; note it in the divergences doc |
+  | our diagnostic/message/error number differs | **defer** — error reporting, low prio by the ruling above |
+  | our output *formatting* of a value differs | **F** if it's a float, else compat at low prio |
+  | an observable that no compiling program can reach | **never** — close it `rejected/`, cite this row |
+
+  The last two rows are where the backlog actually leaks. "FPC prints this
+  differently" and "FPC's RTTI spells this name differently" are *not* on the
+  path to compiling correct Pascal, and a ticket that cannot name a program
+  whose behaviour changes is a `rejected/` ticket, not a low-prio one — parking
+  it at prio 10 keeps it in the ranker's scan forever at zero value.
+
+Two axes cut the repo, and the tracks follow them:
+
+1. **Accepted languages (frontends)** — what the compiler *parses*: **P** Pascal
+   (the full dialect — classes, generics, RTL semantics, *far* past the subset
+   self-host needs), **C**, **N** Nil-Python, **R** Rust, **Z** Zig. Each is a
+   whole language with its own tests; each lowers to the shared IR. (N/C are
+   mainline and gated; R/Z are experimental — X-tagged, see below.)
+2. **The core + everything around it** — **A** the language-agnostic machinery
+   (AST/IR/backends/ABI/ELF/self-host), **B** libraries (all languages), **D**
+   public docs.
+
+The compiler is *written in* a thin Pascal subset, bootstrappable with FPC —
+but that's incidental: it could have been written in C, Zig, or whitespace. "The
+compiler is in Pascal" (Track A's impl) and "Pascal is a frontend" (Track P) are
+different things. **Always pair the letter with its name** (e.g. "Track C (C
+frontend)"). **At session start, infer your track from the request:**
+
+- **Track A — compiler core (language-agnostic).** AST / IR / backends / a
+  target / codegen / ABI / ELF, bootstrap / self-host / `make stabilize`,
+  cross-target work, the shared `ir*.inc` / `symtab.inc` / `defs.inc` and the
+  backends. The integrator: everything below the frontends, plus the self-host
+  gate that blesses the stable binary all other tracks build on. Works on
+  `master`.
+- **Track B — libraries / demos (all languages).** `lib/rtl` (Pascal) · `lib/pcl`
+  · `lib/crtl` (C) · future `lib/zrtl` (Zig), `examples/**`, writing or fixing a
+  library (JSON, hashing, `IntToStr`, `Copy`…), demo apps, `make lib-test` /
+  `make demos`, tickets tagged "(library)". Language-neutral by design — libs are
+  split by *what they do*, never by source language. Works on `master`.
+- **Track C — C frontend (cfront).** The C-language frontend
+  (`compiler/clexer.inc`, `cparser.inc`, `cpreproc.inc`, C-exclusive C→IR
+  lowering), `lib/crtl`, C tests. **Works on `master`** (as of v80, when the C
+  frontend merged in — the old `feat/cfront` worktree is retired). Protected by
+  the same pin boundary (B/D build on `pinned`, not HEAD).
+- **Track D — documentation (user / website).** `docs/**` — the user-facing
+  docs the website pulls straight from git and publishes (getting-started,
+  language reference, tutorials, install, the public landing copy). Prose only:
+  **never** touches `compiler/**` or `lib/**`. NOT the internal dev docs
+  (`devdocs/dev/**`) or the agent board (`devdocs/progress/**`) — those belong to A/B.
+  Works on `master`.
+- **Track P — Pascal frontend (pfront).** The Pascal *dialect* as a language:
+  syntax / semantics / new language features and their frontend bugs — a full
+  frontend, peer of C/Z, not "the compiler's impl language." **P now owns its
+  own parser files** (2026-08-20): the 37,249-line `parser.inc` was sliced into
+  `pasparser_name` / `_class` / `_generic` / `_call` / `_lval` / `_expr` /
+  `_stmt` / `_decl` / `_proc` / `_prog`, and the machinery that was never Pascal
+  went with its real owner — `ast_arena.inc`, `inline_expand.inc`,
+  `ast_syminfer.inc`, `dbg_filetable.inc` to **A**, and NilPy's ~200 forwards to
+  **N** as `pyforwards.inc`. The map is at the bottom of
+  `compiler/frontend_forwards.inc`.
+  *Residual catch:* the LEXER is not carved out — Pascal still shares
+  `lexer.inc` with A (and Pascal-facing `defs.inc` / `symtab.inc`), so **P and A
+  must not edit `lexer.inc` concurrently** and the node/token-numbering
+  discipline still binds. A `pas`lexer split is the remaining half. Anything
+  below the frontend (IR ops, backends, ABI, ELF) is core A. Works on `master`.
+- **Track R — Rust frontend (rfront).** The Rust-language frontend and its
+  Rust→IR lowering, `lib/rrtl` (as it lands), Rust tests. Live work in
+  `devdocs/progress/working/feature-rust-*`. Same rule as C/Z: own your frontend
+  files; shared-internals change → **file a Track A ticket**. Works on `master`.
+- **Track T — Tools & Testing (watcher, agentic test manager, fuzzers).** Owns
+  `tools/testmgr.py`, `tools/twatch.py`, `devdocs/progress/tstate/**` and the
+  report format — plus the **fuzzing tooling**: `tools/fuzz.sh` (mutation +
+  cross-target differential), `tools/pasmith.py` / `tools/pasmith_run.py`
+  (random Object Pascal generator + FPC differential driver), and any Csmith
+  runs. T is "a tool used for testing", not "regression testing only": fuzzing
+  is testing whose oracle is a second implementation rather than a recorded
+  expectation, so it lands here. Face 1 = the standalone twatch daemon (any
+  box, its own dedicated clone, publishes sparse per-SHA regression reports to
+  `tstate/` ONLY — that's the watcher identity's whole write scope). Face 2 =
+  an agent (supervised session or cron) that consumes tstate, files/updates
+  regression tickets like any track agent, maintains the Track T codebase
+  itself, and **fuzzes in spare cycles**.
+  **T owns the TOOL, never the bug.** A fuzz/tstate finding is filed into the
+  owning lane — IR/codegen → A, dialect/frontend → P, RTL/ansistring → B —
+  exactly like a tstate NEW-RED. T does not fix the compiler.
+  Once a watcher is live, dev tracks may gate pushes on `testmgr --tier
+  quick` + self-host fixedpoint; the full matrix runs offloaded, so master
+  MAY carry cross-target reds for hours — tstate is the truth, and a
+  core-job red older than a day is a revert candidate. Gate for T's own
+  tooling changes = `tools/testmgr.py --tier full` green.
+- **Track E — examples & apps (formal category, file-owned by Track B).** Apps
+  *built with* PXX, not PXX itself: demos, games, GUIs, IDEs (the current Pascal
+  one and a future NilPy one are both just E apps — don't burn a letter per tool),
+  and the portable-userland/shell showcase. Lives in `examples/**`, `lib/**`, app
+  dirs = **Track B file-ownership + gate** (build with `$(PXX_STABLE)`, never
+  rebuild the compiler; `make lib-test`/`demos`). A compiler/frontend gap an app
+  forces → file it under the owning lane (Track A / the frontend). `feature-demo-`
+  / `idea-demo-` slugs auto-tag E. Works on `master`.
+- **Track O — optimization (formal category, implicitly Track A).** A
+  cross-cutting *lane*, not a file set: codegen/runtime speed work —
+  register allocation, `-O` passes, the heap allocator, anything chasing the
+  emitted-code or alloc-path cost. Almost everything here edits Track A's shared
+  ground (`ir_codegen.inc`, `symtab.inc`, the backends, `compiler/builtin/**`), so
+  **an O ticket carries a Track A file-ownership tag and obeys A's rules**:
+  self-host byte-identical gate, no-concurrent-edit with A. O is just the visible
+  grouping so the optimization campaign reads as one lane (surfaced on the board
+  like R/T; `feature-opt-*` slugs auto-tag O). New passes land behind `-O3` (a
+  free tier — nothing gates `OptLevel>=3` yet) and promote to `-O2` per-pass only
+  after the full gate; `-O2` stays the proven default. **Per-backend effort
+  (peepholes, register allocator) = x86-64 + aarch64 only** — 32-bit is
+  perf-irrelevant and ESP/xtensa's hot paths are hardware peripherals; shared-IR
+  passes still help all targets free. Works on `master`.
+- **Track S — eSpressif / SoC (formal category, file-owned by A and B).** The
+  ESP32 family — ESP32, S2, S3, C3 — as one visible campaign: the xtensa and
+  riscv32 backends, `lib/rtl/platform/esp/**`, the ESP-IDF profile
+  (`--platform=esp`, `--esp-profile=bare`), and `examples/esp32/**`. Like **O**,
+  this is a work-tag surfaced as its own lane, NOT a file-lane: every S ticket
+  also carries its Track A (compiler internals — `ir_codegen_xtensa.inc`) or
+  Track B (`lib/rtl/platform/esp`, `lib/crtl`, examples) ownership for collision
+  rules, and obeys that lane's gate. It exists because ESP work is otherwise
+  spread across A/B/E and reads as unrelated items, which is how it drifted.
+  **ESP is not a Unix** — FreeRTOS gives tasks, not processes — so 33 PAL entry
+  points are refused even under IDF (no fork/exec/wait/kill, no pipes, no cwd,
+  no links, no stat, no mmap); sockets and basic VFS file I/O are what work. The
+  letter reads as "SoC" as much as "eSpressif", so a future non-Espressif MCU
+  target fits without renaming. `*-esp-*` / `*-xtensa-*` slugs auto-tag S.
+  Works on `master`.
+
+- **Track F — floating point (a work-tag, owned by whoever owns the file).** The
+  owner assigned this letter on 2026-08-19, after stating the rule four times:
+  **float accuracy is LOW PRIO by definition.** *"compiler syntax, segfaults, etc,
+  all prio. floating point, especially when 'mostly ok' (apart performance or
+  insignificant digits), very low prio."* Same shape as O/S/M — **not a file-lane**:
+  an F ticket ALSO carries its A/B/C/N/P file ownership for collision rules and obeys
+  THAT lane's gate, so `track: B+F`, `track: P+F`, `track: A+F` are the normal
+  spellings, and the ranker resolves both letters (`normalize_track` accepts F, so a
+  `B+F` ticket is a B ticket that is also F). **But `ready --track F` correctly prints
+  nothing** — `ready`/`next` scan only `urgent`/`backlog`/`backlog_new`/`unfinished`
+  (`working/` is a live lock and is deliberately NOT ranked), and F
+  tickets live in `float/`. **Parking and rankability are the same switch: you get the
+  invisibility or the filter, not both.** To see the F set, list `devdocs/progress/float/`.
+  **What is F — float MATH and float FORMATTING alike** (owner, same day: *"this
+  implies both floating point math and formatting issues"*): ulps, rounding,
+  subnormals, edge-of-range, correctly-rounded-vs-fast tiers, FPC/CPython numeric
+  parity, precision of a float TYPE — and the whole rendering side, `Write`/`Writeln`
+  of a real, `FloatToStr`/`Str`, digit counts, exponent form, and any *performance*
+  work whose subject is float. Today's `WriteFloat` cluster would have been F end to
+  end; it is the exact drain the letter exists to stop.
+  **What is NOT F — rank the mechanism, never the datatype.** A ticket does not
+  become F by containing a `Double`. A crash, a hang, a wrong signature, a
+  control-flow or codegen bug that merely lives in float code, or a **missing**
+  function a working CPython/FPC program calls — all stay ordinary bugs in their own
+  lane at their own prio. Note the line moved once the owner broadened F to
+  formatting: a badly RENDERED float is F even when the rendering is grossly wrong,
+  because rendering is the subject. What is never F is a defect whose subject is the
+  MECHANISM and whose float content is incidental. Mis-tagging in the F direction is how a
+  real bug disappears, so when it is a close call it is NOT F.
+  **Parking:** F tickets live in `devdocs/progress/float/`, which `ready`/`next`
+  never scan (they read only `urgent`/`backlog`/`backlog_new`/`unfinished`). Nothing
+  there is ranked or dispatched; it is picked up on explicit request, or for fun.
+  Charter and the escape rule: `devdocs/progress/float/README.md`.
+- **Track Z — Zig frontend (zfront).** The Zig-language frontend, greenfield:
+  future `compiler/zlexer.inc`, `zparser.inc`, Zig-exclusive Zig→IR lowering,
+  `lib/zrtl`, Zig tests. **Works on `master`**, under the same pin boundary as C.
+  Same rule as C: own your frontend files; a shared-internals change (new AST
+  node / IR op / symtab field / backend / anything in `lexer.inc`,
+  `ir*.inc`, `symtab.inc`, `defs.inc`, the backends) → **file a Track A ticket**,
+  do not edit it under Track Z. Gate = Zig tests green + self-host byte-identical
+  + cross. Land only green; destabilizing work behind a flag or incremental,
+  never a long-lived branch.
+- **Track N — Nil-Python frontend (npyfront).** The Nil-Python language frontend —
+  `compiler/pylexer.inc`, `compiler/pyparser.inc`, Python→IR lowering, `.npy`
+  tests. **Mainline** (peer of C, not experimental like R/Z): it has its own
+  carved-out files AND a gated suite (`make test-nilpy`, managed + frozen; real
+  coverage — SQLite CRUD, classes, variants, string methods). Works on `master`,
+  under the same pin boundary as C. Same rule as C/Z: own your frontend files; a
+  shared-internals change (new AST node / IR op / symtab field / backend / anything
+  in `lexer.inc`, `ir*.inc`, `symtab.inc`, `defs.inc`, the backends)
+  → **file a Track A ticket**, do not edit it under N. Gate = `test-nilpy` green +
+  self-host byte-identical + cross. Land only green. NOTE the two-hats split: the
+  *language* is N; a **NilPy IDE or app built with it is an E app** (Track B
+  file-ownership), never N — same P-vs-A distinction as everywhere.
+  **What counts as an N bug — NilPy is UPWARD COMPATIBLE with CPython:** *if code
+  works on CPython, it must work on NilPy.* One direction only. NilPy accepting
+  something CPython **rejects** (a mutated tuple, a stricter-in-CPython form) is a
+  **language feature, not a defect** — the same call the Pascal dialect makes for
+  restrictions that were historic rather than necessary. So before filing "we are
+  laxer than CPython", ask whether a program CPython *accepts and runs* can
+  observe it; if not, it belongs in `devdocs/dev/nilpy-semantics-divergences.md`,
+  not in a bug ticket. (Worked example on that page: a NilPy tuple being mutable
+  is NOT a bug; `isinstance(t, list)` answering True IS, because ordinary
+  working code branches on it.)
+- **Track U — User (the decision lane).** Where human judgment lives. NOT a
+  file-lane: owns no source, has no gate, builds nothing — it is the **escalation
+  target**. The rule for every agent, and *especially* an autonomous/scheduled
+  one: **escalate, don't guess.** When you hit a fork you can't settle from the
+  code, the request, or a sensible default — a design choice, "is this intended vs
+  a bug?", a spec ambiguity, a semantics/wording call — **file a Track U ticket
+  (slug `decide-<topic>`: state the fork, the options, the trade-offs, your
+  recommendation) and move on**; do not burn cycles guessing or silently pick a
+  direction that may be wrong. The user works Track U to steer — resolving a
+  `decide-*` unblocks the ranked chain behind it (prio propagates down dep edges).
+  A U item that turns out to be plain work once decided is re-filed into the owning
+  lane (U holds *open questions*, not work). The `decide-*` tickets already in the
+  backlog ARE Track U. Full autonomy model — scheduled per-lane workers, gates,
+  review cadence — in **`devdocs/dev/autonomy.md`**.
+- **Track W — website (a real file-lane, in a SEPARATE repo).** The public site:
+  the private `~/pxx-website` repo (app, `deploy/`, `secrets/`, blog), its
+  deploy/secrets tooling and hosting. It earns a letter under the "don't invent
+  letters" rule precisely because it passes that rule's own test — a genuinely
+  new **place code lives**, the way Track T's watcher runs in its own clone. It
+  is NOT `docs/**`: Track D writes the Markdown *in this repo* that the site
+  publishes verbatim; W owns the machinery that publishes it. Rationale and the
+  lane's gate: `feature-web-track-w-bootstrap`.
+- **Track M — MSWindows (formal category, file-owned by A / B / T).** The
+  Windows campaign as one visible lane: the PE/COFF writer and MS x64 ABI
+  (**A**), the win32 widgetset and Tk-on-Windows compat in `lib/pcl` (**B**),
+  the Wine test harness (**T**). Exactly S's shape and rules — a **work-tag, not
+  a file-lane**: every M ticket ALSO carries its A/B/T file ownership for
+  collision purposes and obeys **that** lane's gate. `*-windows-*` /
+  `*-win32-*` / `*-wine-*` slugs auto-tag M. **M and not W**: W is the website
+  lane above, and Windows is not a place code lives. The two claimed W
+  simultaneously for months without anyone noticing, because Windows declared it
+  in frontmatter and the website in prose, so neither side's grep saw the other
+  (`meta-track-w-collision-windows-vs-website`). Declare a track in
+  **frontmatter** — that is what the ranker reads.
+

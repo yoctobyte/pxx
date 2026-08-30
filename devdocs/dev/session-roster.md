@@ -45,9 +45,29 @@ therefore *fair and often correct* — the coordinator's job is to make sure nob
 is BLOCKED, not to keep everybody busy. Prefer fewer workers on work that matters
 over full occupancy, and treat "everyone is active" as a cost, not a scoreboard.
 
-**You do not write code.** You assign, unblock, pin, and escalate. That is the
-entire remit and the one rule most likely to erode — see the failed experiment
-below, where taking a single ticket produced the day's two worst calls.
+**START tracks; do not babysit them** (owner, 2026-08-30). The role was cut back
+after the ten-agent night — which the owner called an excellent job, *"all 'just
+worked' ... i did not have to fix anything or do any disaster management"* — by
+measuring which half produced that. Relaying and sequencing did; gatekeeping did
+not. So:
+
+- **There is no grant system.** Workers do not ask permission to touch a file and
+  you do not give it. Nothing reserves a file.
+- **The sole-A guard is GONE.** It fired twice that night and neither firing was
+  defensible; it cost a worker two dispatches and a diagnosis went unwritten.
+- **Dispatch, then let them run.** No check-ins. An idle worker costs nothing;
+  a supervised one costs you.
+- **Tell workers to message each other directly.** Peer-to-peer beat routing
+  through the coordinator in every case measured — including one where routing
+  was actively wrong and a worker had to reverse it with a paired experiment.
+- **Arbiter only when asked, and rarely.** Genuine forks go to Track U as
+  `decide-*`. You do not adjudicate lane ownership; there is nothing to own.
+
+Full evidence: `devdocs/dev/coordination-overhead-2026-08-30.md`.
+
+**You do not write code.** You start lanes, relay, sequence, and escalate. That
+is the entire remit and the one rule most likely to erode — see the failed
+experiment below, where taking a single ticket produced the day's two worst calls.
 
 Each cycle:
 
@@ -62,6 +82,8 @@ Each cycle:
 3. **Worker asking for a clear** → only the human can clear. Log it under *Pending
    clears*; under 2h wait, at 2h release it to auto-compact with the required
    wording (see the periodic-check section — a compact is NOT a clear).
+   A worker asking to *edit a file*, by contrast, needs no answer from you: tell
+   it to go ahead, and to message whoever else is in there if it knows.
 4. **Worker blocked on a pin** → you run it: `make stabilize-fast && make pin`
    (~35s, holds a repo-wide lock, announce it). Workers never pin. Anything under
    `compiler/builtin/**` needs one.
@@ -70,7 +92,15 @@ Each cycle:
    and file a confirmation. Only genuine forks, paradoxes and goal-choices become
    `decide-*` tickets for Track U. Never as chat — chat dies with the session.
 6. **A peer reports something** → verify before acting, and name the sha in your
-   own claims. Relay findings between workers; they cannot see each other.
+   own claims. **Relay findings between workers — this is the highest-value half
+   of the job** (measured at ~50% of coordinator time and the part no rule
+   covers). They cannot see each other, so a correction that does not travel
+   is lost.
+   **Sequence what genuinely serialises**, which is not the same as gatekeeping:
+   `make pin` (repo-wide lock), and landing order when a change is only correct
+   as a whole — an ABI change where params and returns must move together, or a
+   staged build whose stage 2 needs stage 1 *pinned* rather than merely merged.
+   Those are the residual that git cannot merge for you.
 7. Keep this file current. It is the only thing that survives your context.
 
 **Never tell a session to revert or discard uncommitted work.** Uncommitted work
@@ -439,7 +469,8 @@ it says the opposite of a later owner ruling, and it is the row a coordinator
 would act on first because it sits in the table. (Noted 2026-08-30, frankD.)
 
 > **Corrected 2026-08-30 (frankD): the dispatch model below is not the one in
-> use, and following it weakens the sole-A guard.**
+> use.** (Its original second clause — "and following it weakens the sole-A
+> guard" — is moot: the guard was cut later the same day.)
 >
 > `.claude/worktrees/` **does not exist** and `git worktree list` shows one entry
 > — the main checkout. Nothing is dispatched as a worktree agent. Today's lane
@@ -462,7 +493,20 @@ would act on first because it sits in the table. (Noted 2026-08-30, frankD.)
 > four-die-at-once limit are both human-attributed rulings, and observed practice
 > is data, not a repeal.
 
-**Worktree workers are lane holders and are NOT in that table.** The coordinator
+> **SUPERSEDED 2026-08-30 — the sole-A guard was cut; this paragraph is kept as
+> a record, not as instruction.** Two things retired it. frankD had already found
+> that `.claude/worktrees/` does not exist and every lane holder is an ordinary
+> session visible to `ListAgents`, so the paragraph's premise (invisible workers
+> only the dispatch record knows about) was already false. Then the guard itself
+> was measured: it fired twice on the ten-agent night and neither firing was
+> defensible — one worker was not in the file at all, the other was in different
+> functions git would have merged — at a cost of two lost dispatches and an
+> unwritten diagnosis. **There is no sole-A guard, no grant, and no dispatch
+> record to keep for this purpose.** See
+> `devdocs/dev/coordination-overhead-2026-08-30.md`, and the head section of this
+> file for what the role is now.
+
+~~**Worktree workers are lane holders and are NOT in that table.** The coordinator
 dispatches ticket work as background agents, each in its own git worktree under
 `.claude/worktrees/`. They are not sessions, `ListAgents` does not show them, and
 they finish without announcing themselves to anyone but the coordinator -- yet
@@ -470,7 +514,7 @@ each one HOLDS ITS LANE for the duration. That matters for exactly one rule: the
 **sole-A guard**. Before dispatching a Track A ticket, or a Track P one that
 touches the shared `lexer.inc`, the question "is anyone else on A right now?" is
 answered by the coordinator own dispatch record, not by the table above and not
-by `ListAgents`. Keep that record; it is the only place the answer exists.
+by `ListAgents`. Keep that record; it is the only place the answer exists.~~
 
 Live worker slots, 2026-08-26: **A** = the fixed nine-second NilPy compile cost;
 **N** = the sorted-by-key segfault. Two at a time is the sustainable number here
