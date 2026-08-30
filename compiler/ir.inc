@@ -13733,6 +13733,117 @@ begin
     (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_TERMINATE) or (IRKind[i] = IR_RAISE);
 end;
 
+function IRConstCondValue(n: Integer; var val: Boolean): Boolean;
+{ Is this branch condition decidable at compile time, and to what?
+
+  NOT a revived constant-folding pass. ir.inc's 2026-07-03 note records that
+  const-fold + algebraic identities were implemented, measured at ZERO fires,
+  and rejected as dead weight -- on the reasoning that "no const-const IR_BINOP
+  ever reaches the IR for ANY frontend". **That premise is now false**, and by
+  measurement rather than argument: `if (sizeof(unsigned) == 4)` in C and
+  `if SizeOf(LongInt) = 4 then` in Pascal both lower to
+
+      const_int 4 ; const_int 4 ; binop c=Ord(tkEq) ; jump_if_false
+
+  in the shared IR, identically. SizeOf is the producer the note said to watch
+  for, and it was already there -- both frontends fold the operand and neither
+  folds the comparison around it. The note's own instruction on finding one is
+  to revive the fold, so this is that, scoped to the one question a branch asks.
+
+  Scoped deliberately to `=` and `<>`. Those are the static-assert idiom in the
+  wild -- busybox's xatonum.h is `sizeof(uint32_t) == sizeof(unsigned)` -- and
+  they are decidable from the bit patterns alone, with no signedness question to
+  get wrong. The ordered comparisons would need the operands' type kinds
+  consulted to choose a signed or unsigned compare, and a wrong guess there
+  silently inverts a branch, which is a far worse failure than the missed fold
+  it would buy. Add them when something real needs them, with the type test. }
+begin
+  IRConstCondValue := False;
+  if (n < 0) or (n >= IRCount) then Exit;
+  if IRKind[n] = IR_CONST_INT then
+  begin
+    val := IRIVal[n] <> 0;
+    IRConstCondValue := True;
+    Exit;
+  end;
+  if (IRKind[n] <> IR_BINOP) then Exit;
+  if (IRA[n] < 0) or (IRA[n] >= IRCount) or (IRB[n] < 0) or (IRB[n] >= IRCount) then Exit;
+  if (IRKind[IRA[n]] <> IR_CONST_INT) or (IRKind[IRB[n]] <> IR_CONST_INT) then Exit;
+  if IRC[n] = Ord(tkEq) then
+  begin
+    val := IRIVal[IRA[n]] = IRIVal[IRB[n]];
+    IRConstCondValue := True;
+  end
+  else if IRC[n] = Ord(tkNeq) then
+  begin
+    val := IRIVal[IRA[n]] <> IRIVal[IRB[n]];
+    IRConstCondValue := True;
+  end;
+end;
+
+procedure IROptConstBranch;
+{ Pass 0 — fold a conditional jump whose condition is a compile-time constant.
+
+  `if (1) return x; return BUG_never_defined();` is the pre-C11 static-assert
+  idiom and it is everywhere in real C -- busybox's include/xatonum.h uses it
+  verbatim. gcc never references the symbol; we emitted the call, the linker
+  warned and linked anyway, and the binary died BEFORE main with
+  `symbol lookup error: undefined symbol`. Not a missed optimisation: a program
+  gcc builds and runs became one that will not start.
+  bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
+
+  The condition already arrives folded -- `PXXDBG=a.ir` shows `const_int ival=1`
+  feeding the jump -- so nothing here re-does the frontends' work. All this pass
+  does is act on a constant that was already sitting in the operand:
+
+    cond <> 0 -> the jump is never taken -> NOP it (fall through to the arm)
+    cond  = 0 -> the jump is always taken -> it IS an unconditional jump
+
+  Both spellings then hand the real work to IROptDeadCode below, which is exact.
+  It runs FIRST for that reason: turning a conditional into an unconditional
+  transfer is what lets the reachability walk see the dead region at all. }
+var i: Integer; taken: Boolean;
+begin
+  for i := 0 to IRCount - 1 do
+    if IRKind[i] = IR_JUMP_IF_FALSE then
+      if IRConstCondValue(IRB[i], taken) then
+      begin
+        if taken then
+          IRKind[i] := IR_NOP      { condition true: the branch never fires }
+        else
+          IRKind[i] := IR_JUMP;    { condition false: IRA already holds the target }
+      end;
+end;
+
+procedure IRMarkReferencedLabels;
+{ Which label ids are named by a control transfer that still exists.
+
+  The node kinds that can name a label are exactly the five IRVerify validates
+  as label operands -- IR_JUMP, IR_JUMP_IF_FALSE and the three exception kinds
+  -- and that is not a list assembled here by grepping: IRVerify validates EVERY
+  node kind, so a new label-consuming kind cannot be added without a case arm
+  landing beside those. Reading the set off the verifier is what keeps this
+  honest as the IR grows.
+
+  Conservative in the safe direction: a label referenced only from code that is
+  itself dead still counts as referenced, so this pass under-removes rather than
+  over-removes. One sweep, no fixpoint. }
+var i, lbl: Integer;
+begin
+  EnsureIRScratch(IRLabelCount);
+  for i := 0 to IRLabelCount - 1 do
+    IRScratchFlag[i] := False;
+  for i := 0 to IRCount - 1 do
+  begin
+    lbl := -1;
+    case IRKind[i] of
+      IR_JUMP, IR_JUMP_IF_FALSE,
+      IR_EXC_ENTER, IR_EXC_MATCH, IR_EXC_MATCH_HIT: lbl := IRA[i];
+    end;
+    if (lbl >= 0) and (lbl < IRLabelCount) then IRScratchFlag[lbl] := True;
+  end;
+end;
+
 procedure IROptDeadCode;
 { Pass 1 — unreachable-code elimination. Walk the body tracking reachability.
   Code between an unconditional transfer and the next IR_LABEL owns no label,
@@ -13755,18 +13866,56 @@ procedure IROptDeadCode;
   invariant is the line between -O1 (provably safe) and -O2 (experimental /
   side-effecting): keep it airtight or move the pass. See
   devdocs/dev/optimization-architecture.md §2. }
-var i: Integer; reachable: Boolean;
+var i, lbl: Integer; reachable, changed: Boolean;
 begin
-  reachable := True;
-  for i := 0 to IRCount - 1 do
-  begin
-    if IRKind[i] = IR_LABEL then
-      reachable := True
-    else if not reachable then
-      IRKind[i] := IR_NOP
-    else if IRIsUncondTransfer(i) then
-      reachable := False;
-  end;
+  { A label restores reachability only if something can still JUMP to it. The
+    original rule was "any IR_LABEL is a potential jump target", which is true
+    of the labels a jump names and false of the ones left behind when
+    IROptConstBranch folds the only branch that named them. Without this, an
+    orphaned else-label resurrects the arm it guards: the constant branch is
+    gone, the then-arm ends in a return, and the dead arm is still emitted
+    because a label with no predecessors reset the walk.
+    IRMarkReferencedLabels reads its node-kind set off IRVerify, and errs
+    towards calling a label referenced, so this only ever removes a region the
+    original rule would also have removed had the label not been there.
+    bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start }
+  { ITERATED TO A FIXPOINT, and one round is provably not enough. The
+    then-arm's `jump endLabel` sits AFTER the arm's own `return`, so it is
+    itself dead -- but it is still a live-looking reference when the mark pass
+    reads it, which keeps endLabel alive, which resurrects the arm the label
+    guards. Round 2 sees the jump already NOPed and the label falls with it.
+    Measured on the ticket's repro: round 1 removes the branch and the orphaned
+    else-label, round 2 removes the call. Terminates because every round only
+    ever turns nodes INTO NOPs -- the state is monotone, so `changed` can flip
+    at most IRCount times, and in practice it is two rounds. }
+  repeat
+    changed := False;
+    IRMarkReferencedLabels;
+    reachable := True;
+    for i := 0 to IRCount - 1 do
+    begin
+      if IRKind[i] = IR_NOP then
+        Continue
+      else if IRKind[i] = IR_LABEL then
+      begin
+        lbl := Integer(IRIVal[i]);
+        if (lbl < 0) or (lbl >= IRLabelCount) or IRScratchFlag[lbl] then
+          reachable := True
+        else if not reachable then
+        begin
+          IRKind[i] := IR_NOP;   { orphaned label inside a dead region }
+          changed := True;
+        end;
+      end
+      else if not reachable then
+      begin
+        IRKind[i] := IR_NOP;
+        changed := True;
+      end
+      else if IRIsUncondTransfer(i) then
+        reachable := False;
+    end;
+  until not changed;
 end;
 
 procedure IROptRedundantJump;
@@ -13876,6 +14025,7 @@ procedure IROptimize;
   slot in before the tripwire — this is the shared, all-target, all-frontend
   home the optimization arc builds on. }
 begin
+  IROptConstBranch;
   IROptDeadCode;
   IROptRedundantJump;
   { Opt-in only: with -O2 the default, inline produces foldable BINOPs on nearly

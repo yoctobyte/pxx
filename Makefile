@@ -11228,6 +11228,18 @@ test-core: $(COMPILER)
 	# but `0.1f` kept the nearest DOUBLE. Row F is a comparison a program can
 	# branch on, not a display question, and row G is the TYPE half -- the value
 	# rows went green one build before G did, so it is not redundant.
+	# A constant `if` condition must not keep its dead arm: the dead call becomes
+	# a real external reference and, when the symbol is only ever DECLARED, the
+	# binary dies BEFORE main with `symbol lookup error`. Both frontends, because
+	# the fix is in the shared IR. The undefined symbols in both files are
+	# load-bearing -- defining them deletes the test while leaving it green.
+	# The second row of each is the NEGATIVE control: the same operators on a
+	# runtime value must still branch, or the fold has inverted control flow.
+	# bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
+	./$(COMPILER) test/c_const_branch_dead_arm.c $(TESTTMP)/c_constbranch26
+	tools/expect_same.sh c_constbranch26 "$$($(TESTTMP)/c_constbranch26)" "$$(printf '42 42 42 42 42\n100 200 400 300 500 600')"
+	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
+	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300')"
 	# The riscv32 arm of this only fails cross-target; see test-c-float-const-cross.
 	# bug-c-the-f-suffix-on-a-float-literal-is-ignored
 	./$(COMPILER) test/c_float_literal_f_suffix.c $(TESTTMP)/c_flit_fsuf26

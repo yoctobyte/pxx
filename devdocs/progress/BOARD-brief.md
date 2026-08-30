@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:33 blocked:9 backlog:386 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2881 rejected:68`
+`working:3 unfinished:33 blocked:9 backlog:386 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2882 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -65,7 +65,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [A]` bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
 - `[p 70] [P]` bug-p-generic-constraints-are-checked-before-the-type-section-closes
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
@@ -93,5 +92,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
+- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
 _398 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
