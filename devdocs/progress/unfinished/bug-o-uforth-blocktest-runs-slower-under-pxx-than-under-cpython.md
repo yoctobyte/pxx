@@ -3,9 +3,9 @@ summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython
 type: bug
 track: O
 prio: 65
-status: working
+status: unfinished
 
-owner: frank-optimize-b4
+owner: ""
 ---
 
 # pxx-compiled uforth is 2.1x slower than CPython on `blocktest`
@@ -850,3 +850,58 @@ makes the difference legible instead of disappointing.**
 The two figures now sit at different confidence levels and should be quoted
 that way: the allocation counts are exact and reproducible on any box, the
 timings are min-of-interleaved-reps on a contended workstation.
+
+## PARKED 2026-08-30 — fleet stood down for a merge and re-pin
+
+Moved `working/` → `unfinished/` by its owner (frank-optimize-b4) because the
+fleet paused and a lock with a stopped owner is unreadable: whoever runs the pin
+cannot tell it from live work. **Bookkeeping, not a rollback.**
+
+**Nothing is half-applied.** Every change is committed and on `origin/master`,
+each one gate-green when it landed: the `-O3` static-literal pass (x86-64 then
+aarch64 `89ab3d9d4`), `-dPXX_ALLOC_CENSUS` (`0f0a5619a`), and the two write-ups
+(`5bb3e120d`, `e61b96811`). There is nothing to revert and nothing to finish
+before the tree is safe to merge or pin.
+
+### Where it actually stands
+
+The ticket's subject — `blocktest` at 2.1x slower than CPython — is **not
+closed**. What has changed is that the two named cost centres are gone (Cause A
+`s[i]` rescan, Cause B concat allocate-and-copy) and the third, string literals
+allocating at runtime, is fixed behind `-O3` on the two backends the lane rule
+covers. Measured effect: **44.5% fewer allocations and 35% fewer bytes** on
+`core.fr`, of which 95% is the 32-byte class, i.e. exactly a short literal's
+block. Wall clock moves 10-25%, not 44%, because what remains is the
+interpreter's own work.
+
+### Resume conditions, in the order they unblock
+
+1. **`-O2` promotion of the static-literal pass — WITHHELD, and it needs Track
+   T's full-tier sweep of the landing sha, not a decision here.** This is the
+   single highest-value next step and it is not mine to take.
+2. **The three unported backends** (i386, arm32, xtensa, riscv32) — but the
+   per-backend rule says x86-64 and aarch64 only, so this is *deliberately* not
+   next. Listed so nobody reads its absence as an oversight.
+3. **The next cost centre is unranked, and that is on purpose.** This ticket
+   produced *two* bad rankings from missing instruments in one night, which is
+   why `-dPXX_ALLOC_CENSUS` exists. Whoever picks it up: **count before you
+   rank.** The census is exact and box-independent; every timing on this ticket
+   is min-of-interleaved-reps on a contended workstation and they are not the
+   same kind of number.
+
+### Two traps banked here, both already paid for once
+
+- **`PXXAlloc`'s zero-init is NOT the next win.** The experiment that priced it
+  reported **−83.9%** and was a **segfault at 0.7 s** — the run did not get
+  faster, it stopped doing the work. A global switch is off the table for
+  measured reasons. Anything here must be a second entry point with individually
+  audited callers. Note also what did not catch it: the compiler self-hosted
+  **byte-identically** with zeroing disabled. *A fixedpoint proves the compiler
+  reproduces itself, not that the runtime is sound.*
+- **`SLOW_SHARDS` still must NOT be dismantled.**
+
+### Do not resume by re-measuring `blocktest` on this box
+
+It is ~240 s under pxx plus ~80 s of CPython oracle on somebody's desk. The
+small subjects are the established proxy, for exactly that reason. A `blocktest`
+number should come from Track T's sweep.
