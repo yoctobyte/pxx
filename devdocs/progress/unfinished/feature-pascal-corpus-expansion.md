@@ -1,5 +1,8 @@
 ---
 prio: 75
+track: P
+status: unfinished
+owner:
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -7,12 +10,19 @@ prio: 75
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** unfinished — **UNBLOCKED 2026-08-30**, rung 6 is available. The
-  blocker `decide-revisit-object-types-rtl-generics-fired-the-trigger` is in
-  `decided/`: option C, and its own Consequences section says *"Rung 6 of
-  feature-pascal-corpus-expansion (p75) unblocks."* See the note at the bottom.
-  neglected by comparison — user call).
-- **Owner:** frankA
+- **Status:** unfinished — **parked 2026-08-30 (frankB) with the wall measured.**
+  The object blocker IS discharged: `decide-revisit-object-types-rtl-generics-fired-the-trigger`
+  is in `decided/` as **option C** (`object` = a value type with a hard error on
+  inheritance; **option B, "`object` becomes `TObject`", was explicitly
+  REJECTED**), and it is already built — `done/bug-p-object-value-types-standard-meaning`,
+  `pasparser_decl.inc:5745`. Verified by compiling, not by reading.
+  **Rung 6 is nevertheless still RED**, on a wall that is none of walls 1-7 and
+  unrelated to `object`: four unbound identifiers in the dictionary includes.
+  Full measurement, provenance, and seven ruled-out shapes in the re-compile
+  note inside THE ONE CANONICAL TABLE below. **Re-measure after
+  `regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section`
+  lands — independence is unproven.**
+- **Owner:** frankB
 
 ---
 
@@ -210,6 +220,66 @@ Last measured 2026-08-28 against binary `c3cd377d5`, on the **pristine**
 corpus (no stubs). **Wall states re-checked against HEAD 2026-08-30 by frankD**
 (folder plus resolution commit, not folder alone); the compile itself was not
 re-run, so the *line numbers* below are still the 08-28 measurement.
+
+> **RE-COMPILED 2026-08-30 (frankB) — the first actual compile since 08-28, and
+> the table's condition is met while the rung is still RED.** Binary: HEAD
+> `4f42b78b9`, self-host fixedpoint `faf762981c3c`, byte-identical to pin
+> **v397** (`0d9341089`) — provenance checked, not assumed. Result:
+>
+> | rung | probe | result |
+> | --- | --- | --- |
+> | 6a | `uses Generics.Defaults` | **ok** — 671512B code, 1661 procs, 25s |
+> | 6a | *control:* same + `TComparer<Integer>.Default` actually instantiated | **ok** — 1672 procs, 31s |
+> | 6b | `uses Generics.Collections` | **ERROR** — `unknown type: TKey` +13 more |
+>
+> The 6a control is the load-bearing half. "Compiles standalone" and "is
+> correct" are different claims if an uninstantiated generic body is never
+> type-checked, and the **+11 procs** (1661 → 1672) is what proves the
+> instantiation generated code rather than being skipped. Without it the green
+> is vacuous. **6a is genuinely clean.**
+>
+> **6b's wall is none of walls 1-7, has nothing to do with the object decision,
+> and is ALREADY FILED** —
+> [[bug-p-generic-type-param-unresolved-in-class-abstract-template]] [P p70,
+> `unfinished/`]. My stop set overlaps that ticket's exactly (`:120`, `:123`)
+> while naming different missing types, and my measurement is appended there.
+> **Do not open a new ticket for this wall.** Four identifiers come back unbound — `TKey`, `TValue`,
+> `TDictionaryPair`, `PDictionaryPair` — all of them `TCustomDictionary`'s
+> parameters and nested types. `TDictionaryPair` is declared **only** in
+> `inc/generics.dictionariesh.inc`, so the parser IS reaching the include; the
+> failure is that the parameters do not bind inside it.
+>
+> **The object arm IS discharged — measured, not inferred.** `= object`
+> compiles as a VMT-less value type (`SizeOf` 8), a **generic** `= object`
+> works too (`SizeOf` 4), and `TB = object(TA)` gives the decision's hard error.
+> The compile advances well past the corpus's single `= object`
+> (`collections.pas:146`) to the dictionary declarations.
+>
+> **Seven shapes were ruled out by construction, each with a control — do not
+> re-run these:** cross-unit generics; `{$MACRO ON}` value macros; a macro used
+> across an `{$I}` boundary; a 3-param macro with nested `TDictionaryPair`/
+> `PDictionaryPair` referenced in bodies; the macro as the **declaration's**
+> parameter list (the corpus's exact shape); backslash include paths
+> (`{$I inc\file.inc}` resolves on Linux — verified non-vacuously by
+> referencing the included type); and a constrained generic `TObjectList<T:
+> class> = class(TList<T>)` specialized from another unit with a class declared
+> after it. All seven compile and run. The trigger needs the real file's
+> combination, not any one of these.
+>
+> **Do NOT assume this is independent of the constraint regression.**
+> `f4fb9d31b` (constraint recording/checking) IS live in this binary, and
+> `regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section`
+> is open. The corpus does use constrained generics (`collections.pas:423`,
+> `defaults.pas:525`), and 423 precedes the includes at 470/2333. My errors are
+> unbound-identifier errors rather than constraint violations, which is *weak*
+> evidence for independence and not proof. **Re-measure 6b against a post-fix
+> binary before concluding anything about `TKey`.**
+>
+> A second, separate defect fell out of this and is filed:
+> [[bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line]]
+> [P p60] — the errors name `generics.defaults.pas:78`, which contains neither
+> `TKey` nor `SizeOf`, while the `near:` context is `collections.pas:1309-1310`.
+> The `near:` context is the only trustworthy field. Budget a pass for it.
 
 | # | wall | owner | status |
 | --- | --- | --- | --- |

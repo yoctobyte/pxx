@@ -323,3 +323,63 @@ So nothing is blocked on this ticket except the question of whose observation
 blocked on frank-user's shell history: which binary produced :120. Three binaries run (6319b892f517, f92f3c013ac58cda, pinned abece5150983d95e), all stop at :135, none mentions PT. Do not re-run the probe. :135 re-laned to B (TArray missing from RTL); :214 split into its own P ticket.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-08-30 (frankB) — the two probes may not disagree at all: the LINE NUMBERS ARE GARBAGE
+
+Measured from the rung-6 climb in [[feature-pascal-corpus-expansion]]. Binary:
+HEAD `4f42b78b9`, self-host fixedpoint `faf762981c3c`, byte-identical to pin
+**v397** (`0d9341089`) — provenance checked rather than assumed.
+
+`uses Generics.Collections` stops here too, and my stop set overlaps this
+ticket's exactly — **`:120`, `:123`** — but names *different* missing types:
+`TKey`, `TValue`, `TDictionaryPair`, `PDictionaryPair`, plus reported stops at
+`:78`, `:79`, `:84`, `:113`.
+
+**The section above asks how two probes of the same file, with no compiler commit
+between them, can report different first stops (`:120` vs `:135`). Here is a
+mechanism: the file and line in these diagnostics are provably wrong, so
+comparing them was never comparing anything.**
+
+Evidence, from my run:
+
+| the diagnostic says | what is actually true |
+| --- | --- |
+| `unknown type: TKey` **in `generics.defaults.pas`** | `TKey` appears **0 times** in that file, and **65 times** in `generics.collections.pas` |
+| at **line 78** of it | line 78 is `function Equals(constref ALeft, ARight: T): Boolean;` — no `TKey`, no `SizeOf` |
+| `near: ) * SizeOf ( T ) >>> ) ; FillChar` | matches `generics.collections.pas:1309-1310`, inside `TCustomList<T>.DoRemove` |
+| a stop **in `lib/rtl/sysutils.pas`** | `TKey`/`TValue`/`TDictionaryPair` are not in sysutils at all |
+
+The `near:` token context is the **only** trustworthy field; the file and line
+should be ignored until this is fixed. Filed separately as
+[[bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line]] [P p60].
+
+So this ticket's "reproducible under one probe and absent under another" is
+**not established** — both probes may have hit this same defect while printing
+unrelated coordinates. That does not make the two runs identical, and I am not
+claiming it does; I am saying the line numbers cannot carry the weight the
+comparison put on them, and the disagreement should be re-derived from `near:`
+contexts before anyone concludes a code difference exists.
+
+### Seven shapes ruled out by construction — do not re-run these
+
+Each compiled AND ran clean on the binary above, so none is the trigger on its
+own: cross-unit generics; `{$MACRO ON}` value macros; a macro across an `{$I}`
+boundary; a 3-param macro with nested `TDictionaryPair`/`PDictionaryPair` used in
+bodies; the macro as the **declaration's** parameter list (`TD<CC> = class`, the
+corpus's exact shape); backslash include paths (`{$I inc\file.inc}` resolves on
+Linux — verified non-vacuously by referencing the included type); a constrained
+`TObjectList<T: class> = class(TList<T>)` specialized cross-unit with a class
+declared after it; and **this ticket's own headline shape**,
+`TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>)` with `T` and
+`PT` in member signatures, which compiles fine in isolation. The trigger needs
+something the real file combines that a reduction does not.
+
+### Do not assume independence from the constraint regression
+
+`f4fb9d31b` (constraint recording/checking) is live in this binary, and
+[[regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section]]
+is open. The corpus uses constrained generics (`collections.pas:423`,
+`defaults.pas:525`) and 423 precedes the dictionary includes at 470/2333. My
+errors are unbound-identifier errors rather than constraint violations, which is
+*weak* evidence for independence and not proof. **Re-measure against a post-fix
+binary before concluding anything here.**
