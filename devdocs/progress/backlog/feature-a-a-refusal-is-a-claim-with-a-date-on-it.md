@@ -4955,3 +4955,77 @@ The lane also noted the workaround was *genuinely tempting*: renaming two PAL
 routines would have unblocked it in five minutes and hidden a bug affecting every
 `--emit-obj` consumer. Worth recording that the platonic-code rule pays off most
 exactly when the workaround is cheapest.
+
+### 123 — the repair was ready before anyone confirmed there was damage
+
+*pxx-a5, 2026-08-30, declining a backfill the coordinator dispatched it onto.*
+
+The coordinator relayed: 7 PENDING-COMMIT tickets, 2 false positives, **5 real**,
+please backfill them — with careful advice about matching shas by unbounded
+exactly-1 subject grep, since a windowed miss would write a *wrong* sha.
+
+The queue was **empty**. `progress.sh pending` → nothing. `check --strict` → 0.
+All 7 were prose *discussing* the machinery — `PENDING_RE` excludes every one
+deliberately, and a `prose-mention-is-not-rewritten` guard already pins that
+direction. **0 real / 7 false**, inverted.
+
+`fill_pending` **rewrites the file**. Run on the reported set it would have written
+shas **into the middle of sentences** in four tickets documenting this exact
+machinery, including the one that fixed it.
+
+**The careful advice was precision about the wrong step.** It addressed *how to
+find the right sha* — never *whether anything was owed one*. What saved it was
+checking the queue was non-empty before filling it, which no amount of rigour
+about the matching rule would have reached.
+
+**So: before applying a repair, confirm the damage exists — in your own
+measurement, not in the report that dispatched you.** A repair procedure is
+persuasive: it implies its own precondition, and the more carefully it is specified
+the more it does. Note the shape against 108 and 121 — those are guards that cannot
+fail; this is a *fix* that cannot fail, because it will happily run on nothing and
+report success.
+
+**And the relay is the coordinator's half.** The claim was passed on unverified,
+with authority attached, when `progress.sh pending` would have settled it in one
+command. The profile is the standing one: plausible, load-bearing, adjacent to
+something the reporter genuinely knew. The vivid detail inside it — *"the ticket
+describing the sha-filling failure is itself one of the five unfilled"* — was
+**false** (it carries `commit 65b2512ef`), and it is the part that would have been
+repeated, because a good story travels further than a count.
+
+**The inverse residue, which is the real one:** a ticket resolved by a hand-written
+Log line never gets a placeholder, so nothing fills it and nothing counts it —
+**uncited and silent.** Strictly worse than PENDING-COMMIT, which at least greps,
+counts, and has a tool that knows how to repair it. The visible defect had a name,
+a count and a fixer; the invisible one had none, and the visible one is what got
+the dispatch.
+
+### 124 — "present but rejected" and "absent" are different states, and only one looks solved
+
+*frank-optimize-b4, 2026-08-30, on the coordinator's own new tool.*
+
+`whoholds.py` printed *"1 of them carry NO session trailer"* for a commit that
+**carried one**. The value `frank-optimize-b4 (c1d9983f-…)` failed the name
+pattern, and the tool reported it identically to a commit with no trailer at all.
+
+The lane had written the field, reasoned about it in a paragraph of commit message,
+and gone on believing it was attributable. **The remedies are opposite** — *add the
+field* versus *fix the value* — and the tool named the one that was already done.
+
+frank-optimize-b4's placement of this is right and is why it earns its own number:
+tonight's family is mostly *a wrong thing that looks checked*. This is one turn
+further in — **a fix that looks applied.** A correct intention nobody parses, next
+to face 33's correct capability nobody calls.
+
+**General rule for any validator: silent rejection is a bug in the validator, not
+in the input.** If a field can be present and inert, say so, because the author is
+the one person who cannot discover it — they have already done the work and have no
+reason to look again.
+
+**Two independent instances of the enclosing bug in one hour**, which is what
+settles it as a design fault rather than carelessness: `git` parses trailers only
+from the **last contiguous block**, so a `Lane:` or `Claude-Session:` line one
+paragraph too high is invisible to `%(trailers:…)` **with no error**. Both the
+coordinator and frank-optimize-b4 lost the trailer on the very commit that
+introduced their use of it. The fix is not a placement rule taught to eight lanes —
+*a documented trap is not a guard* — it is scanning the whole body.
