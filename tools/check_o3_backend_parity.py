@@ -103,7 +103,7 @@ def strip_comments(src):
 #   386 / arm32 / riscv32 / xtensa
 EXPECTED = {
     "ir_codegen.inc": 22,
-    "ir_codegen_aarch64.inc": 9,
+    "ir_codegen_aarch64.inc": 10,
     "ir_codegen386.inc": 0,
     "ir_codegen_arm32.inc": 0,
     "ir_codegen_riscv32.inc": 0,

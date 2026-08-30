@@ -1385,6 +1385,45 @@ begin
   else Error('target aarch64: unsupported float compare operator');
 end;
 
+{ How many IR_ARG nodes hang off this chain. Needed BEFORE the push loop runs,
+  because the last-argument collapse below has to know which push to skip while
+  it is still emitting them. }
+function ArgChainLenA64(argNode: Integer): Integer;
+var n: Integer;
+begin
+  n := 0;
+  while argNode <> -1 do begin Inc(n); argNode := IRB[argNode]; end;
+  ArgChainLenA64 := n;
+end;
+
+{ -O3 W1 last-argument collapse (aarch64), ported from x86-64's same pass.
+
+  Arguments are evaluated left to right into x0 and each is pushed to a 16-byte
+  temp; the pops then run in reverse into x0..x7. So the LAST argument is pushed
+  LAST and popped FIRST, with NOTHING emitted in between -- the round trip is
+  pure ceremony over a value already sitting in x0 where it was produced.
+
+  `mov x(n-1), x0` replaces the str/ldr pair: two instructions and 32 bytes of
+  stack traffic become one register move. And for a ONE-argument call not even
+  that, because the destination register IS x0 -- both instructions vanish.
+
+  Correct because the pair is adjacent: nothing can disturb x0 between them, and
+  removing a MATCHED push/pop at the TOP of the temp stack leaves every deeper
+  slot (earlier args, the hidden destination, an indirect callee) at exactly the
+  offset it had. Deliberately NOT applied when the args spill past x0..x7: that
+  path rebuilds an outgoing block from the temp slots by offset and needs every
+  one of them to exist. }
+function LastArgCollapseA64(nTotal: Integer): Boolean;
+begin
+  LastArgCollapseA64 := (OptLevel >= 3) and (nTotal >= 1) and (nTotal <= 8);
+end;
+
+procedure EmitLastArgMoveA64(nTotal: Integer);
+begin
+  if nTotal > 1 then
+    EmitI32($AA0003E0 or (nTotal - 1));   { mov x(n-1), x0 }
+end;
+
 { -O3 W1 slice 10's aarch64 twin. Does the shift arm OPEN with a widen of the
   left operand? Both the pre-decision that SKIPS the left load and the emit site
   that must honour it call THIS function, so they cannot drift: a skip the widen
@@ -1462,6 +1501,7 @@ var
   pNilPos, pDonePos: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
+  nArgTotal: Integer;   { -O3 W1 last-argument collapse (aarch64): args counted BEFORE the push loop }
   w1ExtLA64: Integer;   { -O3 W1 slice 10 (aarch64): 0 = left load emitted, else the resident reg the widen must read }
   w1CmpLA64, w1CmpRA64: Integer;   { -O3 W1 slices 5+7 (aarch64): 0 = the normal x0/x1 contract, else x19..x24 read in place }
   sgn, isComp, savedLValueWrite: Boolean;
@@ -2983,6 +3023,7 @@ begin
 
         argNode := IRB[node];
         nArgs := 0;
+        nArgTotal := ArgChainLenA64(argNode);
         while argNode <> -1 do
         begin
           { A frozen inline string (or a char) handed to a MANAGED string parameter has
@@ -3001,7 +3042,8 @@ begin
             EmitAnsiStringFromNodeA64(IRA[argNode])
           else
             IREmitNodeAarch64(IRA[argNode]);
-          EmitI32($F81F0FE0); { str x0, [sp, #-16]! (16-byte temp slot, arg0 deepest) }
+          if not (LastArgCollapseA64(nArgTotal) and (nArgs = nArgTotal - 1)) then
+            EmitI32($F81F0FE0); { str x0, [sp, #-16]! (16-byte temp slot, arg0 deepest) }
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
@@ -3016,9 +3058,13 @@ begin
 
         if nArgs <= 8 then
         begin
-          { All args fit in x0..x7: pop each temp into its register (unchanged). }
+          { All args fit in x0..x7: pop each temp into its register. The last
+            one was never pushed at -O3 -- it is still in x0. }
           for i := nArgs - 1 downto 0 do
-            EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
+            if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
+              EmitLastArgMoveA64(nArgTotal)
+            else
+              EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
           if ABIRetViaHiddenDestProc(procIdx) then
             EmitI32($F84107E8);   { ldr x8, [sp], #16 (hidden destination) }
           EmitCallProc(procIdx);
@@ -3133,15 +3179,20 @@ begin
         EmitI32($F81F0FE0);                          { str x0, [sp, #-16]! (callee) }
         argNode := IRB[node];
         nArgs := 0;
+        nArgTotal := ArgChainLenA64(argNode);
         while argNode <> -1 do
         begin
           IREmitNodeAarch64(IRA[argNode]);
-          EmitI32($F81F0FE0);                        { str x0, [sp, #-16]! }
+          if not (LastArgCollapseA64(nArgTotal) and (nArgs = nArgTotal - 1)) then
+            EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! }
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         for i := nArgs - 1 downto 0 do
-          EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
+          if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
+            EmitLastArgMoveA64(nArgTotal)            { last arg is still in x0 }
+          else
+            EmitI32($F84107E0 + i);                  { ldr x[i], [sp], #16 }
         EmitI32($F84107F0);                          { ldr x16, [sp], #16 (callee) }
         if IRCallDest[node] >= 0 then
           EmitI32($F84107E8);                        { ldr x8, [sp], #16 (hidden destination) }
@@ -3166,17 +3217,25 @@ begin
         end;
         argNode := IRA[node];
         nArgs := 0;
+        nArgTotal := ArgChainLenA64(argNode);
         while argNode <> -1 do
         begin
           IREmitNodeAarch64(IRA[argNode]);
-          EmitI32($F81F0FE0);                        { str x0, [sp,#-16]! }
+          if not (LastArgCollapseA64(nArgTotal) and (nArgs = nArgTotal - 1)) then
+            EmitI32($F81F0FE0);                      { str x0, [sp,#-16]! }
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         if nArgs > 8 then
           Error('target aarch64: virtual call with more than 8 parameters not supported');
+        { The pops run high-index first, so x0 (Self) is restored LAST and the
+          VMT load below still sees it -- the collapse only changes where the
+          highest-index argument comes from. }
         for i := nArgs - 1 downto 0 do
-          EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
+          if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
+            EmitLastArgMoveA64(nArgTotal)
+          else
+            EmitI32($F84107E0 + i);                  { ldr x[i], [sp], #16 }
         if IRCallDest[node] >= 0 then
           EmitI32($F84107E8);                        { ldr x8, [sp], #16 (hidden destination) }
         EmitI32($F9400009);                          { ldr x9, [x0] (VMT ptr) }

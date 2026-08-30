@@ -328,3 +328,101 @@ materialising into a register first — which is what the const-right arm alread
 does. It should be reassessed on its own merits, and the slice-8 result above is
 the reason to measure before writing. The last-call-argument push/pop collapse
 is untouched and is genuinely a port.
+
+
+
+## LANDED: the last-argument push/pop collapse — the biggest of the three
+
+Baseline `deda1f9c0026`, new `88bc0cc913f6`, both at the same HEAD with the
+baseline being HEAD minus only this hunk.
+
+Arguments are evaluated into x0 and each pushed to a 16-byte temp; the pops then
+run in reverse into x0..x7. The **last** argument is pushed last and popped
+first with **nothing emitted in between**, so the round trip is ceremony over a
+value already sitting where it was produced. It becomes `mov x(n-1), x0` — and
+for a one-argument call **not even that**, because the destination register IS
+x0 and both instructions vanish.
+
+Correct because the pair is adjacent (nothing can disturb x0 between them) and
+because removing a MATCHED push/pop at the TOP of the temp stack leaves every
+deeper slot — earlier arguments, the hidden aggregate destination, an indirect
+callee — at exactly the offset it had.
+
+**Measured (aarch64 -O3, output identical, -O0/-O1/-O2 byte-identical, x86-64
+byte-identical):** `lispdemo` **-5092 bytes**, `test_cmp_both_in_place` -1100,
+`bench/w1_three_locals` -1092. Larger than slices 5+7 and slice 10 combined, and
+for the dullest possible reason: *every call in the program has a last
+argument.*
+
+**All three call sites, not one.** Internal (`EmitCallProc`), indirect
+(`IR_CALL_IND`'s internal-convention path) and virtual (`IR_VIRTUAL_CALL`) share
+the push/pop shape exactly, so fixing one and leaving two is the double-case
+trap — the sibling is the one that stays broken. The external/cdecl and
+syscall/clone sites have a different pop shape (float classing, x8 for the
+syscall number) and are deliberately untouched.
+
+**Excluded: more than 8 arguments.** That path rebuilds an outgoing stack block
+from the temp slots *by offset* and needs every slot to exist. This is a real
+guard, unlike the one in slices 5+7 — dropping it is deliberate break B below
+and it produces a wildly wrong number.
+
+**Non-vacuity — three breaks, three distinct failures:** a wrong destination
+register gives `acc=71045`; dropping the `<= 8` guard gives
+`acc=133455897761776`; skipping the push while keeping the `ldr` **segfaults**.
+`-O0` and x86-64 stay correct through all three.
+
+`test/test_last_arg_collapse.pas` uses a BAND — consecutive values 10..18 with
+distinct weights, so *any* permutation of the arguments changes the total. Rows
+cover 1 argument (no mov at all), 2, 8 (the boundary), 9 (over it, the collapse
+must not fire), a call as the last argument (a nested collapse mid-flight), a
+virtual call (Self is argument 0 and is popped LAST, so the VMT load must still
+see x0), and a call through a procedure variable (the callee is pushed deepest
+of all). The aarch64 rows were proven with the scratch-makefile + perturbed
+expectation method before being trusted.
+
+**Per-backend gate count: x86-64 22, aarch64 9 -> 10.**
+
+## Slice 6 is DECLINED — and here is the one measurement that would overturn it
+
+Slice 6 on x86-64 folds a register-resident LEFT operand into `imul rax, rN,
+imm32`: the three-operand multiply lets the resident be the *source* while rax
+stays the *destination*, so the `mov rax, rN` disappears. It is the only one of
+the six imm-fold arms that can do this, precisely because the other five are
+short accumulator encodings that read and write rax.
+
+**aarch64 has no multiply-by-immediate form at all.** `mul`, `madd` and `msub`
+are register-only; the constant has to be materialised into a register first —
+which is exactly what the const-right arm already does, one `EmitLoadImmA64(1,
+k)` before the op. So there is no immediate to be displaced and no third operand
+going spare: `mul x0, xN, x1` is already the shape, and slice 5+7's machinery
+does not apply because `mul` has a destination and the resident cannot be it.
+
+### Why this is declined by reading where slice 8 was declined by measuring
+
+That difference is the point, and it is not inconsistency.
+
+- **Slice 8's premise was a claim about COST** — "both encodings are one
+  instruction". Cost claims need numbers, because a fixed cost and a per-item
+  cost are indistinguishable at n=1, and the per-item reading is always the one
+  that justifies the work. Hence 3 / 9 / 27 rows and a constant delta.
+- **Slice 6's premise is a claim about the ISA and about an existing code
+  path** — aarch64 has no `imul`-immediate encoding, and the const-right arm
+  already materialises the constant. Both are checkable by reading the
+  architecture and the emitter. Counting cannot make either more true.
+
+Different kind of claim, different standard of evidence. Measuring here would
+buy confidence in something a manual already answers, at the cost of not
+porting something with known value.
+
+### The trigger
+
+**If a future pass gives aarch64 a fold site where the CONSTANT is already
+resident, this decline expires.** The premise is "the constant must be
+materialised into a register anyway, so the const-right arm's load is free" —
+and a resident constant makes that load unnecessary, at which point there IS a
+spare operand and a resident left could feed `mul x0, xN, xM` with neither side
+staged. Whoever adds constant residency, or any pass that leaves a known value
+in a register across a binop, should re-open this section.
+
+Nothing else changes it. A bigger benchmark, a hotter loop, or a different
+program cannot conjure an immediate form into the ISA.

@@ -4047,6 +4047,33 @@ test-threads: $(COMPILER)
 	else \
 	  echo "=== test_shr_resident_widen: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
+	# The LAST call argument is pushed last and popped first with nothing in
+	# between, so its 16-byte temp round trip is ceremony over a value already in
+	# x0. It becomes `mov x(n-1), x0`, and for a ONE-argument call not even that.
+	# Every argument list is a BAND -- consecutive values 10..18 with distinct
+	# weights -- so ANY permutation changes the total; far-apart values would let
+	# a swap that happens to cancel go unseen. The rows each cover one way it
+	# breaks: 1 arg (no mov at all), 2 args, 8 (the boundary), 9 (OVER it, where
+	# the collapse must not fire because that path rebuilds an outgoing block
+	# from the temp slots by offset), a call as the last argument (nested
+	# collapse), a virtual call (Self is arg 0 and is popped LAST, so the VMT
+	# load must still see x0), and a call through a procedure variable (the
+	# callee is pushed deepest of all).
+	# Verified against FPC 3.2.2; three deliberate breaks (wrong destination
+	# register, dropping the <=8 guard, skipping the push but keeping the ldr)
+	# give acc=71045, acc=133455897761776 and a segfault respectively.
+	./$(COMPILER) -O3 test/test_last_arg_collapse.pas $(TESTTMP)/test_lac326
+	tools/expect_same.sh test_lac326 "$$($(TESTTMP)/test_lac326)" "$$(printf 'acc=73224\none=24408\ndone')"
+	./$(COMPILER) -O0 test/test_last_arg_collapse.pas $(TESTTMP)/test_lac026
+	tools/expect_same.sh test_lac026 "$$($(TESTTMP)/test_lac026)" "$$(printf 'acc=73224\none=24408\ndone')"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  for o in 0 3; do \
+	    ./$(COMPILER) --target=aarch64 -O$$o test/test_last_arg_collapse.pas $(TESTTMP)/test_lac_a64_$$o >/dev/null || { echo "lac aarch64 -O$$o compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh aarch64/test_lac_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_lac_a64_$$o)" "$$(printf 'acc=73224\none=24408\ndone')" || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_last_arg_collapse: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
 	# AARCH64 W1 slices 5+7, which collapse into ONE arm there: `cmp Xn, Xm` on
 	# aarch64 IS `subs xzr, Xn, Xm`, so BOTH sources are free register fields and
 	# a resident left AND a resident right are each read where they live. x86-64
