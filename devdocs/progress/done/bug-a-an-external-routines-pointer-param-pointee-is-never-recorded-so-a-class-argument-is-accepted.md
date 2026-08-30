@@ -201,4 +201,4 @@ repo already uses everywhere. Tests use the working spelling. Noted here rather
 than filed — it is a soname-resolution question, not a param-row one.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 8b2acd9ed.
