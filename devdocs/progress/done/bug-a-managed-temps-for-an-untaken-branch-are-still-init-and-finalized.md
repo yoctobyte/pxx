@@ -280,7 +280,25 @@ every binary named because the tree moved between builds:
 | `bda1155557b2` | + epilogue all-zero guard | 5.10 s | 5.15 | 5.23 |
 | `416c3640e2f0` | + per-arm flush | **0.43 s** | 0.45 | 0.44 |
 
-`split` is 0.27 s on the same binary, so the 35-47x gap closes to ~1.6x. Both
+`split` is 0.27 s on the same binary, so the 35-47x gap closes to ~1.6x.
+
+**Independently confirmed, and the two closure figures differ only by load —
+recorded here so the gap is not later mistaken for a regression.**
+frank-optimize measured the same repro at HEAD `d9ceac6a6e75`, binary
+`3383432c4697`: `split` 0.33 s, `inline` 0.60 s, **1.8x**, at **box load 10.6**
+against the 5.4-6.0 above. Same fix, same repro, two evenings' worth of
+contention apart. A bare "1.6x" and a bare "1.8x" on different days with no load
+beside them is precisely how a phantom regression gets filed later, so: **both
+are the same result.**
+
+The mechanism was also checked by an instrument contention cannot touch.
+Un-splitting `PXXPromoCmp` — inlining `CmpSlow` back in, the shape
+`promocore.pas:796` forbade — now costs **2 `rep stosb` and 282 instructions
+across the entire binary**, against a prologue that used to zero 21 managed
+temps and finalize them in 30 calls within its first 400 instructions. That is
+an absent penalty, not a shrunken one, and it needed no stopwatch. The rule is
+retired in `promocore.pas` as of that measurement; the eight `*Slow` routines
+are kept as harmless rather than deleted. Both
 arms still print `20000000`.
 
 ### Cause 1 — the finalize was emitted after the merge, not in the arm
