@@ -290,3 +290,83 @@ not been tested.
 
 Nothing has been changed in the compiler. The `symtab.inc` finding is a Track A
 shared-file matter and this lane holds `ir_codegen_xtensa.inc` only.
+
+## Round 4 (frankS) — a fourth hypothesis dead, and the window-state differential separates the two paths cleanly
+
+### The ordering hypothesis is dead, from data already collected
+
+Round 3's next candidate was that the desync bites only when `a1` changes
+*between* an overflow spill and its matching underflow reload — an ordering
+property. That requires a **mid-body** `sp` move. There is none. Every executed
+`addi a1, a1, …` in the faulting path sits exactly **6 bytes after its `entry`**:
+
+| addi | entry | delta |
+| --- | --- | --- |
+| `0x08053c52` | `0x08053c4c` | 6 |
+| `0x08054652` | `0x0805464c` | 6 |
+| `0x080560e6` | `0x080560e0` | 6 |
+| `0x0805deca` | `0x0805dec4` | 6 |
+| `0x080898aa` | `0x080898a4` | 6 |
+
+All five are prologue-local. `a1` changes **once**, before the function makes any
+call, so it cannot differ between a spill and its reload. Killed without writing a
+program, by checking arithmetic on the trace already in hand.
+
+### The window-state differential — the right quantity, and it separates them
+
+`qemu-xtensa -d cpu`, `WINDOWBASE`/`WINDOWSTART` over the run (hex):
+
+| | `Copy` (**faults**) | `Pos` (passes) |
+| --- | --- | --- |
+| WINDOWSTART values seen | `55`, `51`, `50`, `14`, `10`, `04` | `01`, `05`, `0f` |
+| WINDOWBASE reached | **6** | 4 |
+
+`Pos` never sets a bit above 3 and stays inside the physical register file.
+`Copy` sets bits up to **6** and wraps it, so its returns must reload spilled
+frames **from memory**, which `Pos` largely never has to do.
+
+The last three states before the fault:
+
+```
+wb=4 ws=10      (only the current frame live)
+wb=4 ws=14      (frames 2 and 4)
+wb=2 ws=04      <- retw here: only the CURRENT frame is live, so the caller
+                   must be reloaded from the stack. That reload faults.
+```
+
+**So the discriminator is real register-file wrap plus an underflow reload from
+memory** — a state property, exactly as suspected, and not any difference in
+which code the two paths execute.
+
+### But this does NOT yet finish it, and the depth test is why
+
+Plain recursion 24 deep also wraps the file and also reloads from memory, and it
+**passes**. So "wraps and reloads" is necessary but not sufficient, the same way
+the `sp` violation was. The remaining difference between the recursion case and
+the `Copy` case is the **frame size**: the recursion frame is `entry a1, 32` plus
+a small `addi`, while every frame on `Copy`'s path is `entry a1, 32` plus **-96 or
+-112**.
+
+That is the next hypothesis and it is **not a finding**: the reload may be correct
+for small frames and wrong once the `addi` extension is large, which would tie
+this ticket back to
+[[bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp]]
+after all — a connection round 3 explicitly could not support.
+
+**The consequence to derive and test first:** a program with no strings and no
+`Copy`, whose recursion is deep enough to wrap the file *and* whose frames are
+large enough to force a big prologue `addi` (a sizeable local array in the
+recursive function). If that faults, the mechanism is frame-size-dependent
+underflow and `Copy` is incidental. If it passes, frame size is not it either and
+a fifth hypothesis is needed.
+
+**Not yet run.** Recorded so the next session tests the prediction rather than
+adopting the story.
+
+### Falsified so far
+
+1. Misaligned word copy (round 2) — 5x5 sweep, every cell faults incl. aligned.
+2. "The failing path moves `sp` more" (round 3) — it moves it *less*: 5 vs 8.
+3. "Plain `sp` move + call depth is sufficient" (round 3) — depth-24 passes.
+4. "The desync needs `a1` to change between spill and reload" (round 4) — no
+   mid-body `sp` move exists; all five are prologue-local.
