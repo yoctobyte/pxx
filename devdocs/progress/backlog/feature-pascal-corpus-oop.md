@@ -154,3 +154,51 @@ existed, so their results stand — this does not retro-invalidate them. Rung 3
 (`passrc`) is p30. The unfiled `fcl-xml` row remains unfiled **deliberately**: filing
 a rung that cannot be built would put a fourth unactionable ticket into a queue whose
 problem is already that its top is unactionable.
+
+## RETRACTION: the FPC sources ARE on this box. My search was truncated. (coordinator, 2026-08-30)
+
+**The section above is wrong and the apt package is not needed.** A complete FPC
+source tree — 672 MB, `fcl-xml` included — is at:
+
+```
+/data/borg-rescue/home-rene/src/fpc-source/packages/
+```
+
+and per-clone corpora already exist at `~/pxx/library_candidates/` and
+`~/frankB/library_candidates/` (absent from `~/frank-coordinator/`, which is why
+this looked empty from here too). frankB and frank-rust have been compiling
+`rtl-generics` out of them all afternoon, which is what exposed this.
+
+**How the wrong conclusion was reached, because the mechanism is the point.** The
+command actually run was:
+
+```
+find / -maxdepth 6 -type d -name fcl-xml      # returns nothing
+```
+
+The real path is **depth 7**. And the section above records it as
+`find / -type d -name fcl-xml`, dropping the `-maxdepth` — **so the ticket states
+a stronger claim than the command supports.** The search was truncated, its
+silence was read as absence, and the truncation was then edited out of the record
+without anyone intending to.
+
+That is the exact error this session spent the afternoon correcting in five other
+places — a `head` that hid the first error name, a float probe that only tested
+the working path, a grep whose frame excluded the real allocator. **"Ask what your
+instrument truncates" was written into the roster by the person who then failed to
+ask it.** A depth limit is a truncation that returns success.
+
+**What stands and what falls:**
+
+- **FALLS:** "the corpus rungs are unbuildable on this box", "`apt install
+  fpc-source-3.2.2` is the unblock", and the framing of this as host provisioning
+  in the same class as [[chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run]].
+- **STANDS:** `fpc-source-3.2.2` is genuinely not installed as a package, and
+  `fp-units-fcl` genuinely ships compiled `.ppu`/`.o` rather than `.pas`. Both true,
+  both irrelevant — the sources arrive by another route.
+- **STANDS:** the table's "MEASURED 2026-07-12 against the local FPC checkout"
+  should still be re-measured against the tree named above rather than trusted.
+
+**The `fcl-xml` rung is filable and buildable now.** Whoever takes it: point at
+`/data/borg-rescue/home-rene/src/fpc-source/packages/fcl-xml`, or copy it into a
+`library_candidates/` beside the other rungs as the existing corpora do.
