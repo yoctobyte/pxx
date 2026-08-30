@@ -5419,3 +5419,54 @@ coverage check read **5 of 10**, then **9 of 10**, and both were the instrument:
 character; then attributing each row to its *longest* match hid that a row naming
 `test_halt_exit_code` also names `test_halt_exit`. **Both would have been reported
 as findings about the Makefile.**
+
+### 133 — when you convert silence into checks, the risk moves to the SUCCESS path
+
+*frankB, 2026-08-30, routing twelve unchecked pdfgen call sites through one
+`PdfCheck(doc, rc, what)`.*
+
+The ticket was "errors are discarded". The obvious danger is missing a site. The
+**actual** danger, once you start checking, is the opposite one: **a check that
+fires spuriously on success is worse than the silence it replaces.** Silence loses
+information; a false alarm takes working code red and teaches people to disable
+checks — and it lands on the paths that were fine before you touched them, which
+is where nobody is looking for a new failure.
+
+So the control that matters is the **positive** one, and it is the one that gets
+skipped. The negative control is easy to want and easy to build: unsupported font,
+then a missing file, proving failure 2 reports its own reason instead of echoing
+failure 1's parked message. Everyone builds that. The positive control needs a
+case that **must still work today**, and here the bug's own shape supplied one —
+BMP and JPEG are untouched by the endian defect (PNG is the only one of the three
+with big-endian 32-bit header fields), so both were embedded with real
+`/Image /XObject`, read back with pdftotext, and driven through every newly-checked
+site. Then `reportlab-diff` made it independent of the author's expectation: three
+documents glyph-box-compared against real reportlab, all driving checked calls, so
+a spurious check takes that job red without anyone having predicted where.
+
+Note also **the exemption is where the defect hides.** `stringWidth` still answers
+0 rather than raising, deliberately — reportlab calls it speculatively during
+layout and a zero is usable. But it now **clears** the error, because pdfgen parks
+its message until acknowledged, and the next genuine failure would otherwise have
+reported *stringWidth's* reason and sent the reader to the wrong line. The one call
+being kept silent on purpose contained the exact defect the ticket was about.
+**Audit your exemptions with the rule you are applying to everything else** — 63,
+73 and 5 again, and it keeps recurring because an exemption is justified once and
+then never re-read.
+
+### 133a — a wrong answer wearing the costume of a right one
+
+Same ticket, and the reason inspection could never have closed it. `ImageReader.getSize`
+returned `134217728×67108864` from byte-swapped PNG header fields.
+
+**`0×0` announces its own shape** — nothing is a zero-by-zero image, so a zero is a
+wrong answer that reports itself as wrong. A byte-swapped dimension **looks exactly
+like a large dimension**. There is no reading of the code that distinguishes them,
+and it came from the accessor that was *supposed* to be authoritative, so it was the
+thing other code trusted. Only `identify` saying 1024×1024 could catch it: an oracle,
+not an inspection (118, 121, 128).
+
+Footnote worth keeping because it stops a future misfiling: the `No such fil`
+truncation in the error text is **pdfgen's own `char errstr[128]`**, reproduced
+identically by a C-only probe — not our rendering. Establishing whose bug a symptom
+is, before it becomes a ticket in the wrong lane, is the cheap half of this work.

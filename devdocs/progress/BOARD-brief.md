@@ -65,7 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-core-test-c-gtk-types
 - `[p 70] [P]` regression-test-core-test-c-gtk-window-2
 - `[p 70] [P]` regression-test-core-test-c-gtk3-stock
-- `[p 70] [P]` regression-test-emit-obj-test-emit-obj
+- `[p 70] [A+S]` regression-test-emit-obj-test-emit-obj
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)

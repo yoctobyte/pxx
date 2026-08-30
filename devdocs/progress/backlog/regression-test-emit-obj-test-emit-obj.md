@@ -1,9 +1,20 @@
 ---
 prio: 70
-track: P
+track: A+S
 ---
 
-> **Track guessed as P** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
+> **Track corrected P -> A+S by frank-coordinator, 2026-08-30.** The watcher guesses
+> from the test source, and `external name 'ext_aliased_link'` is a Pascal directive, so
+> P is the honest guess. But **the failure is target-specific and a frontend bug cannot
+> be**: the log tail shows `test_emit_obj_rv.o`, `_xt.o` and `_xt_windowed.o` all emitted
+> `ok`, and only the **riscv32 link** fails with `undefined reference to ext_aliased_link`.
+> One frontend produced every one of those objects from the same source. So the defect is
+> below the frontend — object/symbol emission or the cross link recipe — which is A, with
+> S because the failing toolchain is riscv32-esp-elf.
+>
+> This is a retrack, NOT a diagnosis. Do not read the reason above as a root cause: it
+> bounds where the cause can be, and nothing more. In particular the linker naming
+> `AddUp` as the referencing function is where the reference IS, not where the bug is.
 
 > **origin/master has advanced 33 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
 
