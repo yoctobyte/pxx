@@ -908,6 +908,78 @@ number should come from Track T's sweep.
 
 ---
 
+## CORRECTION to the section below — I appended it without reading this ticket
+
+Written after the fact, by the same session (frank-optimize), and placed above
+its own work on purpose. **I read this ticket's first ~40 lines, ran an
+independent investigation, and appended the result to the end of a 1193-line
+file.** Several of the conclusions below were already established here, by
+sessions on 2026-08-14, 08-15 and earlier on 2026-08-30, using **callgrind** —
+a better instrument than the one I built. The section below does not say so,
+because I did not know.
+
+**What was already in this ticket and is NOT a finding of mine:**
+
+| my section says | already here, since |
+| --- | --- |
+| "96% of samples in the RTL, no dominant peak" | 2026-08-14/15 §"Re-profiled after the fix": `PXXAlloc + PXXStrFromLit + PXXFree` = 28.5%, *"the profile is now flat rather than having a pole"* |
+| "the cause is allocation and copy traffic, not one hot spot" | same section, stated in those words |
+| "every string literal materialises a fresh heap block per evaluation" | §"Follow-up 1 sized, NOT started", with `PXX_FLAG_STATIC` already named as the fix — and then **LANDED behind `-O3` earlier the same day** (§"FOLLOW-UP 1 LANDED") |
+
+I re-derived the third one from a disassembly and was about to file it as a new
+ticket. It is fixed. Measured just now, marginal cost of `x = "k"` in a loop:
+**-O2 80.3 ns, -O3 0.0 ns** — the pass works, and I would not have spent the
+time had I read to line 586.
+
+**What IS new from this session, after that subtraction:**
+
+1. **A working allocation counter, which this ticket named as its blocker.**
+   §"Still open" says: *"it needs a MEASUREMENT first, which this box cannot
+   currently give: `perf_event_paranoid` is 4 and valgrind is not installed…
+   A census under its own define — counts and a size histogram — would have
+   answered in one run what three sessions have reached for callgrind to
+   learn."* A gdb breakpoint on the allocator entry, differenced between
+   n=1000 and n=3000 so startup allocations cancel, gives exactly that as
+   **allocations per operation** — sharper than a percentage share, because it
+   attributes to a source construct rather than to a routine:
+
+   | statement | allocs/iter |
+   | --- | --- |
+   | `x = 7`, `x = o.f`, `len(b)`, `isinstance`, `o.m(1)` | 0 |
+   | `x = b[2]`, `x = s[0]`, `st.append(1)` | 1 |
+   | `x = d['k']` | 2 |
+
+   Cost tracked that count at ~190 ns per allocation. It also **falsified** my
+   own model: `o.m(1)` costs ~390 ns with **zero** allocations, so the call
+   family is a second, independent driver (per-call managed-slot init, ~50-130
+   ns per argument or local) and not allocation at all.
+
+2. **One specific allocation found and removed** — `PyVarSlotSet`'s
+   unconditional `s := ''`, which every variant slot copy executed. List
+   subscript 1 → 0 allocations, −41% wall clock (`c8e1a2f0`-adjacent commit).
+   Prior work established the aggregate; this is a named site deleted.
+
+3. **`PXXHighBits`** (5.1% of a sampled uforth profile) — not previously in
+   this ticket.
+
+4. **The three eliminations by intervention** (arithmetic, threading dispatch,
+   `exec`/pyeval) — each built and measured to do nothing. Prior sections
+   eliminated concat and `s[i]` rescan; these three are different candidates.
+
+5. **The stale-ratio finding** — the pxx half did not move and CPython's did.
+
+**Why this is worth writing down rather than quietly fixing.** This ticket is
+1193 lines and holds four sessions of work. Appending to the end of it without
+reading it is how the same ground gets re-measured, and I did it while holding
+the ticket. The `PXX_FLAG_STATIC` follow-up sat at line ~543 as prose in a long
+body; that it was both *already sized* and *already landed* was invisible to me
+until I went looking for something else. If there is a process lesson it is the
+one this ticket's own §"Still open" already makes about instruments: **read the
+ticket you are holding, all of it, before adding to it** — and a long ticket is
+an argument for splitting it into children, which is what the umbrella
+conversion has since done.
+
+---
 ## Diagnosis, 2026-08-30, frank-optimize
 
 **Everything above this line is from `96b4b40ab` and does not survive

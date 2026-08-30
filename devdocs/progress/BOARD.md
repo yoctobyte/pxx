@@ -8,14 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython | O | 55 | feature | Container subscript is NilPy's worst primitive against CPython by a wide margin: b[2] costs 234 ns against CPython's 12 (19x) and d['k'] 495 against 30 (16x), while pxx BEATS CPython at isinstance (0.39x), len (0.14x), exec (0.92x) and a zero-argument call (0.10x). Subscript is the largest single gap and the one with an obvious mechanism; it is also on the per-token path of every interpreter-shaped NilPy program. | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
-## unfinished (32)
+## unfinished (33)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -39,6 +38,7 @@ _none_
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-user-defined-decorators | N | 68 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
+| feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython | O | 55 | feature | Container subscript is NilPy's worst primitive against CPython by a wide margin: b[2] costs 234 ns against CPython's 12 (19x) and d['k'] 495 against 30 (16x), while pxx BEATS CPython at isinstance (0.39x), len (0.14x), exec (0.92x) and a zero-argument call (0.10x). Subscript is the largest single gap and the one with an obvious mechanism; it is also on the per-token path of every interpreter-shaped NilPy program. | — |
 | feature-pal-esp-posix-fd-semantics | S | 20→30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
@@ -894,6 +894,7 @@ _none_
 - [p 55] [N] feature-nilpy-lambda-compiled-closure
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields
+- [p 55] [O] feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython [parked — re-claim, do not duplicate]
 - [p 55] [A+O] feature-opt-o3-a64-fold-a-resident-compare-left-across-a-complex-right
 - [p 55] [P] feature-p-assertions-directive-and-position
 - [p 55] [P] feature-p-tmethod-record-for-method-pointers
