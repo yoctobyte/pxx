@@ -273,4 +273,4 @@ specialization-heavy corpus is nothing but splices. It looked trustworthy on the
 corpus because it was; it is not trustworthy in general.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit ec9cc3307.
