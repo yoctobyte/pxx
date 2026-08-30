@@ -86,10 +86,27 @@ Asked for firings that were RIGHT, and answered against her own role:
   `pasparser_generic.inc` 14, `cparser.inc` 14, across six to eight agents.
 - **The sole-A guard fired twice and neither firing is defensible.** frankB was
   refused an `ir.inc` grant twice on the theory that another agent might be in
-  the file. One wasn't in it at all; the other was, but in different functions
-  (`IRLowerCallArg` versus the wide-lowering arms) that git would near-certainly
-  have merged. Cost: frankB idled or diverted twice, and a diagnosis went
-  unwritten.
+  the file. Cost: frankB idled or diverted twice, and a diagnosis went unwritten.
+
+  **Correction, 2026-08-30, from frankwasm — the original reason given here was
+  wrong about him.** This page first said the two agents were in *different
+  functions*. They were not: `8dbcf0c8a` at 19:35 put frankwasm in
+  `IRLowerCallArg`, the same function as frankB's site. They would still have
+  merged — the hunks are ~1000 lines apart — but **by accident of distance, not
+  by independence.** The conclusion holds and the stated reason did not, which is
+  worth more than the tidier version: it means the case for the cut cannot rest
+  on "agents are usually in different places."
+
+  **The real argument is stronger and is frankwasm's:** *git-mergeable and
+  semantically-independent are different properties, and the grant system
+  protected neither.* His tail hunk assumes every managed-string argument reaches
+  `Result := value`. If frankB adds an early `Exit` for a string shape 1000 lines
+  up — roughly what their literal-routing fix does — **both hunks merge clean and
+  his conversion silently stops firing.** A lock would not have caught that; it
+  would have serialised them, and whoever went second would have had to read the
+  whole function anyway. So the discipline that replaces the guard is not "check
+  for a lock", it is: **when you edit a shared function, read the whole function,
+  not just your hunk** — plus a test pinning the boundary.
 - **The claim / `working/` lock prevented nothing.** The one case where
   uncommitted work mattered was resolved by a worker reporting it *directly*.
 - **`progress.sh check` did not fire.**
