@@ -195,4 +195,4 @@ why this sat in `blocked/`; the coordinator's 2026-08-28 note above is the live
 statement.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d9b663137.
