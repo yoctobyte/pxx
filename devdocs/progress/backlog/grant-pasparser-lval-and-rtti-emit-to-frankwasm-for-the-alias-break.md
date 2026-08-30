@@ -25,7 +25,9 @@ Given 2026-08-30 by the coordinator to **frankwasm**, for `feature-unicodestring
 | `compiler/pasparser_lval.inc` | P | **held** — the alias break, two resolvers at ~:6322 and ~:6424 |
 | `compiler/rtti_emit.inc` | A | **held** — the RTTI kind list, ~:942 |
 | `compiler/symtab.inc` | A | **QUEUED** behind frank-optimize — TypeSize ~2922, ordinal-ness ~3120, name table ~8949 |
-| `compiler/ir.inc` | A | free as of the cdecl handback; take on request |
+| `compiler/ir.inc` | A | **held** — the `:1794` index-stride site |
+| `compiler/ast_arena.inc` | A | **held** (added ~14:2x) — the AST node element slot |
+| `compiler/pasparser_decl.inc` | P | **held** (added ~14:2x) — the record-field element slot |
 
 ## Why A+P is safe here, checked rather than assumed
 
@@ -66,3 +68,65 @@ them in the same commit.
 ## Release
 
 Coordinator releases on frankwasm's word, or when `feature-unicodestring-model` resolves.
+
+
+---
+
+## ADDENDUM ~14:2x — two more files, and the ordering constraint GREW
+
+Granted `ast_arena.inc` and `pasparser_decl.inc`. Both verified free by enumeration, not
+inference: no open grant names either, `working/` holds only the cdecl, unicodestring and
+xtensa-ruling tickets, and the P-lane neighbour (frankA) is in `pasparser_proc.inc`,
+disjoint from `_decl`.
+
+### Why they are needed — `ir.inc:1794` derives its type from THREE entities
+
+| arm | width slot |
+| --- | --- |
+| `AN_IDENT` → `Syms[].TypeKind` + **`ElemType`** | **exists**, done at `12111b1f2` |
+| `AN_FIELD` → `RecFieldType(...)` | none — fields carry `UFldTk`/`UFldPtrElemTk`, no string element |
+| else → `ASTTk[baseNode]` | none — no AST node carries one |
+
+So `rec.w[i]` and `(a + b)[i]` would index a wide string at **stride 1, silently**. The
+second is load-bearing for the whole ticket: `WideChar(u1) + WideChar(u2)` is an
+*expression*, so the AST-node slot is what the wall actually needs.
+
+### THE ORDERING CONSTRAINT — a constraint, with its reason, not a plan
+
+```
+1. ir.inc:1794 symbol arm                      DONE (12111b1f2)
+2. AST node element slot                       ast_arena.inc
+3. record-field element slot                   pasparser_decl.inc
+4. the six per-backend COW guards              six ir_codegen*.inc — coordinator-sequenced
+5. Length (frontend shift)
+---- only then ----
+6. break the alias + fix sysutils, ONE commit
+```
+
+**The alias break is the only thing that can construct a wide string.** Until it lands,
+every gap above is unreachable *and untestable* — so shipping the alias with any of 2-5
+missing opens a window that **nothing can detect**, because no test can build a wide string
+to find it. A hazard that can be neither triggered nor observed is one that survives.
+
+That is why the order is a constraint rather than a preference, and why it must not be
+innocently reordered by a later reader.
+
+### Step 2 added ZERO new mechanisms, and that is the finding
+
+frankwasm checked for an existing slot before adding one, and found `symtab.inc:4169`:
+
+```pascal
+Syms[SymCount].ElemType := tyInteger;
+if tk = tyAnsiString then
+  Syms[SymCount].ElemType := tyChar;
+```
+
+A managed string symbol **already records its element type** — an explicit special-case at
+the `AllocVar` chokepoint, not an accident. Confirmed with `a.symptr`: `s: AnsiString` shows
+`kind=23 elemType=3`. No parallel array, no resolver. `ResolveNodeRec` was rejected as a
+template for the same reason — it is a structural walk whose own comments call it *"a
+recurring landmine"* and which grew arms one bug at a time.
+
+Verified behaviourally rather than argued inert: string iteration, copy-on-write
+(`s[1] := 'H'`), a record string field and an indexed concat result all match fpc 3.2.2, plus
+both regressions green.
