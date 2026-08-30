@@ -3255,3 +3255,30 @@ reserved-slot count to an absurd 20 finally shifted the number — by exactly 81
 having no cost. A measurement that cannot come out different is not a
 measurement. The command above is the reusable part; this is what you do when
 you do not have one.
+
+## Two identical-looking walls: where the FIXUP TABLE lives decides whether relaxation is possible
+
+Measured 2026-08-31, on xtensa, twice in one session. Both walls produce an
+error of the same shape — *a forward reference reserved a three-byte slot before
+its target existed and the displacement does not fit* — and one of them is
+fixable by relaxation while the other is not. **Nothing in either error message
+says which.**
+
+| | forward JUMP to a label | forward CALL to a proc |
+| --- | --- | --- |
+| fixups recorded in | a **per-body** list, reset at the top of `IREmitMachineCodeXtensa` | `CallFix`, **whole-program**, drained once by `ApplyCallFixups` |
+| when the target is known | end of this body | after every body in the image exists |
+| so "try again wider" means | re-emit **one body** | re-emit **the image** |
+| state to restore | 7 append-with-count arrays, enumerable and enumerated | everything, and in a parser-driven backend it is a second **parse** |
+| outcome | relaxation, 2 passes, free below the bound (`dd417a986`) | a flag the author must know about (`f6660111e`) |
+
+**The rule, and it generalises past xtensa:** a slot can be widened by re-running
+the emission that reserved it, and *only* by that. So the question is never "can
+this instruction be widened" — it is **"what is the smallest unit I can emit
+again, and does it contain both the slot and the answer?"** For a label, the
+body contains both. For a call, the body contains the slot and the *program*
+contains the answer, so no unit smaller than the program will do.
+
+Check it before reaching for a fix that worked on the sibling: find the array
+the site appends to, and see whether the pass that drains it runs per body or
+per image. It is one grep, and it is the whole design decision.
