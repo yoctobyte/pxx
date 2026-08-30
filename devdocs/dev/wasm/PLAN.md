@@ -2712,3 +2712,119 @@ Test: `test/wasm/check_sysio.sh`, diffed against native. It compares the
 **sandbox file** as well as stdout — stdout can agree while nothing ever reaches
 the disk — and asserts the oracle opened its own file before believing any diff,
 because two builds that both failed every open diff clean against each other.
+
+### Phase 9o — the last three refusals, and the anchor EXECUTES
+
+`wasm32: 3780 of 3780 bodies lowered — op coverage is complete for this program.`
+
+That line is about `compiler.pas`. It is the coverage half of Phase 9's
+milestone, and it arrived in three steps, each of which was found **by running
+the module and reading the trap** rather than by reasoning about what was left.
+That order matters more than the three fixes: after 9n the remaining list was
+ten items long and looked like a plan; two of the three things that actually
+stood between here and a running compiler were not on it.
+
+**LoadFile (`-100`), nine of the ten.** Every other target lowers this to
+builtinheap's `PXXStrLoadFile`, whose body is unreachable here — it is written
+over `PXXSysOpenRO` / `PXXSysLseek` / `PXXSysRead` / `PXXSysClose`, and that
+`{$if}` chain has no wasm arm and correctly answers `-1` rather than inventing
+an fd. Giving it one costs either a THIRD copy of the preopen model inside
+builtinheap or a `builtinheap -> wasibackend` dependency, and the second is what
+would drag the WASI preopen imports into every wasm32 module that merely
+allocates a string. So `PXXWasiLoadFile` is the wasm arm of that one algorithm,
+the backend picks the callee by target, and the path operand goes through
+`WasmEmitPathArg` — the same helper the sys\* family uses, so managed and frozen
+paths cannot diverge between the two.
+
+It builds the string through `PXXStrFromLit` rather than laying out a managed
+header itself. One extra memcpy of the file, in exchange for not having a second
+place in the tree that knows what a managed string looks like.
+
+**The heap ceiling — which was not a refusal at all.** It lowered fine and
+TRAPPED, inside `PXXAlloc`, three frames under `EnsureTokCapacity`, before the
+compiler had parsed a token. `HeapMmap`'s wasm arm handed out one fixed 1 MiB
+BSS arena and returned `-1` forever after; the note there had already reserved
+the fix for this lane and named exactly what was missing, *"an intrinsic to
+reach memory.grow from Pascal"*.
+
+`external 'wasm' name 'memory.grow'` is that way in. The module name `wasm` is
+reserved to mean THIS MACHINE, and the backend emits the instruction inline
+instead of declaring an import — so a module that grows its heap still demands
+nothing of its host. Chosen over a new intrinsic token because a token means
+editing the shared lexer and `defs.inc` for something only one target can ever
+emit, and because there will be a handful of these (`memory.size`,
+`memory.copy`, the atomics) rather than one. `external` already carries a module
+and a field and already means *this call is not an ordinary call*; the only new
+thing is a reserved module name. It cannot collide with a real import — a host
+exporting `wasm` would be answering for the machine it runs on.
+
+One asymmetry worth stating, because a `.wat` that cannot be reassembled stops
+being an oracle: the **memidx byte goes in the binary and is left off the text**.
+`wat2wasm` rejects an explicit memory operand outside multi-memory, and the bare
+mnemonic assembles back to exactly these two bytes.
+
+**`sysgetdents64` — the last one, and the only `IR op 54` in the tree.**
+`__pxxrawsyscall` is the one node this target can never lower. WASI spells the
+same operation `fd_readdir`, in a different record and with the walk position
+handed back to the caller as a cookie, so `PXXWasiGetDents` translates both. A
+truncated tail is dropped WITHOUT advancing the cookie: advancing past it loses
+a directory entry silently, and a lost entry is exactly what makes
+`ResolveCaseInsensitivePath` report "no such file" for a file that is there.
+The `elfwriter.inc` arm is inside `{$ifdef CPU_WASM32}`, and the self-host
+fixedpoint sha did not move across the change (`8df06cb7d35a` either side) —
+which is the proof rather than the claim.
+
+#### What it does now
+
+The 6.5 MB module validates, instantiates, and the compiler answers
+`--version`, `--where` and its usage text under node's WASI. That is the first
+time `pascal26` has run at all on this target.
+
+Compiling still fails, and the failure is now a **wrong value rather than a
+missing lowering**: a non-nil garbage `AnsiString` handle in
+`ParseUsesUnitBody`'s `path`, reached through `ConcatThree` -> `PXXStrSetLen`.
+Five hypotheses were ruled out by measurement (stack overflow, dynamic-array
+growth of managed record fields, `var`-parameter `SetLength` chains, the new
+`LoadFile` arm's destination shapes, short prologue zero-init) and the diagnosis
+is banked in
+`bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver`
+rather than microfixed.
+
+### Phase 9p — the shadow stack was 64 KB, in the wrong place
+
+Two defects in one layout, and the second is what made the first expensive.
+
+**The size** was `wasm-ld`'s 64 KB default. Measured in compiler.pas's own
+module, `ParseUsesUnitBody`'s frame is **11216 bytes** and it recurses once per
+nested `uses` — so six levels of unit nesting exhausted the stack. Now 1 MiB,
+about 93 levels of that same frame, and it is DECLARED address space rather than
+file size, so it costs nothing in the `.wasm`.
+
+**The place** matters more. The stack sat at the TOP, above the initialised data
+blob, growing down into it — so exhausting it did not fault, it overwrote the
+blob and then the globals, and the program carried on with a plausible wrong
+value somewhere else entirely. This target had the repo's most expensive bug
+shape by construction.
+
+It now sits at the bottom, between the null guard and BSS. An overflow runs into
+the guard (a kilobyte nothing else uses), then past address 0, where the i32
+address wraps to ~4 GB and the next access is out of bounds and traps. Linear
+memory has no page protection to give us a guard page, so running off the bottom
+of the address space is the only loud failure this target can produce — the same
+reasoning `HeapMmap`'s wasm arm already uses in returning `-1` and not `0`.
+
+So 1 MiB is not a number tuned by feel. If it ever needs raising, it will be
+raised because a trap said so, and that is now possible.
+
+Tests: `check_loadfile.sh` (an empty file must come back an empty string, not
+the nil that means "could not open"; three reloads into one destination to catch
+a double-free or a use-after-free) and `check_heapgrow.sh` (48 blocks of 256 KB
+— twelve times the old ceiling — every one re-read after later growth so an
+overlapping base shows as a wrong BYTE rather than a plausible total, plus an
+assertion that `memory.grow` is not in the import section). Both diffed against
+the native build.
+
+`test/wasm/wasitrace.js` joins the lane's tools: `wasihost.js` plus a line per
+`path_open`. It answers the question a disassembly cannot — not which function
+trapped, but which FILE the guest had reached in its search chain — and it wraps
+the import table rather than the module, so it needs nothing from the backend.
