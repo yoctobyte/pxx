@@ -1,0 +1,10 @@
+units=2
+1 Ord      =233
+2 Write    =é
+3 concat   =xé bytes=3
+4 argument =é bytes=2
+5 assign   =é bytes=2
+6 towchar  =é ord=233
+7 compare  =TRUE
+8 elemstore=éb units=2
+9 loop     =cé

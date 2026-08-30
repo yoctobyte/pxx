@@ -1071,10 +1071,28 @@ begin
 
       The cost is a builtin unit pulled by a program that merely NAMES the type
       and never converts — the same cost this arm already accepted for
-      UCS4Char, and the same failure mode as not pulling it is a build abort. }
+      UCS4Char, and the same failure mode as not pulling it is a build abort.
+
+      WIDESTRING AND UNICODESTRING ARE HERE FOR THE THIRD WIDENING OF THE SAME
+      PREDICATE, and the pattern is worth naming because it will happen again.
+      The list started as `widechar(` — a CAST, the only way to make such a
+      value at the time. It grew to the type NAMES when a `var w: WideChar`
+      turned out to be a second producer. It grows now because INDEXING a
+      UTF-16 string is a third: `w[i]` on a WideString is a WideChar value and
+      reaches Write and concat through the same helper, in a program that need
+      never write the word `widechar` at all. Measured, not predicted —
+      test_widestring_lowering aborted with the exact message quoted above the
+      moment the index started being typed properly.
+
+      The general shape: a needs-predicate enumerates the SYNTAX that produces
+      a value, and every new producer silently invalidates it. The failure is
+      loud here (a build abort, not a wrong answer), which is the only reason
+      this one is cheap to find. bug-p-a-wide-string-element-is-typed-tychar }
     if (Tokens[i].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(i), 'widechar') or CaseEqual(GetTokenStr(i), 'ucs4char') or
-        CaseEqual(GetTokenStr(i), 'unicodechar')) and
+        CaseEqual(GetTokenStr(i), 'unicodechar') or
+        CaseEqual(GetTokenStr(i), 'widestring') or
+        CaseEqual(GetTokenStr(i), 'unicodestring')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { The hardware-entropy intrinsics (__pxxCpuHasHwRandom / __pxxHwRandom64)

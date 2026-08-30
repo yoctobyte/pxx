@@ -1524,7 +1524,26 @@ begin
       end
       else if TypeIsFrozenString(tk) or (tk = tyAnsiString) then
       begin
-        tk := tyChar;
+        { THE one site that decides a string index's element kind. A UTF-16
+          string's element is a CODE UNIT, so `w[i]` is a WideChar value and
+          must say so HERE -- not at each of its consumers.
+
+          Saying it here is what makes Write(w[i]), `s + w[i]`, a string
+          ARGUMENT and a string assignment all correct at once: every one of
+          them already routes a tyWideChar through WrapWideCharToUTF8, and none
+          of them could see a node typed tyChar. Before this, only `Ord(w[i])`
+          was right -- and it was right because ir.inc took the width off the
+          ADDRESS node instead, which fixed the READ and left every other
+          position printing the unit's low byte. Correct on all of ASCII,
+          wrong on everything else, silently.
+
+          A FROZEN string is always narrow, so it keeps tyChar unconditionally;
+          only the managed kind carries a width.
+          bug-p-a-wide-string-element-is-typed-tychar-so-only-the-ord-read-of-it-is-correct }
+        if (tk = tyAnsiString) and (ASTStrElemTkOf(node) = Ord(tyWideChar)) then
+          tk := tyWideChar
+        else
+          tk := tyChar;
       end
       else if (tk = tyPointer) and (ASTKind[node] = AN_IDENT) then
       begin

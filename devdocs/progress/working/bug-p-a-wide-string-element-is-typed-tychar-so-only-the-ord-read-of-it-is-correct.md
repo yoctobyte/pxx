@@ -4,8 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "The parser types `w[i]` on a WideString as `tyChar`, because a string's element width is not a parse fact. 7c corrected the READ by taking the width from the ADDRESS node (which IRLowerAddress already tags `tyWideChar`), so `Ord(w[i])` is right — but every OTHER consumer of the index node still sees `tyChar`: `Write(w[i])` of a non-BMP unit prints its low byte, and `s + w[i]` appends one byte. The fix is to type the node, not to add an arm per consumer: `NodeIsWideCharVal` already keys on `tyWideChar`, so the existing `WrapWideCharToUTF8` path would make both correct for free."
-status: new
-owner: ""
+status: working
+owner: frankwasm
 ---
 
 # A wide string's element is typed `tyChar`, so only the `Ord` read of it is correct

@@ -1600,9 +1600,6 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     recName, aliasIdx: Integer;
     strElemTk: TTypeKind;   { a managed string's ELEMENT type -- see the
                               tyAnsiString index arm below }
-    strIsWide: Boolean;     { ...and whether that element is a UTF-16 code unit,
-                              which the RESULT NODE has to be tagged with and
-                              not only strided by -- see the append below }
 begin
   { Address of an address-of: `&(&x)`. In valid C this only arises from array
     decay (`&arr` where arr is an array yields arr's address), so the address of
@@ -2003,7 +2000,6 @@ begin
     end;
     
     lo := 0;
-    strIsWide := False;
     if (tk = tyAnsiString) and not isArr then
     begin
       lo := 1;
@@ -2034,7 +2030,6 @@ begin
       begin
         elemSize := 2;
         tk := tyWideChar;
-        strIsWide := True;
       end
       else
       begin
@@ -2156,25 +2151,13 @@ begin
       Exit;
     end;
 
-    { A WIDE string's element is a UTF-16 CODE UNIT, and the node has to say so.
-      The local `tk` above is set to tyWideChar and then never reaches the IR:
-      this append takes ASTTk[node], which the parser filled in as tyChar
-      because at parse time `w[i]` is a string index like any other. So the
-      stride was right (elemSize = 2, carried in ival) and the LOAD WIDTH was
-      wrong -- one byte read from a two-byte unit.
-
-      It reads as correct on every ASCII string, because a BMP code unit's low
-      byte IS the character on little-endian. `Ord(w[1])` on the surrogate pair
-      U+1F600 answered 61 (the low byte of $D83D) where FPC says 55357, and the
-      round trip through UTF-8 was correct the whole time -- the payload was
-      never wrong, only the read of it. Found by the first program that put a
-      non-ASCII value in a wide string, which is the argument for 7b landing
-      before the remaining carriers: a carrier nothing reads is a carrier
-      nothing tests. feature-unicodestring-model }
-    if strIsWide then
-      Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, Ord(tyWideChar))
-    else
-      Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
+    { The element kind comes from ASTTk[node], which the PARSER now sets to
+      tyWideChar for a UTF-16 string index -- the one site that decides a string
+      index's element kind (pasparser_lval.inc). It briefly lived here instead,
+      keyed off the address node, and that fixed the READ while leaving Write,
+      concat and every argument position seeing tyChar. One decision, one site.
+      feature-unicodestring-model }
+    Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
   end
   else if ASTKind[node] = AN_FIELD then
   begin
@@ -7291,25 +7274,6 @@ begin
           movsxd and sign-extend-truncate the 64-bit handle — a corrupted pointer
           whose first refcount/deref segfaults. Force a full pointer-width load. }
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, Ord(tyPointer))
-      else if (IRTk[left] = Ord(tyWideChar)) and
-              (IntToTypeKind(ASTTk[node]) = tyChar) then
-        { A WIDE string element. The ADDRESS node knows the width -- the index
-          arm in IRLowerAddress tags it tyWideChar -- and the AST node does not:
-          the parser typed `w[i]` tyChar because at parse time it is a string
-          index like any other, and the string's element width is not a parse
-          fact. Taking the width from the address is what makes the LOAD two
-          bytes wide instead of one.
-
-          ROOT CAUSE, banked rather than fixed here: the AST node should carry
-          tyWideChar, not just the address. NodeIsWideCharVal already keys on
-          exactly that kind, so typing the index node would make `Write(w[i])`
-          and `s + w[i]` correct for free through the existing
-          WrapWideCharToUTF8 path, instead of each needing its own arm. That is
-          a parser change with a ripple through every consumer of an index node
-          (store, compare, Ord, Write) and wants its own tests; this reads the
-          width where it is already known and is correct for the READ.
-          feature-unicodestring-model }
-        Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, Ord(tyWideChar))
       else
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
     end;

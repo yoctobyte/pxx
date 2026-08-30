@@ -144,3 +144,17 @@ procedure ParseExpr; forward;   { body in pasparser_expr.inc — called from pas
   expansion only landed in the compiler today
   (bug-a-a-nested-include-is-silently-dropped). Flat is also how every other
   frontend is spelled there. }
+
+{ A managed string's ELEMENT WIDTH, as a TTypeKind ord: Ord(tyWideChar) for a
+  UTF-16 string, Ord(tyChar) or 0 for a byte string. The body is in ir.inc,
+  which is included AFTER pasparser_lval.inc, and NodeIsWideCharVal there needs
+  it to answer whether `w[i]` is a WideChar value.
+
+  Forwarded rather than moved, and rather than reimplemented at the asking
+  site: it resolves six different entities (symbol, record field, pointee,
+  call result, concat, array element) and every one of those answers has been
+  wrong at least once during feature-unicodestring-model. A second copy in the
+  parser would be a seventh place to get them wrong -- and the width IS a
+  shared-substrate fact, which is the side of
+  the-substrate-is-ast-and-ir-not-the-parser.md that says to share the AST. }
+function ASTStrElemTkOf(node: Integer): Integer; forward;
