@@ -59,7 +59,16 @@ function StrBool(b: Boolean; width: Integer): AnsiString;
   IR codegen: atomic` on programs that never mention it — 15 riscv32 jobs that
   had nothing to do with atomics. Lifting the guard is
   bug-a-riscv32-and-xtensa-have-no-atomic-codegen. }
-{$ifndef PXX_ESP}
+{ NO $ifndef PXX_ESP DIRECTIVE HERE ANY MORE, AND THERE NEVER EFFECTIVELY WAS ONE.
+  PXX_ESP is not a compiler symbol -- PXX_ESP_BARE is (lexer.inc), and
+  builtinheap.pas:18 turns one into the other FOR ITSELF. Defines do not
+  cross unit boundaries, so the $ifndef PXX_ESP that used to wrap this
+  block compiled its contents on every target, always. It read as
+  protection and was not, which misled two sessions in one afternoon.
+  Deleted rather than corrected to PXX_ESP_BARE: the ISA guards below
+  already exclude these on both ESP targets, so correcting it would be a
+  no-op wearing a second name.
+  bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out }
 {$ifndef CPURISCV32}
 {$ifndef CPUXTENSA}
 function InterLockedIncrement(var Target: LongInt): LongInt;
@@ -80,7 +89,6 @@ function InterLockedExchangeAdd64(var Target: Int64; Source: Int64): Int64;
 function InterLockedCompareExchange64(var Target: Int64;
                                       NewValue, Comperand: Int64): Int64;
 {$ENDIF}
-{$endif}
 {$endif}
 {$endif}
 function FloatToStr(v: Double): AnsiString;
@@ -433,9 +441,17 @@ begin
   r := __pxxrawsyscall(265, 1, Int64(@ts[0]), 0, 0, 0, 0);
 {$endif}
 {$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
+  { The $ifndef PXX_ESP that used to wrap this line never ran (see the
+    note at the InterLocked block): PXX_ESP is defined only inside
+    builtinheap.pas. Its INTENT was real and is UNFULFILLED -- a bare ESP
+    boot has no clock, and this raw clock_gettime64 is COMPILED INTO every
+    bare riscv32 build, reached whenever a program calls Randomize. (Compiled
+    in, not necessarily executed: Randomize is the only caller, so a program
+    that never randomizes never issues it.) Deleting the dead directive does
+    not change either fact; it stops the file claiming a protection it does
+    not provide.
+    Filed as bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing. }
   r := __pxxrawsyscall(403, 1, Int64(@ts[0]), 0, 0, 0, 0);  { clock_gettime64 }
-{$endif}
 {$endif}
   { No clock on a bare target (PXX_ESP): ts stays zero and the stack address
     below is the only entropy — Randomize is still callable, just weak there. }
@@ -1406,7 +1422,7 @@ begin
     Result := ' ' + Result;
 end;
 
-{$ifndef PXX_ESP}
+
 {$ifndef CPURISCV32}
 {$ifndef CPUXTENSA}
 function InterLockedIncrement(var Target: LongInt): LongInt;
@@ -1464,7 +1480,6 @@ begin
   Result := __pxxatomic_cas64(@Target, Comperand, NewValue);
 end;
 {$ENDIF}
-{$endif}
 {$endif}
 {$endif}
 
