@@ -4,9 +4,10 @@ track: P
 prio: 70
 type: bug
 blocked-by: []
-status: open
+status: working
 created: 2026-08-30
 summary: "Generic constraint checking runs inside ParseSpecialization, which the Delphi rewriter reaches BEFORE the argument's class is parsed, so any argument that is not already a fully declared class must be skipped. Cost: tgenconstraint4 (`LongInt`) and 5 (`TClass`) are still wrongly accepted, and no constraint is enforced against a forward-declared class. The fix is to check at end of type section; the hook exists but its call site is guarded."
+owner: frankwasm
 ---
 
 # P: generic constraints are checked before the type section closes

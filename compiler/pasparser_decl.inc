@@ -6034,6 +6034,7 @@ begin
             ArrTypeStrElemTk[ArrTypeCount] := Ord(LastTypeStrElemTk)
           else
             ArrTypeStrElemTk[ArrTypeCount] := 0;
+          ArrTypeAliasOf[ArrTypeCount] := -1;   { a real row, not a `TB = TA` indirection }
           ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; Inc(ArrTypeCount);
         end
         else
@@ -6120,6 +6121,7 @@ begin
           ArrTypeIsDyn[ArrTypeCount] := True;
           ArrTypeElemDynDepth[ArrTypeCount] := 0;
           ArrTypeDynDepth[ArrTypeCount] := tdCnt;
+          ArrTypeAliasOf[ArrTypeCount] := -1;   { a real row, not a `TB = TA` indirection }
           ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; Inc(ArrTypeCount);
         end;
       end
@@ -6184,6 +6186,43 @@ begin
           Next;                      { '.' }
           Next;                      { the next name component }
         end;
+      end
+      else if (CurTok.Kind = tkIdent) and (FindArrayType(CurTok.SVal) >= 0) then
+      begin
+        { `TB = TA`, TA a named ARRAY type. Without this the fallthrough below
+          files TB as a SCALAR: named array types live in the ArrType rows and
+          not in the scalar alias table, so ParseTypeKind answers its
+          unknown-name default and RegisterGeneralAlias records TB as the
+          ELEMENT kind. SizeOf(y) was 4 rather than 8 -- y was an Integer that
+          had lost its array-ness, silently, while the four indexing errors
+          were only the loud symptom. One level works because `var x: TA`
+          consults FindArrayType; the second level never got the chance.
+          Every array shape was affected, not just dynamic ones -- a static
+          `array[0..3] of Integer` failed identically, as did array-of-array
+          and a third level. Strings and pointers were unaffected because they
+          already have their own alias carriers (AliasStrElemTk, AliasElemTk);
+          arrays had none, which names what this ADDS rather than repairs.
+
+          A ROW OF INDIRECTION, NOT A COPY. Cloning would mean enumerating the
+          other 22 ArrType* columns at a third site, and a field list at a
+          third site is exactly the shape that produced
+          bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted:
+          three registration paths each hand-copying an overlapping subset of
+          ~20 columns, one of them forgetting a column, and the sentinel
+          failing OPEN so nothing said so. It is not a style preference -- it
+          is that defect a third time. The alias row carries a NAME and a
+          VISIBILITY; FindArrayType returns the source row, so all 22 columns
+          are TA's real ones, a 23rd column added tomorrow needs no change
+          here, and TC = TB chains for free.
+          Note the alias row keeps its OWN ArrTypeUnitIdx, which is more
+          correct than a copy would be: TB's visibility is where TB was
+          declared, not where TA was.
+          bug-p-an-alias-to-a-named-dynamic-array-type-cannot-be-indexed }
+        ArrTypeName[ArrTypeCount] := GetTokenStrFromRaw(tnOff, tnLen);
+        ArrTypeAliasOf[ArrTypeCount] := FindArrayType(CurTok.SVal);
+        ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx;
+        Inc(ArrTypeCount);
+        Next;                       { consume the source type name }
       end
       else
       begin

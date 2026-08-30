@@ -4,8 +4,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`type TA = array of Integer; TB = TA;` — a type alias to a NAMED array type resolves to the array's ELEMENT type, so `SizeOf(y)` is 4 and indexing raises `this value cannot be indexed`. Static arrays fail identically; strings and pointers are fine, because they have alias carriers (`AliasStrElemTk`, `AliasElemTk`) and arrays do not. Root cause `pasparser_decl.inc:6154`. Not generics, not `TArray`, not cross-unit. DIAGNOSIS COMPLETE — only the write remains."
-status: unfinished
-owner: 
+status: working
+owner: frankwasm
 ---
 
 # An alias to a named array type resolves to the ELEMENT type

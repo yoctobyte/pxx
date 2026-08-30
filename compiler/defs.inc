@@ -4710,6 +4710,7 @@ var
   ArrTypeDimLo  : array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeIsDyn  : array[0..MAX_TYPEALIAS-1] of Boolean;   { `array of T` alias }
+  ArrTypeAliasOf : array[0..MAX_TYPEALIAS-1] of Integer; { `TB = TA` where TA is a named ARRAY type: the row TA occupies, else -1. The row is a NAME and a visibility, nothing else -- FindArrayType resolves through it and returns the SOURCE row, so every consumer reads TA's real fields and an alias row is never seen raw. Deliberately an indirection rather than a copy of the other 22 ArrType* columns: a clone enumerates a field list that goes stale the day a 23rd column is added, which is precisely how ProcParamPtrElemTk came to be written on one registration path of three (bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-...). One integer cannot go stale, and TC = TB chains for free. }
   ArrTypeDynDepth: array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemRowLen: array[0..MAX_TYPEALIAS-1] of Integer; { dyn alias whose element is a named FIXED array (`TDA = array of T`): the row's flattened element count; 0 = scalar element }
   ArrTypeElemRowLo : array[0..MAX_TYPEALIAS-1] of Integer; { the row's low bound, paired with ArrTypeElemRowLen }

@@ -352,7 +352,7 @@ end;
 function FindArrayType(const name: AnsiString): Integer;
 { Latest-named unit wins among the visible rows — see FindUClass.
   bug-p-scope-hiding-covers-routines-but-not-types-and-classes }
-var i, bestRank, r: Integer;
+var i, bestRank, r, guard: Integer;
 begin
   Result := -1;
   bestRank := -2;
@@ -362,6 +362,20 @@ begin
       r := UsesRankOf(CurrentUnitIdx, ArrTypeUnitIdx[i]);
       if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
     end;
+  { Resolve `TB = TA` to TA's row. This is the ONLY place the ArrType table is
+    iterated -- every other access uses an index this function returned -- so
+    resolving here is what lets an alias row carry a name and a visibility and
+    nothing else, and be invisible to all 27 consumers.
+    The loop bounds the chain by the table size rather than trusting it to
+    terminate: a cyclic `TB = TA; TA = TB` would otherwise hang the compiler,
+    and a parser bug is a worse thing to hang on than to mis-resolve.
+    bug-p-an-alias-to-a-named-dynamic-array-type-cannot-be-indexed }
+  guard := 0;
+  while (Result >= 0) and (ArrTypeAliasOf[Result] >= 0) and (guard < ArrTypeCount) do
+  begin
+    Result := ArrTypeAliasOf[Result];
+    Inc(guard);
+  end;
 end;
 
 function FindStrConst(const name: AnsiString): Integer;
