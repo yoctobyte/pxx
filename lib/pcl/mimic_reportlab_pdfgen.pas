@@ -104,21 +104,14 @@ type
     strokeColour: LongWord;
     lineWidth: Double;
     pageOpen: Boolean;
-    { TWO constructors rather than one with a default, and that is a WORKAROUND
-      (devdocs/dev/track-b-workarounds.md) for
-      bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory: a
-      CONSTRUCTOR with a defaulted Variant parameter smashes the stack when the
-      caller omits it. Deterministic from Pascal, intermittent through NilPy,
-      and it lands as a crash in unrelated code — the original symptom faulted
-      inside printf formatting with the return addresses overwritten by text.
-
-      The one-argument form is `canvas.Canvas("out.pdf")`, reportlab's most
-      common call, so it has to work. Forwarding to the two-argument form with
-      an EXPLICIT 0 avoids the defaulted-parameter path entirely.
-
-      REVERT to a single `pagesize: Variant = 0` when that bug closes. }
-    constructor Create(const afilename: AnsiString);
-    constructor Create(const afilename: AnsiString; const pagesize: Variant);
+    { One constructor with a defaulted Variant, which is the platonic form.
+      This was TWO constructors -- a one-arg form forwarding an EXPLICIT 0 --
+      as a workaround for
+      bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory, where a
+      CONSTRUCTOR with a defaulted Variant parameter smashed the stack when the
+      caller omitted it. That bug is fixed; its own 12-line repro was re-run at
+      this pin, 25/25 clean, before this was collapsed. }
+    constructor Create(const afilename: AnsiString; const pagesize: Variant = 0);
     destructor Destroy; override;
     procedure setFont(const name: AnsiString; size: Double);
     procedure setFillColorRGB(r, g, b: Double);
@@ -291,15 +284,7 @@ end;
 
 { ===== Canvas ===== }
 
-constructor Canvas.Create(const afilename: AnsiString);
-var none: Variant;
-begin
-  { explicit argument — see the declaration for why this is not a default }
-  none := 0;
-  Create(afilename, none);
-end;
-
-constructor Canvas.Create(const afilename: AnsiString; const pagesize: Variant);
+constructor Canvas.Create(const afilename: AnsiString; const pagesize: Variant = 0);
 var w, h: Single; ps: TPyList;
 begin
   outPath := afilename;

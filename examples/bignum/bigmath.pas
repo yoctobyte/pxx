@@ -2,10 +2,19 @@
 program BigMath;
 { Deterministic oracle for the bignum DivMod / ModPow / signed-arithmetic lane.
 
-  All work in the main body (no helper procs with TBigInt locals -- proc-local
-  managed records aren't zero-initialised on entry, see
-  bug-proc-local-managed-record-uninit). Managed-return calls are bound to a
-  temp before being passed on (see bug-nested-managed-return-call-arg).
+  Both compiler bugs this program was once shaped around are FIXED --
+  bug-proc-local-managed-record-uninit (proc-local managed records not
+  zero-initialised on entry, which is why all work is in the main body) and
+  bug-nested-managed-return-call-arg (a managed-return call passed straight as
+  an argument). Verified by re-running their own repros on x86-64, i386, arm32,
+  riscv32 and aarch64, not by their ticket folders.
+
+  The code is left as it stands, and that is a readability call rather than a
+  constraint: in a checker like this one, `chk := BigAddSigned(prod, r); if
+  BigCompare(chk, a) <> 0` names the intermediate that the FAIL message is
+  about, and nesting it would read worse, not better. So these temps are
+  ordinary style now. What was stale was this comment claiming otherwise.
+  Helper procs are likewise available and simply not needed here.
   Integer-deterministic, so output is byte-identical across targets.
   Track B; pinned stable. }
 
@@ -57,7 +66,7 @@ begin
   r := BigFromStr('-200000000000000000001');
   if BigCompare(chk, r) <> 0 then begin ok := False; writeln('  FAIL: signed sub'); end;
 
-  { --- ModPow known vectors (args bound to temps first) --- }
+  { --- ModPow known vectors --- }
   base := BigFromInt(4);  e := BigFromInt(13);  m := BigFromInt(497);
   mp := BigModPow(base, e, m);
   writeln('4^13 mod 497  = ', BigToStr(mp), '  (want 445)');

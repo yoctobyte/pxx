@@ -11,19 +11,41 @@ before assuming the workaround is still needed.
 > Scope: only workarounds whose blocking bug is **still open**. Workarounds for
 > already-fixed bugs (now in `done/`) are a separate cleanup pass — see the
 > bottom section.
+>
+> **Two sections, because a row leaves this one in two different ways.** Either
+> the bug closes and the workaround comes out (→ *Reverted*, at the bottom), or
+> the bug closes and the shape stays anyway because it reads better or because
+> reverting it uncovered something else (→ *Deliberate keeps*, immediately
+> below). A row that is not waiting on an open bug does not belong in the first
+> table under any circumstances: on 2026-08-30 seven of its eight rows cited a
+> closed ticket, three of them being deliberate keeps parked under a heading
+> that asserted the opposite, and the section had stopped being read as a queue
+> — which is how four live reverts sat there for weeks
+> (`bug-b-seven-of-eight-workarounds-waiting-on-an-open-bug-are-waiting-on-nothing`).
 
 ## Waiting on an open bug
 
+Two rows. Both re-verified **by behaviour** at pin v393 (`1d69760deabe`) on
+2026-08-30 — the repro was run, the folder was not consulted.
+
 | Where | Workaround | Blocking bug (open) | Revert to |
 |---|---|---|---|
-| `lib/rtl/math.pas` (`DdFloor`, `DdRint`) | `Double(Trunc(x))` where `Int(x)` is the natural spelling | [[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]] | `Int(x)` |
-| `lib/rtl/bignum.pas` (`BigFromStr`, `BigDivMod`), `examples/bignum/bigmath.pas` | managed-return calls bound to a temp before being passed as an arg (no `BigAdd(BigMulSmall(x,…),…)` nesting) | [[bug-managed-record-result-self-arg]] (aka `bug-nested-managed-return-call-arg`) | nest the calls directly |
-| `lib/rtl/chacha20poly1305.pas` (Poly1305) | native 5×26-bit limbs instead of `bignum` | [[bug-managed-record-result-self-arg]] — *partial:* limbs are the idiomatic choice anyway, so this is **not** a pure workaround; keep even after the fix | — (keep) |
-| `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — **fixed generally (v72)**, but a full revert of *this unit* still segfaults at the GCM path (residual, NOT minimally reproducible — every isolated `array :=` pattern passes on v72). **Keep `BlkCopy` here** until the residual is understood. | (do not revert yet) |
-| `lib/pcl/mimic_reportlab_pdfgen.pas` (`Canvas.Create`) | TWO constructors — a one-arg form forwarding an EXPLICIT `0` — instead of one with `pagesize: Variant = 0` | [[bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory]] — a constructor with a defaulted Variant parameter smashes the stack when the caller omits it; deterministic from Pascal (25/25), intermittent through NilPy, and it surfaces as a crash in unrelated code | the single `pagesize: Variant = 0` default |
-| `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-aggregate-member-array-as-var-param]] — passing an aggregate-member array by ref segfaults | a `TPoint = array[0..3] of TGf` / record |
-| `lib/rtl/math.pas` (`SinCosFast`, `FastTrigReduce`) | sin/cos returned in a `TSinCos` **record** by reference, and the reduction in a `TDd`, instead of `var sn, cs: Double` out-parameters | [[bug-a-i386-var-float-parameter-faults-on-first-access]] — ANY access through a by-reference float parameter segfaults on i386 (read, write, `out`, `Single`, every `-O` level); a record by reference is fine. Without this, the default-mode `Sin`/`Cos`/`Tan` crash on i386 | plain `var sn, cs: Double` — *but only if it reads better, which it does not:* the record mirrors `SinCosDd` and is the shape to keep |
+| `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-a-2d-array-row-as-a-const-array-param-still-segfaults]] — the parent [[bug-aggregate-member-array-as-var-param]] IS fixed for three of the four cells its own acceptance named (record field var + const, array row var, and `SizeOf` is right); the surviving cell is a 2D-array **row** passed as a **`const`** array param, which segfaults on all five targets. ed25519's field ops are `AddF(var o: TGf; const a, b: TGf)` and eleven more, so the natural revert passes `p[1]` as a `const TGf` — exactly the failing cell, confirmed with a shape-exact probe | a `TPoint = array[0..3] of TGf` / record |
 | `lib/rtl/mimic_collections_abc.py` (`MutableMapping.update`) | mapping-vs-pairs discriminated by `isinstance(other, dict) or isinstance(other, Mapping)` | **BLOCKER CHANGED 2026-08-27** — the original one ([[bug-n-hasattr-through-an-untyped-parameter-is-always-false]]) is fixed and verified on v389: `hasattr(other, "keys")` now answers True for a dict and False for a list through an untyped parameter. The workaround stays for [[bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module]] instead — the branch that fixed test would select calls `other.keys()`, which segfaults from inside an imported module. The `isinstance` form is safe *because* both its branches iterate `other` directly and neither calls `keys()`. | CPython's three branches: `isinstance(other, Mapping)` → `elif hasattr(other, "keys")` → pairs. Still NARROWER than CPython until then: a duck-typed object with `keys()` and no `dict`/`Mapping` relation lands in the pairs branch |
+
+## Deliberate keeps — the bug is fixed, the shape stays
+
+**Not** waiting on anything. Each of these had its blocker close and is still
+written this way on purpose; two of them will still be here after every bug in
+this file is closed. They lived in the table above until 2026-08-30, which is a
+large part of why that table stopped being read: a section that is mostly
+not-actually-blocked rows does not reward a re-check.
+
+| Where | Shape | Was blocked by | Why it stays |
+|---|---|---|---|
+| `lib/rtl/chacha20poly1305.pas` (Poly1305) | native 5×26-bit limbs instead of `bignum` | [[bug-managed-record-result-self-arg]] (fixed) | limbs are the idiomatic choice for Poly1305 anyway; this was never a pure workaround |
+| `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] (fixed generally, v72) | a full revert of *this unit* still segfaults at the GCM path and is **not** minimally reproducible — every isolated `array :=` pattern passes. Keep until the residual is understood. This row is the model the others are measured against: a written, measured reason |
+| `lib/rtl/math.pas` (`SinCosFast`, `FastTrigReduce`) | sin/cos returned in a `TSinCos` **record** by reference, and the reduction in a `TDd`, instead of `var sn, cs: Double` out-parameters | [[bug-a-i386-var-float-parameter-faults-on-first-access]] (fixed) | the record mirrors `SinCosDd` and is the shape to keep; reverting to `var sn, cs: Double` would read worse |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
 
@@ -71,12 +93,12 @@ before assuming the workaround is still needed.
   key) via a **file** (short path arg + `PalOpen`/`PalRead`), not argv. If a clean
   repro turns up, file it.
 
-- **Managed-record return as a call arg.** Until
-  [[bug-managed-record-result-self-arg]] is fixed, do not write
-  `Result := F(Result, …)` or `g(F(x), …)` where the return type is a record with
-  a managed field (dynamic array / AnsiString) — bind to a local first. Affects
-  any `bignum`-heavy code (e.g. a future X25519/RSA written over `bignum` rather
-  than fixed limbs).
+- ~~**Managed-record return as a call arg.**~~ **FIXED — landmine withdrawn
+  2026-08-30.** `Result := F(Result, …)` and `g(F(x), …)` with a managed-field
+  record return are fine; the ticket's own repro (`ViaResult`, `ViaLocal`, plus a
+  doubly-nested form) runs 200/200 on x86-64, i386, arm32, riscv32 and aarch64 at
+  pin v393. `bignum`-heavy code may nest freely — `lib/rtl/bignum.pas` was
+  reverted to the nested form the same day. [[bug-managed-record-result-self-arg]]
 - **`Read := x` / `Write := x`** (own-name result of an intrinsic-named **virtual**
   method) miscompiles — [[bug-virtual-keyword-name-result]]. Use `Result := x`.
 - **Explicit `Int64(n)` where `n` is `NativeInt`/`NativeUInt`** does not extend on
@@ -85,10 +107,17 @@ before assuming the workaround is still needed.
   *implicit* widening (`q := n`) is correct, as is `Int64(@x)` / `Int64(ptr)`, so
   assign through an Int64 local rather than casting. The garbage MOVES with stack
   layout, so a passing site proves nothing about the one next to it.
-- **Aggregate-member array as a var/const param** (a 2D-array row `p[i]`, or an
-  array-typed record field `p.a`) segfaults —
-  [[bug-aggregate-member-array-as-var-param]]. Keep each sub-array a standalone
-  variable and pass them individually.
+- **A 2D-array ROW as a `const` array param** (`p[i]` where `p: array of TG`)
+  segfaults, on all five targets —
+  [[bug-a-2d-array-row-as-a-const-array-param-still-segfaults]]. **Narrowed
+  2026-08-30 from the much wider claim this bullet used to make.** The three
+  neighbouring forms all work now: the same row as a **`var`** param, and an
+  array-typed **record field** `p.a` in either mode. `SizeOf` of the container
+  is correct too. So the rule is no longer "keep every sub-array standalone" —
+  it is: a row of a 2D array may be written through (`var`), but must not be
+  passed as `const`. A record of arrays has no restriction at all and is the
+  shape to reach for. Parent, for history:
+  [[bug-aggregate-member-array-as-var-param]].
 
 ## Cleanup backlog — workarounds whose bug is now FIXED (revertible)
 
@@ -100,8 +129,13 @@ now in `done/`, so the workaround can be removed and the idiomatic form restored
 - `bug-plain-byvalue-record-param-temp`, `bug-aarch64-record-temp-byvalue-arg` —
   `examples/raytracer` temp-arg avoidance (verify the aarch64 one's status; ticket
   file currently not found).
-- `bug-proc-local-managed-record-uninit` — `examples/bignum/bigmath.pas` keeps all
-  `TBigInt` locals in the main body.
+- ~~`bug-proc-local-managed-record-uninit` — `examples/bignum/bigmath.pas`~~
+  **checked 2026-08-30: nothing to revert.** The bug is fixed (repro re-run on
+  all five targets), and the program's shape is now an ordinary readability
+  choice, not a constraint — in a checker, `chk := BigAddSigned(prod, r); if
+  BigCompare(chk, a) <> 0` names the intermediate the FAIL message is about, and
+  nesting it reads worse. Its header comment claimed a constraint and was
+  corrected; the code stands.
 - `bug-const-open-array-managed-elem-length` — `lib/rtl/menu.pas`.
 - `bug-dynarray-in-record-corrupt` — `lib/rtl/sat.pas`.
 - `bug-builtin-val-miscompiles` — `lib/rtl/sysutils.pas` (`Val` avoided).
@@ -113,6 +147,63 @@ now in `done/`, so the workaround can be removed and the idiomatic form restored
   **chess slice 2** (search + eval through `EvalTerms[i](pos)`); the demo was left
   blocked, not worked around, so nothing to revert — just resumable when chess is
   picked back up.
+
+## Reverted 2026-08-30 (pin v393 `1d69760deabe`, verified against `$(PXX_STABLE)`)
+
+Three of the four rows `bug-b-seven-of-eight-workarounds-waiting-on-an-open-bug-are-waiting-on-nothing`
+identified as live reverts are gone; the fourth is still blocked, by a bug
+nobody knew was still open.
+
+- [[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]]
+  **fixed** — `lib/rtl/math.pas`'s `DdRint` and `DdFloor` are back to `Int(x)`
+  from `Double(Trunc(x))`. Verified on the two targets that HAD the bug, not
+  just the ones that never did: the ticket's own repro (`Int(2^43 + 0.5)`) gives
+  `8796093022208.00` on i386 and arm32 under qemu, where it used to give the two
+  32-bit saturation constants. Then the public surface, `Sin`/`Cos` at ten
+  magnitudes straddling 2^31, byte-identical across x86-64, i386, arm32, riscv32
+  and aarch64 **and** exact against CPython/libm on all ten.
+- [[bug-managed-record-result-self-arg]] **fixed** — `lib/rtl/bignum.pas`'s
+  `BigFromStr` parse loop is one nested expression again
+  (`r := BigAdd(BigMulSmall(r, 10), BigFromInt(d))`, was three statements through
+  two temps) and `BigModPow`'s square-and-multiply passes its `BigMul` results
+  straight in. Verified against **CPython's arbitrary-precision ints** — long
+  decimal parse, a 39×29-digit product, and two modular exponentiations
+  including a 128-bit modulus — identical on all five targets.
+- [[bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory]] **fixed**
+  — `lib/pcl/mimic_reportlab_pdfgen.pas`'s `Canvas` is back to ONE constructor
+  with `pagesize: Variant = 0`, from two with a one-arg form forwarding an
+  explicit `0`. The ticket's 12-line repro runs 25/25 clean, and through NilPy
+  `canvas.Canvas("out.pdf")` — the omitted-argument call the workaround existed
+  to protect — runs 50/50 with A4, letter and the default page all correct.
+
+`make lib-test` green.
+
+**What this batch adds to the two lessons below.** 2026-08-17 established that a
+row is revertible when the **pin** carries the fix, not when the bug is fixed.
+2026-08-27 added: **and the idiomatic form it unblocks actually runs.** This one
+adds the third: **verify the capability, not the ticket's folder — and verify it
+on the arm that was broken.**
+
+Two of the four rows would have been got wrong by the obvious method:
+
+- **Row 1 is invisible from Track B's own target.** Its bug was i386/arm32-only.
+  Every probe run on x86-64 — the machine, the pin, the default build — passes
+  identically whether the bug is fixed or not, so "I tested it and it works"
+  would have been true and worthless. The revert is only justified because the
+  repro was cross-compiled and run under qemu on the two targets that had it.
+- **Row 4 (ed25519) is a ticket in `done/` whose capability does not work.**
+  Its blocker's acceptance named four cells — 2D-array row and array-typed
+  record field, `var` and `const`. Three pass. The fourth, a row as a **`const`**
+  param, segfaults on all five targets, and it is the exact cell ed25519's revert
+  needs, because its field ops are `const TGf`. Filed as
+  [[bug-a-2d-array-row-as-a-const-array-param-still-segfaults]] and the row stays
+  put. A folder is a filing decision; only the repro is evidence.
+
+The general form, since this file keeps rediscovering it one variant at a time:
+**every step between "the bug is fixed" and "this code can change" is a separate
+claim, and each one has been the false one at least once.** Fixed on master ≠
+in the pin (2026-08-17) ≠ the reverted code runs (2026-08-27) ≠ the capability
+works at all (today) ≠ it works on the target that was broken (today).
 
 ## Reverted 2026-08-27 (pin v389 `325b4479070a`, verified against `$(PXX_STABLE)`)
 

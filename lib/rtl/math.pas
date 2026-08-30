@@ -690,16 +690,16 @@ var t, f, a: Double;
 begin
   a := Abs(x);
   if a >= 4503599627370496.0 then begin Result := x; Exit; end;  { >= 2^52: integral }
-  { Trunc(), not Int() and not Floor(). Floor returns a 32-bit Integer which
-    would SILENTLY OVERFLOW for a between 2^31 and 2^52 — a range this function
-    is explicitly still handling. Int() reads better and is what this used to
-    say, but it saturates to 32 bits on i386 and arm32
-    ([[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]]),
-    which is the same trap one level down. Today's callers all stay under 2^31
-    so nothing was observably wrong here — this is closing the latent half.
-    Trunc is 64-bit and right on every target; a is non-negative, so truncation
-    and floor agree. }
-  t := Double(Trunc(a));
+  { Int(), not Floor(). Floor returns a 32-bit Integer which would SILENTLY
+    OVERFLOW for a between 2^31 and 2^52 — a range this function is explicitly
+    still handling. This said Double(Trunc(a)) for a while, because Int()
+    saturated to 32 bits on i386 and arm32
+    ([[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]]);
+    that is fixed, re-measured on both targets under qemu with the ticket's own
+    repro before this was reverted. Int() is the natural spelling and avoids a
+    float->Int64->float round trip. a is non-negative, so truncation and floor
+    agree. }
+  t := Int(a);
   f := a - t;
   if f > 0.5 then t := t + 1.0
   else if f = 0.5 then
@@ -1202,18 +1202,18 @@ end;
     - Floor() returns a 32-bit Integer, which the ~2^50 values the Payne-Hanek
       path feeds this would silently overflow;
     - Int() is the natural spelling — remove the fraction, stay in the float
-      domain — but it SATURATES to 32 bits on i386 and arm32
+      domain — and it USED to saturate to 32 bits on i386 and arm32
       ([[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]]),
       which turned Sin(1e20) into NaN on exactly those two targets while
-      x86-64, aarch64 and riscv32 were green;
-    - Trunc() is 64-bit and correct on every target, so that is what this uses,
-      with the sign correction Trunc does not do.
-  Revert to Int() when that Track A bug lands (devdocs/dev/track-b-workarounds.md). }
+      x86-64, aarch64 and riscv32 were green. That is fixed, and this reverted
+      from Double(Trunc(x)) back to Int() after re-running the ticket's own
+      repro on i386 and arm32 under qemu — so what remains below is just the
+      sign correction, which Int() does not do either. }
 function DdFloor(x: Double): Double;
 var t: Double;
 begin
   if Abs(x) >= 4503599627370496.0 then begin Result := x; Exit; end;  { >= 2^52 }
-  t := Double(Trunc(x));
+  t := Int(x);
   if t > x then t := t - 1.0;
   Result := t;
 end;

@@ -2,11 +2,12 @@
 track: B
 prio: 35
 type: bug
-status: backlog
+status: done
 found: 2026-08-30
 found-by: frankD
 blocked-by: []
 summary: "track-b-workarounds.md's section titled 'Waiting on an open bug' has 8 rows and 7 cite a bug that is now in done/ or rejected/. Four of those seven carry no keep-note, so lib/rtl and lib/pcl are written non-idiomatically for bugs fixed weeks ago -- verified live in the code, not just stale in the ledger. The file's own instruction ('when the listed bug moves to done/, revert the workaround and drop the entry') has not been run, and the section header asserts the opposite of what is true."
+owner: frankB
 ---
 
 # Seven of eight "waiting on an open bug" workarounds are waiting on nothing
@@ -113,3 +114,108 @@ survives its own lifecycle rule.
 
 The **Cleanup backlog** section (line 93) and the several **Reverted** sections
 below it. Those are correctly filed and the Reverted ones are records.
+
+---
+
+## Resolution (2026-08-30, Track B)
+
+frankD's count was right and the conclusion it pointed at was wrong in one row,
+which is the row that mattered. **Three reverts landed; the fourth is still
+blocked, by a bug nobody knew was open.**
+
+Everything below was verified **by behaviour at pin v393** (`1d69760deabe`) —
+each closed blocker's own repro was compiled and run, on every target where the
+bug had been observed. No verdict here rests on a ticket's folder.
+
+### Reverted
+
+| row | site | how it was verified |
+| --- | --- | --- |
+| 1 | `lib/rtl/math.pas` `DdRint`/`DdFloor` → `Int(x)` | i386 + arm32 under qemu |
+| 2 | `lib/rtl/bignum.pas` `BigFromStr`, `BigModPow` → nested calls | CPython bignum oracle, 5 targets |
+| 5 | `lib/pcl/mimic_reportlab_pdfgen.pas` → one constructor | 12-line repro 25/25 + NilPy 50/50 |
+
+### Still blocked — and this is the finding
+
+Row 6 (`lib/rtl/ed25519.pas`) cites
+[[bug-aggregate-member-array-as-var-param]], which is in `done/`. **The
+capability does not work.** That ticket's own acceptance names four cells — 2D
+array row and array-typed record field, `var` and `const`. Measured today:
+
+| container | mode | result |
+| --- | --- | --- |
+| record field `pr.a` | `var` | ok |
+| record field `pr.a` | `const` | ok |
+| 2D-array row `pa[0]` | `var` | ok |
+| **2D-array row `pa[0]`** | **`const`** | **SEGFAULT, all five targets** |
+
+`SizeOf` is correct (`TG=32 TPa=96 TPr=96`), so the element mis-sizing that
+ticket diagnosed as the root really is fixed. One arm of four is not.
+
+It is the exact arm ed25519 needs: its field ops are
+`AddF(var o: TGf; const a, b: TGf)` and eleven more, so a `TPoint = array[0..3]
+of TGf` passes `p[1]` as a `const TGf`. Confirmed with a shape-exact probe, not
+inferred — it segfaults. Filed as
+[[bug-a-2d-array-row-as-a-const-array-param-still-segfaults]]; row 6 stays and
+now cites the ticket that is actually open.
+
+### Row 1 would have been got wrong by the obvious method
+
+Its bug was **i386/arm32-only**. Every probe run on x86-64 — the machine, the
+pin, the default build, `make lib-test` — passes identically whether that bug is
+fixed or not. "I tested it and it works" would have been true and worthless. The
+revert is justified only because the repro was cross-compiled and run under qemu
+on the two targets that had it, then the public surface (`Sin`/`Cos` at ten
+magnitudes straddling 2^31) was checked byte-identical across five targets and
+exact against CPython/libm.
+
+**And the probe was proved sensitive before it was trusted.** Mutating the
+reverted lines back to the bug (`t := Double(Integer(Trunc(a)))`, which is what
+32-bit saturation does) turns rows 0, 5 and 6 of that probe into values around
+1e158 while the sub-2^31 rows stay correct. So the probe genuinely reaches the
+reverted lines at the magnitudes that matter. Without that mutation the passing
+run proves only that nothing crashed.
+
+### Not reverted, deliberately
+
+`examples/bignum/bigmath.pas` (part of row 2). Both bugs it cites are fixed and
+re-verified, and the revert is *available* — it is simply not an improvement. In
+a checker, `chk := BigAddSigned(prod, r); if BigCompare(chk, a) <> 0` names the
+intermediate the FAIL message is about; nesting it reads worse. So the temps are
+ordinary style now, the helper-proc restriction is lifted and unneeded, and what
+was stale was the header comment claiming a constraint. The comment is corrected;
+the code stands.
+
+### The ledger
+
+`devdocs/dev/track-b-workarounds.md` restructured as the ticket's second ask:
+
+- **"Waiting on an open bug"** now has **two** rows, both citing a ticket that is
+  genuinely in `backlog/`. The file's own reproduce command confirms it.
+- **"Deliberate keeps — the bug is fixed, the shape stays"** is a new section
+  holding rows 3, 4 and 7. They were never waiting on anything, and parking them
+  under a heading that said they were is a large part of why the section stopped
+  being read.
+- **"Reverted 2026-08-30"** records the three, in the file's existing format.
+- Two **landmines** rewritten rather than deleted: the managed-record-return one
+  is withdrawn outright, and the aggregate-member-array one is *narrowed* from
+  "keep every sub-array standalone" to the one surviving cell — a record of
+  arrays now has no restriction at all and is the shape to reach for. A landmine
+  that overclaims steers code away from a form that works.
+- The header's scope note now states the invariant and why it is enforced.
+
+### The lesson, in the file's own accumulating form
+
+2026-08-17 established a row is revertible when the **pin** carries the fix, not
+when the bug is fixed. 2026-08-27 added: **and the reverted code actually runs.**
+Today adds two more, so the chain now reads:
+
+> fixed on master ≠ in the pin ≠ the reverted code runs ≠ **the capability works
+> at all** ≠ **it works on the target that was broken**.
+
+Every one of those five links has been the false one at least once in this
+file's history. That is the real answer to "why did four live reverts sit for
+weeks": not laziness, but that checking looked like one question and is five.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -361,7 +361,7 @@ begin
 end;
 
 function BigFromStr(const s: AnsiString): TBigInt;
-var r, t, dig: TBigInt; i, n: Integer; neg: Boolean; d: Int64;
+var r: TBigInt; i, n: Integer; neg: Boolean; d: Int64;
 begin
   r := BigFromInt(0);
   n := Length(s);
@@ -377,12 +377,13 @@ begin
     d := Ord(s[i]) - Ord('0');
     if (d >= 0) and (d <= 9) then
     begin
-      { temps on purpose: a managed-return call passed straight as an arg to
-        another call corrupts loop state on pinned stable -- see
-        bug-nested-managed-return-call-arg }
-      t := BigMulSmall(r, 10);
-      dig := BigFromInt(d);
-      r := BigAdd(t, dig);
+      { nested directly. This was three statements through temps t and dig,
+        because a managed-return call passed straight as an arg to another call
+        corrupted loop state (bug-nested-managed-return-call-arg, aka
+        bug-managed-record-result-self-arg). Fixed; the ticket's own repro was
+        re-run on x86-64, i386, arm32, riscv32 and aarch64 before this was
+        collapsed. }
+      r := BigAdd(BigMulSmall(r, 10), BigFromInt(d));
     end;
     i := i + 1;
   end;
@@ -491,7 +492,7 @@ end;
 { (base^exp) mod m via square-and-multiply. exp treated as non-negative
   magnitude; result is the least non-negative residue (sign of m ignored). }
 function BigModPow(const base, exp, m: TBigInt): TBigInt;
-var result, b, e, q, two, prod: TBigInt; odd: Boolean;
+var result, b, e, q, two: TBigInt; odd: Boolean;
 begin
   if BigIsZero(m) then
   begin
@@ -508,19 +509,19 @@ begin
   e := exp;
   e.neg := False;
 
-  { temps for every managed-return result before it's passed on -- see
-    bug-nested-managed-return-call-arg }
+  { The BigMul results go straight in as arguments. This bound each to `prod`
+    first, for bug-nested-managed-return-call-arg; that is fixed and re-measured
+    on all five targets. No aliasing hazard in the nested form either: the
+    const argument is a fresh temp, distinct from the var out-parameter. }
   while not BigIsZero(e) do
   begin
     odd := (e.limbs[0] mod 2) = 1;
     if odd then
     begin
-      prod := BigMul(result, b);
-      BigDivMod(prod, m, q, result);
+      BigDivMod(BigMul(result, b), m, q, result);
       result.neg := False;
     end;
-    prod := BigMul(b, b);
-    BigDivMod(prod, m, q, b);
+    BigDivMod(BigMul(b, b), m, q, b);
     b.neg := False;
     BigDivMod(e, two, e, q);     { e := e div 2 (quotient -> e, remainder discarded into q) }
   end;
