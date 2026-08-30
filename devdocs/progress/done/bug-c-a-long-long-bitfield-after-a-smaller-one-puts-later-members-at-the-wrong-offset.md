@@ -2,10 +2,10 @@
 track: C
 prio: 50
 type: bug
-status: backlog
+status: done
 blocked-by: []
-owner: ""
-summary: "MEASURED 2026-08-30: not one shape -- 135 of 400 random bitfield structs lay out differently from gcc (34%), in BOTH directions (72 larger, 27 smaller), and 36 have an identical sizeof with different member offsets. Root cause is a MODEL difference (pxx storage-unit vs gcc bit-cursor), not a bad condition, and it is entangled with the bitfield ACCESS WIDTH -- so the fix spans cparser.inc + cir.inc (C) and IRLowerBitFieldRead's signature in ir.inc (A). Diagnosis banked, deliberately not microfixed. Values are always correct; blast radius is pxx/gcc interop only."
+owner: frankC
+summary: "MEASURED 2026-08-30: not one shape -- 135 of 400 random bitfield structs lay out differently from gcc (34%), in BOTH directions (72 larger, 27 smaller), and 36 have an identical sizeof with different member offsets. Root cause is a MODEL difference (pxx storage-unit vs gcc bit-cursor), not a bad condition. CORRECTED 2026-08-30: the fix does NOT need ir.inc -- IRLowerBitFieldRead/Store both OVERWRITE the caller's storageTk with IRBitStorageTk(RecFieldBitBytes(...)) before using it, so the access width is already a per-field property read back from the record and follows the layout automatically. The whole fix is cparser.inc. Diagnosis banked, deliberately not microfixed. Values are always correct; blast radius is pxx/gcc interop only."
 ---
 
 # A `long long` bitfield after a smaller-typed one puts later members at the wrong offset
@@ -285,3 +285,104 @@ the plain `short` at offset 6 vs gcc's 8 — different, but still 2-aligned and
 legal. Across the corpus I saw no case of a plain member landing at an offset
 its own type could not tolerate. So the blast radius is **interop only**
 (a struct crossing a pxx/gcc boundary), never a self-inconsistent pxx program.
+
+
+## CORRECTION 2026-08-30: the fix does NOT reach into `ir.inc`
+
+The section above concludes the fix spans `cparser.inc` + `cir.inc` + a signature
+change to `IRLowerBitFieldRead` in `ir.inc`. **That is wrong**, and it was wrong
+because it was reasoned from the *declaration* rather than the body.
+
+Both lowering routines throw the parameter away before using it:
+
+```pascal
+function IRLowerBitFieldRead(fieldNode, storageAddr: Integer; storageTk: TTypeKind): Integer;
+begin
+  ...
+  storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));   { <- the parameter is dead }
+```
+
+`IRLowerBitFieldStore` does the same on its own line 5. Nothing reads `storageTk`
+before the overwrite in either.
+
+So the access width is **already** derived from the field's recorded `BitBytes`
+rather than from the declared type at the call site — which is precisely the
+property this ticket claimed the fix would have to introduce. Change what
+`cparser.inc` records for a field's offset, shift and `BitBytes`, and the
+load/store width follows with no signature change, no call-site change, and no
+`ir.inc` edit.
+
+The entanglement banked above is real — layout and access width ARE coupled, and
+`if sz >= 8 then bitUnitBytes := 8` is still there for the reason its comment
+gives. What is not true is that the coupling crosses a lane boundary. It is one
+file's business.
+
+## FIXED — 400/400 against gcc, 2026-08-30 (frankC)
+
+The storage-unit model is gone; `cparser.inc` now runs gcc's **bit cursor**.
+
+| measurement | before | after |
+| --- | --- | --- |
+| `laydiff` — offsets, 400 generated structs | pass=264 **diff=136** | **pass=400 diff=0** |
+| `valdiff` — sizes AND field values, 150 programs | pass=105 size_only=45 | **pass=150 size_only=0** |
+| `valdiff` VALUE_DIFF (a read-back regression) | 0 | **0** |
+
+Compiler `a7a03ffb95e1`, `converged after 1 round(s)`.
+
+### The algorithm was validated against gcc BEFORE any Pascal was written
+
+A model change validated only on the cases you happen to try is the trap this
+ticket spent the morning avoiding. So the rule was implemented first in ~30 lines
+of Python, run against **real gcc** on all 400 generated structs, and only
+promoted to Pascal once it reproduced gcc exactly.
+
+That caught a refinement no amount of reading the ABI would have: the first
+version scored **395/400**, and all five failures shared one shape — an anonymous
+**zero-width** bit-field of a wide type (`long long :0`). Every offset already
+matched; only `sizeof` differed. **A `:0` advances the bit cursor but does not
+raise the struct's alignment** — gcc gives `sizeof` 20, not 24, for a `long long
+:0` inside an otherwise 4-aligned struct. With that, 400/400.
+
+### The rule
+
+- A bit-field of declared type `T` may not **cross** a `sizeof(T)` boundary; if it
+  would, it advances to the next one. Otherwise it sits at the running cursor.
+  Nothing is reserved ahead of it.
+- A plain member goes at the next byte boundary at or after the cursor, then
+  aligned to its own type.
+- `T : 0` advances to `T`'s next boundary and contributes no alignment.
+- A named bit-field's declared type **does** contribute struct alignment.
+
+### The access-width entanglement dissolved
+
+This ticket said the fix was blocked on the load/store width — pxx reserved a
+full 8-byte unit for a `long long` bit-field *because* `IRBitStorageTk` loads 8
+bytes, and the old comment warned the next field's unit would otherwise overlap
+"and an 8-byte store clobber this one". **That does not happen: a bitfield store
+is read-modify-write**, so a wide access window covering a neighbour preserves it.
+The reservation was costing every following member its correct offset and buying
+nothing. `bitBytes` is now simply the declared type's width; the no-crossing rule
+guarantees `shift+width` fits inside it, and the struct is always at least
+`thisOff+sz` bytes long, so the load never reads past the object.
+
+And, as the correction above records, `IRLowerBitFieldRead`/`Store` already derive
+their width from `RecFieldBitBytes`, so **no `ir.inc` change was needed at all**.
+
+### Pinned rows held
+
+`cbitfield_mixed_type_pack_b373` (quickjs `JSString`) still `sizeof==24`, output
+byte-identical to gcc, rc=42 — re-checked against gcc rather than trusted.
+`cbitfield_longlong_b359`, `cbitfield_promotion_b358` and
+`cbitfield_arith_precision` all pass.
+
+### One harness bug found and fixed mid-flight
+
+Two concurrent `laydiff` runs shared a temp file and produced comparisons between
+**different structs** — gcc's answer for one against pxx's for another, with
+mismatched probe names in the output. It read as 25 real divergences. The harness
+now takes a per-run `mktemp -d`. A measurement tool that can silently compare two
+different things is worse than none, and this one nearly got a fabricated number
+into a ticket.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

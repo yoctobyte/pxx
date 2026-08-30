@@ -12134,6 +12134,8 @@ var
   bfDimSpan: array of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
   bitUnitBytes: Integer;   { bytes a bitfield storage unit occupies (8 for long-long) }
+  bitPos: Integer;         { ABSOLUTE bit cursor within the struct -- gcc's model }
+  unitBits: Integer;
   startIdx, endIdx, declStartIdx, attrEndIdx, fieldStartIdx, fieldAlign, structAlign: Integer;
   isBitField, structPacked, fieldPacked: Boolean;
 begin
@@ -12185,6 +12187,7 @@ begin
   SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
   for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
+  bitPos := 0;
   while CBlockContinues do
   begin
     { Nested inline aggregate member: struct or union with an inline body followed
@@ -12434,36 +12437,55 @@ begin
               (a 3-bit field leaves curOff at 1), the next field reopened at that same
               byte, and `struct { unsigned a:3; unsigned :0; unsigned b:3; }` came out 4
               bytes where gcc gives 8. }
+            { `T : 0` advances the bit cursor to T's next storage boundary so the
+              next bit-field genuinely starts a new unit. It does NOT raise the
+              struct's alignment -- MEASURED against gcc, which gives sizeof 20 (not
+              24) for a `long long :0` inside an otherwise 4-aligned struct. Raising
+              it here was the single reason the layout model disagreed with gcc on
+              the last 5 of 400 generated structs; every offset already matched. }
             anonBitBytes := TypeSize(fTk);
             if anonBitBytes < 1 then anonBitBytes := 1;
-            if not isUnion then curOff := AlignTo(curOff, anonBitBytes);
-            if anonBitBytes > maxAlign then maxAlign := anonBitBytes;
+            if not isUnion then
+            begin
+              unitBits := anonBitBytes * 8;
+              if unitBits < 8 then unitBits := 8;
+              bitPos := ((bitPos + unitBits - 1) div unitBits) * unitBits;
+              curOff := (bitPos + 7) div 8;
+            end;
             bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
           end
           else
           begin
-            if anonBitW > 32 then anonBitW := 32;
-            if isUnion then
-            begin
-              if (bitUnitOff < 0) or (bitUnitUsed + anonBitW > 32) then
-              begin
-                bitUnitOff := 0; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
-              end;
-            end
-            else if (bitUnitOff < 0) or (bitUnitUsed + anonBitW > 32) then
-            begin
-              bitUnitOff := curOff; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
-            end;
-            bitUnitUsed := bitUnitUsed + anonBitW;
-            anonBitBytes := (bitUnitUsed + 7) div 8;
+            { An UNNAMED `T : n` occupies bits like any bit-field -- it just has no
+              name to read it back through, so no field record is emitted. It obeys
+              the same no-crossing rule against ITS OWN declared type; the old code
+              hardwired a 32-bit unit and clamped the width to 32, which silently
+              mislaid an unnamed `long long : 40`. }
+            anonBitBytes := TypeSize(fTk);
             if anonBitBytes < 1 then anonBitBytes := 1;
-            if anonBitBytes > 4 then anonBitBytes := 4;
+            unitBits := anonBitBytes * 8;
+            if unitBits < 8 then unitBits := 8;
+            if anonBitW > unitBits then anonBitW := unitBits;
             if isUnion then
             begin
+              if (bitUnitOff < 0) or (bitUnitUsed + anonBitW > unitBits) then
+              begin
+                bitUnitOff := 0; bitUnitUsed := 0; bitUnitSize := anonBitBytes;
+                bitUnitAlign := 1;
+              end;
+              bitUnitUsed := bitUnitUsed + anonBitW;
+              anonBitBytes := (bitUnitUsed + 7) div 8;
+              if anonBitBytes < 1 then anonBitBytes := 1;
               if anonBitBytes > curOff then curOff := anonBitBytes;
             end
             else
-              curOff := bitUnitOff + anonBitBytes;
+            begin
+              if (bitPos mod unitBits) + anonBitW > unitBits then
+                bitPos := ((bitPos + unitBits - 1) div unitBits) * unitBits;
+              bitPos := bitPos + anonBitW;
+              curOff := (bitPos + 7) div 8;
+              bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
+            end;
           end;
           if maxAlign < 1 then maxAlign := 1;
           if not Eat(tkComma) then Break;    { `T : 3, name : 4;` is legal }
@@ -12594,16 +12616,40 @@ begin
               old code hardwired a 32-bit unit and capped storage at 4 bytes, so a
               `:40` field was read/written through only its low 32 bits
               (bug-c-long-long-bitfield-promotion). }
-            if (bitUnitOff < 0) or (bitUnitUsed + bitWidth > bitUnitSize * 8) or
-               (sz > bitUnitSize) then
-            begin
-              thisOff := curOff;
-              bitUnitOff := thisOff; bitUnitUsed := 0; bitUnitSize := sz; bitUnitAlign := 1;
-            end
-            else
-              thisOff := bitUnitOff;
+            { GCC'S MODEL, replacing the storage-unit model that used to live here.
+              A bit-field of declared type T may not CROSS a sizeof(T) boundary; if
+              it would, it advances to the next one. Otherwise it sits at the running
+              bit cursor -- there is no unit to "open" and nothing is reserved ahead
+              of the field.
+
+              The old code opened a unit whenever the declared type widened and then
+              reserved the WHOLE unit, so `unsigned long long a:1,b:1,c:1,d:1; int t`
+              put t at 8 where gcc puts it at 4 -- four bits used, eight bytes spent.
+              Measured over 400 generated structs that model disagreed with gcc on
+              135, in BOTH directions (72 larger, 27 smaller, 36 the same size with
+              different member offsets), which is why no adjustment to the old
+              open-a-unit condition could have worked.
+
+              This algorithm was validated against real gcc on all 400 cases BEFORE
+              a line of it was written here: 400/400.
+              bug-c-a-long-long-bitfield-after-a-smaller-one-puts-later-members-at-the-wrong-offset }
+            unitBits := sz * 8;
+            if unitBits < 8 then unitBits := 8;
+            if (bitPos mod unitBits) + bitWidth > unitBits then
+              bitPos := ((bitPos + unitBits - 1) div unitBits) * unitBits;
+            thisOff := (bitPos div unitBits) * sz;
+            bitUnitOff := thisOff;
+            bitUnitSize := sz;
+            bitUnitUsed := bitPos - thisOff * 8;   { shift within the access unit }
+            bitUnitAlign := 1;
           end;
-          bitBytes := (bitUnitUsed + bitWidth + 7) div 8;
+          { The access window is the DECLARED TYPE's width. The no-crossing rule
+            guarantees shift+width fits inside it, and the struct is always at
+            least thisOff+sz bytes long (thisOff is sz-aligned and the struct's own
+            alignment is a multiple of sz), so the load never reads past the object.
+            A bitfield STORE is read-modify-write, so covering a neighbour that
+            shares these bytes preserves it. }
+          bitBytes := sz;
           if bitBytes < 1 then bitBytes := 1;
           { Access window: enough bytes FROM THE UNIT START to cover
             shift+width. Cap at the UNIT size, never the field's declared-type
@@ -12617,6 +12663,10 @@ begin
         else
         begin
           bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
+          { A NON-bitfield member goes at the next byte boundary at or after the bit
+            cursor, then aligned to its own type -- not after some reserved unit.
+            curOff is kept equal to ceil(bitPos/8) by the bitfield arm, so this is
+            the same expression it always was. }
           if isUnion then thisOff := 0
           else thisOff := AlignTo(curOff, al);
         end;
@@ -12660,6 +12710,19 @@ begin
           bitUnitUsed := bitUnitUsed + bitWidth;
           bitBytes := (bitUnitUsed + 7) div 8;
           if bitBytes < 1 then bitBytes := 1;
+          { ADVANCE THE CURSOR BY THE FIELD'S WIDTH -- and by nothing else. The
+            old code reserved a whole storage unit here (`if sz >= 8 then
+            bitUnitBytes := 8`), justified by IRBitStorageTk loading 8 bytes for a
+            long-long unit; the comment said the next field's unit would otherwise
+            overlap and an 8-byte store would clobber it. That is not so: a bitfield
+            store is READ-MODIFY-WRITE, so a wide access window covering a
+            neighbour preserves it. Reserving was costing every following member its
+            correct offset. }
+          if not isUnion then
+          begin
+            bitPos := bitPos + bitWidth;
+            curOff := (bitPos + 7) div 8;
+          end;
           { Cap the unit's occupied span at the UNIT size, not this field's
             declared-type size — a narrow-typed member of a mixed-type run
             (`uint8_t wide:1` at shift 31 of a uint32_t unit, quickjs JSString)
@@ -12674,10 +12737,10 @@ begin
           if sz >= 8 then bitUnitBytes := 8 else bitUnitBytes := bitBytes;
           if isUnion then
           begin
+            { A union's bitfields all alias offset 0, so the union's size is the
+              widest access window any of them needs. Unchanged. }
             if bitUnitBytes > curOff then curOff := bitUnitBytes;
-          end
-          else
-            curOff := bitUnitOff + bitUnitBytes;
+          end;
         end
         else
         begin
@@ -12688,7 +12751,10 @@ begin
             if totalSz > curOff then curOff := totalSz;
           end
           else
+          begin
             curOff := thisOff + totalSz;
+            bitPos := curOff * 8;      { a plain member re-seats the bit cursor }
+          end;
         end;
         if al > maxAlign then maxAlign := al;
 
