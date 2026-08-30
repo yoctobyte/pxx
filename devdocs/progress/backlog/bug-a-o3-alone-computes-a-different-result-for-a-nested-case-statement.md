@@ -78,6 +78,26 @@ Not yet bisected to a pass. The remaining `OptLevel >= 3` sites on x86-64 are in
 diagnose would be exactly the concurrent-edit hazard the lane letters exist to
 prevent.
 
+## Reduction: attempted, abandoned, and what it did establish
+
+A line-delta reducer got the program from **2829 to 1635 lines** — 42% removed
+with the `-O2` vs `-O3` disagreement intact — before it was killed at load 19.6
+on a 12-core workstation. It writes its output only on completion, so **there is
+no reduced artefact**; what survives is the measurement that the program is
+heavily reducible, which is worth knowing before anyone assumes 2829 lines is
+the floor.
+
+**That partial figure is NOT validated and must not be leaned on.** The reducer
+ran a cheap two-oracle predicate (`pxx-O2` != `pxx-O3`) with a five-oracle
+revalidation deferred to the end, and the end never came. A reducer optimises
+for its predicate, so a deleted line that introduces an uninitialised read makes
+`-O2` and `-O3` disagreeing *correct* behaviour and the predicate still says
+"interesting". Everything above the reduction section was measured on the
+unreduced program, where all five oracles ran.
+
+The unreduced repro is complete on its own: pasmith is deterministic, so the
+seed and the generator arguments reproduce it exactly.
+
 ## Why prio 45 and not higher
 
 `-O3` is the free tier — nothing gates `OptLevel >= 3`, `-O2` is the proven
