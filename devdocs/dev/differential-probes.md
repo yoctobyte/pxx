@@ -614,6 +614,66 @@ precisely what the four probes at the top of this file are for.
 
 ---
 
+## The BEFORE/AFTER probe: two commits, one source tree, and a table of subjects
+
+A third arrangement, distinct from both sections above: neither arm is another
+implementation, and neither is a flag. **The two arms are the same source at two
+commits**, built one after the other in the same checkout, and the question is
+*did this change do what it claims and nothing else?* `tools/gate.sh` answers
+"is master broken"; this answers "is THIS commit right", which is the question a
+reviewer actually has.
+
+Two rules, both learned the expensive way on 2026-08-30 verifying the C calling
+convention (`bug-c-a-c-function-s-calling-convention-depends-on-the-target`):
+
+**1. Build BOTH arms from source, in the same run.** A fresh binary compared
+against whatever was on disk is two measurements, not a pair. The control for
+that ticket was committed asserting "green on all five targets" having been
+checked on one; it was false on three, and the consequence is not a weaker
+comparison — **it inverts the sign of every finding drawn from it.** One
+target's post-change failure read as a regression the change had caused, and
+another's as pre-existing, and both were backwards. A probe whose baseline is
+assumed has no sign, only a magnitude.
+
+Corollary, measured three times in one evening across three agents: **after any
+sync that pulled `compiler/**`, your binary is stale although nothing you did
+changed.** Rebuild before measuring and check the binary's sha256 against the
+sha you meant to test — a `cd` that silently failed had one of those rounds
+measuring the baseline binary while reporting it as the experiment, and every
+row came back green.
+
+**2. A subject list is a TABLE. Draw the whole table.** The subjects for that
+ticket were a Pascal→C bridge and a pure-C control, and they encode two axes
+without naming them — *who calls* and *is the C-ABI gate on*. Writing them out:
+
+| | gate OFF | gate ON |
+| --- | --- | --- |
+| Pascal caller | — | the bridge |
+| C caller | the control | **nothing** |
+
+The empty cell is a real population — a C function calling another C function
+inside a C unit that a Pascal program uses — and a commit regressed it from 1000
+to 0 on two targets while passing **two independent verifications**, by two
+agents, with two separately built instruments that agreed row for row. It was
+found by reading the diff, which is a check no instrument performs on itself.
+
+This is the sibling of *AGREEMENT IS NOT EVIDENCE* above and the sharper half:
+that section warns that both arms can be wrong together. This one warns that
+**the subject you did not write cannot be wrong at all** — it reports nothing,
+and nothing reads as green. When you add a probe, name its axes and look for the
+cell you did not fill.
+
+A worked instance, kept because the harness itself failed twice before it
+worked: `/tmp/frankC-share/verify-convention.sh` (session-local, not tracked —
+the pattern is the point, not the file). Its first version put both subjects on
+one output path, so they overwrote each other and were safe only by ordering.
+Its second reported *"control held on every target"* for a change that did
+nothing at all — one line standing for a claim narrower than the table above it.
+Its third counted red→green on one column only and announced "NOTHING went
+green" for a fix whose entire win sat in a column it was not looking at.
+**Point a new probe at something whose answer you already know before you point
+it at something you do not.**
+
 ## Audit note, 2026-08-30 (frankD), measured at `9899bf1ab`
 
 This page opened *"Four standing harnesses"* over a table of **five**, and
