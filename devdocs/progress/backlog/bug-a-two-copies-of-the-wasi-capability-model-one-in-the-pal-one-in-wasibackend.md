@@ -11,6 +11,16 @@ found-by: frankwasm (closing feature-a-wasm32-sys-intrinsics-and-ir-syscall-lowe
 summary: "compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it."
 ---
 
+> **Blocked on a Track U decision, filed 2026-08-30 by the coordinator.** The fix
+> direction is a layering call: a shared include double-defines when both units
+> co-occur, wasibackend cannot use the PAL by design, and what remains points a
+> `lib/rtl` unit at `compiler/builtin` — backwards from every other dependency in
+> the tree. See
+> `decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner`.
+> The coordinator's recommendation there is a differential test FIRST (it removes
+> the silent-drift danger without spending the layering decision), then a shared
+> home. Do not start the de-duplication until that decision lands.
+
 # The state
 
 Two independent implementations of the same capability model:

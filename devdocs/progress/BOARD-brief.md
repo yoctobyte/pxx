@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:29 blocked:7 backlog:377 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2792 rejected:58`
+`working:1 unfinished:29 blocked:7 backlog:378 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2792 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -53,7 +53,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 404, ranked
+## Ready — top 30 of 405, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -86,4 +86,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [A+S]` bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 
-_374 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_375 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
