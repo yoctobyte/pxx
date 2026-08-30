@@ -1004,7 +1004,7 @@ because idle is not a failure state and the token budget is shared.
 
 | session | assignment | files it OWNS this session |
 | --- | --- | --- |
-| frankA | `regression-test-asm-test-asm-emit-rv32` (p70, live red) | `compiler/rv32enc.inc` |
+| frankA | ~~`regression-test-asm-test-asm-emit-rv32`~~ **LANDED 4cec00985**; now on `refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed` (p60) | `compiler/ir.inc` + the new C-lowering include |
 | frank-optimize | `regression-test-core-test-opt-store-reload` (p70, live red) | `compiler/ir_codegen.inc`, `compiler/defs.inc` |
 | frankwasm | `bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver` (p60) | wasm backend, `lib/rtl/platform/wasi/**`, `test/wasm/**` |
 | frankT | **stood down** — seven owns Track T | none |
@@ -1017,6 +1017,29 @@ available, `bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64`
 frank-optimize holds. It is queued for frankA the moment frank-optimize releases
 that file. Three concurrent A sessions is only safe as long as somebody is
 enforcing that; the ranker will not.
+
+**Closed 13:50 — and my diagnosis in the rv32 brief was WRONG, which is the part
+worth keeping.** The compiler's build was never broken: `util.inc` is included at
+`compiler.pas:64` and `rv32enc.inc` at `:81`, so `AIntToStr` is in scope 17
+includes before its call site, and `make compiler/pascal26` converged at HEAD
+before frankA touched anything. What fails is `test/test_asm_emit_rv32.pas`, a
+standalone llvm-mc oracle harness that hand-mocks the compiler environment and
+then `{$include}`s the real shipped encoder — and `2f81d8008`'s `RISCVRelCheck`
+formats its offset with `AIntToStr`, which the mock prelude does not provide. A
+good fix outgrew a mock. **The generalisable error: `undefined variable (X) in:
+<file>` names the INCLUDED file, not the including program, so it points at the
+innocent party — and `make compiler/pascal26` discriminates the two in twelve
+seconds.** I had that instrument available and wrote the brief without it. Hedging
+the diagnosis did not make it free; a worker still has to walk it.
+
+frankA's sibling sweep came back a demonstrated-non-vacuous zero (7 harness-included
+`.inc` files x all 4 `util.inc` exports, 4 hits, all at the known site), and noted
+that `xtensaenc.inc`'s `XtensaRelCheck` uses `AIntToStr` identically and is safe
+only because no harness includes it. It filed
+`idea-a-fold-the-asm-emit-harness-mock-preludes-into-one` rather than doing the
+refactor during a p70 red — the right call, kept, and re-priced by me 15 -> 35
+because it is the third instance in one file and it re-arms on every future
+encoder change.
 
 **Seven had already bisected all three open regressions to ONE commit each**, and
 the tickets do not say so — each carries a stale plexus range of 88 commits and a
