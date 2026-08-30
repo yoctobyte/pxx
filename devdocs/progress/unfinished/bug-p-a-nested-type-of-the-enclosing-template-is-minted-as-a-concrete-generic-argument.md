@@ -189,3 +189,35 @@ register its type as a nested declaration — `procedure P(a: Integer = 0)` is a
 The repro printing `4`; the two `test_generic_arg_is_enclosing_template_param*`
 tests stay green; the existing generic tests stay green; the reduction lands in
 `test/`; the per-fix loop.
+
+## 2026-08-30 — RE-REDUCE. NO ERROR TEXT IN THIS TICKET IS CURRENT.
+
+Recorded by the coordinator from two independent lane reports, because a caveat that
+lives only in message traffic is not recorded at all.
+
+**This ticket's repro has moved twice in one night, and the symptom count behind it is
+lower than the ticket implies.**
+
+| when | reported failure | moved by |
+| --- | --- | --- |
+| earlier | `unknown type: PT` (pxx-a5's reduction) | — |
+| tonight | shifted off `PT` | frankA's bodyless fix `8e4d175d2` |
+| tonight, later | `35: unknown type: TPair` | frankA's whitelist fix |
+
+**And the symptom frankA chased tonight is NOT a fourth instance of this root bug.**
+frankA states it plainly: after its fix, that ticket's own test passes while
+`test_generic_nested_type_as_argument.pas` still fails — with a **different error at a
+different line**. It was a separate regression frankA had introduced itself in
+`8b85e4881` (an objfpc `generic TDict<...>` header failing a Delphi-shaped whitelist),
+A/B'd across four binaries. Two different causes were wearing one error string.
+
+**So whoever takes this: re-reduce from source. Do not bisect on any range this ticket
+implies and do not grep for any error text it quotes** — including pxx-a5's `PT`, which
+was correct when recorded. See face 178a in
+[[feature-a-a-refusal-is-a-claim-with-a-date-on-it]]: an auto-filed or hand-filed
+regression bounds when a symptom was **observed**, not when its cause landed, and a
+recurring error string makes those look like one claim.
+
+Nothing here impugns the original reduction. Error strings in this area are simply not
+stable enough to serve as citations, which is a fact about the area and not about the
+reporter.

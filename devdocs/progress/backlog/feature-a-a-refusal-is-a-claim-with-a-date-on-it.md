@@ -8118,3 +8118,128 @@ from the log tail, and a first-ever run is headed **`first-ever red`** rather th
 **A fix reported with the half of the motivating case it does not solve is worth more than one
 reported as complete**, because the next person knows where to start rather than discovering
 the gap by trusting it.
+
+### 178 — A WHITELIST FAILS IN TWO DIRECTIONS AND THE TEST ASSERTED ONE
+
+frankA, 2026-08-30. A generic-bound-name whitelist regressed `TKey` resolution
+under objfpc: the comment asserted *"a declaration's left-hand side can only follow
+the `type` keyword or the `;` that ended the previous declaration"* — true of Delphi,
+false of objfpc, which writes `generic TDict<TKey, TValue>` behind an ordinary
+`tkIdent`. Every objfpc header failed the header test, parameters were never
+harvested, and `specialize TCmp<TKey>` was minted concrete instead of deferred.
+
+The regression is not the face. **`test_generic_bound_name_harvest` asserted only the
+OVER-collect direction** — a use must not donate its arguments. The **under**-collect
+direction, that a genuine header's parameters must still *be* collected, was never
+asserted, so a whitelist rejecting **every** objfpc header passed it clean.
+
+> **A whitelist has two failure directions; a test written while fixing one of them
+> will assert that one.** The assertion you need is chosen by the *shape of the thing
+> under test*, not by the bug that prompted the test.
+
+Closed correctly: the new arm was checked to **fail on the broken binary**
+(`22c67e5ea61e`, `69: unknown type: TKey`) rather than merely to accompany the fix.
+That step is the whole difference between a control and a passing test — cf. 168a,
+172b, 175, 177.
+
+Why it hid, measured: the **Delphi spelling of the identical shape** passes on all four
+binaries and on FPC. Every control frankA had came from that one surface.
+
+### 178a — TWO CAUSES WEARING ONE ERROR STRING, AND THE AUTO-FILED RANGE POINTS AT THE EARLIER ONE
+
+Same incident. The watcher filed the red at 02:19; the commit that caused *this*
+instance landed at 04:08. The error text was identical both times and the bug had been
+**broken, fixed by someone, then re-broken**. Trusting the ticket's implied range would
+have bisected the wrong window.
+
+Generalises to every auto-filed regression: **the ticket's timestamp bounds when the
+symptom was OBSERVED, not when the cause landed**, and a recurring error string makes
+those two look like one claim. Pairs with the standing rule that a ticket's stated
+blocker and its actual blocker are independent (135).
+
+Consequence for a live ticket, acted on rather than relayed:
+`bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument`
+has had its repro move **twice in one night** — `unknown type: PT` (pxx-a5's reduction)
+→ moved by `8e4d175d2` → now `35: unknown type: TPair`. **Fewer symptoms sit behind it
+than believed.** Re-reduce; trust no error text currently in it.
+
+### 179 — THE ENFORCEMENT WAS DESTROYED WHERE IT WAS LOAD-BEARING AND PRESERVED WHERE IT WAS INERT
+
+frankB, 2026-08-30, from a `git log --follow` nobody had run. The 2026-07-12 ESP park
+(`ad649f55f`, *"park ESP family (user: Pascal has prio)"*) attached its reason to three
+tickets as a comment on the `prio:` line. The 2026-08-25 bulk re-triage `ab584382e`
+rewrote `prio: 30  # ESP parked (user 2026-07-12)` to a bare `prio: 20` and **deleted the
+comment**; its message does not mention ESP, and nothing about it was a decision to
+unpark anything.
+
+**Both tickets that had reached `done/` kept the comment. The only one still live had it
+deleted.** Not targeting — a re-triage re-prices *open* tickets and never touches closed
+ones. Which is worse: the mechanism guarantees that **every surviving copy of the record
+is, by construction, a copy that no longer mattered.**
+
+> **"We still have the record" is not evidence the record survived where it was needed.**
+> Ask where the surviving copies are, not how many there are.
+
+And the fix follows from the mechanism rather than from taste: **one commit swept two
+separate owner rulings** — the same `ab584382e` moved the held NilPy ticket from
+`prio: 20` to `prio: 55`. One commit, two rulings, one cause is a far stronger case than
+two incidents of a class. It would do it again, and `NOT DISPATCHABLE` / `gated-by:`
+survive it **precisely because they are not prices**.
+
+Two-phase erosion, and only the second phase is about tooling: the park sat intact and
+readable in a live ticket's frontmatter from 2026-07-12 to 2026-08-25 — **a span that
+contains the 2026-08-02 ESP activity.** So that work happened with the park visible.
+**Unobserved, then unrecorded.** The coordinator's first write-up collapsed the two and
+made the missing mechanism carry weight that belonged to plain not-reading.
+
+### 179a — THE UNCHOSEN SOURCE ANSWERS A QUESTION NOBODY ASKED
+
+The standing rule was *verify against a source the claimant did not choose*, justified
+defensively: two arms sharing an upstream agree for free. Three checks in a row on
+2026-08-29/30 say the payoff is not defensive at all. The coordinator checked frankB's
+2026-08-02 claim and landed on ESP activity three weeks after the park; frankB then
+checked its **own** claim and landed on `ad649f55f`/`ab584382e`. **Neither check confirmed
+or refuted the claim it was aimed at.** Both returned a different, more useful fact.
+
+> An unchosen source is the only kind that can answer a question nobody asked.
+
+Reframes the discipline from adjudication to discovery, which is a much better reason to
+actually spend the minute.
+
+### 180 — A LANE'S QUEUE CANNOT SEE THE TICKET THAT UNBLOCKS THE LANE
+
+frankC reported Track C's queue as *"nothing above 50 that is a unit of work"* — true of
+`ready --track C` and false of the board. The p60 unit of work in C's own interest is
+`refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed`,
+filed **`track: A`** because A owns `ir.inc`. That filing is **correct** — file-lanes are
+about the file, not the topic — and its consequence is that the one ticket whose entire
+purpose is to make Track C staffable is structurally invisible to Track C.
+
+It compounds an in-edge problem already written into that same ticket: no `blocked-by:`
+edge points at it, because the five C tickets it unblocks *can* proceed by an agent
+holding the A slot, so adding the edges would be a false claim and it inherits no
+priority. **Invisible to the ranker by in-degree, invisible to its beneficiary by track
+letter. Two independent mechanisms, same direction.**
+
+> The tickets that unblock a **lane** rather than a **ticket** are the ones no query
+> surfaces, because from the ranker's side an in-degree of zero is indistinguishable from
+> a leaf, and from the lane's side another letter is indistinguishable from not-my-work.
+
+Nth instance of the night's dominant theme — load-bearing state in a place no tool reads
+(129, 134a, 165, 179) — but the first where **every individual filing decision was right**
+and the invisibility is emergent. Nothing here is a mistake to correct; it is a query
+that does not exist.
+
+### 180a — THE COUNTER-EXAMPLE THE SOURCE ITSELF PRODUCED
+
+Same ticket's table reads *five of seven ranked C tickets need an A file*. Hours later
+frankC resolved `bug-c-an-include-nested-deeper-than-16-is-silently-dropped` **entirely
+inside its own lane**, filing the `defs.inc` follow-up as an A ticket at p40 rather than
+editing it. That is a counter-example to its own measurement, produced by the measurer,
+within a day.
+
+The measurement still holds overwhelmingly — which is the point. **A table that has met
+its counter-examples and states them is worth more than one that has not**, and the
+author is the only person positioned to notice when the ratio moves. Left uncorrected, a
+measurement decays into a slogan of exactly the kind 173 describes: more quotable than
+accurate, and quoted.
