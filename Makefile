@@ -11249,6 +11249,11 @@ test-core: $(COMPILER)
 	# load-bearing -- defining them deletes the test while leaving it green.
 	# The second row of each is the NEGATIVE control: the same operators on a
 	# runtime value must still branch, or the fold has inverted control flow.
+	# The Pascal third row carries the two arms an `if`-only test cannot see:
+	# `while False do` is the SIBLING of the same double case and died the same
+	# way, and `g1` is the control for the OTHER direction -- a dead arm that
+	# DECLARES A GOTO TARGET, which an over-eager fold deletes while every row
+	# above it stays green. Unreachable by fall-through is not unreachable.
 	# bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
 	./$(COMPILER) test/c_const_branch_dead_arm.c $(TESTTMP)/c_constbranch26
 	tools/expect_same.sh c_constbranch26 "$$($(TESTTMP)/c_constbranch26)" "$$(printf '42 42 42 42 42\n100 200 400 300 500 600')"
@@ -11269,7 +11274,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_unsigned_const_guard_folds.c $(TESTTMP)/c_uguard26
 	tools/expect_same.sh c_uguard26 "$$($(TESTTMP)/c_uguard26)" "$$(printf '11\n12\n13\n14\n15\n16\n100\n200')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
-	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300')"
+	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The riscv32 arm of this only fails cross-target; see test-c-float-const-cross.
 	# bug-c-the-f-suffix-on-a-float-literal-is-ignored
 	./$(COMPILER) test/c_float_literal_f_suffix.c $(TESTTMP)/c_flit_fsuf26

@@ -17,6 +17,7 @@ program test_const_branch_dead_arm;
 function NEVER_true: Integer;   external name 'PXX_NEVER_DEFINED_true';
 function NEVER_false: Integer;  external name 'PXX_NEVER_DEFINED_false';
 function NEVER_sizeof: Integer; external name 'PXX_NEVER_DEFINED_sizeof';
+function NEVER_while: Integer;  external name 'PXX_NEVER_DEFINED_while';
 
 function f1(x: Integer): Integer;
 begin if True then begin f1 := x + 1; Exit; end; f1 := NEVER_true; end;
@@ -37,7 +38,41 @@ begin if x = 4 then r1 := 100 else r1 := 200; end;
 function r2(x: Integer): Integer;
 begin if x <> 4 then r2 := 300 else r2 := 400; end;
 
+{ THE SIBLING ARM, and it is the reason this file has a third row: a loop whose
+  condition is constantly FALSE has a body that can never run, and it died at
+  load in exactly the same way before the fix. An `if`-only fix passes every row
+  above and fails this one, which is what devdocs/dev/normalise-dont-special-case.md
+  means by grepping for the sibling before closing the ticket. Measured on the
+  pre-fix binary: `while (0) { NEVER(); }` in C and this in Pascal both produced
+  a binary that would not start. }
+function w1(x: Integer): Integer;
+begin
+  w1 := x + 1;
+  while False do w1 := w1 + NEVER_while;
+end;
+
+{ NEGATIVE CONTROL for the OTHER direction of over-eagerness, and the only row
+  here that an over-eager fold breaks rather than a missing one. A dead arm may
+  DECLARE A GOTO TARGET: unreachable by fall-through is not unreachable, and
+  dropping the arm deletes a live label. Answers 1 only if the else arm was
+  lowered and the goto reached it. }
+function g1: Integer;
+label Lrevive;
+var hops: Integer;
+begin
+  hops := 0;
+  if True then hops := hops + 0
+  else
+  begin
+Lrevive:
+    hops := hops + 1;
+  end;
+  if hops = 0 then goto Lrevive;
+  g1 := hops;
+end;
+
 begin
   WriteLn(f1(41), ' ', f2(41), ' ', f3(41));
   WriteLn(r1(4), ' ', r1(5), ' ', r2(4), ' ', r2(5));
+  WriteLn(w1(41), ' ', g1);
 end.

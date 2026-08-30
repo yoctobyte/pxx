@@ -13966,12 +13966,16 @@ end;
   general const-fold / identity pass is still unshipped and still wants its own
   measurement — this time on C and Nil-Python input, not on the self-compile. }
 
-procedure IROptWarnMissedFoldFire(const what: AnsiString);
+procedure IROptWarnMissedFoldFire(const what: AnsiString; var latch: Boolean);
 { Shared one-shot emit for the missed-optimization tripwire. `what` names the
-  opportunity + which pass to revive. -Werror promotes to a hard error. }
+  opportunity + which pass to revive. -Werror promotes to a hard error.
+
+  The latch is a PARAMETER because there is ONE PER DETECTOR. It used to be a
+  single global, and the noisy detector reached it first: see the comment on
+  WarnedMissedFoldBranch in defs.inc. }
 begin
   Inc(WarnCount);
-  WarnedMissedFold := True;
+  latch := True;
   if WarnAsError then
   begin
     writeln('pascal26: error: ', what, ' reached codegen — revive the matching IR ',
@@ -13984,30 +13988,44 @@ end;
 
 procedure IROptWarnMissedFold;
 { Tripwire (runs LAST, after every other pass, so it also sees IR the passes
-  themselves produced). Three optimizations were measured 0-fire and NOT shipped
-  because PXX's frontends already eliminate them upstream — IR const-fold +
-  algebraic identities (no foldable IR_BINOP reaches the IR), and if-false /
-  if-true DCE (Pascal AND C fold const `if` conditions at AST time, so no
-  IR_JUMP_IF_FALSE with a constant condition reaches the IR — measured on both
-  frontends). If a future pass starts PRODUCING any of them, warn ONCE per
-  compile so the matching pass gets revived instead of silently leaving cycles
-  on the floor. Excludes const-const div/mod (`k div 0` legitimately survives to
+  themselves produced). Three optimizations were measured 0-fire in 2026-07 and
+  NOT shipped; two of those measurements have since been overtaken and the note
+  is kept because WHICH ONE moved is the useful part.
+
+  - IR const-fold + algebraic identities: the 0-fire reading does NOT hold. A
+    foldable const-const IR_BINOP reaches the IR on nearly every -O2 compile
+    (inline produces them — IROptimize's own note below says so), and the C
+    frontend folds nothing at all: `4 == 4`, `2 + 2` and `sizeof(unsigned) == 4`
+    all arrive as const-const BINOPs (frankC, 2026-08-30). The pass is still not
+    shipped; it is a value question now, not an opportunity question.
+  - if-false / if-true DCE: it was never true that a const condition could not
+    reach the IR — one that does produced a binary that would not START, because
+    the dead arm's call became a real external reference. That is the bug this
+    detector existed to catch and could not, and IROptConstBranch above now folds
+    them, so the detector is 0-fire BY CONSTRUCTION rather than by the frontends.
+    Verified it can still fire: with IROptConstBranch commented out, `if True`
+    trips it. bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
+
+  If a future pass starts PRODUCING any of them, warn ONCE per compile — per
+  DETECTOR, see the latch note — so the matching pass gets revived instead of
+  silently leaving cycles on the floor. Excludes const-const div/mod (`k div 0` legitimately survives to
   raise runtime error 200). Strength reduction (x*2^k -> shl) is separately
   deferred: also 0-fire (array access uses IR_INDEX, not an IR_BINOP multiply)
   AND width-unsafe on the current shl path (its <8-byte cdqe fixup corrupts
   offsets that overflow 32 bits). }
 var i, op: Integer; bothConst, ident: Boolean;
 begin
-  if WarnedMissedFold then Exit;
+  if WarnedMissedFold and WarnedMissedFoldBranch then Exit;
   for i := 0 to IRCount - 1 do
   begin
-    { const-condition branch -> would-be if-false / if-true DCE }
-    if (IRKind[i] = IR_JUMP_IF_FALSE) and (IRKind[IRB[i]] = IR_CONST_INT) then
-    begin
-      IROptWarnMissedFoldFire('a constant-condition IR_JUMP_IF_FALSE (if-false/if-true DCE)');
-      Exit;
-    end;
-    if IRKind[i] = IR_BINOP then
+    { const-condition branch -> would-be if-false / if-true DCE. Its OWN latch:
+      it must not be silenced by the noisy BINOP detector below. }
+    if (not WarnedMissedFoldBranch) and
+       (IRKind[i] = IR_JUMP_IF_FALSE) and (IRB[i] >= 0) and
+       (IRKind[IRB[i]] = IR_CONST_INT) then
+      IROptWarnMissedFoldFire('a constant-condition IR_JUMP_IF_FALSE (if-false/if-true DCE)',
+                              WarnedMissedFoldBranch);
+    if (IRKind[i] = IR_BINOP) and (not WarnedMissedFold) then
     begin
       op := IRC[i];
       bothConst := (IRKind[IRA[i]] = IR_CONST_INT) and (IRKind[IRB[i]] = IR_CONST_INT) and
@@ -14028,10 +14046,8 @@ begin
       else if op = Ord(tkDiv) then
         ident := (IRKind[IRB[i]] = IR_CONST_INT) and (IRIVal[IRB[i]] = 1);
       if bothConst or ident then
-      begin
-        IROptWarnMissedFoldFire('a foldable IR_BINOP (const-const or identity operand; const-fold/identities)');
-        Exit;
-      end;
+        IROptWarnMissedFoldFire('a foldable IR_BINOP (const-const or identity operand; const-fold/identities)',
+                                WarnedMissedFold);
     end;
   end;
 end;

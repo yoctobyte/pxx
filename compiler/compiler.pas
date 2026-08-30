@@ -839,6 +839,7 @@ begin
   OptLevelExplicit := False;
   RcSuppressAssign := False;
   WarnedMissedFold := False;
+  WarnedMissedFoldBranch := False;
   WarnMissedFold := False;
   DumpCpp := False;
   FrameIntrinsicUsed := False;
