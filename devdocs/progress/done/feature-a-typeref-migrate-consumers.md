@@ -599,4 +599,4 @@ exact leak CLAUDE.md's compat table warns about; whoever next edits
 readers in front of them and no more.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6a35007de.
