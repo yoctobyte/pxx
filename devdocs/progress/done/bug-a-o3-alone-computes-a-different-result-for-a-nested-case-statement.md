@@ -147,4 +147,4 @@ rebuilt individually. All three still printed 222. **The shape that matches is
 not the shape that fires**, and one build each is what settled it.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 10c869750.

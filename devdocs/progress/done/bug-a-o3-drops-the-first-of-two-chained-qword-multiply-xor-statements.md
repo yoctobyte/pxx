@@ -186,4 +186,4 @@ The pass stays on `-O3`. Promotion to `-O2` is a separate decision and wants
 the full gate plus a measured win, not a fixed bug.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 10c869750.
