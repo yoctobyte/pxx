@@ -334,6 +334,18 @@ var
                        then zero it so an expected halt(100) exits 0. }
   ExitCode: Longint;
 
+  { Set by pylib's INITIALIZATION section, so it is live for the whole run of
+    any NilPy program. Do not go back to installing it from a constructor: it
+    used to be set only by pylib/pyeval's CONTAINER constructors (pylist_new,
+    pydict_new, pybound_new, bytes, the iterators), and the name is what hid
+    that — "object finalize" reads as covering every object, while the
+    installation covered lists, dicts, bytes and iterators. A program that
+    built user-class instances and never a container therefore ran with this
+    nil, and PXXObjRelease freed each instance BLOCK at rc=0 without releasing
+    one managed field: 410 MB over 200k constructions, flat at 980 kB the
+    moment an unrelated `dummy = [1]` was added. The per-constructor installs
+    are kept as a belt on any profile whose unit initialization does not run.
+    feature-nilpy-object-reclamation }
   PXXObjFinalizeHook: TPXXObjFinalize;
 function PXXObjAlloc(size: NativeInt): Pointer;
 function PXXObjAllocRaw(size: NativeInt): Pointer;
