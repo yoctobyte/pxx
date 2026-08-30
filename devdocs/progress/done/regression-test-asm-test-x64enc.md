@@ -44,3 +44,6 @@ pascal26:193: error: undefined variable (EmitSyscall)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-30 — auto-closed by the seven watcher: `test-asm#src:test/test_x64enc.pas` passes at 08cbfa20a11d (tier native); it was red at 31198d3674df. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
