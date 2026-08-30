@@ -171,6 +171,50 @@ end;
   template we know? Returns the offset of the closing `>`, or -1. A binder
   (`X = specialize ...`, a nested type declaration) is ParseSpecialization's
   own business and is skipped. }
+function SelfSpecGroupEnd(ts, i, count: Integer): Integer;
+{ `i` indexes an occurrence of the template's OWN name inside its own body. If
+  what follows is `<` naming this template's own type parameters, in order,
+  closed by `>`, return the index of that `>`; otherwise -1.
+
+  `TOuter<T>` written inside `TOuter<T>`'s body means THIS specialization, whose
+  name is `specName` — so once the name has been rewritten to `TOuter$LongInt`
+  the argument list is not merely redundant, it is wrong: it survives into the
+  output and its `T` is then substituted by the ordinary parameter pass, giving
+  `TOuter$LongInt<LongInt>`, which is not a type. NestedSpecGroup would have
+  collapsed the whole group, but it requires the literal `specialize` keyword
+  and mode-delphi code does not write one, so in mode delphi nothing consumed
+  the group and both rewrites ran. bug-p-a-nested-class-naming-its-enclosing-
+  template-is-substituted-twice — where the name says "nested class" and the
+  measurement says nesting is irrelevant: a plain self-referential field
+  (`FNext: TOuter<T>`, the linked-list idiom) fails identically.
+
+  Matching the parameter names IN ORDER is what keeps this from eating a
+  reference to a DIFFERENT specialization of the same template: `TOuter<Integer>`
+  inside `TOuter<T>`'s body is a nested specialization and must keep its group. }
+var j, k: Integer;
+begin
+  Result := -1;
+  if SpecSubCount <= 0 then Exit;
+  if TemplateTokens[ts + i + 1].Kind <> tkLt then Exit;
+  j := i + 2;
+  for k := 0 to SpecSubCount - 1 do
+  begin
+    if j >= count then Exit;
+    if TemplateTokens[ts + j].Kind <> tkIdent then Exit;
+    if not CaseEqual(GetTokenStrFromRaw(TemplateTokens[ts + j].SOffset,
+                                        TemplateTokens[ts + j].SLen),
+                     SpecSubNames[k]) then Exit;
+    Inc(j);
+    if k < SpecSubCount - 1 then
+    begin
+      if (j >= count) or (TemplateTokens[ts + j].Kind <> tkComma) then Exit;
+      Inc(j);
+    end;
+  end;
+  if (j >= count) or (TemplateTokens[ts + j].Kind <> tkGt) then Exit;
+  Result := j;
+end;
+
 function NestedSpecGroup(ts, i, count: Integer): Integer;
 var j, k, ti: Integer; nm: AnsiString; scanning: Boolean;
 begin
@@ -371,7 +415,7 @@ function SpecializeToBuffer(tokStart, count: Integer; const specName: AnsiString
 var
   i, j, k: Integer;
   subCount: Integer;
-  gEnd, hoistHit: Integer;
+  gEnd, hoistHit, gSelf: Integer;
   s, aliasNm: AnsiString;
 begin
   { PASS 1 — which type parameters does this template also declare as a name?
@@ -475,6 +519,12 @@ begin
           Inc(TokCharLen);
           Inc(j);
         end;
+        { ...and drop a `<T>` that merely re-spells this same specialization.
+          specName already carries the arguments, so leaving the group behind
+          emits `TOuter$LongInt<LongInt>`. The loop tail's Inc(i) lands just
+          past the `>`. }
+        gSelf := SelfSpecGroupEnd(tokStart, i, count);
+        if gSelf >= 0 then i := gSelf;
       end
       else if not SpecSubNamePosition(tokStart, i, count) then
         for k := 0 to SpecSubCount - 1 do
