@@ -252,4 +252,4 @@ follow-up; it is not worth 72 cross-lane edits today, and this ticket's own hist
 the population before pricing that work.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit e3cb3b955.
