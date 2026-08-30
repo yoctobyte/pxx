@@ -11130,7 +11130,7 @@
    "status": "fail"
   },
   {
-   "bad": "108ac182bed6cd40244fd24108d6664d6cf1b2f0",
+   "bad": "2f81d8008a9b6b7e0fb9fdb87d31a8d6f743f10e",
    "bad_untestable": true,
    "first_seen": false,
    "good": "c951ec710b33da734e7141394258135689c3e5fa",
@@ -11142,8 +11142,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "2f81d8008a9b6b7e0fb9fdb87d31a8d6f743f10e",
-    "06b9617d91752039046e3c6d9375311896653b57"
+    "2f81d8008a9b6b7e0fb9fdb87d31a8d6f743f10e"
    ],
    "src": "test/test_asm_emit_rv32.pas tools/expect_same.sh",
    "status": "fail"
