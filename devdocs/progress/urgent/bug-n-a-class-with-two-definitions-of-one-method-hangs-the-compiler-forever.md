@@ -157,11 +157,20 @@ not mine to make** — this pass narrows it and hands off. frankA confirmed
 
 ### Reproduced on the CURRENT pin, which is not the one it was filed against
 
-Filed against `53800fbeb0b66e11`; reproduced against **v393
-`1d69760deabe2865`** (v394 was blessed and withdrawn in between). Both spellings
-hang: compiling the module **directly**, and compiling a file that imports it.
-So the import is not an ingredient — the module alone is enough, which makes the
-repro one file shorter than the ticket's.
+**Correction, added with the stack-frame pass below.** The sentence here first
+read *"filed against `53800fbeb0b66e11`; reproduced against v393
+`1d69760deabe2865`"*, and the contrast it drew was **wrong**. `$(PXX_STABLE)` is
+`stable_linux_amd64/default/pinned`, which is `53800fbeb0b66e11` — **the same
+binary the ticket was filed against**. I had read `1d69760` off `stable_latest`
+during an earlier task and carried it forward; the pin then moved again (VERSION
+394, `history.log` 2026-08-30T04:12:12Z) while I was elsewhere. Two different
+files, one of them not the one the gate uses, and a moving target between the
+reading and the citing. **Reproduced against `53800fbeb0b66e11`, confirmed by
+`sha256sum` of `pinned` itself at the moment of the run.**
+
+Both spellings hang: compiling the module **directly**, and compiling a file that
+imports it. So the import is not an ingredient — the module alone is enough,
+which makes the repro one file shorter than the ticket's.
 
 ### The freeze point, located exactly
 
@@ -266,3 +275,110 @@ frame in one go.
 
 **Left in `urgent/`, not claimed for the fix.** The diagnosis is banked; the
 fix needs a lane that owns compiler files.
+
+---
+
+## The frame — `FindSym`, and that settles the lane: **Track A, `symtab.inc`**
+
+2026-08-30, frankD. Measurement only; still no compiler file edited.
+
+### How the frame was obtained, since the first two attempts failed
+
+`ptrace_scope=1` blocks *attaching*, but gdb **launching** the compiler is
+allowed, and this loop arrives in under 10 s. The batch-mode dance works if the
+`SIGINT` goes to **gdb**, not to the inferior — sending it to the inferior (my
+first two attempts) kills the process and leaves an empty log; sending it to gdb
+interrupts the inferior and lets the remaining `-ex` commands run.
+
+The pinned binary is stripped, so a raw `rip` is not an answer. **The map was
+regenerated from source rather than guessed**, and then a trap was avoided:
+`pinned compiler/compiler.pas` at today's HEAD produces a binary that is **not**
+byte-identical to `pinned` (HEAD has moved past v394's source commit
+`43c8e341`), so its `.map` does **not** apply to `pinned` and citing it would
+have named the wrong function. Instead the **self-built binary was used as the
+subject**: it reproduces the hang, and its map is from the same build, so binary
+and symbols share one provenance.
+
+One harness trap on the way, worth recording because the status code lied in the
+convincing direction: the self-built compiler first exited **rc=1** on the repro,
+which reads as *"HEAD is fixed"*. It is not — it was
+`error: import: no unit named builtinheap`, a path failure that never reached the
+loop, because the compiler locates `builtin/` and `../../lib/rtl` relative to its
+own binary. Rebuilt the expected directory layout and it hangs (rc=124) like the
+pinned one. **A "does not hang" from a binary that never started compiling is the
+exact false negative this ticket is about**, and reading the output rather than
+the status is all that separated them.
+
+### Three samples, all in one place
+
+| sample | `rip` | symbol |
+| --- | --- | --- |
+| 1 | `0x499414` | **`FindSym` +1227** |
+| 2 | `0x498347` | `StrEqual` +4 |
+| 3 | `0x498381` | `StrEqual` +62 |
+
+`FindSym` calls `StrEqual` on every iteration of its chain walk, so all three are
+the same loop.
+
+### The loop, read
+
+`compiler/symtab.inc:3741`, `FindSym` — **two** unguarded walks, the exact-case
+pass and the case-insensitive fallback:
+
+```pascal
+  i := SymHashHead[SymNameFoldHash(lo)];
+  while i >= 0 do
+  begin
+    if StrEqual(Syms[i].Name, lo) and IsBlockVisible(...) ... then ... Exit;
+    i := SymHashPrev[i];          { no visited set, no bound }
+  end;
+```
+
+A cycle in `SymHashPrev` spins here forever, calling `StrEqual` each time,
+allocating nothing, and emitting nothing (the `writeln` is behind `DebugTrace`
+and only on the success path). **That is every measured property of this hang.**
+`FindSymInUnit` (`:3848`) has two more of the same walk, at `:3859` and `:3870`.
+
+### Root cause: a HYPOTHESIS, explicitly not a measurement
+
+I have measured *where* it spins. I have **not** measured that `SymHashPrev`
+holds a cycle, and the next person should not read the following as established.
+
+`SymHashInsert` (`:3704`) pushes newest-first. `SymRollbackTo` (`:3714`) pops with
+
+```pascal
+  for i := SymCount - 1 downto newCount do
+    SymHashHead[SymNameFoldHash(Syms[i].Name)] := SymHashPrev[i];
+```
+
+whose own comment states the assumption it relies on: *"the highest live idx is
+always its bucket's current head, so each pop is O(1)"* — **asserted, not
+checked**. The same comment already warns that a bare truncation *"would leave
+dead heads pointing at slots the next scope re-registers under different names"*,
+which is one step from a chain that points forward into a reused index.
+
+The three ingredients map onto that suspiciously well: two `__init__` definitions
+register the same parameter names **twice** into one bucket; `self.prefix =
+prefix` puts the attribute and the parameter on the **same folded name**; and the
+later scope's local `prefix` is a **third** registration in that same bucket,
+made after the earlier ones were rolled back and their indices freed. Breaking
+the name identity in either direction — which frankB measured as fixing it —
+splits the bucket.
+
+**Test it before believing it.** A probe dumping the bucket for `prefix` after
+each rollback settles it in one run, and that probe belongs to whoever owns the
+file.
+
+### Lane
+
+**`symtab.inc` is shared ground — Track A, and frankA holds it.** Not the NilPy
+frontend. Routing accordingly; frankD holds Track D and this was diagnosis only.
+
+**It is also the same defect family as
+[[bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard]] [A p45]**, filed
+earlier today from the same session. That ticket found four unguarded
+`UClsParent` walks and called them latent. With `FindSym`'s two and
+`FindSymInUnit`'s two, `symtab.inc` has **at least eight unguarded chain walks
+across two different chain structures**, and this one is **not** latent — it is
+the top of the board. The two should be read together, and the guard is probably
+one shared helper rather than eight copies.

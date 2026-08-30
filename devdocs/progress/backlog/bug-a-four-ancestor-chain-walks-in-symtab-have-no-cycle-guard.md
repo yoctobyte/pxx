@@ -6,7 +6,7 @@ status: backlog
 found: 2026-08-30
 found-by: frankD
 blocked-by: []
-summary: "FOUR functions in symtab.inc walk curr := UClsParent[curr] with no cycle guard -- FindUField:1225, FindUMeth:1275, IsSubclassOf:1308, FindUProp:1366. A parent cycle spins in any of them forever, silently, with flat RSS: no OOM, no crash, no output, no exit status. The 2026-08-15 fix for bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler put its guard on the DECLARATION path in pyparser.inc, closing one route to a cycle and leaving every walk that a second route would hang in. Latent -- no current repro reaches it."
+summary: "EIGHT unguarded chain walks in symtab.inc across TWO chain structures -- and one is live, not latent: FindSym is where the urgent two-definitions hang spins. Four walk curr := UClsParent[curr] with no cycle guard -- FindUField:1225, FindUMeth:1275, IsSubclassOf:1308, FindUProp:1366. A parent cycle spins in any of them forever, silently, with flat RSS: no OOM, no crash, no output, no exit status. The 2026-08-15 fix for bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler put its guard on the DECLARATION path in pyparser.inc, closing one route to a cycle and leaving every walk that a second route would hang in. Latent -- no current repro reaches it."
 ---
 
 # Four ancestor-chain walks in `symtab.inc` have no cycle guard
@@ -99,3 +99,54 @@ already.
 ## Gate
 `make compiler/pascal26` (which *is* the byte-identical self-host fixedpoint) plus
 a repro that builds a cycle deliberately. Track T sweeps the matrix.
+
+---
+
+## Update 2026-08-30 — one of these is not latent, and there are more of them
+
+**`FindSym` is where `bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever`
+[N, urgent] actually spins** — three gdb `rip` samples, resolved through a map
+built from the same source as the sampled binary: `FindSym +1227`, `StrEqual +4`,
+`StrEqual +62`. Full method in that ticket.
+
+So this ticket's premise needs amending on both counts.
+
+**It is eight walks, not four, across two different chain structures:**
+
+| chain | function | line |
+| --- | --- | --- |
+| `UClsParent` (ancestors) | `FindUField` | 1225 |
+| | `FindUMeth` | 1275 |
+| | `IsSubclassOf` | 1308 |
+| | `FindUProp` | 1366 |
+| `SymHashPrev` (symbol hash) | `FindSym` (exact-case pass) | 3764 |
+| | `FindSym` (case-insensitive fallback) | 3781 |
+| | `FindSymInUnit` | 3859 |
+| | `FindSymInUnit` | 3870 |
+
+Every one is `while i >= 0 do ... i := <chain>[i]` with no visited set and no
+bound. **Two independent chain structures with the same missing guard is not a
+coincidence about either chain** — it is the file's convention, and a ninth walk
+will be written the same way unless the guard lives somewhere a new walk has to
+pass through.
+
+**It is not latent.** This ticket was filed at p45 with the honest note that *"no
+current repro reaches it"*. **A repro does** — it is the top item on the board.
+The `UClsParent` half may still be latent; the `SymHashPrev` half is being hit
+right now.
+
+**Prio left at 45 deliberately**, and this is a routing statement rather than a
+severity one: the urgent ticket is the one that should be worked, and it will
+land the guard where it is needed. This ticket's remaining value is the *other
+seven* walks — the ones that will not be fixed by whatever closes the hang. Raise
+it only if the hang gets fixed narrowly.
+
+**Which strengthens the fix shape already argued above.** One
+`ChainStepChecked`-style helper (or a validation of each chain when it is built)
+beats eight copies of a guard, because eight copies is eight places the ninth
+walk will not be added. The hang's own ticket carries the suspected cause —
+`SymRollbackTo`'s *"the highest live idx is always its bucket's current head"*,
+asserted in a comment and never checked — and that is a **producer** fix. This
+ticket is the **consumer** half, and the argument above stands: a guard on the
+producer protects the cases you thought of; a guard on the consumer protects the
+ones you did not. **Both, not either.**
