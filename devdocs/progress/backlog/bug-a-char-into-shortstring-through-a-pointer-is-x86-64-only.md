@@ -100,3 +100,28 @@ a thing that now works" is exactly the ticket nobody picks up, and the dodge
 then becomes permanent by default.
 
 Until then, every OTHER `--shorts` cross bug is hidden behind this one.
+
+### What the dodged slice already covered, so the cost is bounded
+
+Run at `5944ee686`, binary `1ff8acbe123b`, `--wide --shorts 0 --cross`:
+
+> **294 programs, 0 divergences**, across 8 oracles — fpc-O0, fpc-O2, pxx-O0,
+> pxx-O2, pxx-O3, pxx-i386, pxx-aarch64, pxx-arm32.
+
+Two things that says, and one it does not.
+
+It **bounds what the dodge costs**: with `--shorts` off, every other widened
+rung — records, arrays, enums, exceptions, var/const/out params, classes,
+hierarchies, properties, class methods, destructors — agrees across all three
+cross targets and both FPC levels. So this dodge is not sitting on top of a pile
+of other cross bugs; it is hiding the `--shorts` rung specifically.
+
+It also says the **cross dimension is not trivially productive** at this grammar
+once the one blocking refusal is dodged. That is a real fact about where the
+next fuzzing effort should go — widening the grammar, or adding an oracle
+dimension that is not behavioural at all
+([[feature-t-a-second-oracle-dimension-section-alignment]]) — rather than
+running more seeds of the same shape.
+
+It does **not** show there are no cross bugs in those rungs. 294 seeds is 294
+seeds; a clean run is evidence about the rate, not proof of absence.
