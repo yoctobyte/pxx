@@ -10710,3 +10710,71 @@ failing for whatever is next, which is indistinguishable from success at the lev
 change". The repair was to force *every* backward call down the long path and re-run the whole
 differential — a population the ticket never mentioned. **Ask what the repro set proves when the
 fix works, not when it fails.**
+
+---
+
+## 214 — A HAND-BUILT MINIMAL CASE IS BUILT OUT OF THE HYPOTHESIS
+
+*(frankB, 2026-08-30, retracting its own three-factor decomposition of the minidom hang after
+reducing the real file instead.)*
+
+frankB had reported the hang required a 2-arg and a 5-arg constructor call, sliced locals, and the
+result returned. The nine-line repro contains **no slicing, no construction and no return at
+all**. Three factors, every one an artefact of the file.
+
+> *"Had I hand-reduced along my own diagnosis I would have preserved slicing and construction and
+> never converged, because I would have been protecting the factors that were not the bug."*
+
+That is a mechanism, not a moral. **Every line in a hand-built minimal case is there because you
+believed it mattered** — so the reduction is drawn from the hypothesis and cannot reach any factor
+the hypothesis omitted. It converges on a confirmation of itself, or it fails to converge, and
+**both outcomes read as progress**. Reducing the real file has no such floor: the delta-debugger
+has no theory to protect.
+
+### 214a — the reducer's degenerate output is the signal, not the noise
+
+452 → 23 lines over 442 probes, and the output was **degenerate**: every method collapsed into one
+class, `createElementNS` left with a one-line body. That looks like a tool overshooting into
+garbage. It is the opposite —
+
+> **the collapse is what put two definitions of one method into one class**, which is the bug, and
+> which no hand reduction preserving the factor table would ever have produced.
+
+**A reducer's degenerate output is precisely where it stopped protecting your assumptions.** The
+instinct to discard a result that "doesn't look like real code" throws away the only part of the
+search that left the hypothesis behind.
+
+Ten hypotheses died to controls on the way, including both of frankB's own. What survived is a
+three-way identity: two definitions of one method, a body assigning a parameter to a **same-named
+attribute**, and any later scope holding a local of that name. `self.zzz = prefix` with a local
+`zzz` compiles; so does the same with a local `prefix`. **Breaking the parameter-and-attribute
+identity in either direction stops it** — which is what makes the reading (a name-resolution loop
+consulting both the parameter scope and the attribute set, with two definitions supplying two
+answers) fit every row rather than merely most.
+
+### 214b — why the wrong decomposition was believable: it was internally consistent
+
+The layer bisect pointed at `Document.createElementNS`, and the factor table built around that
+point agreed with itself completely. This is 184's shape and it is the reason the report was sent
+with confidence. **An instrument agreeing with itself is not evidence about the world.** A factor
+table assembled around a wrong locus will be perfectly consistent, because consistency is a
+property of the table.
+
+### 214c — validate the hang DURING the reduction, not at the end
+
+Under load ~11.6, "slow" and "stuck" are the same observation, and a 442-probe reduction is a long
+time to be wrong about which. frankB ran **60-second checkpoints every twelfth accepted drop**;
+two fired, both confirmed a true hang. Plus the standing evidence — sampled on the compiler's own
+PID, STAT R, 100% CPU, **RSS flat at 67796 KB across 15s**, allocating nothing, so it can never
+OOM and never self-terminate; 120s against a ~4s baseline is a 30× margin.
+
+The point is the placement. A reduction that validates only at the end can have been chasing a
+timeout for four hundred probes; one that validates *during* cannot go more than twelve steps
+wrong. **A checkpoint at the end tests the answer; a checkpoint inside tests the search.**
+
+### 214d — and it was not reshaped to build
+
+Renaming the one local would have landed minidom the same day and buried a compiler hang.
+Platonic-code rule, executed including the part most sessions skip: the parked implementation was
+proven **inert** rather than assumed inert — compiled the weakref test with the `.parked` file
+present, 11 checks OK, confirming the glob and the import-time read both ignore it.
