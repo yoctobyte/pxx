@@ -1047,3 +1047,59 @@ disambiguating them is exactly the spend Track F's charter exists to prevent
 an ordinary bug by the "rank the mechanism, never the datatype" rule — but this
 axis cannot tell the two apart without per-finding adjudication, so it is a poor
 buy at this prio. Recorded so the next person does not re-derive the decision.
+
+## The `--builtins` axis generates UB, and that changes what a divergence means (2026-08-30)
+
+Found by frankA while diagnosing
+[[bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc]],
+which the axis produced.
+
+**`__builtin_clz(0)` is undefined in C**, and gcc's own answers prove it rather
+than merely permitting it: one expression yielded **64 folded, 36, and 63**,
+varying only with *how the argument arrives*. So on a program that calls it at
+zero, gcc is not an oracle — it is a second implementation exercising its own
+freedom.
+
+**Consequence for this campaign, and it is a scoping rule rather than a caveat:**
+
+> A pxx-vs-gcc **checksum** divergence on a UB program is not by itself evidence
+> of a defect.
+
+The hang that came out of this run **is** a real defect — an unterminating loop in
+our own `lib/crtl` on a plausible input is a bug whatever the standard permits —
+but it was identified by its *shape* (a hang, diagnosed to one line), not by the
+checksum comparison. Had it merely printed a different number, filing it would
+have been wrong.
+
+**So before this axis is trusted at scale its predicate needs to reject UB
+candidates**, or every `--builtins` divergence needs manual UB triage before it
+becomes a ticket. Untriaged, the axis manufactures tickets at whatever rate csmith
+emits undefined constructs — and each one costs a real investigation to dismiss.
+
+The harness (`tools/csmith_fuzz.py` and any Csmith runs) is **Track T's** by
+CLAUDE.md; this ticket keeps its C letter because the findings land in the C
+frontend and `lib/crtl`. Whoever changes the predicate should be T.
+
+**Unrelated and still true:** the 64% skip rate is the harness being honest —
+csmith emits x86 `ia32` intrinsics gcc itself refuses without `-msse4.2`, and the
+harness declines to score a comparison it could not make. **Feeding gcc
+`-march=native` would "fix" the rate and make every result meaningless.** A metric
+that improves when you weaken the oracle is not a metric.
+
+## And a verification caveat that outlives this ticket
+
+frankA, guarding the four routines and getting the full program to print the
+oracle's checksum **exactly**:
+
+> Re-running with the guard returning **0, 7 and 63** gives the **identical
+> checksum every time**: the program cannot see the value.
+
+**"Checksum matches gcc, done" would be citing a constant.** The natural close for
+any csmith finding is exactly that sentence, and on a program whose observable
+does not depend on the value you changed, it is worth nothing. **Vary the fix's
+return value and confirm the checksum moves before you accept a checksum match as
+evidence.** If it does not move, the program is not the test — write one that is.
+
+Same family as the campaign's other blind instruments: pxx↔pxx agreement, the
+nine-word probe where two formulas coincide, and byte-identity over a corpus that
+never reaches the case.
