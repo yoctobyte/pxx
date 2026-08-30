@@ -8366,3 +8366,76 @@ divergent fixedpoints and a stale checkout are indistinguishable at the point of
 and the gate distinguishes them only because someone thought to compare the binary's
 mtime against the last `compiler/` commit. A guard that explains which of two very
 different causes it hit is rarer than one that fires.
+
+### 184 — A WRONG COMMAND READS AS VERIFICATION
+
+frankD, 2026-08-30, third pass over `docs-devnotes-ai-assisted-build`. The draft's whole
+advice is *quote the invocation, not the table* — so it printed a re-measure command
+beside each of ten figures. Cross-checking those commands against `tools/factsheet.sh`,
+**two of the ten were wrong, both undercounting**: `ls devdocs/progress/backlog/*.md`
+misses `backlog_new/` (338 against 351), and `ls devdocs/progress/decided/*.md` misses
+the one resolved decision sitting in `done/` (116 against 117).
+
+> **A stale number is wrong once and looks it. A wrong command is wrong on every run,
+> agrees with itself every time, and therefore reads as verification** — the reader does
+> the responsible thing and is reproducibly misled.
+
+That is the worst place in the document for the defect to sit, and the section's own
+virtue is what makes it durable: it invites re-running, and re-running confirms it.
+
+**Neither method is the oracle — the disagreement is.** An earlier log entry on the same
+draft recorded the *reverse* result, the script losing to a hand count on three numbers.
+So "the script won twice" is not a ruling for the script; the finding is that two
+independent instruments disagreeing is the only thing that located either error. Same
+shape as 179a from the other side: the value is in the second, unchosen instrument, not
+in which one wins.
+
+Both replacements were **run before being written down**.
+
+### 184a — THE SECTION STATING THE RULE IS THE SECTION BREAKING IT
+
+Two smaller ones from the same pass, and the pattern is becoming that draft's signature.
+Its header stamped a **date** while a bullet two paragraphs below says stamp a **sha** —
+and the cost landed immediately: how far apart the two measurements were is now
+unrecoverable. And its qualifier section, which correctly identifies that raw counts rot
+and promotes the agent-trailer ratio as the durable figure, **then quoted that ratio to a
+precision that rots too** — "held at 46%", measured today at 45%. It states a band now.
+
+The recursion is not a coincidence. **A section about a hazard is written by someone
+thinking about the hazard in the abstract**, which is a different cognitive act from
+applying it to the sentence being typed. Cf. rule 5 in the coordinator's own operating
+notes — *the rule you are enforcing is the one you will not apply to yourself* — and
+tonight's third instance of it on the coordinator's side.
+
+### 184b — A DELTA MEASURED ACROSS A CHANGED METHOD IS NOT A DELTA
+
+Same pass, and it is the refusal that is worth banking. The backlog had grown +35 since
+the morning, the most quotable number available and directly in service of the draft's
+thesis about drift. frankD **declined to quote it**: 13 of the 35 are the undercount
+being fixed in the same commit, not tickets anyone filed.
+
+> A before-and-after across a **method change** measures the method, not the subject.
+
+Note it declined the number that supported its own argument, which is the direction
+almost nothing gets declined in.
+
+### 185 — KILLING A RUN IS CHEAPER THAN A RESULT WITH MIXED PROVENANCE
+
+frankB, 2026-08-30, mid-`lib-test` when the pin moved v393 → v394. Pulling would have
+swapped `stable_pinned` underneath a running suite and produced **a mixed-pin result that
+looked like a clean green**. It killed the run and restarted against v394 — and noted
+that a v393 result had no value anyway, because nothing ships against it again.
+
+The pair with 183 is the point, and it is frankB's framing: 183 is the provenance rule
+biting in the **alarming** direction (a stale binary makes the gate scream), this is the
+same rule biting in the **ordinary** one, where nothing announces itself and the only
+tell is knowing what you swapped. **A green whose inputs changed halfway is
+indistinguishable from a green.**
+
+Recorded with it, because self-reporting is the rare half: frankB flagged that face 181
+lands on its own current work — it has been citing a header in `lib/rtl/mimic_xml_dom.py`
+all evening as settled reasoning for its `weakref` refusals, rather than re-reading
+whether the header's stated reason applies to its case. It does. But it got there **by
+argument**, and 181's whole claim is that the argument is what stops being re-run once a
+header looks authoritative. **Flagged as a thing done, not a thing avoided**, which is
+what makes it usable.
