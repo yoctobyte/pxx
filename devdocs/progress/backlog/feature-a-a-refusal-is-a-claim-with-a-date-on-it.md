@@ -9326,3 +9326,69 @@ the *distance between two other things*, and it changes when you are not looking
 Checklist item for any emitter growth, now stated once so it is not re-derived: **when an
 emitter grows, ask what rel8 patches span it** — and the tell if it has already fired is `rip`
 (or `pc`) at a **mid-instruction address**, which cannot arise from linear execution.
+
+---
+
+## 197 — THE INSTRUMENT PRINTS ITS OWN SCOPE ONLY WHEN IT HAS NOTHING TO REPORT
+
+*(pxx-a5, 2026-08-30, running 190b's sweep — and the first thing it found was its own file.)*
+
+Method, and it is the reusable part: **run every devtest that touches a Makefile against a
+scratch tree with an empty `Makefile` and an empty `test/`.** A guard that passes over nothing
+is a guard that was never measuring anything. 19 candidates, 12 passed the empty tree, 10 of
+those correct by construction (they name the Makefile only in prose, or build their own
+`mkdtemp` fixture). **Two were real.**
+
+### The one that matters
+
+`tools/test_wiring_gate_devtest.py` — **pxx-a5's own file, written earlier the same session** —
+**passed GREEN against a tree containing zero test files.** Its whole assertion is a negative,
+and *a negative over an empty population is worth nothing* (187, arriving from the emptiness
+side rather than the interning side).
+
+**But the root cause was one level up, and it is the face.** `check_test_wiring.py` printed
+its population count **only inside the all-clear branch**. So:
+
+| state | what it printed |
+|---|---|
+| nothing wrong | `scanned N test subjects` — the count, i.e. the proof it looked |
+| **one advisory live** | the advisory, and **no count at all** |
+
+**The instrument disclosed its own scope exactly when its scope was not in question, and went
+silent about it the moment there was a finding to weigh.** That is backwards in the precise way
+that is hardest to notice: nobody audits the output of a clean run, and the run you *do* read
+is the one that has quietly stopped telling you how much it looked at. A finding without a
+denominator is unreadable, and this arranged for the denominator to be absent exactly when a
+finding existed.
+
+Sibling of 190a (an instrument that could not have failed) and of the standing rule that
+**a survey will not name its own scope** — but sharper, because here the scope reporting was
+*present and correct* and merely attached to the wrong branch. No line was wrong. The `if` was.
+
+### 197a — a collapse detector is not a ratchet, and the difference is what makes it survive
+
+The repair: move the count out of the branch; the devtest now parses `scanned N test subject`
+and **fails below a floor of 250, against a live value of 2830.**
+
+That gap is deliberate and pxx-a5 was explicit about why: **a tight bound there would fire on
+every ordinary week of test-writing.** A guard that cries wolf earns the habit of being
+scrolled past — and a scrolled-past guard is worse than an absent one, because its name still
+claims the coverage. So the floor is set to catch **collapse**, not drift: it answers *"did the
+scanner stop seeing the corpus?"*, which is the failure this bug actually was, and declines to
+answer *"is the corpus the size I expect?"*, which nothing can answer without a maintainer.
+
+**Name the question a bound is for.** A number chosen for feeling safe is the one that gets
+disabled six weeks later.
+
+### 197b — a label can describe a measurement the check is not making
+
+Second real finding: `exit_observable_devtest.py`'s label read *"cross-target differential rows
+are still ~536"* while **measuring 561**, behind a floor of **500** that could never have
+noticed the drift. Three numbers, one check, no two of them agreeing — and every run green.
+
+This is 192 (a derived figure and its rows are two measurements) applied to **prose**: the
+label is a third measurement, asserted once at writing time and never re-derived, and it is the
+one everybody reads. The floor is what fires; the label is what a human believes. **When they
+disagree the label wins the argument and loses the truth.** Corrected the label; left the
+escalated 531 stdout-only ratchet alone, which is right — that one is a live ratchet doing its
+job and is not the same instrument.
