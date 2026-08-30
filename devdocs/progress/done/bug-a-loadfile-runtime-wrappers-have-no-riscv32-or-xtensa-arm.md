@@ -121,4 +121,4 @@ program and the self-host fixedpoint cannot see that.
 
 ## Log
 
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 638be4902.
