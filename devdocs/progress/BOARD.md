@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (333)
+## backlog (336)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -149,7 +149,7 @@ _none_
 | bug-nilpy-classmethod-constructors-on-builtin-types-are-absent | N | 25 | bug | `bytes.fromhex(\"6162\")` and `float.fromhex(\"0x1p3\")` are `undefined variable (bytes)` / `(float)` — the TYPE used as a namespace resolves only for the handful of names the stdlib table lists (int.from_bytes, dict.fromkeys, str.maketrans). | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 35 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-delattr-globals-and-locals-are-absent | N | 12 | bug | `delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug. | — |
-| bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
+| bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected | P | 50 | bug | `TD<T> = class abstract(TEnumBase<T>);` — a bodiless generic class with the `abstract` modifier and a generic parent — is rejected with `unexpected token in a unit interface section`. All three ingredients are required: dropping `abstract`, or making the parent non-generic, compiles. FPC compiles it. rtl-generics uses this exact shape. | — |
@@ -394,6 +394,9 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-core-test-generic-arg-is-enclosing-template-param-objfpc | P | 70 | regression | regression: test-core#src:test/test_generic_arg_is_enclosing_template_param_objfpc.pas red at 1d8b44e59042 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-max-min-iterables | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_max_min_iterables.npy red at 0200df7eabcd (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-min-max-key-in-a-variable | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy red at 0200df7eabcd (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
@@ -719,6 +722,9 @@ _none_
 - [p 70] [A+S] bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable
 - [p 70] [U] decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - [p 70] [P] regression-test-core-test-generic-arg-is-enclosing-template-param-objfpc [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-max-min-iterables [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-in-a-variable [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-none [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
@@ -778,7 +784,6 @@ _none_
 - [p 55] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
 - [p 55] [N] bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module
 - [p 55] [N] bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic
-- [p 55] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
@@ -931,7 +936,7 @@ _none_
 - [p 35] [A+S] bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does
 - [p 35] [T] chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness
 - [p 35] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
-- [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it
+- [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 35] [A+S] feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile
 - [p 35] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 35] [A] feature-c-package-namespace-decision
@@ -1023,6 +1028,7 @@ _none_
 - [p 20] [A] bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
+- [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
 - [p 20] [B] chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run
 - [p 20] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile

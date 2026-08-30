@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 20
 type: bug
 blocked-by: []
 summary: "`except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field."
@@ -68,7 +68,9 @@ row in the NilPy suite unchanged; the bridge tests
 (`test_nilpy_rtl_exception_surface`, `test_nilpy_pyexception_bare_vs_qualified`)
 green.
 
-## HOLD 2026-08-14 (user) — do not build the join fix yet
+## HOLD 2026-08-14 (user) — do not claim this ticket; do not build the join fix yet
+
+**NOT DISPATCHABLE.** (Marker added 2026-08-30 — see the repair note at the bottom.)
 
 The user is reconsidering the approach and will look at this later: *"maybe we
 do need another approach after all."* So the "bind at the JOIN of the arms"
@@ -80,3 +82,26 @@ live silent-wrong-value: reaching it needs a hand-written cross-hierarchy
 `except` tuple AND a layout change to sysutils' Exception.
 
 Raise the prio again when the direction is settled.
+
+
+## Repair 2026-08-30 — the hold had been silently erased, and by what
+
+The hold above priced this to **20** on 2026-08-14 to keep it out of `next`. On
+2026-08-25, `ab584382e` — *"apply the approved re-triage — prio now spans 3-88, not a
+25-45 blob"* — swept it back to **55**. It has ranked in `ready --track N` ever since, so
+the ranker has been offering an agent a ticket the user explicitly said not to start.
+
+**Nobody overrode the user.** A bulk re-price operates on frontmatter across hundreds of
+tickets and cannot read a paragraph. The failure is that **the hold's only enforcement was
+the number it set**, and a number is exactly what a re-triage rewrites. A hold that defends
+itself with a prio is a hold that any future prio pass will erase, silently, while looking
+like ordinary triage.
+
+Repaired both ways: prio restored to 20, **and** the hold now carries the `NOT
+DISPATCHABLE` / `do not claim` marker, which `tools/progress.py` reads
+(`_NODISPATCH_RE`) and which prints `[!! DO NOT CLAIM — the ticket says so; read it]` and
+drops the ticket from `ready`/`next` regardless of prio. **The marker survives re-pricing
+because it is not a price.** That mechanism already existed; the hold simply had not used
+it.
+
+Generalises: when the user says stop, record it with the marker, not with the number.

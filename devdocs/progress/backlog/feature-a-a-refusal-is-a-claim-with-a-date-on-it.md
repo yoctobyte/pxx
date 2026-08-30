@@ -7341,3 +7341,89 @@ bugs, because **the ranker reads frontmatter and a prose row has no owner.** Thr
 independent instances of prose-declared state going unread landed tonight alone. The table
 stays; the two wrong-value rows also got frontmatter. The third, which is a genuine gap
 rather than a defect, stays a row.
+
+### 165 — A HOLD ENFORCED BY A NUMBER IS ERASED BY THE NEXT BULK RE-PRICE
+
+*mine, 2026-08-30, chasing the fourth instance of prose-the-ranker-cannot-see.*
+
+On 2026-08-14 the user held `bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only`:
+*"maybe we do need another approach after all"* — do not build the join fix. The ticket
+recorded it in prose and enforced it by **pricing down to 20 to keep it out of `next`.**
+
+On 2026-08-25, a bulk re-triage — *"prio now spans 3-88, not a 25-45 blob"* — swept it to
+**55**. It has ranked in `ready --track N` ever since. An N agent asking the board what to
+do next would have been handed a ticket the user explicitly said not to start.
+
+**Nobody overrode anybody.** A bulk re-price operates on frontmatter across hundreds of
+tickets and cannot read a paragraph. The defect is that **the hold's only enforcement was
+the number it set**, and a number is precisely what a re-triage rewrites — so the hold was
+destroyed by an operation that had no way to know it existed, while looking like ordinary
+triage in the diff.
+
+**The mechanism that survives already existed and the hold had not used it.**
+`_NODISPATCH_RE` matches `NOT DISPATCHABLE` / `do not claim`, prints `[!! DO NOT CLAIM]`,
+and drops the ticket from `ready`/`next` **regardless of prio**. Grep for the incumbent
+before inventing enforcement: the durable marker was one line away, and the author reached
+for the number because the number is what `next` reads *today*.
+
+Rule: **when the user says stop, record it with the marker, not with the price.**
+
+### 165a — THE THING BEING SEARCHED FOR IS CONSUMED BEFORE IT CAN REACH THE THING BEING SEARCHED
+
+*pxx-a5, same night, on the measurement it had itself named as decisive.*
+
+Its own ticket said the one thing that would move the TESTTMP-collision prio off 50 was to
+grep tstate for `Text file busy` / `: not found` against the 15 frozen names. It ran it over
+1155 reports: 3, 0, and 1 — and none of them this race.
+
+Then it found why the negative was worthless. `tools/testmgr.py:352`:
+
+```
+RUN_RETRY_SIGNATURES = ("Text file busy", "ETXTBSY")
+```
+
+**The harness already retries exactly this event and scores the job GREEN with `flaky` set.**
+The signal is consumed upstream of the record being searched. And `twatch`, the publisher,
+**never read the field** — `grep -n flaky tools/twatch.py` returned nothing, and not one of
+1155 reports mentions a retry.
+
+> **A suppression with no counter makes its own population unmeasurable.** Any "has this
+> ever fired?" gets a confident NO from a record that could not have said otherwise.
+
+That is the strongest form of the false-negative: not a search that missed, a search that
+*could not have hit*. `flaky: N` now sits in the report **header** beside `skips:` — for the
+same reason those are there, that a field appearing only when it has something to say cannot
+report finding nothing.
+
+**Second blind-spot proxy from the same lane in one night** (the first: counting `.expected`
+siblings to find unwired tests, which could only see subjects that had one and would have
+answered "three" for any true number). Both found by running the real instrument instead of
+the stand-in.
+
+And the relationship it surfaced is worth watching for on its own: `done/bug-t-etxtbsy-race-
+reds-single-shot-selfhost-jobs` closed by **adding** that retry, leaving a source comment
+saying *"Root cause belongs in the recipe (write under a temp name and rename into place)."*
+**A closed ticket that names its own unfinished root cause in a code comment reads as done
+from the board, and the comment is the only place the remainder lives.**
+
+### 165b — AND THE CHECK I WAS BUILDING FOR 165 DID NOT EARN ITS PLACE
+
+Having found four instances of prose the ranker cannot see, I measured a scan for the
+general case: ranked tickets, no `blocked-by`, whose prose argues against being worked.
+**14 hits, roughly 5 genuine.**
+
+Two of the false positives are **mention-versus-use** — `bug-p-an-unknown-compiler-directive-
+is-silently-ignored` and `bug-p-fatal-directive-is-silently-ignored` both matched on the
+*quoted example string* `"this configuration is unsupported, do not build"`, which is the
+thing they are about. That is the **third** independent instance of mention-versus-use
+tonight, after frankD's `docsnip.py` expected-fail regex and frankC's census.
+
+Several more matched prose describing the *work's* method (*"each needs a decision, which is
+why this is not a scripted sweep"*) rather than a hold on the ticket. And `decide-` tickets
+are *supposed* to say "I recommend against this" — that is their job.
+
+So: **not built.** At ~35% precision it is below the bar NEAR-DUP was calibrated to, and a
+check that cries wolf earns the habit of being scrolled past. The genuine hits were few
+enough to fix by hand, which is 134a again — **the check you were about to build may be a
+fix.** One of the five was live and is now repaired; that was the whole yield, and it did
+not need an instrument.
