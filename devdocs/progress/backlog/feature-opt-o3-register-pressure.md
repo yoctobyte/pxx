@@ -3339,3 +3339,63 @@ spellings — see both corrections above; the 23 : 7 first published with this
 slice was itself one-per-row too high). This slice is one-armed — x86-64 only —
 so it widens the delta by one, as every one-armed slice does. That delta is now
 asserted by `tools/check_o3_backend_parity.py` rather than recounted by hand.
+
+### 2026-08-30 — END-TO-END PRICE OF THE LANDED CAMPAIGN: ~5-7%, by this ticket's own rule 2
+
+Every W slice so far was measured **individually**, at the point it landed. Nobody
+has measured what the campaign has delivered **collectively**, and that is a
+different number. Measured now, by frank-optimize, at HEAD `440c822e6a80`,
+compiling `compiler.pas`:
+
+**The instruction side — a mnemonic-frequency diff of two 1.95M-instruction
+builds, no timing, so this half has no variance:**
+
+| | `-O2` | `-O3` | delta |
+| --- | ---: | ---: | ---: |
+| `push` + `pop` | 215,525 (11.0%) | 161,595 (8.3%) | **-53,930** |
+| `mov` family | 898,158 (45.9%) | 937,991 (48.2%) | +39,833 |
+| total instructions | 1,956,618 | 1,945,077 | -11,541 (-0.6%) |
+
+**24.1% of the `-O2` push population is gone** — 26,965 matched `push`/`pop`
+pairs converted to register moves. The campaign's lever is real and it fired.
+
+**The time side — 9 paired interleaved runs, box load 6.3 → 11.1:** `-O3` is
+**~5-7% faster** (min-of-9 6.6%; **7 of 9 pairs favour `-O3`**). Reported as a
+sign test rather than a mean because at this effect size on a contended box a
+mean is substantially a measurement of the other agents.
+
+**And that ~5-7% is an UPPER bound on this campaign's share**, because it is the
+whole remaining `-O3`-vs-`-O2` gap and other passes are inside it.
+
+### What this means, stated plainly
+
+**This is rule 2 of this ticket, at campaign scale.** *"A population count is not
+a firing count… count the population to choose the target; count the firings to
+claim a result."* The population was 22.6% push/pop and the stated goal was
+"killing the 37%". The firings are real — a quarter of all pushes eliminated —
+and the delivered time is single digits.
+
+The gap is not a failure of the slices; each did what it said. It is that
+**eliminated stack traffic converts to time at a much worse rate than its
+instruction share suggests** — 53,930 fewer stack ops and 39,833 more register
+moves nets 0.6% fewer instructions, and a modern core was already hiding most of
+that push/pop behind store-forwarding.
+
+**Context that changes the campaign's priority, not its correctness:** `-O3` was
+28% faster than `-O2` this morning. `EmitStaticLitHandle` — one string-literal
+pass, nothing to do with register pressure — accounted for ~78-82% of that and
+has been promoted to `-O2` (`440c822e6a80`). What is left for *everything else
+in the tier, this campaign included*, is the 5-7% above.
+See [[decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it]].
+
+**Recommendation: do not start W2's linear-scan allocator on the current
+justification.** The "Why — the measured opportunity" section above prices the
+opportunity from an instruction census, and this measurement is the first time
+the campaign's *output* has been priced the same way it prices its input. A
+keystone-sized piece of work should be re-justified against delivered time
+first — ideally on a quiet box, since 5-7% is at the edge of what load 6-11
+resolves. The cheap slices already landed; what remains is the expensive one.
+
+**Not claiming this ticket** — this is a measurement filed into it, not a
+resumption of the campaign.
+
