@@ -78,3 +78,36 @@ ELEMENT kind. Asking what the base IS has to come first.
 `test/test_pointer_to_array_indexing.pas` carries a `array[1..4] of PChar` row
 for exactly this, beside the `array[0..3]` rows that cannot catch it.
 - 2026-08-30 — resolved, commit 47eaf847c.
+
+## 2026-08-30, frankA — the sha attribution, VERIFIED rather than reasoned
+
+`5d840acdd` is correct, and it is now checked against the thing it names rather
+than against the mechanism. Both of us had derived it from reading the diff; I
+then "corrected" it to `6f894db66` off an ancestry check I had run **backwards**
+(`is <tested sha> an ancestor of <my fix>` answers a different question from
+`is <my fix> an ancestor of <tested sha>`, and the first says nothing).
+
+The check that actually settles it does not involve ancestry at all — read the
+file out of the tested tree:
+
+```
+git show ff07990984a0:compiler/symtab.inc | awk '/^function IsNodeArray/,/^end;/'
+```
+
+It contains the `AN_DEREF` arm. So the tree Track T tested **did** carry
+`5d840acdd`, and the citation stands on evidence instead of on two people
+agreeing from the same diff.
+
+The `ff07990984a0` in the RED subject *is* a git commit here — but that is luck,
+not a rule: a tstate subject line also carries **binary sha256 prefixes**, and
+`git cat-file -e` cannot tell those apart because it answers about the local
+object store. The report's own `sha:` frontmatter field is the reliable source.
+
+## The ShortString row, which is the finding worth keeping
+
+Ablating the `SymPtrElemStrCap` column alone: `string[7]` and `string[31]` come
+back EMPTY, and **`ShortString` stays green** — because its capacity *is* the
+256-byte default the fallback assumes. A row that passes for a reason unrelated
+to the fix, sitting in the same table as the rows that prove it. Keep it, and
+keep knowing why: it is a guard that cannot fail, wearing a passing test's
+clothes, and it is what would have made a half-fix look complete.
