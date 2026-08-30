@@ -569,4 +569,4 @@ zlib will answer for themselves on the next sweep of this sha; quickjs and tcc
 cannot answer until T's ticket lands.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 82a239672.
