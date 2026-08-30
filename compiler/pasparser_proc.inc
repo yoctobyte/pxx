@@ -2047,6 +2047,17 @@ begin
                 ' elemtk=', Ord(ptypesPtrElemTk[i]),
                 ' stored=', Ord(Syms[idx].PtrElemTk),
                 ' durable=', ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i],
+                { depth and ultimate base, because they are what the char-pointer
+                  predicates actually consult: `PChar` and `^PChar` share a base
+                  and differ ONLY in depth, so a probe that prints the immediate
+                  pointee alone cannot tell them apart at the one place it is
+                  read. Note a.symptr cannot cover this -- it fires from Alloc*,
+                  BEFORE SetSymPointerType, so for a parameter it prints the
+                  recycled slot's previous occupant rather than the shape just
+                  recorded. feature-a-typeref-migrate-consumers }
+                ' depth=', ptypesPtrDepth[i],
+                ' basetk=', ptypesPtrBaseTk[i],
+                ' baserec=', ptypesPtrBaseRec[i],
                 ' symcount=', SymCount);
       SymProcSig[idx] := ptypesProcSig[i];
     end
