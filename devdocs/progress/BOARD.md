@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback | C | 60 | bug | `#include <sys/param.h>` with no `-I` recurses until it hits the include-nesting cap, whatever that cap is — it reported level 17 with sixteen buffers and level 129 with 128. With `-I/usr/include/x86_64-linux-gnu` the same header compiles fine, gcc compiles it fine, and every one of its own includes compiles fine both alone and all together. So it is the host-fallback RESOLUTION of `sys/param.h`, not the header's content or the depth limit. This is what actually blocks busybox — raising the include-buffer cap does NOT unblock it. | — |
+| chore-a-sweep-the-unwired-tests-into-the-suite | A | 40 | chore | BATCH 5 LANDED 2026-08-30 (frankwasm): 6 top-level subjects wired against PROVEN oracles, 2 C helpers exempted, 1 stale exemption removed — 45 unwired down to 37, and ALL 37 REMAINING ARE test/wasm/**, i.e. one campaign's staging and not a general backlog. RE-PRICED 20 -> 40 with the measurement, not as a bare frontmatter edit: p20 priced a DRAIN OF 15 DEFERRED FILES, and the object is a LEAK — every one of batch 5's eight top-level files was created THAT DAY (--diff-filter=A), while `tools-devtest#00`, which runs check_test_wiring, has been STILL-RED in the full tier since 49bd043. DECIDED 2026-08-19: sweep them in — one job, not 45 tickets. Track A, not T, precisely because A can FIX a red in place. These are repro tests from fix commits, so the bug already has a ticket in done/ — reference it, do not re-file. NEVER record current output as the expectation; a file with no constructible oracle is left UNWIRED WITH A STATED REASON, which is the honest form of a skip. | — |
 
 ## unfinished (34)
 
@@ -67,7 +68,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (392)
+## backlog (391)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -224,7 +225,6 @@ _none_
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
-| chore-a-sweep-the-unwired-tests-into-the-suite | A | 20 | chore | RESUMABLE 2026-08-30 and the PAUSE REASON IS GONE: the 15 files it parked on (13 Track N pyeval/pyexec, 2 Track F softfloat) are all WIRED now, and 45 NEW unwired files have accumulated behind them — 37 under test/wasm/, 8 at top level, and every one of those 8 was created TODAY. This is a LEAK, not a backlog: `tools-devtest#00` (which runs check_test_wiring) is STILL-RED in the full tier. DECIDED 2026-08-19: SWEEP them into the suite — one job, not 45 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
 | chore-a-typesize-answers-8-for-a-record-and-the-warning-is-where-no-caller-looks | A | 45 | chore | TypeSize(tyRecord) returns 8, and the warning that a caller must use RecSize() for the full size lives on the return-value line INSIDE symtab.inc, where no caller reads it. One confirmed misuse cost a SIGSEGV and a silently-wrong value in the Rust frontend. There are 319 TypeSize call sites across compiler/**; most are legitimate. This is a classification problem, not a defect list — do not file 319 tickets. | — |
 | chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run | B | 20 | chore | The dlopen loader is unverified by an actual RUN on arm32/aarch64 because this host has no cross ld-linux or cross libc — /usr/arm-linux-gnueabihf/lib and /usr/aarch64-linux-gnu/lib do not exist at all. Host provisioning, not code: no ticket resolving will make a cross libc appear. Split out of feature-real-dynlib-loader so that feature stops resurfacing at p45 with nothing actionable in it. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -1201,7 +1201,6 @@ _none_
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
 - [p 20] [B] chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 20] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
 - [p 20] [U] decide-should-writeableconst-off-be-honoured

@@ -526,3 +526,45 @@ the cheap per-push question — *did THIS push add a file under `test/` that no
 rule references?* — rather than the expensive census. One push's diff, instant
 checker, native's number stays honest, and the signal lands on the person who
 still has the oracle in their head.
+### The remaining 37, measured — and the answer is NOT "wire them"
+
+Checked rather than assumed, because "37 unwired files" invites a batch 6 that
+would be wrong.
+
+`test/wasm/` holds 37 `*_slice.pas` subjects **and 38 `check_*.sh` scripts**,
+one per slice, plus `check_all.sh` and `wat_oracle.sh`. The chain is real and
+complete: `check_all.sh` -> `check_<name>.sh` -> `<name>_slice.pas` (verified,
+e.g. `check_set.sh` names `set_slice.pas` three times).
+
+**The break is one level above every file the checker names: `test/wasm` appears
+NOWHERE in the Makefile.** Not the slices, not the check scripts, not
+`check_all.sh`. An entire test lane — 37 subjects, 38 harness scripts, its own
+oracle script — runs only when a human types it.
+
+The checker reports the 37 leaves because it scans build rules and `tools/`, and
+these are driven from `test/wasm/*.sh`. So the leaves are a **symptom with the
+wrong coordinates**: wiring 37 slices individually would duplicate a harness
+that already exists and is better than a rule per file.
+
+**And `check_all.sh` exists because this lane already lost a suite to exactly
+this class of problem.** Its own header:
+
+> *"This exists because a suite went red and stayed red across a handoff that
+> reported it green... green looked like the ABSENCE of output. That is
+> indistinguishable from a script that died at line 1, which is exactly what had
+> happened."*
+
+The fix was a positive sentinel per check — `PASS <name>`, unreachable under
+`set -e`. Correct, and one level short: a sentinel proves the check ran *when
+someone runs the check*. Nothing runs `check_all.sh`.
+
+**Not batch 6, and not this ticket's call.** Whether that lane becomes a make
+target, stays a hand-run harness with an UNWIRED exemption per slice, or is
+gated on a wasm runtime this box may not have, is a decision for whoever holds
+`feature-target-wasm`. Two of those three answers involve no new rules at all.
+Reported to the coordinator rather than acted on.
+
+What this ticket can say with confidence: **the general unwired-test backlog is
+empty.** What remains is one campaign's harness with a missing top-level hook,
+which is a different problem with a different owner and a one-line fix if the
+answer is "a make target".
