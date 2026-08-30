@@ -364,6 +364,53 @@ and that scope is honest. The failure mode is in the reading — taking a green
 cross-target sweep as coverage of *the compiler* rather than of *the part below
 the frontend*.
 
+### …and when it goes RED, it does not say WHICH ARM is wrong
+
+The paragraphs above are about a green. The complement bites harder, because a
+red *feels* like an answer:
+
+> **A self-differential's reference is not an oracle.** Naming one arm "the
+> oracle" is a **role assignment, not a measurement** — and the role goes to
+> whichever arm was written first. When the two arms disagree, *which one is
+> wrong* is precisely the question a two-arm comparison cannot answer.
+
+The cross-target suites compare each cross build against the **x86-64 build**.
+So the x86-64 side cannot be wrong *by construction* — it is the reference —
+and any divergence is reported as the cross target's fault.
+
+**Measured, 2026-08-30.** After the hidden-temp alignment fix let
+`test_cross_float` run on xtensa at all, it still diverged, and the write-up
+that nearly went into the ticket read *"xtensa diverges from the x86-64
+oracle"* — true-sounding, publishable, and **backwards on two of three rows**.
+Putting FPC beside both reversed it:
+
+| expression | FPC | x86-64 | xtensa |
+| --- | --- | --- | --- |
+| `s1+s2` (Single op Single) | Single | **Double** | Single |
+| `i * s1` | Single | **Double** | Single |
+| `i / 2` | Double | Double | **Single** |
+
+Both targets pick float widths for `Write` that FPC does not, in **opposite
+directions on different lines**
+(`bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc`).
+The x86-64 half had been reachable on every run of the suite since the test was
+written, and was invisible to it for the whole of that time.
+
+**So: a red self-differential is a signal to add a THIRD arm, not to blame the
+non-reference side.** For a Pascal cross-target red, FPC is that arm and it is
+one `fpc -o` away; for C it is gcc. Reach for it *before* writing a cause into
+a ticket, not after — the wrong attribution is cheap to publish and expensive
+to retract, and it points the next agent at the innocent backend.
+
+**One more, from the same measurement: vary the SHAPE before you trust an
+isolated probe.** `WriteLn(s)` for a plain `s: Single` agrees across FPC,
+x86-64 and xtensa, so the first probe reached for reported everything fine. The
+divergence needs the **expression** (`s1+s2`, `i*s1`), not the type. An
+isolated probe that clears a construct has cleared *that spelling of it*, which
+is the same lesson the array-shape census learned from its parenthesised
+`sizeof` row — and it is why *a cell that disagrees with a hand probe is a
+signal to vary the shape, not to pick a winner*.
+
 **And the same test applies to how you VERIFY, not just to what you run.** Two checking
 methods can share an upstream as easily as two test arms:
 
