@@ -5,7 +5,7 @@ track: P
 prio: 70
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frank-user
 created: 2026-08-30
 summary: "pxx spends the `object` keyword on a rooted class reference — a stopgap from before builtin TObject existed, now redundant with it and used in 4 lines of its own two tests. Real FPC source that declares `= object` (generics.collections.pas, rung 6 of the corpus expansion at p75) therefore fails to compile. Retire the rooted reference (its tests convert to TObject with byte-identical output), and give `object` its standard meaning: a value type lowered as a record with methods, hard-erroring on inheritance/virtual/constructor/destructor."
@@ -98,3 +98,66 @@ Breadth is Track T's against the pushed sha.
 - Unblocks rung 6 of [[feature-pascal-corpus-expansion]] (p75).
 - [[feature-p-legacy-value-object-types]] (p15) assumes option B's full scope —
   rewrite to this scope or close in favour of this ticket.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-30)
+
+Both parts landed. `object` in type-DECLARATION position is now the standard
+Pascal value type with methods, lowered as an advanced record; the rooted
+class reference it used to mean in type-REFERENCE position is gone.
+
+**Part 1** removed the `object` arm in `pasparser_decl.inc` and converted
+`test_object_reference.pas` to `TObject`.
+
+Two corrections to what Part 1's own commit message claimed, both worth
+recording because both were the same mistake — asserting rather than measuring:
+
+- **`object` and `TObject` were NOT the same internal type.** The byte-identical
+  output that "proved" it came from a test using only casts and assignment,
+  where both representations are a pointer move; it could not discriminate.
+  `RegisterBuiltinTObject` mints a real class row, so `var o: TObject` takes
+  ordinary class member lookup, while the `pasparser_decl.inc:692` tyPointer arm
+  is only a fallback for when no such row exists.
+- **The bare-object diagnostic was KEPT, not removed** as this ticket's Part 1
+  section said to. It is not object-specific — it fires for any
+  tyPointer/tyClass/REC_NONE, which is also what `TClass` lowers to — and
+  fpcunit depends on the class-reference operations it permits. So
+  `test_object_reference_error.pas` was repointed at `TClass` rather than
+  repurposed for the Part 2 errors, which got their own three files.
+  Track T on `seven` caught the gap between the ticket and the commit
+  (`regression-test-core-test-object-reference`, NEW-RED at f9bfcca97409).
+
+**Part 2** added the type-declaration arm, `protected` under `object`, generic
+`object` templates, and the three refusals — ancestor, virtual/dynamic/override/
+abstract, constructor/destructor — each naming this ticket. Two of the three had
+to be explicit rather than merely absent: the record machinery underneath would
+have *accepted* `constructor` silently, and `virtual` falls out of the record
+directive loop to be misread as the next field. `isObjectType` is threaded as a
+parameter, not a global, so nothing in `defs.inc` changed and no Track A ticket
+was needed.
+
+**The repro, measured both ways against the same file:**
+
+```
+pinned:  generics.collections.pas:146: error: generic templates must be class,
+         record, interface, array or procedure declarations
+HEAD:    past it; the wall moves to :120, `unknown type: PT`
+```
+
+The new wall is a pre-existing generics scope gap that `pinned` never reached,
+because it aborted 26 lines *later* at the syntax error before any
+specialization was streamed. Filed as
+[[bug-p-generic-type-param-unresolved-in-class-abstract-template]] (p70), which
+is now what rung 6 of [[feature-pascal-corpus-expansion]] waits on.
+
+**Follow-ups not done here:**
+
+- The record arm still handles `virtual` by falling out of the directive loop.
+  Deliberately unchanged — the same clear diagnostic would fit, but it is a
+  different lane's risk and belongs in its own ticket.
+- [[feature-p-legacy-value-object-types]] (p15) assumes the full old-style
+  object model, which this ticket deliberately refuses. Close it in favour of
+  this one, or rewrite it as "give `object` a VMT", which is a real and
+  much larger decision.
