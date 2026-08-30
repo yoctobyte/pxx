@@ -84,4 +84,4 @@ pascal26:90: error: undeclared identifier passed as argument 2 of '__pxx_read', 
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 09957cf56.
