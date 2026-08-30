@@ -11,6 +11,24 @@ owner: unassigned
 
 # xtensa has no IR_SET_SIGNAL arm
 
+> **CORRECTION — I filed this at the wrong size (frankS, 2026-08-30).**
+> I priced it as "riscv32 has the arm, port it" without checking what the arm
+> calls. It calls `SigSetHookAddr`, and on xtensa nothing ever sets it:
+> `EmitSignalRuntimeForTarget` has arms for five arches and falls through for
+> xtensa **on purpose** — *"FreeRTOS is not a Unix and has no signal runtime at
+> all"* — a rationale written before the hosted profile existed. Porting the arm
+> alone would emit a call to offset 0.
+>
+> Re-filed at its real size and scope as
+> [[feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile]],
+> where it is worth **more** than this ticket claimed, not less: the three
+> SA_SIGINFO refusals are gated on the same missing runtime, so one piece of work
+> closes four programs.
+>
+> Work this ticket, and the estimate in it, from that one. Left here rather than
+> `rejected/` because the diagnostic observation below is still accurate.
+
+
 `test_signal_handler_callback_b336` fails:
 
 ```
