@@ -1,13 +1,44 @@
 # Licensing Concerns
 
-This project is public, but it is not open source yet. The current position is
-that the code is visible for inspection, discussion, and research while the
-project is still experimental and while the licensing decision remains open.
+> **STATUS: SUPERSEDED — the licensing question was decided, and this page
+> records the deliberation, not the position.**
+>
+> The authority is **[LICENSE.md](../../LICENSE.md)** (the per-directory map)
+> and the `SPDX-License-Identifier` header in every source file. In brief:
+> **MPL 2.0** for `compiler/**` and `tools/**`, **zlib** for the runtime and
+> libraries (`compiler/builtin/**`, `lib/rtl`, `lib/pcl`, `lib/crtl`,
+> `lib/asmcore`), **0BSD** for `examples/**`, **CC BY 4.0** for `docs/**`.
+>
+> Owner, 2026-08-30: *"we decided about the license long ago. i think that was
+> stale info."* And long ago is accurate: the decision is dated **2026-07-02**
+> in `done/task-license-mpl2-rollout` (*"Decision (final)"*), which is **eight
+> weeks** before this page was found still saying the opposite. That ticket's
+> own step 3 was *"update README.md License section (currently says no license
+> yet)"* — the README was updated and this page was not, which is how a rollout
+> leaves one page behind: the checklist named the file it knew about.
+>
+> **Two sections below are still live** and are marked as such: *Authorship, AI
+> Assistance, And Future Forks*, and *Source-Available, Not Open Source*. Every
+> other section — the "no license yet" position, the survey of license families,
+> and the closing recommendation — describes a question that has been answered
+> the other way, and is kept only as the record of how the split was reached.
+>
+> **Why this was not simply deleted.** The reasoning behind the zlib/MPL split
+> is worth more than the file it sits in: the runtime is zlib *because it is
+> embedded into every binary the compiler produces*, so programs built with pxx
+> carry no obligations from the toolchain. Deleting the deliberation would leave
+> the conclusion with no recorded why.
+>
+> Kept for the same reason the strike had to happen at all: this page said the
+> repository grants no license while the repository granted four, and it linked
+> to `LICENSE.md` as *"the current public notice"* — pointing at its own
+> refutation.
+> [[decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one]]
 
-This document records the licensing choices under consideration and the main
-concerns behind them.
+## HISTORICAL — Current Position: No License Yet
 
-## Current Position: No License Yet
+> Superseded. The repository is licensed; see the banner above. Retained as the
+> record of the position that held before the split was adopted.
 
 The repository currently grants no open-source, free-software, commercial, or
 other public license.
@@ -27,7 +58,12 @@ This is the safest temporary position if the intended message is:
 
 The current public notice is [LICENSE.md](../LICENSE.md).
 
-## Authorship, AI Assistance, And Future Forks
+## STILL LIVE — Authorship, AI Assistance, And Future Forks
+
+> Not superseded. The licensing decision settled what rights are granted; it did
+> not settle how the project talks about AI-assisted authorship or about forks,
+> and those are still open public-messaging questions. The one sentence below
+> that the decision DID overtake is called out at the end of the section.
 
 The project should be candid that much of the code and documentation was
 created with AI assistance. That does not mean the repository is ownerless or
@@ -53,11 +89,23 @@ license, it should be clearly maintained as that fork's codebase. Its
 maintainers should stand behind their license choice, changes, release claims,
 and any expectations they create around support, safety, or fitness for use.
 
-This is a statement of intent, not a present license grant. The current
+~~This is a statement of intent, not a present license grant. The current
 repository remains unlicensed until a license or written permission says
-otherwise.
+otherwise.~~
 
-## Source-Available, Not Open Source
+> **Struck.** The repository IS licensed. A fork under MIT/BSD/GPL/LGPL/AGPL no
+> longer needs permission asked first — the MPL 2.0 and zlib grants already say
+> what may be done. The paragraphs above about *responsibility* — a fork
+> standing behind its own license, changes and release claims — are unaffected
+> and still the intent.
+
+## STILL LIVE — Source-Available, Not Open Source
+
+> Not superseded, though it now reads as background rather than as a live
+> option. The distinction it draws is correct and worth a reader understanding;
+> the project simply landed on the open-source side of it. Kept because
+> "source-available" and "open source" are still confused constantly, and
+> because the reasoning is what makes the zlib/MPL choice legible.
 
 If the project grants narrow rights such as "research only",
 "non-commercial only", "evaluation only", or "do not use for important work",
@@ -68,7 +116,12 @@ that prohibits commercial use, production use, security-sensitive use,
 infrastructure use, or other categories of use may be reasonable for this
 project, but it should not be described as open source.
 
-## Existing License Families To Consider
+## HISTORICAL — Existing License Families To Consider
+
+> Superseded. This survey was written to choose between narrow source-available
+> licenses; the project chose open-source licenses instead. Retained because the
+> reasoning about field-of-use restrictions is the argument that was weighed and
+> rejected, and a reader who wonders "why not PolyForm?" deserves the answer.
 
 ### PolyForm Strict
 
@@ -127,7 +180,12 @@ are harder for tools, companies, package indexes, and lawyers to recognize. If
 the project goes this route, the text should be reviewed carefully before
 release.
 
-## Practical Recommendation For The Public Release
+## HISTORICAL — Practical Recommendation For The Public Release
+
+> **Superseded, and this section is the one that was actively misleading.** It
+> recommends keeping the no-license/all-rights-reserved notice. That advice was
+> overtaken by the decision it was written to inform, and it is the opposite of
+> what the repository does.
 
 For the current release, the most conservative choice is to keep the
 no-license/all-rights-reserved notice unless the project explicitly wants to

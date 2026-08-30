@@ -59,7 +59,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (371)
+## backlog (370)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -245,7 +245,6 @@ _none_
 | decide-t-per-assertion-subjects-or-accept-the-file-level-label | U | 25→50 | decide | The float-red labelling mechanism is live but has zero adopters, and structurally cannot gain any: it labels a whole JOB, while every file that motivated it mixes last-digit accuracy with a NaN fault, a missing name, an 84-ulp regression or a formatting bug. The only remaining shape is per-assertion subjects -- real machinery in T's tooling plus a pass through N's files, entirely in service of the subject the owner has called low prio by definition four times, and whose motivating reds have not appeared in 259 runs. Recommendation: accept the file-level label as future-only, build nothing more. | — |
 | decide-t-refuse-unscoped-pattern-kills-in-a-hook | U | 45 | decide | Layer 2 of the pattern-pkill ticket is a PreToolUse hook refusing `pkill -f <toolname>` / `killall` with a bare pattern. It is a .claude/ config change binding every agent on this box, so it is the owner's call, not a track agent's or a peer's. Layers 1 and 3 landed without it; this is the only part left. | — |
 | decide-t-should-a-skip-close-an-open-regression | U | 25 | decide | reg_open counts red -> skip as FIXED, so a regression closes when a box merely STOPS RUNNING the job — the mirror of the skip-as-last-good bug, pointing the other way. It is a deliberate existing trade (the alternative pins a regression open forever on a box that cannot run the job), so it is a policy call, not a defect. Split out of 0dec0194a rather than bundled, because a policy change smuggled in behind a bug fix is how the trade would have been lost without anyone deciding it. | — |
-| decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one | U | 60 | decide | DECIDE: `licensing-concerns.md` says "No License Yet"; the repo root carries LICENSE | — |
 | decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation | U | 30 | decide | devdocs/dev/ (50 files) and devdocs/developer/ (58 files) both hold internal developer docs. A grep in the wrong one returns silence, which reads like a refuted citation rather than a mislocated file. Decide whether to consolidate, and if so which name wins, given 631 citations point at dev/ and 40 at developer/. | — |
 | decide-two-threading-docs-disagreed-for-seven-weeks | U | 40 | decide | Two threading docs, one subject: consolidate, or make the split explicit? | — |
 | decide-what-a-reduced-compiler-must-still-self-host | U | 55 | decide | A reduced build (frontends/targets omitted at compile time) may not be able to compile compiler.pas at all — a NilPy-only compiler has no Pascal frontend. So what does a shipped configuration owe the self-host gate: must it self-host, must it merely be REPRODUCIBLE under the umbrella compiler, or neither? And which of 2^13 configurations does a pin gate? Filed as the second half of an escalation that feature-a-build-a-reduced-compiler asserted had happened and had not. | — |
@@ -561,7 +560,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (123)
+## decided (124)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -669,6 +668,7 @@ _none_
 | decide-stralloc-one-implementation-or-fpcs-two | U | 35 | decide | FPC ships two incompatible StrAllocs — `strings` allocates prefix-free, `sysutils` allocates with a 4-byte size prefix — and `uses SysUtils, Strings` silently pairs the first with the second's StrBufSize/StrDispose, which is a measured heap error. We shipped ONE implementation (the prefixed one, shared by both units). Confirm, or ask for FPC's two-implementation split reproduced warts and all. | — |
 | decide-t-notification-transport-poll-not-webhooks | U | 60 | decide | How Track T's findings reach an agent or a human: polling, never webhooks. 60s is the baseline; adaptive backoff is allowed but the daemon must not grow a time-based one. | — |
 | decide-t-queue-scope-2026-08-03 | T | 60 | decide | User calls on four standing assumptions in the Track T queue: borg's watcher, the arm oracles, who may pin, and when the NilPy fuzzer earns its keep | — |
+| decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one | U | 60 | decide | DECIDE: `licensing-concerns.md` says "No License Yet"; the repo root carries LICENSE | — |
 | decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop | U | 70 | decide | The ticket lock is too heavy for the loop it sits in — 607 commits, 3 locks | — |
 | decide-threadsafe-gate-is-reach-based-not-use-based | U | 45 | decide | Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one | — |
 | decide-tobject-classinfo-blob-or-refusal | U | 42 | decide | TObject.ClassInfo is the last member of feature-pascal-builtin-tobject-class still PXX-REJECT, and it is a judgment call, not an implementation choice: our RTTI blob is honest for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Answer or refuse — the third option is to answer and be silently wrong for the second caller. | — |
@@ -793,7 +793,6 @@ _none_
 - [p 60] [U] decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane
 - [p 60] [U] decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
-- [p 60] [U] decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
