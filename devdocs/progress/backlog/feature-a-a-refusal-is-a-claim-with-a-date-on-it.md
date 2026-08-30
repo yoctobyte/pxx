@@ -11596,3 +11596,86 @@ unlucky programs and useless for an invariant that has never existed.
 
 > **The prediction worth running is the one whose confirmation would let you stop.** That is
 > exactly the prediction there is least reason to run and most reason to assume.
+## 224 — SLOTS DO NOT SAVE YOU; THE FALLBACK DECIDES WHERE A WRONG VERDICT LANDS
+
+Face 212 says a harness needs as many outcome slots as its subject has outcomes. True, and not
+enough. **A wrong verdict has to fall somewhere, and adding a slot does not say which one it
+falls into.** `recheck()` proved that inside a single function: the identical missing
+distinction — "I could not measure" — printed `still reproduces` when it fell out of one loop and
+`FIXED (0 example seed(s) now agree)` when it fell out of another. Not a bias toward alarm or
+toward comfort. An *absence with no slot*, taking the shape of whichever neighbour the control
+flow happened to reach.
+
+So the slot needs a direction, and the direction is not symmetric:
+
+> **A tool that cannot tell should be INCAPABLE of expressing the reassuring answer, not merely
+> discouraged from it.** Erring toward "I did not manage to look" is recoverable — the thing gets
+> re-measured. Erring toward "clean" is not: it closes the question, and nothing revisits a
+> closed question.
+
+Worked example, and the reason the rule is stated rather than assumed. Legacy ledger entries
+record no oracle set, so `oracle_gap()` falls back to a heuristic on the signature and note. It is
+a guess. It was therefore built so that its *only* possible output is `CANNOT JUDGE` — it has no
+path to `FIXED` at all, and a guard asserts so. The guess can cost a wasted re-measurement. It
+cannot cost a wrongly closed finding.
+
+Compare the shape it replaced. Two ways to produce a confident FIXED from no data at all:
+
+- re-measuring a **dodged** entry with its dodge still active — the generator has removed the
+  shape, so the regenerated program never had the chance to fail;
+- rechecking a **cross-only** finding with native-only oracles — every oracle that disagreed is
+  absent, so the comparison comes back clean for a reason unrelated to the compiler.
+
+Both read as green. Neither ran anything capable of going red.
+
+### 224a — a new capability manufactured a new way to be wrong
+
+The second of those was not a pre-existing bug. It became reachable *because* the recheck
+population was widened to include `dodged` entries — those had never been re-measured at all, so
+nothing had ever been in a position to judge them wrongly. The fix and the new failure arrived in
+the same change.
+
+> **Ask what your own fix makes reachable.** A capability is not only a thing that now works; it
+> is a set of paths that now execute. The widening was correct and the guard against its
+> consequence had to ship in the same commit, because separately the first half is a regression.
+
+Same session, one commit later: giving the daemon `--cross` so those findings could be judged
+would, on a host with no QEMU, have made every cross oracle return a sentinel, every comparison
+read as a disagreement, and nothing ever be marked fixed — the throttle latching because a
+package was absent. Third latch of the night, and it existed only because of the second fix.
+
+### 224b — a hand-maintained annotation is a load-bearing manual step wearing a comment's clothes
+
+The tell for the `dodged` latch had been sitting in the source for six weeks, unread. Three dodge
+constants in `pasmith.py`, each hand-annotated `FIXED: <sha>`:
+
+```python
+NO_SHORTSTRING_TRUNCATION  = False   # FIXED: fec98091 + 7716bd2a
+NO_ONE_CHAR_STRING_LITERAL = False   # FIXED: 913ad5fc
+NO_BARE_NOT_ORD            = False   # FIXED: not-ord bitwise + operand-width
+```
+
+Every one of those three transitions was a human noticing and going to look — which is the exact
+property `recheck()`'s own docstring claims nobody should need (*"Nobody has to remember to
+re-enable the fuzzer"*). The comment is not documentation of the automation; it is the automation,
+performed by hand.
+
+> **A hand-maintained annotation is the cheapest available evidence that an automated check has a
+> hole.** If a human has to write down that something got fixed, ask what was supposed to notice.
+
+All three entries were still parked `dodged` in the ledger, tickets in `done/`, shapes actively
+being generated — three for three.
+
+### 224c — the predicate was right; the reuse was wrong
+
+`recheck()` walked `ledger_open()`, which answers *what throttles fuzzing?*. It needed *what
+should be re-measured?*. Two questions, one predicate — and `ledger_open()` was **correct for the
+question it was built for**. A `dodged` finding genuinely does not throttle.
+
+> This is not a bug in the predicate, and looking for one there finds nothing. It is the cost of
+> a query reused for a purpose it was never asked about, where the reuse looks like economy.
+
+The diagnostic is to name both questions out loud and check the answers match, rather than
+checking the predicate. Sibling of face 221a — delete the second implementation, do not sync it —
+approached from the other side: here there was only ever one implementation, and *that* was the
+problem.

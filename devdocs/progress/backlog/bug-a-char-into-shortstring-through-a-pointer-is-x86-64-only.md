@@ -85,3 +85,18 @@ tool, never the bug.
 Gate: per CLAUDE.md's per-fix loop — `make compiler/pascal26` plus the repro
 above on all four targets. Cross breadth comes back from Track T against the
 pushed sha.
+
+## Drop the dodge in the SAME pass as the fix
+
+Track T is currently running its cross slices with `--shorts 0` to get past this
+— the same dodge the 2026-07-14 note prescribed for its sibling. That is how a
+fuzzer stays productive, and it is also how a fuzzer stops being able to find a
+family of bugs; the only thing distinguishing the two is this paragraph.
+
+**Whoever fixes the lowering removes the dodge in the same commit**, and re-runs
+one cross slice with `--shorts 2` to confirm the rung is live again. Do not file
+a follow-up to remove it: a ticket whose entire content is "stop working around
+a thing that now works" is exactly the ticket nobody picks up, and the dodge
+then becomes permanent by default.
+
+Until then, every OTHER `--shorts` cross bug is hidden behind this one.
