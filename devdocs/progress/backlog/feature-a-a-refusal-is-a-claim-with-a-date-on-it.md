@@ -4883,3 +4883,75 @@ step. `normalise-dont-special-case` satisfied structurally instead of by
 discipline — which is the only version of it that survives the next editor.
 `AllocVar` needed nothing (`TypeAlign(tyRecord)` is already 8), checked rather
 than assumed, which is why the fix is one site and not two.
+
+### 119b — a signal that is ALWAYS present and NEVER discriminating is worse than an absent one
+
+*frankS, 2026-08-30, sharpening 119 from a third side — and this is the sentence
+to keep from the whole authorship episode.*
+
+> *"Absence prompts a search and a constant does not."*
+
+`%an` is on every commit in this repo. It is never wrong, never missing, never
+malformed — and it identifies nobody, because every agent commits as the owner. It
+has the *shape* of an ownership signal at every glance, and a glance is all it
+gets. Nothing about reading it feels like a gap.
+
+Contrast the `Claude-Session` trailer at **42 of 200 commits**: missing four times
+out of five, and **missing is a state you can see**. The honest instrument is the
+one that visibly declines to answer.
+
+frankS's connection to 118 is the right one: co-location made the short arm
+visible and did not make anyone care; an author field is present on every commit
+and identifies nobody. Both are cases where **the artefact you would point to as
+evidence of diligence is the one carrying no information** — the arms were on
+screen, the author field was populated, and neither could fail.
+
+**So when auditing an instrument, ask what it looks like when it has nothing to
+say.** If the answer is "the same as when it has something to say", it is not an
+instrument. Prefer a field that is empty 80% of the time over one that is
+plausible 100% of the time.
+
+### 122 — a fork can dissolve when you sit down to write it up, and that is a result
+
+*frankB, 2026-08-30, sent to file a Track U decision and correctly refusing to.*
+
+The coordinator instructed: file the `read`/`write` keyword-token question for A
+with *"both options, the trade-offs, and your recommendation"*. Reasonable — it is
+a language-surface call. But going to write option 2 down, the lane found **option
+2 is a description of a shipped feature.** `external name 'sym'` parses today and
+`pasparser_proc.inc` documents exactly the wished-for semantics: *"sets the LINK
+symbol, NOT the Pascal routine identifier."*
+
+The real defect was one layer down: `--emit-obj` **silently discards the clause**
+and emits the Pascal identifier as the undefined symbol.
+
+    $ readelf -sW alias_esp.o | awk '$7=="UND"{print $8}'
+    PalSysOpen   PalSysRead   PalSysWrite      <-- wanted: open / read / write
+
+And the control that makes it a diagnosis rather than a guess: the **same source**
+built as a host executable emits a dynamic import named `write` and dies with
+`undefined symbol: write`. One back end honours the clause, the other discards it —
+so it is the relocatable-object writer, not a target quirk, confirmed identically
+on x86-64 and hosted riscv32.
+
+**Three things worth carrying:**
+
+1. **"Grep for the incumbent before building" applies to DECISIONS too.** A fork
+   about whether to build X is void if X ships. The coordinator's instruction sent
+   a lane to write options for a feature that already existed, and only the act of
+   writing option 2 down surfaced it. Compare face 112 — filing a banked item is
+   the first time anyone writes the *argument* down, and that is when the better
+   design appears.
+2. **It is the silent-wrong-behaviour row.** Compiles clean; breaks later in a
+   foreign build system as an undefined reference to an identifier appearing in no
+   C source. For ESP that reads as *"the Pascal object is broken"* rather than
+   *"a directive was ignored"* — the diagnostic points away from the cause.
+3. **The regression must assert the symbol NAME, because "it compiles" passes
+   today.** That is why this survived: **every existing check of that path is
+   satisfied by an object that is wrong.** Same family as face 108 — a guard never
+   observed rejecting — and as 121, where the reference could not be wrong.
+
+The lane also noted the workaround was *genuinely tempting*: renaming two PAL
+routines would have unblocked it in five minutes and hidden a bug affecting every
+`--emit-obj` consumer. Worth recording that the platonic-code rule pays off most
+exactly when the workaround is cheapest.
