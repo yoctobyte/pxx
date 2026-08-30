@@ -4,8 +4,8 @@ title: "The wasm-hosted compiler faults on a non-nil garbage AnsiString handle i
 track: A
 prio: 60
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: frankwasm
 created: 2026-08-30
 found-by: frankwasm (running compiler.pas under node's WASI)
 summary: "compiler.pas now lowers COMPLETELY for wasm32 (3780 of 3780 bodies) and the module validates, instantiates and answers --version / --where / usage. Compiling anything faults: `memory access out of bounds` in PXXStrSetLen, reading [oldData-8] where oldData is the non-nil garbage contents of ParseUsesUnitBody's `path` slot, reached through PyTryHostHeader -> ConcatThree. Five plausible causes ruled out by measurement. Wasm-only; the same source is what the native compiler runs on every build."
@@ -106,3 +106,115 @@ runs its program under WASI and diffs against the native build. This is a bug
 that only a program of compiler.pas's size has reached.
 
 Nothing here is a Track U question. It is a measured defect with a repro.
+
+
+# ROOT CAUSE — a by-reference argument was lowered in READ position
+
+Found by disassembly, after the value itself was measured. Not any of the five
+ruled-out hypotheses, and not in `ConcatThree`, `PyTryHostHeader` or the
+resolver at all: **`compiler/ir_codegen_wasm32.inc`, the argument emitters.**
+
+## The measurement that turned it
+
+A define-guarded probe in `PXXStrSetLen` (allocation-free, in the shape of
+`PXXDbgPutConst`) printing the handle whenever it falls outside
+`[HeapLow, HeapHigh)`. It fired exactly once, immediately before the trap:
+
+```
+S=0000000006ef90e0     strSlot
+O=000000002f62696c     the "handle" it read
+L=00000000001098e8     HeapLow
+H=0000000006fc0000     HeapHigh
+F=00000000000fc760     a shadow-stack address, taken inside PXXStrSetLen
+N=000000000000001a     newLen = 26 = Length('/usr/include/' + cName + '.h')
+```
+
+Two numbers ended it.
+
+`O = 0x2f62696c` is **little-endian ASCII `"lib/"`** — the first four characters
+of the `lib/rtl/<unit>.pas` path built one probe earlier by
+`ConcatThree('lib/rtl/', lo, '.pas', path)` (pasparser_proc.inc:3656). The slot
+did not hold a corrupted pointer. It held TEXT.
+
+`F = 0xFC760` sits just below `sp`'s init of `0x100400`, so the **shadow stack
+was healthy** — while `S = 0x6EF90E0` is a grown-heap address. The `path`
+variable's "slot address" was in the heap because it was not a slot address at
+all: it was the string's own data pointer.
+
+## The defect
+
+`PyTryHostHeader` forwards its `var path` to `ConcatThree`'s `var dst`, and
+wasm32 emitted **two** loads where a by-reference pass needs one:
+
+```
+local.get 5 ; i32.const 40 ; i32.add ; i32.load   ; frame+40 = path = &caller's slot  ✓
+i32.load 2 0                                      ; ← EXTRA deref: yields the HANDLE
+call 1900 <ConcatThree>
+```
+
+`WasmEmitLea` models a scalar managed string's position dependence correctly —
+read position yields the handle, write position the slot's address, via
+`InLValueWrite`, the same global the other four backends use. The argument
+emitters simply never set it. So every by-reference argument was walked as a
+read.
+
+Nothing at the caller can distinguish the cases, and that is why this survived:
+the lowering emits the **same `lea [sym=p]` node** for all four uses of a
+`var s: AnsiString` parameter — measured with `PXXDBG=a.ir:Outer`:
+
+| source | IR |
+| --- | --- |
+| `ByVal(p)` | `load_sym` |
+| `Length(p)` | `lea` → arg → builtin |
+| `p[1]` read | `lea` → `index` → `load_mem` |
+| `p[1] := c` | `lea` → `index` → `store_mem` |
+| `Inner(p)` — **by-ref forward** | `lea` → `arg` → `call` |
+
+Four consumers, one node. Only the consumer can resolve it, and the by-ref
+argument was the one consumer not asking.
+
+It VALIDATES. Both are i32 and the operand stack balances, so the module passes
+`wasm-validate`, every body reports as lowered, and the callee writes through
+the string's characters. riscv32 hit the same wall and solved it in
+`WasmEmitLea`'s twin (`feature-riscv32-var-param-forwarding`).
+
+## The fix
+
+`compiler/ir_codegen_wasm32.inc` — set `InLValueWrite` from
+`Procs[p].Params[i].IsRef` around each argument, in **both** emitters:
+`WasmEmitCall` (direct) and `WasmEmitIndArgs` (indirect and virtual). Fixing
+only the first would have left `p.Method(q)` broken in the way hardest to
+attribute.
+
+`IsRef`, deliberately, and not the SLOT-HOLDS oracle this file otherwise
+prefers: the oracle is also true for open arrays and frozen-string VALUE
+parameters, which are reads and must keep loading.
+
+## Verification
+
+* Minimal repro, 16 lines: native `xyz`, wasm trapped; both `xyz` after.
+* `test/wasm/varparam_slice.pas` + `check_varparam.sh`, registered in
+  `check_all.sh`. **Confirmed load-bearing**: reverted the fix, rebuilt, and the
+  slice traps; restored, and it passes. A regression test that cannot fail on
+  the broken compiler is not one.
+* The slice carries BOTH failure directions — the loud one (callee resizes → a
+  length read from four characters of text → trap) and the SILENT one (callee
+  publishes a handle into the caller's character bytes, nothing traps) — plus
+  the read twins, so it also fails a fix that made *every* argument a write.
+* `make compiler/pascal26`: self-host fixedpoint, `converged after 1 round(s)`.
+* `test/wasm/check_all.sh`: **33/33 green**.
+* The original repro: `pascal26 t.pas` under WASI no longer faults. It resolves
+  its full unit chain, finds `compiler/builtin/builtinheap.pas`, parses, and
+  reaches output.
+
+## What is left, filed separately
+
+The compiler now runs far past this bug and the node PROCESS dies with SIGSEGV
+— not a wasm trap, so not the guest. `--version`/`--where` exit 0; a syntax
+error prints correctly and then also segfaults. Filed as
+`bug-wasm-hosted-compiler-segfaults-the-host-after-a-successful-parse`, with the
+measurements and the stack-depth hypothesis. It is a different bug with a
+different shape, not a remainder of this one.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

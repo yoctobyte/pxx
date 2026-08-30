@@ -3093,7 +3093,7 @@ end;
 
 procedure WasmEmitCall(node: Integer; isStmt: Boolean);
 var p, argNode, i, nParams, impIdx: Integer; pvt: Byte;
-    isInstr: Boolean; instrOp: Byte;
+    isInstr: Boolean; instrOp: Byte; savedLVW: Boolean;
 begin
   p := IRA[node];
   if p < 0 then
@@ -3133,7 +3133,36 @@ begin
                       + ' has no wasm value type');
       Exit;
     end;
+    { A BY-REFERENCE parameter is a WRITE POSITION, and saying so here is the
+      whole fix for `var` forwarding on this target.
+
+      IR_LEA on a scalar managed string is position-dependent (see WasmEmitLea):
+      read position yields the HANDLE, write position yields the SLOT's address.
+      An argument was walked in read position unconditionally — correct for a
+      by-value parameter, and exactly wrong for a `var` one, which needs the
+      slot so the callee can publish a new handle into it.
+
+      Nothing catches this at the caller. The lowering emits the SAME
+      `lea [sym=p]` node for all four uses of a `var s: AnsiString` parameter —
+      `Length(p)`, `p[1]`, `p[1] := c`, and forwarding `p` into another `var`
+      — so only the consumer can tell them apart, and the by-ref argument was
+      the one consumer not asking. The result is an i32 either way, so the
+      module VALIDATES and runs: the callee receives the string's DATA pointer
+      as its slot address and writes through it.
+
+      Measured, because the symptom is far from the cause: the wasm-hosted
+      compiler trapped in PXXStrSetLen on a handle of 0x2f62696c — little-endian
+      ASCII "lib/", the first four characters of the `lib/rtl/...` path that the
+      slot was supposed to be POINTING at rather than holding.
+
+      Only a by-value argument is a read. IsRef, not the SLOT-HOLDS oracle: the
+      oracle is also true for open arrays and frozen-string VALUE parameters,
+      which are reads and must keep loading.
+      bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver }
+    savedLVW := InLValueWrite;
+    InLValueWrite := Procs[p].Params[i].IsRef;
     WasmEmitValueAs(IRA[argNode], pvt, 'argument to ' + Procs[p].Name);
+    InLValueWrite := savedLVW;
     Inc(i);
     argNode := IRB[argNode];
   end;
@@ -3247,7 +3276,7 @@ end;
   which wasm reports at the CALLER. }
 function WasmEmitIndArgs(sigProc, firstArg, startIdx: Integer;
                          const what: AnsiString): Boolean;
-var argNode, i, nParams: Integer; pvt: Byte;
+var argNode, i, nParams: Integer; pvt: Byte; savedLVW: Boolean;
 begin
   WasmEmitIndArgs := False;
   nParams := Procs[sigProc].ParamCount;
@@ -3267,7 +3296,15 @@ begin
                       + ' has no wasm value type');
       Exit;
     end;
+    { By-reference argument = write position. Same rule as the direct-call
+      loop above, and it has to be repeated here rather than shared: a virtual
+      or procedural-variable call reaches its arguments through this function
+      alone, so leaving it out would fix `Outer(p)` and leave `p.Method(q)`
+      broken in exactly the way that is hardest to attribute. }
+    savedLVW := InLValueWrite;
+    InLValueWrite := Procs[sigProc].Params[i].IsRef;
     WasmEmitValueAs(IRA[argNode], pvt, 'argument to ' + what);
+    InLValueWrite := savedLVW;
     Inc(i);
     argNode := IRB[argNode];
   end;
