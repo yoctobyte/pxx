@@ -5,8 +5,8 @@ prio: 20
 # ESP PAL: exact POSIX fd semantics over ESP-IDF VFS
 
 - **Type:** feature (Track B PAL / ESP-IDF)
-- **Status:** backlog — unblocked (bug-esp-idf-heap-linux-mmap-ecall resolved 2026)
-- **Owner:** —
+- **Status:** working
+- **Owner:** pxx-b
 - **Opened:** 2026-06-21 (PAL file IO expansion)
 - **Relation:** follows `feature-platform-abstraction-layer`
 
@@ -149,3 +149,77 @@ is real VFS behaviour. There is no ESP32 here, so the implementation can be
 written and the riscv32/xtensa objects built, but the ticket cannot be CLOSED
 without a device.
 
+
+## 2026-08-30 (pxx-b) — the block is gone, and the proposed hardware-free step was VACUOUS
+
+Two findings, both measured.
+
+### 1. There is a QEMU/IDF runner, and VFS file I/O works on it
+
+Both `blocked/` moves above rested on "no qemu/IDF runner in this lane", checked
+with `command -v qemu-system-riscv32`. That returns nothing and means nothing:
+IDF installs its tools off PATH under `~/.espressif/tools/`, reachable only once
+`export.sh` is sourced. Full write-up in [[feature-esp-peripheral-callback-api]].
+
+VFS was then MEASURED rather than assumed from CLAUDE.md's "sockets and basic
+VFS file I/O are what work" — that sentence describes the PAL's refusal list,
+not what QEMU emulates, and on this same emulator the GPIO input path is
+unmodelled and the first ADC call hangs. File I/O is genuinely real:
+
+```
+PROBE: fat_mount rc=0
+PAL: open-create ok
+PAL: write n=7 / seek rc=0 / read n=7 / content-mismatches=0 / close rc=0
+PAL: open-EXCL=-38 (today: -38 unsupported)
+PAL: open-missing=-1 (today: -1, errno collapsed)
+```
+
+So this ticket's acceptance — "an ESP-IDF link/run smoke on C3" — is attainable
+here for the file-semantics half. C3 only; S3/xtensa is a separate boot on a
+separate QEMU binary and is NOT covered.
+
+### 2. The "one thing doable without hardware" cannot detect what it asserts
+
+The 2026-07-20 note proposed host-side `--platform=esp` tests pinning
+`PAL_OPEN_EXCL -> PAL_ERR_UNSUPPORTED` and the errno collapse, as a baseline to
+diff a rewrite against. Measured on the host:
+
+```
+plain =-38
+create=-38
+excl  =-38
+```
+
+`PXX_PAL_ESP_IDF_TARGET` is set by `{$ifdef CPU_XTENSA}` / `{$ifdef CPU_RISCV32}`
+inside `platform_backend.pas`, so an x86-64 build has NO file backend and every
+call returns unsupported. A host assertion that EXCL is refused is therefore
+green whether or not the refusal exists — and would stay green after someone
+implemented EXCL, which is the precise opposite of a baseline. It cannot fail in
+the direction that matters.
+
+What makes the on-target version worth something is the row above it:
+`open-create` **succeeds in the same run**. That success is the control; it
+proves the backend is present, so the `-38` on the next line is a refusal rather
+than an absence. Same assertion, opposite value, and the difference is entirely
+the control sharing the run.
+
+### Landed
+
+`examples/esp32/fs-c3` — mounts FAT (custom `partitions.csv`; the stock
+single-app table has nowhere to mount), drives the real PAL, and
+`build.sh qemu-assert` pins all nine rows. It FAILS when EXCL or the errno
+collapse moves, which is intended: if they moved because this ticket landed, the
+new values are the deliverable and `want=` gets updated deliberately; if the
+create/write/read rows broke instead, the PAL file path regressed. The failure
+text says which.
+
+### Still open — the actual rewrite
+
+Unchanged and untouched by the above: direct `open`/`read`/`write`/`close`,
+errno-style negatives, `PAL_STDIN`/`STDOUT`/`STDERR` mapping, exact
+create/exclusive/truncate/append. The `read`/`write` Pascal-keyword collision
+recorded in the ticket body is the first design fork; if the answer is a
+compiler-supported external alias, that is a **Track A ticket**, not something
+to build around in the PAL.
+
+The baseline now exists to diff that work against, which was the point.

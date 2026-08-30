@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:22 blocked:9 backlog:323 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2680 rejected:55`
+`working:5 unfinished:22 blocked:9 backlog:322 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2680 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter` [N] — owner: frankwasm
 - `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45` [A+S] — owner: frankS
+- `feature-pal-esp-posix-fd-semantics` [S] — owner: pxx-b
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
@@ -51,7 +52,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 342, ranked
+## Ready — top 30 of 341, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -84,4 +85,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 
-_312 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_311 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
