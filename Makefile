@@ -2783,6 +2783,13 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_const_array_of_sets.pas $(TESTTMP)/test_casets26
 	@$(TESTTMP)/test_casets26 | diff -u test/test_const_array_of_sets.expected - \
 	  || { echo 'test_const_array_of_sets: FAIL - set element of a const array'; exit 1; }
+	@# PWideChar(w) — the cast, sharing the PChar arm. The PChar rows are the
+	@# control for that sharing. Needs PXX_WIDE_PAYLOAD (the file defines it):
+	@# without it the cast is deliberately REFUSED, because on the UTF-8 payload
+	@# it would step two bytes and yield packed byte pairs on plain ASCII.
+	@./$(COMPILER) test/test_pwidechar_cast.pas $(TESTTMP)/test_pwcast26
+	@$(TESTTMP)/test_pwcast26 | diff -u test/test_pwidechar_cast.expected - \
+	  || { echo 'test_pwidechar_cast: FAIL - PWideChar cast or its PChar control'; exit 1; }
 	@# A method may be NAMED `Default` -- rtl-generics' central idiom, and a
 	@# collision with nothing to do with generics. Exercises the property
 	@# `default` MODIFIER alongside it, since that is what a too-eager fix breaks.

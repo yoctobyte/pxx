@@ -459,6 +459,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     bcN: Integer;            { element count of a `[..]` open-array constructor operand }
     copyElemRec: Integer;    { element rec of a dynamic-array Copy's source, for a `[i]` suffix }
     mrefNode: Integer;       { a `@`-less method reference inside a method-pointer cast, or -1 }
+    ptrCastElemTk: TTypeKind;   { element of a PChar/PWideChar cast — what `p^` and `p[i]` yield }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
@@ -6951,11 +6952,57 @@ begin
         begin
           { Built-in typecast }
           castTk := tyUnknown;
-          if CaseEqual(name, 'pchar') or CaseEqual(name, 'pansichar') then
+          if CaseEqual(name, 'pchar') or CaseEqual(name, 'pansichar') or
+             CaseEqual(name, 'pwidechar') then
           begin
             { PChar(s): yields a C `const char*` into the string's char data.
               Lowered specially (sentinel -2) to skip the inline length prefix
-              for string operands; a plain Pointer reinterpret otherwise. }
+              for string operands; a plain Pointer reinterpret otherwise.
+
+              PWideChar shares this arm rather than getting its own, and the
+              ONLY thing that differs is the ELEMENT the cast yields — which is
+              why it is a variable here instead of a second fifty-line copy with
+              tyChar changed to tyWideChar in three places. The pointer
+              operation is identical: same -2 adapter, same +8 past an inline
+              length prefix, same PXXPCharOf for a managed handle.
+
+              A PWideChar element is tyWideChar, so `p^` is a WideChar and `p[i]`
+              steps two bytes. That is the same typing PWideChar already gets as
+              a DECLARED type (ParseTypeKind's pwidechar arm sets
+              LastTypePointerElemTk := tyWideChar); the cast was simply missing,
+              so `var p: PWideChar` compiled and `p := PWideChar(w)` was
+              "undefined variable (PWideChar)".
+
+              GATED ON PXX_WIDE_PAYLOAD, and the measurement is why. I first wrote
+              this arm ungated, on the reasoning that WideString's UTF-8 payload
+              is an INHERITED divergence the cast merely passes along. That is
+              false, and one probe said so: on 'hi', `w[1]` is 104 in both
+              compilers, because indexing steps ONE byte through the UTF-8
+              payload and widens — right for ASCII by construction. But
+              `PWideChar(w)[0]` steps TWO bytes and yields 26984 ($6968, 'h' and
+              'i' packed) where FPC gives 104. So the cast does not inherit the
+              existing divergence; it introduces a NEW one, and on plain ASCII,
+              which is where nobody would look for it.
+
+              Under the define the same probe gives 104 and the arm is simply
+              correct. So it is allowed there and REFUSED otherwise, with the
+              refusal naming the gate. A program that cannot compile is a worse
+              outcome than one that runs — but a program that silently reads
+              packed byte pairs as characters is worse than both, and that is
+              this repo's expensive bug class exactly: a plausible wrong value
+              far from its cause. The real unblock is retiring the gate, which
+              is measured and ticketed as
+              chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload. }
+            if CaseEqual(name, 'pwidechar') then
+            begin
+              if not PasDefineExists('PXX_WIDE_PAYLOAD') then
+                Error('PWideChar(...) needs {$define PXX_WIDE_PAYLOAD}: without it a ' +
+                      'WideString holds UTF-8 bytes, so the cast would walk them two at ' +
+                      'a time and yield packed byte pairs instead of characters ' +
+                      '(chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload)');
+              ptrCastElemTk := tyWideChar;
+            end
+            else ptrCastElemTk := tyChar;
             Next; { consume type name }
             Expect(tkLParen, '(');
             ParseExpr;
@@ -6973,9 +7020,9 @@ begin
               Next;
               indexNode := AllocNode(AN_DEREF);
               ASTLeft[indexNode] := node;
-              ASTTk[indexNode] := Ord(tyChar);
+              ASTTk[indexNode] := Ord(ptrCastElemTk);
               CurASTNode := indexNode;
-              LastExprTk := tyChar;
+              LastExprTk := ptrCastElemTk;
               Exit;
             end;
             { PChar(s)[i]: index the cast result -> a char element. The shared
@@ -6989,11 +7036,11 @@ begin
               indexNode := AllocNode(AN_INDEX);
               ASTLeft[indexNode]  := node;
               ASTRight[indexNode] := CurASTNode;
-              ASTTk[indexNode]    := Ord(tyChar);
+              ASTTk[indexNode]    := Ord(ptrCastElemTk);
               node := indexNode;
             end;
             CurASTNode    := node;
-            if ASTKind[node] = AN_INDEX then LastExprTk := tyChar
+            if ASTKind[node] = AN_INDEX then LastExprTk := ptrCastElemTk
             else LastExprTk := tyPointer;
             Exit;
           end;
