@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:26 blocked:8 backlog:359 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2741 rejected:56`
+`urgent:1 working:4 unfinished:26 blocked:8 backlog:359 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2741 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,6 +13,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — owner: frankB
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
+
+## urgent (1) — jump the queue
+
+- `bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever` [N]
 
 ## unfinished (26) — parked mid-flight; re-claim, do not duplicate
 
@@ -54,8 +58,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 380, ranked
+## Ready — top 30 of 381, ranked
 
+- `[p 65] [N]` bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [A]` bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code (unblocks 1)
@@ -64,11 +69,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-revisit-object-types-rtl-generics-fired-the-trigger
 - `[p 70] [U]` decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
-- `[p 70] [P]` regression-test-asm-compiler-2
-- `[p 70] [P]` regression-test-asm-hello-2
-- `[p 70] [P]` regression-test-asm-test-asm-emit-x64
-- `[p 70] [P]` regression-test-asm-test-asmcore-x64
-- `[p 70] [P]` regression-test-asm-test-x64enc
+- `[p 70] [A]` regression-test-asm-compiler-2
+- `[p 70] [A]` regression-test-asm-hello-2
+- `[p 70] [A]` regression-test-asm-test-asm-emit-x64
+- `[p 70] [A]` regression-test-asm-test-asmcore-x64
+- `[p 70] [A]` regression-test-asm-test-x64enc
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-max-min-iterables
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-in-a-variable
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none
@@ -85,6 +90,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 62] [A]` feature-unicodestring-model
 
-_350 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_351 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
