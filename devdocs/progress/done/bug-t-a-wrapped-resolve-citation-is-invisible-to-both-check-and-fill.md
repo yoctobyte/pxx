@@ -165,3 +165,35 @@ oracle *because* aligned implementations stop disagreeing — and then wrote its
 first condition against state I already had rather than the state it was asking
 about. The guard was right to exist and wrong on its first input, and it is the
 guard itself that reported it.
+
+### Calibration fix, same night: it fired on every coordinator push
+
+Reported by frank-coordinator. `feature-a-a-refusal-is-a-claim-with-a-date-on-it`
+is the family index — a document *about* citations — so it contains narrative
+like *"7 PENDING-COMMIT tickets, 2 false positives"*. The coordinator touches it
+on most pushes, the guard read those lines as wrapped citations, and the
+unwrap-it advice arrived every time and was never actionable.
+
+**Mention versus use**, one level below the `regression-`/`decide-`/`grant-`
+exclusion in the nudge. Two changes, and the first is the real one:
+
+1. **Two questions, two candidate sets.** The first cut walked
+   `manifest_tickets` — every ticket the push *touched* — for both conditions.
+   Now (a) *is the fill broken?* asks `pending`, whose answer is authoritative and
+   cannot contain prose, intersected with this push; and (b) *is a placeholder
+   unseen?* looks only at tickets this push **resolved**. A wrapped citation can
+   only be written by the resolve that moved the ticket, so nothing else is a
+   candidate — and a document that merely discusses the mechanism is never
+   resolved by a push.
+2. **Bare occurrences only.** A real citation is bare; a document quoting the
+   placeholder writes `` `PENDING-COMMIT` `` or **PENDING-COMMIT**. This removes
+   the one false positive the scope split cannot reach: a resolved ticket whose
+   own subject is this machinery.
+
+Not a filename suppression list, on the coordinator's reasoning and mine: it
+would decay the moment a second such document exists, and the family index will
+not be the last document that discusses the mechanism it lives under.
+
+Guard: 39 guards, 0 FAIL. Section 9 is the family index itself; 9a is the
+backtick rule, with a bare wrapped citation beside it proving frankC's original
+shape still reports.

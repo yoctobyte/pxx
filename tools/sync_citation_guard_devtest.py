@@ -135,7 +135,7 @@ def main():
                        "- 2026-08-30 — resolved, commit deadbeef1.\n")
 
         print("2. ...and the substring guard sees it anyway")
-        rc, err = run_guard(td, [wrapped], [])
+        rc, err = run_guard(td, [wrapped], [], [wrapped])
         check("bug-wrapped.md" in err, "the wrapped ticket is named", err.strip()[:60])
         check("resolved, commit PENDING-COMMIT" in err,
               "and the LINE is printed, so a reader settles prose-vs-real at a glance")
@@ -144,7 +144,7 @@ def main():
               "other failure mode", "rc=%d" % rc)
 
         print("3. SCOPE: it looks at this run's tickets, not the tree")
-        rc, err = run_guard(td, [clean], [])
+        rc, err = run_guard(td, [clean], [], [clean])
         check(rc == 0 and err.strip() == "",
               "silent when the run's own ticket is properly cited")
         check("bug-wrapped" not in err and "bug-about-the-tool" not in err,
@@ -154,7 +154,7 @@ def main():
               "and a run that touched no ticket at all says nothing")
 
         print("4. prose is reported, never as an error — the seven false positives")
-        rc, err = run_guard(td, [prose], [])
+        rc, err = run_guard(td, [prose], [], [prose])
         check("bug-about-the-tool.md" in err,
               "a ticket discussing the placeholder is still named...")
         check(rc == 0, "...but never carries an exit code", "rc=%d" % rc)
@@ -166,27 +166,29 @@ def main():
                       "- 2026-08-30 — resolved, commit deadbeef1.\n\n"
                       "The write-up quotes `PENDING-COMMIT` while explaining "
                       "it, five times over.\n")
-        rc, err = run_guard(td, [both], [])
+        rc, err = run_guard(td, [both], [], [both])
         check(rc == 0, "a filled citation beside prose is NOT a fill failure",
               "rc=%d" % rc)
         check("FILL FAILED" not in err,
               "which is what the first cut got wrong, on its own commit")
-        check("bug-about-and-resolved.md" in err,
-              "it is still named, so the prose is there for one glance")
+        check(err.strip() == "",
+              "and, since its quotes are backticked, it is not named either",
+              "the bare-only rule removes what the scope split could not")
 
         print("6. the OTHER condition: STILL OWED after the fill")
-        rc, err = run_guard(td, [flat], [flat])
+        rc, err = run_guard(td, [flat], [flat], [flat])
         check(rc == 1, "that one exits non-zero", "rc=%d" % rc)
         check("FILL FAILED" in err, "and says the fill is at fault, not the ticket")
         check("bug in the fill" in err and "hand-edit" in err,
               "and warns against hand-editing around it")
-        rc2, err2 = run_guard(td, [wrapped], [])
+        rc2, err2 = run_guard(td, [wrapped], [], [wrapped])
         check("FILL FAILED" not in err2,
               "while the unseen case is NOT reported as a fill failure — "
               "conflating them would hide the interesting one")
 
         print("7. a file the run touched and then removed is not an error")
-        rc, err = run_guard(td, ["devdocs/progress/done/gone.md"], [])
+        rc, err = run_guard(td, ["devdocs/progress/done/gone.md"], [],
+                            ["devdocs/progress/done/gone.md"])
         check(rc == 0 and err.strip() == "",
               "a renamed or deleted ticket is skipped, not reported missing")
 
@@ -226,13 +228,38 @@ def main():
                   "%s-* is not nudged — its resolution IS a verdict" % pre,
                   "23 of 43 live hits were these")
 
-        print("9. SCOPE again — editing a resolved ticket is not resolving it")
+        print("9. THE FAMILY INDEX — touched on most pushes, never resolved")
+        idx = ticket(td, "devdocs/progress/backlog/feature-a-a-refusal.md",
+                     "The coordinator relayed: 7 PENDING-COMMIT tickets, 2 false "
+                     "positives.\n\nuncited and silent. Strictly worse than "
+                     "PENDING-COMMIT, which at least greps.\n")
+        rc, err = run_guard(td, [idx], [], [])
+        check(err.strip() == "" and rc == 0,
+              "narrative prose in a touched-but-unresolved file is silent",
+              "this fired on EVERY coordinator push before the split")
+
+        print("9a. and a resolved ticket that merely QUOTES the placeholder")
+        quoted = ticket(td, "devdocs/progress/done/bug-about-citations.md",
+                        "- 2026-08-30 — resolved, commit deadbeef1.\n\n"
+                        "It kept `PENDING-COMMIT` forever, and **PENDING-COMMIT** "
+                        "is loud.\n")
+        rc, err = run_guard(td, [quoted], [], [quoted])
+        check(err.strip() == "" and rc == 0,
+              "backticked and bolded occurrences do not count — a citation is bare",
+              "the last false positive the scope split could not reach")
+        bare = ticket(td, "devdocs/progress/done/bug-bare.md",
+                      "- 2026-08-30 — fixed,\n  resolved, commit PENDING-COMMIT.\n")
+        rc, err = run_guard(td, [bare], [], [bare])
+        check("bug-bare.md" in err,
+              "while a BARE wrapped citation still reports — frankC's exact shape")
+
+        print("10. SCOPE again — editing a resolved ticket is not resolving it")
         rc, err = run_guard(td, [hand], [], [])
         check(err.strip() == "" and rc == 0,
               "in manifest_tickets but not manifest_resolved -> silent",
               "otherwise every write-up appended to an old ticket nags")
 
-    print("10. the wiring, in sync.sh itself")
+    print("11. the wiring, in sync.sh itself")
     check("verify_citations_landed" in SYNC.split("fill_pending_commits\n")[-1],
           "the guard runs AFTER fill_pending_commits, not before")
     check("'devdocs/progress/*/*.md'" in SYNC,
@@ -252,7 +279,7 @@ def main():
     check("--diff-filter=A" in SYNC,
           "and asks for ADDED files, so an edit to an old ticket is not a resolve")
 
-    print("\n  %d guard(s), %d FAIL" % (36, len(fails)))
+    print("\n  %d guard(s), %d FAIL" % (39, len(fails)))
     return 1 if fails else 0
 
 

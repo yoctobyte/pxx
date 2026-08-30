@@ -492,21 +492,47 @@ verify_citations_landed() {
     # bug lives only where a file has both.
     still_owed=$(python3 "$(dirname "$0")/progress.py" pending 2>/dev/null \
                  | cut -f1 || true)
+    # TWO QUESTIONS, TWO CANDIDATE SETS. The first cut walked one list for both
+    # and that was the calibration bug: `manifest_tickets` is every ticket the
+    # push TOUCHED, and the family index is touched on most pushes while being a
+    # document ABOUT citations, so it always contains strings shaped like one.
+    # The coordinator got the unwrap-it advice on every push it made, about
+    # narrative prose, and it was never actionable. Mention versus use, one level
+    # down from the regression-/decide-/grant- exclusion in the nudge below.
+    #
+    #   (a) is the fill broken?     -> ask `pending`. Its answer is authoritative
+    #                                  and cannot contain prose. Intersected with
+    #                                  this push so we do not nag about another
+    #                                  lane's backlog.
+    #   (b) is a placeholder unseen? -> only tickets this push RESOLVED. A
+    #                                  wrapped citation can only be written by
+    #                                  the resolve that moved the ticket, so
+    #                                  nothing else is a candidate, and a
+    #                                  document that merely discusses the
+    #                                  mechanism is never resolved by this push.
     broken="" ; unseen=""
-    for f in $manifest_tickets; do
-        [ -f "$f" ] || continue          # renamed or removed since; nothing to read
-        grep -qF "$PLACEHOLDER" "$f" 2>/dev/null || continue
-        if printf '%s\n' "$still_owed" | grep -qxF "$f"; then
-            broken="$broken
+    for f in $still_owed; do
+        [ -n "$f" ] || continue
+        printf '%s\n' "$manifest_tickets" | grep -qxF "$f" || continue
+        broken="$broken
   $f"
-        else
-            unseen="$unseen
-  $f: $(grep -nF "$PLACEHOLDER" "$f" | head -2 | cut -c1-120 | sed 's/^/      /')"
-        fi
+    done
+    for f in $manifest_resolved; do
+        [ -f "$f" ] || continue          # renamed or removed since; nothing to read
+        printf '%s\n' "$still_owed" | grep -qxF "$f" && continue   # (a) owns it
+        # BARE occurrences only. A real citation is bare; a document quoting the
+        # placeholder writes `PENDING-COMMIT` or **PENDING-COMMIT**, and a
+        # resolved ticket whose SUBJECT is this machinery is otherwise the one
+        # remaining false positive.
+        hits=$(grep -nE "(^|[^\`*])$PLACEHOLDER([^\`*]|\$)" "$f" 2>/dev/null \
+               | head -2 | cut -c1-120 | sed 's/^/      /')
+        [ -n "$hits" ] || continue
+        unseen="$unseen
+  $f: $hits"
     done
 
     if [ -n "$unseen" ]; then
-        echo "sync: NOTE — $PLACEHOLDER is still in a ticket this push touched," >&2
+        echo "sync: NOTE — $PLACEHOLDER is still in a ticket this push RESOLVED," >&2
         echo "sync: and \`progress.py pending\` did not see it. Read the line: if it is" >&2
         echo "sync: prose about the placeholder, ignore this; if it is a real citation," >&2
         echo "sync: PENDING_RE is blind to its spelling and the sha will never be filled." >&2
