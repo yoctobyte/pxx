@@ -267,4 +267,4 @@ still open for them — the reject is still keyed on the `AN_ASSIGN` shape and a
 ticket was filed and it is still true for the targets that remain.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit ad8ba77fb.
