@@ -3395,6 +3395,26 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                                                or {}).get("hole_jobs"),
                             "deadline": report.get("deadline"),
                             "wall": report["wall"], "new_red": new_red,
+                            # WHICH of those reds had never run before. NEVER
+                            # SEEN is not WAS GREEN -- diff_jobs says so at
+                            # length and the ledger already honours it ("first-
+                            # ever red", and no blame range, because the job has
+                            # no earlier passing sha). The ARCHIVE collapsed the
+                            # two: `new_red` counts a first-ever run exactly
+                            # like a green->red regression, correctly for the
+                            # VERDICT and misleadingly for every reader.
+                            #
+                            # Measured 2026-08-30: d24df3f09 showed 24 new reds
+                            # and the pin shadow read "30 red(s) the current pin
+                            # does not have". ALL 24 were first-ever runs -- not
+                            # one regression -- while the commit itself touched
+                            # only the Makefile, wiring nine .pas tests and no
+                            # .npy at all. The honest sentence is "24 failures
+                            # that already existed became visible"; the archive
+                            # could only say "24 new reds", which reads as cause
+                            # and would have been filed against the one commit
+                            # that could not have done it.
+                            "first_seen": first_seen,
                             "fixed": fixed,
                             # still_red too, not just the transitions. Without
                             # it a RED row with no transitions -- which is the
