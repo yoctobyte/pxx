@@ -3,6 +3,7 @@ slug: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 title: "How should the sysopen/sysread/sysclose intrinsics reach WASI, given compiler.pas links no PAL by design?"
 track: U
 prio: 70
+status-note: "DECIDED 2026-08-30 by the owner — see the RESOLUTION section; kept open only until the implementing commit lands"
 type: decide
 status: backlog
 owner: ""
@@ -220,3 +221,70 @@ refusals are this decision. Effective priority propagates down that edge, so
 this now ranks from what it unblocks rather than from its filed `prio: 40`.
 The filed number is untouched and stays the U lane's to set; the edge is a
 measurement.
+
+
+## RESOLVED 2026-08-30 — by the owner, and NOT as any of the three options were framed
+
+**The owner rejected the ticket's premise rather than picking from its menu:**
+
+> *"I don't understand why we need to include the PAL layer in the compiler
+> itself, that contradicts our design goals"*
+
+frankwasm checked instead of defending, and the check is what settles it:
+
+- **`compiler.pas` links no PAL.** Its 9 PAL references are it adding search
+  paths **for programs it compiles**, not for itself.
+- **`sysopen`/`sysread`/`syswrite` are INTRINSICS.** On every native target the
+  backend emits a raw `syscall` **instruction**, inline — which is exactly why
+  the compiler needs no RTL. **wasm has no syscall instruction**, so the backend
+  must emit a CALL to *something*, and WASI's capability-based `path_open` makes
+  that something a few dozen lines rather than one instruction.
+
+**So the question was never "link the PAL". It was WHERE those few dozen lines
+live** — and the answer is the builtin unit the compiler already links by
+necessity. Option 2 (link the PAL) is **rejected**, not deferred.
+
+### The shape, as agreed with the owner
+
+Owner's constraint: *a separate unit in `builtin/`, don't touch existing files
+if possible.*
+
+| file | change |
+| --- | --- |
+| `lib/rtl/platform/wasi/wasi_open.inc` | **NEW** — the path-resolution / rights logic, extracted once |
+| `compiler/builtin/wasibackend.pas` | **NEW** — the compiler-side unit, `{$i}`s the above |
+| `lib/rtl/platform/wasi/platform_backend.pas` | one `{$i}` line, **no logic moved** |
+| `compiler/pasparser_proc.inc` | one guarded ambient injection |
+| `compiler/ir_codegen_wasm32.inc` | lower the sys* intrinsics to calls into it |
+
+**The shared include is the ticket's third option**, which was always the right
+one and which the ticket buried under the option the owner rejected. frankwasm
+raised the gap the owner's instruction did not close by itself: a fresh unit
+would **duplicate the capability model that already exists in the PAL, and two
+copies of a capability model drift silently** — one path opening files the other
+refuses.
+
+### Two cost corrections — the ticket was wrong in BOTH directions
+
+1. **A new unit in `compiler/builtin/` needs NO pin.** Those units are not baked
+   into the compiler binary; `builtin/` is a **search directory** and the units
+   are sources read per-program at compile time.
+2. **The hazard runs the OPPOSITE way from the one the ticket feared.**
+   `builtinheap` is loaded **ambiently** — every program, every target, by every
+   compiler *including the old pinned one other lanes build with*. A wasm-only
+   unit made ambient would be parsed by every lane's next build. So it must be
+   injected **conditionally**, on the precedent already in the tree:
+   `if cWantsSoftFloat then ParseUsesUnitAmbient('softfloat')`
+   (`cparser.inc:9778`).
+
+### Cross-lane note, recorded because it is the owner's call and not a lane's
+
+Two of the five files are outside Track wasm's exclusive set —
+`pasparser_proc.inc` (P/A shared) and `lib/rtl/platform/wasi/**` (Track B).
+Normally that is *file a Track A ticket and hand off*. **The owner has paused all
+other tracks specifically to give this work sole occupancy**, which is the grant
+that makes it safe. frankwasm flagged it explicitly rather than assuming it, and
+it is recorded here as the owner's decision rather than a boundary a lane chose
+to cross. Both edits are one line; the substance is all in new files.
+
+**Kept open only until the implementing commit lands**, then resolved by it.
