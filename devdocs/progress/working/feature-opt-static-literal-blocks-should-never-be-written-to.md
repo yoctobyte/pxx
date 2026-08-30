@@ -84,3 +84,55 @@ because the point is that a write disappears, a direct check that it has:
 `-dPXX_ALLOC_CENSUS` is the wrong instrument here (it counts allocations, and
 none of these are), so verify by disassembly or by measuring the same qemu
 subject that made fix 1 necessary.
+
+---
+
+## 2026-08-30 frank-optimize — LANDED for five backends, MEASURED AND DROPPED for x86-64
+
+**Landed:** `PXXStrIncRef`/`PXXStrDecRef` skip the refcount write on a saturated
+block (i386, arm32, aarch64, riscv32, xtensa in one edit), and
+`EmitStaticLitHandleA64` no longer takes a reference at all — on aarch64 that
+deletes a whole `call PXXStrIncRef` per literal evaluation.
+
+| | before | after | |
+| --- | ---: | ---: | ---: |
+| aarch64/qemu, literal-heavy loop | 605.1 ms | 399.7 ms | **−33.9%, 9/9 pairs** |
+| same loop, NO literals (control) | 66.6 ms | 68.5 ms | +2.9%, 4/9 |
+| x86-64, literal-heavy loop | 9.82 ms | 10.05 ms | **+2.3% SLOWER, 1/11** |
+| x86-64, no-literal control | 3.96 ms | 3.97 ms | +0.4%, 6/11 |
+
+**The "What" section above is wrong about x86-64 and that is why the x86-64 half
+did not land.** It says the change "deletes the write from the hot path — x86-64
+loses `inc qword [rax-16]` (4 bytes each, 8 sites)". You cannot delete it: a
+**generic** retain cannot know its argument is static. The only available form is
+a runtime floor test on the five hand-emitted sequences plus deletion at the
+literal site. Built, correct (`cmpq $0x40000000,-0x10(%rax)` verified by
+disassembly), self-hosting, **−36,864 bytes of `code`** — and 2.3% slower,
+because a load+cmp+branch on every managed retain and release costs more than the
+one store it saves on the literal subset. Parked as a patch. A delivered *size*
+result is not a speed result.
+
+**The rel8 precondition this ticket was split out for is GONE:** `PatchRel8` now
+calls `CheckRel8`, which errors loudly (`bug-a-a-rel8-jump-patch-truncates-...`,
+resolved). The five-site version built without incident. The ticket's own
+prescription was a hypothesis about a world that moved.
+
+## What is still open, and it is now a DESIGN question, not an implementation
+
+**x86-64 `-O2` — the configuration that ships, and where `EmitStaticLitHandle`
+went live in `440c822e6a80` — still writes its static literal blocks.** It incs at
+the literal site and decs on an inlined release; balanced, so nothing is freed and
+nothing is wrong. But the block is *written*, so it still dirties a page shared
+with code and still cannot move to a non-writable segment. **Five backends are
+clean and the shipping one is not.** Raised by frankwasm from the RSS table before
+anyone had said so — an unmoved number is the shape that most needs a second look.
+
+The fork, for whoever takes it: making x86-64 `-O2` stop writing needs something
+other than a per-release test, because that test is measured at −2.3%. Candidates
+nobody has priced — a static-block bit checked only on the *free* path rather than
+every release; keeping the retain but making the block's page private; or accepting
+the write and pursuing the non-writable segment by a different route. If the
+answer is "not worth it", that is a legitimate close, but it should be a decision
+rather than a silence.
+
+**Not claiming this further.** Released.
