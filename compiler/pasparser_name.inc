@@ -577,11 +577,11 @@ function GenMakeStringValueIndex(valNode: Integer): Integer; forward;
   since a parameter's type is itself a type }
 function ParseProcTypeSignature: Integer; forward;
 procedure EatProcTypeCallConv(mpi: Integer); forward;
-procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean); forward;
+procedure ParseRecordFields(ci: Integer; isPackedRecord, isObjectType: Boolean); forward;
 procedure ParseTypeSection; forward;  { body in pasparser_decl.inc; ParseRecordFields' nested-`type` arm sits ABOVE that body, which FPC's declaration order needs — bug-a-fpc-seed-drift-emitasmx64-forward }
 function IsHintDirectiveName(const nm: AnsiString): Boolean; forward;
 procedure SkipHintDirectives; forward;  { body in pasparser_decl.inc; the var-section and record-field skips CALL it above that body, which FPC's declaration order needs }
-procedure ParseRecordMethodDecl(ci: Integer); forward;
+procedure ParseRecordMethodDecl(ci: Integer; isObjectType: Boolean); forward;
 var RecordMethodClassPrefix: Boolean = False;  { `class function` in a record/helper body }
 procedure ParseRecordPropertyDecl(ci: Integer); forward;
 function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }

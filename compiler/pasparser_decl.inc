@@ -199,7 +199,7 @@ begin
       ci := AddUClass(0, 0);
       UClsParent[ci] := -1;
       UClsIsRecord[ci] := True;
-      ParseRecordFields(ci, wasPacked);
+      ParseRecordFields(ci, wasPacked, False);
       LastTypeRecId := REC_UCLASS_BASE + ci;
       Result := tyRecord;
       Exit;
@@ -3158,7 +3158,7 @@ begin
   UPropPub[pri] := 0;
 end;
 
-procedure ParseRecordMethodDecl(ci: Integer);
+procedure ParseRecordMethodDecl(ci: Integer; isObjectType: Boolean);
 { A method SIGNATURE inside an advanced record ({$modeswitch advancedrecords} in FPC; its
   own RTL leans on it — TPoint/TSize/TRect are all advanced records).
 
@@ -3340,6 +3340,21 @@ begin
     Eat(tkSemicolon);
   end;
 
+  { OLD-STYLE OBJECT, the other refused half. `virtual`/`dynamic`/`override`/`abstract`
+    are not in the loop above because a record has no VMT to dispatch through, so on a
+    record they fall out here and are then misread as the next field -- a confusing
+    error for a construct nobody writes. On an `object` somebody DOES write them, and
+    the confusing error is the failure mode this ticket exists to prevent: say what is
+    refused and why. Only the object arm is checked; the record arm's behaviour is
+    unchanged, and improving it is a separate ticket.
+    bug-p-object-value-types-standard-meaning }
+  if isObjectType and (CurTok.Kind = tkIdent) and
+     (CaseEqual(CurTok.SVal, 'virtual') or CaseEqual(CurTok.SVal, 'dynamic') or
+      CaseEqual(CurTok.SVal, 'override') or CaseEqual(CurTok.SVal, 'abstract')) then
+    Error('an object type cannot have a ' + CurTok.SVal +
+          ' method -- pxx lowers `object` as a value type with no VMT ' +
+          '(bug-p-object-value-types-standard-meaning); use a class for dynamic dispatch');
+
   { A record's `class procedure` / `class function` must be `static` (terecs5). A
     non-static class method dispatches on the runtime metaclass, and a record has none —
     no VMT, no class reference. FPC rejects it; pxx used to consume `class` and treat the
@@ -3400,7 +3415,7 @@ begin
   UMthPub[UMthCount - 1] := 0;
 end;
 
-procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean);
+procedure ParseRecordFields(ci: Integer; isPackedRecord, isObjectType: Boolean);
 var
   arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
@@ -3533,7 +3548,7 @@ begin
        (CaseEqual(GetTokenStr(TokPos), 'private') or
         CaseEqual(GetTokenStr(TokPos), 'protected')) then
     begin
-      if CaseEqual(GetTokenStr(TokPos), 'protected') then
+      if CaseEqual(GetTokenStr(TokPos), 'protected') and not isObjectType then
         Error('a record cannot have protected members (records do not inherit)');
       Next;
     end;
@@ -3541,17 +3556,36 @@ begin
        (CaseEqual(CurTok.SVal, 'private') or CaseEqual(CurTok.SVal, 'protected') or
         CaseEqual(CurTok.SVal, 'public') or CaseEqual(CurTok.SVal, 'published')) then
     begin
-      if CaseEqual(CurTok.SVal, 'protected') then
+      { `protected` is refused on a record because records do not inherit -- but an
+        `object` may legally OPEN the section (FPC accepts it, and generics.collections'
+        TCustomPointersCollection uses it). It is inert either way: nothing derives from
+        a pxx `object`, so protected and public differ in no observable respect. Opening
+        it is what real source does; enforcing it is a separate job from both. }
+      if CaseEqual(CurTok.SVal, 'protected') and not isObjectType then
         Error('a record cannot have protected members (records do not inherit)');
       if CaseEqual(CurTok.SVal, 'published') then
         Error('a record cannot have a published section');
       Next;
       continue;
     end;
+    { OLD-STYLE OBJECT, refused half: `constructor` / `destructor` are the two
+      members whose job in an old-style object is the VMT -- the constructor sets
+      the VMT pointer that `virtual` dispatch then reads, and the destructor is
+      what `Dispose(p, Done)` calls through it. pxx lowers `object` as a
+      record-with-methods, which has no VMT (bug-p-object-value-types-standard-meaning),
+      so a constructor here would parse, compile, and do none of the thing it was
+      written to do. The record machinery would happily take `constructor` -- that
+      is exactly why this has to be an explicit refusal rather than an omission.
+      Silence is what the earlier decide-old-style-object-types rejected. }
+    if isObjectType and (CurTok.Kind = tkIdent) and
+       (CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor')) then
+      Error('an object type cannot have a ' + CurTok.SVal +
+            ' -- pxx lowers `object` as a value type with no VMT ' +
+            '(bug-p-object-value-types-standard-meaning); use a plain method, or a class');
     if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
        ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor')) then
     begin
-      ParseRecordMethodDecl(ci);
+      ParseRecordMethodDecl(ci, isObjectType);
       continue;
     end;
     if CurTok.Kind = tkProperty then
@@ -3567,7 +3601,7 @@ begin
     begin
       Next;
       RecordMethodClassPrefix := True;
-      ParseRecordMethodDecl(ci);
+      ParseRecordMethodDecl(ci, isObjectType);
       RecordMethodClassPrefix := False;
       continue;
     end;
@@ -4428,7 +4462,7 @@ begin
           Error('class helper: the extended type must be a class');
         UClsHelperTk[ci] := Ord(fTk);
         UClsHelperRec[ci] := LastTypeRecId;
-        ParseRecordFields(ci, False);
+        ParseRecordFields(ci, False, False);
       end
       else if CurTok.Kind = tkClass then
       begin
@@ -5640,7 +5674,38 @@ begin
           UClsHelperTk[ci] := Ord(fTk);
           UClsHelperRec[ci] := LastTypeRecId;
         end;
-        ParseRecordFields(ci, isPackedRecord);
+        ParseRecordFields(ci, isPackedRecord, False);
+      end
+      else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'object') then
+      begin
+        { `TFoo = object ... end` -- the STANDARD Pascal old-style object type, in
+          type-DECLARATION position. A value type with methods: the same shape as an
+          advanced record, and lowered as exactly that (UClsIsRecord, no VMT, Self by
+          reference). There is no second object model here and deliberately so; what is
+          out of scope is refused loudly, at the three places below and in
+          ParseRecordMethodDecl.
+
+          This is not a new dialect extension -- it is the keyword's ONLY meaning in
+          Pascal, which pxx had spent on something else. Until today `object` in type-
+          REFERENCE position (`var o: object`) resolved to a rooted class reference, a
+          2026-07-03 stopgap for "a lightweight root, like TObject without a unit" that
+          builtin TObject superseded nine days later. Part 1 of this ticket retired it,
+          which is what leaves the keyword free to mean what it means everywhere else.
+
+          The trigger was real source, not tidiness: rtl-generics' generics.collections
+          declares exactly one `= object` (TCustomPointersCollection, a stateless
+          methods-only handle) and it stopped the unit at line 146. CLAUDE.md's compat
+          table calls that a bug, not a compat item -- real Pascal source that does not
+          compile. bug-p-object-value-types-standard-meaning }
+        Next;
+        if CurTok.Kind = tkLParen then
+          Error('an object type cannot have an ancestor -- pxx lowers `object` as a ' +
+                'value type with no VMT (bug-p-object-value-types-standard-meaning); ' +
+                'use a class to inherit');
+        ci := AddClassLikeType(FindUClass(tname), tnOff, tnLen, tname);
+        UClsParent[ci] := -1;
+        UClsIsRecord[ci] := True;
+        ParseRecordFields(ci, False, True);
       end
       else if (CurTok.Kind = tkType) and (Tokens[TokPos].Kind = tkIdent) and
               CaseEqual(GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen), 'helper') and
@@ -5659,7 +5724,7 @@ begin
         fTk := ParseTypeKind;
         UClsHelperTk[ci] := Ord(fTk);
         UClsHelperRec[ci] := LastTypeRecId;
-        ParseRecordFields(ci, False);
+        ParseRecordFields(ci, False, False);
       end
       else if CurTok.Kind = tkCaret then
       begin

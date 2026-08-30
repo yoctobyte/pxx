@@ -10238,11 +10238,22 @@ test-core: $(COMPILER)
 	grep -q "metaclass type mismatch: TOther is not TBase" $(TESTTMP)/test_metaclass_descendant_error.log
 	! ./$(COMPILER) test/test_metaclass_narrowing_error.pas $(TESTTMP)/test_metaclass_narrowing_error26 > $(TESTTMP)/test_metaclass_narrowing_error.log 2>&1
 	grep -q "metaclass type mismatch: TBase is not TChild" $(TESTTMP)/test_metaclass_narrowing_error.log
-	# object: rooted object-reference type (any instance; cast to touch members)
+	# TObject/TClass as the rooted reference -- what `object` used to mean here until
+	# bug-p-object-value-types-standard-meaning gave the keyword back its real one
 	./$(COMPILER) test/test_object_reference.pas $(TESTTMP)/test_object_reference26
 	tools/expect_same.sh test_object_reference26 "$$($(TESTTMP)/test_object_reference26 | tail -1)" "OK"
 	! ./$(COMPILER) test/test_object_reference_error.pas $(TESTTMP)/test_object_reference_error26 > $(TESTTMP)/test_object_reference_error.log 2>&1
 	grep -q "member access on a bare object reference" $(TESTTMP)/test_object_reference_error.log
+	# object: the STANDARD Pascal old-style object type -- a value type with methods
+	./$(COMPILER) test/test_object_value_type.pas $(TESTTMP)/test_object_value_type26
+	tools/expect_same.sh test_object_value_type26 "$$($(TESTTMP)/test_object_value_type26 | tail -1)" "OK"
+	# ...and the three things it deliberately refuses, loudly (no VMT to hang them on)
+	! ./$(COMPILER) test/test_object_value_ancestor_error.pas $(TESTTMP)/test_object_value_ancestor_error26 > $(TESTTMP)/test_object_value_ancestor_error.log 2>&1
+	grep -q "an object type cannot have an ancestor" $(TESTTMP)/test_object_value_ancestor_error.log
+	! ./$(COMPILER) test/test_object_value_virtual_error.pas $(TESTTMP)/test_object_value_virtual_error26 > $(TESTTMP)/test_object_value_virtual_error.log 2>&1
+	grep -q "an object type cannot have a virtual method" $(TESTTMP)/test_object_value_virtual_error.log
+	! ./$(COMPILER) test/test_object_value_constructor_error.pas $(TESTTMP)/test_object_value_constructor_error26 > $(TESTTMP)/test_object_value_constructor_error.log 2>&1
+	grep -q "an object type cannot have a constructor" $(TESTTMP)/test_object_value_constructor_error.log
 	./$(COMPILER) test/test_case_insensitive.pas $(TESTTMP)/test_case_insensitive26
 	tools/expect_same.sh test_case_insensitive26 "$$($(TESTTMP)/test_case_insensitive26)" "42"
 	./$(COMPILER) test/test_case_sensitive.pas $(TESTTMP)/test_case_sensitive26

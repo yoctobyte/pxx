@@ -1332,8 +1332,9 @@ begin
     (class/record/array/procvar branches) parses it. }
   if not ((CurTok.Kind in [tkClass, tkRecord, tkPacked, tkArray,
                             tkProcedure, tkFunction]) or
-          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'interface'))) then
-    Error('generic templates must be class, record, interface, array or procedure declarations');
+          ((CurTok.Kind = tkIdent) and
+           (CaseEqual(CurTok.SVal, 'interface') or CaseEqual(CurTok.SVal, 'object')))) then
+    Error('generic templates must be class, record, object, interface, array or procedure declarations');
 
   startTok := TokPos - 1;
   if CurTok.Kind = tkPacked then
