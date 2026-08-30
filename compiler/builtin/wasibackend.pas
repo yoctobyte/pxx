@@ -29,14 +29,50 @@ unit wasibackend;
   older pinned compiler they are using, and a construct it could not read would
   break targets that have nothing to do with wasm.
 
-  DUPLICATION, DELIBERATE AND TEMPORARY. The preopen/rights core below is
-  copied from platform_backend.pas rather than shared, so that this commit
-  changes no existing file's behaviour and check_wasi.sh keeps proving the PAL
-  unchanged. Two copies of a CAPABILITY MODEL is exactly the kind that drifts
-  silently — one path opening files the other refuses — so it does not stay:
-  the next commit makes platform_backend delegate here and deletes its copy.
-  If you are reading this comment and platform_backend still has its own
-  preopen table, that follow-up did not happen and this is now a real defect. }
+  DUPLICATION: DELIBERATE, AND PENDING A DECISION RATHER THAN OWED A CLEANUP.
+  The preopen/rights core below is copied from platform_backend.pas rather than
+  shared, so that its landing commit changed no existing file's behaviour and
+  check_wasi.sh kept proving the PAL unchanged.
+
+  THIS PARAGRAPH REPLACES A PROMISE, and how it was redeemed is worth keeping.
+  It used to say the next commit would make platform_backend delegate here and
+  delete its copy, and it ended: "If you are reading this comment and
+  platform_backend still has its own preopen table, that follow-up did not
+  happen and this is now a real defect." That follow-up did not happen and
+  nobody had filed it — the sentence is the only thing in the tree that caught
+  it, months of green checks later. It worked; it is replaced, not deleted,
+  because a promise that has been overtaken by a decision must stop reading as
+  an unpaid debt or the next reader re-files it.
+
+  Where it actually stands: DECIDED, and the answer is keep both.
+  decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner
+  resolved as C — two copies deliberately, drift guarded by a test, and do NOT
+  invert the layering by pointing a lib/rtl unit at compiler/builtin. It follows
+  from the owner's standing constraint that no PAL belongs in the compiler's
+  sources, which is the same constraint that put this unit here in the first
+  place. So TWO COPIES IS THE INTENDED STATE, not a transitional one.
+
+  (A re-examination is in flight on one specific ground — that the cost is paid
+  per FIX rather than per divergence, see below — so the resolution may be
+  revisited. It does not change what to do while reading this: keep them in
+  step.)
+
+  WHAT GUARDS IT MEANWHILE, and what does not:
+
+  * test/wasm/check_wasidiff.sh asks both models the same nine questions in ONE
+    module — including the refusals, which are the half that matters — and
+    fails if they answer differently. That covers DRIFT.
+  * It does NOT cover a defect copied at birth. The copies are each other's only
+    oracle there, so an identical bug makes them agree. Measured, not feared:
+    the u64 out-param alignment defect
+    (bug-wasm-hosted-compiler-segfaults-the-host-after-a-successful-parse) was
+    in both, agreed on by both, and had to be fixed twice. check_align.sh
+    catches that class by using a strict HOST instead of the other copy.
+
+  So the demonstrated cost of this duplication is not divergence — it is that
+  every fix must be applied twice and nothing tells the second person the second
+  copy exists. If you are fixing something below, fix
+  lib/rtl/platform/wasi/platform_backend.pas too. }
 
 interface
 

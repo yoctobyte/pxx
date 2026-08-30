@@ -250,6 +250,26 @@ function wasi_clock_time_get(clockId: Integer; precision: Int64;
 function wasi_random_get(buf: Pointer; len: Integer): Integer;
   external 'wasi_snapshot_preview1' name 'random_get';
 
+{ THERE IS A SECOND COPY OF EVERYTHING BELOW, and it is intended, not stale.
+  compiler/builtin/wasibackend.pas holds the same preopen table, the same rights
+  masks and the same path resolution, because compiler.pas links no PAL by
+  design -- that is what
+  decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
+  settled. The layering question (a shared home, and what may depend on what) is
+  decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner,
+  and it is DECIDED: keep both copies, guard the drift with a test, and do not
+  invert the layering by pointing this unit at compiler/builtin. Two copies is
+  the intended state, not a transitional one.
+
+  SO: A FIX HERE PROBABLY BELONGS THERE TOO. That is the duplication's real
+  cost, and it is not the one people expect -- test/wasm/check_wasidiff.sh
+  already catches DRIFT (it asks both models the same nine paths, refusals
+  included, in one module), but nothing can catch a defect copied at BIRTH,
+  because there the two copies agree with each other. That is not hypothetical:
+  the u64 out-param alignment bug just below was in both and had to be fixed
+  twice. Nothing but this comment tells you the other copy exists.
+  bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend }
+
 var
   { The preopen table, scanned once on first use. A WASI program cannot open a
     path; it can only open a path RELATIVE to a directory the host granted it,
