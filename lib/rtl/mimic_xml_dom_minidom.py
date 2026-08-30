@@ -1,17 +1,22 @@
-# PARKED -- NOT BUILDABLE, DELIBERATELY NOT NAMED *.py
+# WAS PARKED FOR A DAY, AND THE REASON IS WORTH KEEPING.
 #
-# This is the finished lib/rtl/mimic_xml_dom_minidom.py. It is parked with a
-# .parked suffix because adding it to lib/rtl as a .py would HANG THE COMPILER
-# FOREVER (100% CPU, flat RSS, no output), taking out every lane that runs a
-# library gate. See bug-n-a-class-with-two-definitions-of-one-method-hangs-the-
-# compiler-forever for the 9-line repro and the three ingredients.
+# This file spent 2026-08-30 as `mimic_xml_dom_minidom.py.parked` -- finished,
+# differential-green, and deliberately NOT named *.py, because adding it to
+# lib/rtl HUNG THE COMPILER FOREVER (100% CPU, flat RSS, no output, no exit).
+# A hang is the worst shape a gate failure can take: it does not fail, it
+# stops, and any lane running `make lib-test` would have read it as a slow box.
 #
-# It is NOT reshaped to dodge the hang. Renaming the offending local would make
-# it build today and would hide the bug, which is exactly what the platonic-code
-# rule in CLAUDE.md forbids. When that ticket closes: rename this to .py, wire
-# the two Makefile lines described in the minidom ticket, and run the already-
-# banked differential test/lib_mimic_xml_dom_minidom.npy (34 checks, passing
-# under CPython today).
+# It was NOT reshaped to dodge the hang. Renaming the one local that triggered
+# it would have built that same day and hidden the bug -- exactly what the
+# platonic-code rule in CLAUDE.md forbids. Instead the bug was filed with a
+# 9-line repro (bug-n-a-class-with-two-definitions-of-one-method-hangs-the-
+# compiler-forever) and this file waited.
+#
+# Unparked once the fix could actually be USED here, which is a later moment
+# than the fix landing: Track B builds with $(PXX_STABLE), not HEAD, so the
+# condition was a PIN containing frankA's 0425a62c8 -- reached at v395
+# (acec6c192f14). Verified by compiling this file with the pinned binary, not
+# by inferring it from the sha: 2.9s, where v394 spun for a 75s timeout.
 #
 # SPDX-License-Identifier: 0BSD
 """mimic_xml_dom_minidom -- a real DOM you can build and mutate, not an alias.

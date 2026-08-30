@@ -17103,6 +17103,30 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_weakref.npy $(TESTTMP)/lib_mimic_weakref
 	tools/expect_same.sh lib_mimic_weakref.1 "$$($(TESTTMP)/lib_mimic_weakref | grep -c '=ok')" "11"
 	tools/expect_same.sh lib_mimic_weakref.2 "$$($(TESTTMP)/lib_mimic_weakref | tail -1)" "MIMIC-WEAKREF OK"
+	# A real minidom DOM -- Document/Element/Attr/Text/Comment/DocumentFragment/
+	# DocumentType/NamedNodeMap/DOMImplementation, namespace-aware create+set,
+	# deep and shallow cloneNode, normalize (feature-b-a-real-minidom-is-an-
+	# implementation-not-a-shim, piece 2). A DIFFERENTIAL against CPython's REAL
+	# xml.dom.minidom: test/lib_mimic_xml_dom_minidom.npy runs unmodified under
+	# python3 and both outputs are byte-identical, so this asserts agreement with
+	# the stdlib rather than with itself.
+	#
+	# THE IMPORT SPELLING IN THAT FILE IS LOAD-BEARING. It says `from
+	# xml.dom.minidom import ...`, NOT the `from xml.dom import minidom` spelling
+	# CPython's docs use, because the latter currently binds the PARENT PACKAGE
+	# here -- getDOMImplementation is then not found while XHTML_NAMESPACE
+	# silently answers with xml.dom's. That is bug-n-from-package-import-
+	# submodule-binds-the-parent-package. Do not "modernise" the import: it would
+	# fail here and hide the bug behind a test change.
+	#
+	# This entry was BLOCKED for a day by a compiler hang (100% CPU, no output)
+	# that made the file unbuildable, and the source sat at
+	# lib/rtl/mimic_xml_dom_minidom.py.parked rather than being reshaped to dodge
+	# it -- renaming one local would have built and hidden the bug. Fixed by
+	# frankA's 0425a62c8, which reached this lane at pin v395.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_dom_minidom.npy $(TESTTMP)/lib_mimic_xml_dom_minidom
+	tools/expect_same.sh lib_mimic_xml_dom_minidom.1 "$$($(TESTTMP)/lib_mimic_xml_dom_minidom | grep -c '=ok')" "34"
+	tools/expect_same.sh lib_mimic_xml_dom_minidom.2 "$$($(TESTTMP)/lib_mimic_xml_dom_minidom | tail -1)" "MIMIC-MINIDOM OK"
 	# xml.etree.ElementTree as a TREE MODEL with no XML reader
 	# (feature-b-mimic-xml-etree-elementtree-tree-model). html5lib hands the
 	# module to its treebuilder/treewalker as somewhere to hang a tree and

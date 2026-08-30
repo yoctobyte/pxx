@@ -5,14 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:29 blocked:7 backlog:378 backlog_new:13 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2808 rejected:58`
+`working:2 unfinished:28 blocked:7 backlog:378 backlog_new:13 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2809 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path` [A] — owner: frank-optimize
 - `feature-unicodestring-model` [A] — owner: frankwasm
 
-## unfinished (29) — parked mid-flight; re-claim, do not duplicate
+## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -23,7 +23,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
-- `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — blocked-by: bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
 - `feature-c-diagnostics-name-the-module-they-are-in` [C] — blocked-by: bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-dynamic-compiler-tables` [A]
@@ -54,7 +53,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 404, ranked
+## Ready — top 30 of 403, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -87,4 +86,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 
-_374 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_373 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

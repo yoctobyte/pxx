@@ -4,7 +4,7 @@ prio: 20
 type: feature
 blocked-by: [bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever]
 summary: "Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims."
-status: unfinished
+status: done
 owner: frankB
 ---
 
@@ -224,3 +224,60 @@ compiler has a bug" to "the compiler Track B is required to use does not yet hav
 the fix".
 
 Everything else in the finish list below is unchanged and still correct.
+
+## 2026-08-30 (frankB) — UNPARKED and LANDED at pin v395
+
+The unpark condition the previous entry wrote down was met, and it was checked
+the way that entry demanded — by a real compile, not by reading a sha.
+
+**The condition, evaluated:** `git merge-base --is-ancestor 0425a62c8
+acec6c192f14` (the v395 pin's source commit) is **true**. v394's source
+`43c8e34120` was not an ancestor, which is why the previous session stopped.
+
+**The compile, measured** — because "the fix is in the pin" is an argument about
+a binary and deserves a run:
+
+| pin | result on this file |
+| --- | --- |
+| v394 `53800fbeb0b6` | spun the full 75s timeout at 100% CPU |
+| **v395 `aa78a7faf63a`** | **ok in 2.9s** (`code=1318680B procs=1918`) |
+
+Compiled first from a scratch dir while `make lib-test` was still running, then
+again from its real `lib/rtl` home once that finished — deliberately not
+dropping a possible hang into a live gate run.
+
+**The differential is green from the real location:** output **byte-identical**
+to CPython's real `xml.dom.minidom`, 34/34 `=ok`, `MIMIC-MINIDOM OK`. Both
+Makefile assertions run and exit 0.
+
+**Landed:**
+- `lib/rtl/mimic_xml_dom_minidom.py.parked` → `.py` (`git mv`), and the
+  `PARKED -- NOT BUILDABLE` banner replaced with the history: why it was parked,
+  why it was not reshaped to dodge the hang, and the *two-step* unpark condition
+  (fix lands ≠ fix is usable here, because this lane builds with `$(PXX_STABLE)`).
+- The three Makefile lines wired after `lib_mimic_weakref.2`, with a comment
+  guarding the load-bearing import spelling so nobody "modernises"
+  `from xml.dom.minidom import ...` back to the form that silently binds the
+  parent package.
+
+**Neighbours checked, not assumed:** `lib_mimic_xml_dom` (20 checks) and
+`lib_mimic_weakref` still pass with this module now present — it is reached
+through `mimic_xml_dom.py`'s `minidom` binding, so its arrival could have
+changed that module's behaviour. It did not. `tools/lib_units_compile.py` scans
+only `*.pas`, so the 142-unit count is unchanged.
+
+### What this does NOT deliver, restated so nobody re-reads the ticket as a win
+
+The ticket's stated payoff — *"unblocks exactly one corpus file"* — is **still
+not delivered, and not by Track B**. `html5lib/treebuilders/dom.py` needs
+`property(...)` as a builtin NAME, which this dialect does not have
+([[bug-n-property-works-as-a-decorator-but-is-not-a-builtin-name]], Track N).
+The DOM is complete and gated; the corpus file stays red for a reason that has
+nothing to do with it. That was the previous session's finding and landing the
+code does not change it.
+
+**Resolving** on the gate the ticket itself named — the CPython differential —
+not on the corpus file it was motivated by.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
