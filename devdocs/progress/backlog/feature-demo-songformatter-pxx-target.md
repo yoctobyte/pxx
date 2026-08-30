@@ -198,7 +198,21 @@ and as `re.findall` results with 2+ groups (where the `re` module returns lists
 today — see that unit's header). One feature, three consumers.
 
 Two findings filed from this pass, both beyond songformatter:
-- [[bug-pascal-subclass-inherited-members]] — subclassing is half-wired FOUR ways
+
+> **`bug-pascal-subclass-inherited-members` resolves to no ticket under any name
+> (checked 2026-08-30).** It is cited four times in this file, described below as
+> *"on the critical path for two modules"* and as having a *"prio-60 filing"* —
+> so this is not a stray reference, it is a dependency this ticket schedules
+> around. **Not de-linked and not re-pointed, because guessing would be worse than
+> the dangle:** the nearest candidate, `bug-a-nilpy-subclass-overlays-parent-layout`
+> [A p70], is **done** and covers the *layout* arm only, while the text below names
+> four arms (unqualified inherited members, wrong `Create`, inherited default
+> property losing subscript assignment). Re-pointing at it would silently mark
+> three arms resolved. **The owning lane must decide whether the other three
+> survive at HEAD, then either file the remainder or close this out** — it is the
+> difference between "Counter can stop being a mode flag" and "still blocked".
+
+- `bug-pascal-subclass-inherited-members` — subclassing is half-wired FOUR ways
   (inherited fields and methods invisible unqualified, wrong `Create`, inherited
   default property loses subscript assignment). It forced Counter to ship as a
   dict mode instead of a subclass, and it blocks the natural shape for

@@ -154,10 +154,19 @@ fixed.
 If a binary-interop or memory ticket makes it pay for itself — the two natural
 triggers are typed-file I/O against FPC-written data
 (`feature-pascal-typed-and-untyped-files`) and any embedded target where 32
-bytes per set matters. Do it together with
-`compat-pascal-subrange-storage-size`: they are the same job (storage size from
-the declared range) over two type constructors, and doing one alone leaves half
-the layouts still divergent.
+bytes per set matters. Do it together with the **subrange** half — which is not a separate ticket to
+coordinate with, it is the *"A subrange type is always 4 bytes"* section of THIS
+file, absorbed here and still carrying its old slug at the section head. They are
+the same job (storage size from the declared range) over two type constructors,
+and doing one alone leaves half the layouts still divergent.
+
+*(De-linked 2026-08-30. `compat-pascal-subrange-storage-size` resolved to no
+ticket because it was merged INTO this one — so this document was citing itself
+as a separate dependency it needed to coordinate with. A merge that keeps the
+absorbed ticket's citations converts them all into dangling links pointing at a
+section of the citing file; that is a fifth outcome beside rename, never-filed,
+delivered-under-another-name and never-was-a-ticket, and it is the only one where
+the answer is already in the reader's hands.)*
 
 ## A subrange type is always 4 bytes
 
@@ -253,8 +262,8 @@ characters, in place; pxx uses its managed string with a declared cap, so
 `s[0]` is a Turbo Pascal idiom that FPC still honours and that real code does
 use, but reading it here answers #0 rather than a wrong length, so a program
 that uses it gets an obviously-empty answer rather than a plausible one. The
-layout difference matters for the same reasons as
-[[compat-pascal-subrange-storage-size]]: a record with a `string[N]` field, a
+layout difference matters for the same reasons as the subrange section above
+(merged in from `compat-pascal-subrange-storage-size`, hence no longer a link): a record with a `string[N]` field, a
 `file of TRec`, and anything handed to C see a pointer where FPC puts N+1
 bytes in place.
 

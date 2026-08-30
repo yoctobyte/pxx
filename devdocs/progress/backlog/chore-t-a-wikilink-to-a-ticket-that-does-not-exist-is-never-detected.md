@@ -46,7 +46,10 @@ The second is why this is worth doing.
   changed type and track).
 - **Never filed** -- the link is a promise, not a citation. Spot-checked:
   `feature-nilpy-future-import-noop` and `compat-pascal-subrange-storage-size`
-  match nothing under any name. Same shape as an unexecuted
+  match nothing under any name. **Both spot-checks were right about the filename
+  and wrong about the bucket** — see the 2026-08-30 sweep below: the first was
+  *delivered*, and the second was *merged into the ticket that cites it*. Neither
+  is "never filed", and neither is distinguishable from it by resolving the name. Same shape as an unexecuted
   `(to file / relay to ...)` row: work recorded as though it has a home, which
   does not.
 
@@ -187,3 +190,75 @@ Your gate line asks for negative controls in both directions. Add a third: **a
 `project_*` link must produce no finding.** It is the case that shipped broken, and a
 checker that is silent on a clean board looks identical to one that is silent on the
 wrong namespace.
+
+---
+
+## 2026-08-30 (frankD, second pass) — the fixed check reports 0, and four real ones sit where it does not look
+
+`8dc8fa5cb` fixed the namespace and the remedy line. The board then reported **0
+DANGLING-LINK**, and that 0 is genuine *for the folders the rule visits*.
+
+**It visits three.** `progress.py:1672` — `if t.status not in ("unfinished", "blocked",
+"working"): continue`. The rule was built inside the STALE-PARK family, where a resume
+condition is load-bearing, and it inherited that family's aperture. But this ticket's own
+defect is not about parks: a dangling link is wrong wherever it sits, which is why the
+scan inside that loop deliberately reads the whole body rather than the neighbourhood of
+a blocking phrase. **The inner aperture was widened and the outer one was not.**
+
+Running the prefix instrument over all ranked folders: **0 visible, 4 invisible**, every
+one in `backlog/`.
+
+| citing ticket | dangling name | verdict |
+| --- | --- | --- |
+| `feature-p-assertions-directive-and-position` | `bug-p-assert-does-not-raise-eassertionfailed` | **rename** → `compat-pascal-assert-halts-instead-of-raising-eassertionfailed`, in `done/` |
+| `compat-pascal-four-type-sizes-…` | `compat-pascal-subrange-storage-size` | **merged into the citing ticket** |
+| `feature-c-csmith-differential-fuzzing` | `bug-c-bitfield-packing-sizeof-vs-gcc` | **never filed** |
+| `feature-demo-songformatter-pxx-target` | `bug-pascal-subclass-inherited-members` | **unresolvable — left dangling on purpose, see below** |
+
+**Two of those four are the very examples this ticket uses to define its buckets.** The
+spot-checks at the top name `bug-p-assert-…` as a rename and
+`compat-pascal-subrange-storage-size` as never-filed. Both were still dangling tonight,
+and one of the two classifications was wrong. **The check reported a clean board while
+its own specification's worked examples were unfixed and one was mis-bucketed** — which is
+the same shape as the namespace bug: the instrument agreed with the hypothesis that built it.
+
+### A fifth outcome: MERGED INTO THE CITING TICKET
+
+`compat-pascal-subrange-storage-size` was not renamed and not never-filed. It was
+**absorbed** into `compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees`,
+which still carries `*(was compat-pascal-subrange-storage-size, prio 22)*` at the head of
+the section that used to be it. The absorbed ticket's citations came with it, so the
+merged document was **citing itself as a separate dependency to coordinate with** — *"Do it
+together with `compat-pascal-subrange-storage-size`: they are the same job"*, six lines
+above the section that IS it.
+
+This is why the spot-check above put it in the wrong bucket, and the reason generalises:
+**a merged ticket is indistinguishable from a never-filed one by resolving its name.** The
+evidence is inside the citing file, not in the board. It is the only outcome where the
+answer is already in the reader's hands and the link is what stops them looking. A merge
+that keeps the absorbed ticket's citations manufactures one dangling link per citation,
+all pointing at a section of the document doing the citing.
+
+**So the buckets are five, and only two of them are fixed by resolving a name:** rename ·
+never filed · never filed but already delivered · merged into the citing ticket · never
+was a ticket (a method maxim in brackets).
+
+### One left dangling deliberately
+
+`bug-pascal-subclass-inherited-members` is cited four times by
+`feature-demo-songformatter-pxx-target`, called *"on the critical path for two modules"*
+and given a *"prio-60 filing"* it does not have. The nearest candidate,
+`bug-a-nilpy-subclass-overlays-parent-layout` [A p70], is **done** and covers the layout
+arm alone, where the prose names four arms. **Re-pointing would silently mark three arms
+resolved**, so the link stays and carries a block quote saying what is and is not known.
+`Counter` ships as a mode flag because of it and `feature-nilpy-configparser` is blocked
+in practice by it, so this is worth an owning-lane judgement rather than a slug edit.
+
+### Suggested, not done — the aperture
+
+Widening the folder filter for the dangling half is a one-line change in Track T's file
+and is not mine to make. Note it needs a **decision**, not just a wider tuple: `done/`
+holds most of the board and a dead trail there is history, exactly as this ticket's fix
+sketch says. `urgent/`, `backlog/`, `backlog_new/` are the ones where a dangling link is a
+live obstacle. Negative control for it: a link that dangles in `backlog/` must produce a
+finding — it did not tonight, four times.

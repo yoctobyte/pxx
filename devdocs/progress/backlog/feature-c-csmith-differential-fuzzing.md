@@ -97,9 +97,14 @@ failures are crashes (still one dominant class — see below).
   fixed them and nobody re-checked. Whether the crash CLASS is gone or just
   these two representatives is not established: a fresh crasher has to be
   found before the bullet can be closed, which is what a batch is for.
-- **Bitfield LAYOUT** ([[bug-c-bitfield-packing-sizeof-vs-gcc]]) — `sizeof` of a packed
-  bitfield struct is 12 where gcc gives 8. Values are right, so the checksum oracle CANNOT
-  see it; it breaks ABI/interop instead.
+- **Bitfield LAYOUT** — `sizeof` of a packed bitfield struct is 12 where gcc gives 8.
+  Values are right, so the checksum oracle CANNOT see it; it breaks ABI/interop instead.
+  **`bug-c-bitfield-packing-sizeof-vs-gcc` was never filed** (de-linked 2026-08-30). Do not
+  mistake `bugfix-cfront-bitfield-packing-gcc-compat` for it: that one is in `rejected/`,
+  and it was rejected as a **false diagnosis of the sqlite `VdbeCursor` crash**, having
+  measured PXX and gcc as *matching* on that struct — a different subject, closed for a
+  reason that says nothing about this. This bullet is the whole record of a finding the
+  oracle structurally cannot rediscover, and the link is what made it look filed.
 - **Brace elision over rows** ([[bug-c-multidim-brace-elision-flattens-rows]]) —
   `int q[2][3] = {{1},{2}}` gives q[0][1]=2 instead of 0. Pre-existing.
 - **`--opts 0,2,3`** — the harness only ran `-O0,-O2` in anger. Adding `-O3` would point
