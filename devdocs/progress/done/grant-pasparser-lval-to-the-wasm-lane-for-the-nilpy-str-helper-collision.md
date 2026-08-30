@@ -2,7 +2,7 @@
 slug: grant-pasparser-lval-to-the-wasm-lane-for-the-nilpy-str-helper-collision
 track: A
 prio: 55
-status: open
+status: done
 ---
 
 # GRANT: `compiler/pasparser_lval.inc` → the wasm lane, for the NilPy str/helper collision
@@ -65,3 +65,35 @@ path, not solved. It also **withdrew** the tuple-unpack from its own repro
 conditions after measuring that `return`, plain assignment and unpack behave
 identically — a correction to its own minimisation, which is the direction of
 correction that costs something and nobody asks for.
+
+
+## CLOSED 2026-08-30 — RETURNED UNUSED, and the grant should never have been asked for
+
+The lane patched `pasparser_lval.inc`, measured **no change**, and a `PXXDBG` probe
+on its own guard showed the block is **never asked during a NilPy parse**. The
+type-helper dispatch is **duplicated**: the same block, comment and all, also sits
+at `pyparser.inc:39038`, and that is the copy NilPy runs. So the fix was Track N's
+own ground the whole time and needed no A-ground grant.
+
+`grep FindHelperForType` is what found it, and would have found it before the ask.
+The lane's own verdict: *"my escalation was correct in form and wrong in target."*
+
+**This is not a failure of the grant process — it is the doctrine working.**
+`the-substrate-is-ast-and-ir-not-the-parser.md` says share the AST and the IR and
+**duplicate the parser per language**, so two copies of a dispatch block are the
+intended design, not drift. The trap is that the duplication is invisible from the
+Pascal copy: nothing at `pasparser_lval.inc:275` says a sibling exists, and a lane
+reasoning about *"the type-helper dispatch"* will find one file and believe it is
+the site.
+
+**Generalisation worth carrying, and it inverts the usual advice.** This index keeps
+recording *a parser that exists twice is one that gets fixed on one arm* — the
+hazard of duplication. Here the hazard ran the other way: a lane found the **wrong**
+arm, changed it correctly, and observed nothing, because the arm it changed was not
+the one its language runs. **Before requesting access to a shared parser file, grep
+the symbol across every frontend's parser** — if it appears in your own language's
+parser too, that is your copy and the shared file is not involved.
+
+Landed instead as `05eff4cc9`, entirely within Track N's files. All four collisions
+match CPython; `s.Trim()` / `s.IsEmpty()` still reach the Pascal helper, so the
+guard is **observed rejecting**, not only accepting.
