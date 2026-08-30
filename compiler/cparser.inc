@@ -2758,6 +2758,17 @@ begin
         begin
           if Syms[si].PtrElemTk = tyRecord then sz := RecSize(Syms[si].PtrElemRec)
           else sz := TypeSize(Syms[si].PtrElemTk);
+          { `int (*p)[4]`: the pointee is an ARRAY and this answered its ELEMENT
+            size -- 4 where gcc says 16, `double (*q)[3]` 8 where gcc says 24,
+            `char (*r)[7]` 1 where gcc says 7. Same shape as every other reader
+            that takes a pointer-to-array's element for the thing itself; the
+            metadata was already recorded and only unread. SymPtrElemArrLen holds
+            the FLATTENED product for a multi-dim pointee (its own note in
+            defs.inc says so), so one multiply covers `int (*m)[3][4]` too.
+            Pascal's SizeOf(p^) is correct on the identical construct, which is
+            what says this is the C reader alone and not the metadata.
+            bug-c-sizeof-of-a-dereferenced-pointer-to-array-answers-the-element-size }
+          if SymPtrElemArrLen[si] > 0 then sz := sz * SymPtrElemArrLen[si];
         end;
       end;
     end

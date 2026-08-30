@@ -11329,6 +11329,14 @@ test-core: $(COMPILER)
 	# DECLARES A GOTO TARGET, which an over-eager fold deletes while every row
 	# above it stays green. Unreachable by fall-through is not unreachable.
 	# bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
+	@echo "=== sizeof(*p) where the pointee is an ARRAY ==="
+	# `int (*p)[4]` answered the ELEMENT size, 4 where gcc says 16 -- the same
+	# pointer-to-array reader gap as the Pascal side, in the C sizeof arm alone.
+	# Rows S, D and E are the controls that an extent multiply applied one level
+	# too widely would move. Non-vacuous: A/B/C/M read 4/8/1/4 on pinned.
+	# bug-c-sizeof-of-a-dereferenced-pointer-to-array-answers-the-element-size
+	./$(COMPILER) test/c_sizeof_deref_ptr_to_array.c $(TESTTMP)/c_szderef26
+	tools/expect_same.sh c_szderef26 "$$($(TESTTMP)/c_szderef26)" "$$(printf 'A 16\nB 24\nC 7\nM 48\nS 4\nD 8\nE 16')"
 	./$(COMPILER) test/c_const_branch_dead_arm.c $(TESTTMP)/c_constbranch26
 	tools/expect_same.sh c_constbranch26 "$$($(TESTTMP)/c_constbranch26)" "$$(printf '42 42 42 42 42\n100 200 400 300 500 600')"
 	# An UNSIGNED constant guard must be decidable at compile time, like every
