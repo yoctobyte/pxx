@@ -19986,3 +19986,129 @@ T's ten minutes.*
 returning the answer the measurer expected.** The four differ in what was empty —
 a population, a stream, a parse, a preprocessor symbol — and are identical in
 shape: **the check ran, and could not have said anything else.**
+
+## PRE-MERGE STATE, 2026-08-30 ~12:0x — measured, not reported
+
+Owner: *"let's wait for everything to finish and push, then we will look about
+merging."* **No merge started.** Everything below is measured in this checkout
+after a `git fetch`, not relayed.
+
+| check | value |
+| --- | --- |
+| `origin/master` | `90501813d` |
+| `forwardlint` | **exit 0** — the seed builds |
+| `working/` locks | 2: `bug-o-uforth-blocktest` (pre-dates tonight), `bug-p-object-value-types-standard-meaning` (frank-user, LIVE) |
+| trees dirty / unpushed | frankA 0/0 · frankC 0/0 · b4 0/0 · frank-rust 0/0 · **frankwasm 1/0 (live)** · **frank-user 3/0 (live)** |
+| load | 13.6 |
+
+**frank-rust is unblocked and landed** — its permission dialog was cleared and
+its tree is clean at origin. That was the one piece of work with no backup.
+
+### THE DOUBLE-FIX, and the procedure it forces on the pin
+
+**Two independent fixes for the same seed break landed THREE MINUTES APART** —
+`301905d6c` at 10:20 and `652bfcdfa` at 10:23 — and *together* they produced a
+duplicate forward, which FPC rejects as hard as a missing one. Resolved since.
+
+**The failure mode was a double-fix, not a missing fix**, and it is my
+coordination error: a seed break is loud and lane-agnostic, so *every* lane that
+runs a gate sees it and any of them can fix it in two lines. **I am the only
+party positioned to say "X is on it, stand off", and I did not.**
+
+**frankC's consequence is the one that goes into the pin procedure: anyone
+verifying the seed before a pin must `git fetch` FIRST.** Its local
+`forwardlint` went red on a resolution that had been on origin for hours — *a
+stale checkout reports a red that origin fixed*, and before a pin that reads as
+a reason to stop. Same shape as `twatch --status` reading local `tstate/`.
+
+### frankA closed the p70 pair, and the decisive step was an EXPERIMENT
+
+`faee264e5`. It **renamed `max(const a: Variant; const b: Variant)` out of the
+overload set and re-ran the failing shape**: with the catch-all present,
+`TypeError`; with it renamed away, the correct answer. **That is the matcher
+agreeing it ranks them that way** — recorded as a *cause*, not a mechanism.
+
+**The ticket's title AND its stated cause were both wrong:** a literal receiver
+*does* reach the keyed set; **it is outranked on the way there.** Fix normalises
+the two shapes (a string literal argument reported `tyAnsiString` instead of
+`tyString`, conditioned on `AN_STR_LIT` so a real `string[N]` from a Pascal unit
+is untouched) rather than growing a second ranking path. 22 probe shapes against
+CPython, both receiver kinds × four key spellings, **and the two defects
+demonstrated on separate binaries** — row 2 before the library fix, row 4 before
+this one.
+
+Deliberately NOT claimed: a literal TUPLE receiver still fails
+(`bug-nilpy-keyword-arg-vs-overload-set`, pre-existing at `7b73a385d^`) — left
+alone rather than widen a change before a re-pin. **Correct call.**
+
+**And it stated a limit rather than implying a measurement**: `progress.sh check`
+exits 1 on the current tree, from seven pre-existing STALE-PARK advisories plus
+the historical DEAD-COMMIT line — *"I did not record check's exit code before my
+commits, so I am telling you it is systemic because none of the seven are tickets
+I touched, not because I measured the before."* That is the honest form.
+
+**My ruling on its two older parks** (`perf-a-cache-the-compiled-nilpy-runtime-unit-image`
+[A p60], `feature-pascal-corpus-generics` [P p65]): **no action before the merge.**
+The rule that makes a Track A `unfinished/` ticket critical is about a
+**half-applied compiler change** poisoning the self-host gate. **Neither has any
+uncommitted state on disk and there is nothing to revert** — the tree is
+byte-identical to origin. The park is a bookkeeping state, not a code state, and
+the distinction is the whole content of the rule.
+
+### frankC parked clean, and found two wrong root causes by MEASURING
+
+`forwardlint` 0 (219,130 lines), fixedpoint `50c56ff6764c`,
+`C-CORPUS-PROBE-COMPLETE programs=3 identical=3 skipped=0 failed=0` against that
+same sha. `compiler/` byte-identical to origin.
+
+**It built TWO fixes against five init-walkers before probing whether any of them
+runs on this input. None does.** *"Two wrong root causes reached by reading
+instead of measuring — the playbook's own rule, paid for twice in one sitting.
+Ten minutes of probes would have replaced an hour."*
+
+Real site is `cparser.inc:8592-8601`: `until (depth = 0) or (CurTok.Kind = tkEOF)`
+exits on EOF with `depth` still 1 **and nothing asks which condition ended it**.
+**Same shape a second time**: `CBraceTopLevelInitCountAt` returns `-1` for
+*"unbalanced"* and all five callers read `-1` as *"no count available"* — **one
+value, two meanings, and the meaning that mattered is the one nobody can act
+on.**
+
+**It did not land the one-liner, and the reason is right:** the identical `until`
+appears at `4896`, `8263`, `11419` and in `SkipBraceBlock`. *Fixing one is how
+you get the arm that stays broken*, and a partial C-parser normalisation in the
+hour before a binary is blessed is the shape to avoid. One refusal across all
+four, after the pin.
+
+It also corrected its own p30: the ticket says *"nothing is consumed that should
+not be"* — **false for the shape that matters.** `int a[] = { 1, 2` followed by a
+real `main` **consumes main**, and reports `main function not found` about a
+function on line 2. **It priced this from the quiet shape days after writing face
+238 about exactly that.**
+
+### frank-rust closed the nested-type ticket AND retracted a stale corpus claim
+
+Route B (hoist), 5/5 against FPC, fixedpoint `374fa81e8293`, forwardlint clean
+**and read**, `test_generic_cycle_fail` still failing with its cycle diagnostic —
+*the control a deferral change must not break, and this change is entirely in the
+deferral path.*
+
+**The retraction is the part to propagate.** The ticket claimed the corpus stop
+for `uses Generics.Collections` was `generics.collections.pas:120`. It does not
+reproduce against **either** binary: HEAD and `pinned` both stop at **line 146**,
+`TCustomPointersCollection<T, PT> = object` — a generic over an OBJECT type.
+**So the change moves the corpus not at all, and the real wall is long-standing
+rather than a regression** — which is what running `pinned` alongside is for.
+Filed `bug-p-a-generic-template-cannot-be-an-object-type` [P p60]. *"I nearly
+wrote 'unblocks the corpus' off the ticket's own figure. An unverified corpus
+number is worth less than none."*
+
+### Held for when work resumes (b4's list, recorded so it is mine not its)
+
+1. **`ELF_AARCH64_PAGE`** — one line in b4's slice, with the owner. **A late
+   answer means a SECOND pin.**
+2. **The ESP-bare alignment finding lives only in `7720f02c8`'s commit message
+   and its gated row** — deliberately unfiled under the no-new-tickets rule.
+   File it when work resumes; it is a second silently-repaired population.
+3. **The wasm no-coupling claim stays HALF-checked** until b4 reads frankwasm's
+   files. Two lanes each confirming their own side is not the claim being
+   checked.
