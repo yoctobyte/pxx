@@ -88,7 +88,7 @@ def sh_func(name):
     return m.group(0)
 
 
-def run_guard(cwd, tickets, still_owed):
+def run_guard(cwd, tickets, still_owed, resolved=()):
     """Run verify_citations_landed for real, with a stub `progress.py pending`.
 
     The function asks `pending` AFTER the fill, so the stub is what makes the
@@ -102,6 +102,7 @@ def run_guard(cwd, tickets, still_owed):
     script = (
         "PLACEHOLDER='PENDING-COMMIT'\n"
         "manifest_tickets='%s'\n" % "\n".join(tickets)
+        + "manifest_resolved='%s'\n" % "\n".join(resolved)
         + sh_func("verify_citations_landed")
         + "\nverify_citations_landed\n")
     r = subprocess.run(["sh", "-c", script], cwd=cwd, capture_output=True,
@@ -189,7 +190,49 @@ def main():
         check(rc == 0 and err.strip() == "",
               "a renamed or deleted ticket is skipped, not reported missing")
 
-    print("8. the wiring, in sync.sh itself")
+    print("8. the silent sibling: resolved this push, citing nothing")
+    with tempfile.TemporaryDirectory(
+            dir=os.environ.get("TESTMGR_TMP") or os.environ.get("TMPDIR")
+            or "/tmp") as td:
+        hand = ticket(td, "devdocs/progress/done/bug-hand-resolved.md",
+                      "- 2026-08-30 — fixed with guards; resolved.\n")
+        cited = ticket(td, "devdocs/progress/done/bug-cited.md",
+                       "- 2026-08-30 — resolved, commit 62dd38d65.\n")
+        keyed = ticket(td, "devdocs/progress/done/bug-keyed.md",
+                       "commit: b78e8f9bc\n\n- 2026-08-29 — fix landed.\n")
+        held = ticket(td, "devdocs/progress/done/bug-placeholder.md", FLAT)
+
+        rc, err = run_guard(td, [], [], [hand])
+        check("bug-hand-resolved.md" in err and rc == 0,
+              "a hand-typed Log line with no sha is nudged, exit 0", "rc=%d" % rc)
+        check("not a commit" in err and "correctly uncited" in err,
+              "and the message says an uncommitted resolution is legitimate",
+              "caution 3, in the text a person actually reads")
+
+        for name, f in (("Log form", cited), ("frontmatter form", keyed)):
+            rc, err = run_guard(td, [], [], [f])
+            check(err.strip() == "", "silent on a real citation: %s" % name,
+                  err.strip()[:60])
+
+        rc, err = run_guard(td, [held], [], [held])
+        check("resolved this push, citing no commit" not in err,
+              "a ticket still holding the placeholder is the FILL's, not the nudge's")
+
+        for pre in ("regression", "decide", "grant"):
+            g = ticket(td, "devdocs/progress/done/%s-x.md" % pre,
+                       "- 2026-08-30 — closed on the verdict.\n")
+            rc, err = run_guard(td, [], [], [g])
+            check(err.strip() == "",
+                  "%s-* is not nudged — its resolution IS a verdict" % pre,
+                  "23 of 43 live hits were these")
+
+        print("9. SCOPE again — editing a resolved ticket is not resolving it")
+        rc, err = run_guard(td, [hand], [], [])
+        check(err.strip() == "" and rc == 0,
+              "in manifest_tickets but not manifest_resolved -> silent",
+              "otherwise every write-up appended to an old ticket nags")
+
+    print("10. the wiring, in sync.sh itself")
     check("verify_citations_landed" in SYNC.split("fill_pending_commits\n")[-1],
           "the guard runs AFTER fill_pending_commits, not before")
     check("'devdocs/progress/*/*.md'" in SYNC,
@@ -203,8 +246,13 @@ def main():
           "the pre-fill recording is gone, not left dead beside its replacement")
     check("still_owed=$(python3" in SYNC,
           "and condition (a) re-asks `pending` AFTER the fill, not before")
+    check("--no-renames" in SYNC,
+          "manifest_resolved disables rename detection",
+          "a git mv backlog/->done/ is R, and --diff-filter=A would miss it")
+    check("--diff-filter=A" in SYNC,
+          "and asks for ADDED files, so an edit to an old ticket is not a resolve")
 
-    print("\n  %d guard(s), %d FAIL" % (24, len(fails)))
+    print("\n  %d guard(s), %d FAIL" % (36, len(fails)))
     return 1 if fails else 0
 
 

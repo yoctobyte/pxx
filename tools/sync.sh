@@ -380,6 +380,18 @@ manifest_n=$(printf '%s' "$manifest" | grep -c . || true)
 manifest_tickets=$(git log --format= --name-only "origin/$BRANCH..HEAD" \
                    -- 'devdocs/progress/*/*.md' 2>/dev/null | sort -u)
 
+# ...and, separately, the tickets this run RESOLVED -- newly added to a resolved
+# bucket. Not the same set: appending a correction to a ticket resolved last week
+# touches it without resolving it, and a nudge that fired on that would be noise
+# on every write-up. `--no-renames` is deliberate: a `git mv` from backlog/ to
+# done/ is otherwise reported as R and --diff-filter=A would never see the very
+# move this is about.
+manifest_resolved=$(git log --no-renames --diff-filter=A --format= --name-only \
+                    "origin/$BRANCH..HEAD" \
+                    -- 'devdocs/progress/done/*.md' \
+                       'devdocs/progress/decided/*.md' \
+                       'devdocs/progress/done-followup/*.md' 2>/dev/null | sort -u)
+
 # Did every commit we set out to push actually arrive? Subject match against
 # origin, which survives the sha rewriting that a rebase does by design.
 verify_manifest_landed() {
@@ -460,7 +472,13 @@ EOF
 # push as a failure is this file's own recorded failure mode wearing the other
 # hat, and the defect here is silence -- a line that names the file ends it.
 verify_citations_landed() {
-    [ -n "$manifest_tickets" ] || return 0
+    # BOTH inputs, because this function now answers two questions and they have
+    # different sources. Keying the early-out on manifest_tickets alone made the
+    # nudge unreachable whenever that list was empty -- harmless live, since
+    # manifest_resolved is a subset of it, but the devtest passes the two
+    # separately and caught it in the first run. Accidentally correct is not
+    # correct.
+    [ -n "$manifest_tickets" ] || [ -n "$manifest_resolved" ] || return 0
     # STILL OWED, not "was owed". Asking `pending` again AFTER the fill is the
     # only honest form of condition (a), and the first cut got it wrong in a way
     # its own devtest could not see: it asked whether `pending` had named the
@@ -494,6 +512,55 @@ verify_citations_landed() {
         echo "sync: PENDING_RE is blind to its spelling and the sha will never be filled." >&2
         echo "sync: Unwrapping it onto one line is the fix, and re-running sync fills it.$unseen" >&2
     fi
+    # THE SILENT SIBLING. A ticket resolved by a hand-typed Log line never gets
+    # a placeholder, so the fill has nothing to fill and `check` nothing to
+    # count: uncited, and nothing anywhere says so. Strictly worse than
+    # PENDING-COMMIT, which at least greps, counts, and has a tool that repairs
+    # it.
+    #
+    # This lives HERE, not in progress.py's `check`, and the scope is the whole
+    # reason. As a standing report over the tree it is worthless: 31 uncited
+    # tickets in the freshest six days, 456 before August, and no date floor
+    # rescues it -- measured, and it is why
+    # bug-t-a-resolve-that-never-wrote-a-placeholder-is-uncited-and-nothing-says-so
+    # was closed `rejected/`. The SAME findings are worth having one at a time,
+    # addressed to the person who just resolved the ticket, at the moment fixing
+    # it costs one line. Scope changes the value, not the count.
+    #
+    # Bias is opposite to the placeholder search above, on purpose: that one is a
+    # literal because a missed spelling hides a real defect, this one is loose
+    # because it is a nudge and a false alarm on somebody's write-up is the only
+    # way it can do harm.
+    # Calibrated against the live board, not guessed: over the last 400 commits
+    # touching a resolved bucket, 469 resolutions, 43 would nudge -- 9%. But 23
+    # of those 43 are `regression-`, `decide-` and `grant-` slugs, whose
+    # resolution IS a verdict rather than a commit: the watcher files and closes
+    # regression tickets from tstate, a decision closes when the user rules, a
+    # grant when it is returned. Nudging those teaches that uncited means
+    # nothing, which is the third caution exactly. Excluded by prefix, and the
+    # rate falls to 19 of 469 -- 4%, roughly one nudge per twenty-five
+    # resolutions, every one of them a `bug-`/`feature-` ticket that changed code
+    # and cited nothing.
+    uncited=""
+    for f in $manifest_resolved; do
+        [ -f "$f" ] || continue
+        case "${f##*/}" in
+            regression-*|decide-*|grant-*|meta-*|tstate-*|README*) continue ;;
+        esac
+        grep -qF "$PLACEHOLDER" "$f" 2>/dev/null && continue     # the fill owns it
+        grep -Eqi "commits?[: ]+.?[0-9a-f]{7,40}" "$f" && continue
+        uncited="$uncited
+  $f"
+    done
+    if [ -n "$uncited" ]; then
+        echo "sync: NOTE — resolved this push, citing no commit:$uncited" >&2
+        echo "sync: nothing will ever ask again — \`check\` counts placeholders, and a" >&2
+        echo "sync: hand-typed Log line never wrote one. Add \`, commit <sha>.\` to the Log" >&2
+        echo "sync: entry; cite the FIX, not the close, and name the close beside it." >&2
+        echo "sync: If the resolution was not a commit — profiled, declined, filed" >&2
+        echo "sync: elsewhere — then it is correctly uncited and this line is noise." >&2
+    fi
+
     if [ -n "$broken" ]; then
         echo "sync: *** FILL FAILED — these were owed a citation and still are ***$broken" >&2
         echo "sync: progress.py named them, the substitution ran, and the literal survived." >&2
