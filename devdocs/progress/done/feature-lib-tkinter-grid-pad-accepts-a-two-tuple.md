@@ -4,7 +4,7 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence."
-status: unfinished
+status: done
 owner: frank-b
 ---
 
@@ -426,3 +426,59 @@ This is the third state this ticket has been in today and the distinction betwee
 them is the whole point: a HEAD pre-answer (known, not closable), a pinned close
 (closable, closed), and a reverted pin (closed prematurely, reopened). Each was
 correct about the binary it named.
+
+## 2026-08-30 — CLOSED AGAIN, against pin `53800fbeb0b66e11`. This is the third pin and the last.
+
+The alias regression that withdrew v394 is fixed and re-pinned. `$(PXX_STABLE)`
+is now **`53800fbeb0b66e11`**, measured with `sha256sum stable_linux_amd64/default/pinned`
+at the top of this run rather than recalled from the dispatch that announced it.
+
+**The eleven rows were re-RUN, not re-derived.** They were correct against v394;
+what had been withdrawn was the ground, not the analysis. Re-deriving would have
+spent a second full pass to reproduce a known result, with the added risk that
+the two passes differ in some detail and nobody can say which was right.
+
+```
+grid(row=0, column=0, sticky="", columnspan=1, rowspan=1, padx=(8,6), pady=2)  COMPILES
+grid(padx=(8, 6))                                                              COMPILES
+grid(row=0, column=0, padx=8)                                                  COMPILES
+grid(row=0, column=0, padx=(8, 6))                                             COMPILES
+pack(padx=(8, 6))                                                              COMPILES
+pack(side="left", fill="x", expand=0, padx=(8, 6))                             COMPILES
+configure(scrollregion=(0, 0, 100, 100))                                       COMPILES
+configure(state="normal", scrollregion=(0, 0, 1, 1))                           COMPILES
+create_text(1.0, 2.0, "hi", font=("Arial", 12))                                COMPILES
+create_text(1.0, 2.0, "hi", anchor="w", fill="red", font=("Arial", 12))        COMPILES
+askopenfilename(filetypes=[("a", "*.b")])                                      COMPILES
+```
+
+Eleven of eleven, identical to the v394 table row for row. Controls on the same
+binary, because eleven-of-eleven green is the shape a compiler that accepted
+*everything* would also produce:
+
+```
+grid(nosuchkeyword=(8, 6))  REJECTED rc=1: Widget.grid has no parameter named 'nosuchkeyword'
+lbl.no_such_method(1, 2)    REJECTED rc=1: Label has no method no_such_method
+all four facades in one program -> builds, links, RUNS under xvfb, rc=0, prints
+                                   "all four facades ok"
+```
+
+Rejection is still real and still specific to the right thing, and the accepted
+program does not merely typecheck — it links and runs.
+
+Each compile's exit status was read from the **compiler's own** invocation
+(`if $P ... > log 2>&1; then`), not from a `tail` or an `echo` after it. For an
+eleven-row table that distinction is the difference between a verification and
+eleven confident greens: `cmd > log 2>&1; tail log` reports `tail`'s status and
+`{ cmd; echo "rc=$?"; }` reports the `echo`'s, and both read as 0 for a red run.
+
+**`lib/pcl` needs no change** — that was this ticket's finding from the first
+triage onward, and three pins have not altered it. The facade was already
+complete; what was broken was NilPy argument binding, fixed by `51b0753e7`, and
+this ticket was only ever waiting for a pin that carried it.
+
+Four states in two days, and the distinction between them is the point: a HEAD
+pre-answer (known, not closable), a pinned close (closable, closed), a reverted
+pin (closed prematurely, reopened), and now a close against a pin that exists.
+Each was correct about the binary it named — which is why every one of them named it.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
