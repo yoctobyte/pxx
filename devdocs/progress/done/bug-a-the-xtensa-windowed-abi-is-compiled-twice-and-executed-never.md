@@ -203,7 +203,7 @@ and not 107. Item 3 (whether the differential belongs in the repo as a tool) is
 deliberately **not** done and should stay a separate decision.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 77fafffb8.
 
 ## APPENDIX — the harness's provenance, banked because the harness does not survive
 
