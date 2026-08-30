@@ -166,4 +166,4 @@ call, and the plain-call path now delegating instead of carrying its own copy),
 `compiler/pyforwards.inc` (forward).
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 7b73a385d.
