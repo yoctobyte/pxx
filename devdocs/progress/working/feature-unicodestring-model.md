@@ -510,3 +510,67 @@ constructs a wide string until step 6.
 refactor ticket of its own** — the sibling of
 [[refactor-p-the-char-array-is-not-a-string-rule-is-spelled-five-times]]. To be
 filed AFTER step 4 lands, so the window is not held up by paperwork.
+
+## 2026-08-30 (frankwasm) — step 4 landed; only the switch is left
+
+`e2dba4293`, one commit, seven files, in a window the coordinator held open
+across three other agents. Steps 1-5 are now all in and **step 6 is the only
+thing left**.
+
+    (elemSize = 1)  ->  ((elemSize = 1) or (elemSize = 2))     x6
+    (Integer(IRIVal[node]) = 1) -> the same widening            aarch64
+
+Stride 8 stays excluded, which was the point of the clause in the first place:
+an `array of AnsiString` has `IRTk = tyAnsiString` because its ELEMENT is a
+string, not its base.
+
+**Three comments asserting a 1-byte stride were corrected in the same commit** —
+x86-64's said the widened assumption outright, riscv32's and xtensa's carried it
+in their arm headers. A file whose prose contradicts its code is how the next
+reader concludes the code is wrong.
+
+Inert on today's corpus, and measured rather than asserted: `pinned` == new on
+copy-on-write through a plain variable, a record field and an array element, on
+the aliasing COW exists to protect, and on the read path.
+
+The seven-spellings problem is filed as
+[[refactor-a-the-managed-string-index-cow-rule-is-spelled-seven-times]].
+
+### Step 6 is NOT disjoint from `defs.inc` — correcting an answer I nearly gave
+
+I was drafting "step 6 does not touch `defs.inc`, so frank-optimize and I are
+disjoint" when the step-4 window opened, and had not finished checking. It is
+probably wrong.
+
+The alias sites are inside **`BuiltinScalarTypeKind(nm: AnsiString): TTypeKind`**
+(`pasparser_lval.inc`), which returns a **bare kind**. Under option B the answer
+for `widestring` is not a kind, it is a PAIR — `tyAnsiString` *whose element is
+`tyWideChar`* — and that function's signature has nowhere to put the second half.
+So step 6 needs a channel out of it, and every global in this compiler lives in
+`defs.inc`. Settle the shape of that channel BEFORE claiming a lane boundary.
+
+This is the same trap as step 4's, one level up: the obvious reading of a site
+("it just returns a kind, so widening it is local") is wrong for a reason only
+visible from the signature.
+
+### `tyWideString` (defs.inc:1752) is dead, and its comment sells option A
+
+It was added under **option A**, which was then rejected in favour of **B**.
+Nothing constructs or reads it — the only references anywhere are its own
+comment and two prose mentions in `builtinheap.pas`. Under B it is permanently
+unreachable, because `widestring` resolves to a `tyAnsiString` carrying a wide
+ELEMENT and never to a distinct kind.
+
+That would be harmless if the comment above it were not a 40-line, confident
+migration plan for the design we did not take, sitting at the tail of
+`TTypeKind` where it reads as current. Its lockstep list also still names
+`rtti_emit.inc:~942`, which was established to be wrong — that site classifies
+ORDINALS, and `tyAnsiString` is correctly absent from it too; the real lockstep
+sites are `FieldIsManaged` and the four finalizer sites.
+
+**Recommended: delete the enumerator and the comment**, keeping only the
+sysutils `UTF8Encode`/`UTF8Decode` warning, which belongs here in the ticket
+rather than in `defs.inc`. It is last in the enum, so nothing renumbers, and
+re-adding it costs nothing if A is ever revisited. Raised with the coordinator
+rather than done unilaterally: `defs.inc` is dual-occupied, and deleting a type
+kind is closer to a decision than to cleanup.
