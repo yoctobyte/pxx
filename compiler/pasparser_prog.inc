@@ -548,6 +548,7 @@ end;
 
 procedure ParseProgram;
 var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
+    needsWide: Boolean;   { program can reach the UTF-16 runtime — see the token scan }
     doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
@@ -627,6 +628,7 @@ begin
   needsWasiFile := False;
   needsThreads := False;
   needsPromoInt := False;
+  needsWide := False;
   { Default standard surface: textfile (classic Text/Assign/Reset/WriteLn) is
     loaded by default on every non-ESP program, so `var f: Text` resolves
     uniformly in programs, units, methods, and nested scopes — no token-scan
@@ -704,6 +706,32 @@ begin
       end;
     if usesMath then needsMath := True;
   end;
+  { The UTF-16 runtime is its own unit for the reason `math` is: builtinheap has
+    no dead-code elimination, so four unreachable transcoders were 13 KB of
+    every bare ESP image. Pull builtinwide only when the program can actually
+    reach it (feature-unicodestring-model step 7a).
+
+    TWO TRIGGERS, and the second is the one that would be missed. A program that
+    NAMES the type is the obvious half. The other is a DIRECT call to one of the
+    four by name -- test/test_widestring_transcode.pas does exactly that,
+    because it was written before the type existed, and a predicate that catches
+    only the type name passes every test that USES widestring and breaks the one
+    test that tests the runtime.
+
+    No '(' requirement, unlike math's: these names are not plausible variables
+    the way `ln` is, so the false-positive that rule exists to prevent cannot
+    arise. A false POSITIVE here costs 4 KB in a program that mentioned the
+    word; a false negative is a link failure. }
+  if not NoDefaultRtl then
+    for i := 0 to TokCount - 1 do
+      if Tokens[i].Kind = tkIdent then
+      begin
+        tnm := GetTokenStr(i);
+        if CaseEqual(tnm, 'widestring') or CaseEqual(tnm, 'unicodestring') or
+           CaseEqual(tnm, 'pxxwidealloc') or CaseEqual(tnm, 'pxxwideconcat') or
+           CaseEqual(tnm, 'pxxwidefromutf8') or CaseEqual(tnm, 'pxxutf8fromwide') then
+        begin needsWide := True; Break; end;
+      end;
   { ESP-class targets (xtensa always, riscv32 under --esp-profile=bare) have no
     FPU codegen at all: every float op lowers to a __pxx_* soft-float kernel that
     lives in the `softfloat` unit. Hosted riscv32/arm32 pull that unit
@@ -1309,6 +1337,12 @@ begin
     needsBuiltin := True;
   end;
   if needHeapUnit then ParseUsesUnitAmbient('builtinheap');
+  { …and the UTF-16 runtime on top of it, only when the token scan above found a
+    program that can reach it. AFTER builtinheap, which it uses. Never on a bare
+    ESP boot: its allocator is a 64 KiB static arena, which is not a plausible
+    UTF-16 host, and that is the same trade builtinheap makes for its
+    mmap-dependent bodies. feature-unicodestring-model }
+  if needsWide and (not EspBareBoot) then ParseUsesUnitAmbient('builtinwide');
   { The WASI file core, on wasm32 ONLY. `sysopen`/`sysread`/`syswrite` are
     intrinsics that every native backend emits as a raw `syscall` instruction
     inline — which is precisely why a program using them needs no RTL. wasm has
