@@ -70,4 +70,4 @@ already documented. Two is a smell, three is a design flaw.
 
 The two tests in this ticket ARE the regression coverage for the method-pointer
 half; no new test is needed for it.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d5fd2a6ca.
