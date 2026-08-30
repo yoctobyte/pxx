@@ -66,7 +66,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (385)
+## backlog (386)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -180,6 +180,7 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected | P | 50 | bug | `TD<T> = class abstract(TEnumBase<T>);` — a bodiless generic class with the `abstract` modifier and a generic parent — is rejected with `unexpected token in a unit interface section`. All three ingredients are required: dropping `abstract`, or making the parent non-generic, compiles. FPC compiles it. rtl-generics uses this exact shape. | — |
+| bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line | P | 60 | bug | Compiling generics.collections.pas reports `unknown type: TKey` `in: generics.defaults.pas` at line 78. TKey appears ZERO times in generics.defaults.pas and 65 times in generics.collections.pas; defaults.pas:78 contains no TKey and no SizeOf, while the `near:` context it prints matches collections.pas:1309-1310. Both the file and the line are wrong -- the current-unit pointer appears not to be switched when a deferred generic body is compiled. Sends whoever picks up a generics failure to the wrong file first; cost frankB a pass. | — |
 | bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template | P | 55 | bug | In mode Delphi, `TE = TBox<TOuter>;` fails with `unknown type: TOuter` when TOuter is declared AFTER TBox in the same type section — reorder the two declarations and the identical program compiles and runs. FPC accepts both orders. DelphiRewriteGenericUses splices its minted alias declarations immediately behind the TEMPLATE, so they can only name types already declared at that point. objfpc is unaffected (its aliases are emitted at the use). 20-line repro, both orders. | — |
 | bug-p-a-different-specialization-of-the-same-template-inside-its-own-body | P | 35 | bug | `TOuter<T> = class FOther: TOuter<ShortInt>; end;` -- a reference to a DIFFERENT specialization of the SAME template, from inside that template's own body -- does not compile. A different TEMPLATE's specialization in the same position is fine, and same-template-same-args was fixed by bug-p-a-nested-class-naming-its-enclosing-template-is-substituted-twice. Pre-existing: fails identically on pinned. | — |
 | bug-p-a-forward-interface-declaration-is-not-parsed | P | 45 | bug | `IFoo = interface;` (forward) is rejected with `Expected: end, but got: ;` while the CLASS arm of the same double case, `TBar = class;`, parses fine. Pre-existing on pinned and HEAD alike -- not a regression. Costs tgenconstraint37, which is otherwise the only corpus test that exercises specializing against a forward-declared type. | — |
@@ -835,6 +836,7 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- [p 60] [P] bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 - [p 60] [U] decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane

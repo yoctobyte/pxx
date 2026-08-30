@@ -1504,3 +1504,63 @@ P bug. Not urgent at p15, but it will mislead whoever reaches it.
 `bug-c-a-c-function-s-calling-convention-depends-on-the-target`. Re-`claim`
 before the first commit; resuming parked work is the one transition with no
 prompt to re-claim.
+
+## CORRECTION to the note above: I described option B, which the owner REJECTED
+
+**Caught by frankB before it built anything, 2026-08-30.** The unblock stands.
+The characterisation of the decision does not.
+
+I wrote *"option C … its single `= object` becomes a `TObject`"*. That second
+half **is option B, and the decision names it as rejected**, verbatim: *"Option B
+is rejected for the reason the owner gave: `object` is not `TObject` and neither
+FPC nor Delphi treats it as such. B prices inheritance, VMTs and a constructor
+protocol that the corpus does not use and that nothing has asked for."*
+
+**Option C, verbatim:** *"the rooted-reference `object` is RETIRED rather than
+kept alongside it. `object` gets its standard Object Pascal meaning — a value
+type, i.e. a record with callables — with a **hard error** on inheritance,
+`virtual`, `constructor` and `destructor` rather than silent half-support."*
+
+**How I got it wrong, since the mechanism is reusable:** I read the file's `tail`
+and its `summary:`, found a measurement table comparing a `TObject` version
+against an `object` version, and reported it as the ruling. It was evidence
+*inside* the analysis, not the answer — and the answer was in a `# DECIDED`
+section I never opened. Reading a fragment of a long ticket and stating its
+conclusion is the exact failure this board has logged three times this week; the
+fragment I chose was the one that looked like a result.
+
+**And it is already implemented.** `= object` lands at `pasparser_decl.inc:5745`
+as a VMT-less value type (`UClsIsRecord := True`, hard error on an ancestor),
+closed as [[bug-p-object-value-types-standard-meaning]] in `done/`. Measured by
+frankB at HEAD `4f42b78b9`, not read: a value-type `object` with methods
+compiles, runs, prints `7 8`, `SizeOf` 8 — no VMT pointer; and `TB = object(TA)`
+gives *"an object type cannot have an ancestor -- pxx lowers `object` as a value
+type with no VMT …; use a class to inherit."* Both arms live.
+
+**So there is no object work in this ticket.** Anyone building to my note would
+have implemented the one thing the owner explicitly ruled out, against a decision
+file that says so.
+
+**Also corrected: no `lexer.inc` collision on this ticket.** `object` is not a
+lexer keyword — it is handled in `pasparser_generic.inc` and
+`pasparser_decl.inc`, both of P's own carved-out files. The generic A/P
+shared-lexer caution does not bind here.
+
+## The actual wall (frankB, HEAD `4f42b78b9` / pinned `faf762981c3c`)
+
+```
+rung 6a  generics.defaults.pas     ok    [671512B code, 1661 procs, 25s]
+rung 6b  generics.collections.pas  ERR   "unknown type: TKey"  [75s]
+```
+
+**Rung 6a is NOT yet claimed clean, deliberately.** `generics.defaults` compiles
+standalone and fails to survive being *used* from collections. The obvious
+reading is "defaults is fixed, collections is the wall" — but an uninstantiated
+generic body may never be type-checked at all, in which case the standalone green
+is vacuous and says nothing about that file. frankB has a control running (same
+unit with `TComparer<Integer>.Default` actually instantiated) to tell those apart,
+and is withholding the wall until it reads. A clean table with no control is what
+burned the ESP float arm.
+
+The wrong-file diagnostic frankB hit on the way is filed separately as
+[[bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line]].
