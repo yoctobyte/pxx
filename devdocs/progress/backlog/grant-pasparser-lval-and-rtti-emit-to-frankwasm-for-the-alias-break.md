@@ -21,7 +21,7 @@ Given 2026-08-30 by the coordinator to **frankwasm**, for `feature-unicodestring
 
 | file | lane | status |
 | --- | --- | --- |
-| `compiler/defs.inc` | A | **held** — `tyWideString` landed at ordinal 32, `d61f404f3` |
+| `compiler/defs.inc` | A | **held** — `tyWideString` landed at ordinal 32 (later DELETED under option B) |
 | `compiler/pasparser_lval.inc` | P | **held** — the alias break, two resolvers at ~:6322 and ~:6424 |
 | `compiler/rtti_emit.inc` | A | **held** — the RTTI kind list, ~:942 |
 | `compiler/symtab.inc` | A | **QUEUED** behind frank-optimize — TypeSize ~2922, ordinal-ness ~3120, name table ~8949 |
@@ -130,3 +130,21 @@ recurring landmine"* and which grew arms one bug at a time.
 Verified behaviourally rather than argued inert: string iteration, copy-on-write
 (`s[1] := 'H'`), a record string field and an indexed concat result all match fpc 3.2.2, plus
 both regressions green.
+
+---
+
+## SHA HYGIENE, ~15:1x — every sha this grant originally cited was rewritten
+
+`tools/sync.sh` rebases on nearly every push here, so a sha read from `git log` **before**
+the push names a commit that survives only in the author's reflog. frankwasm reported five
+such rewrites in its own ticket and in two messages to the coordinator; this grant had
+inherited one of them.
+
+That is `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`, which CLAUDE.md documents and
+which three parties then walked into on the same campaign in one afternoon — the author, the
+ticket, and the coordinator relaying it onward. **The documentation was not the problem; the
+habit of quoting a number you can see is.**
+
+Working rule, same shape as `resolve` taking no sha: **cite a sha only after `git log
+origin/master` shows it**, or cite nothing and let `sync.sh` fill it in. A relayed sha is
+worse than an unrelayed one, because the recipient has no way to know it was read pre-push.
