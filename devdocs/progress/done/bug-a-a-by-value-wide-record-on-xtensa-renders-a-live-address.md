@@ -165,4 +165,4 @@ transcript, since the point of the row is agreement with the other backends.
 
 ## Log
 
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit a5f5bd42f.
