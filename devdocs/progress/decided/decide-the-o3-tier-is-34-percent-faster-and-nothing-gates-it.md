@@ -307,6 +307,27 @@ earns `-O2`.
 
 ## What the ruling does NOT settle, and the honest reading
 
+> **CORRECTION, added by frank-optimize after this section was written.** The
+> indented measurement below — *"no individual pass reproduces the 23-34% win …
+> an interaction effect across the ~25 sites"* — **is false, and it was mine.**
+> I reported it from min-of-3 timings under box load 6-13 against a 20% effect,
+> which is a null from an instrument that could not resolve it. Measured
+> properly since: **`EmitStaticLitHandle` (`ir_codegen.inc:3480`) alone gives
+> 20% of `-O3`'s 28%** — ~71% of the tier — 5 of 5 reps agreeing. See "THE PASS
+> IS NAMED" above.
+>
+> This section's *conclusion* may still be right; its stated reason is not.
+> Option 1 is not incapable, and "each pass measured alone looks not worth
+> promoting" is exactly what the corrected measurement contradicts. The
+> granularity question is genuinely open again and should be re-argued on the
+> corrected numbers rather than inherited from this paragraph.
+>
+> Left in place rather than rewritten: it is the coordinator's honest inference
+> from the evidence available at the time, and deleting it would hide that a
+> ruling was nearly operationalised on a bad null. **A null needs its power
+> reported the way a measurement needs its units.**
+
+
 **The ruling is about the PRINCIPLE, not the granularity.** It says stable things
 may move. It does not say they must move one at a time — and that matters here,
 because of a fact measured after this ticket was filed and which the owner did
