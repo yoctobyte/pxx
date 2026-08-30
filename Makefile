@@ -4063,7 +4063,7 @@ test-threads: $(COMPILER)
 	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
 	  for o in 0 3; do \
 	    ./$(COMPILER) --target=aarch64 -O$$o test/test_shr_resident_widen.pas $(TESTTMP)/test_srw_a64_$$o >/dev/null || { echo "srw aarch64 -O$$o compile FAIL"; exit 1; }; \
-	    tools/expect_same.sh aarch64/test_srw_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_srw_a64_$$o)" "$$(printf 'acc=2399488939246\none=799829646330\ndone')" || exit 1; \
+	    tools/expect_same.sh aarch64/test_srw_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_srw_a64_$$o; echo "exit=$$?")" "$$(printf 'acc=2399488939246\none=799829646330\ndone\nexit=0')" || exit 1; \
 	  done; \
 	else \
 	  echo "=== test_shr_resident_widen: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
@@ -4090,7 +4090,7 @@ test-threads: $(COMPILER)
 	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
 	  for o in 0 3; do \
 	    ./$(COMPILER) --target=aarch64 -O$$o test/test_last_arg_collapse.pas $(TESTTMP)/test_lac_a64_$$o >/dev/null || { echo "lac aarch64 -O$$o compile FAIL"; exit 1; }; \
-	    tools/expect_same.sh aarch64/test_lac_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_lac_a64_$$o)" "$$(printf 'acc=73224\none=24408\ndone')" || exit 1; \
+	    tools/expect_same.sh aarch64/test_lac_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_lac_a64_$$o; echo "exit=$$?")" "$$(printf 'acc=73224\none=24408\ndone\nexit=0')" || exit 1; \
 	  done; \
 	else \
 	  echo "=== test_last_arg_collapse: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
@@ -4114,7 +4114,7 @@ test-threads: $(COMPILER)
 	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
 	  for o in 0 3; do \
 	    ./$(COMPILER) --target=aarch64 -O$$o test/test_cmp_both_in_place.pas $(TESTTMP)/test_cbip_a64_$$o >/dev/null || { echo "cbip aarch64 -O$$o compile FAIL"; exit 1; }; \
-	    tools/expect_same.sh aarch64/test_cbip_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cbip_a64_$$o)" "$$(printf 'acc=49149\none=16383\ndone')" || exit 1; \
+	    tools/expect_same.sh aarch64/test_cbip_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cbip_a64_$$o; echo "exit=$$?")" "$$(printf 'acc=49149\none=16383\ndone\nexit=0')" || exit 1; \
 	  done; \
 	else \
 	  echo "=== test_cmp_both_in_place: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
@@ -4152,7 +4152,7 @@ test-threads: $(COMPILER)
 	@if command -v qemu-aarch64 > /dev/null 2>&1; then \
 	  for o in 0 3; do \
 	    ./$(COMPILER) --target=aarch64 -O$$o test/test_static_string_literals.pas $(TESTTMP)/test_ssl_a64_$$o >/dev/null || { echo "ssl aarch64 -O$$o compile FAIL"; exit 1; }; \
-	    tools/expect_same.sh aarch64/test_ssl_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_ssl_a64_$$o)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')" || exit 1; \
+	    tools/expect_same.sh aarch64/test_ssl_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_ssl_a64_$$o; echo "exit=$$?")" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone\nexit=0')" || exit 1; \
 	  done; \
 	else \
 	  echo "=== test_static_string_literals: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
@@ -12847,7 +12847,7 @@ test-riscv32: $(COMPILER)
 	# fixed-one-arm-only bug.
 	./$(COMPILER) --target=riscv32 test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in_x64
-	tools/expect_same.sh riscv32/test_rv32_in "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_in)" "$$($(TESTTMP)/test_rv32_in_x64)"
+	tools/expect_same.sh riscv32/test_rv32_in "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_in; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_in_x64; echo "exit=$$?")"
 	# SKIP test/test_cross_managed_aggregate_locals.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# LoadFile: the codegen arm AND the three runtime wrappers landed together --
 	# PXXSysOpenRO/PXXSysLseek/PXXSysClose had arms for four targets and none for
@@ -12857,17 +12857,17 @@ test-riscv32: $(COMPILER)
 	# -strace, not inferred.
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile_x64
-	tools/expect_same.sh riscv32/test_rv32_loadfile "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_loadfile)" "$$($(TESTTMP)/test_rv32_loadfile_x64)"
+	tools/expect_same.sh riscv32/test_rv32_loadfile "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_loadfile; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_loadfile_x64; echo "exit=$$?")"
 	# by-value SysOpen/SysRead/SysWrite/SysClose/SysFchmod: the family had no arm
 	# on either 32-bit generic backend. rv32 is asm-generic and has NO plain
 	# open, so SysOpen lowers to openat(AT_FDCWD, path, flags, 0).
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_sysopen_family.pas $(TESTTMP)/test_rv32_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_rv32_sysopen_family_x64
-	tools/expect_same.sh riscv32/test_rv32_sysopen_family "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_sysopen_family)" "$$($(TESTTMP)/test_rv32_sysopen_family_x64)"
+	tools/expect_same.sh riscv32/test_rv32_sysopen_family "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_sysopen_family; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_sysopen_family_x64; echo "exit=$$?")"
 	# string COW — same SPECIAL_IN gap; it uses `in [..]` on a character.
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow_x64
-	tools/expect_same.sh riscv32/test_rv32_string_cow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_string_cow)" "$$($(TESTTMP)/test_rv32_string_cow_x64)"
+	tools/expect_same.sh riscv32/test_rv32_string_cow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_string_cow; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_string_cow_x64; echo "exit=$$?")"
 	# SKIP test/test_cross_var_string_param.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string_x64
@@ -13401,22 +13401,22 @@ test-xtensa: $(COMPILER)
 	# one address word. Peeling, not a list.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_set_param.pas $(TESTTMP)/test_xtensa_test_cross_set_param
 	./$(COMPILER) test/test_cross_set_param.pas $(TESTTMP)/test_xtensa_test_cross_set_param_x64
-	tools/expect_same.sh xtensa/test_cross_set_param "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_set_param)" "$$($(TESTTMP)/test_xtensa_test_cross_set_param_x64)"
+	tools/expect_same.sh xtensa/test_cross_set_param "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_set_param; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_cross_set_param_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_sets.pas $(TESTTMP)/test_xtensa_test_cross_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_xtensa_test_cross_sets_x64
-	tools/expect_same.sh xtensa/test_cross_sets "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_sets)" "$$($(TESTTMP)/test_xtensa_test_cross_sets_x64)"
+	tools/expect_same.sh xtensa/test_cross_sets "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_sets; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_cross_sets_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_lfm.pas $(TESTTMP)/test_xtensa_test_lfm
 	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_xtensa_test_lfm_x64
-	tools/expect_same.sh xtensa/test_lfm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_lfm)" "$$($(TESTTMP)/test_xtensa_test_lfm_x64)"
+	tools/expect_same.sh xtensa/test_lfm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_lfm; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_lfm_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_set_runtime.pas $(TESTTMP)/test_xtensa_test_set_runtime
 	./$(COMPILER) test/test_set_runtime.pas $(TESTTMP)/test_xtensa_test_set_runtime_x64
-	tools/expect_same.sh xtensa/test_set_runtime "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_set_runtime)" "$$($(TESTTMP)/test_xtensa_test_set_runtime_x64)"
+	tools/expect_same.sh xtensa/test_set_runtime "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_set_runtime; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_set_runtime_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_streaming.pas $(TESTTMP)/test_xtensa_test_streaming
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_xtensa_test_streaming_x64
-	tools/expect_same.sh xtensa/test_streaming "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming)" "$$($(TESTTMP)/test_xtensa_test_streaming_x64)"
+	tools/expect_same.sh xtensa/test_streaming "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_streaming_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_streaming_enumset.pas $(TESTTMP)/test_xtensa_test_streaming_enumset
 	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_xtensa_test_streaming_enumset_x64
-	tools/expect_same.sh xtensa/test_streaming_enumset "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming_enumset)" "$$($(TESTTMP)/test_xtensa_test_streaming_enumset_x64)"
+	tools/expect_same.sh xtensa/test_streaming_enumset "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming_enumset; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_streaming_enumset_x64; echo "exit=$$?")"
 	# test_rtti prints raw ADDRESSES and a pointer-width InstanceSize, so the
 	# three lines that cannot agree across a 32/64-bit boundary are filtered --
 	# the same filter i386, arm32 and aarch64 already use for this program. The
@@ -13424,23 +13424,31 @@ test-xtensa: $(COMPILER)
 	# real differential and it matches.
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti_x64
-	tools/expect_same.sh xtensa/test_rtti "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_xtensa_test_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	# This row's output is FILTERED, so the exit capture cannot simply be
+	# appended: after a pipe `$$?` is GREP's status, and the row would assert
+	# that the filter ran rather than that the program did -- the exact "anything
+	# appended after the thing you are measuring becomes the thing that reports"
+	# shape this whole check exists to catch. Redirect the run to a file, echo
+	# its status while it is still the last command, then filter the file. The
+	# status line therefore comes FIRST here; both sides are built the same way,
+	# so the comparison is unaffected.
+	tools/expect_same.sh xtensa/test_rtti "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_rtti > $(TESTTMP)/test_rtti_xt.raw; echo "exit=$$?"; grep -vE 'pointer:|RTTI value:|InstanceSize:' $(TESTTMP)/test_rtti_xt.raw)" "$$($(TESTTMP)/test_xtensa_test_rtti_x64 > $(TESTTMP)/test_rtti_n.raw; echo "exit=$$?"; grep -vE 'pointer:|RTTI value:|InstanceSize:' $(TESTTMP)/test_rtti_n.raw)"
 	# +2: IR_CLASSREF. It reported `unsupported node in IR codegen: unknown`,
 	# not `classref` -- IROpName has no entry for seven of the 75 declared ops.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_class_of.pas $(TESTTMP)/test_xtensa_test_class_of
 	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_xtensa_test_class_of_x64
-	tools/expect_same.sh xtensa/test_class_of "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_class_of)" "$$($(TESTTMP)/test_xtensa_test_class_of_x64)"
+	tools/expect_same.sh xtensa/test_class_of "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_class_of; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_class_of_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_classref.pas $(TESTTMP)/test_xtensa_test_classref
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_xtensa_test_classref_x64
-	tools/expect_same.sh xtensa/test_classref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_classref)" "$$($(TESTTMP)/test_xtensa_test_classref_x64)"
+	tools/expect_same.sh xtensa/test_classref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_classref; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_classref_x64; echo "exit=$$?")"
 	# +2: SetLength on a var-array PARAMETER — one extra deref, refused outright
 	# until now while riscv32 had carried the two-line answer for a while.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_setlen_varparam.pas $(TESTTMP)/test_xtensa_test_cross_setlen_varparam
 	./$(COMPILER) test/test_cross_setlen_varparam.pas $(TESTTMP)/test_xtensa_test_cross_setlen_varparam_x64
-	tools/expect_same.sh xtensa/test_cross_setlen_varparam "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_setlen_varparam)" "$$($(TESTTMP)/test_xtensa_test_cross_setlen_varparam_x64)"
+	tools/expect_same.sh xtensa/test_cross_setlen_varparam "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_setlen_varparam; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_cross_setlen_varparam_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen
 	./$(COMPILER) test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64
-	tools/expect_same.sh xtensa/test_nested_dynarray_setlen "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen)" "$$($(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64)"
+	tools/expect_same.sh xtensa/test_nested_dynarray_setlen "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64; echo "exit=$$?")"
 	# +2: the read family (READLINE / READ_VAR / READ_DISCARD) and bare Eof.
 	# PIPED stdin, exactly as the riscv32 rows do it — the differential sweep
 	# that measured these ran with stdin at /dev/null, where both sides see EOF
@@ -13448,19 +13456,19 @@ test-xtensa: $(COMPILER)
 	# to both sides is the assertion; an empty stdin is not one.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_readln.pas $(TESTTMP)/test_xtensa_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_xtensa_readln_x64
-	tools/expect_same.sh xtensa/test_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_xtensa_readln_x64)"
+	tools/expect_same.sh xtensa/test_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_readln; echo "exit=$$?")" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_xtensa_readln_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin_x64
-	tools/expect_same.sh xtensa/test_eof_stdin "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_eof_stdin)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_xtensa_eof_stdin_x64)"
+	tools/expect_same.sh xtensa/test_eof_stdin "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_eof_stdin; echo "exit=$$?")" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_xtensa_eof_stdin_x64; echo "exit=$$?")"
 	# `x in [consts]` and the string-COW program that uses it. Same SPECIAL_IN
 	# arm as the riscv32 rows above; xtensa has no conditional execution, so its
 	# version branches over a `movi` where arm32 uses `moveq` and riscv uses slt.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_in_operator.pas $(TESTTMP)/test_xtensa_in
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_xtensa_in_x64
-	tools/expect_same.sh xtensa/test_xtensa_in "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_in)" "$$($(TESTTMP)/test_xtensa_in_x64)"
+	tools/expect_same.sh xtensa/test_xtensa_in "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_in; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_in_x64; echo "exit=$$?")"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow_x64
-	tools/expect_same.sh xtensa/test_xtensa_string_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_string_cow)" "$$($(TESTTMP)/test_xtensa_string_cow_x64)"
+	tools/expect_same.sh xtensa/test_xtensa_string_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_string_cow; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_string_cow_x64; echo "exit=$$?")"
 	# By-value records of 5-8 bytes: BOTH words must cross, on four separate
 	# spots that each counted one word where the type is two -- IR_LOAD_SYM, the
 	# call-arg push (plus its even-word pad), the callee param spill in
@@ -13474,7 +13482,7 @@ test-xtensa: $(COMPILER)
 	# with the other backends, not a transcript.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide
 	./$(COMPILER) test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide_x64
-	tools/expect_same.sh xtensa/test_xtensa_recwide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_recwide)" "$$($(TESTTMP)/test_xtensa_recwide_x64)"
+	tools/expect_same.sh xtensa/test_xtensa_recwide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_recwide; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_recwide_x64; echo "exit=$$?")"
 	# SysOpen/SysRead/SysWrite/SysClose/SysFchmod. xtensa's syscall numbers are
 	# its OWN table (read=12, write=13, close=9, fchmod=52, openat=288) -- neither
 	# x86-64's nor asm-generic's, and a number from the wrong table is not a
@@ -13483,13 +13491,13 @@ test-xtensa: $(COMPILER)
 	# and riscv32 share one spelling. LoadFile is NOT here: see the riscv32 SKIP.
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_sysopen_family.pas $(TESTTMP)/test_xtensa_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_xtensa_sysopen_family_x64
-	tools/expect_same.sh xtensa/test_xtensa_sysopen_family "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sysopen_family)" "$$($(TESTTMP)/test_xtensa_sysopen_family_x64)"
+	tools/expect_same.sh xtensa/test_xtensa_sysopen_family "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sysopen_family; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_sysopen_family_x64; echo "exit=$$?")"
 	# LoadFile. xtensa has BOTH plain lseek(15) and _llseek(17), so unlike rv32
 	# the ordinary 3-arg path is correct here -- same helper, different call
 	# shape per target, which is exactly why the wrappers are per-arch.
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile_x64
-	tools/expect_same.sh xtensa/test_xtensa_loadfile "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_loadfile)" "$$($(TESTTMP)/test_xtensa_loadfile_x64)"
+	tools/expect_same.sh xtensa/test_xtensa_loadfile "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_loadfile; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_loadfile_x64; echo "exit=$$?")"
 	# ParamCount / ParamStr / ArgStr. xtensa was the only hosted target whose
 	# entry stub never saved the kernel-provided initial sp to BSS_INITIAL_RSP,
 	# so builtin -55 had no honest arm available -- the stub save and both arms
@@ -13499,7 +13507,7 @@ test-xtensa: $(COMPILER)
 	# temp, which is why ParamCount alone does not make this test pass.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_arg_runtime.pas $(TESTTMP)/test_xtensa_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_xtensa_args_x64
-	tools/expect_same.sh xtensa/test_xtensa_args "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_args alpha beta)" "$$($(TESTTMP)/test_xtensa_args_x64 alpha beta)"
+	tools/expect_same.sh xtensa/test_xtensa_args "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_args alpha beta; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_args_x64 alpha beta; echo "exit=$$?")"
 	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
 	# which answered FALSE while b printed BBBB with Length 4 -- the equality
 	# guard was gated on tyAnsiString only, so both-frozen fell through to the
@@ -13509,7 +13517,7 @@ test-xtensa: $(COMPILER)
 	# and string equality agree. The variable is the whole test.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_trunc.pas $(TESTTMP)/test_xtensa_shortstring_trunc
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_xtensa_shortstring_trunc_x64
-	tools/expect_same.sh xtensa/test_xtensa_shortstring_trunc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_shortstring_trunc)" "$$($(TESTTMP)/test_xtensa_shortstring_trunc_x64)"
+	tools/expect_same.sh xtensa/test_xtensa_shortstring_trunc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_shortstring_trunc; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_shortstring_trunc_x64; echo "exit=$$?")"
 	# The first row the xtensa syscall table unblocked. ASSERTS THE EXIT STATUS,
 	# not stdout: the program's whole subject is dying by SIGTERM (-> 143) once
 	# the dispatch stub restores SIG_DFL and re-raises, and its stdout is one

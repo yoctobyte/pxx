@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:4 unfinished:27 blocked:8 backlog:357 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2751 rejected:56`
+`urgent:1 working:4 unfinished:27 blocked:8 backlog:358 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2752 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -65,7 +65,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
-- `[p 70] [A]` bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code (unblocks 1)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [A]` bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp
 - `[p 70] [U]` decide-revisit-object-types-rtl-generics-fired-the-trigger
@@ -73,6 +72,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [A]` regression-test-asm-compiler-2
 - `[p 70] [A]` regression-test-asm-hello-2
+- `[p 70] [P]` regression-test-asm-test-asm-emit-rv32
 - `[p 70] [A]` regression-test-asm-test-asm-emit-x64
 - `[p 70] [A]` regression-test-asm-test-asmcore-x64
 - `[p 70] [A]` regression-test-asm-test-x64enc
