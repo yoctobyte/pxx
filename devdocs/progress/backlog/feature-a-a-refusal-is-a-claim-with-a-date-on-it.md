@@ -10155,3 +10155,71 @@ establish that the comment was the wrong half.
 Had it been filed as first noticed, the ticket would have asserted a defect in the correct file.
 **A finding is recorded when it is in a ticket on master; a suspicion is not yet a finding, and
 filing it early does not make it one — it launders it into one.**
+
+---
+
+## 208 — THE NUMBER WAS RIGHT WHEN IT WAS WRITTEN
+
+*(pxx-a5, 2026-08-30, closing 190b/206's residue: two asserted observations, **one of them
+rotted**.)*
+
+`BLANK_MAX=4000` in `gui_shot.sh`, written 2026-06-24. At the script's own default 1100×700
+under ffmpeg 8.0.1, an empty Xvfb display now captures at **4013 bytes — five samples, zero
+variance.** The test is `-le BLANK_MAX`. So **every blank frame passes as a real window**:
+deterministic, thirteen bytes over, every time. The comment still says *"a blank frame is ~1-3
+KB"*; at 1024×768 it is 4192.
+
+**Nobody edited it and nobody was careless.** ffmpeg's encoder or the default size moved
+underneath it. That is the whole point:
+
+> **A measured constant needs its derivation recorded beside it, or the only thing still
+> asserting it is the memory of whoever measured it.**
+
+This is the generalisable half of 206. Provenance is what distinguishes a tunable from a
+recorded observation — and a recorded observation whose *derivation* is not recorded cannot be
+re-checked by anyone but its author, which is a dependency on a person rather than on a file.
+The comment that would have saved it is not "why 4000" but **"4000 = measured at 1100×700,
+ffmpeg 7.x, 2026-06-24; re-derive with `<command>`"**.
+
+### 208a — two behaviours died, and the second one is invisible
+
+The obvious loss is the `capture looks blank` error. The second is the **restart-and-retry
+path**, which re-launches Xvfb and re-grabs when a first capture looks blank. That branch is now
+**unreachable**, so a genuinely wedged display is never recovered **and reports success.**
+
+A dead threshold does not merely stop reporting; it disables everything downstream of the
+report. When a check goes quiet, ask what *else* was gated on it firing — the recovery path is
+usually the part nobody remembers exists, and it fails in the direction of a clean pass.
+
+Priority stated honestly: **prio 30, because a human usually looks at the resulting PNG.**
+Tooling with a person in the loop is not a silent gate, and saying so is better than inflating
+it.
+
+### 208b — check whether a constant's referent is reachable by READING, before you queue it for cores
+
+The other of the two, `ADDLINE=10` in `dwarf_smoke.sh`, was **correct and needed no build at
+all**: it indexes a heredoc that lives in the same file, so counting settled it. Line 10 is
+`local := a + b;`, the first statement of `Add`.
+
+Both had been filed as *"needs a quiet box"*. **One needed nothing.** Re-derivation cost is not
+a property of the category; it is a property of where the referent lives. A constant pointing at
+something *in the same file* is settled by reading; one pointing at an external tool's output
+needs the tool. **Sort the residue by referent before you sort it by cost** — otherwise cheap
+work inherits the scheduling of expensive work and waits for a window it never needed.
+
+### 208c — the doc entry that failed to prevent the thing it documented
+
+Grepping for `gui_shot` surfaced the resolved ticket `bug-t-agents-kill-each-others-processes-
+with-pattern-pkill`. The playbook already carried **two** of the three victims of a `-f` pattern
+match — a sibling agent's process, and the `pgrep` waiter that matches itself and never returns.
+**The third was missing**: `pkill -f` matches the shell running it, kills the asker, exit 144.
+
+That is **202 demonstrated inside the very entry that should have prevented it.** The bullet
+recorded `pgrep`'s *presentation* and not the *mechanism*, so it did not transfer one command
+sideways — and pxx-a5, who had read that entry, read its own exit 144 as a crashed tool. The
+three victims look like three unrelated faults (a sibling dying, a loop that never ends, a tool
+that crashes) and are one cause.
+
+**A doc entry written as a symptom protects against exactly the instance it names.** Written as
+a mechanism, it protects against the family. The distance between those two is one sentence, and
+the entry had been sitting one sentence short for long enough to catch a reader of itself.
