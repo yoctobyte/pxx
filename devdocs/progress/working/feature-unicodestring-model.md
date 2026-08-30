@@ -855,10 +855,23 @@ missed:** a program NAMING `widestring`/`unicodestring`, *and* a direct call to
 predicate that only catches the type name passes every test that uses the type
 and breaks the one test that tests the runtime.
 
-**Unmeasured risk to settle first, not to design around:** `builtinwide` needs
-builtinheap's header constants and `PU16`, so it must `uses builtinheap`. Whether
-a builtin unit can cleanly depend on another builtin is not verified. If it
-cannot, that changes the split, not the schedule.
+**The risk flagged here is SETTLED, and the answer is a precedent so close it
+is nearly a template.** The worry was that `builtinwide` needs builtinheap's
+header constants and `PU16`, so it must `uses builtinheap`, and that a builtin
+depending on another builtin might not work.
+
+It does. **`compiler/builtin/wasibackend.pas` is exactly that unit today:**
+
+    wasibackend.pas    uses builtinheap;
+    pasparser_prog.inc:1339    if needsWasiFile then ParseUsesUnitAmbient('wasibackend');
+
+A builtin unit that depends on builtinheap AND is pulled on demand by a
+`needs*` predicate — both halves of 7a, already shipped, in one file.
+(`pyeval.pas uses pylib, typinfo, promocore` is a second, less direct instance.)
+
+So 7a is: copy `wasibackend`'s shape. That is the fifth time in this campaign
+that the mechanism turned out to exist already — after the channel, the alias
+carrier, the field carrier and the array slot.
 
 ### Also settled while measuring
 
