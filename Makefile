@@ -181,6 +181,31 @@ bootstrap: bootstrap-check
 	cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)
 	mv $(BUILD_COMPILER) $(COMPILER)
 
+# The RANGE-CHECKED seed: the only build in this repo that names an array, a
+# line and the offending index when something writes past the end of a parallel
+# array -- the failure shape symtab.inc's ~30 lockstep arrays have by
+# construction, and which is otherwise debugged by guessing.
+#
+#   make fpc-seed-checked      -> build/pxx-checked
+#   build/pxx-checked prog.pas /tmp/out
+#
+# -Cr is the one that matters (bounds). -Ci and -Ct are free. -Co (overflow) is
+# deliberately NOT here: this compiler wraps on purpose in several places (FNV
+# hashing, the hex-literal lexer accumulating a 64-bit pattern) and -Co rejects
+# every one of them, which is a different argument than bounds checking.
+#
+# STATE, 2026-08-30: this TARGET BUILDS. The binary still traps at first use --
+# ERangeError in SymNameFoldHash (symtab.inc), because -Cr range-checks the
+# deliberate FNV wraparound too. The fix is measured and one line per site
+# (`and LongWord($$FFFFFFFF)` on the product, byte-identical result under both
+# fpc and pxx) but lands in files another lane holds; see
+# bug-a-the-range-checked-seed-traps-on-deliberate-wraparound-arithmetic.
+# chore-a-the-range-checked-fpc-seed-cannot-be-built
+fpc-seed-checked: bootstrap-check
+	@mkdir -p build
+	$(FPC) -O1 -g -gl -Crit -Tlinux -Px86_64 -obuild/pxx-checked $(COMPILER_SRC)
+	@echo "built build/pxx-checked (fpc, -Cr bounds-checked)"
+
 bootstrap-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
 bootstrap-frozen: bootstrap
 

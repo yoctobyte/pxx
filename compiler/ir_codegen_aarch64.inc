@@ -1211,11 +1211,11 @@ begin
   else
   begin
     q := ResidentRegOf(IRA[rt]);
-    opc := $CA000000;                                     { eor }
-    if op = tkPlus then opc := $8B000000                  { add }
-    else if op = tkMinus then opc := $CB000000            { sub }
-    else if op = tkAnd then opc := $8A000000              { and }
-    else if op = tkOr then opc := $AA000000;              { orr }
+    opc := Integer($CA000000);                                     { eor }
+    if op = tkPlus then opc := Integer($8B000000)                  { add }
+    else if op = tkMinus then opc := Integer($CB000000)            { sub }
+    else if op = tkAnd then opc := Integer($8A000000)              { and }
+    else if op = tkOr then opc := Integer($AA000000);              { orr }
     EmitI32(opc or (q shl 16) or (r shl 5) or r);         { <op> xr, xr, xq }
   end;
 
@@ -2406,7 +2406,7 @@ begin
               { unsigned checked mul: any high-half bit = overflow. }
               EmitI32($9BC17C02);                          { umulh x2, x0, x1 }
               EmitI32($9B017C00);                          { mul x0, x0, x1 }
-              EmitOvfCheckA64($B4000002);                  { cbz x2, skip }
+              EmitOvfCheckA64(Integer($B4000002));                  { cbz x2, skip }
             end;
           end
           else

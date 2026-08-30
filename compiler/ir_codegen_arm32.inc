@@ -309,7 +309,7 @@ begin
   EmitI32($E3A02000);   { mov r2, #0 }
   EmitI32($E3A03000);   { mov r3, #0 }
   { .st }
-  BrArm32(bSt, CodeLen, $EA000000);
+  BrArm32(bSt, CodeLen, Integer($EA000000));
   EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_CODE);
   EmitI32($E58C2000);   { str r2, [ip] }
   EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_ADDR);
@@ -330,8 +330,8 @@ begin
   { .out }
   outAt := CodeLen;
   EmitI32($E8BD8010);   { pop {r4, pc}  -> restorer -> rt_sigreturn }
-  BrArm32(bOut1, outAt, $BA000000);
-  BrArm32(bOut2, outAt, $CA000000);
+  BrArm32(bOut1, outAt, Integer($BA000000));
+  BrArm32(bOut2, outAt, Integer($CA000000));
   { .dfl: no hook — revert to SIG_DFL and re-raise. }
   BrArm32(bDfl, CodeLen, $0A000000);
   EmitI32($E1A04000);   { mov r4, r0        (sig; r4 was pushed) }
@@ -354,7 +354,7 @@ begin
   EmitI32($E3A07025);   { mov r7, #37       kill }
   EmitI32($EF000000);   { svc #0 }
   jOut := CodeLen; EmitI32($EA000000);
-  BrArm32(jOut, outAt, $EA000000);             { -> shared epilogue }
+  BrArm32(jOut, outAt, Integer($EA000000));             { -> shared epilogue }
 
   { --- sethook (r0 = sig, r1 = handler), falls through into install --- }
   SigSetHookAddr := CodeLen;
