@@ -203,3 +203,26 @@ ask it.** A depth limit is a truncation that returns success.
 **The `fcl-xml` rung is filable and buildable now.** Whoever takes it: point at
 `/data/borg-rescue/home-rene/src/fpc-source/packages/fcl-xml`, or copy it into a
 `library_candidates/` beside the other rungs as the existing corpora do.
+
+---
+
+## Rung 3 (fcl-xml DOM) — first wall cleared, second wall measured (frank-rust, 2026-08-30)
+
+Source: `/data/borg-rescue/home-rene/src/fpc-source/packages/fcl-xml/src`, per
+the coordinator's retraction above. Probe is `uses dom;` with a one-line body,
+which pulls `xmlutils` and therefore `names.inc`.
+
+| wall | status |
+| --- | --- |
+| 1. `property` in an `interface` (`IXmlLineInfo`) | **CLEARED** — [[bug-p-a-property-in-an-interface-declaration-is-rejected]], `0f0fd6642`. Two defects: the parse, and eleven copies of accessor dispatch that did not know an interface receiver needs `AN_INTF_CALL`. The parse fix alone compiles and then segfaults, so "the corpus got further" would have been a false green here. |
+| 2. `const namingBitmap: array[0..$0C] of TSetOfByte` | **OPEN** — [[bug-p-a-const-array-of-sets-is-rejected-as-too-many-elements]], filed with the mechanism and a 6-line repro. |
+
+Wall 2 is not a parser arm's worth of work: `BakeSetConst` can already bake a set
+literal, but an array's static store has no element-init kind that carries a
+baked blob, so the second half is the real job. Sized in the ticket rather than
+started, so the next taker does not read "add an arm" and find out later.
+
+Method note for whoever takes rung 3 next: probe with `uses <unit>;` and a
+one-line body, and read the FIRST error only. Each wall's error names the include
+file it is in (`in: names.inc`), which is the fastest handle on a 22k-line
+package -- and do not treat a compile as a rung cleared, per wall 1.
