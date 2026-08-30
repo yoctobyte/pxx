@@ -10835,12 +10835,30 @@ procedure EmitXtensaFrameReserve(var patchPos: Integer);
   argument for six over five or eight beyond taste, so it is a limit the next
   large routine meets with no explanation of why it sits where it does.
   bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi }
+var rFrame: Integer;
 begin
+  { THE SCRATCH REGISTER IS NOT FREE TO CHOOSE, and picking a8 for both ABIs is
+    what this got wrong first time round: under Call0 a8 is where the caller
+    puts the HIDDEN AGGREGATE-RESULT POINTER (see the tyRecord arm of the
+    parameter prologue below), so loading the frame size into it destroyed the
+    destination of every record-returning function before the stash that saves
+    it ran three instructions later. Measured as a segfault in
+    test_const_record_temp and test_cross_aggregate_return, both green on the
+    ADDMI chain this replaced.
+
+    So it follows the split EmitXtensaLongJump already uses, for the same
+    reason: Call0 scratches in a9 (a8 is spoken for), windowed scratches in a8
+    (its hidden destination travels in a2, and a9 is the long form's temp).
+    Windowed cannot reach the interrupt path -- the parser gates `interrupt;`
+    to Call0 -- so a9 is the only register this adds to that handler's
+    save set. }
+  if XtensaABI = XTENSA_ABI_WINDOWED then rFrame := reg_xtensa_a8
+                                     else rFrame := reg_xtensa_a9;
   XtensaEmitLitHeader;
   patchPos := CodeLen;
   EmitI32(0);                            { frame-size literal, patched below }
-  xtensa_l32r(reg_xtensa_a8, $FFFF);
-  xtensa_sub(reg_xtensa_sp, reg_xtensa_sp, reg_xtensa_a8);
+  xtensa_l32r(rFrame, $FFFF);
+  xtensa_sub(reg_xtensa_sp, reg_xtensa_sp, rFrame);
 end;
 
 function EmitProcPrologue: Integer;
@@ -10896,10 +10914,18 @@ begin
     else
     begin
       { Raw `interrupt;` handler (Call0): a hardware exception can preempt arbitrary
-        code, so the interrupted caller-saved a-regs the body clobbers (a2-a8,
-        a10-a13) must be preserved. a0/a1(sp)/a15 are covered by the normal Call0
-        frame below; a9/a14 are never touched by codegen. Saved in a 48-byte area
-        (11 regs, 16-byte aligned) ABOVE the normal frame; the epilogue restores
+        code, so the interrupted caller-saved a-regs the body clobbers (a2-a13
+        except a9's old exemption, see below) must be preserved. a0/a1(sp)/a15 are
+        covered by the normal Call0 frame below; a14 is never touched by codegen.
+
+        a9 WAS on that exempt list and should not have been: codegen reaches it
+        from the record-return stash (EmitFrameAddrXtensa a9), from a Call0 long
+        jump or long call (which scratch a9/a10), and now from every prologue's
+        frame-size load. The list was written when none of those existed and was
+        never revisited -- it named a register rather than tracking one.
+
+        Saved in a 48-byte area (12 regs, 16-byte aligned) ABOVE the normal
+        frame; the epilogue restores
         them and returns via `rfe` (general level-1 exception). Windowed ABI is
         gated off in the parser (mid-window spill is a follow-up). }
       if (CurProc >= 0) and ProcIsInterrupt[CurProc] then
@@ -10910,7 +10936,7 @@ begin
         xtensa_s32i(reg_xtensa_a6, reg_xtensa_sp, 16); xtensa_s32i(reg_xtensa_a7, reg_xtensa_sp, 20);
         xtensa_s32i(reg_xtensa_a8, reg_xtensa_sp, 24); xtensa_s32i(reg_xtensa_a10, reg_xtensa_sp, 28);
         xtensa_s32i(reg_xtensa_a11, reg_xtensa_sp, 32); xtensa_s32i(reg_xtensa_a12, reg_xtensa_sp, 36);
-        xtensa_s32i(reg_xtensa_a13, reg_xtensa_sp, 40);
+        xtensa_s32i(reg_xtensa_a13, reg_xtensa_sp, 40); xtensa_s32i(reg_xtensa_a9, reg_xtensa_sp, 44);
       end;
       { Xtensa Call0 ABI prologue: push a0, a15 (save Return Address and Frame Pointer) }
       xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
@@ -11998,7 +12024,7 @@ begin
         xtensa_l32i(reg_xtensa_a6, reg_xtensa_sp, 16); xtensa_l32i(reg_xtensa_a7, reg_xtensa_sp, 20);
         xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, 24); xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, 28);
         xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, 32); xtensa_l32i(reg_xtensa_a12, reg_xtensa_sp, 36);
-        xtensa_l32i(reg_xtensa_a13, reg_xtensa_sp, 40);
+        xtensa_l32i(reg_xtensa_a13, reg_xtensa_sp, 40); xtensa_l32i(reg_xtensa_a9, reg_xtensa_sp, 44);
         xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 48);
         xtensa_rfe;
       end
