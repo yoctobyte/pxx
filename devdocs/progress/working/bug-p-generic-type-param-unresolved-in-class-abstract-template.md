@@ -4,9 +4,10 @@ track: P
 prio: 70
 type: bug
 blocked-by: []
-status: open
+status: working
 created: 2026-08-30
 summary: "A generic template's own type parameter is not in scope inside a `class abstract(...)` body: generics.collections' TCustomPointersEnumerator<T, PT> reports `unknown type: PT` for its own PT. This is the wall the rtl-generics corpus hits now that bug-p-object-value-types-standard-meaning cleared the one 26 lines later that used to abort the parse first."
+owner: frankR
 ---
 
 # P: a generic type parameter is unresolved inside a `class abstract` template
@@ -165,3 +166,106 @@ commit, would report more.
 **The last step needs frank-user's shell history** — which binary it actually ran.
 Nobody is chasing it during the pre-merge pause; it is a p70 backlog item and the
 question is one message when work resumes.
+
+## 2026-08-30 (frankR) — `:120` does not reproduce on `pinned` either; `:135` root-caused and it is not a parser bug
+
+Everything below is one pasted probe, stated exactly as the hold above demands.
+
+```
+HEAD           097f9b794
+binary         compiler/pascal26   sha256 f92f3c013ac58cda
+pinned         stable_linux_amd64/default/pinned  sha256 abece5150983d95e
+corpus         generics.collections.pas  sha256 5a3402725ab53181  (same file all lanes measured)
+
+$ cat gcprobe.pas
+program gcprobe;
+uses Generics.Collections;
+begin
+end.
+
+$ pascal26 -Fu<rtl-generics/src> gcprobe.pas gcprobeo
+```
+
+Note the flag ORDER: `-Fu` after the source file is silently ignored and the run
+dies at `:2 uses: unit source not found`. That is a plausible way to record a
+probe that did not do what its author thought.
+
+### `:120` — a THIRD recorded run, and this one is on `pinned`
+
+| binary | first stop | `:120` present? |
+| --- | --- | --- |
+| `6319b892f517` (frankR, earlier session) | `:135` | no |
+| `f92f3c013ac58cda` (frankR, HEAD 097f9b794) | `:135` | no |
+| **`abece5150983d95e` (`pinned`)** | **`:135`** | **no** |
+
+The third row is the new information. `pinned` is the OLDER binary — so if some
+build in this checkout's history reported `unknown type: PT` at `:120`,
+`pinned` was the candidate, and it does not. `TCustomPointersEnumerator<T, PT>
+= class abstract(TEnumerator<PT>)` resolves `PT` on every binary available here.
+
+**Still not retitling** — the hold stands and the missing piece is unchanged: it
+needs frank-user's shell history, not another run from me. But the "unrecorded
+flag vs wrong binary" split now has a third data point on the `wrong binary`
+side, and the flag-order trap above is a concrete mechanism for how the `:2`
+failure mode hides.
+
+### `:135` — root cause found, and the ticket's own hypothesis is disproved
+
+The note above reads: *"`TArray<T> = array of T` is declared at `:57` of the
+same file, so a generic **array** template fails to resolve where a generic
+**class** template at `:133` succeeds."*
+
+`:57` is **inside an `{$ifdef}`**:
+
+```pascal
+  {$ifdef VER3_0_0}
+  TArray<T> = array of T;
+  {$endif}
+```
+
+and pxx defines `VER3`, `VER3_2`, `VER3_2_2` (`lexer.inc:1188-1190`) — **not**
+`VER3_0_0`. So that declaration is skipped, and the corpus is doing the right
+thing: from FPC 3.0.2 on, `TArray<T>` comes from the `System` unit. **pxx claims
+VER3_2_2 and its RTL provides no `TArray`** — `grep -rn TArray lib/ --include=*.pas`
+returns nothing.
+
+Decisive experiment — define the symbol so the corpus declares it itself:
+
+```
+$ pascal26 -dVER3_0_0 -Fu<src> gcprobe.pas gco2
+pascal26:214: error: unexpected token
+```
+
+`:135` is **gone** and the wall advances 79 lines. So a generic ARRAY template
+resolves perfectly well; there was simply no `TArray` to resolve. The
+class-vs-array framing was the wrong split.
+
+**This re-lanes.** `TArray<T> = array of T` in the RTL is a **Track B** library
+gap, not a Track P parser defect — one declaration, and the FPC-parity argument
+for it is that pxx already answers `VER3_2_2` to the `{$ifdef}` the corpus uses
+to decide whether to declare it itself. Filed separately rather than taken:
+`lib/rtl` is not this lane's file.
+
+### The wall after that is a real Track P generic bug
+
+With `TArray` supplied, `:214`:
+
+```pascal
+  TCustomListWithPointers<T> = class(TCustomList<T>)
+  public type
+    TPointersEnumerator = class(TCustomPointersEnumerator<T, PT>)
+    protected
+      FList: TCustomListWithPointers<T>;     { <-- :214 }
+```
+
+```
+near: protected FList  TCustomListWithPointers$UInt32  UInt32 >>>  FIndex
+```
+
+The token stream shows `TCustomListWithPointers$UInt32` followed by a stray
+`UInt32` — the ENCLOSING template's name was substituted to its specialized
+form AND its `<T>` argument list was left behind and substituted separately, so
+the field type came out as `TCustomListWithPointers$UInt32<UInt32>`. A nested
+class naming its enclosing template is substituted twice.
+
+That one IS this lane's, and it is in `pasparser_generic.inc`.

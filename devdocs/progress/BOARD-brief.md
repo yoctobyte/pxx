@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:31 blocked:7 backlog:387 backlog_new:27 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2832 rejected:58`
+`urgent:1 working:2 unfinished:31 blocked:7 backlog:387 backlog_new:27 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2832 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-p-generic-type-param-unresolved-in-class-abstract-template` [P] — owner: frankR
 - `feature-unicodestring-model` [A] — owner: frankwasm
 
 ## urgent (1) — jump the queue
@@ -65,7 +66,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
@@ -79,6 +79,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [B]` bug-b-rtl-provides-no-tarray-generic-but-pxx-claims-ver3-2-2
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
