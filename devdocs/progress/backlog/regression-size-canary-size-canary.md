@@ -116,3 +116,49 @@ Three ways out, and they are not equivalent:
 
 Do NOT re-baseline to clear the red before someone with the ESP budget in view
 has looked at it. A canary silenced by moving its line is a canary deleted.
+
+## Partly fixed at `1a526a89d` — and the job is STILL RED (coordinator, 2026-08-30)
+
+frankwasm confirmed the cause by measurement (two isolated worktrees at
+`bfe82dd79` and its parent `0a7d649c6`, each seeded with the sources touched
+afterwards so `make` could not no-op — both printed `converged after 1 round(s)`),
+then landed a `{$ifndef PXX_ESP}` guard on the four wide functions.
+
+**The acute part is gone. One row remains over the line.**
+
+| subject | before guard | after guard | allowed | verdict |
+| --- | ---: | ---: | ---: | --- |
+| esp32c3-bare | 66252 | **50532** | 55580 | restored to parent's exact number |
+| esp32s3-bare | 56684 | **43452** | 47797 | restored to parent's exact number |
+| esp32s2-bare | 56684 | **43452** | 47797 | restored to parent's exact number |
+| esp32-bare | 56684 | **43452** | 47797 | restored to parent's exact number |
+| **x86_64-empty** | 69400 | **69400** | 67406 | **STILL OVER by 1994 bytes** |
+
+**Read the number, not the verdict.** This job stays RED until step 7a of
+[[feature-unicodestring-model]] moves the wide runtime into a separately-pulled
+`builtinwide` unit. While it is red, a *new* x86_64 size regression cannot change
+the job's verdict — it can only change the number. **69,400 is the figure to
+compare against; anything above it is a second, unrelated regression hiding under
+this one.** That is the cost of leaving it red and it is why 7a is not optional.
+
+Exact restoration on all four ESP rows — not approximate — is what says the
+growth had a single cause and all of it was removed.
+
+**Two things checked rather than assumed, both of which changed the commit:**
+
+- The coordinator required the guard to move declarations, bodies **and** callers
+  together, since guarding only the first two is exactly
+  [[bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out]]. frankwasm
+  grepped all four symbols across every `.pas`/`.inc`/`.py`/`.sh`: declarations,
+  bodies and one test, nothing else. **No third arm exists**, so the double case
+  cannot arise here.
+- `test_widestring_transcode.pas` needed **no** ESP skip. It already fails to
+  build on hosted xtensa (a sysutils function-result limit) and bare esp32
+  (`platform_backend` not found) **on `pinned`, at the same two sites, before the
+  change**. Adding a skip would have recorded a restriction that was neither new
+  nor this commit's.
+
+`var s: widestring` compiles and runs on bare esp32 today (43,516 bytes) because
+`widestring` is still an alias for a byte string — so the guard introduces no
+confusing diagnostic. What a bare-ESP program *should* do when it names a real
+UTF-16 type becomes live at 7b, which is when 7a has removed the reason to care.
