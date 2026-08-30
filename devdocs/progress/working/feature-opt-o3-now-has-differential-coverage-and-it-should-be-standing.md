@@ -156,3 +156,54 @@ argument, not a firing count.
 **Residual, and I own it:** this shows the *operand-staging family* fires. It
 does not attribute firings to individual slices, and does not show that all 10
 aarch64 gate sites are reached. A clean batch clears the family, not each site.
+
+### Firing counts, and three numbers that were not measurements
+
+The section above closes the *family* question by density. The per-slice
+question has a real instrument — `PXXDBG` probes, one of which
+(`ir_codegen_aarch64.inc:1256`) exists for exactly this reason and says so:
+*"There is no aarch64 disassembler on a typical dev box, and a pass that
+silently stops firing is invisible to every correctness check we own."*
+
+On csmith seed 330502, `--target=aarch64 -O3`:
+
+| probe | count | what it is |
+| --- | ---: | --- |
+| `a.w2` | **105** | a real firing count — the aarch64 in-place-ALU slice |
+| `a.resid` | **2280** | real — residency decisions, both backends probed |
+| `a.forinit` | **2** | real — `ir.inc`, shared |
+| `a.a64binop` | 18778 | **a POPULATION, not firings.** The comment says `REPORT ONLY` |
+| `a.w1left` | 0 | **meaningless here** — its only live site is in `ir_codegen.inc`, x86-64 |
+| `a.w1cmp32` | 0 | same |
+| `a.reload` | 0 | **no live probe exists** — two text mentions, zero `PxxDbgEnabled` sites |
+
+**Four of those seven rows are not what they look like, in four different
+ways**, and every one of them answers rather than erroring: a population read as
+a result, two probes belonging to the other backend, and one probe that no
+longer exists. The check that separates them is one grep —
+`grep -rc "PxxDbgEnabled('<tag>')" compiler/` — and which FILE the site is in.
+
+**So the honest residual is narrower and sharper than I banked above.** csmith
+code at `-O3` on aarch64 provably fires W2 (105) and exercises residency (2280).
+**The aarch64 compare fold and the widen fusion — the two slices this session
+landed — have no probe at all**, so whether csmith reaches them is not merely
+unmeasured, it is unmeasurable with the instruments in the tree. Adding a probe
+to each is the obvious next step and it is cheap; I am naming it rather than
+doing it under this ticket, since it is campaign work, not coverage work.
+
+### Provenance of the binary under test
+
+`ba3d1a18edf6` is a **binary sha256**, not a commit. The commits in it that
+matter, all verified ancestors of HEAD:
+
+- `ba99a4e81` — generic method body / `try`+`asm` `end`-counting fix
+- **`f370bb085` — the shared-IR control-flow rewrite the pin is held on**
+  (`IRMarkReachableLabels`, `IROptDeadCode`'s own fixpoint deleted, strictly
+  more deletion than before)
+- `931b43ae0` — `MAX_GENERIC_METHODS` 512 → 2048
+
+That makes this batch incidental evidence about `f370bb085`: a control-flow-heavy
+generator against a brand-new dead-code eliminator. **It is not a substitute for
+the queued full tier** — different question, different matrix — but it was not
+commissioned for it, which is worth stating plainly rather than letting it be
+read as coverage it is not.
