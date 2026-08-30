@@ -195,6 +195,9 @@ Validated in both directions, as the pair above shows: the assertion passes at
 HEAD and would fail against `pinned`, which compiles the same source clean.
 
 ## Log
-- 2026-08-30 — undefined read and dishonest guard fixed by frankC, both tests
-  in `test-core`; the limit itself handed to Track A. Commit PENDING-COMMIT.
+- 2026-08-30 — commit d5350d64a: undefined read and dishonest guard fixed by
+  frankC, both tests in `test-core`; the limit itself handed to Track A.
+  (Citation moved to the FRONT of the entry on purpose — third time tonight
+  that a `commit PENDING-COMMIT` pushed onto a continuation line was invisible
+  to the fill. The placeholder has to sit on the line the entry starts on.)
 - 2026-08-30 — resolved, commit d5350d64a.
