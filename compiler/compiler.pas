@@ -865,6 +865,8 @@ begin
   RtlOverLibc := False;
   LibcSyscallProcIdx := -1;
   LibcErrnoProcIdx := -1;
+  LibcSyscallCallCount := 0;
+  LibcSyscallThunkAddr := -1;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   SocExplicit := False;
@@ -2043,6 +2045,14 @@ begin
     DbgMarkTokFile(TokCount, 1);
     TokPos := 0;
     Next;
+    { Register the two libc imports BEFORE the frontend runs, not lazily at the
+      first syscall. Registering them last put their Procs[] rows after every
+      unit's externals and the emitted DT_NEEDED came out as a UNIT name
+      ("builtinheap") rather than libc.so.6 -- the program then failed at LOAD,
+      not at run. Creating them up front keeps the import table's order the same
+      as it is for any ordinary `external` declaration.
+      feature-port-rtl-over-libc }
+    if RtlOverLibc and (TargetArch = TARGET_X86_64) then EnsureLibcSyscallProcs;
     ParseProgram;
   end;
 
@@ -2198,6 +2208,12 @@ begin
             ' eligible-param-loads+stores=', RegcallEligibleUses);
   end;
   if MeasureInline then InlineMeasureSummary;
+  { All code is emitted and CodeLen is final; the ELF writer below derives
+    dataBase from it. This is the one point where the libc syscall thunk can be
+    appended -- EmitSyscall fires mid-routine, so the body cannot be emitted
+    where it is first needed without execution falling into it.
+    feature-port-rtl-over-libc }
+  EmitLibcSyscallThunk;
   if EmitSharedMode then
     writeELFSharedX64(outFile)
   else if EmitObjMode then

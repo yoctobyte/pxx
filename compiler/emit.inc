@@ -190,7 +190,37 @@ procedure MovRdiImm(v: Int64); begin EmitB($48); EmitB($BF); EmitI64(v); end;
 procedure MovRsiImm(v: Int64); begin EmitB($48); EmitB($BE); EmitI64(v); end;
 procedure MovRdxImm(v: Int64); begin EmitB($48); EmitB($BA); EmitI64(v); end;
 
-procedure EmitSyscall; begin EmitB($0F); EmitB($05); end;
+{ The ONE place the x86-64 kernel-entry instruction is emitted, which is what
+  lets --rtl-libc convert all 43 sites without touching a single caller: every
+  caller has already set up the RAW convention (rax = nr, then rdi/rsi/rdx/r10/
+  r8/r9), and the thunk converts from that. Emitting a 5-byte call rather than
+  the ~140-byte body inline is not a size preference -- inlining it overflows
+  rel8 jump patches that span a syscall, silently.
+  feature-port-rtl-over-libc }
+procedure EmitSyscall;
+begin
+  if RtlOverLibc and (TargetArch = TARGET_X86_64) then
+  begin
+    { REFUSED rather than emitted wrong: at -O3 EmitExternalIndirectCall wraps
+      the call in FloatPoolSave/Restore, which address the float-resident pool
+      at [rbp + FxSaveBase] -- and FxSaveBase is PER FUNCTION. In a shared
+      out-of-line thunk rbp belongs to whichever caller jumped in, so those
+      stores would land in that caller's frame at another function's offset and
+      silently corrupt it. A loud refusal now beats a wrong value later; lifting
+      it means saving the pool at the call site rather than in the thunk. }
+    if OptLevel >= 3 then
+      Error('--rtl-libc is not supported with -O3 yet: the shared syscall thunk '
+            + 'cannot carry -O3''s per-function float-register pool (FxSaveBase '
+            + 'is frame-relative). Build the libc-mode program at -O2 or lower.');
+    if LibcSyscallCallCount >= MAX_CALLFIX then
+      Error('too many --rtl-libc syscall sites');
+    EmitB($E8);                                   { call rel32 -> thunk }
+    LibcSyscallCallPos[LibcSyscallCallCount] := CodeLen;
+    Inc(LibcSyscallCallCount);
+    EmitI32(0);                                   { patched by EmitLibcSyscallThunk }
+  end
+  else begin EmitB($0F); EmitB($05); end;
+end;
 
 procedure EmitDataRef(dataOff: Integer);
 { Absolute data-address placeholder; width follows the target's pointer size

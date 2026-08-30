@@ -11850,6 +11850,97 @@ begin
   FloatPoolRestore;
 end;
 
+{ --rtl-libc: the ONE out-of-line thunk every syscall site calls, appended after
+  all code is emitted (compiler.pas, just before the ELF writer) and reached by
+  the rel32 call sites EmitSyscall recorded.
+
+  ON ENTRY the RAW convention is already set up by the caller: rax = number,
+  rdi/rsi/rdx/r10/r8/r9 = args 0..5. libc'"'"'s `long syscall(long nr, ...)` takes the
+  number as its FIRST C argument, so the mapping is a SHIFT of every value one
+  slot right into rdi/rsi/rdx/rcx/r8/r9, with the 7th landing on the stack. All
+  61 RTL call sites pass the full 7 (the intrinsic zero-pads), so the stacked
+  argument is always present rather than a special case.
+
+  THE SIX ARE SAVED AND RESTORED, and that is what makes this safe without
+  auditing 43 callers. The real instruction clobbers only rax, rcx and r11 --
+  rdi/rsi/rdx/r10/r8/r9 survive it -- while a C call clobbers every caller-saved
+  register. A caller that sets an argument register once and issues two
+  syscalls, or reads one back afterwards, would break SILENTLY under a
+  non-preserving lowering. Rather than recording "I could not find a caller that
+  depends on it" -- a limit claim nobody re-tests -- the contract is preserved
+  and the dependency is made irrelevant. rax is deliberately NOT saved: it
+  carries the result.
+
+  Registers: r10 parks the old rsp, r11 carries the 7th argument. rax cannot
+  park anything -- SysV requires AL = the number of vector registers used for a
+  variadic callee, so it is zeroed at each call.
+
+  The internal branch is rel32, NOT rel8: with FloatPoolSave/Restore around the
+  two calls the span reaches ~143 bytes, which is precisely the overflow this
+  ticket already tripped once. Using rel32 here is the shape the fix for
+  bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows should take.
+
+  Error convention: raw returns -errno; libc returns -1 and sets errno. Mapping
+  it back here means no RTL error check changes anywhere and program output is
+  byte-identical to the raw build BY CONSTRUCTION. Verified as plain Pascal
+  externals before this was written: a bad-fd write returns -1 with errno 9,
+  and the raw build returns -9.
+  feature-port-rtl-over-libc }
+procedure EmitLibcSyscallThunk;
+var noErr, i: Integer;
+begin
+  if LibcSyscallCallCount = 0 then Exit;
+  LibcSyscallThunkAddr := CodeLen;
+  { save the raw-convention argument registers }
+  EmitB($41); EmitB($51);                                     { push r9  = a5 }
+  EmitB($41); EmitB($50);                                     { push r8  = a4 }
+  EmitB($41); EmitB($52);                                     { push r10 = a3 }
+  EmitB($52);                                                 { push rdx = a2 }
+  EmitB($56);                                                 { push rsi = a1 }
+  EmitB($57);                                                 { push rdi = a0 }
+  { build the C argument list: nr from rax, the rest from the saved copies }
+  EmitB($48); EmitB($89); EmitB($C7);                         { mov rdi, rax    = nr }
+  EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($00); { mov rsi, [rsp]    = a0 }
+  EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8]  = a1 }
+  EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($10); { mov rcx, [rsp+16] = a2 }
+  EmitB($4C); EmitB($8B); EmitB($44); EmitB($24); EmitB($18); { mov r8,  [rsp+24] = a3 }
+  EmitB($4C); EmitB($8B); EmitB($4C); EmitB($24); EmitB($20); { mov r9,  [rsp+32] = a4 }
+  EmitB($4C); EmitB($8B); EmitB($5C); EmitB($24); EmitB($28); { mov r11, [rsp+40] = a5 }
+  { aligned call: r10 parks rsp, r11 is the 7th argument at [rsp] }
+  EmitB($49); EmitB($89); EmitB($E2);                         { mov r10, rsp }
+  EmitB($48); EmitB($83); EmitB($E4); EmitB($F0);             { and rsp, -16 }
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($10);             { sub rsp, 16 }
+  EmitB($4C); EmitB($89); EmitB($54); EmitB($24); EmitB($08); { mov [rsp+8], r10 }
+  EmitB($4C); EmitB($89); EmitB($5C); EmitB($24); EmitB($00); { mov [rsp], r11 }
+  EmitB($31); EmitB($C0);                                     { xor eax, eax }
+  EmitExternalIndirectCall(RegisterExternal(LibcSyscallProcIdx));
+  EmitB($48); EmitB($8B); EmitB($64); EmitB($24); EmitB($08); { mov rsp, [rsp+8] }
+  { -1 means "consult errno"; every other value is already the raw answer }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($FF);             { cmp rax, -1 }
+  EmitB($0F); EmitB($85); noErr := CodeLen; EmitI32(0);       { jne .done (rel32) }
+  EmitB($49); EmitB($89); EmitB($E2);                         { mov r10, rsp }
+  EmitB($48); EmitB($83); EmitB($E4); EmitB($F0);             { and rsp, -16 }
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($10);             { sub rsp, 16 }
+  EmitB($4C); EmitB($89); EmitB($54); EmitB($24); EmitB($08); { mov [rsp+8], r10 }
+  EmitB($31); EmitB($C0);                                     { xor eax, eax }
+  EmitExternalIndirectCall(RegisterExternal(LibcErrnoProcIdx));
+  EmitB($48); EmitB($8B); EmitB($64); EmitB($24); EmitB($08); { mov rsp, [rsp+8] }
+  EmitB($8B); EmitB($00);                                     { mov eax, [rax] = errno }
+  EmitB($48); EmitB($F7); EmitB($D8);                         { neg rax        = -errno }
+  Patch32(noErr, CodeLen - (noErr + 4));                      { .done: }
+  { restore the raw-convention registers, preserving the caller'"'"'s contract }
+  EmitB($5F);                                                 { pop rdi }
+  EmitB($5E);                                                 { pop rsi }
+  EmitB($5A);                                                 { pop rdx }
+  EmitB($41); EmitB($5A);                                     { pop r10 }
+  EmitB($41); EmitB($58);                                     { pop r8 }
+  EmitB($41); EmitB($59);                                     { pop r9 }
+  EmitB($C3);                                                 { ret }
+  for i := 0 to LibcSyscallCallCount - 1 do
+    Patch32(LibcSyscallCallPos[i],
+            LibcSyscallThunkAddr - (LibcSyscallCallPos[i] + 4));
+end;
+
 { Load the resolved address of an external routine into rax. Reuses the dynamic
   GOT slot/fixup table used by external calls; x86-64 encodes `mov rax,[abs32]`.
   Other backends still reject this until they grow an equivalent address-load

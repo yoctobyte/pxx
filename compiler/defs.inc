@@ -3421,6 +3421,16 @@ var
   RtlOverLibc : Boolean;
   LibcSyscallProcIdx : Integer;
   LibcErrnoProcIdx : Integer;
+  { --rtl-libc emits `call <thunk>` at each syscall site and appends the ONE
+    thunk after all code is emitted, patching these rel32 fields. Out-of-line
+    rather than inline because the sequence is ~140 bytes: inlining it grew
+    EmitSyscall from 2 bytes to ~140 and silently overflowed unrelated rel8 jump
+    patches that span a syscall (bug-a-a-rel8-jump-patch-truncates-silently-
+    when-its-span-grows). A 5-byte call moves no span, and the body exists once
+    instead of at 43 sites. }
+  LibcSyscallCallPos : array[0..MAX_CALLFIX-1] of Integer;
+  LibcSyscallCallCount : Integer;
+  LibcSyscallThunkAddr : Integer;
   { Xtensa ABI selector. Call0 remains the bare-target default; ESP-IDF uses
     the windowed ABI. }
   XtensaABI : Integer;
