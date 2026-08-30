@@ -4,8 +4,8 @@ track: B
 type: bug
 blocked-by: []
 summary: "tools/gui_shot.sh rejects a capture as blank when it is <= BLANK_MAX=4000 bytes, on a comment claiming 'a blank frame is ~1-3 KB'. Measured 2026-08-30 at the script's own default 1100x700 under ffmpeg 8.0.1: a fully blank frame is 4013 bytes, five samples, no variance. 4013 > 4000, so the blank check passes every blank capture and the Xvfb restart-and-retry path it guards can never fire. The number was right when written; the encoder or the default size moved under it. Lane note: gui_shot.sh is not in Track T's listed file set, so this is filed to the lane that uses it for PCL/GUI work — reroute if that reading is wrong."
-status: new
-owner: ""
+status: working
+owner: frankB
 ---
 
 # `gui_shot.sh`'s blank-frame detector no longer detects a blank frame

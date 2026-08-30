@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:4 unfinished:27 blocked:8 backlog:358 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2743 rejected:56`
+`urgent:1 working:5 unfinished:27 blocked:8 backlog:358 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2743 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-b-gui-shot-blank-frame-detector-no-longer-detects-a-blank-frame` [B] — owner: frankB
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
