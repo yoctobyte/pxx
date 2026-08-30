@@ -19307,3 +19307,61 @@ reading the file's recent tail, where every entry uses a dash.** A pattern
 derived from the current convention cannot see the convention it replaced.
 Separator set widened; **407 headings now seen, zero same-level duplicates**, so
 the verdict is unchanged and the coverage is no longer overstated.
+
+## Correction 2026-08-30 ~12:4x — I relayed "unblocked" and it was not, for the lane I relayed it to
+
+**MY ERROR, caught by frankB measuring instead of accepting the relay.** I told
+Track B that `mimic_xml_dom_minidom.py.parked` was unblocked by frankA's symtab
+fix. **It is not, for Track B.** frankA's fix landed at 09:03; the current pin
+**v394 `53800fbeb0b66e11` was built from `43c8e3412` at 06:11**, and
+`git merge-base --is-ancestor 0425a62c8 43c8e3412` is **false** — confirmed
+independently here. Track B builds everything with `$(PXX_STABLE)` and never
+HEAD, so **frankA's 4.01s and 36/36 are true of a compiler that lane is not
+permitted to use.**
+
+frankB measured rather than argued from the sha: **the pinned compiler on the
+parked source spins the full 75s timeout at 100% CPU**, exactly as before the fix.
+
+**Unparking would have been worse than an ordinary breakage.** It would have put
+a file in `lib/rtl` that `make lib-test` cannot compile, and the failure mode is a
+**hang, not an error** — the worst shape for a gate, because it does not fail, it
+stops — hitting every lane that runs lib-test, not just Track B.
+
+**The relay was not wrong; the SCOPE of a measurement is what does not survive
+relaying.** *"It builds in 4.01s"* is true and *"it builds for Track B"* is
+false, and **the sentence looks identical from outside the lane.** Same shape as
+the claims-discipline table in CLAUDE.md: two different things wearing one
+phrase. The coordinator seat is exactly where that collapse happens, because
+relaying is all it does.
+
+**Standing rule added: before relaying an unblock, state which BINARY the
+measurement used.** For any Track B or E claim, the only question is whether the
+enabling commit is an ancestor of the **pin's source**, not of `origin/master`.
+
+**The ticket now records a mechanical unpark trigger** — *a pin whose source
+commit has `0425a62c8` as an ancestor*, with the `merge-base` command against
+`pin.log` written out, plus a required real compile by `$(PXX_STABLE)` before the
+rename. `blocked-by` stays: the condition it names — *this lane can build the
+file* — is still false; only the reason changed. "When the hang is fixed" is now
+a condition that is **already true and still insufficient**, which is the kind of
+resume condition that strands a ticket forever.
+
+### PIN DECISION — not now, and here is the trigger
+
+**263 commits sit above the pin's source**, including tonight's data-section
+alignment invariant, the PT_LOAD split, the symtab bucket fix, the class-cycle
+guard and the min/max receiver set. **Not pinning yet**, deliberately:
+
+- load **16.5** and Track T mid-`--tier full`; a pin holds the repo-wide lock and
+  every lane plus the human waits through it;
+- **breadth is 8h stale, 112 commits behind — no cross-target verdict exists for
+  ANY of tonight's work**;
+- nothing is urgently waiting. minidom is a parked file nobody is blocked on, by
+  frankB's own assessment.
+
+**Trigger, mechanical rather than a feeling:** pin when load is below ~13 **and**
+Track T has swept a sha at or above `3b8d1039e` (or `twatch --status` / `trackt
+health` shows T proven down, in which case the lane's own full gate comes first).
+Then `tools/gate.sh quick` — REQUIRED before a pin — then
+`make stabilize-fast && make pin`. If a pin runs tonight for other reasons,
+minidom comes free.
