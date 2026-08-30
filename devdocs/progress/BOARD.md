@@ -68,7 +68,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (384)
+## backlog (388)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -216,6 +216,7 @@ _none_
 | bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure | T | 50 | bug | `trackt setup --fetch-corpus` provisions library_candidates/ only. It never runs, mentions or checks tools/install_externals.sh or tools/install_cross_sysroot.sh, so a box built strictly to track-t.md's documented deploy recipe comes up able to publish verdicts and unable to run ten of the jobs behind them. The corpus half self-announces as SKIP; the sysroot half goes RED, and a red is read as a defect in the tree — on seven's first full tier it auto-filed an 18-job cascade naming twelve innocent Rust commits. | — |
 | bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it | T+S | 45 | bug | test-esp-bare and test-esp-softfloat appear in ZERO testmgr tiers and in no script — grep across tools/ finds one xtensa/esp job total, test-xtensa. So the ESP bare-metal suite is written, correct, and never executed by any gate or sweep. Found because the one executed windowed row landed there, in a target nothing runs. | — |
 | bug-t-the-o-level-sweep-never-sees-the-third-party-corpus | T | 60 | bug | tools/optdiff.sh diffs -O0/-O1/-O2/-O3 output across 1960 programs from our own test tree and has ZERO references to library_candidates/ or external/. So lua, sqlite, quickjs, zlib, duktape and tcc are compiled at the default level only and are never diffed across O levels. The owner's proof rule leans on the target set being complex enough to constitute a proof — and the part of it carrying that weight is exactly the part the O-level sweep does not reach. | — |
+| bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven | T | 65 | bug | bench.tsv has 17178 rows and NONE are from seven: 11242 borg, 3747 plexus, 2185 xeon — the first and last are retired hosts. plexus last benched 2026-08-28; seven's only attempt (2026-08-30T11:11) returned rc=1 rows=0. The contention guard is working exactly as designed and that IS the problem: it refuses to record a dirty measurement on a busy box, and our boxes are busy because sweeping is their job. Correctness numbers accrue for free from the sweeps; VALUE numbers do not accrue at all. | — |
 | bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable | T | 40 | bug | CLAUDE.md gates the widen-your-gate exception on `twatch.py --status` exit 1 OR `trackt.py health` DOWN, as if they were two ways to ask one question. They are not: --status reads PUBLISHED tstate (was work swept recently) and health checks for a RUNNING PROCESS (is anything sweeping now). Measured 2026-08-29 during a watcher handover, they returned UP/exit-0 and DOWN simultaneously. Joined by `or`, the disagreement silently resolves to `down`, so every agent widens its gate by ~10 minutes per fix during any handover — the exact cost the rule exists to avoid. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
 | bug-t-two-public-surfaces-answer-how-big-is-the-backlog-differently | T | 30 | bug | The published status dashboard says 338 backlog tickets; tools/factsheet.sh says 351. Both defensible -- factsheet counts backlog_new/, the dashboard appears to break those out alongside '20 experimental'. Not a defect in either, but two public surfaces answer the same question with different numbers and the generator's owner should pick one. | — |
@@ -445,6 +446,9 @@ _none_
 | regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
+| regression-test-core-test-rtl-fpc-compat-helpers | P | 70 | regression | regression: test-core#src:test/test_rtl_fpc_compat_helpers.pas red at 6d68643f9799 (auto-filed by twatch) | — |
+| regression-test-core-test-str-of-unsigned | P | 70 | regression | regression: test-core#src:test/test_str_of_unsigned.pas red at 6d68643f9799 (auto-filed by twatch) | — |
+| regression-test-core-test-val-radix-and-optional-code | P | 70 | regression | regression: test-core#src:test/test_val_radix_and_optional_code.pas red at 6d68643f9799 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
@@ -818,6 +822,9 @@ _none_
 - [p 70] [T] regression-cascade-d24df3f09efb [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-core-test-rtl-fpc-compat-helpers [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-core-test-str-of-unsigned [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-core-test-val-radix-and-optional-code [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
@@ -829,6 +836,7 @@ _none_
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [P] bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
+- [p 65] [T] bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 - [p 65] [U] decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
