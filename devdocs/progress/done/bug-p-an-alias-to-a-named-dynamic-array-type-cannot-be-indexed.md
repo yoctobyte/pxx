@@ -4,7 +4,7 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`type TA = array of Integer; TB = TA;` — a type alias to a NAMED array type resolves to the array's ELEMENT type, so `SizeOf(y)` is 4 and indexing raises `this value cannot be indexed`. Static arrays fail identically; strings and pointers are fine, because they have alias carriers (`AliasStrElemTk`, `AliasElemTk`) and arrays do not. Root cause `pasparser_decl.inc:6154`. Not generics, not `TArray`, not cross-unit. DIAGNOSIS COMPLETE — only the write remains."
-status: working
+status: done
 owner: frankwasm
 ---
 
@@ -248,3 +248,6 @@ SILENTLY today; the indexing errors are only the loud symptom.
 diagnosis complete, write only; the fix is one branch in pasparser_decl.inc:6154 plus an ArrType row-copy helper that belongs beside the two existing registration sites — that file's owner should write it. Do not re-measure: root cause, exact site and fix sketch are all in the ticket.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
