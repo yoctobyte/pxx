@@ -109,7 +109,9 @@ the wrong risk — and the lane rules were being routed around all day (seven la
 in `symtab.inc`) with a 0.14% revert rate and nothing attributable to the
 machinery that costs the most.
 
-**Cut gatekeeping, not gates — and not relaying.**
+**Cut gatekeeping, not gates — and not relaying.** (With one qualification the
+first draft of this page got wrong: the gates are not a backstop for *silently
+clobbered* work. See "The residual is SILENT" below.)
 
 ## The residual — where "git will merge it" is NOT the whole story
 
@@ -174,11 +176,61 @@ Cheap, and each catches something no one else can see:
   agent would have decided silently.
 - **Push-often** — Track T only sees `origin`; unpushed work is untested work.
 
+## The residual is SILENT, not merely rare — corrected 2026-08-30
+
+This page first said the residual risk was *loud and cheap, because git detects
+it immediately*. **That is true of conflicts and false as a general claim**, and
+the correction came from the coordinator the same evening, with a case:
+
+frankS parked a held change across the pin as **whole-file copies** of
+`defs.inc` and `cpreproc.inc`. Restoring them over the post-pin tree would have
+reverted frankA's `CUnitOfPascalProgram` block and 124 changed lines of
+`cpreproc.inc` — another lane's work, deleted with **no conflict and no
+diagnostic**, as a clean well-formed commit. Git cannot see it: a whole-file copy
+is a snapshot with no idea what moved underneath it. **And no track letter would
+have caught it either** — frankS was in its own lane throughout. The letters, the
+claim lock and the sole-A guard are all blind to this.
+
+So the honest shape of the residual is not *"2% of merges conflict."* It is:
+**a small number of failure modes are silent, and they are not the ones the lane
+letters address.** That night's set, all four silent:
+
+1. **A parked whole-file copy** restoring over a moved tree.
+2. **A stale binary** — three instances that night. `make` reports a verified
+   fixedpoint that is *correct about a tree that no longer exists*.
+3. **A change that must land atomically** — the ABI fix; textually mergeable,
+   semantically not.
+4. **A staged dependency on a pin** — stage 2 cannot build until stage 1 is
+   *pinned*, not merely merged.
+
+None of the four is prevented by anything cut here, and all four are caught or
+prevented by things kept — which is the argument for the cut, not against it.
+The rule that closes (1) is a norm about **how you park**, not about who may
+touch what: `devdocs/dev/parallel-tracks.md`, "Parking a held change".
+
+### Do not read the gates as the backstop for this class
+
+The section above says the failures that matter are semantic ones the gates
+catch. **That is true of the two reverts and NOT true of a silent clobber.**
+frankS's case surfaced as `undefined variable (CUnitOfPascalProgram)` **only
+because the reverted code had a live caller.** Clobber something self-contained —
+a function not yet called, a test, a helper landed an hour earlier — and it
+compiles clean, reaches a valid fixedpoint, passes quick, and lands. **The gate
+caught that one by luck, not by coverage.**
+
 ## If this turns out to be wrong
 
-The prediction is: **collisions stay rare and cheap, and the failures that
-matter keep being semantic ones the gates catch.** The way to falsify it is a
-run where merge conflicts or clobbered work actually cost more than the
-coordination did. If that happens, re-read this page before reinstating anything
-— and reinstate the *specific* rule the incident argues for, not the whole
-apparatus, which is how it grew the first time.
+The prediction is: **collisions stay rare and cheap, and the failures that matter
+keep being semantic ones the gates catch.**
+
+**But the falsification test cannot be "did an incident cost more than the
+coordination did", because a silent revert produces no incident.** A bad night of
+this class looks exactly like a good one. So the test is:
+
+> **If work disappears without a conflict, reinstate the specific mechanism that
+> would have caught it.**
+
+Not the whole apparatus — the specific mechanism. Rebuilding everything after one
+incident is how the apparatus grew the first time. And watch for the shape rather
+than the alarm: someone asking where their function went, a test that stopped
+existing, a fix that had to be made twice.
