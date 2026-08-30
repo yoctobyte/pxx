@@ -1,7 +1,7 @@
 ---
 prio: 65
 track: A
-status: working
+status: done
 owner: frank-optimize-b4
 ---
 
@@ -149,3 +149,5 @@ boundary.** An earlier draft used gV=100, where `100 shr 1` and `101 shr 1` are
 both 50, and the unsafe build passed. Standing rule 4 is about adjacency, and it
 applies to an ORDERING exactly as it does to a register: the reordered read must
 differ from the correct one, and round numbers are where it does not.
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
