@@ -22821,3 +22821,51 @@ independent observations of one pass, two of them predating tonight.
 **Durable caution regardless of which option wins: promote and measure ONE PASS AT
 A TIME.** Every gate promoted together is *worse* than this one alone (18.06 vs
 16.23) — the passes interfere, so **the batch is not the sum.**
+
+## Whether a test EXECUTES is not a property visible from inside it
+
+frankwasm, closing `feature-unicodestring-model` (`0d438d80a`) — the close nearly
+went out on an acceptance test that had never run.
+
+**None of the nine widestring tests was wired into the Makefile.** Not one.
+`tools/check_test_wiring.py` had been exiting 1 and naming all nine, all day. That
+included `test_widestring_jsonscanner_wall` — the fcl-json line **the campaign
+exists for**, measured against FPC 3.2.2, quoted in three of its messages, and
+executed by nothing but its author's own hand. Wired at `d24df3f09`, all nine
+verified in the recipe form first.
+
+**The shape:** it had audited that exact test family hours earlier and found the
+`{$define PXX_WIDE_PAYLOAD}` blind spot — **because it was reading the test
+sources.** So it found every property the sources carry and none of the properties
+they do not. This is `test-fgl`, the coverage banner and the skip-hole one layer
+further in: not a test that passes by not running, but **a test that never entered
+the set at all.**
+
+**And the population is a LEAK, not a backlog.**
+`chore-a-sweep-the-unwired-tests-into-the-suite` [A p20] said 15 files, all blocked
+on deferred lanes. Measured: **45 unwired**, the 13 pyeval/pyexec + 2 softfloat are
+**wired** (108 Makefile references), `test/wasm/**` holds 37, and **8 are top-level
+files created TODAY** — all eight confirmed with `--diff-filter=A`. The ticket's own
+batch-1 note said it on 2026-08-19: *"the orphan population grows faster than it
+drains, so twenty-one was a snapshot and never a census."* True for eleven days
+while the summary went on describing a drain. Corrected at `81d98060d`.
+
+**A p20 on a leak is a mis-price, not a low priority** — the deferral it parked on
+had lifted and the field never moved. Same family as
+[[status-is-not-state-build-the-thing]]: the ranker faithfully reports a number
+whose premise expired.
+
+**Why it is urgent rather than tidy:** `tools-devtest#00` has been STILL-RED in the
+full tier since `49bd043` (2026-08-29), and the guard sits in limited+full and
+deliberately **not** native — correctly, since native is what dev boxes gate pushes
+on and harness guards must not inflate that number. The consequence is that **a lane
+agent who adds an unwired test gets no signal for days.** frankwasm's fix is the
+right shape and is frankT's to take: have `gate.sh quick` name a test file *this
+push added and did not wire* — one push's diff, not a census, instant checker,
+native's number stays honest.
+
+**The trap for whoever drains it:** every expectation must be an **oracle, never a
+recording**, and it matters most for these eight because they are hours old and came
+from fix commits landed today. Two files in an earlier batch shipped as the
+regression test for their own fix; transcribing today's output pins whatever the fix
+left behind, bug included.
