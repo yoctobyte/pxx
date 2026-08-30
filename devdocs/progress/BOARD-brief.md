@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:7 backlog:339 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2731 rejected:56`
+`working:5 unfinished:27 blocked:7 backlog:340 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2732 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -15,9 +15,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-target-wasm` [A+B] — owner: frankwasm
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A] — owner: frankA
 
-## unfinished (28) — parked mid-flight; re-claim, do not duplicate
+## unfinished (27) — parked mid-flight; re-claim, do not duplicate
 
-- `bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address` [A+S]
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead` [C] — blocked-by: bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
@@ -70,7 +69,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
 - `[p 65] [U+S]` decide-is-the-2026-07-12-esp-park-still-in-force (unblocks 1)
-- `[p 65] [A+S]` bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - `[p 65] [P]` bug-p-two-different-nested-specializations-of-one-template-collide
@@ -88,5 +86,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
+- `[p 60] [U]` decide-does-track-r-work-on-master-like-every-other-lane
 
 _330 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

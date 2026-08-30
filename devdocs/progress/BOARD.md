@@ -18,11 +18,10 @@ _none_
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 
-## unfinished (28)
+## unfinished (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address | A+S | 65 | bug | A by-value wide record on xtensa renders a live address | — |
 | bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead | C | 55 | bug | A `static`/`static inline` DEFINED in a .h reached through `uses` had its body discarded and became an external, so the program linked a DT_NEEDED on a lib<header>.so that does not exist and died at load. PARTIALLY FIXED 2026-08-30 with the provenance scope term the reverted first attempt was missing (gtk green, .h/.c pair test in the gate). STILL BROKEN for the common shape -- a header that includes <stdio.h>/<string.h> or anything else with a crtl src/*.c sibling above the static -- because CModuleOfTok never resets when an include returns to its parent. Blocked on bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull; do not attempt the rest before that lands. | bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull |
@@ -63,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (339)
+## backlog (340)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -85,6 +84,7 @@ _none_
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
 | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
+| bug-a-paramsize-and-allocparam-disagree-about-a-5-8-byte-byvalue-record | A | 40 | bug | ParamSize and AllocParam disagree about a 5-8 byte by-value record | — |
 | bug-a-proc-map-emits-static-addresses-for-a-dynamic-build | A | 30 | bug | --proc-map computes every address as LOAD_ADDR + CODE_OFFSET + BodyAddr, using the STATIC code offset unconditionally. A dynamic build (-dPXX_LIBC_HEAP, --shared) sits at DYNAMIC_CODE_OFFSET, so every PROC line is 0x70 low -- a constant shift over all routines. Measured on the pinned binary. It does not fail; tools/vgsym.py resolves the shifted address to the PRECEDING routine, so the symbolized stack is wrong rather than absent. compiler.pas's own comment already states the limitation; nothing enforces it. | — |
 | bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout | A | 25 | bug | ir.inc:9399 says a promotable-int store's two paths 'both go through promocore.pas, the only place that knows the layout'. x86-64's hand-emitted variant-release blob in ir_codegen.inc reads the payload as a literal [rax+8] at three sites, so it knows the layout too. The values agree today so nothing is broken — but this is the same arm, the same shape and the same file as instance #4 of the audit, where an x86-64 hand-emitted twin of a 'single choke point' silently diverged for two months. | — |
 | bug-a-pxx-home-is-advertised-but-not-honoured | A | 35 | bug | `--where` advertises PXX_HOME as tier 2, overriding the exe-dir defaults, but setting it changes nothing: units still resolve from compiler/../lib/rtl, and even REMOVING a unit from the PXX_HOME tree does not produce 'unit not found'. Found while trying to test a compiler hypothesis against a modified copy of the RTL instead of editing Track B's files. | — |
@@ -655,9 +655,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2731)
+## done (2732)
 
-2731 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2732 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -734,7 +734,6 @@ _none_
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
 - [p 65] [U+S] decide-is-the-2026-07-12-esp-park-still-in-force (unblocks 1) [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 65] [A+S] bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - [p 65] [P] bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - [p 65] [P] bug-p-two-different-nested-specializations-of-one-template-collide
@@ -889,6 +888,7 @@ _none_
 - [p 40] [A+S] bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
 - [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
+- [p 40] [A] bug-a-paramsize-and-allocparam-disagree-about-a-5-8-byte-byvalue-record
 - [p 40] [A] bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
 - [p 40] [A] bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code

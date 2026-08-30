@@ -1377,7 +1377,16 @@ begin
         bug-a-xtensa-codegen-has-no-variant-support }
       if Syms[IRA[node]].TypeKind = tyVariant then
         EmitSlotAddrXtensa(reg_xtensa_a2, IRA[node])
-      else if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
+      else if Is64BitXtensa(Syms[IRA[node]].TypeKind) or
+              ((Syms[IRA[node]].TypeKind = tyRecord) and not Syms[IRA[node]].IsArray and
+               (RecSize(SymTR[IRA[node]].RecId) > 4) and
+               (RecSize(SymTR[IRA[node]].RecId) <= 8)) then
+        { A 5-8 byte record VALUE needs BOTH words. EmitLoadVar64Xtensa is
+          type-agnostic (a raw 8-byte load, already by-ref aware), so it serves a
+          record exactly as it serves an Int64. Without this the record fell to
+          the 1-word EmitLoadVarXtensa below and silently dropped its high 4
+          bytes — one of three spots, all counting 4 bytes where the type is 8.
+          arm32 had the identical trio (bug-arm32-record-byvalue-over-4-bytes-abi-gap). }
         EmitLoadVar64Xtensa(IRA[node])
       else
         EmitLoadVarXtensa(IRA[node]);
@@ -1669,6 +1678,30 @@ begin
             64-bit `<> 0` test on a null low word took the dereference branch
             and double-faulted (esp32s3 bare-boot total UART silence). Twin of
             the riscv32 IR_LOAD_MEM fix. Hi first: a2 still holds the address. }
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_a2, 4);
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+        end
+        else if tk = tyRecord then
+        begin
+          { A record VALUE loaded through memory only ever means a <=8-byte
+            by-value record: IRLowerCallArg wraps a record-RETURNING call (or
+            operator result) in IR_LOAD_MEM, and anything over 8 bytes travels
+            by pointer. Load both words -- riscv32 carries this identical arm
+            with the identical comment, and xtensa was the last backend without
+            it (bug-riscv32-byval-record-param-one-word is the same defect one
+            target over).
+
+            This is the arm that made `inner(mk)` -- a record-returning function
+            called directly as a by-value argument -- print `7 0` on Call0 and
+            `7 6` (a stale register) on windowed, while every OTHER shape of the
+            same bug was already fixed: a named variable, a 4-byte record, a
+            5-byte record, two records in a row, the 5th and 6th parameter
+            positions, and forwarding a record parameter onward all passed. The
+            producer node is what differs -- the arg reaching the call-arg loop
+            is IR_LOAD_MEM, not IR_LOAD_SYM -- which is why widening IR_LOAD_SYM
+            did not cover it and why only varying the SHAPE of the repro found
+            it (devdocs/dev/root-cause-over-microfix.md). Hi first: a2 still
+            holds the address. }
           xtensa_l32i(reg_xtensa_a3, reg_xtensa_a2, 4);
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
         end
@@ -2624,6 +2657,44 @@ begin
               XtensaPushA2;
             end;
             Inc(nArgs, 8);
+          end
+          else if (procIdx >= 0) and
+             (i < Procs[procIdx].ParamCount) and (i < MAX_PROC_PARAMS) and
+             (Procs[procIdx].Params[i].TypeKind = tyRecord) and
+             (not Procs[procIdx].Params[i].IsRef) and
+             (not Procs[procIdx].Params[i].IsArray) and
+             (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) > 4) and
+             (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) <= 8) then
+          begin
+            { By-value record over 4 bytes (up to 8): push BOTH words, exactly
+              as the Int64 arm below does. IREmitNodeXtensa now yields a2:a3 for
+              a 5-8 byte record value (IR_LOAD_SYM widened above to match);
+              without this arm the record fell to the generic 1-word case and
+              lost its high word on every plain-value record argument.
+
+              The three symptoms in test_arm32_record_byval_wide are one bug
+              seen at three distances from the frame pointer, which is why
+              nothing but a full-word fix works: a LONE record arg printed
+              `1 0` (high word simply absent), a record BETWEEN scalars printed
+              `1 1` (the missing word read back the neighbouring slot), and a
+              record after four scalars printed `1 134730429` — a live address
+              rendered as a decimal number. Same escalation arm32 recorded:
+              data loss becomes corruption becomes a leaked pointer as the slot
+              that gets read moves further from the one that was written. }
+            { The even-word pad is the SAME call the Int64 arm below makes, and
+              it is required for the same reason: the callee spill in
+              EmitParamSpillsForTarget runs one shared 64-bit branch for Int64,
+              Double AND this record, so it skips an odd word here too. Omitting
+              it was measured, not assumed -- `mixedMiddle(1, p, 2)` printed
+              `1 2 2 1` for `1 1 2 2`: the caller had packed the record at words
+              1-2 while the callee read words 2-3 and took word 4 for `y`. Both
+              sides apply the rule or neither does. }
+            XtensaPadTo64Xtensa(procIdx, nArgs);
+            IREmitNodeXtensa(IRA[argNode]);        { a2=lo, a3=hi }
+            XtensaPushA2;                           { lo, word nArgs }
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+            XtensaPushA2;                           { hi, word nArgs+1 }
+            Inc(nArgs, 2);
           end
           else if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and

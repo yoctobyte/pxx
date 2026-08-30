@@ -13403,6 +13403,20 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow_x64
 	tools/expect_same.sh xtensa/test_xtensa_string_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_string_cow)" "$$($(TESTTMP)/test_xtensa_string_cow_x64)"
+	# By-value records of 5-8 bytes: BOTH words must cross, on four separate
+	# spots that each counted one word where the type is two -- IR_LOAD_SYM, the
+	# call-arg push (plus its even-word pad), the callee param spill in
+	# ir_codegen.inc, and IR_LOAD_MEM for a record-RETURNING call used directly
+	# as an argument. arm32 and riscv32 already carried all four; xtensa is the
+	# sixth backend and had none of them
+	# (bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address, and the
+	# same defect as bug-arm32-record-byvalue-over-4-bytes-abi-gap /
+	# bug-riscv32-byval-record-param-one-word). Compared against the x86-64
+	# oracle rather than a literal, because the point of the row is agreement
+	# with the other backends, not a transcript.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide
+	./$(COMPILER) test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide_x64
+	tools/expect_same.sh xtensa/test_xtensa_recwide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_recwide)" "$$($(TESTTMP)/test_xtensa_recwide_x64)"
 	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
 	# which answered FALSE while b printed BBBB with Length 4 -- the equality
 	# guard was gated on tyAnsiString only, so both-frozen fell through to the

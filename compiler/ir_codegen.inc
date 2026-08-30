@@ -1394,10 +1394,52 @@ begin
         xtVReg := reg_xtensa_a10;
       end;
       if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
-          (Syms[idx].TypeKind = tyDouble)) and
+          (Syms[idx].TypeKind = tyDouble) or
+          ((Syms[idx].TypeKind = tyRecord) and
+           (RecSize(Syms[idx].RecName) > 4) and
+           (RecSize(Syms[idx].RecName) <= 8))) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
-        { The xtensa C ABI starts a 64-bit argument at an EVEN word index, so an
+        { A 5-8 byte by-value RECORD is spilled by this same two-word path, and
+          it is the third of three spots that each counted 4 bytes where the
+          type is 8 — the other two are IR_LOAD_SYM and the by-value call-arg
+          push loop, both in ir_codegen_xtensa.inc. All three must land
+          together: arm32 recorded for the identical defect that fixing the
+          word count without the slot "turned the data loss into active
+          corruption", and that is exactly what a two-of-three state measures
+          as — the caller pushes two words, this spill consumed one and did
+          Inc(pw, 1), so every parameter AFTER the record shifted by a word and
+          the rows changed value instead of becoming correct.
+          bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address
+
+          The width is asked as RecSize(Syms[idx].RecName), NOT as `sz`. `sz` is
+          ParamSize(idx), and ParamSize answers the SLOT-LAYOUT question through
+          ABIParamSlotIsPointer, which holds tyRecord unconditionally -- so `sz`
+          is TARGET_PTR_SIZE (4 here) for every record regardless of its real
+          width, and a `sz > 4` guard is dead code that compiles, self-hosts and
+          silently never fires. It was written that way first and measured as a
+          byte-identical repro. AllocParam does not have the bug because it asks
+          RecSize(LastTypeRecId) directly; ParamSize and AllocParam therefore
+          disagree about a 5-8 byte by-value record on a 32-bit target, which is
+          filed separately rather than changed here.
+
+          arm32 and riscv32 already spell it RecSize(Syms[idx].RecName) in this
+          same procedure, a few dozen lines up -- this arm is the third copy of
+          a rule two backends had, so it is written to match them exactly rather
+          than to be independently clever. The even-word alignment rule below
+          then applies to it as to an Int64, and the caller's record arm calls
+          XtensaPadTo64Xtensa for exactly that reason -- it did not at first,
+          and the two-of-three state that produced is described above.
+
+          The 64-bit ALIGNMENT skip below is deliberately shared. A record is
+          not a C `long long` and xtensa's C ABI would not align an 8-byte
+          struct to an even word — but this convention is INTERNAL (the arm is
+          guarded to non-external callees on the call side), and the two sides
+          must agree with each other, not with gcc. Sharing the branch is what
+          guarantees they do; a separate record branch here would be a fourth
+          place to count words, which is how this bug got three.
+
+          The xtensa C ABI starts a 64-bit argument at an EVEN word index, so an
           odd index skips one word — the caller's XtensaPadTo64Xtensa emits that
           same skip, and both sides must apply the rule or neither. Without it
           here, a routine CALLED FROM C read the parameter one register early:
