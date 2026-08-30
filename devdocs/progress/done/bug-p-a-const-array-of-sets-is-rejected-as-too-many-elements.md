@@ -3,7 +3,7 @@ slug: bug-p-a-const-array-of-sets-is-rejected-as-too-many-elements
 track: P
 prio: 55
 type: bug
-status: backlog
+status: done
 owner: frank-rust
 blocked-by: []
 summary: "`const tbl: array[0..2] of TSetOfByte = ([], [0..255], [$41..$5A]);` is rejected as `too many array constant elements`. A SET element is not consumed by the array-constant element loop, so cElem desyncs from the token stream and counts the SAME `[` once per declared slot before erroring -- the reported position is the FIRST element, which makes it read like a size error rather than a parse one. A scalar set const and an array of ordinals each work; only the combination fails. This is fcl-xml's `names.inc` (namingBitmap, 13 sets of Byte) and so the next wall on rung 3 of [[feature-pascal-corpus-oop]], immediately after the interface-property one."
@@ -78,3 +78,70 @@ common lexer idiom.
 `make compiler/pascal26` + the repro above printing `yes`, plus
 `./compiler/pascal26 <fcl-xml>/xmlutils.pp` getting past `names.inc`. FPC
 (`-Mdelphi`) is the oracle for the repro's output.
+
+---
+
+## FIXED — and it was smaller than this ticket sized it
+
+**The sizing above was wrong and the correction is the useful part.** I wrote
+"an array's static store has no element-init kind that carries a baked blob, so
+that second half is the real work". The first thing I then did was MEASURE it
+rather than believe it:
+
+```pascal
+var a: array[0..2] of TSetOfByte;
+begin a[0] := []; a[1] := [0..255]; a[2] := ns_A; ...
+```
+
+compiles and gives the right answers today. `arr[i] := <set>` was already a
+working assignment, so nothing below the parser was missing — the pending-init
+flush builds an ordinary `arr[ei] := <value>` AST, and a set value node
+(`AN_SET_CONST_REF`) is one it can carry like any other. The estimate came from
+reading the init-kind table and seeing no set in it; the answer came from
+running four lines. **Reading the mechanism told me what was absent; running it
+told me what was needed, and those were different.**
+
+### The change
+
+- **One arm** in the array-constant element loop (`pasparser_decl.inc`), before
+  the fallback: element type `tySet` and the token is `[` or a named set
+  constant → `BakeSetConst` (which already folds `A + B` / `A - [x]` into a
+  32-byte mask in `Data[]`) and record the offset.
+- **Init kind 9** in both emitters — `pasparser_prog.inc` for a global const and
+  `pasparser_proc.inc` for a routine-local one — rebuilding `AN_SET_CONST_REF`
+  from that offset. Same encoding on both sides, deliberately: kind 2 already
+  carries a comment saying the two emitters must not drift, and this is the
+  second kind that would have.
+- `TryBakeConstArrayIntoData` sees a kind it does not know and falls back to
+  runtime stores. That is its documented fail-closed behaviour and it is correct
+  here, so it needed no change.
+
+### Measured
+
+Binary `390a091ff683`, self-host fixedpoint at HEAD.
+
+The repro prints `yes` / `1`, matching FPC `-Mdelphi` exactly. New test
+`test/test_const_array_of_sets.pas` (wired into `test-core`) covers the empty
+set — the shape that spun first — plus a full set, a range and a named constant,
+in a global const array AND a routine-local one, the latter because it goes
+through the LocalInit emitter where a second encoding would drift.
+
+**The oracle claim is split, on purpose.** With the `ext` rows deleted, FPC
+compiles the test and prints the `tbl`/`loc` rows identically — that is
+FPC-parity, verified by diff. FPC **rejects** both `ext` forms, a named set
+constant as an element and a set expression as an element, as *"Illegal
+expression"*. We accept them, which is not a defect (CLAUDE.md's compat
+ceiling), and they are kept in the test because they reach `BakeSetConst`
+through `FindSetConst` and through its `+`/`-` folding, which no literal row
+exercises. Their expected values come from the set algebra, not from FPC, and
+the test says so.
+
+### The corpus wall is cleared, and the next two are named
+
+`fcl-xml`'s `xmlutils.pp` now gets past `names.inc`. The next errors in the same
+unit are `undefined variable (PWideChar)` at line 285 and `undefined variable
+(AllocMem)` at line 478 — a missing type and an RTL gap, different lanes, and
+not filed here. See [[feature-pascal-corpus-oop]].
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

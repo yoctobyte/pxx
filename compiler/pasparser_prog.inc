@@ -332,6 +332,16 @@ begin
       ASTIVal[valNode] := PendingInitVal[i];
       ASTTk[valNode] := Ord(tyPointer);
     end
+    else if PendingInitKind[i] = 9 then
+    begin
+      { SET element of a const array: Val is the Data[] offset of the 32-byte mask
+        BakeSetConst folded at declaration time, exactly as a named set constant's
+        use resolves. Same encoding as the local path's kind 9, deliberately --
+        the two emitters must not drift. }
+      valNode := AllocNode(AN_SET_CONST_REF);
+      ASTIVal[valNode] := PendingInitVal[i];
+      ASTTk[valNode] := Ord(tySet);
+    end
     else
     begin
       valNode := AllocNode(AN_INT_LIT);

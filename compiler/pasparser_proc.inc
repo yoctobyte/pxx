@@ -102,6 +102,15 @@ begin
       ASTIVal[valNode] := LocalInitVal[i];
       ASTTk[valNode] := Ord(tyPointer);
     end
+    else if LocalInitKind[i] = 9 then
+    begin
+      { SET element of a routine-local const array -- Val is the Data[] offset of
+        the baked 32-byte mask (same encoding as the global path's kind 9,
+        deliberately: the two emitters must not drift). }
+      valNode := AllocNode(AN_SET_CONST_REF);
+      ASTIVal[valNode] := LocalInitVal[i];
+      ASTTk[valNode] := Ord(tySet);
+    end
     else if LocalInitKind[i] = 4 then
     begin
       { `@var` -- Val is the SYM index; address-of that ident. }

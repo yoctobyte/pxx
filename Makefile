@@ -2776,6 +2776,13 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_property_in_an_interface.pas $(TESTTMP)/test_iprop26
 	@$(TESTTMP)/test_iprop26 | diff -u test/test_property_in_an_interface.expected - \
 	  || { echo 'test_property_in_an_interface: FAIL - interface property parse or accessor dispatch'; exit 1; }
+	@# A const array whose ELEMENTS are sets (fcl-xml's namingBitmap). The empty
+	@# set is the row that spun first; the tbl/loc rows are FPC-verified, the ext
+	@# rows are forms FPC rejects and we accept, covering BakeSetConst's named-
+	@# constant and expression-folding paths.
+	@./$(COMPILER) test/test_const_array_of_sets.pas $(TESTTMP)/test_casets26
+	@$(TESTTMP)/test_casets26 | diff -u test/test_const_array_of_sets.expected - \
+	  || { echo 'test_const_array_of_sets: FAIL - set element of a const array'; exit 1; }
 	@# A method may be NAMED `Default` -- rtl-generics' central idiom, and a
 	@# collision with nothing to do with generics. Exercises the property
 	@# `default` MODIFIER alongside it, since that is what a too-eager fix breaks.
