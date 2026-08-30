@@ -28,10 +28,15 @@
 # not stale -- a full at ff07990984a0 (seven, 20:57:28Z) covers it: --is-ancestor
 # says YES for both f370bb085 and c9a1f6f2a. Serving it would re-answer an
 # answered question at 3202 jobs on the binding-constraint box.
-# READ THE VERDICT CAREFULLY, THOUGH: that run's `new_red: []` is VACUOUS. Its
-# parent_tested IS its own sha, so nothing could be classified new -- full runs
-# self-parent often (both of tonight's did), and a number that cannot move is
-# not evidence. What actually clears the rewrite is the SET COMPARISON against
+# READ THE VERDICT CAREFULLY, THOUGH: that run's `new_red: []` is VACUOUS, and
+# WHICH ARTIFACT YOU CHECK CHANGES WHETHER YOU CAN SEE THAT. In the REPORT
+# front-matter (reports/20260830T205728Z-ff07990-seven.md) parent_tested IS the
+# run's own sha, so nothing could be classified new -- full runs self-parent
+# often, and both of tonight's did. In the NDJSON row the key is ABSENT
+# altogether -- not empty, not present -- so from runs-seven.ndjson alone the
+# emptiness is invisible and new_red: [] looks like a finding. An absent
+# baseline is as vacuous as a self-baseline with the evidence removed. Either
+# way a number that cannot move is not evidence. What actually clears the rewrite is the SET COMPARISON against
 # the last PRE-rewrite full (b4904151c, 20:30): two C tests fixed, one new red
 # (test_pointer_to_a_named_fixed_array, bisected to 5d840acdd, not the rewrite),
 # every other standing red identical. Plus two GREEN natives at descendants.

@@ -293,8 +293,8 @@ KB proves reachability and effect in one step, where a green run proves neither.
 
 ## The instrument answered, correctly, about something else
 
-**The dominant failure of 2026-08-30 — eleven measured instances across five
-agents, and not one of them produced an error.** Every probe ran, returned, and
+**The dominant failure of 2026-08-30 — thirteen measured instances, from at
+least five agents, and not one of them produced an error.** Every probe ran, returned, and
 was right. About a different question than the one asked.
 
 It is not the same as a broken tool. A broken tool announces itself. This
@@ -314,9 +314,26 @@ reader checks whether the instrument worked, and it did.
 | did this test pass? | did `diff` exit 0 against a **missing** `.expected`? | **FAIL** — output was identical to pinned |
 | is `sizeof(*p)` right? | is it right for struct, union and scalar pointees? (`csizeof_deref_ptr_b79.c` has no array pointee) | **green test sitting on top of an open gap** |
 | was my commit in the tree Track T tested? | is the TESTED sha an ancestor of MY FIX? (the question backwards — `merge-base --is-ancestor A B` is not symmetric) | **NO** — it was there; I "corrected" a peer's correct attribution |
+| which commits are in this range? | which commits are reachable from `origin/master` **OR** from the range? (a stray ref beside a range is a **union**, not a restriction) | **40 commits, 5 touching code** — the range holds **4**, and **1**. Produced while auditing someone else's ancestry arithmetic |
+| is this `new_red: []` vacuous? | here is `new_red: []`. (`parent_tested` lives in the REPORT front-matter and is **absent from the ndjson row** — not empty, *not present*) | correct about the field, silent about its scope, and **no sign that the question cannot be answered from here** |
 
-**The `merge-base` row is the cleanest instance in the table and the only one
-that needs nothing to be wrong.** No stale tree, no missing file, no unfetched
+**The two git rows are the cleanest instances in the table and the only ones
+that need nothing to be wrong.** No stale tree, no missing file, no unfetched
+object, no mis-chosen predicate — just an argument in the wrong order, or one
+argument too many. `git log <ref> A..B` is legal, silent, and returns a
+*plausible superset*: 40 where the range holds 4. Both were produced by someone
+**checking somebody else's work**, which is when you are least braced for your
+own instrument.
+
+**And the last row is the one to carry into any archive question: two artifacts
+of the same run disagreed about what could be known from them.** The report's
+front-matter carries `parent_tested`; the ndjson row does not carry the key at
+all. So *"is this verdict comparing against anything?"* is answerable from one
+and unanswerable from the other — and the unanswerable one **looks complete**. An
+absent baseline is exactly as vacuous as a self-baseline, with the evidence of
+its own emptiness removed.
+
+**On the `merge-base` row specifically:** No stale tree, no missing file, no unfetched
 object, no mis-chosen predicate — just two arguments in the wrong order. Both
 orders are legal, both return 0 or 1 with no message, and the answer you get is
 *true* of the question you accidentally asked.
