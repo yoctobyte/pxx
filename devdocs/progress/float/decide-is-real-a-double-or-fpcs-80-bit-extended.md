@@ -117,3 +117,105 @@ and it does not block
 
 `keep-open` still applies: this changes printed digits and arithmetic results
 for every program that writes a bare `Real`, so it stays an owner decision.
+
+---
+
+## MEASURED 2026-08-30 — the premise of this ticket is WRONG
+
+Prompted by the owner: *"i know it's a bit odd for the real type, but it is what
+FPC does and hence what programmers expect. we might want to double check that,
+because real is then a really weird type, going from single to extended."*
+
+Double-checked. **The instinct was right and the ticket was wrong.** `Real` is
+not a sliding type in FPC, and it is never `Extended`.
+
+### FPC's own source is unconditional
+
+`rtl/inc/systemh.inc:117`:
+
+```pascal
+{$ifndef FPUNONE}
+  Real = type Double;
+{$endif}
+```
+
+No `{$ifdef CPU…}` anywhere near it. **`Real` is `Double` on every FPC target** —
+not Single on AVR, not Extended on x86. The `type` prefix makes it a distinct
+type for overload resolution (the comment cites `tw7425.pp`), not a different
+width.
+
+### Confirmed by running FPC 3.2.2 (x86-64, `{$mode objfpc}`, `-O2`)
+
+```
+SizeOf(Single) 4   SizeOf(Double) 8   SizeOf(Extended) 10   SizeOf(Real) 8
+Real     var 1/3 = 3.3333333333333331E-001     <- identical to pxx
+Double   var 1/3 = 3.3333333333333331E-001
+Extended var 1/3 = 3.33333333333333333342E-0001
+```
+
+**`Real` under FPC prints exactly what pxx prints today.** The two agree.
+
+### So what actually produced the divergence in the table at the top?
+
+Constant precision, not `Real`. The same run:
+
+```
+Writeln(3.14159)          -> 3.14158999999999999993E+0000   (Extended form)
+r := 3.14159; Writeln(r)  -> 3.1415899999999999E+000        (Double form, = pxx)
+```
+
+`writeln(3.14159)` has no `Real` in it. FPC evaluates an **untyped float
+constant** at `Extended` precision on x87 targets — that is the
+`DEFAULT_EXTENDED` define in `systemh.inc`, whose whole job is the precision of
+constants and the default `Write` format. The original filing read a
+constant-precision difference as a `Real`-width difference.
+
+(Oddity noted in passing, not chased: `Writeln(1.0/3.0)` prints
+`3.333333433E-01` — **Single** form — so FPC's own handling of a folded constant
+expression is not self-consistent with a plain literal. Belongs to
+[[decide-default-float-output-format-and-constant-precision]] if anyone works it.)
+
+### Consequence: this ticket's question is answered, and it is the easy answer
+
+Under the owner's rule — *"but still, we follow what FPC does"* — `Real` stays
+`Double`. No 80-bit `Real`, no per-target `Real`, no change to what pxx prints
+for a `Real` variable. The status quo was already FPC-compatible; only the
+diagnosis was wrong.
+
+`tools/fpc_diff_probe.sh:281`'s `real-default` row should be **re-pointed** at
+[[decide-default-float-output-format-and-constant-precision]] — the constant
+question — rather than at this ticket. It is not `bydesign` and not this one.
+
+## The question that REPLACES it, and it is a real one
+
+pxx's `Real` is **not** FPC's `Real`, in the opposite direction from the one this
+ticket assumed. `compiler/pasparser_lval.inc:6301`:
+
+> *"`Real` is the target's native float depth: ESP and riscv32 have no hardware
+> double."*
+
+```pascal
+else if CaseEqual(nm, 'real') then Result := RealTypeKind
+```
+
+So pxx makes `Real` **Single** on riscv32 and xtensa, where FPC would make it
+`Double`. That is a live divergence from the rule just adopted, and it is the
+one place "follow FPC" costs something real: those targets have no hardware
+double, so following FPC buys source compatibility at the price of softfloat
+doubles in every bare-`Real` expression on the ESP32 family — the Track S
+targets, where the cost lands hardest.
+
+**Not guessing this one** (CLAUDE.md: escalate, don't guess). The fork:
+
+| option | `Real` on riscv32/xtensa | cost |
+| --- | --- | --- |
+| **follow FPC** | Double (softfloat) | ESP/riscv32 bare-`Real` arithmetic goes soft — slow, and code size grows |
+| **keep native depth** | Single | FPC source that assumes `Real` has Double range silently loses precision on those targets, with no diagnostic — the exact trap this cluster exists to close |
+| **follow FPC + diagnose** | Double, warn under a flag when a `Real` is used on a softfloat target | probably the honest one; costs a flag |
+
+Recommendation: **follow FPC** (Double everywhere) for consistency with the rule
+just adopted, and let the ESP profile opt out explicitly rather than silently —
+a program that wants Single on an MCU can say `Single`. But it is the owner's
+call because it is a performance regression on the S targets.
+
+`keep-open` retained for that question.

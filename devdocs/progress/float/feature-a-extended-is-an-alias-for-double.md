@@ -42,9 +42,13 @@ This is not a formatting change — it is a TYPE with 80-bit x87 semantics:
 - **x87, not SSE.** pxx's float codegen is SSE-based; 80-bit needs the x87 stack
   (`fld`/`fstp` `tbyte`), a different register file and a different
   control-word/rounding story.
-- **Storage is 10 bytes, alignment is not.** FPC pads to 16 in records/arrays on
-  x86-64; get this wrong and every `Extended` field offset in a ported record is
-  wrong.
+- **Storage is 10 bytes, alignment is not.** ~~FPC pads to 16 in records/arrays on
+  x86-64~~ — **half wrong, corrected 2026-08-30 by measurement**: records yes,
+  arrays NO. A record field is 16-aligned and the record's size rounds to 16, but
+  an `array of Extended` strides by **10** with no padding, and the field
+  *following* an Extended sits at +10. See "The FPC target spec" below for the
+  measured table. Get this wrong and every `Extended` field offset in a ported
+  record is wrong.
 - **The RTL surface**: `FloatToStr`, `Str`, `Val`, `WriteLn`'s formatter and the
   math routines all currently assume Double.
 
@@ -166,3 +170,101 @@ The diagnostic proposed further up — warn (error under `--strict-fpc`) when
 not the missing precision, it is the **silence**: a ported FPC numeric routine
 drifts with no compile-time signal. Small change, removes the trap, and does not
 pre-commit workstream 2.
+
+---
+
+## The FPC target spec, MEASURED 2026-08-30 — this is what "properly" has to hit
+
+Owner, 2026-08-30: *"not sure what extended would be on ARM - i suspect 64 bit,
+so extended being 80 bit is intel only? and, i'm not sure what to expect for
+alignment (arrays/records). but still, we follow what FPC does."*
+
+Both suspicions confirmed, and the alignment answer is stranger than either
+guess. Measured against FPC 3.2.2 (x86-64, `{$mode objfpc}`, `-O2`, default
+`{$PACKRECORDS}`) plus FPC's own `rtl/inc/systemh.inc`. **This table is the
+specification for workstream 1** — do not re-derive it, and do not assume C's
+`long double` rules, which differ on every line that matters.
+
+### 1. Extended is Intel-only — confirmed from FPC's source
+
+`SUPPORT_EXTENDED` is defined for exactly three CPUs in `rtl/inc/systemh.inc`:
+
+| CPU | default float | `SUPPORT_EXTENDED` |
+| --- | --- | --- |
+| `CPUI386` | `DEFAULT_EXTENDED` | **yes** |
+| `CPUI8086` | `DEFAULT_EXTENDED` | **yes** |
+| `CPUX86_64` | `DEFAULT_EXTENDED` *only if* `FPC_HAS_TYPE_EXTENDED`, else `DEFAULT_DOUBLE` | **conditional** |
+| `CPUARM`, `CPUAARCH64`, `CPUM68K`, `CPUPOWERPC`, `CPUSPARC`, `CPUSPARC64` | `DEFAULT_DOUBLE` | no |
+| `CPUAVR` | `DEFAULT_SINGLE` | no |
+
+So `Extended` is **8 bytes on ARM and AArch64** — the suspicion was right — and
+on every other non-x86 target. It is 10 bytes on i386 and on x86-64 *with the
+legacy FPU*. Note the conditional: FPC's own comment is *"win64 doesn't support
+the legacy fpu"*, so **`Extended` is Double on x86-64 Windows too**. That is a
+Track M consideration, not just a cross-target one: the PE/COFF + MS x64 ABI
+work must NOT get 80-bit Extended even though the CPU is x86-64.
+
+### 2. Sizes and layout — measured, x86-64 Linux
+
+```
+SizeOf(Single) 4   SizeOf(Double) 8   SizeOf(Extended) 10   SizeOf(Real) 8
+SizeOf(Comp)   8   SizeOf(Currency) 8
+```
+
+| construct | FPC | note |
+| --- | --- | --- |
+| `array[1..3] of Extended` | size **30**, stride **10** | **no padding in arrays** |
+| `record b: Extended end` | size **16** | padded up |
+| `record a: Byte; b: Extended end` | size **32**, `off(b)=16` | field is 16-**aligned** |
+| `record a: Byte; b: Extended; c: Byte end` | size **32**, `off(b)=16`, `off(c)=**26**` | the *next* field packs immediately after the 10 bytes — no trailing pad before `c` |
+| `packed record a: Byte; b: Extended; c: Byte end` | **12** | 1+10+1 |
+| `record a: Byte; b: Double; c: Byte end` | size 24, `off(b)=8`, `off(c)=16` | Double for contrast |
+
+**The rule, stated once:** `Extended` is a **10-byte type with 16-byte
+alignment**. Alignment governs where it *starts* (record fields round up to 16;
+a record containing one rounds its own size to 16) and does **not** govern what
+follows it (the next field sits at +10, and array elements stride by 10).
+
+That combination is unusual and is where an implementation will go wrong. The
+earlier note in this ticket — *"FPC pads to 16 in records/arrays on x86-64"* —
+is **half wrong and now corrected**: records yes, arrays no.
+
+### 3. It is NOT C's `long double` — an interop trap for Track C
+
+Same box, gcc 13:
+
+```
+sizeof(long double)     = 16      _Alignof(long double) = 16
+struct{char,ld,char}    = 48      off(b)=16
+long double[3] stride   = 16
+```
+
+| | FPC `Extended` | C `long double` |
+| --- | --- | --- |
+| `SizeOf` | **10** | **16** |
+| array stride | **10** | **16** |
+| record/struct field alignment | 16 | 16 |
+
+A Pascal `array of Extended` and a C `long double[]` **do not have the same
+layout**, so passing one to the other desynchronises after the first element.
+`lib/crtl` and any `long double` binding must convert, not alias. Same trap the
+sizeof bug describes, but across a language boundary rather than inside one
+compiler — and it lands on [[bug-c-crtl-long-double-math]]'s territory.
+
+### 4. `Real` is settled, and it was never part of this
+
+`Real = type Double` unconditionally in FPC (`systemh.inc:117`, no CPU guard).
+`Real` never becomes `Extended` anywhere, and a `Real` variable under FPC prints
+byte-for-byte what pxx prints today. The `writeln(3.14159)` divergence that
+started this cluster is **constant precision** (`DEFAULT_EXTENDED`), not `Real`'s
+width — measured and written up in
+[[decide-is-real-a-double-or-fpcs-80-bit-extended]], which surfaces a genuinely
+new question in its place (pxx makes `Real` Single on riscv32/xtensa; FPC does
+not).
+
+### Reproduce
+
+Both probes are small and self-contained; the tables above were produced by
+`fpc -O2` on the two programs quoted in this section plus a `gcc -O2` one-liner
+for the C column. Re-measure rather than trusting this page if FPC's version
+moves — `SUPPORT_EXTENDED` is version-conditional by construction.
