@@ -212,3 +212,4 @@
 2026-08-29T22:36:46Z	plexus	e46dbffaa80d8049ea895ba4d3d4337f3c499d86	would NOT pin e46dbffaa80d — 3 red(s) the current pin does not have, 1 inherited from the current pin: demos#00, test-core#src:test/test_mgmt_operators.pas, test-pascal-conformance#shard0/6
 2026-08-29T23:11:40Z	seven	64758a5c233eeebadff032bcc351eacd1bd22878	would NOT pin 64758a5c233e — 1 red(s) the current pin does not have, 3 inherited from the current pin: test-pascal-conformance#shard0/6
 2026-08-29T23:53:15Z	seven	d347a85d004ab4a9cb10362fa2718797657b7c22	would NOT pin d347a85d004a — 1 red(s) the current pin does not have, 3 inherited from the current pin: test-pascal-conformance#shard0/6
+2026-08-30T00:11:10Z	seven	6a19b5333e0797c8d5de6aa9cfc6b3a20f4e1f7d	would NOT pin 6a19b5333e07 — 2 red(s) the current pin does not have, 3 inherited from the current pin: fpc-bootstrap#src:compiler/compiler.pas, test-pascal-conformance#shard0/6
