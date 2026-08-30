@@ -376,10 +376,11 @@ def oracle_pas(limit=None):
         print("  %-38s %d" % (k, v))
     if cand:
         print("\n  candidates to read (fpc differs -- dialect divergence OR capture):")
-        for n, ln in cand[:60]:
+        # No cap. A truncated list in an audit tool reads as "that is all of
+        # them", and the whole point of this pass is that the remainder is the
+        # reading queue -- an elided tail is the part nobody then reads.
+        for n, ln in cand:
             print("    Makefile:%-7d %s" % (ln, n))
-        if len(cand) > 60:
-            print("    ... and %d more" % (len(cand) - 60))
     return 0
 
 

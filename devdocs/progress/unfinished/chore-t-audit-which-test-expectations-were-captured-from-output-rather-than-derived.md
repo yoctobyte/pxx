@@ -275,3 +275,98 @@ Two of the three big populations are answered by measurement, and neither
 contains a captured-and-wrong expectation. What remains is Pascal, which has no
 oracle for the dialect-specific majority and is the part that genuinely needs
 reading. The triage ranking is already built for it.
+
+
+## Progress 2026-08-30, third pass — FPC as a partial oracle for Pascal
+
+The Pascal population was written up above as having *no* oracle. That was true
+of the dialect-specific majority and **false of whatever subset FPC can
+compile**, which was simply unmeasured — the same blind spot as the other two
+populations, in the same shape: the artefact's purpose is to test *our*
+compiler, so whether an independent implementation can run it is not what
+anyone is thinking about.
+
+`tools/expect_audit.py --oracle-pas`, full run:
+
+```
+Pascal expectations tied to one .pas-built binary: 1277 rows,
+                                     fpc built 846 of 1212 binaries
+  DERIVED (fpc reproduces it)            784
+  no oracle: fpc cannot build it         380
+  candidate: fpc differs (read it)        69
+  no oracle: cross-target row             44
+```
+
+**784 answered by measurement**, and the reading queue drops from ~1277 to 69.
+
+### This oracle is weaker than the other two, and the tool says so
+
+CPython **is** the definition of what a `.npy` should do, and gcc **is** the
+definition for portable C — a disagreement there is a finding. FPC is only the
+reference for the subset of the dialect pxx shares with it, and CLAUDE.md's
+compat table is explicit that accepting a form FPC rejects is *not a defect* and
+a differing diagnostic is *deferred*. So the verdicts are deliberately asymmetric:
+
+- **FPC reproduces it → DERIVED.** Sound in that direction: an independent
+  implementation produced the value.
+- **FPC differs → proves nothing on its own.** It is a *candidate*: either a
+  deliberate dialect divergence or a captured expectation, and only reading
+  tells them apart. The verdict is named `candidate: fpc differs (read it)`
+  rather than `disagrees` so nobody reads the count as a defect count.
+
+### The 69 candidates, categorised
+
+Most are divergences by construction — the test's *subject* is a place we
+deliberately differ:
+
+| category | n |
+| --- | --- |
+| a mimic/strict-FPC flag is the thing under test | 9 |
+| shift/width dialect semantics | 8 |
+| float formatting (Track F) | 8 |
+| platform / ESP defines | 4 |
+| runtime-error numbers (ours by CLAUDE.md's rule) | 3 |
+| our own `-O3` sweeps | 2 |
+| **genuinely needs reading** | **26** |
+
+### Worked example, so the method is not just asserted: `test_sizeof26`
+
+Built `test/test_sizeof.pas` with FPC and diffed all 27 values. **25 of 27 agree
+exactly.** The two that differ:
+
+```
+SizeOf(Variant)   pxx 16   fpc 24
+SizeOf(String)    pxx  8   fpc 256
+```
+
+Both are deliberate: our `Variant` layout is smaller than FPC's `TVarData`, and
+the `String` figure is the classic `{$H}` question — 8 for a managed string
+reference against FPC's 256-byte `ShortString`. Neither is a captured value;
+the expectation is derivable from the type widths the dialect defines, which the
+test's own header sets out. **Verdict: derived.**
+
+That is what judging one of these costs — a build, a diff, and identifying two
+positions — and it is why the 26 remainder is a tractable queue rather than an
+open-ended one.
+
+### A silent cap in the audit tool, found and removed
+
+The candidate list printed 60 rows and `... and 9 more`. **A truncated list in
+an audit tool reads as "that is all of them"**, and the elided tail is exactly
+the part nobody then reads — the no-silent-caps rule applied to my own
+instrument. Cap removed; it now prints every candidate.
+
+### Standing
+
+| population | oracle | derived by measurement | left to read |
+| --- | --- | --- | --- |
+| NilPy | CPython | 342 / 353 | 0 — 11 labelled + enforced |
+| C (native) | gcc | 333 / 333 | 0 |
+| C (no oracle) | — | — | 62 counted |
+| Pascal (fpc-buildable) | FPC 3.2.2 | 784 / 1277 | 69 candidates, 26 after categorising |
+| Pascal (not buildable) | — | — | 424, ranked by literal-overlap |
+
+**Across all three oracles, not one captured-and-wrong expectation has been
+found.** The one disagreement anywhere is `test_nilpy_math_domain_errors`, which
+is a transcript of an *older CPython*, not of one of our bugs, and is labelled
+rather than fixed because the compat table defers error wording.
