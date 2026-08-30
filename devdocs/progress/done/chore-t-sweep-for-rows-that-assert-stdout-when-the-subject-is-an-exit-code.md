@@ -153,4 +153,4 @@ character, and `\b` after the program name matched nothing. Then it read **9 of
 the tree — twice in one file, in a session about exactly that.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f444a4a33.
