@@ -1450,6 +1450,27 @@ begin
     if (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
       Result := ProcRetStrElemTk[ASTIVal[node]];
   end
+  { A CONCAT is wide when EITHER operand is -- the rule the wide concat itself
+    implements, stated once here so the type answer and the lowering cannot
+    disagree.
+
+    DERIVED, not stamped, and that is the point. ASTStrElemTk (the AST-node
+    slot, step 2 of this ticket) is a carrier with no writers, so an expression
+    that PRODUCES a wide string would answer narrow until some producer
+    remembered to fill it in -- and the assignment above reads this answer
+    AFTER lowering the right-hand side, so a stamp written during lowering
+    would work by ordering rather than by construction. Measured before it was
+    written: with the operands wide and this arm absent, `r := w + v` read the
+    concat as narrow and transcoded an already-UTF-16 payload a second time,
+    four bytes per character, Length 12 where FPC says 6.
+
+    `or`, not "the left one": `s + w` is as wide as `w + s`, and taking the
+    left operand's width answers narrow for half of the mixed cases.
+    feature-unicodestring-model }
+  else if (ASTKind[node] = AN_BINOP) and (Integer(ASTIVal[node]) = Ord(tkPlus)) and
+          ((ASTStrElemTkOf(ASTLeft[node]) = Ord(tyWideChar)) or
+           (ASTStrElemTkOf(ASTRight[node]) = Ord(tyWideChar))) then
+    Result := Ord(tyWideChar)
   else
   begin
     Result := ASTStrElemTk[node];
@@ -1465,6 +1486,109 @@ begin
   end;
 end;
 
+{ Is this element-width ord the WIDE one? 0 (not a managed string / not
+  recorded) and Ord(tyChar) both mean narrow, and they must keep meaning the
+  same thing here: 0 is the sentinel a carrier that forgot to store leaves
+  behind, so treating it as anything but narrow would turn a missed write into
+  a transcode. See ProcParamStrElemTk's note in defs.inc. }
+function StrElemIsWide(elemTk: Integer): Boolean;
+begin
+  StrElemIsWide := (elemTk = Ord(tyWideChar));
+end;
+
+{ ---- 7c: the element-width conversion on a managed-string VALUE ----
+
+  A managed string is ONE kind (tyAnsiString) carrying an element WIDTH, so a
+  narrow value reaching a wide destination -- or the reverse -- is a real
+  conversion, not a reinterpretation. This is where it happens, and it is
+  deliberately the ONLY place: `w := s`, `s := w`, and `Write(w)` all funnel
+  through here rather than growing three transcoders.
+
+  WHY THE FRONTEND AND NOT THE SEVEN BACKENDS. Every other width decision so
+  far (Length, the index stride, the COW guards) had to be per-backend because
+  it is emitted inline. A conversion is a CALL, and IR_CALL is something all
+  seven backends already lower -- so the whole of 7c costs zero per-backend
+  code. The precedent is IRPromoCall right above: the entire promotable-int
+  subsystem is synthesised runtime calls and has never needed a backend arm.
+
+  THE ARGUMENT MUST BE AN OWNING LOCAL, NOT A BARE VALUE, and this is not
+  caution. A bare IR_CONST_STR does not lower to a managed handle at all: it
+  lowers to the address of the literal's LENGTH PREFIX (handle-8), because
+  that is what tyString means, and the +8 to reach the handle is applied by
+  the store paths and by the call-argument marshalling -- not by IREmitNode.
+  Handing that pointer to a runtime function that reads its header at -8 reads
+  the literal's refcount as a length. And a call RESULT is worse in the other
+  direction: it arrives with refcount 1 and no owner, which is the leak
+  IRPromoInitFromLiteral documents one screen up (a wide mask constant in a
+  loop grew the heap without bound). Routing through a hidden owning local
+  fixes both at once -- the store materialises whatever the source is into a
+  real handle, and scope exit releases it. }
+function IRStrWidthConv(value, srcAstNode: Integer; dstWide, srcWide: Boolean): Integer;
+var cpi, argSym, resSym, g0: Integer;
+begin
+  IRStrWidthConv := value;
+  if value < 0 then Exit;
+  if dstWide = srcWide then Exit;
+  if dstWide then cpi := FindProc('PXXWideFromStr')
+  else cpi := FindProc('PXXStrFromWide');
+  { Unreachable through a normal compile: the token scan in pasparser_prog.inc
+    pulls builtinwide for any program that NAMES widestring/unicodestring, and
+    a program with no such name cannot have produced a wide width here. It is
+    reachable with --no-rtl or on a bare-ESP profile, where a compiler error
+    naming the missing helper beats a link failure naming a mangled symbol. }
+  if cpi < 0 then
+    Error('compiler error: UTF-16 width conversion needs builtinwide (widestring with no RTL?)');
+  argSym := AllocVar('', tyAnsiString);
+  Syms[argSym].ElemType := IntToTypeKind(ASTStrElemTkOf(srcAstNode));
+  SymIsHiddenArgTemp[argSym] := True;
+  IRMarkStatementNode(IRAppend(IR_STORE_SYM, argSym, value, -1, 0, Ord(tyAnsiString)));
+  g0 := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, argSym, -1, -1, 0, Ord(tyAnsiString)),
+                 -1, -1, 0, Ord(tyAnsiString));
+  { The RESULT needs an owner too, and this half was measured rather than
+    reasoned. The transcoder hands back a fresh block with refcount 1; an
+    ASSIGNMENT destination adopts it, so `w := s` was flat over a million
+    iterations -- but a CONCAT OPERAND is consumed by PXXWideCat and dropped,
+    and nothing ever released it. `v := w + s` grew 86 bytes an iteration,
+    linear, 78 MB at two million; `v := w + w` (both already wide, no
+    conversion) was flat, which is what localised it.
+
+    Parking the result in a second hidden local makes ownership the same in
+    both positions: the store publishes it, the NEXT iteration's store releases
+    the previous handle, and scope exit releases the last. Exactly the
+    lifecycle IRPromoInitFromLiteral spells out for the ARGUMENT side of the
+    same problem (bug-a-runtime-variant-heap-grows-unbounded) -- the two halves
+    are the same bug seen from each end of the call. }
+  resSym := AllocVar('', tyAnsiString);
+  { The temp's own width is the DESTINATION's -- it holds the converted value.
+    AllocVar writes tyChar for a tyAnsiString symbol, which is right for the
+    narrowing direction and has to be corrected for the widening one. }
+  if dstWide then Syms[resSym].ElemType := tyWideChar;
+  SymIsHiddenArgTemp[resSym] := True;
+  IRMarkStatementNode(IRAppend(IR_STORE_SYM, resSym,
+                        IRAppendCall(cpi, g0, -1, Ord(tyAnsiString)),
+                        -1, 0, Ord(tyAnsiString)));
+  IRStrWidthConv := IRAppend(IR_LOAD_SYM, resSym, -1, -1, 0, Ord(tyAnsiString));
+end;
+
+{ 7c: the value an OUTPUT statement should actually emit. A wide string's
+  payload is UTF-16, and every backend's write blob emits the bytes it is
+  given, so `Write(w)` without this prints `a NUL b NUL` -- which is what it
+  did, measured, while Length and indexing were already correct. Transcoding
+  back here rather than teaching seven inline write blobs about surrogate
+  pairs is the same trade the concat arm makes.
+
+  Note this is a CONVERSION and not a formatting choice: a WideString's text
+  is what Write means, and UTF-8 is what a byte stream carries. It sits beside
+  WrapWideCharToUTF8, which does the identical thing for the single code unit.
+  feature-unicodestring-model }
+function IRWideWriteValue(value, srcNode: Integer): Integer;
+begin
+  IRWideWriteValue := value;
+  if (srcNode >= 0) and (IntToTypeKind(ASTTk[srcNode]) = tyAnsiString) and
+     (ASTStrElemTkOf(srcNode) = Ord(tyWideChar)) then
+    IRWideWriteValue := IRStrWidthConv(value, srcNode, False, True);
+end;
+
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     rcSym, rcPi, rcArg, rcArg2: Integer;
@@ -1476,6 +1600,9 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     recName, aliasIdx: Integer;
     strElemTk: TTypeKind;   { a managed string's ELEMENT type -- see the
                               tyAnsiString index arm below }
+    strIsWide: Boolean;     { ...and whether that element is a UTF-16 code unit,
+                              which the RESULT NODE has to be tagged with and
+                              not only strided by -- see the append below }
 begin
   { Address of an address-of: `&(&x)`. In valid C this only arises from array
     decay (`&arr` where arr is an array yields arr's address), so the address of
@@ -1876,6 +2003,7 @@ begin
     end;
     
     lo := 0;
+    strIsWide := False;
     if (tk = tyAnsiString) and not isArr then
     begin
       lo := 1;
@@ -1906,6 +2034,7 @@ begin
       begin
         elemSize := 2;
         tk := tyWideChar;
+        strIsWide := True;
       end
       else
       begin
@@ -2027,7 +2156,25 @@ begin
       Exit;
     end;
 
-    Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
+    { A WIDE string's element is a UTF-16 CODE UNIT, and the node has to say so.
+      The local `tk` above is set to tyWideChar and then never reaches the IR:
+      this append takes ASTTk[node], which the parser filled in as tyChar
+      because at parse time `w[i]` is a string index like any other. So the
+      stride was right (elemSize = 2, carried in ival) and the LOAD WIDTH was
+      wrong -- one byte read from a two-byte unit.
+
+      It reads as correct on every ASCII string, because a BMP code unit's low
+      byte IS the character on little-endian. `Ord(w[1])` on the surrogate pair
+      U+1F600 answered 61 (the low byte of $D83D) where FPC says 55357, and the
+      round trip through UTF-8 was correct the whole time -- the payload was
+      never wrong, only the read of it. Found by the first program that put a
+      non-ASCII value in a wide string, which is the argument for 7b landing
+      before the remaining carriers: a carrier nothing reads is a carrier
+      nothing tests. feature-unicodestring-model }
+    if strIsWide then
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, Ord(tyWideChar))
+    else
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
   end
   else if ASTKind[node] = AN_FIELD then
   begin
@@ -7116,6 +7263,25 @@ begin
           movsxd and sign-extend-truncate the 64-bit handle — a corrupted pointer
           whose first refcount/deref segfaults. Force a full pointer-width load. }
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, Ord(tyPointer))
+      else if (IRTk[left] = Ord(tyWideChar)) and
+              (IntToTypeKind(ASTTk[node]) = tyChar) then
+        { A WIDE string element. The ADDRESS node knows the width -- the index
+          arm in IRLowerAddress tags it tyWideChar -- and the AST node does not:
+          the parser typed `w[i]` tyChar because at parse time it is a string
+          index like any other, and the string's element width is not a parse
+          fact. Taking the width from the address is what makes the LOAD two
+          bytes wide instead of one.
+
+          ROOT CAUSE, banked rather than fixed here: the AST node should carry
+          tyWideChar, not just the address. NodeIsWideCharVal already keys on
+          exactly that kind, so typing the index node would make `Write(w[i])`
+          and `s + w[i]` correct for free through the existing
+          WrapWideCharToUTF8 path, instead of each needing its own arm. That is
+          a parser change with a ripple through every consumer of an index node
+          (store, compare, Ord, Write) and wants its own tests; this reads the
+          width where it is already known and is correct for the READ.
+          feature-unicodestring-model }
+        Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, Ord(tyWideChar))
       else
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
     end;
@@ -8390,6 +8556,36 @@ begin
                                        Ord(tyAnsiString)));
           Result := IRAppend(IR_LOAD_SYM, foldSym, -1, -1, 0, Ord(tyAnsiString));
         end;
+        Exit;
+      end;
+
+      { 7c: WIDE concat. `a + b` with either operand UTF-16 cannot go to the
+        backends' IR_BINOP arm -- that one calls PXXStrConcat, which is correct
+        byte-wise but appends a 1-byte NUL and clears the ASCII cache bits of a
+        block whose bytes are not characters. It becomes a call to PXXWideCat
+        instead, and BOTH operands are widened first, so `s + w` and `w + s`
+        concatenate at one width rather than interleaving two.
+
+        Emitting a CALL here is what keeps 7c out of the seven backends. The
+        narrow concat is per-backend because each one has the (len, src, src,
+        len) operands in registers already; nothing above that layer needs to
+        inherit it, so PXXWideCat takes two handles and this arm is the only
+        code that knows UTF-16 exists. feature-unicodestring-model }
+      if (Integer(ASTIVal[node]) = Ord(tkPlus)) and
+         (IntToTypeKind(ASTTk[node]) = tyAnsiString) and
+         (ASTStrElemTkOf(node) = Ord(tyWideChar)) then
+      begin
+        cpi := FindProc('PXXWideCat');
+        if cpi < 0 then
+          Error('compiler error: UTF-16 concat needs builtinwide (widestring with no RTL?)');
+        left := IRStrWidthConv(IRLowerAST(ASTLeft[node]), ASTLeft[node], True,
+                               ASTStrElemTkOf(ASTLeft[node]) = Ord(tyWideChar));
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyAnsiString));
+        right := IRStrWidthConv(IRLowerAST(ASTRight[node]), ASTRight[node], True,
+                                ASTStrElemTkOf(ASTRight[node]) = Ord(tyWideChar));
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyAnsiString));
+        IRB[first] := last;
+        Result := IRAppendCall(cpi, first, -1, Ord(tyAnsiString));
         Exit;
       end;
 
@@ -10389,6 +10585,19 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           value := IRAppend(IR_BINOP, value,
                             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                             Ord(tkPlus), 0, Ord(tyPointer));
+        { 7c: ELEMENT-WIDTH conversion. `w := s` with w wide and s narrow is a
+          transcode, not a copy -- one managed-string kind carrying a width is
+          exactly what makes the two assignable at all, and exactly what makes
+          the conversion necessary. Placed in this chain of `value := ...`
+          steps rather than at the store, so it composes with the PChar decay
+          above and the range check below the way every other value transform
+          here does. feature-unicodestring-model }
+        if (lhsTk = tyAnsiString) and
+           ((IntToTypeKind(ASTTk[ASTRight[node]]) = tyAnsiString) or
+            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyString)) then
+          value := IRStrWidthConv(value, ASTRight[node],
+                     StrElemIsWide(ASTStrElemTkOf(ASTLeft[node])),
+                     StrElemIsWide(ASTStrElemTkOf(ASTRight[node])));
         { {$R+}: guard a narrowing store with the range-check helper — index
           bounds (reads AND writes) are handled centrally in IRLowerAddress
           (feature-pascal-range-checks-r-plus). }
@@ -12780,6 +12989,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             value := IRPromoAddrOf(ASTLeft[item])
           else
             value := IRLowerAST(ASTLeft[item]);
+          value := IRWideWriteValue(value, ASTLeft[item]);   { 7c: UTF-16 -> UTF-8 }
           if IsNodePChar(ASTLeft[item]) then
             { write(PChar): tag the IR_WRITE with the -3 decimals sentinel so
               codegen emits a runtime C-string (strlen + write) instead of
@@ -12827,6 +13037,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         else
         begin
           value := IRLowerAST(item);
+          value := IRWideWriteValue(value, item);            { 7c: UTF-16 -> UTF-8 }
           outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, IRTk[value]);
         end;
         if first < 0 then first := outNode;
