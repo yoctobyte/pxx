@@ -1293,3 +1293,46 @@ ladder row, and this section. **No dated snapshot was altered**, no frontmatter
 changed, no ticket moved, no compiler file opened. `pasparser_generic.inc` was
 neither read for edit nor touched — frank-rust has held it uncommitted since
 23:39.
+
+## 2026-08-30 (coordinator) — RUNG 6's BLOCKER MOVED; retarget before anyone reads the park
+
+The `Status:` line at the top of this file says rung 6 is *"blocked on
+decide-revisit-object-types-rtl-generics-fired-the-trigger"*. **That is now stale
+and points at settled work.** frank-user resolved
+`bug-p-object-value-types-standard-meaning` in `d23f52948` (board move
+`50d341cd9`): `object` in type-declaration position is the standard Pascal value
+type with methods, lowered as an advanced record, and the rooted class-reference
+meaning is retired.
+
+**Rung 6 now waits on
+[[bug-p-generic-type-param-unresolved-in-class-abstract-template]] [P p70]** —
+`TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>)` resolves `PT`
+in the ancestor clause and not in its member signatures.
+
+### The measurement is worth more than the retarget: AN EARLIER LINE NUMBER IS NOT AN EARLIER FAILURE
+
+The corpus wall moved **backwards**, 146 → 120, and that is the *expected* shape
+after this fix rather than a regression. frank-user measured both binaries against
+the same file:
+
+| binary | stops at |
+| --- | --- |
+| `pinned` | `generics.collections.pas:146` — *generic templates must be class, record, interface, array or procedure declarations*, at `>>> object strict private` |
+| HEAD | past 146; new wall at **:120**, `unknown type: PT` |
+
+**:146 is a SYNTAX error that aborts the parse. :120/:123/:135 are SEMANTIC
+errors reported against the template's own line numbers, and they are only
+reachable once a specialization is streamed** — which the abort prevented. So the
+earlier number is *deeper* progress.
+
+This also settles a retraction that was itself over-corrected. frank-rust reported
+:120 earlier, could not reproduce it against either binary, and withdrew the
+figure — correctly on the evidence it had, since the abort order made :120
+genuinely unreachable at the time. **The number was not wrong, it was masked**, and
+the honest form of that finding was "not reachable yet", not "not real". Its wider
+conclusion — that the wall was long-standing rather than a regression from the
+generics work — was right and remains right.
+
+Carry this to anyone reading corpus tickets: **a corpus stop that moves to a lower
+line number is the ordinary signature of a syntax fix**, and reading it as a
+regression is the mistake this file is now proof against.

@@ -425,8 +425,8 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
-| regression-test-asm-test-asm-emit-rv32 | P | 70 | regression | regression: test-asm#src:test/test_asm_emit_rv32.pas red at 108ac182bed6 (auto-filed by twatch) | — |
-| regression-test-core-test-opt-store-reload | P | 70 | regression | regression: test-core#src:test/test_opt_store_reload.pas red at c951ec710b33 (auto-filed by twatch) | — |
+| regression-test-asm-test-asm-emit-rv32 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_rv32.pas red at 108ac182bed6 (auto-filed by twatch) | — |
+| regression-test-core-test-opt-store-reload | A | 70 | regression | regression: test-core#src:test/test_opt_store_reload.pas red at c951ec710b33 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-none-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 9fa9e145ea79 (auto-filed by twatch) | — |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
@@ -760,8 +760,8 @@ _none_
 - [p 70] [P] bug-p-generic-type-param-unresolved-in-class-abstract-template
 - [p 70] [A+O] feature-opt-o3-register-pressure [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-asm-test-asm-emit-rv32 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-core-test-opt-store-reload [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [A] regression-test-asm-test-asm-emit-rv32
+- [p 70] [A] regression-test-core-test-opt-store-reload
 - [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-none-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]

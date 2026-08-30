@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: P
+track: A
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -37,3 +37,35 @@ expect_same: MISMATCH [test_opt_sr_O0.4]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## 2026-08-30 (coordinator) — RETRACKED P → A (O-flavoured), on the diff's own content
+
+Auto-filed as **P** from the test path; the banner in this ticket says the
+frontmatter is what the ranker reads, so the guess decides the owner. It is wrong.
+
+The mismatch is two lines the actual output has and the expectation does not:
+
+```
++reord 635218
++reord2 635317
+```
+
+Those are emitted by `test/test_opt_store_reload.pas:153` and `:161`
+(`WriteLn('reord ', Int64(qh))`). The subject is **store/reload reordering** —
+codegen and the `-O` pipeline, i.e. Track **A** under the **O** work-tag, which by
+CLAUDE.md is file-owned by A and obeys A's gate. The Pascal frontend is not
+involved at any point.
+
+**Read the two candidate causes before fixing**, because they want opposite
+changes and the diff alone cannot tell them apart: either the optimizer's
+behaviour changed and the new lines are a real regression, or the test grew two
+`WriteLn`s and its expectation was never regenerated. **The second one is the
+quiet case** — it leaves a permanent red that looks like a codegen bug and wastes
+whoever picks it up. Check `git log -- test/test_opt_store_reload.pas` and the
+expectation file's mtime first; that is one command and it decides which bug this
+is.
+
+Standing, not flaky: STILL-RED on every native report from 06:57Z to 08:45Z. The
+attributing sha `c951ec710b33` is a `diag(N)` commit and the earlier one is a
+`tstate-ticket` commit — **neither can be the cause**; a tstate red attributes to
+the sha it swept.

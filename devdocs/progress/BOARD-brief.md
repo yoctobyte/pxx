@@ -62,8 +62,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-test-asm-compiler-3
-- `[p 70] [P]` regression-test-asm-test-asm-emit-rv32
-- `[p 70] [P]` regression-test-core-test-opt-store-reload
+- `[p 70] [A]` regression-test-asm-test-asm-emit-rv32
+- `[p 70] [A]` regression-test-core-test-opt-store-reload
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none-2
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
