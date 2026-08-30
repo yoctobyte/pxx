@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `0c722047d131` | 2026-08-30T02:03:52Z | GREEN (native) | 371.3s | `e46dbffaa80d` RED |
-| seven | `3f854c927aac` | 2026-08-30T02:01:33Z | RED (full) | 889.0s | `3f854c927aac` RED |
+| seven | `0200df7eabcd` | 2026-08-30T02:04:31Z | GREEN (native) | 108.7s | `3f854c927aac` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -34,8 +34,3 @@
   - `tools-devtest#00`
   </details>
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `30c06db1ae4e`, last good `b26e7ed366f3`, 14 commit(s) in range
-- **test-core#src:test/test_c_gtk.pas** — test/test_c_gtk.pas tools/expect_same.sh (seven): bad `bfec13534396`, last good `f8b0eea0049c`, 3 commit(s) in range
-- **test-core#src:test/test_c_gtk3_stock.pas** — test/test_c_gtk3_stock.pas test/gtk3stock/gtk3_c.h +1 (seven): bad `bfec13534396`, last good `f8b0eea0049c`, 3 commit(s) in range
-- **test-core#src:test/test_c_gtk_call.pas** — test/test_c_gtk_call.pas (seven): bad `bfec13534396`, last good `f8b0eea0049c`, 3 commit(s) in range
-- **test-core#src:test/test_c_gtk_types.pas** — test/test_c_gtk_types.pas (seven): bad `bfec13534396`, last good `f8b0eea0049c`, 3 commit(s) in range
-- **test-core#src:test/test_c_gtk_window.pas** — test/test_c_gtk_window.pas lib/pcl/gtk3_c.h (seven): bad `bfec13534396`, last good `f8b0eea0049c`, 3 commit(s) in range
