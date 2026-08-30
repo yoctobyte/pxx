@@ -461,3 +461,59 @@ idiom, which lands the address in `a0` and therefore has to be framed around the
 install stub's own return address. `EmitGlobRef`/`EmitDataRef` relocate DATA
 addresses only, and `ProcAddrFix` is keyed by proc index, so neither serves a raw
 code offset. That is the one piece of the port with no in-tree model.
+
+## Addendum 6 (frankS, 2026-08-30): the one piece with NO in-tree model — xtensa has no `auipc`
+
+Written **before** the stub, at the coordinator's instruction, because this is the
+piece a later reader will assume was solved the usual way. It was not, and it
+cannot be.
+
+The install stub must put the **dispatch stub's own absolute address** into the
+`sa_handler` field. Every other backend has a one-instruction idiom for it:
+
+| target | idiom | why it does not transfer |
+| --- | --- | --- |
+| x86-64 | `call +0` then `pop rdx` (`EmitCodeAbsToRdx`, ir_codegen.inc:496) | x86-only |
+| aarch64 | `adr x10, dispatch` (ir_codegen_aarch64.inc:276) | no `adr` on xtensa |
+| riscv32 | `auipc t0, 0` + `addi` (ir_codegen_riscv32.inc) | **xtensa has no `auipc`** |
+
+And neither in-tree relocation serves it:
+
+- `EmitGlobRef` / `EmitDataRef` (via `XtensaEmitLitHeader` + `l32r`) relocate
+  **data** addresses — BSS and the data segment. A code offset is not either.
+- `ProcAddrFix` (the `IR_PROCADDR` arm, ir_codegen_xtensa.inc:3831) is keyed by
+  **proc index** and patched to `entry + BodyAddr`. `SigDispatchAddr` is a raw code
+  offset inside the runtime blob, not a procedure, so it has no index to key on.
+
+**The idiom that does work, and its two traps.** `CALL0` sets `a0` to the address of
+the instruction following it (`PC + 3`), which makes `call0 .next` the xtensa way to
+read the PC. Both traps are in `EncodeXtensaCall0` and both are load-bearing:
+
+1. **The target must be 4-aligned** — `CALL0` encodes a WORD offset
+   (`target = align4(PC) + 4 + imm18*4`), and the encoder raises rather than
+   truncating. `call0` is a 3-byte instruction, so the natural fallthrough at
+   `PC + 3` is *not* aligned and a pad byte is required.
+2. **`a0` is `PC + 3`, not the aligned target** — the return address and the jump
+   target differ by the padding. The delta added afterwards must be computed from
+   `PC + 3`, not from where control actually resumes. Getting this backwards
+   misplaces the handler address by one to three bytes, which installs a handler
+   pointing mid-instruction — a fault at signal-delivery time, arbitrarily far from
+   the cause, and only on the path that a signal actually arrives on.
+
+`addi`'s immediate is **-128..127**, so a delta beyond that needs
+`EmitLoadConstXtensa` into a scratch register and an `add` rather than a single
+`addi`. At the sizes involved that is the expected case, not the exception.
+
+Third constraint, from the same encoder: `a0` is also the install stub's **own**
+return address, so the `call0` must be framed — saved before and restored after —
+or the stub cannot return to its caller.
+
+**Related, and the reason `XtensaRelCheck` exists at all:** every xtensa PC-relative
+field silently wraps on overflow, and the repo has already paid for it once — an
+ESP-IDF image encoded a `j` as `262581 mod 262144 = 437` and landed
+mid-instruction inside an unrelated routine
+(`bug-a-xtensa-pc-relative-encoders-silently-truncate-an-out-of-range-offset`).
+The check is in the encoders now, so this stub inherits the protection; it is
+recorded here because "the offset silently targets a different valid address" is
+the same failure class as the `-1` sentinel and the recalled syscall number, and
+this ticket has now met it three times in three different disguises.
