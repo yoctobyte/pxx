@@ -189,4 +189,4 @@ so the shared code/data page the parent ticket removed cannot return, and the
 box was not free to measure on.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3b8d1039e.
