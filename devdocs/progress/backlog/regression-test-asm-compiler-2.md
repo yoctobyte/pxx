@@ -42,3 +42,58 @@ ok: /tmp/testmgr-scratch-619868/test_asm_dis_self26  [code=9551696B  data=429600
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## TRIAGED 2026-08-30 (frankA) — NOT the EmitSyscall defect; bisected to `75d2ba662`
+
+Filed in the same batch as `regression-test-asm-test-asm-emit-x64` and
+`regression-test-asm-test-x64enc`, which WERE caused by `3a0ed43fb`
+(`x64enc.inc` gaining an `EmitSyscall` reference) and are fixed in `658f4bea5`.
+**This one is a different commit.** Do not close it on that fix.
+
+Bisected, two builds one commit apart, nothing else changed:
+
+| build | `test_asmcore_x64` |
+| --- | --- |
+| `75d2ba662^` (= `eb340e59d`) | `all asmcore_x64 checks passed`, **exit 0** |
+| `75d2ba662` (page-separate code from data) | **SIGSEGV, exit 139** |
+
+### The asmcore case is an out-of-bounds write, not a failed assertion
+
+Symbolised at `test_asmcore_x64.pas:191`, *after* that line's output appeared —
+so it is temporary cleanup, not the statement itself:
+
+```
+lea    0x451fb8,%rax
+mov    %rax,%rdi
+xor    %rax,%rax
+movabs $0xf0,%rcx        { 240 }
+rep stos %al,(%rdi)      { SIGSEGV }
+```
+
+240 bytes zeroed from `0x451fb8`. The single `PT_LOAD` ends at **`0x451fc4`**
+(`vaddr 0x400000` + `memsz 0x51fc4`), so **only 12 of the 240 bytes are mapped**.
+`filesz` puts data ending at `0x43b35c`, so the object is in BSS and is the LAST
+object in it: a BSS allocation ~228 bytes shorter than its own zero-init, at the
+one place in the image where nothing absorbs the overrun.
+
+Two candidate causes ruled out by measurement rather than argument:
+
+- **not the rel8 patch bug** — 228 short jumps in that binary, **zero** with a
+  target off an instruction boundary;
+- **not the optimizer** — identical segfault at `-O0`, `-O1`, `-O2` and `-O3`.
+
+### The hello/compiler cases are the padding reaching the disassembler
+
+`test-asm` runs `-S` and asserts `! grep -q "^    db "`. The padding zeros
+disassemble as runs of `add [rax], al` with one odd byte over: exactly **one
+`db 00`, line 14704 of 14704** — the last line. The assertion is working; the
+padding really is undisassemblable bytes inside the code segment.
+
+That is a design call, not a bug: either the padding moves out of the
+disassembled range, or the assertion exempts a trailing pad. `75d2ba662`'s own
+argument that the padding is safe ("zero is `udf #0` on aarch64 and faults on
+x86-64") is about a **stray jump** and is not in tension with this — disassembly
+simply was not considered.
+
+Owner: `compiler/elfwriter.inc` is b4's file. Diagnosis only from here; no edit
+made.

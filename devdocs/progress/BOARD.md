@@ -64,7 +64,7 @@ lives in git, not in a timestamp._
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (355)
+## backlog (357)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -414,7 +414,9 @@ lives in git, not in a timestamp._
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-asm-compiler-2 | A | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
 | regression-test-asm-hello-2 | A | 70 | regression | regression: test-asm#src:test/hello.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
+| regression-test-asm-test-asm-emit-x64 | A | 50→70 | regression |  | — |
 | regression-test-asm-test-asmcore-x64 | A | 70 | regression | regression: test-asm#src:test/test_asmcore_x64.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
+| regression-test-asm-test-x64enc | A | 50→70 | regression |  | — |
 | regression-test-core-test-opt-store-reload | P | 70 | regression | regression: test-core#src:test/test_opt_store_reload.pas red at c951ec710b33 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-in-a-variable | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | — |
@@ -751,7 +753,9 @@ lives in git, not in a timestamp._
 - [p 70] [A+O] feature-opt-o3-register-pressure [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [A] regression-test-asm-compiler-2
 - [p 70] [A] regression-test-asm-hello-2
+- [p 70] [A] regression-test-asm-test-asm-emit-x64
 - [p 70] [A] regression-test-asm-test-asmcore-x64
+- [p 70] [A] regression-test-asm-test-x64enc
 - [p 70] [P] regression-test-core-test-opt-store-reload [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-in-a-variable [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-none [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
