@@ -41,7 +41,9 @@ import importlib.util
 import io
 import os
 import re
+import shutil
 import subprocess
+import types
 import sys
 import tempfile
 
@@ -427,6 +429,45 @@ def t_new_findings_record_their_oracles():
     return "a new finding records the oracle set that saw it"
 
 
+def t_missing_emulator_drops_the_oracle_rather_than_latching():
+    """A cross oracle without its emulator must be LEFT OUT, not left in.
+
+    Left in, it returns a sentinel for every finding, every comparison reads as
+    a disagreement, nothing is ever marked fixed, and the throttle latches on a
+    host that is merely missing a package. Left out, oracle_gap() reports those
+    findings as CANNOT JUDGE — the truth — and native findings still close.
+    """
+    m = load()
+    m.shutil = types.SimpleNamespace(which=lambda n: None, rmtree=shutil.rmtree)
+    m.qemu_for = lambda a: None
+    names = [o.name for o in m.build_oracles(True)]
+    assert not [n for n in names if n.startswith("pxx-i386")], names
+    assert "fpc-O0" in names and "pxx-O3" in names, "native oracles were dropped too"
+    return "a cross oracle with no emulator is skipped, not kept"
+
+
+def t_every_cross_arch_has_a_declared_emulator():
+    """CROSS_ARCHS and QEMU_BIN must not drift: a new arch with no entry would
+    raise a KeyError inside build_oracles instead of degrading."""
+    m = load()
+    missing = [a for a in m.CROSS_ARCHS if a not in m.QEMU_BIN]
+    assert not missing, "cross arch(es) with no emulator declared: %s" % missing
+    return "every cross arch declares its emulator"
+
+
+def t_daemon_rechecks_with_cross_oracles():
+    """twatch has never fuzzed cross, so cross findings only ever arrive from a
+    manual run. Without --cross on the daemon's recheck they are unjudgeable
+    forever and the unknown count never reaches zero — and a permanently
+    nonzero counter stops being read.
+    """
+    src = io.open(os.path.join(ROOT, "tools", "twatch.py"), encoding="utf-8").read()
+    i = src.index('"--recheck"')
+    blk = src[i:i + 400]
+    assert '"--cross"' in blk, "the daemon's recheck does not pass --cross"
+    return "the daemon rechecks with cross oracles"
+
+
 TESTS = [t_pasmith_still_rejects_units_with_dash_o,
          t_recheck_regenerates_through_emit,
          t_recheck_walks_more_than_the_throttle_set,
@@ -437,6 +478,9 @@ TESTS = [t_pasmith_still_rejects_units_with_dash_o,
          t_oracle_gap_leaves_ordinary_findings_alone,
          t_a_gap_can_only_produce_cannot_judge,
          t_new_findings_record_their_oracles,
+         t_missing_emulator_drops_the_oracle_rather_than_latching,
+         t_every_cross_arch_has_a_declared_emulator,
+         t_daemon_rechecks_with_cross_oracles,
          t_emit_uses_outdir_for_units,
          t_the_generator_command_line_exists_once,
          t_check_mode_goes_through_emit,

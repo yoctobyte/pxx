@@ -87,6 +87,16 @@ RUN_TIMEOUT = 5
 COMPILE_TIMEOUT = 30
 
 CROSS_ARCHS = ["i386", "aarch64", "arm32"]
+# The user-mode emulator each cross oracle needs, mirroring run_target.sh's
+# `need` calls. run_target.sh exits 2 when one is missing, which is
+# indistinguishable from a program that exits 2 — so availability is checked
+# here, up front, instead of being inferred from a return code.
+QEMU_BIN = {"i386": "qemu-i386", "aarch64": "qemu-aarch64", "arm32": "qemu-arm"}
+
+
+def qemu_for(arch):
+    """The emulator binary for `arch` if it is on PATH, else None."""
+    return shutil.which(QEMU_BIN[arch])
 
 # Result sentinels, kept distinct from any real checksum so they can never
 # silently compare equal to one.
@@ -130,6 +140,18 @@ def build_oracles(cross):
     ]
     if cross:
         for a in CROSS_ARCHS:
+            if not qemu_for(a):
+                # Degrade HONESTLY rather than silently. Without its emulator a
+                # cross oracle cannot run the binary at all, so every finding
+                # would come back as a sentinel, every comparison would read as
+                # a disagreement, and nothing could ever be marked fixed — the
+                # throttle would latch on a host that simply lacks a package.
+                # Leaving the oracle OUT instead means oracle_gap() reports a
+                # cross finding as CANNOT JUDGE, which is the truth, and native
+                # findings still recheck and still close.
+                print("pasmith_run: no %s — skipping the %s oracle"
+                      % (QEMU_BIN[a], a), file=sys.stderr)
+                continue
             o.append(Oracle("pxx-%s" % a, "pxx", ["--target=%s" % a], arch=a))
     return o
 

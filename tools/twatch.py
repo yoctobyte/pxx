@@ -4954,8 +4954,23 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
         set_phase(clone, host, "fuzz-recheck", sha=sha)
         clone.checkout(sha)
         try:
+            # --cross on the RECHECK, not on the fuzz loop. The daemon has
+            # never fuzzed cross targets, so every cross finding in the ledger
+            # arrived from a manual run — and without cross oracles here the
+            # recheck cannot judge them, so they would sit unjudgeable forever
+            # and the "could not be judged" count would never reach zero. A
+            # permanently-nonzero counter stops being read, which is how the
+            # next dead proxy starts.
+            #
+            # Bounded and safe: a recheck files no findings, it only closes
+            # them, so the worst a flaky emulator can do is fail to mark
+            # something fixed. On a host with no qemu the oracles are skipped
+            # and those findings report CANNOT JUDGE, which is the truth.
+            # Whether the daemon should also FUZZ cross is a separate question
+            # with real cost — not decided here.
             r = subprocess.run(
-                [sys.executable, runner, "--recheck", "--ledger", ledger_loc,
+                [sys.executable, runner, "--recheck", "--cross",
+                 "--ledger", ledger_loc,
                  "--ledger-inplace", "--sha", sha[:12]],
                 cwd=clone.path, env=env, text=True, capture_output=True, timeout=1800)
             tail = (r.stdout or "").strip().split("\n")[-1]
