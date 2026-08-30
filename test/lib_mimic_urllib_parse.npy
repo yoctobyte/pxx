@@ -1,0 +1,186 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_urllib_parse.py against CPython's real urllib.parse.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where
+`from urllib.parse import ...` finds the stdlib module, and every line below
+produces identical output both ways. Run it as
+`python3 test/lib_mimic_urllib_parse.npy` to see that.
+
+THIS FILE IS THE GATE THE SHIM'S HEADER ALREADY CLAIMED. That header said
+"...which test/lib_mimic_urllib_parse.npy checks by running the same file both
+ways" while no such file existed -- a 232-line module asserting a differential
+that had never been written, which reads as coverage to anyone skimming it.
+Filed and fixed together; see feature-b-sweep-mimic-shims-against-cpython.
+
+WHAT IS ASSERTED. The shim's header names FOUR rules "a plausible
+implementation gets wrong", and each gets a block below, because a rule someone
+thought worth writing down is a rule someone can regress:
+
+  1. the scheme is LOWER-CASED (security-relevant: a sanitizer comparing
+     against a lower-case allow-list lets `JavaScript:` through if missed);
+  2. `;params` splits off the path for SOME schemes only, by membership of
+     uses_params -- `data:` deliberately keeps its whole path;
+  3. a scheme must LOOK like one (letter, then letters/digits/+/-/.), so
+     `1a:b` has no scheme and keeps the colon in the path;
+  4. an unbalanced `[` or `]` in the netloc raises ValueError -- html5lib's
+     sanitizer catches that and DELETES the attribute, so returning a result
+     instead keeps an attribute it meant to drop.
+
+NOT ASSERTED, because the shim deliberately does not have them and says so:
+`urljoin`, `parse_qs`, `urlencode`, and the `_replace`/`geturl` conveniences.
+A differential pins agreement; asserting an absence would fail under CPython.
+"""
+
+from urllib.parse import urlparse, urlsplit, urlunsplit, urlunparse, quote, unquote
+
+fails = [0]
+
+
+def check(label, got, want):
+    if got == want:
+        print(label + '=ok')
+    else:
+        fails[0] = fails[0] + 1
+        print(label + '=FAIL got=' + repr(got) + ' want=' + repr(want))
+
+
+def parsed(url):
+    """The six fields as a flat string -- compared as one value, so a field
+    that moves into its neighbour is caught rather than averaging out."""
+    try:
+        r = urlparse(url)
+        return '|'.join([r.scheme, r.netloc, r.path, r.params, r.query, r.fragment])
+    except ValueError:
+        return '<ValueError>'
+
+
+def split(url):
+    try:
+        r = urlsplit(url)
+        return '|'.join([r.scheme, r.netloc, r.path, r.query, r.fragment])
+    except ValueError:
+        return '<ValueError>'
+
+
+# ------------------------------------------------------- ordinary splitting
+check('full', parsed('http://a.example:8080/p/q;x=1?y=2#z'),
+      'http|a.example:8080|/p/q|x=1|y=2|z')
+check('no_scheme', parsed('//host/path'), '|host|/path|||')
+check('path_only', parsed('/just/a/path'), '||/just/a/path|||')
+check('relative', parsed('a/b/c'), '||a/b/c|||')
+check('empty', parsed(''), '|||||')
+check('fragment_only', parsed('#frag'), '|||||frag')
+check('query_only', parsed('?q=1'), '||||q=1|')
+check('netloc_only', parsed('http://host'), 'http|host||||')
+check('trailing_slash', parsed('http://host/'), 'http|host|/|||')
+
+# ------------------------------------------------- rule 1: scheme lowercased
+# Security-relevant per the shim's header, so both the ordinary and the
+# mixed-case-with-payload forms are pinned.
+check('scheme_upper', parsed('HTTP://x/'), 'http|x|/|||')
+check('scheme_mixed', parsed('HtTpS://x/'), 'https|x|/|||')
+check('scheme_js_mixed', parsed('JavaScript:alert(1)'), 'javascript||alert(1)|||')
+# ...and the netloc/path are NOT lower-cased along with it
+check('host_case_kept', parsed('HTTP://Example.COM/Path'),
+      'http|Example.COM|/Path|||')
+
+# --------------------------------------- rule 2: params, per-scheme, by list
+check('params_http', parsed('http://h/a/b;p=1'), 'http|h|/a/b|p=1||')
+# `data` is NOT in uses_params, so the whole thing stays in path
+check('params_data', parsed('data:text/html;base64,AAA'),
+      'data||text/html;base64,AAA|||')
+check('params_relative', parsed('a/b;p=1'), '||a/b|p=1||')
+# params attach to the LAST path segment only
+check('params_last_segment', parsed('http://h/a;q=1/b;p=2'),
+      'http|h|/a;q=1/b|p=2||')
+# urlsplit never splits params at all -- they stay in the path
+check('split_keeps_params', split('http://h/a/b;p=1'), 'http|h|/a/b;p=1||')
+
+# ------------------------------------------ rule 3: a scheme must look like one
+check('scheme_leading_digit', parsed('1a:b'), '||1a:b|||')
+check('scheme_with_plus', parsed('svn+ssh://h/p'), 'svn+ssh|h|/p|||')
+check('scheme_with_dot', parsed('a.b:c'), 'a.b||c|||')
+check('scheme_with_dash', parsed('a-b:c'), 'a-b||c|||')
+check('scheme_with_space', parsed('a b:c'), '||a b:c|||')
+check('scheme_with_underscore', parsed('a_b:c'), '||a_b:c|||')
+
+# ----------------------------------- rule 4: unbalanced brackets -> ValueError
+check('bracket_unclosed', parsed('http://[::1/p'), '<ValueError>')
+check('bracket_unopened', parsed('http://::1]/p'), '<ValueError>')
+check('bracket_ok', parsed('http://[::1]/p'), 'http|[::1]|/p|||')
+check('bracket_ok_port', parsed('http://[::1]:8080/p'), 'http|[::1]:8080|/p|||')
+check('split_bracket_unclosed', split('http://[::1/p'), '<ValueError>')
+
+# ------------------------------------------------------------ round-tripping
+check('unsplit_roundtrip', urlunsplit(urlsplit('http://h:1/p?q#f')),
+      'http://h:1/p?q#f')
+check('unparse_roundtrip', urlunparse(urlparse('http://h/p;x?q#f')),
+      'http://h/p;x?q#f')
+check('unsplit_from_tuple', urlunsplit(('http', 'h', '/p', '', '')), 'http://h/p')
+
+# --- the authority rule, which was WRONG on 9 of these 20 before 2026-08-30 ---
+# An empty netloc is not the same as no netloc, and truthiness cannot tell them
+# apart. The `//` is emitted only when the scheme is in uses_netloc AND the path
+# is empty or absolute -- so the block below is one behaviour, not twenty cases.
+# A scheme OUTSIDE uses_netloc never gets an authority:
+check('unsplit_mailto', urlunsplit(('mailto', '', 'a@b', '', '')), 'mailto:a@b')
+check('unsplit_news', urlunsplit(('news', '', 'comp.lang', '', '')), 'news:comp.lang')
+check('unsplit_tel', urlunsplit(('tel', '', '+123', '', '')), 'tel:+123')
+check('unsplit_data', urlunsplit(('data', '', 'text/html,x', '', '')),
+      'data:text/html,x')
+check('unsplit_mailto_empty_path', urlunsplit(('mailto', '', '', '', '')), 'mailto:')
+# ...and one INSIDE it earns an authority only when the path is empty/absolute:
+check('unsplit_http_relative', urlunsplit(('http', '', 'p', '', '')), 'http:p')
+check('unsplit_http_absolute', urlunsplit(('http', '', '/p', '', '')), 'http:///p')
+check('unsplit_http_emptypath', urlunsplit(('http', '', '', '', '')), 'http://')
+check('unsplit_file_absolute', urlunsplit(('file', '', '/etc/x', '', '')),
+      'file:///etc/x')
+check('unsplit_file_relative', urlunsplit(('file', '', 'etc/x', '', '')),
+      'file:etc/x')
+check('unsplit_ws', urlunsplit(('ws', '', '/s', '', '')), 'ws:///s')
+check('unsplit_svnssh', urlunsplit(('svn+ssh', '', '/r', '', '')), 'svn+ssh:///r')
+# a path already starting `//` gets ANOTHER `//` when there is no authority --
+# looks like a typo, is not: without it the result re-parses with `x` as a host
+check('unsplit_slashslash_path', urlunsplit(('', '', '//x', '', '')), '////x')
+check('unsplit_slashslash_scheme', urlunsplit(('http', '', '//x', '', '')),
+      'http:////x')
+# a real netloc always wins, relative path or not
+check('unsplit_netloc_relative', urlunsplit(('http', 'h', 'p', '', '')), 'http://h/p')
+check('unsplit_netloc_emptypath', urlunsplit(('http', 'h', '', '', '')), 'http://h')
+check('unsplit_no_scheme_netloc', urlunsplit(('', 'h', '/p', '', '')), '//h/p')
+
+# ROUND-TRIP is the contract the header states -- the same grammar walked
+# backwards -- and it was broken for every scheme outside uses_netloc.
+for u in ['mailto:a@b', 'news:comp.lang', 'tel:+123', 'data:text/html,x',
+          'http://h/p', 'http://h:8080/p?q#f', 'file:///etc/x', '/p', 'a/b',
+          'http:p', '//h/p']:
+    check('roundtrip_' + u, urlunsplit(urlsplit(u)), u)
+
+# -------------------------------------------------------------- quote/unquote
+check('quote_plain', quote('abc'), 'abc')
+check('quote_space', quote('a b'), 'a%20b')
+check('quote_slash_safe_default', quote('a/b'), 'a/b')
+check('quote_slash_not_safe', quote('a/b', ''), 'a%2Fb')
+check('quote_reserved', quote('a?b=c&d'), 'a%3Fb%3Dc%26d')
+check('quote_unreserved', quote('a-b_c.d~e'), 'a-b_c.d~e')
+check('quote_percent', quote('100%'), '100%25')
+check('quote_empty', quote(''), '')
+check('unquote_plain', unquote('abc'), 'abc')
+check('unquote_pct', unquote('a%20b'), 'a b')
+check('unquote_lower_hex', unquote('a%2fb'), 'a/b')
+check('unquote_upper_hex', unquote('a%2Fb'), 'a/b')
+# a malformed escape is LEFT ALONE rather than raising -- CPython's rule, and
+# the one a hand-written unquote is most likely to get wrong by raising
+check('unquote_trailing_pct', unquote('abc%'), 'abc%')
+check('unquote_short_escape', unquote('a%2'), 'a%2')
+check('unquote_bad_hex', unquote('a%zzb'), 'a%zzb')
+check('unquote_double_pct', unquote('a%%20b'), 'a% b')
+check('unquote_empty', unquote(''), '')
+# quote then unquote is identity over a nasty sample
+check('quote_unquote_roundtrip', unquote(quote('a b/c?d=e&f%g', '')),
+      'a b/c?d=e&f%g')
+
+if fails[0] == 0:
+    print('MIMIC-URLLIB-PARSE OK')
+else:
+    print('MIMIC-URLLIB-PARSE FAILED ' + str(fails[0]))

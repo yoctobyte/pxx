@@ -17165,6 +17165,27 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_string_template.npy $(TESTTMP)/lib_mimic_string_template
 	tools/expect_same.sh lib_mimic_string_template.1 "$$($(TESTTMP)/lib_mimic_string_template | grep -c '=ok')" "43"
 	tools/expect_same.sh lib_mimic_string_template.2 "$$($(TESTTMP)/lib_mimic_string_template | tail -1)" "MIMIC-STRING-TEMPLATE OK"
+	# urllib.parse -- THE GATE THE SHIM'S HEADER ALREADY CLAIMED. That header
+	# cited "test/lib_mimic_urllib_parse.npy" as its differential while no such
+	# file existed and none ever had (checked the history). A 232-line module
+	# asserting coverage it did not have, which is worse than none: a reader
+	# skimming the header stops looking.
+	#
+	# Writing it found a real bug the same hour -- urlunsplit had open-coded a
+	# condition that never consulted `uses_netloc`, a list the module simply did
+	# not define, so 9 of 20 tuples came out wrong: `mailto:///a@b`,
+	# `data:///text/html,x`, and relative paths silently rewritten absolute.
+	# Round-tripping was broken for every scheme outside uses_netloc, which is
+	# the contract the header states.
+	#
+	# The blocks here follow the FOUR rules that header calls out as
+	# plausibly-guessable-wrong (scheme lower-casing, which is security-relevant
+	# for sanitizer allow-lists; per-scheme `;params`; what may be a scheme; and
+	# unbalanced brackets raising ValueError) -- a rule someone wrote down is a
+	# rule someone can regress.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_urllib_parse.npy $(TESTTMP)/lib_mimic_urllib_parse
+	tools/expect_same.sh lib_mimic_urllib_parse.1 "$$($(TESTTMP)/lib_mimic_urllib_parse | grep -c '=ok')" "78"
+	tools/expect_same.sh lib_mimic_urllib_parse.2 "$$($(TESTTMP)/lib_mimic_urllib_parse | tail -1)" "MIMIC-URLLIB-PARSE OK"
 	# A real minidom DOM -- Document/Element/Attr/Text/Comment/DocumentFragment/
 	# DocumentType/NamedNodeMap/DOMImplementation, namespace-aware create+set,
 	# deep and shallow cloneNode, normalize (feature-b-a-real-minidom-is-an-

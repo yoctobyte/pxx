@@ -53,6 +53,21 @@ query-string layer, a separate job), and the `SplitResult`/`ParseResult`
 uses_params = ['', 'ftp', 'hdl', 'prospero', 'http', 'imap', 'https', 'shttp',
                'rtsp', 'rtsps', 'rtspu', 'sip', 'sips', 'mms', 'sftp', 'tel']
 
+# Exactly CPython's list, in its order. Membership decides whether `urlunsplit`
+# emits a `//` authority marker when the netloc is EMPTY -- which is the whole
+# difference between `mailto:a@b` and the nonsense `mailto:///a@b`.
+#
+# This list was MISSING, and its absence was not visible: `urlunsplit` had
+# open-coded a condition that never consulted it, so nine of twenty tuples came
+# out wrong (mailto/news/tel/data all gained a spurious authority, and a
+# relative path was rewritten absolute). Nothing failed, because no
+# differential existed -- the shim's header claimed one that had never been
+# written.
+uses_netloc = ['', 'ftp', 'http', 'gopher', 'nntp', 'telnet', 'imap', 'wais',
+               'file', 'mms', 'https', 'shttp', 'snews', 'prospero', 'rtsp',
+               'rtsps', 'rtspu', 'rsync', 'svn', 'svn+ssh', 'sftp', 'nfs',
+               'git', 'git+ssh', 'ws', 'wss', 'itms-services']
+
 _SCHEME_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-."
 _SCHEME_START = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 _HEX = "0123456789ABCDEFabcdef"
@@ -175,13 +190,48 @@ def urlparse(url, scheme="", allow_fragments=True):
 
 
 def urlunsplit(parts):
-    """The inverse of `urlsplit`."""
+    """The inverse of `urlsplit`.
+
+    TWO STAGES, and they are separate in CPython for a reason worth keeping.
+    Stage one decides whether an authority is present AT ALL -- a three-state
+    question, because "no netloc" and "empty netloc" are different URLs
+    (`mailto:a@b` versus `file:///etc/x`). Stage two renders. Collapsing them
+    into one truthiness test is what the previous version did, and it could not
+    express the difference: an empty netloc is falsy either way.
+
+    The rule, off CPython's own source rather than the docs:
+
+      * an authority is emitted when netloc is non-empty; or when the scheme is
+        in `uses_netloc` AND the path is empty or absolute. `mailto` and `news`
+        are not in that list, so they never get one; `http` is, but only earns
+        one when its path is absolute, which is why `('http','','p')` is
+        `http:p` and not `http:///p`;
+      * with no authority, a path that already starts `//` gets ANOTHER `//`
+        prefix. That looks like a typo and is not: without it the result would
+        re-parse with `x` as a host, so `('','','//x')` is `////x`.
+
+    Nine of twenty tuples were wrong before this, including `mailto:///a@b` and
+    `data:///text/html,x`. Round-tripping was broken for every scheme outside
+    `uses_netloc`, and the header advertises these inverses as the same grammar
+    walked backwards -- so `urlunsplit(urlsplit(u))` returning a different URL
+    was a failure of the module's stated contract, not a nicety.
+    """
     scheme, netloc, url, query, fragment = (parts[0], parts[1], parts[2],
                                             parts[3], parts[4])
-    if netloc or (scheme and url[:2] != "//"):
+    # stage one: is there an authority? `has_authority` False is CPython's
+    # `netloc = None`; True with an empty `netloc` is its `netloc = ''`.
+    if netloc:
+        has_authority = True
+    else:
+        has_authority = (scheme != "" and scheme in uses_netloc
+                         and (url == "" or url[:1] == "/"))
+    # stage two: render
+    if has_authority:
         if url and url[:1] != "/":
             url = "/" + url
         url = "//" + netloc + url
+    elif url[:2] == "//":
+        url = "//" + url
     if scheme:
         url = scheme + ":" + url
     if query:
