@@ -218,4 +218,4 @@ file's history. That is the real answer to "why did four live reverts sit for
 weeks": not laziness, but that checking looked like one question and is five.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d2a61a524.
