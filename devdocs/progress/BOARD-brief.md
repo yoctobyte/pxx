@@ -25,7 +25,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-generic-type-param-unresolved-in-class-abstract-template` [P]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
-- `feature-c-corpus-busybox-applet` [C] — blocked-by: bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
+- `feature-c-corpus-busybox-applet` [C]
 - `feature-c-diagnostics-name-the-module-they-are-in` [C] — blocked-by: bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-dynamic-compiler-tables` [A]

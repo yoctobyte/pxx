@@ -3,9 +3,9 @@ track: C
 prio: 60
 type: feature
 status: unfinished
-blocked-by: [bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array]
+blocked-by: []
 owner: 
-summary: "Spun out of idea-c-realworld-test-targets (its own top pick, #1 in the suggested order). Build ONE busybox applet -- cat -- from upstream source with cfront, standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, run under tools/run_target.sh on x86-64 + aarch64. busybox is syscall-heavy, which points it straight at crtl, the layer that is actually thin."
+summary: "UNBLOCKED 2026-08-30 -- libbb.h now compiles and all 145 TUs are reachable. Spun out of idea-c-realworld-test-targets (its own top pick, #1 in the suggested order). Build ONE busybox applet -- cat -- from upstream source with cfront, standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, run under tools/run_target.sh on x86-64 + aarch64. busybox is syscall-heavy, which points it straight at crtl, the layer that is actually thin."
 ---
 
 # busybox `cat` via cfront — one applet, real syscall load
@@ -145,3 +145,39 @@ resume here.
 blocked at TU 1 by the 16-deep C preprocessor include cap (bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array); libbb.h alone hits level 17, so all 145 TUs are blocked. Buffers live in defs.inc = Track A, not C's to fix. Tree fetched + gcc oracle green and verified.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## UNBLOCKED — 2026-08-30, and the blocker was neither of the two named here
+
+`libbb.h` compiles. The wall was **not** the 16-buffer cap: raising it to 128
+moved the error from level 17 to level 129 and fixed nothing, because the depth
+was tracking the cap rather than any real nesting. One header was including
+**itself**.
+
+`/usr/include/sys/signal.h` is one line, `#include <signal.h>`, and the C
+preprocessor searched the including file's own directory for **angled** includes
+as well as quoted ones — so that resolved back to itself and recursed until the
+buffers ran out. C 6.10.2 gives the including file's directory to `"..."` only.
+Fixed in `1672aeaad`
+([[bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback]]);
+[[bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array]] landed
+on its own merits and was never busybox's blocker.
+
+**Where the build stands now**, `autoconf.h` + `libbb.h` + a trivial `main`:
+
+```
+warning: crtl does not define xzalloc, xstrtoull_range_sfx, xstrtoull_range,
+  xstrtoull_sfx, xstrtoull, xatoull_range_sfx, xatoull_range, xatoull_sfx,
+  xatoull, xstrtoll_range_sfx, xstrtoll_range, xstrtoll, xatoll_range_sfx,
+  xatoll_range, xatoll, xatou, BUG_xatou32_unimplemented, bb_strtoull,
+  bb_strtoll, bb_strtou, BUG_bb_strtou32_unimplemented, bb_strtoi
+ok: [code=265896B  data=13772B  bss=68136B  procs=1381]
+```
+
+Those are busybox's OWN functions (`libbb/`), not crtl gaps — they resolve once
+the `libbb` TUs are actually compiled and linked in. So the next step is the one
+this ticket was filed to do: compile the TU set, not fight the preprocessor.
+
+**The filing note that turned out to be right:** *"a first failure somewhere
+unexpected would be more interesting, not less."* It was the preprocessor twice
+over — once as the reported symptom and once as the real cause, which was a
+different mechanism in the same file.
