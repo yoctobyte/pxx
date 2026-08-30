@@ -9121,3 +9121,75 @@ someone acts unpermitted. This is the other half: it also reads as **not yet don
 board spends a dispatch re-offering it. **File the grant at the moment it is given**; a
 coordinator's recall is not a record, and this seat's context is destroyed and rebuilt while
 the work it tracks continues.
+
+---
+
+### 191b — an improving metric is not a passing test
+
+*(frankA, 2026-08-30, increment 2 of `--rtl-libc`: written, measured, and reverted.)*
+
+The choke-point conversion worked exactly as designed and produced the most attractive number
+of the night:
+
+| program | raw | increment 1 | increment 2 |
+|---|---:|---:|---:|
+| hello-world | 73 | 67 | **9** |
+| file I/O + heap + string + exceptions | 195 | 105 | **9** |
+
+**The second program segfaulted.** frankA's own note is the face:
+
+> *"A syscall count of **9** was the most attractive number of the night while the binary was
+> broken. I would have believed 9 if I had not also been diffing the output."*
+
+191 says to assert on positive output the subject emits. This is *why* it is stronger, and it
+sharpens the reason: the danger is not that a failure looks like nothing, it is that **a
+failure looks like the number you were hoping for** (191a) — and a *metric* is precisely the
+instrument that cannot tell them apart. 9 syscalls is what a working libc route and a dead
+program both produce. What separated them was `heap sum 2997`, a positive output the program
+emits and a segfault cannot forge.
+
+So: **a metric is never the verdict.** Pair every count, timing or size with one positive
+output the subject emits. The metric tells you how well it went; only the output tells you
+that it went.
+
+---
+
+## 194 — THE LANDMINE IS NOT IN THE CODE THAT CRASHES, AND GROWING AN EMITTER ARMS IT
+
+*(frankA, same session; filed as `bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows`
+[A p55], landed `d066764fa`.)*
+
+`Code[p] := Byte(CodeLen - (p + 1))` — the rel8 patch idiom, ~30 sites across `symtab.inc`,
+`ir_codegen.inc`, `exception_emit.inc`, `emit.inc`. `Byte()` truncates. **No range check, no
+diagnostic.** Past 127 bytes of span, a forward jump becomes a **backward** one, landing in
+the middle of an instruction.
+
+Nothing is wrong with the code today: no current emitter spans 127 at those sites, so the
+default build is correct and always has been. It is **armed by growing an unrelated emitter**
+— an ordinary, safe-looking act — and when it fires, the binary crashes somewhere else
+entirely with the responsible emitter nowhere on the stack. `--rtl-libc` tripped it first only
+because growing `EmitSyscall` from 2 bytes to ~140 is the largest single emitter growth
+anyone has attempted here.
+
+**How it was found is the transferable part: a structural tell, not a hypothesis.** `rip`
+faulted at `0x411115`, which is **inside** the 7-byte instruction at `0x41110f` — and a
+mid-instruction `rip` cannot arise from linear execution, so it is not a clue, it is a
+*proof* that control arrived by a bad jump. That converted an open-ended search into an
+enumeration: scan the executable segment for any rel8 jump targeting that address. Exactly one
+hit, `jns` at `0x41115e`, displacement **−75**; intended forward span **181**; `181 − 256 =
+−75`. **Arithmetic, not a story** — the same closing move as 192a.
+
+**Two wrong guesses preceded it and are in the ticket rather than tidied away**, each costing
+a rebuild and each of the kind that sounds right: (1) the pushes clobber the 128-byte red zone
+— added `sub/add rsp,128`, changed nothing; (2) the C call destroyed `rbp` — a breakpoint
+showed **`rbp` was already nil on arrival**, so the new code never touched it. Recording the
+refuted guesses is what makes the ticket cost the next reader two rebuilds less.
+
+**The redesign is the right generalisation and did not wait for the bug to be fixed:** emit a
+`call` to one shared out-of-line thunk. `EmitSyscall` emits ~5 bytes instead of ~140, so no
+rel8 span moves and the landmine is not tripped — and the ~140 bytes exist once instead of at
+43 sites. Smaller, faster, and it routes around a latent defect without depending on its fix.
+
+**Who needs to know, beyond A:** Track O. O's entire campaign is *changing and growing
+emitters*, which is the exact act that arms this. A peephole that adds four bytes in the wrong
+place is indistinguishable, from the outside, from a miscompile.
