@@ -6912,7 +6912,15 @@ begin
   depth := 1;
   sawValue := False;
   j := openIdx + 1;
-  while (depth > 0) and (j < TokCount) do
+  { Stop at end of the C SOURCE, not end of the token array. By the time a
+    global initializer is counted the RTL may already be APPENDED to Tokens[],
+    and Pascal's `end` lexes as the same tkEnd that closes a C brace -- so an
+    unterminated C initializer could have its depth driven back to zero by
+    Pascal tokens the user never wrote, and return a confident positive count
+    where the refusal below belongs. Same rule the rest of the C parser uses;
+    CBlockContinues states it: a braced list that reaches END OF FILE is
+    unterminated, always. }
+  while (depth > 0) and (j < TokCount) and (Tokens[j].Kind <> tkEOF) do
   begin
     case Tokens[j].Kind of
       tkBegin:
@@ -6941,7 +6949,32 @@ begin
     end;
     Inc(j);
   end;
-  if depth <> 0 then Result := -1;
+  { An unterminated run is a REFUSAL, not a return value.
+
+    This was `if depth <> 0 then Result := -1`, and it had detected the
+    condition since it was written -- but -1 is also what a caller gets when
+    there is nothing to count, and every caller reads it that way. One value,
+    two meanings, and the meaning that mattered is the one no caller could act
+    on. Measured on the pointer-array arm: a `char *p[]` global whose list is
+    never closed reached :8235 here, got -1, and :8254's `if cnt > 0 ... else
+    arrLen := 1` silently sized it as a ONE-element array -- after which the raw
+    Expect failed with an internal dump carrying a token ordinal (Kind: 57) and
+    no source path, no `error:` prefix.
+
+    (Again no literal brace of either hand appears in this comment. A lone
+    closing one ends the comment just as an opening one nests it; this text cost
+    the second build of the session to that, having already cost the first.)
+
+    That is this ticket's own bug on its second arm: the aggregate arm ate main
+    silently, this arm sized an array wrongly and then failed unreadably. One
+    cause, two symptoms, and fixing only the arm the ticket named would have
+    left the other -- `if you fix a bug on one arm of a double case, grep for
+    the sibling before closing the ticket`.
+
+    Nothing valid changes: a well-formed initializer always reaches depth 0
+    before EOF, so no correct program ever took either path.
+    bug-c-an-unclosed-initializer-list-reports-the-next-error-instead-of-itself }
+  if depth <> 0 then CRefuseUnterminated;
 end;
 
 function CConsumeCastProcInit(var procIdx: Integer): Boolean;
@@ -8219,6 +8252,13 @@ begin
       end;
       if nArrElems >= 0 then
       begin
+        { The flat pre-scan folded every element and then ran out of tokens: the
+          list never closed. Handing that to the raw Expect produced an INTERNAL
+          dump -- a token ordinal, no source path, no `error:` prefix -- through
+          a path no other diagnostic here uses. Same refusal every other braced
+          list makes; CBlockContinues' comment describes this exact failure for
+          its own arm. }
+        if CurTok.Kind = tkEOF then CRefuseUnterminated;
         Expect(tkEnd, '}');
         ptrArrDeferTok := -1;   { flat pre-scan handled it; nothing to defer }
       end
@@ -8240,6 +8280,9 @@ begin
           else if CurTok.Kind = tkEnd then Dec(depth);
           Next;
         end;
+        { ...and the deferred arm exits the same way on the same condition.
+          Sixth spelling of one rule in this file; see the ticket for the count. }
+        if depth > 0 then CRefuseUnterminated;
         nArrElems := 0;
       end;
     end;
@@ -8592,13 +8635,28 @@ begin
       else if CurTok.Kind = tkBegin then
       begin
         { `= { ... }` aggregate initializer: skip with BALANCED braces so inner
-          commas (`{{"a",f},{"b",g}}`) don't end it early. }
-        depth := 0;
-        repeat
-          if CurTok.Kind = tkBegin then Inc(depth)
-          else if CurTok.Kind = tkEnd then Dec(depth);
-          Next;
-        until (depth = 0) or (CurTok.Kind = tkEOF);
+          commas (`{{"a",f},{"b",g}}`) don't end it early.
+
+          This WAS a hand-rolled copy of SkipBraceBlock -- identical token for
+          token except for its missing `if (CurTok.Kind = tkEOF) and (depth > 0)
+          then CRefuseUnterminated`, so it exited on EOF with the braces still
+          open and said nothing. A global array whose initializer list is never
+          closed, followed by a definition of main, therefore ATE main as
+          initializer text and died with "main function not found" -- with main
+          present, on the next line. A function silently left the program.
+
+          (No literal open-brace appears in this comment, and that is not
+          fastidiousness: pxx and FPC both NEST comments, so an unbalanced one
+          in the text ends the comment early. This exact text cost a build --
+          the same trap CBlockContinues spells out ten screens up, which had
+          already cost three.)
+
+          The sibling arm ten lines above already called SkipBraceBlock. Two
+          spellings of one skip, and every past fix landed on the other one:
+          `a parser that exists twice is one that gets fixed on one arm`. So
+          this is a duplicate DELETED, not a guard added.
+          bug-c-an-unclosed-initializer-list-reports-the-next-error-instead-of-itself }
+        SkipBraceBlock;
       end
       else if (not wasArr) and (idx >= 0) and (baseTk <> tyRecord) and
               (baseTk <> tyPointer) and TypeIsOrdinal(baseTk) and

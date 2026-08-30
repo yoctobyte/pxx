@@ -10864,6 +10864,23 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Futest test/c_pasunit_strings.c $(TESTTMP)/test_cpasunit_strings_c26
 	$(TESTTMP)/test_cpasunit_strings_p26 > $(TESTTMP)/test_cpasunit_strings.oracle
 	$(TESTTMP)/test_cpasunit_strings_c26 | diff -u $(TESTTMP)/test_cpasunit_strings.oracle -
+	# bug-c-an-unclosed-initializer-list-reports-the-next-error-instead-of-itself
+	# An unclosed brace run is UNTERMINATED, always -- one rule that was spelled
+	# six ways in cparser.inc, and only some of the spellings said so. Each of
+	# these three took a different arm: the aggregate skip (which ate main and
+	# reported "main function not found" with main on the next line), the
+	# deferred pointer-array skip, and the unsized-dimension COUNTER, which had
+	# detected the condition since it was written and returned -1 for it -- the
+	# same -1 that means "nothing to count".
+	@./$(COMPILER) test/c_unclosed_global_init_fail.c $(TESTTMP)/c_unclosed_global_init_fail26 2>&1 \
+	  | grep -q "unterminated C construct" \
+	  || { echo 'c_unclosed_global_init_fail: FAIL - an unclosed global initializer must refuse, not eat main'; exit 1; }
+	@./$(COMPILER) test/c_unclosed_ptr_array_init_fail.c $(TESTTMP)/c_unclosed_ptr_array_init_fail26 2>&1 \
+	  | grep -q "unterminated C construct" \
+	  || { echo 'c_unclosed_ptr_array_init_fail: FAIL - the deferred pointer-array arm must refuse too'; exit 1; }
+	@./$(COMPILER) test/c_unclosed_unsized_2d_init_fail.c $(TESTTMP)/c_unclosed_unsized_2d_init_fail26 2>&1 \
+	  | grep -q "unterminated C construct" \
+	  || { echo 'c_unclosed_unsized_2d_init_fail: FAIL - the unsized-dim counter must refuse, not size from -1'; exit 1; }
 	./$(COMPILER) test/test_type_runtime.pas $(TESTTMP)/test_type_runtime26
 	tools/expect_same.sh test_type_runtime26 "$$($(TESTTMP)/test_type_runtime26)" "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
 	./$(COMPILER) test/test_float.pas $(TESTTMP)/test_float26
