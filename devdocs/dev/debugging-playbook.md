@@ -94,8 +94,9 @@ order to read them in. Route by what you are holding:
 - `## Correct code whose correctness is a joint property of TWO places` -- the
   edit that is only right in company, and the warning shape that survives an
   agent who is sure the general rule applies
-- `## A benchmark with no NULL ROW cannot report "unresolved"` -- it prints a
-  number instead, and the number is real without measuring your change
+- `## Min-of-N tells you HOW to sample. It does not tell you your RESOLUTION`
+  -- run a null; a benchmark with no null row prints a number instead of
+  "unresolved", and the number is real without measuring your change
 
 ## Reading a NEGATIVE result — the gap four agents named on the same day
 
@@ -388,6 +389,16 @@ what catches you is the arm you did not expect to be informative — and this
 control was informative *precisely by moving when it could not have been
 affected*. Same corollary too: **run it in the same command as the treatment**,
 or the temptation is to skip it exactly when the treatment already looks clean.
+
+**The consequence for anything with a per-change value bar** — the O charter's
+promise gate is the live example, and this is a note for whoever owns it, not a
+ruling: if the floor on this hardware is ~6% and a rule also forbids batching
+changes to measure them together, then a pass worth 2-4% cannot be cleared by
+any measurement currently available — not because it is too small to be worth
+having, but because it is **too small to be seen**. A stateable bar exists
+underneath that — *resolvable on a workload long enough that the null row goes
+quiet, sign test only, no magnitude claimed below the control* — and it is
+different from "measure it".
 
 **And withdraw a statistic that is pointing your way.** The same session
 retracted a "10 of 11, p≈0.006" on the grounds that the test assumes
@@ -2133,51 +2144,6 @@ reps beats a long workload with few** — `hello.pas` at min-of-15 settled in tw
 minutes what `compiler.pas` at min-of-3 had got wrong in ten. If the effect you
 are claiming is smaller than ~10%, say how many reps produced it, or do not
 claim it.
-
-## A benchmark with no NULL ROW cannot report "unresolved" — it prints a number
-
-Measured 2026-08-30, and it is the calibration this playbook was missing: every
-timing section here tells you how to compare A against B, and none of them tells
-you what the floor is.
-
-A four-shape A/B included a **control that must be zero** — the same loop with
-the feature under test entirely absent. It came back:
-
-```
-  no strings at all (control)   +6.27%   treatment faster in 7/15 pairs
-```
-
-**7 of 15 is a coin flip and 6.27% is a large number, and they are the same
-row.** So at that load, min-of-15 on a 5 ms program carries about **six percent
-of noise** — and nothing below that in the rest of the table was resolved,
-including the treatment rows quoted to two decimals beside it.
-
-**This is the guard rule applied to a benchmark.** *A guard that cannot fail is
-not a guard, and it prints PASS.* Its analogue: **a benchmark with no null row
-cannot output "unresolved", so it outputs a number** — and the number is real,
-it is just not measuring your change. The decimals were never the lie; the
-missing row was.
-
-**Two things follow, and the second is not about your patch.**
-
-- **Report the sign count, not the magnitude**, whenever the magnitude is inside
-  the floor your control just measured. A sign test over interleaved pairs
-  degrades gracefully; a min does not.
-- **A change smaller than the floor is not a change that failed a bar — it is one
-  the instrument cannot rule on**, and those must be written down differently.
-  The same program was measured at `+2.3%` and `−3.04%` on two runs, same
-  isolated change, opposite signs. Neither run was wrong and neither was
-  evidence.
-
-**The consequence for anything with a per-change value bar** (the O charter's
-promise gate is the live example, and this is a note for whoever owns it, not a
-ruling): if the floor on this hardware is ~6% and a rule also forbids batching
-changes to measure them together, then a pass worth 2-4% cannot be cleared by
-any measurement currently available — not because it is too small to be worth
-having, but because it is **too small to be seen**. A stateable bar exists
-underneath that — *resolvable on a workload long enough that the null row goes
-quiet, sign test only, no magnitude claimed below the control* — and it is
-different from "measure it". Raised by frankwasm off this control row.
 
 ## Regenerate the baseline; never reuse one from earlier in the session
 
