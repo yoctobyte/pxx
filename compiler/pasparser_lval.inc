@@ -1483,50 +1483,6 @@ begin
       end;
       if alreadyResolved then
         { type + node already set by the comma-sugar chain above }
-      else if DerefPtrArrayInfo(node, dpaCount, dpaLo, dpaFlat) then
-      begin
-        { `p^[i]` where p points at a named FIXED ARRAY. The `^` arm already
-          resolved tk/recName through PtrElemTk/PtrElemRec, which for this shape
-          ARE the element's, so the subscript changes the ADDRESS and not the
-          type — there is nothing to re-derive here.
-
-          IT IS TESTED FIRST, and that is the whole point: every other arm in
-          this chain dispatches on `tk`, and `tk` on a pointer-to-array deref is
-          the ARRAY's ELEMENT kind. So a pointer ELEMENT made the `(tk =
-          tyPointer) and (ASTKind[node] = AN_DEREF)` arm below fire — the arm for
-          `^PChar`, a different shape entirely — which answered a plausible type
-          and skipped the low-bound normalisation below, so `array[1..4] of
-          PChar` read one element past its end. Asking what the base IS beats
-          guessing from what its elements are.
-          bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds
-
-          Falling through to the tail below instead asked the ROOT symbol for an
-          ElemType, and a pointer variable has none: `p^[i]` came back with
-          REC_NONE, so `p^[i].b` resolved every field at offset 0 and printed
-          the FIRST field's value whatever you asked for. Silent, exit 0.
-          bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero }
-        { ...and the pointee's own LOW BOUND, which nothing downstream knows
-          about: `p^[i]` over `array[1..4]` indexed from the array's base and
-          ran one element past its end. Normalise the subscript here, the one
-          place that knows the bound, rather than teaching the lowering about a
-          second kind of base. }
-        { ...but NOT when the ND path above built the subscript: BuildFlatNDIndex
-          already subtracts EVERY dimension's low bound, dim 0 included, so
-          subtracting dpaLo here again would double-count it and index
-          (i - 2*lo0) — correct only for the lo=0 case that hid it. }
-        if (dpaLo <> 0) and (ASTRight[indexNode] >= 0) and (not isND) then
-        begin
-          dpaLoNode := AllocNode(AN_INT_LIT);
-          ASTIVal[dpaLoNode] := dpaLo;
-          ASTTk[dpaLoNode] := Ord(tyInteger);
-          dpaSubNode := AllocNode(AN_BINOP);
-          ASTIVal[dpaSubNode] := Ord(tkMinus);
-          ASTLeft[dpaSubNode] := ASTRight[indexNode];
-          ASTRight[dpaSubNode] := dpaLoNode;
-          ASTTk[dpaSubNode] := Ord(tyInteger);
-          ASTRight[indexNode] := dpaSubNode;
-        end;
-      end
       else if IsNodeArray(node) then
       begin
         if ASTKind[node] = AN_IDENT then
@@ -1623,6 +1579,42 @@ begin
           recName := REC_NONE;
         end;
       end
+      else if DerefPtrArrayInfo(node, dpaCount, dpaLo, dpaFlat) then
+      begin
+        { `p^[i]` where p points at a named FIXED ARRAY. The `^` arm already
+          resolved tk/recName through PtrElemTk/PtrElemRec, which for this shape
+          ARE the element's, so the subscript changes the ADDRESS and not the
+          type — there is nothing to re-derive here.
+
+          Falling through to the tail below instead asked the ROOT symbol for an
+          ElemType, and a pointer variable has none: `p^[i]` came back with
+          REC_NONE, so `p^[i].b` resolved every field at offset 0 and printed
+          the FIRST field's value whatever you asked for. Silent, exit 0.
+          bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero
+
+          IT STAYS HERE rather than moving to the head of the chain, and that is
+          a measured call, not a preference. This arm also used to carry the
+          pointee's LOW-BOUND normalisation, which made its POSITION matter: the
+          day `IsNodeArray` learned this shape an earlier arm began winning and
+          the subtraction stopped running, silently, in one row of one test.
+          Moving the arm up fixes that and re-arms the same trap for whatever
+          gets added above it next; the subtraction now runs after the whole
+          chain instead (see below) and no longer cares who wins.
+
+          With that gone, the head position buys nothing — ABLATED: forced to
+          False, test_pointer_to_array_indexing,
+          test_ptr_to_array_of_pointers_index and
+          test_pointer_to_a_named_fixed_array all still pass, because
+          `IsNodeArray`'s arm now answers this shape and its
+          `recName := ResolveNodeRec(node)` covers the record-element case above.
+          It buys real risk, though: at the head it SUPPRESSES that arm.
+          frankA REPORTS that suppressing it broke `qrec^[1]^.x` with
+          "dereferenced value is not a pointer" in his own attempt at this
+          reorder — his measurement, not mine; what I measured is only that the
+          head position is unnecessary here. That row passes either way in this
+          tree, so the two are consistent and the cheaper position wins.
+          bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
+      end
       else
       begin
         { A SCALAR cannot be indexed. `i[2]` over an Integer reached this
@@ -1676,6 +1668,49 @@ begin
           tk := tyUnknown;
           recName := REC_NONE;
         end;
+      end;
+
+      { The pointee's own LOW BOUND, for `p^[i]` over `^array[1..4]` — nothing
+        downstream knows about it, so the subscript is normalised here, the one
+        place that does.
+
+        DELIBERATELY OUTSIDE THE CHAIN ABOVE, and this is the interesting part
+        (frankA's design call, and he is right). It used to live inside the
+        DerefPtrArrayInfo arm, which coupled it to chain POSITION: it ran only
+        when that arm happened to be the one that won. The day `IsNodeArray`
+        learned this shape (5d840acdd), an earlier arm started winning and the
+        subtraction silently stopped running — `array[0..3]` was unaffected
+        because its lo is 0, so exactly one row of one test moved and nothing
+        else in the suite noticed.
+
+        Moving that arm to the head of the chain fixes today's winner and leaves
+        the same trap armed for the next arm anyone adds above it. Running it
+        here does not care which arm typed the node, because TYPING AN ELEMENT
+        and NORMALISING A SUBSCRIPT are different jobs that were never related
+        by anything but adjacency.
+
+        Two guards, both real. NOT when the ND path built the subscript:
+        BuildFlatNDIndex already subtracts every dimension's low bound, dim 0
+        included, so this would double-count it and index (i - 2*lo0) — correct
+        only for the lo=0 case that hid it. NOT for the comma-sugar chain, which
+        builds and types its own nodes and would get the subtraction applied to
+        its last subscript alone; that shape is excluded rather than guessed at,
+        exactly as it was before this moved.
+        bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds,
+        regression-test-core-test-pointer-to-a-named-fixed-array }
+      if (not alreadyResolved) and (not isND) and
+         DerefPtrArrayInfo(node, dpaCount, dpaLo, dpaFlat) and
+         (dpaLo <> 0) and (ASTRight[indexNode] >= 0) then
+      begin
+        dpaLoNode := AllocNode(AN_INT_LIT);
+        ASTIVal[dpaLoNode] := dpaLo;
+        ASTTk[dpaLoNode] := Ord(tyInteger);
+        dpaSubNode := AllocNode(AN_BINOP);
+        ASTIVal[dpaSubNode] := Ord(tkMinus);
+        ASTLeft[dpaSubNode] := ASTRight[indexNode];
+        ASTRight[dpaSubNode] := dpaLoNode;
+        ASTTk[dpaSubNode] := Ord(tyInteger);
+        ASTRight[indexNode] := dpaSubNode;
       end;
       ASTTk[indexNode] := StrValTk(tk);
       node := indexNode;

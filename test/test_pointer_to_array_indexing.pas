@@ -12,8 +12,16 @@ program test_pointer_to_array_indexing;
 
   Hence: EXIT CODES PROVE NOTHING HERE. Four of the broken rows returned 0.
   Compare values, and keep an element kind from each arm the chain has --
-  managed string, frozen string, pointer, record, ordinal -- because a fix
-  validated on the crashing rows can leave the silent one wrong.
+  managed string, frozen string, pointer, record, ordinal.
+
+  THE FROZEN-STRING ROW IS NOT EXTRA COVERAGE (frankB, and this is stronger
+  than the version of it I first wrote). The bug had a second silent arm hiding
+  BEHIND the first: clearing the arm chain routed `string[7]` past the
+  frozen-string arm and into `elemSize := LOCAL_STR_CAP + 8` -- 264 bytes of
+  stride for a 15-byte slot -- still empty, still exit 0, and by then every
+  crash was fixed. So a sweep that stops when the segfaults stop is not merely
+  incomplete: it has guaranteed it cannot see what is left. This row is the only
+  one that can.
   bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
 type
   TR = record a, b: Integer; end;

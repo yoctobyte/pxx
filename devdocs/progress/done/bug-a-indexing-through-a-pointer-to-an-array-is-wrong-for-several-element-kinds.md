@@ -527,3 +527,65 @@ T's sweep.
 
 ## Log
 - 2026-08-30 — resolved, commit 47eaf847c.
+
+---
+
+## Follow-up — the fix got SMALLER, not bigger (frank-rust, 2026-08-30)
+
+frankA made a design point after the first landing that retired part of my own
+fix, and the ablation is the interesting half.
+
+**His point:** the pointee's low-bound normalisation had no business living
+inside an arm of `ParseLValueAST`'s chain at all. *Typing an element* and
+*normalising a subscript* are different jobs, coupled only by chain POSITION —
+and that coupling is exactly why the regression looked the way it did: the day
+`IsNodeArray` learned this shape, an earlier arm began winning, the subtraction
+silently stopped running, and precisely one row of one test moved (`array[0..3]`
+has lo = 0, so only the `array[1..4]` row could see it).
+
+Moving the arm to the head of the chain — what I landed — fixes today's winner
+and leaves the same trap armed for whatever arm is added above it next. The
+subtraction now runs **after the whole chain**, guarded by `DerefPtrArrayInfo`,
+`not isND` and `not alreadyResolved`, and cares about no arm.
+
+**Then the ablation, which is why the diff shrank.** With the subtraction out, is
+the head position still worth anything? Forced the arm to `False`, rebuilt:
+`test_pointer_to_array_indexing`, `test_ptr_to_array_of_pointers_index` and
+`test_pointer_to_a_named_fixed_array` **all still pass** — `IsNodeArray` now
+answers this shape and its `recName := ResolveNodeRec(node)` covers the
+record-element case the arm was written for. So the head position buys nothing,
+and it costs: at the head it SUPPRESSES that arm, and frankA reports that
+suppressing it broke `qrec^[1]^.x` with *"dereferenced value is not a pointer"*
+in his own attempt at the same reorder. **The arm went back where it was.**
+
+Net: one fewer special case than the first landing, and the arm-ordering class
+of regression cannot recur through that path — not because the ordering is now
+right, but because nothing depends on it.
+
+**Why my reorder did not break `qrec^[1]^.x` and his did**, since it looks like
+luck and is: the arm's body sets no `tk` and no `recName`. It only did the
+subtraction. So the `^` arm's resolution survived underneath it. Two reorders of
+the same arm, one safe and one not, decided by a property neither of us was
+reasoning about.
+
+**The `not alreadyResolved` guard is mine and is deliberately conservative.**
+The comma-sugar path `p^[i,j]` builds and types its own node chain; an
+unconditional subtraction would apply to its last subscript alone. Neither of us
+tested that shape, so it is excluded rather than guessed at — which preserves
+exactly the reachability the arm had before it moved.
+
+### One measurement note, because the instrument lied
+
+A follow-up harness of mine reported `test_named_fixed_array_of_a_dynamic_array`
+FAILING. There is no `.expected` file for that test; `diff` was exiting non-zero
+because the file was **missing**, and the loop scored that as a test failure.
+Output is byte-identical to the pinned binary. It did not error — it answered,
+correctly, about something else. Third instance tonight across three agents.
+
+### frankA's ShortString ablation, recorded because it is a positive control
+
+Without the `SymPtrElemStrCap` column, `string[7]` and `string[31]` are empty and
+**`ShortString` is GREEN — because its capacity IS the default.** A row that
+passes for a reason unrelated to the fix, sitting in the same table as the rows
+that prove it. Anyone re-testing this bug with a ShortString row alone will
+conclude it is fixed when it is not.
