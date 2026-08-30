@@ -196,6 +196,23 @@ begin
     xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4 * nLive);
 end;
 
+function XtensaArgRegN(n: Integer): Integer;
+{ The register holding outgoing argument `n` of a helper call, for the ABI in
+  force. Call0 passes arg0..arg5 in a2..a7; windowed `call8` rotates the window
+  so the callee sees them as a2.., which means the CALLER writes a10..a15.
+
+  A function rather than two spellings at each site: every hand-written arm in
+  this backend that needed more than one argument wrote the windowed pair by
+  hand, and the Call0 half is the one that is silently wrong when it is missed —
+  a wrong-but-plausible register, never a fault. Same argument as XtensaSlotOff
+  one screen up. }
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    XtensaArgRegN := reg_xtensa_a10 + n
+  else
+    XtensaArgRegN := reg_xtensa_a2 + n;
+end;
+
 procedure XtensaPopA3;
 { Pop the top expression-stack slot into a3 (windowed: sp constant). }
 begin

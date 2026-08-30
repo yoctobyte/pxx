@@ -11154,19 +11154,117 @@ begin
   if TargetArch = TARGET_XTENSA then
   begin
 
-    { Release local managed strings before returning (ARC scope-exit DecRef).
-      Must precede the result load: each DecRef call clobbers a2. The returned
-      Result handle is skipped (ownership transfers to the caller). }
+    { Release local managed values before returning (ARC scope exit). Must
+      precede the result load: each helper call clobbers a2. The returned Result
+      is skipped (ownership transfers to the caller).
+
+      SIX OF SEVEN MANAGED KINDS, and until now it was one. This arm released a
+      scalar AnsiString and nothing else, so a COM-interface local, a static
+      array of string, a Variant, a promotable int, and a record with managed
+      fields each leaked on every call on xtensa alone — silently, because a
+      leak prints nothing and the cross-target differential asserts printed
+      output. The other five backends have carried these arms for weeks; this is
+      a port of riscv32's chain below, kind for kind, not a new design.
+      bug-a-xtensa-scope-exit-releases-one-of-seven-managed-kinds
+
+      The SEVENTH — a local dynamic array — is deliberately still absent, and
+      that is the same call riscv32's own arm records: a scope-exit release is
+      safe only once EVERY store that can publish a handle into the local
+      retains it, and xtensa is still the one target that takes the
+      non-retaining IR_STORE_MEM share path for `obj.f := a`. Adding the release
+      half alone converts a silent leak into a double free, which is how it was
+      measured on aarch64. It lands with IR_STORE_DYN, on
+      feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45. }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
+          { COM/ARC interface local: _Release the held reference (nil-safe). }
+          procIdx := FindProc('PXXIntfRelease');
+          if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);       { arg0 = slot address }
+          EmitLoadConstXtensa(XtensaArgRegN(1), SymTR[i].RecId - REC_UCLASS_BASE);
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+        begin
+          { STATIC array with MANAGED ELEMENTS: release EVERY element. N-D
+            arrays are stored flat, so ArrLen is the right count. }
+          procIdx := FindProc('PXXArrayReleaseImmediate');
+          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);       { arg0 = &arr }
+          EmitLoadConstXtensa(XtensaArgRegN(1), Syms[i].ArrLen);
+          mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+          EmitLoadConstXtensa(XtensaArgRegN(2), mek);
+          if mek = 3 then
+            EmitLoadDataRefXtensa(XtensaArgRegN(3),
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
+          else  { kinds 1/4: immediate — 0, or the interface id }
+            EmitLoadConstXtensa(XtensaArgRegN(3),
+              ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        begin
+          { A SCALAR AnsiString local. `not IsArray` is load-bearing: an array's
+            TypeKind IS its element kind, so without it a local `array of
+            string` would hand its DATA POINTER to the string releaser. }
           EmitLoadVarXtensa(i);                  { a2 = handle }
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
           if XtensaABI = XTENSA_ABI_WINDOWED then
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+        begin
+          { Variant local: clear (releases any managed payload). arg0 = address. }
+          procIdx := FindProc('PXXVarClear');
+          if procIdx < 0 then Error('compiler error: PXXVarClear not found');
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+        begin
+          { Promotable-int local/temp: release a heap-tier payload at scope exit
+            (bug-a-runtime-variant-heap-grows-unbounded). Absent on profiles
+            built without promocore, where FindProc simply answers -1. }
+          procIdx := FindProc('PXXPromoClear');
+          if procIdx >= 0 then
+          begin
+            EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+            EmitCallProc(procIdx);
+          end;
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+                RecordHasManagedFields(SymTR[i].RecId) then
+        begin
+          { Record-with-managed-fields local: release each managed field via the
+            portable helper. arg0 = record address, arg1 = layout descriptor.
+            COM interface members first, through their own pass (absent on the
+            ESP profile, where FindProc simply answers -1). }
+          if RecordHasComIntfFields(SymTR[i].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+              EmitLoadDataRefXtensa(XtensaArgRegN(1),
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+            end;
+          end;
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+          EmitLoadDataRefXtensa(XtensaArgRegN(1),
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
           EmitCallProc(procIdx);
         end;
     Exit;
