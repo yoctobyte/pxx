@@ -12566,6 +12566,17 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_i386_extern_float "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_extern_float)" "$$($(TESTTMP)/test_i386_extern_float_x64)"
 	./$(COMPILER) --target=i386 test/ccross_entry.c $(TESTTMP)/test_i386_centry
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_centry; tools/expect_same.sh i386/test_i386_centry-rc "$$?" "42"
+	# A C PROGRAM'S OWN FUNCTIONS MUST NOT TAKE THE C-ABI CALL PATH. Every C
+	# function is ProcCdecl and a C-DEFINED one is not ProcExternal, so an
+	# `or ProcCdecl` on the direct-call site dragged every function of every C
+	# program onto the C-ABI marshalling -- where cparser's prologue spill is
+	# POSITIONAL on aarch64/arm32. Broke the lua cross build ("external call
+	# with more than 8 parameters not supported") and four C-conformance shards
+	# (output mismatch). Two symptoms, one cause; the .c file asserts both.
+	# x86-64 cannot catch it: cparser's x86-64 spill really is SysV.
+	# bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32
+	./$(COMPILER) --target=i386 test/ccross_cdecl_cmode.c $(TESTTMP)/test_i386_cdeclcmode
+	tools/expect_same.sh i386/cdecl-cmode "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cdeclcmode)" "CDECL-CMODE OK"
 	./$(COMPILER) --target=i386 test/ccross_args.c $(TESTTMP)/test_i386_cargs
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cargs; tools/expect_same.sh i386/test_i386_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/ccross_double_to_int.c $(TESTTMP)/test_i386_cd2i
@@ -12974,6 +12985,17 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_aarch64_extern_float "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_extern_float)" "$$($(TESTTMP)/test_aarch64_extern_float_x64)"
 	./$(COMPILER) --target=aarch64 test/ccross_entry.c $(TESTTMP)/test_aarch64_centry
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_centry; tools/expect_same.sh aarch64/test_aarch64_centry-rc "$$?" "42"
+	# A C PROGRAM'S OWN FUNCTIONS MUST NOT TAKE THE C-ABI CALL PATH. Every C
+	# function is ProcCdecl and a C-DEFINED one is not ProcExternal, so an
+	# `or ProcCdecl` on the direct-call site dragged every function of every C
+	# program onto the C-ABI marshalling -- where cparser's prologue spill is
+	# POSITIONAL on aarch64/arm32. Broke the lua cross build ("external call
+	# with more than 8 parameters not supported") and four C-conformance shards
+	# (output mismatch). Two symptoms, one cause; the .c file asserts both.
+	# x86-64 cannot catch it: cparser's x86-64 spill really is SysV.
+	# bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32
+	./$(COMPILER) --target=aarch64 test/ccross_cdecl_cmode.c $(TESTTMP)/test_aarch64_cdeclcmode
+	tools/expect_same.sh aarch64/cdecl-cmode "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cdeclcmode)" "CDECL-CMODE OK"
 	./$(COMPILER) --target=aarch64 test/ccross_args.c $(TESTTMP)/test_aarch64_cargs
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cargs; tools/expect_same.sh aarch64/test_aarch64_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=aarch64 test/ccross_double_to_int.c $(TESTTMP)/test_aarch64_cd2i
@@ -13051,6 +13073,17 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_riscv32_qplus_narrow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_qplus_narrow)" "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c $(TESTTMP)/test_riscv32_centry
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_centry; tools/expect_same.sh riscv32/test_riscv32_centry-rc "$$?" "42"
+	# A C PROGRAM'S OWN FUNCTIONS MUST NOT TAKE THE C-ABI CALL PATH. Every C
+	# function is ProcCdecl and a C-DEFINED one is not ProcExternal, so an
+	# `or ProcCdecl` on the direct-call site dragged every function of every C
+	# program onto the C-ABI marshalling -- where cparser's prologue spill is
+	# POSITIONAL on aarch64/arm32. Broke the lua cross build ("external call
+	# with more than 8 parameters not supported") and four C-conformance shards
+	# (output mismatch). Two symptoms, one cause; the .c file asserts both.
+	# x86-64 cannot catch it: cparser's x86-64 spill really is SysV.
+	# bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32
+	./$(COMPILER) --target=riscv32 test/ccross_cdecl_cmode.c $(TESTTMP)/test_riscv32_cdeclcmode
+	tools/expect_same.sh riscv32/cdecl-cmode "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cdeclcmode)" "CDECL-CMODE OK"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c $(TESTTMP)/test_riscv32_cargs
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cargs; tools/expect_same.sh riscv32/test_riscv32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/ccross_double_to_int.c $(TESTTMP)/test_riscv32_cd2i
@@ -14473,6 +14506,17 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_arm32_extern_float "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_extern_float)" "$$($(TESTTMP)/test_arm32_extern_float_x64)"
 	./$(COMPILER) --target=arm32 test/ccross_entry.c $(TESTTMP)/test_arm32_centry
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_centry; tools/expect_same.sh arm32/test_arm32_centry-rc "$$?" "42"
+	# A C PROGRAM'S OWN FUNCTIONS MUST NOT TAKE THE C-ABI CALL PATH. Every C
+	# function is ProcCdecl and a C-DEFINED one is not ProcExternal, so an
+	# `or ProcCdecl` on the direct-call site dragged every function of every C
+	# program onto the C-ABI marshalling -- where cparser's prologue spill is
+	# POSITIONAL on aarch64/arm32. Broke the lua cross build ("external call
+	# with more than 8 parameters not supported") and four C-conformance shards
+	# (output mismatch). Two symptoms, one cause; the .c file asserts both.
+	# x86-64 cannot catch it: cparser's x86-64 spill really is SysV.
+	# bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32
+	./$(COMPILER) --target=arm32 test/ccross_cdecl_cmode.c $(TESTTMP)/test_arm32_cdeclcmode
+	tools/expect_same.sh arm32/cdecl-cmode "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cdeclcmode)" "CDECL-CMODE OK"
 	./$(COMPILER) --target=arm32 test/ccross_args.c $(TESTTMP)/test_arm32_cargs
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cargs; tools/expect_same.sh arm32/test_arm32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/ccross_double_to_int.c $(TESTTMP)/test_arm32_cd2i

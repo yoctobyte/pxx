@@ -2990,7 +2990,7 @@ begin
           copying it is the whole point; the classification below is the proven
           one on this target.
           bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
-        if ProcExternal[procIdx] or ProcCdecl[procIdx] then
+        if ProcExternal[procIdx] or (ProcCdecl[procIdx] and (not CProgramMode)) then
         begin
           { External C call (AAPCS): integer/pointer args in x0..x7, FP args in
             v0..v7 (the two classes are allocated independently, mirroring the

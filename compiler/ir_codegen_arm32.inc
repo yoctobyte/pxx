@@ -2644,8 +2644,18 @@ begin
           so its direct call sites must marshal AAPCS too. Only the CALL
           INSTRUCTION differs -- an external goes through its GOT slot, a bodied
           proc through EmitCallProc.
+
+          PASCAL MODE ONLY, and omitting that broke lua and four C-conformance
+          shards on aarch64. The C frontend marks EVERY C function ProcCdecl,
+          and a C-defined function is NOT ProcExternal -- so `or ProcCdecl`
+          dragged every C function in a C program onto this path, where it
+          inherited the <=8 parameter refusal AND an AAPCS marshalling its
+          prologue does not match: cparser.inc's aarch64 spill is POSITIONAL.
+          x86-64 is unaffected by the same expression because cparser's x86-64
+          spill really is SysV. In Pascal mode ProcCdecl implies this target has
+          the prologue arm, which is what makes the path safe here.
           bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
-        if ProcExternal[procIdx] or ProcCdecl[procIdx] then
+        if ProcExternal[procIdx] or (ProcCdecl[procIdx] and (not CProgramMode)) then
         begin
           { External C call (armel / base AAPCS soft-float): the cross sysroot is
             armel (gnueabi, ld-linux.so.3), so FP and 64-bit values pass in the
