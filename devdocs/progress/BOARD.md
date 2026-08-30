@@ -62,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (336)
+## backlog (338)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -176,6 +176,7 @@ _none_
 | bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure | T | 50 | bug | `trackt setup --fetch-corpus` provisions library_candidates/ only. It never runs, mentions or checks tools/install_externals.sh or tools/install_cross_sysroot.sh, so a box built strictly to track-t.md's documented deploy recipe comes up able to publish verdicts and unable to run ten of the jobs behind them. The corpus half self-announces as SKIP; the sysroot half goes RED, and a red is read as a defect in the tree — on seven's first full tier it auto-filed an 18-job cascade naming twelve innocent Rust commits. | — |
 | bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable | T | 40 | bug | CLAUDE.md gates the widen-your-gate exception on `twatch.py --status` exit 1 OR `trackt.py health` DOWN, as if they were two ways to ask one question. They are not: --status reads PUBLISHED tstate (was work swept recently) and health checks for a RUNNING PROCESS (is anything sweeping now). Measured 2026-08-29 during a watcher handover, they returned UP/exit-0 and DOWN simultaneously. Joined by `or`, the disagreement silently resolves to `down`, so every agent widens its gate by ~10 minutes per fix during any handover — the exact cost the rule exists to avoid. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
+| bug-t-two-public-surfaces-answer-how-big-is-the-backlog-differently | T | 30 | bug | The published status dashboard says 338 backlog tickets; tools/factsheet.sh says 351. Both defensible -- factsheet counts backlog_new/, the dashboard appears to break those out alongside '20 experimental'. Not a defect in either, but two public surfaces answer the same question with different numbers and the generator's owner should pick one. | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping | A | 40 | chore | Grant: frankwasm holds `compiler/ir.inc` for the `:11207` mistyping fix | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
@@ -401,6 +402,7 @@ _none_
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
+| task-d-audit-public-copy-for-the-two-byte-identical-claims | D | 55 | task | CLAUDE.md's claims-discipline section names two DIFFERENT byte-identical claims -- the self-host fixedpoint (our BINARY reproduces itself, at the default -O only) and the corpus oracle (a pxx-built zlib's OUTPUT matches a gcc-built zlib's). Conflating them implies we emit gcc's machine code, which we do not. Nobody has audited docs/** or the README for the conflation, and terse styles drop the qualifying words first. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
 ## backlog_new (13)
@@ -813,6 +815,7 @@ _none_
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 55] [A+S] ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired
+- [p 55] [D] task-d-audit-public-copy-for-the-two-byte-identical-claims
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
@@ -966,6 +969,7 @@ _none_
 - [p 30] [N] bug-n-pypal-arm32-getdents64-is-unfilled
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [T] bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier
+- [p 30] [T] bug-t-two-public-surfaces-answer-how-big-is-the-backlog-differently
 - [p 30] [A] chore-a-delete-the-dead-pascal-lvalue-statement-path
 - [p 30] [A] chore-a-re-include-bench-timing-in-tools-devtest
 - [p 30] [T] chore-t-a-standing-collector-cannot-say-so-to-the-ranker

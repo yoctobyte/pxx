@@ -164,6 +164,34 @@ check("3b. and the job's OWN src still names the first file, which is the "
       "test/alpha.pas" in (job.src or ""), "job.src = %r" % job.src)
 
 
+# --- 3c. the marker must never become the thing that reports ---------------
+#
+# STATUS PROVENANCE, and this guard exists because the step marker is exactly
+# the shape that breaks it: anything appended AFTER the thing you are measuring
+# becomes the thing that reports. `cmd > log; tail log` reports tail's status,
+# `cmd | tee` reports tee's, and a `;`-list reports its last command's -- each
+# layer answering correctly about what it was given, failing in the
+# green-looking direction. Found fleet-wide 2026-08-30; a pin that failed the
+# self-host fixedpoint was notified as exit 0.
+#
+# script() writes the marker BEFORE each recipe line, never after, so a job's
+# exit status is still the first failing recipe line's. That is a property of
+# the emission order and nothing enforces it but this check. Measured over
+# every job in five targets rather than argued: 2653 scripts, 0 whose last
+# command is anything but a recipe line.
+bad = []
+for tgt in ("test-core", "test-threads", "lib-test", "test-nilpy", "test-asm"):
+    for jj in tm.split_jobs(tgt, tm.make_dry_run(tgt)):
+        jj.logpath = "/nonexistent/%s.log" % jj.name.replace("/", "_")
+        last = jj.script().rstrip("\n").splitlines()[-1]
+        if not last.endswith("|| exit $?"):
+            bad.append((jj.name, last[:90]))
+check("3c. no job's script ends in a step marker — the marker is emitted "
+      "BEFORE each line, so it can never become the command that reports "
+      "the job's status",
+      not bad, "%d job(s), e.g. %s" % (len(bad), bad[:3]))
+
+
 # --- 4-8. routing ---------------------------------------------------------
 def rec(**kw):
     base = {"status": "fail", "src": "", "step_i": None, "step_n": 0,
@@ -316,5 +344,5 @@ check("14. the body carries the failing step as its own bullet, adjacent to "
       and "tools/lib_units_compile.py" in body_a,
       body_a)
 
-print("\n%d check(s), %d FAILED" % (14, len(fails)))
+print("\n%d check(s), %d FAILED" % (15, len(fails)))
 sys.exit(1 if fails else 0)
