@@ -661,4 +661,4 @@ row called a difference has at least one diff line.
 and every one a documented dialect divergence.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 364fcff8a.
