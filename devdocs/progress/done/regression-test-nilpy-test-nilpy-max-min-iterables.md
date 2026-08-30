@@ -127,4 +127,4 @@ stamp, `touch` the sources (a copied-in seed is newer than them — CLAUDE.md's
 no-op trap), and require `converged after` in the log before accepting a verdict.
 A plain `git bisect start` here also spans ~5600 commits, nearly all watcher
 `tstate` publishes; path-limit it or test candidates directly.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f11128eaf.
