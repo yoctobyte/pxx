@@ -2348,6 +2348,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "F", "M", "N", "O", "P", "R", "S", "T", "U", "W", "Z"], default="")
         sp.add_argument("--strict", action="store_true")
         sp.add_argument("--write", action="store_true")
+        # board-md only (the loop gives it to every subcommand the way --strict
+        # and --write already are). BOARD.html is gitignored and costs ~87% of
+        # board-md's runtime, so a caller that only needs the committed
+        # BOARD*.md — tools/sync.sh, which runs this INSIDE its fetch->push
+        # race window and stages nothing else — can say so.
+        sp.add_argument("--no-html", action="store_true")
     sp = sub.add_parser("claim")
     sp.add_argument("slug")
     sp.add_argument("owner")
@@ -2405,9 +2411,14 @@ def main(argv: list[str]) -> int:
         sys.stdout.write(board.cmd_board())
     elif cmd == "board-md":
         board.write_board_md()
-        board.write_board_html()
         print(f"wrote {PROG / 'BOARD.md'}")
-        print(f"wrote {PROG / 'BOARD.html'}")
+        # Measured 2026-08-30 on plexus: board-md is 18-21s, of which ~2.5s is
+        # the markdown and the rest is BOARD.html (md_html -> inline ->
+        # ~1.9M uncompiled re.sub calls). BOARD.html is gitignored, so a
+        # git-facing caller pays 87% for a file it will never stage.
+        if not getattr(args, "no_html", False):
+            board.write_board_html()
+            print(f"wrote {PROG / 'BOARD.html'}")
     elif cmd == "check":
         rc, out = board.check(getattr(args, "strict", False))
         sys.stdout.write(out)

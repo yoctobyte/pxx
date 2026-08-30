@@ -66,6 +66,32 @@ rebase_in_progress() {
     [ -d "$d" ]
 }
 
+# Regenerating the boards is a pure function of the ticket files, and it is not
+# cheap: 18-21s measured on plexus 2026-08-30, ~5s of it the markdown and the
+# rest BOARD.html. Every one of those seconds is spent INSIDE the fetch->push
+# window — which is what makes the NEXT race likely, so sync.sh was widening its
+# own window on every retry, and the retries are what the window causes.
+#
+# So skip the regeneration when the tickets have not moved since the last one.
+# The fingerprint covers everything under devdocs/progress EXCEPT the generated
+# boards themselves and tstate/: the watcher publishes tstate every few minutes
+# and tstate is NOT a ticket status (progress.py's STATUSES), so tstate churn
+# cannot change a board. That one exclusion is what makes the skip fire during
+# exactly the contention the retries exist for — the daemon is the busiest
+# writer on the tree and none of its writes mean anything to the board.
+#
+# The bias is deliberate. A directory this covers but the board ignores costs
+# only a needless regeneration; one it MISSES would commit a stale board. So it
+# covers everything and names its two exceptions rather than listing STATUSES,
+# which would go stale the day a status is added.
+TICKETS_FINGERPRINT=''
+ticket_fingerprint() {
+    git ls-tree -r HEAD -- devdocs/progress 2>/dev/null \
+        | grep -v -e 'devdocs/progress/tstate/' \
+                  -e 'devdocs/progress/BOARD[^/]*$' \
+        | sha1sum | cut -d' ' -f1
+}
+
 rebase_onto_origin() {
     git fetch --no-write-fetch-head -q origin "$BRANCH"
 
@@ -86,7 +112,9 @@ rebase_onto_origin() {
             # Generated boards only — discard both sides, regenerate from the
             # tickets. The resolution is always identical and always mechanical.
             git checkout --ours -- $BOARD_GLOB 2>/dev/null || true
-            tools/progress.sh board-md >/dev/null 2>&1 || true
+            # --no-html: BOARD.html is gitignored, is never staged here, and is
+            # ~87% of board-md's runtime. Nothing in a rebase wants it.
+            tools/progress.sh board-md --no-html >/dev/null 2>&1 || true
             git add $BOARD_GLOB
             if ! GIT_EDITOR=true git rebase --continue >/dev/null 2>&1; then
                 if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
@@ -136,10 +164,16 @@ rebase_onto_origin() {
         echo "sync:   git status   # then finish or abort the rebase by hand" >&2
         exit 1
     fi
-    tools/progress.sh board-md >/dev/null 2>&1 || true
-    if [ -n "$(git status --porcelain -- $BOARD_GLOB)" ]; then
-        git add $BOARD_GLOB
-        git commit -q --amend --no-edit
+    fp=$(ticket_fingerprint)
+    if [ "$fp" != "$TICKETS_FINGERPRINT" ]; then
+        tools/progress.sh board-md --no-html >/dev/null 2>&1 || true
+        # Set it AFTER the regeneration, so an interrupted or failed run does
+        # not record a fingerprint whose board was never written.
+        TICKETS_FINGERPRINT=$fp
+        if [ -n "$(git status --porcelain -- $BOARD_GLOB)" ]; then
+            git add $BOARD_GLOB
+            git commit -q --amend --no-edit
+        fi
     fi
 }
 
@@ -159,6 +193,18 @@ rebase_onto_origin() {
 # tree gets rather than by how busy it usually is.
 SYNC_PUSH_TRIES="${SYNC_PUSH_TRIES:-12}"
 
+# Milliseconds of entropy per call. /dev/urandom is the source; $$ is the
+# fallback and is deliberately POOR — it is constant within a process, so if the
+# device is ever unreadable the backoff degrades to the deterministic behaviour
+# we are replacing rather than to something that looks random and is not.
+jittered_backoff() {
+    _t=$1
+    _r=$(od -An -N4 -tu4 /dev/urandom 2>/dev/null | tr -d ' \n')
+    [ -n "$_r" ] || _r=$$
+    _ms=$(( _t * 500 + _r % (_t * 1000 + 1) ))
+    printf '%d.%03d\n' "$(( _ms / 1000 ))" "$(( _ms % 1000 ))"
+}
+
 push_with_retry() {
     tries=0
     while [ "$tries" -lt "$SYNC_PUSH_TRIES" ]; do
@@ -167,10 +213,20 @@ push_with_retry() {
         fi
         tries=$((tries + 1))
         echo "sync: push raced another writer — rebasing and retrying ($tries/$SYNC_PUSH_TRIES)" >&2
-        # Brief, growing pause. Without it every racing writer retries in
-        # lockstep and they keep colliding; the whole budget can burn inside a
-        # couple of seconds against one slow push from someone else.
-        sleep "$tries"
+        # Brief, growing, RANDOMISED pause. The growth was here from the start
+        # and the comment always said it exists to break lockstep — but the
+        # delay was `sleep "$tries"`, identical in every process, which is the
+        # one thing that cannot break lockstep. Two writers that collide at t=0
+        # both sleep exactly 1s, both retry at t=1, and stay in phase for the
+        # whole budget; the fleet grew to nine writers and the budget started
+        # running out (2026-08-29, 2026-08-30) with no single slow pusher to
+        # blame. Jitter is the fix, and it is the fix precisely because it is
+        # the property the old line lacked, not because it is longer.
+        #
+        # Uniform over [tries/2, 3*tries/2), so the MEAN is unchanged at
+        # `tries` and the total budget is the same as before — this trades no
+        # patience for decorrelation.
+        sleep "$(jittered_backoff "$tries")"
         rebase_onto_origin
     done
     git push origin "$BRANCH"       # let the real error out (non-zero propagates)
