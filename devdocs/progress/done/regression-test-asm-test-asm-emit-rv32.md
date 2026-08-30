@@ -145,4 +145,4 @@ of years later. Filed as [[idea-a-fold-the-asm-emit-harness-mock-preludes-into-o
 
 **Gate:** `make compiler/pascal26` (converged, 1 round) + the repro compiles and
 prints `ALL RISC-V ASM EMIT TESTS PASSED`.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 4cec00985.
