@@ -351,22 +351,35 @@ no-full-suite hook.
 
 ### The self-host fixedpoint builds at `-O2`, so it is ZERO coverage for every `-O3`-gated pass
 
-Measured 2026-08-30 by frank-optimize, then corrected by them the same night —
-and **the correction is the more useful half, so read past the anecdote.**
+**This was already written down, and the citation matters more than the
+anecdote:** `devdocs/progress/backlog/feature-opt-o3-register-pressure.md:72-79`,
+rule 1 of the umbrella's `READ FIRST` block, landed `d8ec3553a` on **2026-08-29**:
 
-The anecdote first, because it is what made anyone look. Landing the x86-64
-zero-extend fusion, they broke the new emitter on purpose to prove the test
-fires — dropped `REX.R`, so `r8`–`r15` read `rax`. The test did fire, in the
-expensive way: `acc=374503906869` against `1299819431187`, a plausible wrong
-number with no crash. And then:
+> **Every `-O3` pass needs its OWN control test. The self-host gate cannot see an
+> `-O3`-only defect.** Not "might not" — cannot: `make compiler/pascal26` builds
+> the compiler at the DEFAULT `-O` level, so no `OptLevel >= 3` arm runs while
+> building it. Demonstrated on purpose, not inferred: slice 5's comparison
+> encoding was deliberately broken in the ModRM field, `-O3` printed `acc=0`, and
+> the fixedpoint reported `converged after 1 round(s)` the whole time.
+
+A day later, landing the x86-64 zero-extend fusion, frank-optimize broke the new
+emitter on purpose to prove the test fires — dropped `REX.R`, so `r8`–`r15` read
+`rax`. The test fired in the expensive way (`acc=374503906869` against
+`1299819431187`: a plausible wrong number, no crash), and:
 
 ```
 make compiler/pascal26   ->   converged after 1 round(s), e4a7919b39b4
 ```
 
 **The compiler reproduced itself byte-identically with a deliberately broken
-encoder in it.** The anti-Thompson agreement check would not have caught it
-either — both properties are about *reproduction*.
+encoder in it** — the anti-Thompson agreement check blind alongside it, since both
+properties are about *reproduction*.
+
+**That is a REPLICATION, not a discovery, and it is worth exactly what a
+replication is worth:** a second encoding (`REX.R` where slice 5 broke ModRM),
+across two backends' worth of gate sites, same outcome. What it is not is the
+evidence for the rule. The evidence is a day old and sits at the head of the
+ticket the slices were being landed into.
 
 **The reason is not subtle and it is decidable without running anything**, which
 is the part worth carrying:
@@ -391,38 +404,37 @@ landed. The Makefile rows for this pass ask for it explicitly — `./$(COMPILER)
 -O3 test/test_shr_resident_zeroext.pas` at `Makefile:4239` — which is exactly
 why the fixedpoint had nothing to say about it.
 
-**This sharpens CLAUDE.md's two scope limits into a third, and it is the widest
-of the three because it is decidable from the build configuration rather than
-from the code.** The optimisation-level limit is stated there as "the claim holds
-at the default `-O` only"; this is that sentence with teeth on it — the default
-`-O` does not merely *weaken* the guarantee for a higher tier, it removes it
-entirely, and the removal is total, permanent and greppable.
+**This is not a new scope limit. It is CLAUDE.md's FIRST one at full strength.**
+There the optimisation-level limit reads "the claim holds at the default `-O`
+only", which is true and sounds like a weakening. It is not a weakening: for a
+tier above the default the guarantee is not weaker, it is **absent**, and the
+absence is total, permanent, and decidable by grep. Rule 1 says the same thing
+and says it first; the greps above only show *where the default comes from* and
+that no wrapper overrides it on either self-host path. Useful, not a finding.
 
-#### And the wrong reading I published in between, which is the reason this subsection was rewritten
+#### The two wrong readings this subsection went through before it said the above
 
-When I first placed this I asserted a mechanism nobody had measured: that the
-limit here was one of **propagation** — the emitted code being wrong without the
-wrongness reaching the bytes that get compared. It read well and it was wrong.
-The pass was never compiled in, so nothing propagated or failed to; propagation
-never entered it.
+Recorded because the section was rewritten twice in three hours, by two people,
+in the same direction each time — **towards the duller and more useful claim.**
 
-I did name the alternative — "the pass never fires" — and I even wrote that the
-separating check was free and unrun. **Then I ranked the interesting mechanism
-first anyway and let the dull one sit as a caveat.** The correction cost three
-greps, from someone who did not need to count firings because the gate condition
-settles it.
-
-The guard that would have caught me is this file's own: **ask what this would be
-if it were false.** For propagation to be the mechanism, the pass would have to
-be able to *run* at the fixedpoint's `-O` level — one grep for its gate, two
-minutes, and it does not. I had a measured observation and I converted it into a
+**Mine: I asserted a mechanism nobody had measured.** I wrote that the limit here
+was one of **propagation** — the emitted code being wrong without the wrongness
+reaching the bytes that get compared. It reads well and it is wrong: the pass was
+never compiled in, so nothing propagated or failed to. I had named the dull
+alternative ("the pass never fires"), and had written in the same paragraph that
+the separating check was free and unrun. **Then I ranked the interesting
+mechanism first anyway and left the dull one as a caveat.** The guard is this
+file's own — **ask what this would be if it were false**: for propagation to be
+the mechanism, the pass would have to be able to *run* at the fixedpoint's `-O`
+level. One grep at its gate. I had a measurement and converted it into a
 mechanism claim by choosing, not by checking.
 
-Its companion, and frank-optimize volunteered it about their own half without
-being asked: this makes their `converged after 1 round(s)` **duller** than
-reported, not sharper. It was not a surprising survival, it was the only possible
-outcome. Both errors point the same way — a real measurement acquires a story on
-the way to being written down, and the story is the part nobody measures.
+**Theirs, volunteered unasked, and the sharper of the two:** the byte-identical
+self-host was **duller** than they reported it, not sharper. Not a surprising
+survival — the only possible outcome, and a rule they had themselves been landing
+slices under said so in advance. Both corrections point the same way: **a real
+measurement acquires a story on the way to being written down, and the story is
+the part nobody measures.**
 
 They put the finding at the Makefile rows rather than in the commit message,
 which is right and worth copying: it lands where someone deciding whether to
@@ -678,6 +690,9 @@ name.
 - ``## A ticket's prescription is a hypothesis, and it can rule out the answer``
   -- when a fix does not take, re-read what the ticket EXCLUDED
 - `## A comment is an unverified claim, and tickets inherit it`
+- `## A STANDING-RULES block is skipped by whoever has landed the most slices`
+  -- not buried, not stale, not hard to find; skipped by the reader most
+  confident he knows the campaign, which is the one with the most slices landed
 - `## Record the negative result` -- and record the option you measured and
   declined, with its number
 
@@ -1702,6 +1717,47 @@ compiles **with no import at all** and the from-import binds nothing.
 
 The companion habit, from the same fix: **when you disprove a comment, correct
 it in place, and grep for its copies.** That one had two.
+
+## A STANDING-RULES block is skipped by whoever has landed the most slices
+
+Measured 2026-08-30, and proposed by the agent it happened to — who was wary of
+proposing a rule whose evidence is that he broke the existing one. It is worth a
+paragraph precisely because of that, so here is the paragraph.
+
+`feature-opt-o3-register-pressure.md` opens with **`READ FIRST — four standing
+rules for every slice in this campaign`**, and says why they are there:
+
+> Each of these was paid for once. They are here, at the top, rather than inside
+> the write-up of the slice that learned them, because that is where the next
+> slice will actually read them.
+
+That is correct ticket design and it worked for four slices. On the fifth it was
+skipped, and rule 1 was then **re-derived from scratch** — by deliberately
+breaking an encoder, observing the green fixedpoint, and reporting it as a
+finding — by the agent landing slices into that very ticket.
+
+**The failure mode is not "buried", "stale", or "hard to find". All three are
+false here:** the block is at line 66 of the file, it is headed `READ FIRST`, its
+rules are true, and the reader had the file open. **It was skipped because he
+already knew the campaign** — and *having landed the most slices* is exactly what
+produces that confidence. So the block decays fastest against its most
+experienced reader, which is the opposite of how documentation is usually assumed
+to fail, and it means seniority in a campaign is a **risk factor** for re-deriving
+its own standing rules rather than a protection against it.
+
+Two things follow, and neither is "write it more prominently" — there is no more
+prominent than line 66 under `READ FIRST`:
+
+- **Re-read the standing block at CLAIM time, not at read time.** Same guard
+  CLAUDE.md already gives for a ticket's `summary`, and for the same reason: the
+  agent most likely to append to a long ticket without reading it is the one
+  under the most pressure to produce something, and that is whoever is mid-slice.
+- **When a "finding" is about the campaign's own machinery rather than about the
+  code, grep the ticket for it before writing it up.** A rule that was paid for
+  once tends to have been written down once. The cost here was small — an
+  experiment that was going to be run anyway — but the write-up travelled to
+  three agents and a coordinator before the citation caught up with it, which is
+  where a re-derivation actually gets expensive.
 
 ## "The compiler couldn't compile X" and "the language can't do X" look identical from inside `compiler/**`
 
