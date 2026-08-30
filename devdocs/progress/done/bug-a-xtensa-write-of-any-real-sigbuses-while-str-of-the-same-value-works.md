@@ -2,10 +2,11 @@
 track: A+S
 type: bug
 prio: 45
-status: open
+status: done
 blocked-by: []
 found: 2026-08-30
 found-by: frankS
+owner: frankS
 ---
 
 <!-- UN-BLOCKED 2026-08-30, coordinator. Its only blocker
@@ -135,3 +136,43 @@ was ever wrong.
 
 **Blocked, not fixed:** `ir.inc` and `symtab.inc` are a Track S stop-line. The
 fix is one line in Track A's files and belongs to A.
+
+## Log
+
+- 2026-08-30 — **RETIREMENT TEST RUN, and it passes. Resolved.** The ticket's own
+  repro, verbatim, `--target=xtensa --platform=posix --xtensa-soft-mulhigh`,
+  Call0, qemu-xtensa:
+
+  ```
+  A
+  B  7.0000000000000000E+000
+  C
+  ```
+
+  Identical to the x86-64 oracle. No SIGBUS.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
+
+### It is NOT an instance of the data-section alignment defect — checked, not assumed
+
+This was re-tested during a sweep of every open xtensa SIGBUS ticket against the
+two builds that bracket
+[[bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why]],
+because a `Write` of a real faulting while `Str` of the same value works is a
+difference in what gets DEREFERENCED, which is that defect's signature.
+
+It is not. The repro passes at **`75d2ba662^` as well as at `75d2ba662` and at
+HEAD** — so it was already fixed before the data-section alignment changed, by
+`bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot` (frankC's
+allocator alignment floor), exactly as the un-blocking note predicted. Two
+alignment defects, one in the FRAME and one in the DATA SECTION, with the same
+symptom on the same target; this ticket belongs to the first.
+
+Resolving on this ticket's own repro rather than on the adjacent measurements
+that made it look fixed, which is what the retirement note asked for.
+
+### Not absorbed
+
+The float-width divergence remains
+`bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc`.
+Different cause, different evidence, still open.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
