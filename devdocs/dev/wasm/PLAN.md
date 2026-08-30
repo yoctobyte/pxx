@@ -2626,3 +2626,89 @@ in the oracle before it believes the diff.
 **This is where the lane parks** (see the ticket's park banner). Four of the five
 measured next items need no decision; only `IR_SYSCALL` (op 54) is in the U
 family.
+
+### Phase 9n — the sys\* family, and the anchor executes
+
+The park lifted when the owner answered the Track U ticket, and answered it with
+an option the ticket had not offered — a **separate unit in `compiler/builtin/`**,
+which is option (a) minus the file that made (a) expensive. The resolution and
+the two cost estimates the ticket got backwards are recorded on the ticket itself
+(`decided/decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`);
+what belongs here is what the lowering had to get right.
+
+`sysopen` / `sysread` / `syswrite` / `sysclose` / `sysfchmod` are **intrinsics**.
+Every register backend emits a raw `syscall` instruction inline, which is exactly
+why a program using them needs no RTL — and is exactly why `compiler.pas`
+bootstraps on them. wasm has no syscall instruction and no ambient filesystem, so
+the arm emits a CALL into `compiler/builtin/wasibackend.pas`.
+
+**Three things this could get wrong, one of which it did:**
+
+* **The path argument has two shapes.** A managed AnsiString's handle already IS
+  the nul-terminated pointer, so it is passed through (with a nil -> empty-literal
+  guard). A frozen string is length-prefixed: the arm takes its address, loads the
+  8-byte prefix, writes a NUL at `buf+8+len`, and hands over `buf+8`. Both shapes
+  appear in the slice because `path` is assigned twice — this is the
+  `normalise-dont-special-case` double case, and the second arm is the one that
+  would have stayed broken.
+* **The errno SIGN.** WASI returns a *positive* errno; POSIX `open` returns -1. A
+  missing file that comes back positive is a valid fd downstream — silent
+  corruption rather than a failure — so the slice asserts `missing_lt0`.
+* **The statement-position drop, which is a VALIDATION error, not a wrong
+  answer.** `sysfchmod` and `sysclose` are functions used as statements. Builtin
+  arms own their own operand-stack discipline and return before the ordinary drop
+  at `:3007`, so the result stayed on the stack and the module was **rejected at
+  load** with `type mismatch at end of block, expected [] but got [i32, i32]`.
+  That failure mode is the good one — wasm's load-time validation caught at build
+  time what a register target would have discovered as a corrupted stack much
+  later.
+
+**A measurement cost an hour and the lesson is CLAUDE.md's, not new.** The `.wat`
+validated cleanly while the `.wasm` did not, which is precisely the divergence
+`test/wasm/wat_oracle.sh` exists to detect, so the hunt went to the binary
+encoder. It was not there. The `.wasm` on disk was **three minutes older than the
+compiler that was supposed to have produced it** — a stale artifact from before
+the drop fix. *Verify against a known sha*; the file timestamp was the whole
+answer and was the last thing checked rather than the first.
+
+**Injected on demand, and not ambiently, for two independent reasons.** The first
+was known in advance: `builtinheap` is parsed by every compiler on every target
+**including the older pinned one** other lanes build with, so a wasm-only unit
+made ambient the same way would be read by compilers with no stake in wasm. The
+second was measured, not predicted — **a wasm import is STATIC**, present in the
+module whether or not it is ever reached, so injecting the unit for every wasm32
+program made *every* module import `fd_prestat_get` / `fd_prestat_dir_name` and
+refuse to instantiate on a host that had not wired them up. Twenty of the slices
+in `test/wasm` went red with `LinkError: function import requires a callable`.
+The fix is the `math` / `softfloat` token scan, with one difference worth noting:
+an intrinsic **is a token**, so demand here is *exact* rather than heuristic — no
+`pi`-shaped false positive is possible — and no library unit calls the family, so
+a miss through a unit is unreachable.
+
+**`PXXWasiFchmod` succeeds and does nothing.** WASI has no chmod. The compiler's
+every output path is `sysopen / syswrite / sysfchmod(fd,420) / sysclose`, so
+refusing there would fail the write that had already completed. A deliberate call,
+stated at the body.
+
+#### The anchor, re-measured
+
+| | after Phase 9m | after 9n |
+| --- | --- | --- |
+| refused bodies | 32 | **10** |
+| the `-50` / `-52` family | 23 | **0** |
+
+And the interesting part is not the count. The 6.5 MB module **validates**,
+**instantiates**, and `_start` **executes** — 872 bytes of program — before
+trapping in `main$144`, a 5-byte `unreachable` stub for builtin `LoadFile`. The
+anchor now stops at the *next* gap rather than at this one, which is the first
+time it has run at all.
+
+The ten left are **nine `LoadFile` (`-100`) and one `sysgetdents64` (IR op 54)**.
+Neither is gated by a decision: `LoadFile` is a builtin that reads a whole file
+and can now be written over the same five primitives this phase landed, and
+`sysgetdents64` is directory enumeration, which WASI spells `fd_readdir`.
+
+Test: `test/wasm/check_sysio.sh`, diffed against native. It compares the
+**sandbox file** as well as stdout — stdout can agree while nothing ever reaches
+the disk — and asserts the oracle opened its own file before believing any diff,
+because two builds that both failed every open diff clean against each other.

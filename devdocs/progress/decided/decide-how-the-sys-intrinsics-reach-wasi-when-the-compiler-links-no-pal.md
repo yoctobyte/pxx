@@ -4,7 +4,7 @@ title: "How should the sysopen/sysread/sysclose intrinsics reach WASI, given com
 track: U
 prio: 40
 type: decide
-status: backlog
+status: decided
 owner: ""
 created: 2026-08-29
 found-by: frankwasm (sizing the builtins refusal block)
@@ -100,3 +100,46 @@ wait for this decision.
 
 `tkArgStr` (3 lines) may also be independent: WASI `args_get` /
 `args_sizes_get` need no preopen and no rights. Not verified.
+
+# Resolved by the owner, 2026-08-30 — (d), a fourth option none of the three above was
+
+The owner rejected the menu's framing before choosing from it:
+
+> *"i suggest to craft a separate unit for the wasm functionality that lives in
+> our builtin folder, and not touching existing files, if possible."*
+
+That is **(a) without the file it was going to land in**. The whole cost of (a)
+was that it put a second capability model inside `builtinheap.pas` — a unit
+every program on every target parses, compiled by every pxx INCLUDING the older
+pinned one other lanes build with. A separate unit removes that cost entirely,
+and the ticket had not considered it because it inherited "(a) means
+builtinheap" from where `PXXSysWrite` already lived.
+
+Two cost estimates in the analysis above were also wrong, and both wrong in the
+same direction — they overstated the price of a new unit:
+
+* **A new unit in `compiler/builtin/` needs no pin.** `builtin/` is a search
+  directory; its sources are read per-program at compile time. Nothing about
+  adding a file to it changes the pinned binary, so no lane waits.
+* **The hazard runs the OPPOSITE way from the one feared.** The risk was never
+  "other lanes must adopt a new compiler"; it is that an *ambient* unit is
+  parsed by compilers that have nothing to do with wasm. Hence the injection is
+  gated on `TargetArch = TARGET_WASM32`, and — after measurement — on demand
+  within that gate too.
+
+An include (option (c)) was implemented far enough to find that it cannot work:
+both units can co-occur in one program (a raw `sysopen` alongside `uses
+SysUtils`), so a shared include would define every symbol twice. The one
+implementation the ticket wanted is still the goal, reached from the other
+direction: `wasibackend` is self-contained now, and the follow-up makes the PAL
+delegate to IT. That duplication is stated at the head of
+`compiler/builtin/wasibackend.pas` with the sentence that makes it self-reporting
+— *"if you are reading this comment and platform_backend still has its own
+preopen table, that follow-up did not happen and this is now a real defect."*
+
+Landed: `8f6f3e373` on branch `wasm`. Anchor coverage 32 -> 10 refused bodies;
+the whole -50/-52 family is gone. The remaining ten are nine `LoadFile` and one
+`sysgetdents64`, which this decision does not gate.
+
+## Log
+- 2026-08-30 — decided, commit PENDING-COMMIT.
