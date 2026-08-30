@@ -11,6 +11,14 @@ summary: "With several checkouts syncing at once, tools/sync.sh's rebase-and-ret
 - **Type:** bug (silent history loss) — **Track T** (`tools/sync.sh`).
 - **Observed:** 2026-08-30, frankC, pushing two Track C commits.
 
+> **DANGLING SHAS BY DESIGN.** This ticket quotes shas that the squash it
+> documents destroyed — `5348f20ef`, `34a72721c`, `380ec29c8`, `55b08dc7f`. They
+> are *supposed* not to resolve; that is the evidence. `progress check`'s
+> `DANGLING-SHA` scan is suppressed here by this marker rather than by being
+> taught to skip Track T, so the suppression is visible in the file that needs it
+> instead of hidden in the checker. Mention versus use, fifth instance.
+
+
 ## What happened
 
 `5348f20ef` (a refactor) and `34a72721c` (a fix) were committed separately and

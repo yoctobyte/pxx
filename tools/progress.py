@@ -2016,6 +2016,78 @@ pre code{background:none;padding:0}
                 f"the work did not land"
             )
 
+        # A CITED SHA THAT DOES NOT EXIST.
+        #
+        # `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` is why `resolve`
+        # takes no sha: it writes PENDING-COMMIT and sync.sh fills in what the
+        # commit LANDED as. That guard covers the Log: line, because that is
+        # where the TOOL writes. Prose in the body is where PEOPLE write, and
+        # it is unguarded -- two lanes did it within one hour on 2026-08-30
+        # (`ce3560ecd` for `9b01b1b9b`, `90b4d2b51` for `89ab3d9d4`), each
+        # having verified the push by artefact and then typed the pre-rebase
+        # sha from their own reflog. `git show` works locally and fails
+        # everywhere else, which is the worst possible signature.
+        #
+        # MEASURED before landing, over every ticket:
+        #   4294 hex tokens -> 1306 unresolvable -> 474 "look like shas".
+        # That check would have been useless: 12-hex tokens here are mostly
+        # BINARY sha256 prefixes from byte-identity comparisons, not commits.
+        # Narrowed to git's short-sha width (9-11) AND a commit-ish context
+        # word on the same line: 82 live candidates, 7 dangling. Four of those
+        # are one ticket that QUOTES squashed-away shas on purpose -- mention
+        # versus use again, fifth instance -- so that ticket opts out by
+        # marker and the check reports 3.
+        #
+        # done/ and rejected/ are NOT scanned, and that is the design: 130
+        # dangling citations sit there, and rewriting a finished record to
+        # tidy a sha falsifies history. The number is worth knowing; the sweep
+        # is not worth doing.
+        SHORT_SHA = re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{9,11}(?![0-9a-fA-F])")
+        SHA_CTX = re.compile(r"land|commit|push|\bsha\b|resolve|bisect|revert", re.I)
+        sha_hits: "dict[str, tuple]" = {}
+        for t in self.tickets:
+            if t.status in ("done", "rejected", "decided"):
+                continue
+            if "DANGLING SHAS BY DESIGN" in t.text:
+                continue
+            for lineno, line in enumerate(t.text.splitlines(), 1):
+                if not SHA_CTX.search(line):
+                    continue
+                for m in SHORT_SHA.finditer(line):
+                    tok = m.group(0)
+                    if not (any(c.isdigit() for c in tok) and any(c.isalpha() for c in tok)):
+                        continue
+                    sha_hits.setdefault(tok, (t, lineno))
+        if sha_hits:
+            toks = list(sha_hits)
+            missing = []
+            for i in range(0, len(toks), 400):
+                chunk = toks[i:i + 400]
+                try:
+                    proc = subprocess.run(
+                        ["git", "cat-file", "--batch-check=%(objectname) %(objecttype)"],
+                        input="\n".join(chunk), capture_output=True, text=True,
+                        cwd=str(ROOT), timeout=30)
+                except Exception:
+                    proc = None
+                if proc is None or proc.returncode not in (0, 1):
+                    break  # no git, or it failed -- say nothing rather than guess
+                for tok, out in zip(chunk, proc.stdout.splitlines()):
+                    if "missing" in out:
+                        missing.append(tok)
+            for tok in missing:
+                t, lineno = sha_hits[tok]
+                warning_count += 1
+                lines.append(
+                    f"DANGLING-SHA: {t.slug} [{t.track} p{t.prio}] cites `{tok}` "
+                    f"at line {lineno} and no such object exists. Almost always a "
+                    f"PRE-REBASE sha copied from a local reflog after a verified "
+                    f"push — `git show` works in the author's tree and nowhere "
+                    f"else. Re-read the sha from origin/master and correct it in "
+                    f"place. If the ticket quotes a dead sha ON PURPOSE, add the "
+                    f"line 'DANGLING SHAS BY DESIGN' to its body"
+                )
+
         # THE APERTURE, printed with every verdict including a clean one.
         #
         # The stale-edge scan above reads frontmatter. Three instances found on
