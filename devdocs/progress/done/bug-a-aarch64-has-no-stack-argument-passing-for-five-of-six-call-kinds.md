@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: 20e1ca641
 summary: "FIXED for the four PXX-INTERNAL call kinds -- direct, constructor, indirect, virtual -- which now share one EmitCallArgRegsA64 and three Errors are deleted. NilPy builds and runs on aarch64: `print(1+1)` prints 2, and a class-heavy program matches CPython. THE TICKET'S PREMISE IS CORRECTED: it is TWO mechanisms, not one refused six times. The remaining three sites -- external, variadic external, cdecl indirect -- are the AAPCS64 C convention with INDEPENDENT int/fp register banks and a per-parameter classification, which the internal convention (every argument 8 bytes in an x-register, by position) does not have. Re-filed as bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds; nothing currently reaches it.
 ## Fixed for the internal family — 2026-08-31 by frankA
 
