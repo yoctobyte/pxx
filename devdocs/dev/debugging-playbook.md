@@ -78,6 +78,9 @@ order to read them in. Route by what you are holding:
   the box is noisy, look for the experiment that cannot be a margin
 - `## A canary nobody has watched fail is indistinguishable from one that is
   not measuring`
+- `## Correct code whose correctness is a joint property of TWO places` -- the
+  edit that is only right in company, and the warning shape that survives an
+  agent who is sure the general rule applies
 
 ## Reading a NEGATIVE result — the gap four agents named on the same day
 
@@ -193,6 +196,42 @@ the deliberate variable-form twin (25) passing. That converts a localisation
 arm* on sight instead of collapsing into "strings are broken". Design a canary in
 pairs and the pair is worth more than either row, which is the same reason the
 original diagnosis was cheap.
+
+## Correct code whose correctness is a joint property of TWO places
+
+The category, and it is the inverse of the trap this repo usually records. Normally
+a comment disagrees with the code and one of them is wrong. Here the code
+disagrees with a **general rule**, the rule is sound, and it is the rule that does
+not apply — so the better an agent's grasp of the principle, the more confidently
+they break it.
+
+Measured 2026-08-30 by frankwasm; the code is at `bcd4e68a4`'s comment.
+
+`ir.inc` tags `pystr_repeat`'s argument node `ASTTk[argVal]` — the *original
+expression's* type, not the parameter's kind. Every general principle says that
+is wrong, and the obvious correction was nearly landed as a latent-correctness
+fix. Built alone, nothing else, self-hosted: **`len("a" * 3)` segfaults.** The
+tag must describe what `IRLowerCallArg` **returns**, not what the parameter
+declares, and it becomes right only in company with an optimisation that makes
+the call hand back the literal's own handle.
+
+**The tell you are in this category:** the "wrong" thing has a partner, and
+changing either one alone is a regression *in either direction*. The warning that
+works is therefore not "do not touch this" — it is **"one change or nothing, in
+either direction"**, which names the coupling instead of forbidding the edit, and
+survives an agent who is certain the rule applies.
+
+**It has already attracted one repair attempt from someone holding the correct
+general principle.** That is what makes it a trap rather than a wart, and the
+reason a comment at the line beats a ticket: the ticket is read by whoever went
+looking, and this is found by whoever was not.
+
+**A cheap discipline that catches the whole category:** when a "latent
+correctness" fix is obvious and nothing is currently broken, build it **alone**
+and run something that exercises it before you believe the reasoning. A latent
+fix has no failing test to go green, so the only evidence available is that
+nothing new goes red — and if you land it with four other changes you will not
+learn which one segfaulted.
 
 ## Do not read a green as coverage
 
