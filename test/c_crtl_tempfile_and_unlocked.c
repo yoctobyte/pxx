@@ -59,13 +59,24 @@ int main(void)
   printf("ftrylockfile: %d\n", ftrylockfile(stdout));
 
   /* fchdir has no PAL syscall; it resolves the fd through /proc/self/fd/N and
-     chdir()s to what it finds. The row asserts it LANDED, not merely returned. */
-  { char cwd0[512], cwd1[512];
+     chdir()s to what it finds. The row asserts it LANDED, not merely returned.
+
+     NO PATH IS PRINTED, deliberately: testmgr rewrites an absolute /tmp path
+     inside an EXPECTED string to the run's scratch directory, but does not
+     rewrite the test SOURCE — so a row that printed one compared a rewritten
+     expectation against an unrewritten actual and went red on the sweeping
+     host while passing locally. Instead both sides come from getcwd(), which
+     also makes the comparison immune to /tmp being a symlink. */
+  { char cwd0[512], cwd1[512], viaChdir[512];
     int d = open("/tmp", O_RDONLY);
     if (!getcwd(cwd0, sizeof(cwd0))) cwd0[0] = 0;
+    if (chdir("/tmp")) viaChdir[0] = 0;
+    else if (!getcwd(viaChdir, sizeof(viaChdir))) viaChdir[0] = 0;
+    if (chdir(cwd0)) { }
     printf("fchdir: %d\n", fchdir(d));
     if (!getcwd(cwd1, sizeof(cwd1))) cwd1[0] = 0;
-    printf("fchdir landed /tmp: %d\n", strcmp(cwd1, "/tmp") == 0);
+    printf("fchdir landed: %d\n",
+           viaChdir[0] != 0 && strcmp(cwd1, viaChdir) == 0);
     close(d);
     if (chdir(cwd0)) { }
   }

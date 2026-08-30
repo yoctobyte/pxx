@@ -59,3 +59,12 @@ stream `IR_LABEL`, which holds while PXX has no computed jumps.
 Not urgent — no corpus is blocked on it (busybox's applet closure is clear), and
 `-O0` already exposes a wider version of the same class
 (`decide-is-deleting-a-provably-unreachable-branch-an-optimization-or-a-correctness-requirement`).
+
+## The sibling to check with it (frankA, 2026-08-30)
+
+A **backward `goto` into a dead region** is the same self-witnessing shape: the
+label is referenced by a jump that itself sits in the region being decided. If
+the fix is a worklist from the entry, both fall out of it and neither needs its
+own case — which is the argument for pricing the worklist over adding a third
+scan. `test/c_const_branch_dead_arm.c` already carries a goto row, added as a
+control against an over-eager fold; it is green today and would stay green.

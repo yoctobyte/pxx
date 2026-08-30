@@ -9519,7 +9519,7 @@ end;
 
 function CPullCrtlForPrototypes: Integer;
 var
-  i, k, n: Integer;
+  i, k, n, savedModRanges: Integer;
   hdr, nm, synth, wantList: AnsiString;
 begin
   Result := -1;
@@ -9586,6 +9586,7 @@ begin
   end;
   if Length(synth) = 0 then Exit;
   CPreprocess(synth, SourceFileDir);
+  savedModRanges := CModRangeCount;
   Result := CLexAppend(synth);
   { This appended block is its own C MODULE for duplicate-definition purposes.
     It is preprocessed SEPARATELY from the main source, so a guarded header the
@@ -9594,8 +9595,16 @@ begin
     redefinition of the copy in the main text. In C those are two translation
     units and both copies are legal. Real `.c` markers inside the block refine
     this further, per crtl module.
-    bug-c-static-functions-in-different-crtl-modules-collide }
-  CMarkTokModule(Result, '<crtl-prototype-pull>');
+    bug-c-static-functions-in-different-crtl-modules-collide
+
+    INSERTED, not appended, and that is the whole correctness of the sentence
+    above. CModuleOfTok scans backward and takes the LAST range starting at or
+    before the token, so a coarse range appended after the lexer's per-`.c`
+    ones does not get refined by them — it shadows every one. The block then
+    read as a single module, and two crtl modules' same-named statics
+    (`fcntl.c` and `unistd.c` both have `static int sysret`) collided in it.
+    Reachable from a program whose only crtl reference is `printf`. }
+  CInsertTokModuleRange(savedModRanges, Result, '<crtl-prototype-pull>');
 end;
 
 { A C program that asked for NO system libraries must not quietly acquire one.

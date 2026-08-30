@@ -78,10 +78,15 @@ int fchdir(int fd);
 int ttyname_r(int fd, char *buf, size_t buflen);
 char *ttyname(int fd);
 
-/* Declared and defined, but every one of them FAILS with ENOSYS: the PAL
-   exposes no syscall for them yet. They exist so that a program carrying a code
-   path it never takes can still LINK — see the note in the sibling unistd.c.
-   A caller that does take the path gets -1/ENOSYS, never a silent no-op. */
+/* Declared and defined, but every one of them FAILS with ENOSYS. They exist so
+   that a program carrying a code path it never takes can still LINK — see the
+   note in the sibling unistd.c. A caller that does take the path gets
+   -1/ENOSYS, never a silent no-op.
+
+   chroot and the set*id family have no PAL entry at all. `fork` is a different
+   case: the PAL has vfork, and vfork is NOT fork — the child shares the
+   parent's memory — so pointing fork at it would corrupt silently rather than
+   fail. It stays unavailable until there is a real fork. */
 int chroot(const char *path);
 int fork(void);
 int vfork(void);

@@ -202,11 +202,11 @@ char *ttyname(int fd)
 
 /* ---- link-only stubs: no PAL syscall exists for these --------------------- */
 
-/* Same shape and the same honesty as execvp above. Each of these needs a
-   syscall the PAL does not expose, so rather than fake a success they fail the
-   way a libc on a platform without the call fails: -1 / ENOSYS. That is a
-   defined answer a caller can act on, and it is loud — the alternative, a
-   silent success that did nothing, is the failure mode that costs days.
+/* Same shape and the same honesty as execvp above: rather than fake a success
+   these fail the way a libc on a platform without the call fails, -1 / ENOSYS.
+   That is a defined answer a caller can act on, and it is loud — the
+   alternative, a silent success that did nothing, is the failure mode that
+   costs days.
 
    They exist at all because REFERENCING them is enough to break a link: real
    programs carry code paths they never take (busybox's libbb declares the
@@ -214,8 +214,17 @@ char *ttyname(int fd)
    routine). Providing the symbol lets that program link; taking the path it
    never takes gets an error, not a lie.
 
-   Add a real implementation here the day the PAL grows the syscall — the
-   signature is already the right one. */
+   *** WHICH OF THESE THE PAL COULD ACTUALLY SERVE — because an earlier draft
+   of this comment got it wrong. *** chroot, setuid/setgid/seteuid/setegid and
+   setgroups have no PAL entry: those really are missing syscalls. `fork` is a
+   different case and the distinction matters: the PAL has PalVfork, and vfork
+   is NOT fork — the child shares the parent's memory and may do nothing but
+   exec or _exit — so wiring fork to it would be a silent corruption, not a
+   convenience. vfork() below is being given its real implementation over
+   PalVfork separately; fork() stays unavailable until there is a fork.
+
+   The general lesson, already recorded in <sys/ioctl.h> for the same mistake:
+   MEASURE the PAL before believing a line that says an entry is missing. */
 int chroot(const char *path)   { (void)path; errno = ENOSYS; return -1; }
 int fork(void)                 { errno = ENOSYS; return -1; }
 int vfork(void)                { errno = ENOSYS; return -1; }
@@ -225,13 +234,6 @@ int seteuid(uid_t uid)         { (void)uid; errno = ENOSYS; return -1; }
 int setegid(gid_t gid)         { (void)gid; errno = ENOSYS; return -1; }
 int setgroups(size_t n, const gid_t *list) { (void)n; (void)list; errno = ENOSYS; return -1; }
 
-/* wait/waitpid report ECHILD, not ENOSYS: there genuinely are no children to
-   reap (fork above is a stub), and ECHILD is the code POSIX defines for that,
-   so a caller's existing error path handles it instead of meeting a code it
-   has never seen. The W* decode macros in <sys/wait.h> ARE real. */
-int wait(int *status)                        { (void)status; errno = ECHILD; return -1; }
-int waitpid(int pid, int *status, int options)
-{ (void)pid; (void)status; (void)options; errno = ECHILD; return -1; }
 
 ssize_t readlink(const char *path, char *buf, size_t bufsz) {
   int rc = __pxx_readlink(path, buf, (int)bufsz);

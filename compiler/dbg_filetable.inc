@@ -107,6 +107,39 @@ begin
   Inc(CModRangeCount);
 end;
 
+procedure CInsertTokModuleRange(atIdx, startTok: Integer; const path: AnsiString);
+{ Insert a module range at a KNOWN POSITION instead of appending it.
+
+  CModuleOfTok scans BACKWARD and takes the first range whose start is <= the
+  token, so "later in the array wins". Appending a coarse range that starts
+  before finer ones therefore does not get refined by them — it SHADOWS all of
+  them. That is what CPullCrtlForPrototypes did: it marked the whole appended
+  block `<crtl-prototype-pull>` after CLexAppend had already marked each pulled
+  crtl `.c` with its own path, so every module in the block collapsed into one
+  and two crtl modules' same-named file-scope statics read as a duplicate
+  definition in one translation unit. `fcntl.c` and `unistd.c` both have a
+  `static int sysret`, and any program reaching both through the prototype-pull
+  path warned about it — including a program whose only crtl reference is
+  `printf`. bug-c-static-functions-in-different-crtl-modules-collide
+
+  The caller records CModRangeCount before the lex and passes it here, so the
+  coarse range lands ahead of everything that lex produced and the finer marks
+  do what the original comment always claimed they did. }
+var i, modId: Integer;
+begin
+  if CModRangeCount >= MAX_DBG_RANGES then Exit;
+  if (atIdx < 0) or (atIdx > CModRangeCount) then Exit;
+  modId := InternKey(path);
+  for i := CModRangeCount downto atIdx + 1 do
+  begin
+    CModRangeStart[i] := CModRangeStart[i - 1];
+    CModRangeId[i] := CModRangeId[i - 1];
+  end;
+  CModRangeStart[atIdx] := startTok;
+  CModRangeId[atIdx] := modId;
+  Inc(CModRangeCount);
+end;
+
 procedure CMarkTokNoModule(startTok: Integer);
 { Tokens from `startTok` on belong to NO C module -- the include stack has
   returned above the last `.c` it entered. Without this the attribution only

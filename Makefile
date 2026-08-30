@@ -8693,6 +8693,20 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/cstatic_same_module_dup.c $(TESTTMP)/cstatic_same_module26 > $(TESTTMP)/cstatic_same_module.log 2>&1
 	tools/expect_same.sh cstatic_same_module.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_same_module.log)" "1"
 	tools/expect_same.sh cstatic_same_module26 "$$($(TESTTMP)/cstatic_same_module26)" "2 11"
+	# The THIRD file in that pair's family: a TU whose only crtl reference is a
+	# hand-written `printf` prototype. The prototype pull brings in whichever
+	# crtl `.c` modules the TU needs, and fcntl.c and unistd.c each have a
+	# file-scope `static int sysret` -- two translation units, both legal. It
+	# warned because CPullCrtlForPrototypes marked the whole appended block as
+	# ONE module AFTER the lexer had marked each pulled `.c` with its own path,
+	# and CModuleOfTok takes the LAST range starting at or before the token --
+	# so the coarse range shadowed every finer one instead of being refined by
+	# them. Zero warnings AND a correct run are both asserted: suppressing the
+	# diagnostic wholesale passes the first and costs the true positive above.
+	# bug-c-static-functions-in-different-crtl-modules-collide
+	./$(COMPILER) test/c_crtl_prototype_pull_module_split.c $(TESTTMP)/c_protopull26 > $(TESTTMP)/c_protopull.log 2>&1
+	tools/expect_same.sh c_protopull.log "$$(grep -c 'duplicate definition' $(TESTTMP)/c_protopull.log)" "0"
+	tools/expect_same.sh c_protopull26 "$$($(TESTTMP)/c_protopull26)" "prototype pull ok"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_selection_b209.c $(TESTTMP)/cgeneric_selection_b20926
 	$(TESTTMP)/cgeneric_selection_b20926; tools/expect_same.sh cgeneric_selection_b20926-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/crange_designator_b210.c $(TESTTMP)/crange_designator_b21026
@@ -11314,10 +11328,13 @@ test-core: $(COMPILER)
 	# The _unlocked spellings are ALIASES, not stubs -- a crtl FILE has no lock
 	# to skip -- and these rows are what says so. fchdir/ttyname_r have no PAL
 	# syscall and resolve the fd through /proc/self/fd/N; the row asserts the
-	# chdir LANDED, not merely that it returned 0.
+	# chdir LANDED, not merely that it returned 0 -- and prints NO path,
+	# because testmgr rewrites an absolute /tmp path in an EXPECTED string but
+	# not in the test SOURCE, which is what made this row red on the sweeping
+	# host and green locally (regression-test-core-c-crtl-tempfile-and-unlocked).
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_crtl_tempfile_and_unlocked.c $(TESTTMP)/c_crtl_tmp26
-	tools/expect_same.sh c_crtl_tmp26 "$$($(TESTTMP)/c_crtl_tmp26)" "$$(printf 'mkstemp fd>=0: 1\nmkstemp name changed: 1\nmkstemp len: 19\nmkstemp write: 5\nmkstemp readback: 5 [hello]\nmkstemp unlink: 0\nmkstemp bad: -1 errno=22\nmkdtemp ok: 1 changed: 1\nfileno_unlocked(stdout): 1\nferror_unlocked(stdout): 0\nfeof_unlocked(stdout): 0\nfputs_unlocked ok\npc\nfwrite_unlocked ok\nftrylockfile: 0\nfchdir: 0\nfchdir landed /tmp: 1\nttyname_r(0) rc class: 1')"
+	tools/expect_same.sh c_crtl_tmp26 "$$($(TESTTMP)/c_crtl_tmp26)" "$$(printf 'mkstemp fd>=0: 1\nmkstemp name changed: 1\nmkstemp len: 19\nmkstemp write: 5\nmkstemp readback: 5 [hello]\nmkstemp unlink: 0\nmkstemp bad: -1 errno=22\nmkdtemp ok: 1 changed: 1\nfileno_unlocked(stdout): 1\nferror_unlocked(stdout): 0\nfeof_unlocked(stdout): 0\nfputs_unlocked ok\npc\nfwrite_unlocked ok\nftrylockfile: 0\nfchdir: 0\nfchdir landed: 1\nttyname_r(0) rc class: 1')"
 	# The crtl calls with NO PAL syscall behind them. Each must fail -1/ENOSYS
 	# and never report a success it did not perform -- a silent success here
 	# would make a privilege drop or a chroot look done when nothing happened.
@@ -11326,6 +11343,22 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_crtl_enosys_stubs.c $(TESTTMP)/c_crtl_enosys26
 	tools/expect_same.sh c_crtl_enosys26 "$$($(TESTTMP)/c_crtl_enosys26)" "$$(printf 'fork: -1 1\nvfork: -1 1\nchroot: -1 1\nsetuid: -1 1\nsetgid: -1 1\nseteuid: -1 1\nsetegid: -1 1')"
+	# crtl's termios, over the general PalIoctl bridge -- REAL, not stubs, and
+	# exercisable without a terminal (under the harness fd 0 is a pipe). The
+	# cfmakeraw bits, the ENOTTY path and the c_cc subscripts all match a
+	# glibc-built binary of the same file. TWO ROWS DIVERGE ON PURPOSE:
+	# `ispeed follows ospeed` and the B115200 row. crtl keeps the line speed in
+	# the CBAUD bits of c_cflag where the KERNEL keeps it, so there is one
+	# speed; modern glibc (measured, not assumed) carries separate
+	# c_ispeed/c_ospeed, returns the numeric rate rather than the Bxxx code,
+	# and encodes cfsetispeed via termios2 BOTHER. Matching that means carrying
+	# termios2; the compat ceiling says no, since real code sets both
+	# directions to the same Bxxx and reads it back, which works exactly here.
+	# sizeof(struct termios) is deliberately NOT asserted -- ours is the kernel
+	# layout so TCGETS needs no translation, glibc's is 60 bytes and does.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_termios_no_tty.c $(TESTTMP)/c_termios26
+	tools/expect_same.sh c_termios26 "$$($(TESTTMP)/c_termios26 < /dev/null)" "$$(printf 'raw iflag: 0\nraw oflag: 4\nraw lflag: 272\nraw cs8: 1 parenb: 0 cread kept: 1 clocal kept: 1\nraw vmin: 1 vtime: 0\nsetospeed: 0\ngetospeed==B9600: 1\nispeed follows ospeed: 1\ncs8 survived: 1\nsetispeed: 0\ngetospeed==B115200: 1\ntcgetattr(pipe): -1 ENOTTY: 1\nVMIN=6 VTIME=5 VINTR=0 VEOF=4')"
 	# crtl's GNU string/stdio extensions, against a glibc-built binary of the
 	# same file. strverscmp is the row set worth reading: a digit run with
 	# LEADING ZEROS is a FRACTIONAL part in glibc and sorts BEFORE one without,
