@@ -650,6 +650,22 @@ function CompareMem(P1, P2: Pointer; Len: Int64): Boolean;
   for every record type, so this is what `TComparer<TRec>.Default` runs on. }
 function CompareMemRange(P1, P2: Pointer; Len: Int64): Integer;
 
+{ FPC System.AllocMem: GetMem plus a zero-fill, returned as an untyped Pointer.
+
+  IN SYSUTILS RATHER THAN A BUILTIN, and the placement is the measured half:
+  FPC declares it in the implicit System unit so no `uses` is needed, and we have
+  no implicit-unit slot for a library declaration. But the code that wants it —
+  fcl-xml's `xmlutils.pp`, three sites — opens with `uses SysUtils, Classes`, and
+  both are ours, so SysUtils is a place the caller already reaches. Same shape as
+  IEnumerable<T> in classes.pas: FPC needing mechanism X for reason R does not
+  mean we need X when the caller's own uses clause already solves R.
+
+  The zero-fill is the entire difference from GetMem and it is not optional —
+  `FBucket := AllocMem(I * sizeof(PHashItem))` is a hash table of pointers then
+  tested against nil, so an unzeroed block reads as fully populated with garbage
+  addresses. A GetMem alias would compile everywhere and crash later. }
+function AllocMem(Size: PtrUInt): Pointer;
+
 { Element count of the dynamic array whose handle is P, 0 for nil (FPC
   System.DynArraySize). The count is the managed-block header's length word at
   P-8 — the same slot Length() reads — so this is Length() reached through an
@@ -999,6 +1015,12 @@ function AdjustLineBreaks(const S: AnsiString; Style: TTextLineBreakStyle): Ansi
 procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
 
 implementation
+
+function AllocMem(Size: PtrUInt): Pointer;
+begin
+  Result := GetMem(Size);
+  if (Result <> nil) and (Size > 0) then FillChar(Result^, Size, 0);
+end;
 
 uses platform, platform_types, wideint, strings;
 
