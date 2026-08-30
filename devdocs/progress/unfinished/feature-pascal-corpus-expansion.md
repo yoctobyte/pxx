@@ -204,7 +204,9 @@ and `(to file / relay to frankB)` in another while it was actually **done**.
 **Update THIS table. Leave the snapshots alone.**
 
 Last measured 2026-08-28 against binary `c3cd377d5`, on the **pristine**
-corpus (no stubs).
+corpus (no stubs). **Wall states re-checked against HEAD 2026-08-30 by frankD**
+(folder plus resolution commit, not folder alone); the compile itself was not
+re-run, so the *line numbers* below are still the 08-28 measurement.
 
 | # | wall | owner | status |
 | --- | --- | --- | --- |
@@ -213,8 +215,15 @@ corpus (no stubs).
 | 3 | nested `specialize X<T>` in expression position | P | open, diagnosis banked, not reached by the probe yet |
 | 4 | SysUtils: `EArgumentOutOfRangeException`, `CreateRes`, `Error`/`TRuntimeError` | B | **DONE** — all three declared in `lib/rtl/sysutils.pas` (191, 154/155, 208/268); verified by compiling a `raise EArgumentOutOfRangeException` program, not by grep |
 | 5 | method pointers | P | **DONE** — defect A `9ab19fb21`, defect B `6d2a841a1` (parse) + `2c155cce2` (lowering). All 7 shapes match FPC |
-| 6 | generic class specialized by the ENCLOSING generic's type parameter | P | **partly done.** objfpc works (`c3cd377d5`); `:3250` no longer fails. **Delphi mode still blocked** — see below |
-| 7 | `@SArgumentOutOfRange` — a `resourcestring` is not addressable | **P** | open — **not a new row's worth**: it is [[bug-p-a-resourcestring-is-not-addressable]] (p55, backlog). 5 corpus sites |
+| 6 | generic class specialized by the ENCLOSING generic's type parameter | P | **DONE** — objfpc `c3cd377d5`; the Delphi half closed 2026-08-28, `35f485537` |
+| 7 | `@SArgumentOutOfRange` — a `resourcestring` is not addressable | **P** | **DONE** — [[bug-p-a-resourcestring-is-not-addressable]] is resolved and in `done/` |
+
+> **Every wall in this table is now DONE (checked 2026-08-30, frankD).** The
+> paragraph below is kept because it is the reasoning that made wall 6 the last
+> one, and it was correct — but its conclusion has been overtaken: wall 6 fell
+> the same day it was written. **Rung 6 is no longer behind any wall in this
+> table.** It is behind something else that did not exist when the table was
+> made — see "Is the park's condition met?" at the end of this file.
 
 **Rung 6 is now behind wall 6 alone.** Wall 5 fell on 2026-08-28 and the compile
 advanced roughly 900 lines, from `generics.defaults.pas:2381` to `:3250`, where
@@ -319,7 +328,7 @@ matters, because it changes what is worth doing next. What is actually wired:
 | 1. FPC test-suite conformance | `tools/run_pascal_conformance.sh` + `test/pascal-conformance/pxx.skip` (206 entries), 6-way sharded, testmgr `full` tier, twatch dashboard (`conformance.tsv`) | **wired, green** (323 pass / 0 fail at last recorded sweep) |
 | 2. **fgl — real FPC generic containers** | `tools/run_fgl_corpus.sh` + `test/fgl/` + `make test-fgl` | **wired 2026-08-25** — 3 pass / 4 known-fail. [[feature-pascal-corpus-fgl]] |
 | 3. fpcunit | folded into the fpjson runner | done |
-| 4. fpjson (fcl-json's own 203-case suite) | `make test-fpjson` | **wired, RED** — recorded 203/203, re-measured 2026-08-25 at dev HEAD `20c989a5e`: does not compile, `data ptr fixup overflow`. [[bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table]]. In **no testmgr tier**, which is why nobody noticed. |
+| 4. fpjson (fcl-json's own 203-case suite) | `make test-fpjson` | **both halves of this row are STALE** (frankD, 2026-08-30). The overflow blocker resolved 2026-08-25 in `042e13b5c`, and `test-fpjson` is no longer in no tier — it is in **full**, deliberately full-only (`tools/testmgr.py:236`), with the note there citing this exact rung as why. Recorded RED and unswept is no longer true; **what is true is that nobody has re-measured it since the blocker closed.** |
 | 5. Synapse | `make lib-test` (Track B), 3 drivers incl. TLS | **wired, green** — re-measured 2026-08-25 at dev HEAD, all three pass |
 | 6. rtl-generics (Generics.Collections) | — | blocked: [[feature-pascal-corpus-generics]] |
 | 7. fcl-passrc (60k LOC) | — | endgame: [[feature-pascal-corpus-passrc]] |
@@ -1198,3 +1207,89 @@ go looking for the next ordering bug behind it.
 [[bug-p-two-different-nested-specializations-of-one-template-collide]] (p65) —
 independent of everything above, and its "where to start" remains a hypothesis
 from the error's shape, not a measurement.
+
+---
+
+## Is the park's condition met? — judgement, 2026-08-30 (frankD, read-only pass)
+
+Asked by the coordinator: *"do seven resolved blockers add up to a resume?"*
+**Partly — and the count is answering a question this ticket stopped asking.**
+
+### The seven are real, and the canonical table's condition IS met
+
+Every wall in **LIVE STATUS — THE ONE CANONICAL TABLE** is now closed. Its own
+conclusion was *"Rung 6 is now behind wall 6 alone"*, and wall 6
+([[bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body]])
+closed 2026-08-28 in `35f485537` — which the 2026-08-29 note at the top of this
+file already says. Wall 7 is resolved too. Wall 3 was established to *be* wall 6.
+So on the condition as written, the park is discharged.
+
+### But the park was re-written mid-park, and the new condition is live
+
+The Status line says *"parked **2026-08-30** — rung 6 blocked on
+[[decide-revisit-object-types-rtl-generics-fired-the-trigger]]"*. That ticket is
+open in `backlog/` at **U p70**. It post-dates all seven.
+
+**This is the structural point, and it generalises past this ticket.** Counting
+resolved blockers assumes a park condition is *static*. This one was replaced
+while parked, so the seven and the current block are disjoint sets, and a
+resolved-blocker tally answers a question the ticket had already stopped asking.
+**A park's condition needs a date as much as a park does** — and only the Status
+line here carries one, which is why it is the only line that was right.
+
+### The resume is real, but it is not rung 6 — and both named alternatives moved
+
+Rung 6 waits on a human decision and nothing an agent does changes that. What is
+actually available has itself drifted since it was written down:
+
+1. **Rung 4 (fpjson) is the live candidate, and its row above was wrong in both
+   halves.** The blocker resolved 2026-08-25 (`042e13b5c`); the "in no testmgr
+   tier" claim ended when `test-fpjson` was added to **full**. So the rung is not
+   RED-and-unwatched — it is **unmeasured since its blocker closed**, which is a
+   different and much cheaper problem. I did not run it: `make test-fpjson` is a
+   full-tier target and the hook refuses it here; Track T sweeps it.
+2. **The escape hatch named in the U ticket has closed.** That ticket argues —
+   correctly at the time — that `blocked-by` should NOT go on this umbrella,
+   because it would hide workable rungs, citing
+   [[bug-p-two-different-nested-specializations-of-one-template-collide]] [P p65]
+   as *"explicitly independent of this decision"*. **That resolved the same day,
+   `4d5f86a0b`.** The reasoning stands; the example it rests on is gone, so the
+   trade wants re-pricing rather than re-affirming.
+
+### On the frontmatter edge — do NOT add `blocked-by` here
+
+The coordinator's standing instruction is to promote a real blocker into
+frontmatter, and I am declining for this one, on the coordinator's own earlier
+reasoning: `blocked-by` on an **umbrella** removes the whole ladder from `ready`
+when only one rung is blocked. Correct ranking bought by hiding several workable
+rungs is a worse trade.
+
+**The structural fix is that the edge has nowhere correct to go.** `blocked-by`
+is a whole-ticket field and the block is per-rung, so no frontmatter on *this*
+file can be right. **Rung 6 wants to be its own ticket**, carrying the edge; then
+the ranker sees the real dependency, the ladder stays visible, and the prose stops
+being the only register that knows. Until that split, this section is the
+compensating control and it is the same class of thing it is compensating for.
+
+### Sibling glance (asked for; read-only)
+
+- **[[feature-pascal-corpus-fpc-testsuite]] [P p65] — strong resume candidate.**
+  Of 10 wikilinks, four are not in `done/`: this umbrella (circular), two
+  **dangling** (`project_fpc_compat_next_queue`, `project_mimic_fpc_done` resolve
+  to no file at all), and one real — `task-pascal-conformance-long-tail`, in
+  `backlog/`. Its own Status says the rung-1 harness is delivered and live. So
+  its four-resolved count understates: it is effectively behind **one** item.
+  (This umbrella cites two dangling links of its own — `project_fpc_compat_next_queue`,
+  `project_synapse_progress`. A dangling wikilink reads as an open dependency to
+  every tool that counts them, and as a typo to every human. Worth a sweep;
+  not done here.)
+- **[[feature-pascal-corpus-generics]] [P p65] — held by frankA, not touched.**
+  Five open links, none of them dangling. Relayed to frankA rather than edited.
+
+### What was and was not done here
+Read-only judgement. Prose edits confined to this file: the canonical table
+(which instructs *"Update THIS table. Leave the snapshots alone."*), the rung-4
+ladder row, and this section. **No dated snapshot was altered**, no frontmatter
+changed, no ticket moved, no compiler file opened. `pasparser_generic.inc` was
+neither read for edit nor touched — frank-rust has held it uncommitted since
+23:39.
