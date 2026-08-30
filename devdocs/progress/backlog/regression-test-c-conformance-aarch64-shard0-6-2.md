@@ -40,3 +40,43 @@ test-c-conformance-aarch64: FAILURES: 00175.c(output)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## CAUSE IDENTIFIED AND FIXED — but DO NOT CLOSE on that alone
+
+**The cause is fixed; this job is not yet observed green.** Those are different claims and the
+distinction is the ticket's, not a formality.
+
+frankA found one expression behind **both** symptoms — the >8-param refusal and the
+conformance output mismatch:
+
+```pascal
+if ProcExternal[procIdx] or ProcCdecl[procIdx] then        { the bug }
+if ProcExternal[procIdx] or (ProcCdecl[procIdx] and (not CProgramMode)) then   { the fix }
+```
+
+The C frontend marks **every** C function `ProcCdecl`, and a C-defined function is not
+`ProcExternal` — so the aarch64/arm32 direct-call sites dragged every function of every C
+program onto the C-ABI marshalling path, where `cparser.inc`'s own prologue spill is
+**positional** on exactly those two targets. A 9-param C function hits the C-ABI path's arg
+limit (the refusal); `mix(int,double,int,double)` makes an AAPCS call into a positional
+prologue and prints garbage (the mismatch). x86-64 was never affected because cparser's
+x86-64 spill really is SysV — **the two targets whose halves disagree are exactly the two
+that broke.**
+
+Fixed forward, not reverted: the prologue arms are correct and tested, only the call-site
+predicate was wrong.
+
+### Why this ticket stays open
+
+**The lua tree and the c-testsuite corpus are both ABSENT from this checkout.** frankA
+reproduced the *mechanism* from synthetic C — a new `ccross_cdecl_cmode.c` that fails to
+build at `83a767151ffa` with both reported error messages verbatim, verified by stashing the
+fix and rebuilding at that sha rather than by reasoning — and says so itself:
+
+> My evidence is that the cause is fixed — **not that those five jobs are green.**
+
+So: **Track T re-runs these jobs against current HEAD and that verdict closes them.** A fixed
+cause plus an unrun job is exactly the shape that produced today's other findings; do not
+substitute one for the other.
