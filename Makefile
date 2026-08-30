@@ -589,7 +589,7 @@ test-nilpy: $(COMPILER)
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy $(TESTTMP)/test_nilpy_itercur26
-	tools/expect_same.sh test_nilpy_itercur26.1 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y')"
+	tools/expect_same.sh test_nilpy_itercur26.1 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y\n[1, 2, 3]\n[1, 2, 3]\n7\n[8]')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy $(TESTTMP)/test_nilpy_sortpairs26
 	tools/expect_same.sh test_nilpy_sortpairs26.1 "$$($(TESTTMP)/test_nilpy_sortpairs26)" "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins
@@ -10497,7 +10497,7 @@ test-core: $(COMPILER)
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy $(TESTTMP)/test_nilpy_itercur26
-	tools/expect_same.sh test_nilpy_itercur26.2 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y')"
+	tools/expect_same.sh test_nilpy_itercur26.2 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y\n[1, 2, 3]\n[1, 2, 3]\n7\n[8]')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy $(TESTTMP)/test_nilpy_sortpairs26
 	tools/expect_same.sh test_nilpy_sortpairs26.2 "$$($(TESTTMP)/test_nilpy_sortpairs26)" "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins

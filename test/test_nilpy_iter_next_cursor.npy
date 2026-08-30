@@ -74,3 +74,23 @@ for n, s in iter([(1, "a"), (2, "b")]):
     print(n, s)
 for i, w in enumerate(iter(["x", "y"])):
     print(i, w)
+
+# --- the two container kinds this file did not reach ---
+#
+# Added closing feature-nilpy-iter-and-next-over-a-container, whose gate asked
+# for iter() over a list, tuple, set, dict and string. The feature itself landed
+# with this file (0e171a8d1, under feature-nilpy-lazy-iterator-objects) and
+# every other row of that gate was already pinned above; only these two source
+# kinds were not, so the ticket's residual value was the assertions, not the
+# code.
+#
+# A SET is iterated through sorted(): CPython does not specify set iteration
+# ORDER, so asserting the raw sequence would pin an implementation detail and
+# fail for a reason that is not a defect. The property under test is that the
+# cursor yields every element once, which sorted() preserves.
+print(list(iter((1, 2, 3))))
+print(sorted(list(iter({3, 1, 2}))))
+
+ti = iter((7, 8))
+print(next(ti))
+print(list(ti))
