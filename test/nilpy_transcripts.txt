@@ -1,0 +1,51 @@
+# NilPy expectations that CANNOT be confirmed by the CPython oracle.
+#
+# Every other NilPy test with a .expected file is DERIVED: running it under
+# CPython reproduces the .expected byte for byte, so the expectation is
+# reproducible without running the implementation under test. 342 of 353 are in
+# that state, verified by `tools/expect_audit.py --oracle`.
+#
+# The entries below are TRANSCRIPTS -- their .expected records what an
+# implementation printed rather than what an independent source says it should
+# print. That is not automatically wrong, but it is a different kind of claim,
+# and an unlabelled transcript is indistinguishable from a derived expectation.
+# Labelling them is the point: see
+# chore-t-audit-which-test-expectations-were-captured-from-output-rather-than-derived.
+#
+# `tools/expect_audit.py --oracle` enforces this file BOTH ways: a test that
+# stops agreeing with CPython and is not listed here is reported, and a test
+# listed here that starts agreeing is reported as a stale entry. So the list
+# cannot quietly grow or rot.
+#
+# Format: <test basename>  # reason
+
+# --- disagrees with the current oracle -------------------------------------
+# CPython 3.12+ replaced the generic "math domain error" with per-function
+# wording ("expected a positive input", "expected a number in range from -1 up
+# to 1, got 2.0"). Our .expected holds the older generic text. This is an error
+# MESSAGE difference, which CLAUDE.md's compat table defers explicitly -- "our
+# diagnostic/message/error number differs -> defer". No working program changes
+# behaviour on it. Listed rather than fixed for that reason; if the project ever
+# decides to track CPython's wording, this is the entry to revisit.
+test_nilpy_math_domain_errors
+
+# --- cannot run under CPython at all ---------------------------------------
+# NilPy accepts syntax CPython rejects. Per the N charter that is a language
+# feature, not a defect -- upward compatibility runs one way only.
+test_nilpy_import_does_not_publish_names
+test_nilpy_import_order_does_not_rebind_a_type
+test_nilpy_keyword_call_tuple_on_a_skipped_default
+test_nilpy_str_method_vs_pascal_string_helper
+
+# Needs a companion module/package that only exists under our import resolution.
+test_nilpy_file_dunder
+test_nilpy_package_imports
+test_nilpy_relative_import
+
+# Reads stdin; CPython hits EOF under the harness. The expectation is about our
+# EOF behaviour, so there is no oracle run to compare against.
+test_nilpy_input_eof_raises
+test_nilpy_select_stdin_ready
+
+# CPython raises RuntimeError mid-iteration; the test exists to pin what WE do.
+test_nilpy_dict_mutation_during_iteration

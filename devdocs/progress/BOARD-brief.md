@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:4 unfinished:27 blocked:8 backlog:359 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2752 rejected:56`
+`urgent:1 working:4 unfinished:28 blocked:8 backlog:358 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2752 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -18,7 +18,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever` [N]
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -27,6 +27,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument` [P] — blocked-by: bug-p-a-qualified-type-name-cannot-be-a-generic-argument
+- `chore-t-audit-which-test-expectations-were-captured-from-output-rather-than-derived` [T]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — blocked-by: bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever

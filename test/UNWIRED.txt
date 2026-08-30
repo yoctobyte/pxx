@@ -79,3 +79,16 @@ test/gui/helloworld/main.pas  unit of the stock Lazarus helloworld reference pro
 test/kwpadprobe.pas  Pascal unit imported by test/test_nilpy_keyword_call_tuple_on_a_skipped_default.npy (wired, test-nilpy) via `import 'kwpadprobe.pas' as kw`
 test/strhelperprobe.pas  Pascal unit imported by test/test_nilpy_str_method_vs_pascal_string_helper.npy (wired, test-nilpy) via `import 'strhelperprobe.pas' as probe`
 test/test_generic_nested_type_as_argument.pas  the 5-row REDUCTION for bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument (unfinished); it does not compile at HEAD (`unknown type: PT`), so it is a repro and not yet a test — wire it in the commit that closes that ticket and delete this line
+
+# The CPython differential for the minidom shim. It PASSES under CPython today
+# (34 checks against the real xml.dom.minidom) and is banked so its expectations
+# are recorded against the oracle rather than re-derived later. It is deliberately
+# NOT wired because lib/rtl/mimic_xml_dom_minidom.py cannot be built: as a .py in
+# lib/rtl it HANGS THE COMPILER FOREVER (100% CPU, flat RSS, no output), which
+# would take out every lane running a library gate. The implementation is parked
+# beside it as mimic_xml_dom_minidom.py.parked.
+# Wire this in the commit that closes
+# bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
+# and delete this line -- the two Makefile lines are given in
+# feature-b-a-real-minidom-is-an-implementation-not-a-shim.
+test/lib_mimic_xml_dom_minidom.npy  CPython differential for the minidom shim; the shim itself hangs the compiler (bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever), so wiring this would hang any lane running a lib gate

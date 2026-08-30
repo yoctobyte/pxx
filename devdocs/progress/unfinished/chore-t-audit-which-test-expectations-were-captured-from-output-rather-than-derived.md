@@ -4,8 +4,8 @@ prio: 40
 type: chore
 blocked-by: []
 summary: "A test expectation CAPTURED from a program's output records whatever the compiler did that day — bugs included — and then defends that behaviour after the fix, converting a defect into a requirement. Audit the Makefile's expect_same.sh values for which are DERIVABLE from the source independently and which are transcriptions of a run. test_alloca26 is the model of the safe form: 7088718 is reproducible by anyone, in any language, without running our compiler. File ownership is Track B where Makefile expectations are touched."
-status: backlog
-owner: unassigned
+status: unfinished
+owner: frankB
 ---
 
 # Which test expectations were captured from output rather than derived?
@@ -106,3 +106,110 @@ This does not gate anything and nothing is known to be broken. It is
 prophylactic work on the suite's trustworthiness, priced accordingly — but the
 mechanism is real and has already been demonstrated once in miniature, which is
 why it is a ticket and not a paragraph in a message.
+
+
+## Progress 2026-08-30 (frankB) — the NilPy population is DONE and self-enforcing
+
+The audit has an instrument and one population is closed. Recording what is
+settled, what it cost, and exactly what is left, because the remaining work needs
+a different oracle rather than more of the same reading.
+
+### The strong result: 342 of 353 NilPy expectations are DERIVED, proven
+
+A NilPy test is a Python program, so CPython can run it. That turns this audit's
+question from a heuristic into a measurement for the whole `.npy` population:
+run each test under CPython and compare byte for byte against its `.expected`.
+An expectation CPython reproduces **is** reproducible without running the
+implementation under test, which is this ticket's criterion exactly.
+
+```
+NilPy expectations with a CPython oracle: 353
+  DERIVED  (CPython reproduces the .expected) : 342
+  transcripts (cannot be confirmed)           : 11
+```
+
+**Only one of the 353 actually disagrees with the oracle**, and it is not a
+frozen compiler bug: `test_nilpy_math_domain_errors` holds the older generic
+`ValueError: math domain error`, while CPython 3.12+ emits per-function wording
+(`expected a positive input`). That is an error-MESSAGE difference, which
+CLAUDE.md's compat table defers explicitly — *"our diagnostic/message/error
+number differs → defer"* — and no working program changes behaviour on it. So it
+is **labelled, not fixed**, which is the disposition this ticket asked for.
+
+The other ten cannot run under CPython at all: four use syntax NilPy accepts and
+CPython rejects (a language feature under the N charter, since upward
+compatibility runs one way only), three need companion modules that exist only
+under our import resolution, two read stdin, and one pins our behaviour where
+CPython raises mid-iteration.
+
+### The labelling is enforced, not asserted
+
+`test/nilpy_transcripts.txt` lists all eleven with a reason each, and
+`tools/expect_audit.py --oracle` enforces it **in both directions**: a test that
+stops agreeing and is not listed is reported as a NEW TRANSCRIPT; an entry that
+starts agreeing is reported as STALE; an entry naming a test that no longer
+exists is reported too. Exit 1 on any drift, so it can gate.
+
+**Verified that it actually enforces** — an enforcement tool that does not
+enforce is precisely the failure class this ticket is about. Dropped a real entry
+and added a bogus one in a single run:
+
+```
+NEW TRANSCRIPT (not in test/nilpy_transcripts.txt): test_nilpy_package_imports
+REGISTRY NAMES A TEST THAT NO LONGER EXISTS: test_nilpy_no_such_test_at_all
+registry: OUT OF SYNC
+exit=1
+```
+
+Registry restored byte-identical afterwards.
+
+### The triage instrument, for the populations with no oracle
+
+`tools/expect_audit.py` (no flags) classifies the Makefile's inline expectations
+by a mechanical signal: **does the expected text appear literally in the test's
+own source?** A test printing `writeln('looped 3')` checked against `looped 3`
+is derivable by inspection; a value appearing nowhere in its source is a
+*computed* result, and computed results are where capture happens.
+
+```
+Makefile expectations parsed: 3063 of 3101 mentions (98.8%)
+  low  (derivable by inspection) 1716
+  med                             542
+  HIGH (computed)                 805
+.expected files: 477 — low 260, med 178, HIGH 25, no sibling source 14
+```
+
+It is a ranked reading list, not a verdict: it cannot know that
+`15511210043330985984000000` is 25!, and it flags it. The point is to spend
+judgement where capture is possible at all.
+
+The 38 unparsed are 35 line-continuations, 2 non-calls and 1 line with a
+trailing comment — stated because a coverage claim with an unstated remainder is
+the shape this ticket exists to distrust.
+
+### Two things NOT filed, because checking beat filing
+
+- **Unwired `.expected` files.** The classifier reported 24 named nowhere in the
+  Makefile, which looked like dead weight. Sixteen are corpus fixtures driven by
+  `tools/run_fgl_corpus.sh` and friends, and `tools/check_test_wiring.py` — which
+  already exists and already gates this — reports the whole tree clean. My
+  "unwired" test was Makefile-only and would have filed a finding an existing
+  tool already covers.
+- **It did flag a file of mine**, though: `test/lib_mimic_xml_dom_minidom.npy`,
+  banked earlier today and deliberately not wired because the shim it tests hangs
+  the compiler. Registered in `test/UNWIRED.txt` with the reason and the
+  condition for wiring it. The gate is clean again.
+
+### What is left, and why it needs a different instrument
+
+The Pascal and C populations have no oracle wired into this tool. The probes
+exist — `tools/fpc_diff_probe.sh` and `tools/gcc_diff_probe.sh` — so the same
+strong check is available in principle, but only for the subset that compiles
+under FPC/gcc, which for pxx-dialect tests is a minority. So the remaining work
+is: extend `--oracle` to the C corpus (where gcc is a genuine oracle for most of
+it), and hand-judge the Pascal HIGH bucket, which the literal-overlap ranking has
+already ordered.
+
+Returned to `unfinished/` rather than held in `working/`: one population is
+closed and enforced, the next needs a different oracle, and nothing is
+half-applied.
