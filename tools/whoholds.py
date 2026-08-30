@@ -28,6 +28,12 @@ TO BE SEEN BY THIS TOOL, put a `Lane:` trailer on your commits:
 
     Lane: frankA
 
+Put it anywhere in the message -- this tool scans the whole body, deliberately.
+git itself parses trailers only from the LAST contiguous block, so a `Lane:` line
+one paragraph too high is invisible to `%(trailers:...)` with no error at all, and
+that is how the very commit introducing this field lost its own trailer. A field
+that fails silently when used conscientiously is worse than no field.
+
 That is additive -- it does NOT replace CLAUDE.md's `Claude-Session:` line, which
 is the spec and identifies a transcript. `Lane:` identifies someone you can reach,
 which is the thing a collision actually needs, and a session whose id has no URL
@@ -38,7 +44,9 @@ UNCOMMITTED work is invisible to this. A lane editing a file it has not committe
 does not appear, so `quiet` means "nobody has LANDED anything recently", never
 "nobody is in it". Ask before opening a file that matters.
 """
-import subprocess, sys, time, collections
+import re, subprocess, sys, time, collections
+
+_LANE_OK = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,31}$")
 
 WINDOW_MIN = 360
 
@@ -55,25 +63,41 @@ def recent(path, minutes):
     # as a fallback and is NOT redefined here. A lane whose session id has no URL
     # form (plain UUID sessions) can satisfy `Lane:` without fabricating a URL,
     # which is the divergence that prompted this.
+    # Read the WHOLE body, not %(trailers:...). git parses trailers only from the
+    # last contiguous block, so a `Lane:` line one paragraph too high is invisible
+    # WITH NO ERROR -- which is exactly what happened on the commit that introduced
+    # this field. Telling eight lanes a paragraph-placement rule they will get
+    # wrong is the losing move; a documented trap is not a guard. So scan the body
+    # and accept the line wherever it sits.
     out = sh("git", "log", f"--since={minutes} minutes ago", "--date=unix",
-             "--format=%H%x01%cd%x01%s%x01"
-             "%(trailers:key=Lane,valueonly=true)%x01"
-             "%(trailers:key=Claude-Session,valueonly=true)",
-             "origin/master", "--", path)
+             "--format=%H%x01%cd%x01%s%x01%b%x02", "origin/master", "--", path)
     now, rows = time.time(), []
-    for line in out.splitlines():
-        parts = line.split("\x01")
+    for rec in out.split("\x02"):
+        rec = rec.strip("\n")
+        if not rec.strip():
+            continue
+        parts = rec.split("\x01")
         if len(parts) < 3:
             continue
         _, cd, subj = parts[0], parts[1], parts[2]
-        lane = (parts[3] if len(parts) > 3 else "").strip()
-        trailer = parts[4] if len(parts) > 4 else ""
+        body = parts[3] if len(parts) > 3 else ""
         sess = ""
-        if lane:
-            # a lane name is worth more than a session id: it is reachable
-            sess = lane.split("(")[0].strip()[:18]
-        else:
-            for tok in trailer.split():
+        # The value must LOOK like a lane name: one identifier, optionally with a
+        # parenthesised id after it. Without this the scan matched the prose line
+        # "Lane: is also the better field for the actual need." out of a commit
+        # body and reported a session called "is also the better" -- caught by
+        # running it against the real log rather than a fixture. A loose pattern
+        # on free text finds something every time, and finding something is what
+        # makes it look like it worked.
+        for bl in body.splitlines():
+            if not bl.lower().startswith("lane:"):
+                continue
+            cand = bl.split(":", 1)[1].split("(")[0].strip()
+            if _LANE_OK.match(cand):
+                sess = cand[:18]
+                break
+        if not sess:
+            for tok in body.split():
                 if tok.startswith("session_"):
                     sess = tok[8:16]
                     break
