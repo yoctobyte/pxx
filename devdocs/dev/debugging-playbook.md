@@ -293,7 +293,7 @@ KB proves reachability and effect in one step, where a green run proves neither.
 
 ## The instrument answered, correctly, about something else
 
-**The dominant failure of 2026-08-30 — ten measured instances across four
+**The dominant failure of 2026-08-30 — eleven measured instances across five
 agents, and not one of them produced an error.** Every probe ran, returned, and
 was right. About a different question than the one asked.
 
@@ -313,6 +313,19 @@ reader checks whether the instrument worked, and it did.
 | where is this parse error? | what text sits at a token index past the unit's end? (`Tokens[]` is shared; it lands in a *neighbouring unit*) | a plausible Pascal declaration in an **innocent file** |
 | did this test pass? | did `diff` exit 0 against a **missing** `.expected`? | **FAIL** — output was identical to pinned |
 | is `sizeof(*p)` right? | is it right for struct, union and scalar pointees? (`csizeof_deref_ptr_b79.c` has no array pointee) | **green test sitting on top of an open gap** |
+| was my commit in the tree Track T tested? | is the TESTED sha an ancestor of MY FIX? (the question backwards — `merge-base --is-ancestor A B` is not symmetric) | **NO** — it was there; I "corrected" a peer's correct attribution |
+
+**The `merge-base` row is the cleanest instance in the table and the only one
+that needs nothing to be wrong.** No stale tree, no missing file, no unfetched
+object, no mis-chosen predicate — just two arguments in the wrong order. Both
+orders are legal, both return 0 or 1 with no message, and the answer you get is
+*true* of the question you accidentally asked.
+
+**Its fix generalises past being careful:** ask the question that has no argument
+order. "Was my change in that tree?" is answerable directly —
+`git show <sha>:compiler/symtab.inc | awk '/^function IsNodeArray/,/^end;/'` —
+and reading the code out of the tested tree **cannot be asked backwards**. Prefer
+an instrument with no orientation to remembering which way round to point one.
 
 ### The four shapes
 
