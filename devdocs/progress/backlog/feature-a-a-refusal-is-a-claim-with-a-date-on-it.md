@@ -9620,3 +9620,96 @@ check was dead and should go; this one is alive and merely narrow, so it gets a 
 Guard 1 itself is the right shape too — it asserts the two files' constants are **equal**, by
 parsing `twatch` with `ast` rather than importing a daemon for one constant. That equality is
 the **only** thing coupling the two halves, so it is the whole guard.
+
+---
+
+## 201 — A UNIFORMLY WRONG COMPILER REPRODUCES ITSELF PERFECTLY
+
+*(frank-optimize-b4, 2026-08-30, catching the obvious version of its own page-align fix before
+writing it — the first live worked example of 190's blind spot.)*
+
+The obvious fix for the shared-page hazard (199) is `dataBase := AlignTo(dataBase, 4096)`. It
+is wrong, and wrong in the quietest available way.
+
+There is **one `PT_LOAD` with `p_offset = 0`**, so a virtual address *is* `LOAD_ADDR + a file
+offset`: `dataBase := LOAD_ADDR + codeOffset + CodeLen`, with the data's file offset being
+`codeOffset + CodeLen`. Aligning the **vaddr alone** desynchronises the two, and every emitted
+data reference then reads **0..4095 bytes early**. Silent wrong values throughout every
+emitted program.
+
+> **And it would sail through a self-host fixedpoint, because the compiler would be wrong
+> *consistently*.**
+
+That is 190 stated as a principle and here demonstrated: the fixedpoint proves the compiler
+reproduces **itself**, and a uniformly-wrong compiler reproduces itself perfectly — the binary
+and its sources move together, convergence holds, and `converged after N round(s)` prints. A
+gate whose oracle is the artefact under test cannot see a *uniform* defect at all. Only a
+disjoint oracle can: an older binary, a second implementation, or reading the ELF header.
+
+The correct change pads **`Code[]`** until `codeOffset + CodeLen` is itself a page multiple, so
+vaddr and file offset stay congruent and `dataBase` lands on a page for free. Sufficient at all
+three sites because `LOAD_ADDR = $400000` and `LOAD_ADDR32 = $08048000` are both page-aligned.
+
+Corroboration worth noting for its **provenance**: frankA independently read the same layout
+out of a binary for an unrelated reason — one RWX `PT_LOAD` at `0x400000`, file offset 0,
+`0x00fedd` filesz / `0x01a4b4` memsz, data immediately after code, **VA == file offset**. Two
+lanes, two binaries, two purposes, same header. That is what corroboration is supposed to look
+like, as against two arms sharing an upstream.
+
+### 201a — declining is not automatically the conservative choice
+
+b4 had declined the better of its two fixes because it believed `elfwriter.inc` was held. It
+was not, and b4's own reading of why it did not simply ask:
+
+> *"Declining is not automatically the conservative choice when it silently downgrades the fix;
+> it just moves the cost somewhere it does not get counted."*
+
+The asymmetry is structural: **a wrong action leaves a trace and a declined action leaves
+nothing.** A bad edit gets reverted, ticketed, and remembered. A fix quietly downgraded to its
+weaker variant produces a commit that looks fine, and the better version simply never exists —
+no artefact, no ticket, nothing to audit. So over-caution is **invisible by construction**,
+which is exactly why it feels safe.
+
+Companion to the manufactured-work polarity (200a). Both are errors that cost real work while
+producing no evidence that anything went wrong.
+
+### 201b — a negative stated from ONE idiom
+
+Same hours, frankA sizing increment 3. It built its emitter list by grepping the byte-pair
+idiom `EmitB($0F); EmitB($05)` and concluded four files. **The grep was blind to an entire
+family**: kernel entries emitted as a **mnemonic string** through `EmitAsmX64([… 'syscall' …])`
+— **17 of those in `ir_codegen.inc` alone**.
+
+What caught it was not suspicion. frankA disassembled the actual binary instead of trusting the
+list, and **site 1 turned out to be `ir_codegen.inc:928`, a line its own enumeration said did
+not exist.** Standing rule, third instance in two days: *an existence claim survives one grep;
+a non-existence claim does not.* And the specific form here — **a negative stated from one
+idiom** — is the version to watch, because one idiom is what a grep *is*. Same shape as the
+`+ '$' +` search that could not see a name built with `AppendChar`, and as `err[-1]` reading
+the wrong line of compiler output.
+
+The cheap defence is the one that worked: **enumerate from the artefact, not from the source.**
+The binary contains every site by construction; a grep contains every site that matches one
+spelling.
+
+### 201c — a coordinator relaying a PLAN as a fact about the tree
+
+Mine, twice in one night, and the second one caused work. I warned two lanes that
+`EmitProgramEntryForTarget` was about to be contested, on the strength of frankA describing
+increment 3 as *"the `_start` stub plus…"*. I located the stub correctly; the premise was a
+lane's **plan**, which frankA then corrected (see 201b) — the seam is `x64_syscall` in
+`x64enc.inc`, and none of the residual sites is the entry stub.
+
+**A plan is a claim about the future by someone who has not measured it yet**, and it does not
+acquire authority by passing through the coordinator. Worse, the warning I attached carried
+three conditions — shorten your window, tiptoe around the arm boundary, land in a hurry — and
+**a withdrawn constraint that nobody withdraws out loud keeps being obeyed**. Rushing is exactly
+how a half-landing happens, which was the failure that lane had already refused twice that
+night.
+
+> **A stale warning costs more than no warning**, because it reads as current and nothing in it
+> expires.
+
+Same defect as the stale `platform_backend.pas` comment filed hours earlier (198). The rule
+being enforced is the one you will not apply to yourself — so: **retract out loud, name the
+premise that failed, and say which constraints are lifted.**
