@@ -3151,6 +3151,18 @@ test-nilpy: $(COMPILER)
 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/excnoleak.time | grep -oE '[0-9]+$$'); \
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 90000 ]; then echo "caught-exception-object leak regressed: RSS $${rss}KB (>90MB over 640k raises; pre-fix was ~105MB, fixed is ~75MB)"; exit 1; else echo "exception-no-leak: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; exception-object RSS leak guard skipped"; fi
+	@# a user class with MANAGED fields, in a program that never builds a
+	@# container: PXXObjFinalizeHook was installed only by pylib's container
+	@# constructors, so the instance block was freed at rc=0 with every managed
+	@# field still held. 410 MB peak before the fix, ~1 MB after. The .npy
+	@# carries the warning that a container added to it disarms this guard.
+	./$(COMPILER) test/test_nilpy_class_field_no_container_no_leak.npy $(TESTTMP)/test_nilpy_cfnoleak26
+	tools/expect_same.sh test_nilpy_cfnoleak26 "$$($(TESTTMP)/test_nilpy_cfnoleak26)" "20400100000"
+	@if [ -x /usr/bin/time ]; then \
+	  /usr/bin/time -v $(TESTTMP)/test_nilpy_cfnoleak26 2>$(TESTTMP)/cfnoleak.time >/dev/null; \
+	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/cfnoleak.time | grep -oE '[0-9]+$$'); \
+	  if [ -n "$$rss" ] && [ "$$rss" -gt 20000 ]; then echo "class managed-field finalize regressed: RSS $${rss}KB (>20MB over 200k instances; pre-fix was ~410MB, fixed is ~1MB)"; exit 1; else echo "class-field-no-container-no-leak: OK (RSS $${rss}KB)"; fi; \
+	else echo "/usr/bin/time absent; class managed-field RSS leak guard skipped"; fi
 	@# `target[key] op= value` on a dict/list/Counter subscript (found already fixed)
 	./$(COMPILER) test/test_nilpy_augmented_subscript_assign.npy $(TESTTMP)/test_nilpy_augsubassign26
 	tools/expect_same.sh test_nilpy_augsubassign26 "$$($(TESTTMP)/test_nilpy_augsubassign26)" "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"

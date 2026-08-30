@@ -19687,4 +19687,23 @@ begin
   Result := VariantToStr(v);
 end;
 
+initialization
+  { The instance finalizer, published for the WHOLE run rather than only while
+    some container happens to have been built. Every other install site is a
+    pylib/pyeval CONSTRUCTOR (pylist_new, pydict_new, pybound_new, ...), so a
+    NilPy program that builds user-class instances but never a list, dict,
+    bytes, iterator or bound method left PXXObjFinalizeHook nil — and
+    PXXObjRelease then freed the instance BLOCK at rc=0 without releasing a
+    single managed field. Measured: a class with one 2000-byte string field,
+    200k constructions, 399 MB peak; adding an unrelated `dummy = [1]` to the
+    same program made it flat at 980 kB, which is the whole tell.
+
+    Same shape, and the same fix, as PyIterCallHook's install in pyeval's
+    initialization section — a hook that was live exactly when an unrelated
+    feature happened to be running. The per-constructor installs stay: they are
+    idempotent, and they are what keeps this correct on any profile whose unit
+    initialization does not run.
+    feature-nilpy-object-reclamation }
+  PXXObjFinalizeHook := @PyObjFinalize;
+
 end.

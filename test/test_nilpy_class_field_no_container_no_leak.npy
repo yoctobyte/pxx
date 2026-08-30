@@ -1,0 +1,42 @@
+# feature-nilpy-object-reclamation — the instance FINALIZER was installed as a
+# side effect of pylib's container constructors (pylist_new, pydict_new,
+# pybound_new, ...). A program that builds user-class instances and never a
+# list, dict, bytes, iterator or bound method therefore ran with
+# PXXObjFinalizeHook still nil, and PXXObjRelease freed the instance BLOCK at
+# rc=0 without releasing a single managed field. Measured before the fix: 399 MB
+# peak here, flat ~1 MB after.
+#
+# THIS FILE MUST CONTAIN NO CONTAINER — no list, dict, set, tuple, bytes,
+# comprehension, iterator or bound method, anywhere, including in dead code.
+# Building one installs the hook, which is exactly what the bug's own tell was:
+# adding a single `dummy = [1]` to the leaking program made it flat. A container
+# added here later would disarm this test silently and it would still pass.
+
+class Holder:
+    def __init__(self, s):
+        self.s = s + "!"
+
+
+class Child:
+    def __init__(self, n):
+        self.n = n
+
+
+class Parent:
+    def __init__(self, n):
+        self.kid = Child(n)
+
+
+def churn(k):
+    t = 0
+    i = 0
+    base = "x" * 2000
+    while i < k:
+        h = Holder(base)
+        p = Parent(i)
+        t = t + len(h.s) + p.kid.n
+        i = i + 1
+    return t
+
+
+print(churn(200000))
