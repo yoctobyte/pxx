@@ -72,6 +72,11 @@ order to read them in. Route by what you are holding:
 **A measurement or a verdict is telling you something and you are about to believe it**
 - `## A guard can fail in the FALSE DIRECTION` -- a red that means "this box
   checks MORE"; the reflex it invites is to delete the extra coverage
+- `## Min-of-N tells you HOW to sample. It does not tell you your RESOLUTION`
+  -- run a null that CANNOT be affected; ~6% floor measured on this box, and
+  anything under it is unresolved however many pairs agree
+- `## The natural repair action can destroy the diagnostic` -- rebuilding a
+  suspicious binary erases the anti-Thompson check
 - `## A job name is a promise, not a description of what ran` -- two hosts can
   report the same job list, count and verdict and check different things
 - `## A/B the hunk, bisect the window` -- with a named suspect, one build beats
@@ -336,6 +341,68 @@ means.** On a contended box a mean mostly measures the other agents; load moved
 7.7 → 5.4 during one session, and a sequential comparison would have credited
 ~20% of that session's win to the box. **Keep the previous binary** rather than
 rebuilding it afterwards, and name each binary's sha beside its number.
+
+## Min-of-N tells you HOW to sample. It does not tell you your RESOLUTION — run a null
+
+The rule above is necessary and **not sufficient**, and the gap is where most of
+one night's published numbers died. Min-of-N says how to sample; it says nothing
+about how small an effect your instrument can resolve, so a min quoted to two
+decimals reads as precision it does not have.
+
+**Measure the floor, do not estimate it: run a control that shares NO MECHANISM
+with your change.** Measured 2026-08-30 on this box, benching a static-literal
+retain guard — the control was a program with **no strings at all**, which the
+change cannot touch:
+
+```
+no strings at all   (the box)   +6.27%   sign test 7/15   <- a coin flip
+```
+
+**That is the noise floor with its clothes off: ~6% on a ~5 ms program at that
+load, at min-of-15.** In frank-optimize's words, *the controls were doing more
+work than the treatments.* It retired three of its own published rows on the
+spot — a mixed row at −3.04%, a pure-cost row at +3.66%, and an earlier +2.3%,
+all under the floor and none of them resolved. What survived cleared it by a
+wide margin: `compiler.pas` at +6.95%, and an aarch64 change at **−33.9%, 9 of
+9** — clear by a factor of five.
+
+**Anything under your measured floor is UNRESOLVED, regardless of how many pairs
+agree.** A mixed microbenchmark near the break-even flipped sign between runs:
+`+2.3%` at 1/11, then `−3.04%` at 10/15 — same program, same isolated change.
+Pair counts do not rescue an effect smaller than the noise; they just make a coin
+flip look deliberate.
+
+**This is the positive-control rule pointed at benchmarks.** A guard needs a case
+it **must reject**; a measurement needs a case that **must not move**. In both,
+what catches you is the arm you did not expect to be informative — and this
+control was informative *precisely by moving when it could not have been
+affected*. Same corollary too: **run it in the same command as the treatment**,
+or the temptation is to skip it exactly when the treatment already looks clean.
+
+**And withdraw a statistic that is pointing your way.** The same session
+retracted a "10 of 11, p≈0.006" on the grounds that the test assumes
+independence and stationarity and this box is neither — **while the conclusion it
+supported survived anyway.** That is the retraction nothing prompts and nobody
+catches, and it is the one worth naming.
+
+### The natural repair action can destroy the diagnostic
+
+`tools/gate.sh:104`, and it is the only thing that knows this:
+
+> Deliberately a hint, not a fix: gate.sh must NOT rebuild before comparing, or
+> it loses the ability to catch a genuinely contaminated binary — which is the
+> entire point of the anti-Thompson check.
+
+Finding a binary that disagrees with its sources, the instinct is to rebuild.
+**Rebuilding is the one action that erases the evidence**, and the check exists
+for the case where the binary is contaminated rather than merely stale. Same
+hazard as restoring a `.PRISTINE` copy over a file: the danger is in the
+*repair*, not in the edit, which is why nothing watches for it.
+
+The staleness case is also the common one and is *not* a miscompile: the gate's
+own testmgr step rebuilds as a side effect, so the first run after a sibling's
+commit fails and the re-run passes — which reads as flakiness. It cost two full
+gate runs on consecutive days before anyone saw the pattern.
 
 ## Match by SYMBOL, never by coordinate
 
