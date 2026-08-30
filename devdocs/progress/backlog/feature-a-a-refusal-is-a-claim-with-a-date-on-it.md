@@ -7427,3 +7427,64 @@ check that cries wolf earns the habit of being scrolled past. The genuine hits w
 enough to fix by hand, which is 134a again — **the check you were about to build may be a
 fix.** One of the five was live and is now repaired; that was the whole yield, and it did
 not need an instrument.
+
+### 166 — SECOND LANE, SAME NIGHT, SAME FILE, ONE HOUR APART: THE SIBLING WAS NOT GREPPED FOR
+
+*frankA, 2026-08-30, hours after frankS banked face 161 for the identical mistake.*
+
+`ParseGenericTemplateNamed` detects bodyless class forms up front — no `end` for its depth
+loop to count down to — but its test looked at the token after `class` **without skipping
+`abstract`/`sealed`**. So `class abstract;` read as *having* a body, the depth loop took it,
+and it swallowed every following declaration until it hit somebody else's `end`.
+
+> *I fixed the identical omission in `CollectNestedTypeNames`, in this same file, earlier
+> tonight.*
+
+**Face 161 was frankS. This is frankA. Different lanes, same night, and this one is two
+functions apart in one file with an hour between them.** One instance is a lapse. Two
+instances, by two agents who had each read `normalise-dont-special-case.md` and one of whom
+had banked the rule *as a face* the same evening, is a statement about the rule: **"grep for
+the sibling before closing" has no mechanical trigger, so it is applied exactly when
+somebody happens to remember it.** Nothing fails. The first fix is green, the ticket closes,
+and the second copy waits — here, as the corpus wall the lane spent the rest of the night on.
+
+The cost is measurable in this case: the sibling *was* the wall. rtl-generics 4 errors → 1
+(pinned was 20) once it was found.
+
+### 166a — AND FIVE REDUCTIONS AIMED AT THE REPORTED LINE, BECAUSE THE REPORTED LINE WAS NEVER THE DEFECT
+
+The trigger is `generics.collections.pas:144`. **The error comes out at line 120** — on
+`function DoGetCurrent: T`, a line with nothing wrong with it, in a class that compiles
+cleanly on its own.
+
+So **five** reductions aimed at line 120's *text* failed to reproduce: four already recorded
+in the ticket by earlier sessions, one written tonight. The ticket's own standing advice —
+*"start by asking why `generics.defaults` parses cleanly alone"* — pointed at the symptom
+and had been quietly costing every session that followed it.
+
+What worked was ignoring the text entirely and **truncating at real declaration
+boundaries**: `cut@125` clean, `cut@141` clean, `cut@144` fails. A swallowing bug reports at
+wherever the swallow *ends*, which is unrelated to where it started, so the one field
+everybody anchors on is the one field that carries no information.
+
+Durable form, now leading the ticket: **do not trust any error line in this unit without a
+truncation bisect.** The reported line has been wrong twice.
+
+Both obvious suspects were ruled out **by measurement before touching anything** — `p.dgen`
+shows injections at 133/137/139/144/152 and **none** at 120 or 135; the harvest was
+`names=293 cap=512 overflow=0`. Both would have made plausible stories.
+
+### 166b — THE ORACLE CLAIM WAS ABOUT THE DRAFT, NOT THE PROGRAM
+
+frankA's first regression test carried the control `TFwd<T> = class;` with the header line
+*"Oracle: FPC prints the same line."* **FPC rejects it** — *"Type TFwd$1 is not completely
+defined"*. pxx accepting it is the ordinary accept-more divergence and not a defect, so the
+code was fine and **the header would have shipped a false oracle claim.**
+
+Caught only by running FPC on the **finished file** rather than on the draft that had been
+reasoned about. The control still earns its place — it is what isolates the modifier as the
+variable — so it moved into the header table instead of the program.
+
+A false oracle citation is the worst kind of stale claim available: it reads as *"someone
+compared this against a reference implementation"*, which is precisely the check nobody
+repeats.
