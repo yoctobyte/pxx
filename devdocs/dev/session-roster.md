@@ -24009,3 +24009,86 @@ absence is not evidence.
 **frankT also declined to re-derive the table's agent count**, leaving it at
 *"at least five"* rather than relay a number it could not derive — its own census
 rule applied to itself, hours later, against a number nobody would have checked.
+
+## ASYMMETRIC SURVIVAL — a claim outruns its qualifications, and the gap widens per hop
+
+The last row of the night, and the only one that is not an instrument being
+correct about something else. frank-user, declining to put a true number into
+public copy:
+
+> **The general-codegen misreading is not written by me, it is written by the
+> reader, from a line that is individually true.**
+
+Every other row tonight was an artifact answering a question nobody asked. **This
+is a statement correct about the right thing that still lands wrong, because the
+reader supplies the missing quantifier — and supplies the generous one.** Not a
+scope error in the writing; one the writing *invites* and cannot prevent.
+
+**The load-bearing half is the rate, not the fact:**
+
+> **A claim and its qualifications do not propagate at the same speed, and the gap
+> WIDENS PER HOP. A breadcrumb is engineered to hop, so the caveat is lapped by
+> the thing it was meant to bound.**
+
+**Therefore the defence is SUBTRACTIVE — omit the line — not additive.** You
+cannot attach a caveat that travels as fast as the number. CLAUDE.md's claims rule
+says *do not conflate*; this says **the conflation happens downstream of you, in a
+reader you will never meet, and the artifact's own virtue accelerates it.**
+
+Concretely: *"~15% faster than FPC"* is true, measured three-way interleaved on
+byte-identical output, and one careless hop from *"pxx generates better code than
+FPC"*. **An unrequested number that can only be rounded up is pure downside in an
+artifact whose whole value is that it survives being repeated.**
+
+**The artifact:** a ClawHub skill, **staged and validated, NOT published** —
+held on the owner's own GitHub device login and explicit go. Outward-facing,
+their name, their decision. Its four claims are the bounded ones: byte-identical
+self-host at default `-O`; programs' **output** matches the gcc-built originals,
+not the machine code; **self-host says nothing about the non-Pascal frontends**
+(a finding six hours old, already at correct scope in public copy); experimental
+subset. **No performance line.**
+
+## W2 declined — a justification that INVERTED, and the queue it unblocked
+
+`99d72eafa`. Three compilers emitting **byte-identical output**, verified both
+directions, min-of-N three-way interleaved:
+
+```
+FPC 3.2.2 -O2-built  15268 ms    ours -O3 14.4% faster, 7/7
+FPC 3.2.2 -O3-built  15509 ms    ours -O3 15.0% faster, 6/6
+ours      -O2-built  14215 ms    ours -O3 8.05% faster, 7/7
+ours      -O3-built  13071 ms
+```
+
+**FPC `-O3` is slower than its own `-O2`**, closing *"you only beat it at -O2"*
+in four words, pre-emptively.
+
+**The campaign closed because its case inverted, not because it shrank.** It
+rested on *"the residual is mostly whole-body register allocation"* — **there is
+no residual; we passed it.** Both stand-ins for promise died at once: the gap by
+measurement, the census by the ticket's own rule 2.
+
+**And it declined its own campaign on a benchmark it simultaneously said cannot
+see the best case** — W1 slices worth 1.9-2.1x on tight scalar loops while
+*costing* 2-6% on this self-compile. That is harder to write than a decline, and
+it is what makes the revival condition honest rather than decorative.
+
+**Methodology, the strongest argument for the interleaving rule I have seen:** its
+non-interleaved sanity check disagreed with the interleaved run **by 7% on the
+same arm — exactly the size of the effect.** *"Had I sanity-checked instead of
+measuring properly rather than as well as."* **A confound the same magnitude as
+the signal is where a reasonable shortcut yields a confident wrong answer — and
+it would have been its own number, in its own favour.**
+
+**Stale table DELETED, not updated**, and the reason generalises: both baselines
+were eight weeks gone and the self-compile had grown ~5s → ~14s, so **only the
+ratio ever travelled, and the ratio is what inverted.** *A number whose context
+moved is not repairable by editing the number* — the same lesson as the `-O3`
+line numbers, one domain over.
+
+**Side effect worth more than it looks: Track A's queue head cleared for the
+first time all night.** `next --track A` had offered the live campaign umbrella at
+effective 70 for the whole session, and I warned frankA, frankS and frank-optimize
+off it **by hand** — one of the four near-duplicates. The reprice 70 → 20 fixed it
+structurally. **A dispatch problem I had been solving by relay was a ranking
+problem all along**, and the lane that owned the ticket fixed it in one line.
