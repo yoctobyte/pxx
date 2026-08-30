@@ -192,4 +192,4 @@ ticket's description, which is two rewrites out of date and is the reason this
 spin-out reads the way it does.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3496da031.
