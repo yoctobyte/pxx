@@ -47,6 +47,13 @@ fi
 # BOARD.md, then refused at BOARD-brief.md and handed a mechanical conflict to
 # a human. The pattern must match whatever board-md emits, so it is a glob.
 BOARD_GLOB='devdocs/progress/BOARD*.md'
+
+# The raw placeholder, for verify_citations_landed's literal search. Duplicating
+# the STRING from progress.py is deliberate and is not the drift this file has
+# been burned by twice: what drifted was two independent MATCHERS, and the whole
+# point of that guard is to not share a matcher. A constant that both sides spell
+# the same way is not an assumption; a regex that one side widens is.
+PLACEHOLDER='PENDING-COMMIT'
 PUSH=1
 [ "${1:-}" = "--no-push" ] && PUSH=0
 
@@ -286,6 +293,10 @@ fill_pending_commits() {
     # (bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two).
     # `pending` prints "<path>\t<sha>" per ticket, sha empty if undeterminable.
     pending=$(python3 "$(dirname "$0")/progress.py" pending 2>/dev/null || true)
+    # Recorded for verify_citations_landed below, which needs to tell "the
+    # regex saw it and the fill failed" from "the regex never saw it at all".
+    # Those are different bugs and only the first is this function's fault.
+    pending_seen=$(printf '%s\n' "$pending" | cut -f1)
     [ -n "$pending" ] || return 0
 
     filled=""
@@ -364,6 +375,15 @@ trap 'rm -f "$SYNC_LOCK" 2>/dev/null' EXIT
 manifest=$(git log --format=%s "origin/$BRANCH..HEAD" 2>/dev/null)
 manifest_n=$(printf '%s' "$manifest" | grep -c . || true)
 
+# The TICKET files our commits touch, captured at the same moment and for the
+# same reason: the rebase rewrites shas, so ask the question while the range
+# still means what we think it means. Same `*/*.md` glob fill_pending_commits
+# uses -- it keeps README.md (which documents the placeholder by name) and the
+# generated boards out of reach, and that glob is load-bearing there for exactly
+# the reason it is load-bearing here.
+manifest_tickets=$(git log --format= --name-only "origin/$BRANCH..HEAD" \
+                   -- 'devdocs/progress/*/*.md' 2>/dev/null | sort -u)
+
 # Did every commit we set out to push actually arrive? Subject match against
 # origin, which survives the sha rewriting that a rebase does by design.
 verify_manifest_landed() {
@@ -398,6 +418,81 @@ EOF
     exit 1
 }
 
+# A SECOND, DUMBER LOOK, sharing nothing with the first.
+#
+# bug-t-a-wrapped-resolve-citation-is-invisible-to-both-check-and-fill: frankC
+# wrote an ordinary wrapped Log line --
+#
+#     - 2026-08-30 — reproduced at HEAD before claiming (all three cells), fixed,
+#       resolved, commit PENDING-COMMIT.
+#
+# -- and it matched NEITHER progress.py's PENDING_RE nor this file's fill. So
+# `check` reported no pending resolves, sync printed "pushed 1 commit(s), all
+# verified on origin" with no `filled` line -- which is exactly what a ticket
+# with nothing to fill looks like -- and the literal sat in the file forever.
+# The placeholder was not unfilled. It was UNSEEN, in all three places anyone
+# would look.
+#
+# That is the 2026-08-29 bug rotated. Back then the fill was a pair of sed
+# literals covering fewer spellings than PENDING_RE, so check counted what fill
+# could not fill and THE MISMATCHED NUMBERS WERE THE ALARM. Aligning them was
+# right -- and it retired a differential test that had been running free on
+# every input. Two divergent implementations of one predicate ARE an oracle;
+# consolidating them deletes it, and nothing announces that.
+#
+# So the replacement oracle must share no assumption with the regex. Not a wider
+# pattern -- a wider pattern only moves the boundary, and the next unanticipated
+# spelling is silent again. A literal substring cannot be defeated by wrapping,
+# indentation, or wording.
+#
+# SCOPE IS THE WHOLE DESIGN. Run over the tree, this fires on the seven files
+# that merely DISCUSS the placeholder -- and a guard that cries wolf on prose is
+# a guard that gets scrolled past. It looks only at ticket files THIS RUN'S
+# COMMITS TOUCHED, so it fires once, on the sync that resolved the ticket, and
+# never again.
+#
+# TWO CONDITIONS, and conflating them would hide the interesting one:
+#   (a) `pending` NAMED the file and the literal survived -> the fill is broken.
+#       Unambiguous, and the only one that earns a non-zero exit.
+#   (b) `pending` never named it and the literal is there -> either the regex is
+#       blind to this spelling, or the line is prose. WARN and PRINT THE LINE.
+#       One glance settles which, which is a better answer than any pattern I
+#       could write to guess it -- and it keeps a false positive from carrying
+#       an exit code, which is what would teach people to ignore the real one.
+#
+# Never exit non-zero for (b): the push already SUCCEEDED. Reporting a healthy
+# push as a failure is this file's own recorded failure mode wearing the other
+# hat, and the defect here is silence -- a line that names the file ends it.
+verify_citations_landed() {
+    [ -n "$manifest_tickets" ] || return 0
+    broken="" ; unseen=""
+    for f in $manifest_tickets; do
+        [ -f "$f" ] || continue          # renamed or removed since; nothing to read
+        grep -qF "$PLACEHOLDER" "$f" 2>/dev/null || continue
+        if printf '%s\n' "$pending_seen" | grep -qxF "$f"; then
+            broken="$broken
+  $f"
+        else
+            unseen="$unseen
+  $f: $(grep -nF "$PLACEHOLDER" "$f" | head -2 | cut -c1-120 | sed 's/^/      /')"
+        fi
+    done
+
+    if [ -n "$unseen" ]; then
+        echo "sync: NOTE — $PLACEHOLDER is still in a ticket this push touched," >&2
+        echo "sync: and \`progress.py pending\` did not see it. Read the line: if it is" >&2
+        echo "sync: prose about the placeholder, ignore this; if it is a real citation," >&2
+        echo "sync: PENDING_RE is blind to its spelling and the sha will never be filled." >&2
+        echo "sync: Unwrapping it onto one line is the fix, and re-running sync fills it.$unseen" >&2
+    fi
+    if [ -n "$broken" ]; then
+        echo "sync: *** FILL FAILED — these were owed a citation and still are ***$broken" >&2
+        echo "sync: progress.py named them, the substitution ran, and the literal survived." >&2
+        echo "sync: That is a bug in the fill, not in the ticket. Do not hand-edit around it." >&2
+        exit 1
+    fi
+}
+
 rebase_onto_origin
 
 if [ "$PUSH" = "1" ]; then
@@ -413,6 +508,7 @@ if [ "$PUSH" = "1" ]; then
         echo "sync: nothing of ours to push — origin/$BRANCH at $(git log --oneline -1 "origin/$BRANCH")"
     fi
     fill_pending_commits
+    verify_citations_landed
 else
     echo "sync: up to date — $(git log --oneline -1)"
 fi
