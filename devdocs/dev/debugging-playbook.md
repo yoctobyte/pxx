@@ -2271,6 +2271,24 @@ Four more from a single day, all different mechanisms, all the same shape:
   and measure one at a time. "All of them" is not a shortcut through "each of
   them" — it is a different experiment with a different answer.
 
+- **"Same repo" and "same tree" are different, and `ps` cannot tell them apart —
+  `/proc/<pid>/cwd` can.** Every agent's `make compiler/pascal26` has an
+  identical command line and builds into `/tmp/pxx-build-*`, so a `pgrep` showing
+  three concurrent builds is **not** evidence they are colliding, and it is also
+  not evidence that anyone is safe. Read the working directory instead:
+
+      for p in $(pgrep -f 'pascal26|make compiler'); do
+        echo "$p $(readlink /proc/$p/cwd)"; done
+
+  Measured 2026-08-30 (frankA's method, and it corrected me the same hour): a
+  warning went out naming three agents as sharing one worktree. All three were in
+  their own checkouts; the tree had **exactly one** occupant, and it was none of
+  the three. To enumerate the fleet rather than one build, read the cwd of each
+  session socket — `readlink /proc/$(basename s .sock)/cwd` over
+  `/run/user/1000/cc-socks/*.sock` — which maps every live session to its tree
+  and takes a second. **A claim about who is in a directory is checkable; do not
+  relay one.**
+
 And the cheapest one, which cost a full probe cycle the same evening: a compile
 whose output flag was wrong (`pascal26 x.pas -o out` — there is no `-o`; the
 second positional IS the output) wrote a file literally named `-o`, exited 0,
