@@ -12700,8 +12700,9 @@ test-riscv32: $(COMPILER)
 # fix), 63/13 (IR_STORE_MEM gaining the typed stores it never had) and 64/12
 # (IR_INDEX gaining the two managed-string base shapes it never had), then
 # 69/7 (Track A's pointer-aligned array frame slot, 599000083 — not an xtensa
-# change at all) and 84/6 (the dyn-array + managed-record IR ops, the whole-array
-# store arm they unmasked, and Halt(n)). No sweep has regressed a program.
+# change at all), 84/6 (the dyn-array + managed-record IR ops, the whole-array
+# store arm they unmasked, and Halt(n)) and 90/7 (rtti_reg, `in`, the set family,
+# and the by-value set parameter). No sweep has regressed a program.
 # Every one of those fixes was a MISSING ROW of a rule the other five backends
 # already carried — see
 # bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element.
@@ -12977,7 +12978,39 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_single_in_aggregate.pas $(TESTTMP)/test_xtensa_test_single_in_aggregate
 	./$(COMPILER) test/test_single_in_aggregate.pas $(TESTTMP)/test_xtensa_test_single_in_aggregate_x64
 	tools/expect_same.sh xtensa/test_single_in_aggregate "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_single_in_aggregate)" "$$($(TESTTMP)/test_xtensa_test_single_in_aggregate_x64)"
-	@echo "hosted xtensa: 84 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	# +7 on 2026-08-30: the set family (SET_LIT / SET_COPY / SET_BINOP /
+	# SET_CMP), the `in` operator, IR_RTTI_REG/IR_RESOURCES, and the by-value
+	# SET PARAMETER marshalling those made reachable. Every one of the last
+	# three was hidden UNDER the one above it: rtti_reg exposed a missing `in`,
+	# `in` exposed a missing set_copy, set_copy exposed a set param passed as
+	# one address word. Peeling, not a list.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_set_param.pas $(TESTTMP)/test_xtensa_test_cross_set_param
+	./$(COMPILER) test/test_cross_set_param.pas $(TESTTMP)/test_xtensa_test_cross_set_param_x64
+	tools/expect_same.sh xtensa/test_cross_set_param "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_set_param)" "$$($(TESTTMP)/test_xtensa_test_cross_set_param_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_sets.pas $(TESTTMP)/test_xtensa_test_cross_sets
+	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_xtensa_test_cross_sets_x64
+	tools/expect_same.sh xtensa/test_cross_sets "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_sets)" "$$($(TESTTMP)/test_xtensa_test_cross_sets_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_lfm.pas $(TESTTMP)/test_xtensa_test_lfm
+	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_xtensa_test_lfm_x64
+	tools/expect_same.sh xtensa/test_lfm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_lfm)" "$$($(TESTTMP)/test_xtensa_test_lfm_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_set_runtime.pas $(TESTTMP)/test_xtensa_test_set_runtime
+	./$(COMPILER) test/test_set_runtime.pas $(TESTTMP)/test_xtensa_test_set_runtime_x64
+	tools/expect_same.sh xtensa/test_set_runtime "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_set_runtime)" "$$($(TESTTMP)/test_xtensa_test_set_runtime_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_streaming.pas $(TESTTMP)/test_xtensa_test_streaming
+	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_xtensa_test_streaming_x64
+	tools/expect_same.sh xtensa/test_streaming "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming)" "$$($(TESTTMP)/test_xtensa_test_streaming_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_streaming_enumset.pas $(TESTTMP)/test_xtensa_test_streaming_enumset
+	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_xtensa_test_streaming_enumset_x64
+	tools/expect_same.sh xtensa/test_streaming_enumset "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming_enumset)" "$$($(TESTTMP)/test_xtensa_test_streaming_enumset_x64)"
+	# test_rtti prints raw ADDRESSES and a pointer-width InstanceSize, so the
+	# three lines that cannot agree across a 32/64-bit boundary are filtered --
+	# the same filter i386, arm32 and aarch64 already use for this program. The
+	# rest of it (class names, parent chain, PropCount, property values) is a
+	# real differential and it matches.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti_x64
+	tools/expect_same.sh xtensa/test_rtti "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_xtensa_test_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	@echo "hosted xtensa: 91 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

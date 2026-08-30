@@ -2153,8 +2153,51 @@ begin
           EmitAsmXtensa(['movi a4, 1','bge a3, a2, .done','movi a4, 0','.done:','mov a2, a4'])
         else if op = Ord(tkGe) then
           EmitAsmXtensa(['movi a4, 1','bge a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
+        else if op = Ord(tkIn) then
+        begin
+          { Set membership: a2 = element, a3 = set address. Branch on the range
+            check rather than riscv32's branch-free mask, because xtensa has no
+            sltiu and no zero register — the mask costs more instructions here
+            than the branch does. Same semantics: an element outside 0..255
+            yields 0 and never dereferences past the 32-byte set, and `bgeu`
+            catches a negative element as a huge unsigned in one compare, as
+            riscv32's `sltiu` does.
+
+            THE ONLY BINARY OPERATOR XTENSA WAS MISSING, and the six `class of`
+            / RTTI programs need it because lib/rtl/typinfo.pas uses `in` —
+            which means anything that so much as USES typinfo failed to compile
+            for this target, one layer under the rtti_reg arm above. }
+          EmitAsmXtensa(['movi a5, 0',
+                         'movi a4, 256',
+                         'bgeu a2, a4, .done',
+                         'movi a6, 3',
+                         'ssr a6',
+                         'srl a4, a2',          { a4 = elem >> 3 = byte index }
+                         'add a4, a3, a4',
+                         'l8ui a4, a4, 0',      { a4 = the set byte }
+                         'movi a6, 7',
+                         'and a6, a2, a6',      { a6 = bit index }
+                         'ssr a6',
+                         'srl a4, a4',
+                         'movi a6, 1',
+                         'and a5, a4, a6',
+                         '.done:',
+                         'mov a2, a5']);
+        end
         else
-          Error('target xtensa: unsupported binary operator (div/mod/shifts pending)');
+        begin
+          { The message used to read "(div/mod/shifts pending)" and name no
+            operator. Both halves cost real time: div, mod and every shift have
+            been implemented for a while, so the parenthesis sends you to the
+            wrong place, and without the operator the only way to learn WHICH
+            one is missing is to edit this line and self-compile — which is
+            exactly what it cost to find tkIn above. Mirrors riscv32's spelling.
+
+            A diagnostic that names a cause it no longer has is worse than one
+            that names none: the first sends you somewhere, and it is wrong. }
+          ErrorIdent := 'op ' + MangleSuffix(op);
+          Error('target xtensa: unsupported binary operator');
+        end;
       end;
 
     IR_CALL:
@@ -2443,6 +2486,34 @@ begin
             end
             else
               Inc(nArgs, 1);
+          end
+          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             (i < Procs[procIdx].ParamCount) and
+             (Procs[procIdx].Params[i].TypeKind = tySet) and
+             (not Procs[procIdx].Params[i].IsRef) and
+             (not Procs[procIdx].Params[i].IsArray) then
+          begin
+            { Set by-value param: the arg VALUE is the 32-byte set's ADDRESS, so
+              push all 8 words inline (mirrors i386 and riscv32) and let the
+              callee spill rebuild the set in its own 32-byte param slot. One
+              address word leaves the callee reading its own uninitialised slot
+              as set bytes.
+
+              Xtensa had no arm at all, so `CountIn(s)` counted members of the
+              stack: an EMPTY set answered 1 where the oracle said 0, and a
+              literal `[]` answered 2. Identical to the riscv32 defect that made
+              chess perft count 164 instead of 20
+              (bug-riscv32-chess-perft-runtime-corruption) — the test that
+              catches it, test_cross_set_param, was written FOR that incident
+              and could not run here until IR_SET_COPY landed minutes ago. }
+            IREmitNodeXtensa(IRA[argNode]);        { a2 = set address }
+            xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+            for j := 0 to 7 do
+            begin
+              xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, j * 4);
+              XtensaPushA2;
+            end;
+            Inc(nArgs, 8);
           end
           else if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and
@@ -2747,6 +2818,135 @@ begin
           EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[node]));   { a2=dest, a3=src, a4=count }
         EmitCallProc(procIdx);
       end;
+
+    IR_SET_LIT:
+      { a2 = the 32-byte set blob's address. }
+      EmitLoadDataRefXtensa(reg_xtensa_a2, Integer(IRIVal[node]));
+
+    IR_SET_COPY:
+      begin
+        { Copy the 32-byte set from src (IRB) to dest (IRA), 8 words. }
+        IREmitNodeXtensa(IRB[node]);              { a2 = source addr }
+        XtensaPushA2;
+        IREmitNodeXtensa(IRA[node]);              { a2 = dest addr }
+        XtensaPopA3;                              { a3 = src }
+        for i := 0 to 7 do
+        begin
+          xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, i * 4);
+          xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, i * 4);
+        end;
+      end;
+
+    IR_SET_BINOP:
+      begin
+        { Set +/-/*/>< over 8 words into the BSS scratch (IRIVal). }
+        IREmitNodeXtensa(IRA[node]);              { a2 = lhs addr }
+        XtensaPushA2;
+        IREmitNodeXtensa(IRB[node]);              { a2 = rhs addr }
+        xtensa_mov(reg_xtensa_a3, reg_xtensa_a2); { a3 = rhs }
+        XtensaPopA2;                              { a2 = lhs }
+        EmitLoadGlobAddrXtensa(reg_xtensa_a4, Integer(IRIVal[node]));  { a4 = scratch }
+        { `-` is `and not`, and xtensa has no xori — hoist the -1 mask out of
+          the loop rather than materialising it eight times. }
+        if IntToTokenKind(IRC[node]) = tkMinus then
+          xtensa_movi(reg_xtensa_a8, -1);
+        for i := 0 to 7 do
+        begin
+          xtensa_l32i(reg_xtensa_a5, reg_xtensa_a2, i * 4);
+          xtensa_l32i(reg_xtensa_a6, reg_xtensa_a3, i * 4);
+          if IntToTokenKind(IRC[node]) = tkPlus then
+            xtensa_or(reg_xtensa_a5, reg_xtensa_a5, reg_xtensa_a6)
+          else if IntToTokenKind(IRC[node]) = tkStar then
+            xtensa_and(reg_xtensa_a5, reg_xtensa_a5, reg_xtensa_a6)
+          else if IntToTokenKind(IRC[node]) = tkMinus then
+          begin
+            xtensa_xor(reg_xtensa_a6, reg_xtensa_a6, reg_xtensa_a8);   { not rhs }
+            xtensa_and(reg_xtensa_a5, reg_xtensa_a5, reg_xtensa_a6);
+          end
+          else if IntToTokenKind(IRC[node]) = tkSymDiff then
+            xtensa_xor(reg_xtensa_a5, reg_xtensa_a5, reg_xtensa_a6);   { `><` }
+          xtensa_s32i(reg_xtensa_a5, reg_xtensa_a4, i * 4);
+        end;
+        xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);  { result addr }
+      end;
+
+    IR_SET_CMP:
+      begin
+        { Compare two 32-byte sets. a8 = accumulated differences, a9 =
+          subset-direction violations (mirrors riscv32 and aarch64, 8 words).
+          The final 0/1 materialisation uses the branch idiom the comparison
+          arms above use, because xtensa has neither sltiu nor a zero register. }
+        IREmitNodeXtensa(IRA[node]);              { a2 = lhs addr }
+        XtensaPushA2;
+        IREmitNodeXtensa(IRB[node]);              { a2 = rhs addr }
+        xtensa_mov(reg_xtensa_a3, reg_xtensa_a2); { a3 = rhs }
+        XtensaPopA2;                              { a2 = lhs }
+        xtensa_movi(reg_xtensa_a8, 0);            { differences }
+        xtensa_movi(reg_xtensa_a9, 0);            { violations }
+        if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) or
+           (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+          xtensa_movi(reg_xtensa_a11, -1);        { the `not` mask, hoisted }
+        for i := 0 to 7 do
+        begin
+          xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, i * 4);   { lhs word }
+          xtensa_l32i(reg_xtensa_a5, reg_xtensa_a3, i * 4);   { rhs word }
+          xtensa_xor(reg_xtensa_a6, reg_xtensa_a4, reg_xtensa_a5);
+          xtensa_or(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a6);
+          if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) then
+          begin
+            xtensa_xor(reg_xtensa_a6, reg_xtensa_a5, reg_xtensa_a11);  { not rhs }
+            xtensa_and(reg_xtensa_a6, reg_xtensa_a4, reg_xtensa_a6);   { lhs and not rhs }
+            xtensa_or(reg_xtensa_a9, reg_xtensa_a9, reg_xtensa_a6);
+          end
+          else if (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+          begin
+            xtensa_xor(reg_xtensa_a6, reg_xtensa_a4, reg_xtensa_a11);  { not lhs }
+            xtensa_and(reg_xtensa_a6, reg_xtensa_a5, reg_xtensa_a6);   { rhs and not lhs }
+            xtensa_or(reg_xtensa_a9, reg_xtensa_a9, reg_xtensa_a6);
+          end;
+        end;
+        if IRC[node] = Ord(tkEq) then
+          EmitAsmXtensa(['movi a4, 1','movi a6, 0','beq a8, a6, .done',
+                         'movi a4, 0','.done:','mov a2, a4'])
+        else if IRC[node] = Ord(tkNeq) then
+          EmitAsmXtensa(['movi a4, 1','movi a6, 0','bne a8, a6, .done',
+                         'movi a4, 0','.done:','mov a2, a4'])
+        else if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkGe)) then
+          EmitAsmXtensa(['movi a4, 1','movi a6, 0','beq a9, a6, .done',
+                         'movi a4, 0','.done:','mov a2, a4'])
+        else
+        begin
+          { tkLt / tkGt: proper = subset AND unequal. Two single-label blocks
+            rather than one block with two branches to the same label — labels
+            are scoped per EmitAsmXtensa call, and one shape per block is the
+            shape every other arm in this file already uses. }
+          EmitAsmXtensa(['movi a4, 1','movi a6, 0','beq a9, a6, .done',
+                         'movi a4, 0','.done:']);
+          EmitAsmXtensa(['movi a5, 1','movi a6, 0','bne a8, a6, .done',
+                         'movi a5, 0','.done:']);
+          xtensa_and(reg_xtensa_a2, reg_xtensa_a4, reg_xtensa_a5);
+        end;
+      end;
+
+    IR_RTTI_REG:
+      { a2 = the RTTI-registry address, through the -100 data-ref sentinel the
+        linker fills in. One line, and it is the entire reason six `class of` /
+        RTTI / LFM programs would not compile for xtensa — including
+        lib/rtl/typinfo.pas itself, so anything that so much as USES typinfo
+        failed here. Mirrors aarch64; x86-64 emits the same sentinel by hand.
+
+        RISCV32 HAS THE SAME GAP and is not fixed here — it is not my lane's
+        file. Filed as bug-a-rtti-reg-and-resources-are-missing-on-riscv32.
+        Found by the sibling rule: this arm was ported from aarch64 rather than
+        riscv32 precisely because riscv32 turned out not to have one, which is
+        only visible if you check the arm you are copying FROM exists.
+        devdocs/dev/normalise-dont-special-case }
+      EmitLoadDataRefXtensa(reg_xtensa_a2, -100);
+
+    IR_RESOURCES:
+      { a2 = the resource-table address (-101 sentinel). Same arm, same gap,
+        same two backends missing it. }
+      EmitLoadDataRefXtensa(reg_xtensa_a2, -101);
 
     IR_SETLEN_DYN:
       begin
