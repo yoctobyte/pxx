@@ -19692,3 +19692,57 @@ x86-64 works, filed by frankD as [A p25].
 
 **TWO SESSIONS STILL ON TRACK A** (frankA, b4). frankA's next item is in N's
 files, which keeps them clear for now. Settle it when b4's ticket lands.
+
+### CORRECTION, same tick — forwardlint is NOT an unknown tool, and the real gap is sharper
+
+I wrote above that `tools/forwardlint.py` was *"a tool nobody knew about"*.
+**Wrong**, and frankwasm corrected its own framing before I could repeat it
+further: forwardlint is **step 2 of `tools/gate.sh quick`** (`tools/gate.sh:216-225`,
+the step printing `fpc seed compiles (forward decls)`) — *the very step that
+aborted for every lane tonight* — and its promotion to master is already recorded
+in this file as `c7690064e`. Verified by reading `gate.sh` rather than taking the
+correction on trust.
+
+**The true gap is structural and explains every instance:**
+
+| | runs forwardlint? | CLAUDE.md status |
+| --- | --- | --- |
+| `make compiler/pascal26` + repro | **no** — and cannot catch this class, since pxx resolves across the unit | **MANDATORY** |
+| `gate.sh quick` | **yes**, ~1s | **OPTIONAL** |
+
+**The check lives in the gate that is optional and is absent from the gate that
+is mandatory.** An agent following the documented loop *exactly* hits this class
+every time and cannot see it — the self-host fixedpoint is green, the tests pass,
+and only the FPC **seed** build fails. No amount of care closes it.
+
+Bitten so far, every time with the loop followed correctly: **Track R**
+(`bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed`), **frankwasm twice**
+(`WasmDataAddr`, `WasmEmitClassRef`), **Track C twice tonight** (`CModuleOfTok`
+in `lexer.inc`, then `CBlockContinues` entirely inside `cparser.inc`), and
+**Track P now** — `pasparser_generic.inc:844` → `QualArgAliasName` (:1476) and
+`:1022` → `EmitQualAliasDecl` (:1525), both from the qualified-argument fix,
+both call and definition inside the one file. **Measured by me directly, not
+relayed; master's seed is red as of ~10:1x** and routed to frank-rust.
+
+**frankC's form is the one to keep, and its reasoning is the load-bearing part:**
+*anything that edits `compiler/**` gets forwardlint, unconditionally, in the same
+breath as the build.* Not *"be careful when touching `lexer.inc`"* — that rule
+would have caught its first break and **missed its second**, which was entirely
+inside its own file. At ~1s the cost is below the threshold where *"is this
+change risky enough to check?"* is worth asking, **and asking that question is
+what produced both misses. A cheap check applied conditionally has a condition to
+get wrong.**
+
+**Whether the MANDATORY loop should include it is the owner's call. Surfaced, not
+edited** — `CLAUDE.md` is the owner's, and a peer cannot authorise a change there.
+The case is: five instances across four lanes, every one with the documented loop
+followed correctly, cost ~1s to prevent, and the failure mode is that **the next
+lane to run a gate inherits a red it did not cause and reasonably assumes is
+its own.**
+
+**Note the shape of my own error here**, since it is face 235 within the hour: I
+took frankwasm's inference (*"I found it in a code comment in my own file, so
+nobody knows it"*) and **restated it as fleet-wide fact in a durable document**.
+A relayed inference is not a measurement, and the roster is exactly where an
+unchecked one hardens. Both the claim and its correction came from the same lane;
+what I contributed was amplification.
