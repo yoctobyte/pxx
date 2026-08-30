@@ -5,7 +5,7 @@ type: bug
 status: backlog
 blocked-by: []
 owner: ""
-summary: "`#include \"nosuch.pas\"` from C reports the line AFTER the include (pointing at innocent code), leaks the internal `__pxx_pascal_unit` marker into the `near:` context, and speaks Pascal (`uses:`) at an author who wrote `#include`. Measured at aa78a7faf63a. The raise site is pasparser_proc.inc -- a Track P file -- so the edit is not Track C's, per the string-literal-decay precedent."
+summary: "`#include \"nosuch.pas\"` from C reports the line AFTER the include (pointing at innocent code), leaks the internal `__pxx_pascal_unit` marker into the `near:` context, and speaks Pascal (`uses:`) at an author who wrote `#include`. Measured at aa78a7faf63a. CORRECTED 2026-08-30: the raise site is fine; the offset is created by the C-side caller, so the edit needs cparser.inc AND pasparser_proc.inc -- see the measurement section at the end."
 ---
 
 # A missing Pascal unit, imported from C, is diagnosed at the wrong line in the wrong language
@@ -127,3 +127,50 @@ in the context. A `test/` case belongs beside the `c_pasunit_*_fail` block in
 - Parent: `feature-c-import-a-pascal-unit-under-a-mangled-name` (this was its last
   open non-§6 item; §6 is blocked on a user permission grant).
 - Precedent for the track/file split: `refactor-c-string-literal-decay-belongs-at-the-producer`.
+
+---
+
+## The frontmatter's routing was wrong, and frankC measured it (2026-08-30)
+
+This ticket said *"the raise site is `pasparser_proc.inc` — a Track P file — so
+the edit is not Track C's."* **Half right, and the wrong half is the one a
+dispatcher reads.** The coordinator routed on it and sent frankC to a file that
+cannot hold the fix.
+
+**Pascal's own `uses` through the same raise site is CORRECT:**
+
+```
+program p; / (blank) / uses nosuchunit;   ->  pascal26:3   correct, with a near: showing the user's own text
+#include "nosuch.pas" on line 1           ->  pascal26:2   wrong
+```
+
+So `pasparser_proc.inc:3567` is not defective. It reports `CurTok`, and for a
+Pascal caller `CurTok` is still on the unit name when the loader fails. **The
+offset is manufactured entirely on the calling side:** `CParsePascalUnitMarker`
+(`cparser.inc:432-500`) consumes the marker identifier, both strings and the
+semicolon before it calls, so `CurTok` has already crossed to the next line.
+
+**One cause, one victim** — the coordinator's "a consistent off-by-one usually
+has one cause and several victims" guess was wrong in the useful direction, and
+it was checked rather than assumed.
+
+**There is no P-only path.** Capturing at entry to `ParseUsesUnit` does not help:
+the caller has already advanced, so P reads line 2 either way. The information is
+gone before P is entered. Defects 3 and 4 need the caller too — `CProgramMode` is
+deliberately set False by the marker handler before the call (reason documented
+at `cparser.inc:483`) and `PyImportLang='pas'` is also set by NilPy's
+`import "x.pas"`, so **neither flag distinguishes a C author from a Pascal one**.
+
+### Banked so the fix is short when `cparser.inc` frees
+
+- Caller→callee state already flows across this exact call by an established
+  pattern: `PyImportLang` is set by the marker handler, and `defs.inc:3442`
+  documents `PyDottedImport` doing the same, *"cleared by ParseUsesUnitBody so a
+  stale value cannot leak."* A diagnostic origin is another rider on a proven
+  mechanism, not a new one.
+- `ErrorAt(line, msg)` already exists at `lexer.inc:99` and passes
+  `withContext=False`, which fixes **defect 2** (the leaked `__pxx_pascal_unit`
+  in the `near:` context) for free at the same time.
+
+**Do not land a P-side half alone** — with no caller to supply the position it is
+dead code that reads as a finished change.
