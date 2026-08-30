@@ -250,4 +250,4 @@ diagnosis complete, write only; the fix is one branch in pasparser_decl.inc:6154
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 38f18fb6f.
