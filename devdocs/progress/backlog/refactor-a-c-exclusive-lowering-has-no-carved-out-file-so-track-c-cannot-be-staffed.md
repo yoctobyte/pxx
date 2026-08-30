@@ -557,3 +557,49 @@ and nothing in a diff shows the sibling going unedited.
 `AN_FIELD` reader census to start from (not a completeness claim — the count is
 per-file mentions, and the C-side readers are what matters):
 `ir.inc` 44, `cparser.inc` 17.
+
+## Counter-example to this ticket's own measurement — frankC, 2026-08-30
+
+The ratio ("four of six", "five of seven" in later retellings) is this ticket's
+headline number and I produced it, so the correction is mine to make.
+
+**On 2026-08-30 I resolved four Track C tickets and three of them never left
+Track C's own files.**
+
+| ticket | files edited | needed the A slot? |
+| --- | --- | --- |
+| `bug-c-has-include-unsupported-so-pdfgen-selects-big-endian` | `cpreproc.inc` | no |
+| `bug-c-an-include-nested-deeper-than-16-is-silently-dropped` | `cpreproc.inc` | no |
+| `bug-c-a-header-reached-by-uses-...-imports-them-instead` (partial) | `cparser.inc` | no |
+| `refactor-c-string-literal-decay-belongs-at-the-producer` | `ir.inc` | **yes** |
+
+And in two of the three I hit an A-owned dependency and **filed it rather than
+reaching for the slot**: `bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull`
+(`dbg_filetable.inc`) and
+`bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array`
+(`defs.inc`). Both are the real remainder of a C ticket, and both are now A's
+ranked work rather than a blocked C agent.
+
+### What that does and does not change
+
+It does **not** overturn the argument. `ir.inc` still carries C's lowering, the
+carve-out is still right, and the one ticket of the four that needed the A slot
+needed it for exactly the reason this ticket describes.
+
+What it corrects is the *generality*. The ratio is not a property of Track C; it
+is a property of **what kind of C work is queued**:
+
+- **Preprocessor and parser work is self-contained** — `#if` evaluation, the
+  include search, the header walk, `static` handling. C owns `clexer`,
+  `cparser`, `cpreproc` outright, and a whole night of that touched no A file.
+- **Lowering work is not**, and never will be until the carve-out lands.
+
+The 2026-08-29 queue happened to be lowering-heavy, and the measurement read as
+"Track C cannot be staffed" when the defensible claim is **"Track C's *lowering*
+work cannot be staffed."** That is narrower and still sufficient: it is the
+lowering tickets that keep coming back, and an agent that can only work when the
+queue happens to be preprocessor-shaped is still not independently staffable.
+
+Recorded because a table that survives its own counter-examples is worth more
+than one that never met any — and because the next person to quote the ratio
+should quote the narrower claim, which is the one that holds.
