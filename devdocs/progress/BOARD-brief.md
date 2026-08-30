@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:35 blocked:9 backlog:385 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:127 done:2869 rejected:66`
+`working:1 unfinished:35 blocked:9 backlog:385 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:127 done:2870 rejected:66`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback` [C] — owner: frankC
-- `chore-a-sweep-the-unwired-tests-into-the-suite` [A] — owner: frankwasm
 
 ## unfinished (35) — parked mid-flight; re-claim, do not duplicate
 

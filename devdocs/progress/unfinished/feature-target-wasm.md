@@ -350,3 +350,54 @@ lane had the same defect in a worse place.
    the decide inherits from what it unblocks rather than sitting at its filed
    `prio: 40` while gating a p60 anchor. Nobody edited that number and nobody
    should: the number is the U lane's call, the *edge* is a fact.
+
+## 2026-08-30 (frankwasm) — the whole wasm test lane is unreachable from any runner
+
+Found from the outside, while draining `chore-a-sweep-the-unwired-tests-into-the-suite`,
+and it is one line to fix if the answer is "a make target".
+
+`test/wasm/` holds **37 `*_slice.pas` subjects and 38 `check_*.sh` scripts**, one
+per slice, plus `check_all.sh` and `wat_oracle.sh`. The chain is complete and
+correct: `check_all.sh` -> `check_<name>.sh` -> `<name>_slice.pas` (spot-checked:
+`check_set.sh` names `set_slice.pas` three times).
+
+**Nothing invokes the top of it.** `test/wasm` appears nowhere in the Makefile,
+nowhere in `tools/`, nowhere in `testmgr.py`. Grepped every `.py`, `.sh` and the
+Makefile outside that directory — the only hit is `test/wasm/proto/gen_exc_wat.py`,
+i.e. the directory referencing itself. **The lane runs when a human types it and
+at no other time.**
+
+`check_test_wiring.py` has been reporting the 37 leaves as orphans, which is true
+and has the wrong coordinates: wiring 37 slices individually would duplicate a
+harness that is better than a rule per file. frankT has taken "this directory is
+unreachable" as a real gap in that checker.
+
+### Why this is worth a paragraph and not a line
+
+`check_all.sh` exists **because this lane already lost a suite to exactly this
+class of problem**. Its own header:
+
+> *"a suite went red and stayed red across a handoff that reported it green...
+> green looked like the ABSENCE of output. That is indistinguishable from a
+> script that died at line 1, which is exactly what had happened."*
+
+The fix was a positive sentinel per check — `PASS <name>`, unreachable under
+`set -e`. Correct, and **one level short**: a sentinel proves the check ran *when
+someone runs the check*. The same reasoning applied one level up asks who runs
+`check_all.sh`, and nobody does.
+
+### Three answers, and the resumer should pick deliberately
+
+1. **A make target** invoking `check_all.sh` — one line, but it puts a wasm
+   runtime on the critical path of whatever tier it lands in, and this box may
+   not have one. Check before choosing.
+2. **Deliberately hand-run**, with 37 `test/UNWIRED.txt` entries naming the
+   harness as the reason. Honest, and stops the checker reporting it forever.
+3. **Gated on runtime availability** — a target that skips loudly when no
+   runtime is present. Note the skip must be LOUD: a silent skip is the same
+   failure the sentinel was added to prevent, and this lane has already paid for
+   that lesson once.
+
+Nothing here is claimed or changed; the campaign stays parked. Recorded so the
+resumer does not rediscover it, and so `check_test_wiring.py`'s 37 lines are not
+read as 37 pieces of work.

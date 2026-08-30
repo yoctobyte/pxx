@@ -4,8 +4,8 @@ prio: 40
 type: chore
 owner: frankwasm
 blocked-by: []
-summary: "BATCH 5 LANDED 2026-08-30 (frankwasm): 6 top-level subjects wired against PROVEN oracles, 2 C helpers exempted, 1 stale exemption removed — 45 unwired down to 37, and ALL 37 REMAINING ARE test/wasm/**, i.e. one campaign's staging and not a general backlog. RE-PRICED 20 -> 40 with the measurement, not as a bare frontmatter edit: p20 priced a DRAIN OF 15 DEFERRED FILES, and the object is a LEAK — every one of batch 5's eight top-level files was created THAT DAY (--diff-filter=A), while `tools-devtest#00`, which runs check_test_wiring, has been STILL-RED in the full tier since 49bd043. DECIDED 2026-08-19: sweep them in — one job, not 45 tickets. Track A, not T, precisely because A can FIX a red in place. These are repro tests from fix commits, so the bug already has a ticket in done/ — reference it, do not re-file. NEVER record current output as the expectation; a file with no constructible oracle is left UNWIRED WITH A STATED REASON, which is the honest form of a skip."
-status: working
+summary: "DONE 2026-08-30 (frankwasm), batch 5: the general unwired-test backlog is EMPTY and top-level is zero for the first time. 6 subjects wired against oracles that were DIFFED (5 vs FPC 3.2.2 byte-for-byte, 1 vs `wc -c` of its own .data), 2 C helpers exempted because compiling them standalone would test a shape that never occurs, 1 stale exemption removed. The 37 files check_test_wiring still names are ALL test/wasm/** and are NOT orphans: they are one campaign's harness (37 slices, 38 check_*.sh, check_all.sh) whose top-level hook is missing, recorded in feature-target-wasm — do NOT open a batch 6 for them. The inflow is the unsolved half and is now frankT's: gate.sh quick asks the per-push question as of 7c1c422c9. NEVER record current output as the expectation; a file with no constructible oracle is left UNWIRED WITH A STATED REASON, which is the honest form of a skip."
+status: done
 ---
 
 # Sweep the unwired tests into the suite
@@ -568,3 +568,40 @@ What this ticket can say with confidence: **the general unwired-test backlog is
 empty.** What remains is one campaign's harness with a missing top-level hook,
 which is a different problem with a different owner and a one-line fix if the
 answer is "a make target".
+
+
+## RESOLVED 2026-08-30 — the backlog this ticket was written to drain is empty
+
+Not "finished the list" — **the list is a different list now.** What remains
+under `check_test_wiring.py` is 37 `test/wasm/**` files that are not orphan
+tests at all: they are a complete harness (37 slices, 38 `check_*.sh`,
+`check_all.sh`, `wat_oracle.sh`) missing its top-level hook. Wiring them
+individually would duplicate a runner that is better than a rule per file.
+Recorded in `feature-target-wasm` with three candidate answers; **do not open a
+batch 6 for them.**
+
+**The inflow, which this ticket could never have fixed, now has an owner.**
+Draining 45 does nothing about eight a day. frankT built the per-push question
+into `gate.sh quick` (`7c1c422c9`) — *did THIS push add a file under `test/`
+that no rule references?* — scoped inside the checker as `--since`, cannot-scope
+reported as exit 2 rather than a pass, and a failure message that names
+`test/UNWIRED.txt` and says outright not to delete the test to clear it. Cost
+measured at 0.7-1.3s against quick's ~30s budget.
+
+That is the half that matters. This ticket drained a population; that check
+stops it refilling, and it lands on the person who still has the oracle in their
+head rather than on a sweep three weeks later reconstructing it.
+
+### What the drain was actually for, stated once
+
+An unwired test is not a missing test — it is **a test that cannot fail**. Nine
+of them were `feature-unicodestring-model`'s entire family, including that
+campaign's acceptance test: written, measured against FPC, quoted in three
+messages to other agents, and executed by nothing but one person's hand. The
+campaign was one message from closing on it.
+
+The rule that follows, and it is the one to keep: **whether a test executes is
+not a property visible from inside it.** Reading the sources finds every
+property the sources carry and none of the ones they don't.
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
