@@ -76,4 +76,4 @@ the tool itself.
 test path `tools/crtl_reachability.py` — a Python tool, which is Track T's file.
 The defect was in `lib/crtl`, so `C` is correct, but the path it was inferred
 from points at the wrong lane. Worth knowing when the next auto-filed stub lands.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 609f335a5.
