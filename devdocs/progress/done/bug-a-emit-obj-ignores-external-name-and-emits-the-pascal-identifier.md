@@ -202,4 +202,4 @@ survived: every existing check of the path is satisfied by an object that is
 wrong.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 1a7658326.
