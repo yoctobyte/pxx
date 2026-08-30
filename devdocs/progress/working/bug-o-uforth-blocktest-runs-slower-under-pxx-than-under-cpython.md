@@ -762,3 +762,50 @@ Track A gap rather than a Track O one: this runtime has `-dPXX_HEAP_DEBUG`,
 "how much does it allocate, and of what size". A census under its own define —
 counts and a size histogram, no call-site attribution — would have answered in
 one run what three sessions have reached for callgrind to learn.
+
+### The zero-init candidate: an experiment that produced a 6x SPEEDUP and was void
+
+Run before writing anything, to price the banked diagnosis above rather than
+rank it on a hunch. The zeroing on `PXXAlloc`'s O(1) reuse path was disabled —
+deliberately unsound, as a measurement only — the compiler rebuilt, uforth
+rebuilt with it, and `core.fr` timed against an unpatched build at the same
+HEAD, interleaved:
+
+```
+uf_zon:  min 4.443s
+uf_zoff: min 0.714s      -83.9%
+```
+
+**That number is not a speedup. It is a segfault at 0.7 seconds.** 66 lines of
+output became 1. The run did not get faster, it stopped doing the work.
+
+This is the fleet's exit-status warning arriving in its predicted form — *a
+silently-red configuration does not merely report success, it reports a
+speedup* — and it is worth being precise about what did and did not catch it.
+The exit status **was** available: `ufrun.sh` propagates the program's rc. The
+timing loop threw it away, by construction:
+
+```sh
+t=$( { TIMEFORMAT=%R; time "$b" ...; } 2>&1 | tail -1 )
+```
+
+That idiom captures the timing and discards the verdict — `$?` is `tail`'s, and
+even without the pipe the assignment's status is the substitution's. **A timing
+harness is the one place the exit status is most load-bearing and the standard
+idiom for timing is the one that drops it.** What actually caught this was the
+output diff against the control run, printed BEFORE the timing loop rather than
+after. That ordering was luck as much as discipline; it is now the rule for
+this ticket's harness, and the loop carries the rc as well.
+
+**The void experiment still produced a finding, and it argues against the
+candidate rather than for it.** The zero-init contract is load-bearing enough
+that the workload dies in under a second without it — so the redundant-write
+story may be true and is certainly not the whole story, and a global switch is
+off the table for real reasons rather than stylistic ones. Anything here has to
+be a second entry point used by individually audited callers, which is what the
+`PXXAlloc` comment already demands. Still not started, now for a measured
+reason.
+
+Note also what did NOT catch it: the compiler self-hosted **byte-identically**
+with the zeroing disabled. A fixedpoint proves the compiler reproduces itself,
+not that the runtime is sound.
