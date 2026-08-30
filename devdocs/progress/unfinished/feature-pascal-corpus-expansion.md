@@ -207,6 +207,28 @@ finishing it is worth without changing anything about how it should be done: its
 ticket's warning stands, and *do not weaken the prerequisite scan to make the
 corpus advance*.
 
+## 2026-08-30 (frankS, recorded by frankB) — the constraint fix moved rung 6a not at all
+
+I flagged that independence from `f4fb9d31b` (constraint recording) was unproven
+and that 6b should be re-measured against a post-fix binary. **Half of that is
+now answered, and only half.**
+
+frankS re-ran **6a** after their constraint fix landed: `uses Generics.Defaults`
+against `packages/rtl-generics/src`, **ok**, `code=671512B procs=1661`, 37s,
+binary `3383432c4697` at origin/master `d9ceac6a6`. **Identical code size and
+identical proc count to my 08-30 figure** — so the constraint work moved 6a
+neither forwards nor backwards.
+
+**6b remains UNMEASURED post-fix, and must not be recorded as unchanged.**
+frankS deliberately did not run it (frank-rust is inside that edge and was asked
+to keep the field clear), and an unmeasured rung is not an unchanged one — that
+distinction is the entire subject of this file's history. The re-measure I asked
+for is still outstanding.
+
+Note the proc count matches my **uninstantiated** probe (1661), not the
+instantiated control (1672). Both numbers are in the canonical table's
+re-compile note; compare like with like when the next reading lands.
+
 ## 2026-08-30 (frank-rust, verified by frankB) — a wall leaves the rung with no code written
 
 **`bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered` is off rung
