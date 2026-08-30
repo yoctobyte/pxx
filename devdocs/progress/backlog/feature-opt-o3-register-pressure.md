@@ -63,7 +63,7 @@ owner: ""
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
 
-## READ FIRST — four standing rules for every slice in this campaign
+## READ FIRST — five standing rules for every slice in this campaign
 
 Each of these was paid for once. They are here, at the top, rather than inside
 the write-up of the slice that learned them, because that is where the next
@@ -145,6 +145,32 @@ first cut of that test followed deliberately — produces rows that are maximall
 *insensitive*, because far-apart values compare the same way against almost
 anything. Adjacent values, not distinct ones, are what make an operand
 observable.
+
+
+**5. A PROMOTION moves a gate. Nothing moves the test rows with it.** Rule 1
+says every `-O3` pass needs its own control test; the corollary nobody had paid
+for is that when the gate is re-spelled `OptLevel < 3` -> `< 2`, that test is
+now asserting the wrong level. `EmitStaticLitHandle`/`...A64` were promoted on
+2026-08-30. The x86-64 side got a `-O2` row. The aarch64 side's qemu loop still
+read `for o in 0 3`, so **the only level aarch64 actually ships was the one level
+never asserted** — `-O3` covered the promoted pass incidentally, as a superset,
+and a green there says nothing about the default. Found by running the arm by
+hand, not by any gate; `tools/check_o3_backend_parity.py` counts gate SITES per
+backend and cannot see that a site changed tier, and the tstate full run could
+not answer it either (the row carries no `skip_holes` field, so "no job went
+newly red" and "the cross arm ran" are different claims).
+
+Fixed in `2649faaca`, and proven live rather than assumed: a scratch emitter
+built with `MSTR_STATIC_RC=0` makes aarch64 `-O2` print `b=Zbcdef` while `-O0`
+stays correct — sensitive in both directions. **Build that broken emitter to a
+SCRATCH PATH with the good compiler**; the same break run through
+`make compiler/pascal26` hangs for minutes, because a compiler that frees its
+own `.data` literals cannot reach a fixedpoint.
+
+So: **when you promote a gate, grep for every test row and qemu loop naming that
+pass and move them with it, in the same commit.** Both backends, and check the
+`for o in ...` lists specifically — an `-O3`-only list is correct for an
+`-O3` slice and silently wrong for a promoted one.
 
 
 - **Type:** feature (codegen — optimization) — **Track O** (Optimization lane;
