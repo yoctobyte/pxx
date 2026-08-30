@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-30T04:09:15Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e6802ca213b6bcbf54cf8669a61488533b6134fb",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-30T04:24:23Z",
    "fixed": [],
    "new_red": [],
@@ -490,6 +481,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-30T09:59:36Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "seven",
@@ -3841,6 +3841,7 @@
   "test-threads#src:test/threadsafe_define.pas@2": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
+  "test-uforth#src:compiler/.pascal26.fixedpoint": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
   "test-uforth#src:compiler/.pascal26.fixedpoint@1": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
   "test-uforth#src:compiler/.pascal26.fixedpoint@10": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
   "test-uforth#src:compiler/.pascal26.fixedpoint@11": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
@@ -7339,6 +7340,7 @@
   "test-threads#src:test/threadsafe_define.pas@2": "full",
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "full",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "full",
+  "test-uforth#src:compiler/.pascal26.fixedpoint": "slow",
   "test-uforth#src:compiler/.pascal26.fixedpoint@1": "full",
   "test-uforth#src:compiler/.pascal26.fixedpoint@10": "full",
   "test-uforth#src:compiler/.pascal26.fixedpoint@11": "full",
@@ -10798,6 +10800,7 @@
   "test-threads#src:test/threadsafe_define.pas@2": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
+  "test-uforth#src:compiler/.pascal26.fixedpoint": "pass",
   "test-uforth#src:compiler/.pascal26.fixedpoint@1": "pass",
   "test-uforth#src:compiler/.pascal26.fixedpoint@10": "pass",
   "test-uforth#src:compiler/.pascal26.fixedpoint@11": "pass",
@@ -10930,14 +10933,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-30T09:55:00Z",
+  "date": "2026-08-30T09:59:36Z",
   "deadline": 3600.0,
   "sha": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 548.4
+  "verdict": "GREEN",
+  "wall": 264.0
  },
  "last_breadth_try": {
   "date": "2026-08-29T18:39:13Z",
@@ -10963,6 +10966,16 @@
    "unreached": 0,
    "verdict": "RED",
    "wall": 111.3
+  },
+  "slow": {
+   "date": "2026-08-30T09:59:36Z",
+   "deadline": 3600.0,
+   "sha": "be6dbd7fba7e8428c6ffb2b64161af755559d910",
+   "tier": "slow",
+   "timed_out": false,
+   "unreached": 0,
+   "verdict": "GREEN",
+   "wall": 264.0
   }
  },
  "last_full": {
