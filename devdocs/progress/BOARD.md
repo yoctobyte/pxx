@@ -105,7 +105,7 @@ _none_
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 40 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
 | bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works | A+S | 45 | bug | `Write` of any real SIGBUSes on xtensa — while `Str` of the same value is correct | — |
 | bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead | C | 55 | bug | A `static`/`static inline` function DEFINED in a .h reached through `uses` has its body discarded and becomes an external, so the program links a DT_NEEDED on a lib<header>.so that does not exist and dies at load. The identical function in a .c compiles and runs. REOPENED 2026-08-30: a first fix was landed and REVERTED -- it was correct for a user's own header and wrong for the crtl modules that reach the same walk. Read the reopen section before attempting it again. | — |
-| bug-c-an-include-nested-deeper-than-16-is-silently-dropped | C | 45 | bug | MAX_CPREP_INCLUDES is 128 and the nesting guard errors at 128, but CPLoadInclude/CPIncludeLength are `case depth of 0..15` with no else -- so at depth >= 16 the load is a no-op and CPIncludeLength returns an UNSET function result. Measured: the 17th nested header and everything below it vanishes, with no error. LEVEL16 came back 0 where gcc says 16, and the only diagnostic is `undeclared identifier ... treated as 0` pointing at the use site, nowhere near the dropped include. | — |
+| bug-c-an-include-nested-deeper-than-16-is-silently-dropped | C | 50 | bug | MAX_CPREP_INCLUDES is 128 and the nesting guard errors at 128, but CPLoadInclude/CPIncludeLength are `case depth of 0..15` with no else -- so at depth >= 16 the load is a no-op and CPIncludeLength returns an UNSET function result. Measured: the 17th nested header and everything below it vanishes, with no error. LEVEL16 came back 0 where gcc says 16, and the only diagnostic is `undeclared identifier ... treated as 0` pointing at the use site, nowhere near the dropped include. | — |
 | bug-c-has-include-with-a-macro-operand-answers-0 | C | 35 | bug | `__has_include(HDR)` where HDR is a macro expanding to `<stdio.h>` answers 0 under pxx and 1 under gcc. Same silent shape as the pdfgen endian bug it was found beside: no error, no warning, the guarded #include is simply skipped and whatever the header would have defined stays undefined. The literal forms `__has_include(<x>)` and `__has_include(\"x\")` are correct; only a macro-expanded operand is affected. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
@@ -819,6 +819,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
+- [p 50] [C] bug-c-an-include-nested-deeper-than-16-is-silently-dropped
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
@@ -843,7 +844,6 @@ _none_
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
 - [p 45] [A+S] bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer
 - [p 45] [A+S] bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works
-- [p 45] [C] bug-c-an-include-nested-deeper-than-16-is-silently-dropped
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race

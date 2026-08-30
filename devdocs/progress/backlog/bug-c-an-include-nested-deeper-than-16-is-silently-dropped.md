@@ -1,5 +1,5 @@
 ---
-prio: 45
+prio: 50
 track: C
 type: bug
 blocked-by: []
@@ -60,6 +60,41 @@ Two independent defects, and both should be fixed:
 2. **A `case` with no `else` leaves a function Result undefined**, so the
    failure is unpredictable rather than merely wrong.
 
+## How close is real code to the cliff? Measured, not guessed
+
+The obvious objection is that nothing nests headers 17 deep by accident, which
+would make the blast radius small. The counter-objection is that nobody has
+looked, which would make it *unknown*. So I looked.
+
+A faithful model of `CPProcessText`'s recursion (a header is entered at
+depth+1 whether or not its guard then skips the body; an already-included
+header costs one level and descends no further) over this box's real header
+sets:
+
+| header | modelled depth |
+| --- | --- |
+| `stdio.h`, `stdlib.h`, `string.h`, `math.h` | 6 |
+| `time.h` | 5 |
+| `glib.h` | 12 |
+| **`gtk/gtk.h`** | **15** |
+| `pango/pango.h` | 18 |
+
+The model **overestimates**: it counts `#include`s inside conditional blocks
+that the real preprocessor skips. That is the safe direction for "is the limit
+reachable", and the `pango` row is where it shows — the chain it reports runs
+`pango.h -> ... -> pthread.h -> sched.h -> linux/sched/types.h -> ... ->
+asm-generic/bitsperlong.h`, and compiling a file that includes `<pango/pango.h>`
+shows `__BITS_PER_LONG` **absent under gcc too**, so that chain is not actually
+taken. I could not demonstrate any real header set here exceeding 15.
+
+**So the honest reading is: not currently reachable, and one level of margin.**
+`gtk/gtk.h` — the deepest header set this repo actually compiles against —
+has a modelled upper bound of exactly 15, against a hard cliff at 16 with no
+diagnostic on the other side. That is why this is prio 50 rather than the 45 it
+was filed at or the 60 it was argued up to: the failure mode is severe and the
+margin is one, but the claim "real code hits this today" is not supported by
+measurement and should not be written into the ticket as if it were.
+
 ## Options
 
 - **Make the buffers an array** — `CPrepInclude: array[0..N] of AnsiString` —
@@ -81,6 +116,9 @@ Two independent defects, and both should be fixed:
   a dropped header — i.e. the guard and the buffer count are the same number.
 
 ## Log
+- 2026-08-30 — prio 45 -> 50 after measuring how close real headers get: gtk
+  at a modelled (over-estimating) 15 against a cliff at 16. Argued for 60 on
+  "blast radius unknown"; the measurement makes it known and narrow, so 50.
 - 2026-08-30 — found by frankC while adding `__has_include`
   (`bug-c-has-include-unsupported-so-pdfgen-selects-big-endian`), which needed
   to know which include-buffer depths are safe to probe at. Filed rather than

@@ -170,6 +170,57 @@ level**, and *"a `-O0`-only self-compile failure passed the entire gate on
 2026-08-19 and was found by a benchmark."* If you are about to lean on "it passes
 the self-host gate", this is the probe that says how far that claim reaches.
 
+## Measure at the LAYER you changed, not several layers downstream
+
+The probes above compare a program's *behaviour*. When what you changed is a
+stage the program passes through rather than the program, there is usually a
+cheaper and strictly stronger instrument: **compare that stage's own output.**
+
+**The C preprocessor case, and reach for it by default.** `--dump-cpp` prints
+the preprocessed translation unit. For any change to `cpreproc.inc` — the
+include search, macro expansion, the `#if` evaluator, line markers — run it over
+a handful of named C files with the two compilers and diff:
+
+```sh
+./compiler/pascal26                 --dump-cpp test/cmath_constants.c /tmp/a > head.cpp
+./stable_linux_amd64/default/pinned --dump-cpp test/cmath_constants.c /tmp/b > pin.cpp
+# normalise each binary's OWN install-path prefix before diffing:
+sed 's#\./compiler/\.\./#ROOT/#; s#\./stable_linux_amd64/default/\.\./\.\./#ROOT/#' ...
+```
+
+That normalisation is the detail that makes it usable: the two binaries sit in
+different directories, so the crtl anchor resolves through different `..`
+chains and every `# 1 "<path>"` line marker differs for a reason that has
+nothing to do with the change. Without the `sed` every file reports DIFFERS and
+the probe is useless; with it, equality is exact.
+
+Measured 2026-08-30 on the `__has_include` change, which lifted the include
+search out of `CPInclude` into a shared `CPSearchInclude`: **11,832 lines across
+four files, byte-identical.** Four compiles, a few seconds. The alternative
+being considered at the time was a build-and-run differential over the whole C
+corpus — ten minutes, and it could only ever have *inferred* that the
+preprocessor was unchanged from the fact that programs behaved the same.
+
+**The general rule.** An extraction or refactor of an intermediate stage is
+exactly the case where behavioural equality is weak evidence: it passes as long
+as nothing downstream happens to notice, and downstream stages routinely
+normalise differences away. Ask what artefact the stage produces and compare
+that:
+
+| you changed | dump the stage, not the program |
+| --- | --- |
+| the C preprocessor | `--dump-cpp` |
+| what the frontend inferred | `PXXDBG=n.locals`, `n.ctorargs`, `a.ast:<proc>` |
+| what the IR looks like | `PXXDBG=a.ir:<proc>` |
+| the backend | the emitted binary itself — that is what the self-host fixedpoint is |
+
+And the counterweight, because this cuts the other way too: a stage-output
+diff proves the stage is unchanged, **not that it is right**. It is the correct
+instrument for *"I refactored this and nothing should move"*; it is the wrong
+one for *"I fixed this and something should"*. The `__has_include` change needed
+both — the stage diff for the extraction, and a gcc differential for the new
+operator, because for that half identical output would have meant failure.
+
 ## Library-specific probes
 
 | tool | oracle | answers | lane |
