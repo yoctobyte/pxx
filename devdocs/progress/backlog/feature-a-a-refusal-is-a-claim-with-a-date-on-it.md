@@ -4710,3 +4710,45 @@ measurement — parse it, as above — not as something a reader will notice. An
 a new target becomes executable, the first work item is not "look for bugs" but
 **"count the rows in every arm chain that mentions it"**, because that set is
 knowable in advance and is where the bugs already are.
+
+### 119 — every commit here has the same author, so `git log` cannot answer "who holds this file"
+
+*The coordinator, 2026-08-30, caught by frankC after routing a ticket on it.*
+
+Asked which lane held `symtab.inc`, the coordinator ran `git log -3 -- compiler/symtab.inc`,
+saw *"feat(A): TTypeRef gains PtrDepth"* 76 minutes old, and attributed it to the
+lane working on a **ptrdiff** cell. Same prefix, adjacent topic, confident routing
+message sent naming that lane as the holder.
+
+It was not that lane. And the check that would have caught it does not exist:
+**every commit in this repo is authored `yoctobyte <rene.tegel@gmail.com>`,**
+because every agent commits as the owner. Author is not a discriminator, `%an` is
+a constant, and the session-id trailer some lanes add is not universal — the very
+commit in question carries none.
+
+So the attribution was made from the only field that varies, **the subject line's
+topic**, which encodes what the work was about and says nothing about who did it.
+That is inference dressed as measurement: the command was real, the output was
+real, and the field being read did not contain the answer.
+
+**The general form is the one this index keeps returning to** — *a correct answer
+to the wrong question looks exactly like a correct answer.* `git log -- <file>`
+answers "when did this file last change and what for". It does not answer "who is
+in it now", and nothing in its output says so.
+
+**The instrument that does answer it is `devdocs/progress/working/`** — the live
+lock, in both directions, plus the roster. That is what it is for, the coordinator's
+own tick instructions say to read it, and it was skipped because git felt faster.
+The lock ticket for this file had in fact already been **released**
+(`c583c33c7`, *"park(A): release the typeref lock — PtrDepth landed green"*), so
+the correct answer was one `ls` away and was the opposite of the one sent.
+
+**Cost, and why it is not merely embarrassing:** routing on a wrong holder sends
+work *away* from whoever actually knows the file's current state, and it manufactures
+a phantom collision that blocks a real one. Both failures are silent — the lane you
+named will usually just accept.
+
+Corollary for anyone reading a history on this fleet: **authorship questions are
+unanswerable from git here.** Ask the lane, or read the lock. If a per-commit
+session-id trailer is ever made universal, that changes; today it is not, and
+assuming it is present is its own version of this mistake.

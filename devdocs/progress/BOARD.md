@@ -58,7 +58,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (321)
+## backlog (322)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -202,6 +202,7 @@ _none_
 | decide-release-signing-key-custody | U | 25 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | decide-settextbuf-needs-buffered-text-io-or-stays-missing | U | 55 | decide | SetTextBuf's contract is 'use this caller-supplied buffer for this handle', and lib/rtl/textfile.pas has no buffering at all — it reads one byte per PalRead syscall. So the fork is: build buffered Text I/O (a real win beyond this routine) and make SetTextBuf mean something, or leave it missing so the compile error stays honest. Stubbing it is already ruled out. | — |
 | decide-should-forwardlint-join-the-mandatory-per-fix-loop | U | 55 | decide | Collapses the two tickets that both asked what may join the three-line per-fix loop. make compiler/pascal26 compiles compiler.pas WITH pxx, so the loop and the self-host fixedpoint are blind BY CONSTRUCTION to a construct pxx accepts and FPC rejects -- and FPC is the bootstrap seed. tools/forwardlint.py models FPC's resolution, runs in 4.1s, and as of 7aba316be is silent on a clean tree, which removes the one argument that kept it out. Five measured instances of the seed breaking while the loop stayed green. Recommendation: option 1, narrowly. The edit is to CLAUDE.md's gating section, so only the owner makes it. | — |
+| decide-should-forwardlint-run-in-the-build-not-only-the-gate | U | 55 | decide | Should `forwardlint` run in `make compiler/pascal26`, not only in `gate.sh`? | — |
 | decide-should-writeableconst-off-be-honoured | U | 20 | decide | `{$WRITEABLECONST}` is not implemented at all — the compiler contains no reference to it. Typed constants are now unconditionally writable, which is FPC's DEFAULT; the question is whether pxx should honour the OFF form and refuse the store, or document typed consts as always writable. A dialect call, not a bug fix. | — |
 | decide-t-per-assertion-subjects-or-accept-the-file-level-label | U | 25→50 | decide | The float-red labelling mechanism is live but has zero adopters, and structurally cannot gain any: it labels a whole JOB, while every file that motivated it mixes last-digit accuracy with a NaN fault, a missing name, an 84-ulp regression or a formatting bug. The only remaining shape is per-assertion subjects -- real machinery in T's tooling plus a pass through N's files, entirely in service of the subject the owner has called low prio by definition four times, and whose motivating reds have not appeared in 259 runs. Recommendation: accept the file-level label as future-only, build nothing more. | — |
 | decide-t-refuse-unscoped-pattern-kills-in-a-hook | U | 45 | decide | Layer 2 of the pattern-pkill ticket is a PreToolUse hook refusing `pkill -f <toolname>` / `killall` with a bare pattern. It is a .claude/ config change binding every agent on this box, so it is the owner's call, not a track agent's or a peer's. Layers 1 and 3 landed without it; this is the only part left. | — |
@@ -778,6 +779,7 @@ _none_
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
 - [p 55] [U] decide-settextbuf-needs-buffered-text-io-or-stays-missing
 - [p 55] [U] decide-should-forwardlint-join-the-mandatory-per-fix-loop
+- [p 55] [U] decide-should-forwardlint-run-in-the-build-not-only-the-gate
 - [p 55] [A] feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-dynamic-include-paths-config
 - [p 55] [N] feature-n-a-kwargs-collecting-callee-through-a-callable-value
