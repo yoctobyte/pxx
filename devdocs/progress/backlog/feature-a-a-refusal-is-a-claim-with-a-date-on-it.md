@@ -10506,3 +10506,86 @@ guard is real and runs where its sibling runs. But *a Track P frontend regressio
 NilPy suite* is the kind of thing that gets missed when someone reasons about which suite covers
 what. Left as a note at ≤ p15 rather than a change, because the change is larger than the
 finding — which is the right call and the right way to say so.
+
+---
+
+## 212 — A HARNESS NEEDS AS MANY OUTCOME SLOTS AS THE SUBJECT HAS OUTCOMES
+
+*(frankA, 2026-08-30, reporting three status bugs in its own instruments in one session. The
+third is not the same bug as the first two, and the difference is the finding.)*
+
+Two of them belong to the family already indexed at 191 — **status destroyed**:
+
+- `echo "rc=$?"` after a **pipe**;
+- a `$(basename …)` sitting between the subject and the `$?` that reads it.
+
+Both are frankC's general form — *anything appended after the thing you are measuring becomes
+the thing that reports* — and both fail in the loud direction: a red run reads green, and an
+impossibly clean table is eventually noticed by someone.
+
+The third destroys nothing. `o=$(cmd)` inside `&&`/`||` propagates the command's status
+**correctly**. What broke is that the harness had **one boolean for two different failures**:
+
+| what happened | where it landed | what it was labelled |
+| --- | --- | --- |
+| did not compile | else-branch | compile failure |
+| compiled, ran, **exited 217** | else-branch | compile failure |
+
+A program exiting 217 is a **result**. It was filed as the **absence** of a result.
+
+> **A boolean holds one fact. Compile-failed, ran-and-exited-nonzero, ran-and-printed-the-wrong-thing,
+> and timed-out are four different facts about a compiler.**
+
+### 212a — this direction manufactures a plausible wrong cause, and has no detector
+
+Worth separating from 191 rather than filing under it, because the two fail in **opposite**
+directions and only one of them is self-announcing:
+
+- **191 (status destroyed)** → failure looks like *success*. Alarming, but it produces a table
+  that is *too* clean, and cleanliness is a thing a reviewer can be surprised by.
+- **212 (outcomes collapsed)** → you get a failure, **at the right row**, with a **wrong label**,
+  and nothing about it looks odd at all. It is indistinguishable from the harness working.
+
+There was no detector. frankA caught it because *a row looked wrong* — which is not a method, it
+is luck arriving in the shape of competence. And note the direction it errs in (204a): collapsing
+outcomes upward moves every ambiguous result into the **most upstream** cause, so a run of
+runtime failures reports as a **build problem**, which is the diagnosis that sends you to the
+wrong file.
+
+### 212b — the timing harness has a fifth slot nobody writes down
+
+Face 186 said a swallowed failure in a timing harness reports a **speedup**. 212 sharpens what
+the slot actually is. For a performance comparison the outcomes are not four but five, and the
+extra one is unique to timing:
+
+> **ran, was fast, and was fast because it did less.**
+
+The binary that fell over during startup posts the best number in the table, and unlike a boolean
+`true`, a *plausible small number* is exactly what the experiment was hoping for. Relayed to the
+one lane running a timing harness tonight.
+
+### 212c — six passing rows are the evidence; the failing row is the ticket
+
+Filed here because it is the same lesson from the other side and it arrived in the same message.
+Chasing `regression-test-nilpy-test-nilpy-max-min-iterables`, frankA ran eight shapes where the
+ticket contained one:
+
+| shape | result |
+| --- | --- |
+| `max(d)` — bare dict, no key | OK |
+| `max(d, key=lambda k: len(k))` | **OK** |
+| `max(d, key=len)` | TypeError |
+| `max(d, key=f)` — user `def` | TypeError |
+| `max(d.keys(), key=len)` | OK |
+| `sorted(d, key=len)` | OK |
+| `list(map(len, d))` | OK |
+
+The ticket's single row licenses at least three theories — builtin-vs-user function, dicts,
+iterating a dict — and **the six passes kill all three for the cost of six runs.** `sorted(d,
+key=len)` passing does the most work of any row and is the one nobody would think to run, because
+it is not in the ticket.
+
+What survives is a **discriminating pair**: inline lambda passes, named reference fails, *same
+expression*. That names a mechanism (what the indirect-call path hands the key) instead of a
+symptom. **Vary the shape until the passes outnumber the failures** — a boundary is defined by
+where it stops, and the ticket only ever tells you one point inside it.
