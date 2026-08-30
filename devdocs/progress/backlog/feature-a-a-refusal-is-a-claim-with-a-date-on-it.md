@@ -4816,3 +4816,70 @@ because they read different rec ids and fall **through** to the COM arms when
 fall-through and answered 0 for a COM interface. The oracle found the hazard the
 tidy-up would have created — which is the same save frankC got by *reading* the
 seventh reader it did not touch.
+
+### 121 — a self-differential's REFERENCE is not an oracle
+
+*frankC, 2026-08-30, after fixing the frame-alignment SIGBUS and finding the
+"remaining" divergence was two bugs, one of them on the reference side.*
+
+`test-xtensa` compares the xtensa build against the **x86-64 build**. That is a
+self-differential: both arms come from the same compiler, so the suite can only
+ever report *"the targets disagree"* — never *"both are wrong."* **The reference
+cannot be wrong by construction, so a defect the two targets share, or one living
+in the reference arm, is invisible on every run of the suite since it was
+written.**
+
+It took a third arm to see it. frankC had a sentence half-written saying *"xtensa
+diverges from the x86-64 oracle"*, then put **FPC** beside both, and the direction
+inverted:
+
+| expression | FPC | x86-64 | xtensa |
+| --- | --- | --- | --- |
+| `s1+s2` (Single op Single) | Single | **Double** | Single |
+| `i * s1` | Single | **Double** | Single |
+| `i / 2` | Double | Double | **Single** |
+
+Both targets pick `Write` float widths FPC does not, **in opposite directions on
+different lines**. The x86-64 half had been reachable on every run of the suite
+and could not be reported, because it was the yardstick.
+
+**This is a property of every cross-target suite here, not a fact about one test.**
+Naming one arm "the oracle" is a *role assignment*, not a measurement, and the role
+is usually assigned to whichever arm was written first. The moment two arms
+disagree, the interesting question — *which one is wrong?* — is exactly the one a
+two-arm comparison cannot answer.
+
+**Two operational rules:**
+
+1. When a self-differential goes red, **add a third arm from outside the system
+   before assigning blame** — FPC, gcc, CPython. `differential-probes.md` indexes
+   them; the cost is one run.
+2. When it goes **green**, remember what that green means: the arms agree. It is
+   not evidence about correctness, and it is silent on every defect they share.
+   Compare the sibling rule for a HOST GREEN — a pass is a claim bounded by
+   something nobody stated.
+
+**And the shape-variation half.** An isolated `WriteLn(s)` for a plain `s: Single`
+agrees across all three: the divergence needs the *expression*, not the type. So
+the first probe reached for reported everything fine. Vary the shape before
+believing a probe that agrees with you.
+
+### 121a — and the alignment fix was face 118 again, one day later
+
+The same session's fix is a second instance of 118 inside twelve hours.
+`AllocArray` has five branches; **four already set `align := TARGET_PTR_SIZE`
+outright** — dyn-element, string, frozen string, record. Only the scalar branch
+asked `TypeAlign` about the *element*, and got 1 for a byte.
+
+So the SIGBUS was never a missing rule. It was **one branch not following a rule
+stated four times immediately beside it** — the rule was on screen, four times,
+for anyone editing that procedure. Exactly xtensa's one-row cleanup arm sitting
+twenty lines from arms that grew: co-location makes drift visible, and visibility
+was again not the binding constraint.
+
+Note the payoff of fixing it at the allocator rather than at the two `ir.inc`
+call sites: it covers both **by construction**, so there is no pair to keep in
+step. `normalise-dont-special-case` satisfied structurally instead of by
+discipline — which is the only version of it that survives the next editor.
+`AllocVar` needed nothing (`TypeAlign(tyRecord)` is already 8), checked rather
+than assumed, which is why the fix is one site and not two.
