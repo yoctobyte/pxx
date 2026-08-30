@@ -5726,3 +5726,93 @@ token rewrite and template registration are different mechanisms, and merging tw
 mechanisms is what made the first filing wrong in the first place. Its regression
 sidesteps that bug deliberately — both records declare the same member — so the result
 cannot depend on which template wins. **A test must not silently depend on an open bug.**
+
+### 140 — a BY-CONSTRUCTION claim is legitimate exactly when the construction is a property of the ARTEFACT, not a role somebody ASSIGNED
+
+*frankD, 2026-08-30, sweeping the live docs for bounding arguments
+(`by construction`, `structurally`, `can never`, `guarantees` — 35 candidates).*
+
+The test, and it is sharp enough to apply without re-deriving it:
+
+| claim | construction | verdict |
+| --- | --- | --- |
+| *"pxx emits zero `syscall` instructions, so every syscall originates inside libc"* (OpenBSD `pinsyscalls`) | a property of **what we emit** | **legitimate** |
+| *"the x86-64 side cannot be wrong by construction — it is the reference"* | a **role assigned** to one arm | **not a bound at all** |
+
+The second is a definitional claim doing empirical work. Nothing about being *called*
+the oracle constrains the code, so the sentence carries the grammar of a proof and none
+of the force (121: a self-differential's reference is not an oracle).
+
+**And the second data point was already in the repo, months older than the first.**
+`Int()` of a large double was wrong on the 32-bit targets **and** on x86-64, in
+different ways, fixed months apart — the later ticket says it in its own summary:
+*"The i386/arm32 half of this was fixed under [the other]; **x86-64 was never in scope
+and is still wrong.**"* So there was a **documented window in which the cross targets
+were correct and the reference was not**, and any cross-target red read by the
+blame-the-cross-target rule during that window was attributed exactly backwards.
+
+The detail that earns it a place: **the x86-64 defect was found by Track B from a
+library, not by the cross sweep that ran over it the whole time.** The sweep could not
+find it, because the sweep's rule named that arm correct.
+
+**Verified by behaviour at HEAD, not by folder** (rule 10): both tickets are in `done/`,
+and the pinned binary now answers `Int(1e300) = 1.0000000000000001E+300`,
+`Int(-0.5) = -0.0`, `Frac(1e300) = 0.0` — FPC agrees on all three. So the window is
+**historical, and correctly described as such**. The remaining digit-count difference
+against FPC's `1.00000000000000005250E+0300` is float FORMATTING, which is **F, low prio
+by definition** — not a defect and not to be filed.
+
+### 140a — ADD a second measurement rather than CORRECT the first
+
+The section frankD examined already carried the right conclusion, measured that same
+day. It did not need correcting; it needed a **second, independent** support.
+
+> **An argument resting on one measurement is one retraction away from collapsing.**
+
+Which is exactly how face 138 failed hours earlier: one bounding argument, one
+data point that the harness had manufactured, and the whole inference went with it. The
+`Int()` case and the `test_cross_float` case come from different periods of the repo,
+different lanes, and neither depends on the other — so retracting either leaves the
+claim standing.
+
+**And the best-looking hit was a false positive.** The `by construction` sentence was
+the *setup being demolished two paragraphs later*. Caught by reading the context
+instead of acting on the grep hit — the same trap as a path that is absent because the
+doc won its argument. **Grep finds the sentence; only the paragraph says whether it is
+asserted or quoted.** Mention versus use, third costume in one night.
+
+### 141 — ADJACENCY APPLIES TO AN ORDERING EXACTLY AS IT DOES TO A REGISTER
+
+*frank-optimize-b4, 2026-08-30, the control for the `-O3` operand-order pass.*
+
+The pass reverses evaluation order, so the control must prove a wrongly-early read is
+visible. First draft used `gV = 100` — and **the unsafe build passed**, because
+`100 shr 1` and `101 shr 1` are both **50**. At `gV = 101` correct gives 51 and
+reordered gives 52.
+
+**A control for an ORDERING needs the reordered read to differ from the correct one**,
+and round numbers are exactly where it does not — the same reason a fixture value must
+differ from its neighbour, from the register case, now wearing its third disguise in one
+night. A vacuous control was one value away from shipping, in a session that had already
+banked two of these.
+
+### 141a — the estimate was wrong in the direction that flatters the pass
+
+Filed as **-2 instructions**, from reading a disassembly and counting two moves that
+looked removable. Writing the pass showed only **one** goes: the obvious version —
+right into `rcx`, then left into `rax` — is **unsafe**, because `ScratchSafeSubtree`
+explicitly admits emissions using rax/rcx/rdx and a nested BINOP loads its own right
+operand into rcx. That version is safe only for a **leaf** left, which is precisely the
+case the `-O2` mirror already handles. The remainder is the both-complex case, worth one
+move: park the **right** value, and the restore vanishes because the left is produced
+last and is already in rax.
+
+Legality is stricter than filed too: the arm below needs only `ScratchSafeSubtree(right)`
+because it evaluates left first; **reversing the order needs both sides pure**, since a
+left with side effects must not be moved after a right that can read them.
+
+**Filing (B) made it better; filing (C) made it smaller. Both times the justification
+was where the design actually got decided** (112), and both times a banked estimate
+would have carried the wrong number forward — **this one into a promotion argument**,
+where the number is the whole case. Measured result: `three.pas` loop 18 → 17, campaign
+cumulative 22 → 17, six programs byte-identical at -O0/-O1/-O2 and all smaller at -O3.
