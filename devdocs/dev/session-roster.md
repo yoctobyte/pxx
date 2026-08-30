@@ -23504,3 +23504,71 @@ of `bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-nati
 `qemu-system-aarch64` without KVM is the strictly stronger claim; dispatched to
 frankB behind `AllocMem`, which unblocks frank-rust's fcl-xml ladder and is
 minutes of Track B work against a queue that tops out at p15.
+
+## A third fixedpoint blindness, on a third axis: a CONSERVATIVE bug cannot fail a self-compile
+
+2026-08-30, frankC, found in shared IR an hour after the second one.
+
+> **A conservative bug keeps code, and keeping code cannot break a self-compile.
+> The fixedpoint is blind to any change that only ever errs toward doing LESS.**
+
+**This is not frank-rust's limit restated.** That one needs the construct to be
+*absent* from `compiler.pas`. Here the construct is thoroughly present — the
+compiler branches on constants constantly — and `make compiler/pascal26` printed
+**"converged after N round(s)" through three separate wrong intermediate states**,
+including one where the pass fired and eliminated nothing. It converged because a
+conservative bug emits *more* code, and more code still compiles.
+
+**Three limits, three axes, and saying them as a set is what makes them stick:**
+
+| axis | bounds | found by |
+| --- | --- | --- |
+| `-O` level | **how hard** (default `-O` only) | a `-O0`-only failure, 2026-08-19 |
+| language surface | **what** (constructs the compiler never writes) | frank-rust's `tkProperty` hang |
+| direction of error | **which way** (a bug that only does LESS) | frankC's const-branch |
+
+All three failed identically: **no error, a correct answer about something else.**
+All three were found from outside the gate. None is an argument for widening it —
+frankC's was caught by **one 200 ms repro**.
+
+**The cost, which is why it is not a performance note:** the dead arm reaches
+codegen, a call inside it becomes a real external reference, and a
+declared-but-never-defined symbol makes the binary **fail at LOAD**. The pre-C11
+static-assert idiom — busybox's `include/xatonum.h` declares
+`BUG_bb_strtou32_unimplemented()`, defines it nowhere, relies on the fold.
+**A missed fold is a won't-start.**
+
+### The fourth grain, and the biggest: a language SAMPLE standing in for a language-INDEPENDENT property
+
+Two comment blocks in shared `compiler/ir.inc` asserted as measured fact that no
+constant-condition `IR_JUMP_IF_FALSE` and no const-const `IR_BINOP` reach the IR
+**for ANY frontend**. Both false — the C frontend folds nothing, so `4 == 4`,
+`2 + 2` and `sizeof(unsigned) == 4` all arrive as const-const BINOPs. **The
+2026-07-03 measurement behind them was taken on the compiler's own self-compile,
+which is Pascal.**
+
+Worse than my `compiler/**` slip, because it sat in the substrate everyone shares
+**as a documented reason not to look**. frankwasm's question answers it too:
+*what enumerates this?* — "one frontend's self-compile", written up as "any".
+
+### I had the derived rule BACKWARDS, and frankC's is right
+
+I told frankC that since the fixedpoint is honest zero for a C session, *trust the
+C tests*. That is actively bad advice. The correct rule:
+
+> **Write the repro in a language you do NOT own, whenever you suspect the shared
+> internals.**
+
+The **Pascal** repro was load-bearing: it proved the defect was shared-IR rather
+than C-frontend, **which is what stopped the fix going into `cparser`, where it
+would have stayed broken for every other frontend.** Mine would have confirmed the
+bug and said nothing about whose it was. Regression landed as a C file and a Pascal
+file side by side, which is that reasoning made durable.
+
+### Coordination note: the fix was UNPUSHED on the head of A's queue
+
+`bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start`
+sat in `backlog/` as the head of `next --track A` at effective 70 while frankC held
+the fix locally. Verified against a freshly pulled tree — `ir.inc:13793` still read
+*"for ANY frontend"* — and warned frankA off it. **An unpushed fix to an open queue
+head is worse than invisible: it is bait**, and nothing reserves a ticket.
