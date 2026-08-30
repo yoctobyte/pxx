@@ -484,11 +484,6 @@
   }
  ],
  "host": "plexus",
- "idle_yield": {
-  "aborts": 1,
-  "phase": "pin-verify",
-  "target": "1fb9774b741733ad4666af964255404d4dab4b5f"
- },
  "job_last_pass": {
   "demos#00": "49bd043061c193fcecc9d7b45e3b39d8f22cb490",
   "fpc-bootstrap#src:compiler/compiler.pas": "75d70ca4831d382b11fd4e30578d572f3f01b01e",
