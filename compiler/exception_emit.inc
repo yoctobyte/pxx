@@ -354,7 +354,7 @@ begin
     unhandledJmp := CodeLen;
     rv32_beq(reg_a0, reg_zero, 0);                              { patched: unhandled }
     rv32_addi(reg_a0, reg_a0, EXC_JMP_OFFSET_RV32);
-    EmitI32(EncodeRISCVJAL(reg_zero, ExcLongJmpAddr - CodeLen));
+    EmitRiscv32CallToCode(reg_zero, ExcLongJmpAddr);   { tail jump, never returns }
     Patch32(unhandledJmp, EncodeRISCVBEQ(reg_a0, reg_zero, CodeLen - unhandledJmp));
 
     if (not NoUnhandledHandler) and (not EspBareBoot) then

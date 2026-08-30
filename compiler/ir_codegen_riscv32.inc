@@ -3243,7 +3243,7 @@ begin
         rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
         IREmitNodeRISCV32(IRA[node]);                { a0 = signal number }
         rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a1 = handler }
-        rv32_jal(reg_ra, SigSetHookAddr - CodeLen);  { bl sethook }
+        EmitRiscv32CallToCode(reg_ra, SigSetHookAddr);  { bl sethook }
       end;
 
     IR_SETLEN_DYN:
@@ -3846,6 +3846,87 @@ begin
   end;
 end;
 
+{ --- reaching a LABEL inside one body ---------------------------------------
+  JAL reaches +-1 MB. Direct calls to a proc row stopped using it long ago
+  (EmitCallProc's riscv32 arm is an unconditional auipc+jalr pair, widened when
+  cross lua at 1.75 MB placed callees out of reach), but the jumps a body makes
+  to its OWN labels were still a bare 4-byte JAL, and one body is now big enough
+  to break that: `pascal26 --target=riscv32 compiler/compiler.pas` refused with
+  `jal displacement 2197196 is outside the encodable range`, from the label
+  fixup below, inside ParseFactorCore -- a single procedure spanning code
+  offsets 4199288..6396484, 2.20 MB. Two procedures in this compiler exceed
+  1 MB on x86-64 (ParseFactorCore 1.15 MB, PyParseFactorCore 1.24 MB) and the
+  next largest is 0.4 MB, so this is a narrow wall, but it is a real one and
+  nothing about it is specific to the compiler.
+
+  THE REACH TEST CHOOSES, never the program size. A BACKWARD jump knows its
+  target and keeps the cheap 4-byte JAL whenever that reaches; only the far ones
+  pay for auipc+jalr. A FORWARD jump does not know its target yet, so it has to
+  reserve the WIDE slot -- the same trade EmitCallProc already makes for every
+  riscv32 call, and the reason the forward-reference hole xtensa documents
+  (bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build)
+  does not exist here. The slot is patched to `jal` + `nop` when the distance
+  turns out to fit, so the common case still executes one instruction; only the
+  four bytes are spent.
+
+  The size is therefore NOT a constant, and every site that emits a skip branch
+  over the slot must ask for it BEFORE it encodes that branch. That coupling is
+  why both halves live here rather than being open-coded five times.
+  bug-a-riscv32-cannot-reach-a-far-call-so-the-compiler-will-not-link }
+function Rv32JumpSlotBytes(lblId, slotPos: Integer): Integer;
+begin
+  if (LabelPositions[lblId] <> -1) and
+     Riscv32JalReaches(slotPos, LabelPositions[lblId]) then
+    Result := 4
+  else
+    Result := 8;
+end;
+
+procedure EmitRv32JumpToLabel(lblId: Integer; var fixCount: Integer);
+var rvHi, rvLo: Integer;
+begin
+  if LabelPositions[lblId] <> -1 then
+  begin
+    if Riscv32JalReaches(CodeLen, LabelPositions[lblId]) then
+      EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
+    else
+    begin
+      { reg_t0 is the scratch EmitCallProc's riscv32 arm already clobbers at
+        every call site, so a jump costs nothing new. }
+      RISCVPcrelSplit(LabelPositions[lblId] - CodeLen, rvHi, rvLo);
+      rv32_auipc(reg_t0, rvHi);
+      rv32_jalr(reg_zero, reg_t0, rvLo);
+    end;
+    Exit;
+  end;
+  { Forward: reserve the wide slot and record it. The first word keeps JAL's
+    opcode ($6F) because the fixup loop reads it to tell a jump slot from a
+    branch one; the second is a nop so a slot that is somehow never patched
+    falls through rather than executing a stray register jump. }
+  if fixCount >= MAX_IR then Error('label fixup overflow');
+  LabelFixupPos[fixCount] := CodeLen;
+  LabelFixupTarget[fixCount] := lblId;
+  Inc(fixCount);
+  EmitI32(EncodeRISCVJAL(reg_zero, 0));
+  EmitI32($00000013);                            { addi x0, x0, 0 }
+end;
+
+procedure PatchRv32JumpSlot(pos, targetOffset: Integer);
+var rvHi, rvLo: Integer;
+begin
+  if Riscv32JalReaches(pos, targetOffset) then
+  begin
+    Patch32(pos, EncodeRISCVJAL(reg_zero, targetOffset - pos));
+    Patch32(pos + 4, $00000013);                 { addi x0, x0, 0 }
+  end
+  else
+  begin
+    RISCVPcrelSplit(targetOffset - pos, rvHi, rvLo);
+    Patch32(pos, EncodeRISCVAuipc(reg_t0, rvHi));
+    Patch32(pos + 4, EncodeRISCVJalr(reg_zero, reg_t0, rvLo));
+  end;
+end;
+
 procedure IREmitMachineCodeRISCV32;
 var i, lblId, pos, targetOffset, f, si, procIdx, sz: Integer;
     LabelFixupCount: Integer;
@@ -3892,19 +3973,7 @@ begin
         end;
 
       IR_JUMP:
-        begin
-          lblId := IRA[i];
-          if LabelPositions[lblId] <> -1 then
-            EmitAsmRv32(['jal zero, %', LabelPositions[lblId] - CodeLen])
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            EmitAsmRv32('jal zero, 0');
-          end;
-        end;
+        EmitRv32JumpToLabel(IRA[i], LabelFixupCount);
 
       IR_JUMP_IF_FALSE:
         begin
@@ -3920,17 +3989,8 @@ begin
             is dead after the branch. }
           if Is64BitRISCV32(IntToTypeKind(IRTk[IRB[i]])) then
             rv32_or(reg_a0, reg_a0, reg_a1);
-          EmitI32($00051463);                       { bne a0, zero, +8 }
-          if LabelPositions[lblId] <> -1 then
-            EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            EmitI32(EncodeRISCVJAL(reg_zero, 0));
-          end;
+          rv32_bne(reg_a0, reg_zero, 4 + Rv32JumpSlotBytes(lblId, CodeLen + 4));
+          EmitRv32JumpToLabel(lblId, LabelFixupCount);
         end;
 
       IR_EXC_ENTER:
@@ -3945,18 +4005,10 @@ begin
           rv32_sw(reg_t2, reg_sp, 0);
           rv32_sw(reg_sp, reg_t1, 0);
           rv32_addi(reg_a0, reg_sp, EXC_JMP_OFFSET_RV32);
-          EmitI32(EncodeRISCVJAL(reg_ra, ExcSetJmpAddr - CodeLen));
-          rv32_beq(reg_a0, reg_zero, 8);            { 0 = normal path: skip }
-          if LabelPositions[lblId] <> -1 then
-            EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            EmitI32(EncodeRISCVJAL(reg_zero, 0));
-          end;
+          EmitRiscv32CallToCode(reg_ra, ExcSetJmpAddr);
+          { 0 = normal path: skip the jump slot }
+          rv32_beq(reg_a0, reg_zero, 4 + Rv32JumpSlotBytes(lblId, CodeLen + 4));
+          EmitRv32JumpToLabel(lblId, LabelFixupCount);
         end;
 
       IR_EXC_LEAVE:
@@ -3973,7 +4025,7 @@ begin
             EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_CLS);
             rv32_sw(reg_a0, reg_t1, 0);
           end;
-          EmitI32(EncodeRISCVJAL(reg_ra, ExcRaiseAddr - CodeLen));
+          EmitRiscv32CallToCode(reg_ra, ExcRaiseAddr);
         end;
 
       IR_EXC_STORE:
@@ -3995,18 +4047,10 @@ begin
           EmitLoadImmRISCV32(reg_t0, Integer(IRIVal[i]));
           rv32_xor(reg_t2, reg_t2, reg_t0);
           rv32_sltiu(reg_a0, reg_t2, 1);            { a0 = equal }
-          rv32_beq(reg_a0, reg_zero, 8);            { equal=0 -> take the jal }
-          rv32_jal(reg_zero, 8);                    { equal: skip the jal }
-          if LabelPositions[lblId] <> -1 then
-            EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            EmitI32(EncodeRISCVJAL(reg_zero, 0));
-          end;
+          sz := Rv32JumpSlotBytes(lblId, CodeLen + 8);
+          rv32_beq(reg_a0, reg_zero, 8);            { equal=0 -> take the jump }
+          rv32_jal(reg_zero, 4 + sz);               { equal: skip the jump }
+          EmitRv32JumpToLabel(lblId, LabelFixupCount);
         end;
 
       IR_EXC_MATCH_HIT:
@@ -4018,17 +4062,9 @@ begin
           EmitLoadImmRISCV32(reg_t0, Integer(IRIVal[i]));
           rv32_xor(reg_t2, reg_t2, reg_t0);
           rv32_sltiu(reg_a0, reg_t2, 1);            { a0 = equal }
-          rv32_beq(reg_a0, reg_zero, 8);            { not equal: skip the jal }
-          if LabelPositions[lblId] <> -1 then
-            EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            EmitI32(EncodeRISCVJAL(reg_zero, 0));
-          end;
+          { not equal: skip the jump slot }
+          rv32_beq(reg_a0, reg_zero, 4 + Rv32JumpSlotBytes(lblId, CodeLen + 4));
+          EmitRv32JumpToLabel(lblId, LabelFixupCount);
         end;
 
       IR_EXC_CLEAR:
@@ -4118,7 +4154,7 @@ begin
     { Read the instruction word to check opcode }
     { RISC-V jal has opcode 0x6F, beq has opcode 0x63 }
     if (Code[pos] = $6F) then
-      Patch32(pos, EncodeRISCVJAL(reg_zero, targetOffset - pos))
+      PatchRv32JumpSlot(pos, targetOffset)
     else if (Code[pos] = $63) then
       Patch32(pos, EncodeRISCVBEQ(reg_a0, reg_zero, targetOffset - pos))
     else

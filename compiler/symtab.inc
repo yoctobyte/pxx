@@ -12646,6 +12646,64 @@ begin
     xtensa_callx0(rTgt);
 end;
 
+{ --- riscv32: reaching an already-emitted RUNTIME HELPER -------------------
+  JAL encodes a signed 21-bit byte offset, so it reaches +-1 MB. Direct calls to
+  a PROC ROW have not used it since cross lua (1.75 MB of code) -- EmitCallProc's
+  riscv32 arm widened those to auipc+jalr unconditionally. The calls to runtime
+  HELPERS did not get the same treatment, and they are the ones that sit behind
+  the whole runtime blob, so they are further away than anything else a program
+  calls.
+
+  NOT WHAT THE TICKET'S REPRO WAS MEASURING, and worth saying so. The refusal
+  `jal displacement 2197196 is outside the encodable range` was tagged and
+  traced to the LABEL FIXUP in ir_codegen_riscv32.inc, inside ParseFactorCore --
+  a jump, not a call. These helper calls were the first hypothesis, and routing
+  them through this chooser left the error byte-identical, which is how the
+  hypothesis was retired. They are widened anyway because the reasoning that
+  reached them is sound on its own: the helpers sit at the front of the image,
+  so a body 6 MB in is further from them than from anything else it calls, and
+  nothing but this predicate was checking that.
+
+  THE REACH TEST CHOOSES, not the program size: a build that is barely over the
+  line must still emit the cheap 4-byte form for the calls that fit, which is
+  what a size heuristic would take away from every program that grows past it.
+  The predicate MIRRORS EmitJType's own bounds rather than approximating them, so
+  the chooser and the encoder cannot disagree at a boundary and send a reachable
+  call down the long path or -- much worse -- the reverse.
+
+  Every site that calls this has a target that is FINAL at emit time (the helper
+  is already emitted), so the pair may be 4 or 8 bytes with nothing downstream
+  depending on which: each of them is followed either by a patch computed from
+  CodeLen afterwards, or by a branch whose displacement counts only the
+  instructions after it. That is exactly why the forward-reference hole xtensa
+  documents does not exist here -- there is no call site sized before its target.
+
+  linkReg is a parameter because one of the sites is a TAIL JUMP into
+  __pxx_longjmp (reg_zero, never returns) and the rest are calls (reg_ra); the
+  long form has to preserve that distinction rather than always linking.
+  bug-a-riscv32-cannot-reach-a-far-call-so-the-compiler-will-not-link }
+function Riscv32JalReaches(pc, target: Integer): Boolean;
+var d: Integer;
+begin
+  d := target - pc;
+  Result := (d >= -1048576) and (d <= 1048574);
+end;
+
+procedure EmitRiscv32CallToCode(linkReg, target: Integer);
+var rvHi, rvLo: Integer;
+begin
+  if Riscv32JalReaches(CodeLen, target) then
+    rv32_jal(linkReg, target - CodeLen)
+  else
+  begin
+    { reg_t0 is the same caller-saved scratch EmitCallProc's riscv32 arm uses
+      for every direct call, so nothing new is clobbered at a call site. }
+    RISCVPcrelSplit(target - CodeLen, rvHi, rvLo);
+    rv32_auipc(reg_t0, rvHi);
+    rv32_jalr(linkReg, reg_t0, rvLo);
+  end;
+end;
+
 { A call to an already-emitted RUNTIME HELPER (the exception setjmp/raise
   entry points) rather than to a proc row. Same reach problem, same answer, but
   no CallFix entry is involved at all -- the target is final at emit time -- so

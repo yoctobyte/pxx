@@ -909,9 +909,9 @@ begin
   if (TargetArch = TARGET_RISCV32) and not NoSignals and TargetHasSignalRuntime then
   begin
     rv32_addi(reg_a0, reg_zero, 2);                                    { SIGINT }
-    rv32_jal(reg_ra, SigInstallAddr - CodeLen);
+    EmitRiscv32CallToCode(reg_ra, SigInstallAddr);
     rv32_addi(reg_a0, reg_zero, 15);                                   { SIGTERM }
-    rv32_jal(reg_ra, SigInstallAddr - CodeLen);
+    EmitRiscv32CallToCode(reg_ra, SigInstallAddr);
   end;
   if (TargetArch = TARGET_XTENSA) and not NoSignals and TargetHasSignalRuntime then
   begin
@@ -2249,9 +2249,17 @@ begin
       rv32_lw(reg_t1, reg_t1, 8);       { t1 = &BSS_INITIAL_RSP }
       rv32_sw(reg_sp, reg_t1, 0);
     end;
-    { RISC-V entry stub: jump to main body. }
+    { RISC-V entry stub: jump to main body. TWO words, not one: this is the
+      longest forward reference in the whole image -- from offset ~0 to the main
+      body past every proc body -- so it is the first jump to exceed JAL's 1 MB
+      and the last one that can afford a reach test, because its target does not
+      exist yet. `pascal26 --target=riscv32 compiler/compiler.pas` asked it for
+      20089124. The slot is patched to `jal` + `nop` when the distance fits, so
+      every program that does not need the width still executes one instruction.
+      bug-a-riscv32-cannot-reach-a-far-call-so-the-compiler-will-not-link }
     jmpPatch := CodeLen;
     EmitI32($0000006F);
+    EmitI32($00000013);                         { addi x0, x0, 0 }
     Exit;
   end;
   { x86-64: save rsp then jmp to main body.
@@ -2297,7 +2305,7 @@ begin
       Patch24(jmpPatch, EncodeXtensaJ(CodeLen - jmpPatch));
   end
   else if TargetArch = TARGET_RISCV32 then
-    Patch32(jmpPatch, EncodeRISCVJAL(0, CodeLen - jmpPatch))
+    PatchRv32JumpSlot(jmpPatch, CodeLen)
   else
     Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
 end;
@@ -12386,7 +12394,7 @@ begin
     rv32_sw(reg_t2, reg_sp, 0);
     rv32_sw(reg_sp, reg_t1, 0);
     rv32_addi(reg_a0, reg_sp, EXC_JMP_OFFSET_RV32);
-    EmitI32(EncodeRISCVJAL(reg_ra, ExcSetJmpAddr - CodeLen));
+    EmitRiscv32CallToCode(reg_ra, ExcSetJmpAddr);
     { beq skips the jal on the NORMAL return (a0 = 0); the jal is the taken
       edge, so the landing pad can sit arbitrarily far away. }
     rv32_beq(reg_a0, reg_zero, 8);
@@ -12525,7 +12533,7 @@ begin
     EmitI32($94000000 or (((ExcRaiseAddr - CodeLen) div 4) and $03ffffff))
 {$endif}
   else if TargetArch = TARGET_RISCV32 then
-    EmitI32(EncodeRISCVJAL(reg_ra, ExcRaiseAddr - CodeLen))
+    EmitRiscv32CallToCode(reg_ra, ExcRaiseAddr)
   else if TargetArch = TARGET_XTENSA then
     EmitXtensaCallToCode(ExcRaiseAddr)
   else
