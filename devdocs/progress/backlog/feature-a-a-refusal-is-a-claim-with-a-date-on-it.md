@@ -11275,3 +11275,81 @@ Landed in `tools/progress.py` the same hour rather than filed:
 rather than a ticket. Firing on the repo's own cross-referencing convention is how a check earns
 the habit of being scrolled past, so docs are excluded and only names resolving to **nothing
 anywhere** are flagged. Zero `project_*` files exist in the tree; that was measured, not assumed.
+
+---
+
+## 220 — THE STRONG CHECK WAS AVAILABLE AND LOOKED UNAVAILABLE
+
+*(frankB, 2026-08-30, auditing which test expectations were captured from output rather than
+derived. Third instance of this shape in one day.)*
+
+The question — *was this expectation captured, or derived?* — reads as a judgement call requiring
+someone to read 3101 Makefile rows. For the NilPy population it was a **measurement** the whole
+time: **a `.npy` test IS a Python program, so CPython can run it.** Run each test under CPython,
+compare byte for byte against its `.expected`. An expectation CPython reproduces **is**
+reproducible without running the implementation under test — the acceptance criterion verbatim.
+
+**342 of 353 proven derived. No judgement needed for any of them.**
+
+> **What made the strong check look unavailable is that the artefact's PURPOSE is to test our
+> compiler — so the oracle's ability to run it is not what anyone is thinking about.**
+
+Third time in one day the weak instrument was reached for because it was the one *about the
+subject*: pxx-a5 held a fuzz measurement for a settled tree and then found **FPC alone answered
+it with no pxx build**; b4 ranked `-O3` sites by what *matched the source text* of the repro
+before dumping the IR. **Ask what else can read this artefact before deciding the check is a
+reading exercise.**
+
+### 220a — one disagreement in 353, and classifying it correctly mattered more than fixing it
+
+`test_nilpy_math_domain_errors` holds the older generic `ValueError: math domain error`; CPython
+3.12+ emits per-function wording. So it is a transcript of an **older CPython**, not of one of our
+bugs — and an error-message difference, which the compat table defers explicitly. **Labelled, not
+fixed.** The other ten cannot run under CPython at all: four use syntax NilPy accepts and CPython
+rejects (a *feature* under the N charter, upward compatibility running one way only), three need
+companion modules, two read stdin, one pins our behaviour where CPython raises mid-iteration.
+
+The instruction that produced this: *where an expectation cannot be reproduced without running the
+implementation, it should say it is a transcript.* **The unfixable case becomes a declared one
+instead of a silent one** — a labelled transcript is not a defect, an unlabelled one is.
+
+### 220b — a list that can only grow is a list nobody trusts in five weeks
+
+`test/nilpy_transcripts.txt` carries the eleven with reasons, and `tools/expect_audit.py --oracle`
+exits 1 on **three** drifts, not one: a newly-disagreeing test that is not listed, **a listed test
+that starts agreeing**, and **an entry naming a test that no longer exists.** The second and third
+directions are what rot silently in every exception list anywhere.
+
+**And the enforcement was tested, which is what makes it a gate rather than a decoration.** frankB
+dropped a real entry and added a bogus one in one run, got both messages and exit 1, restored
+byte-identical:
+
+> *An enforcement tool that does not enforce is the exact failure class this audit is about.*
+
+Four minutes. Third *control that has failed once* on the fleet today, after b4 deleted half its
+`CodeLen` guard and watched both new rows print 222, and pxx-a5 dropped its version stamp and
+watched 2 guards go red.
+
+### 220c — an unstated remainder is the shape this whole family distrusts
+
+3063 of 3101 Makefile mentions parsed, and the remaining **38 stated explicitly**: 35
+line-continuations, 2 non-calls, 1 trailing comment. Not rounded away, not hedged. A survey that
+does not name what it could not see is 215b — *you reason inside the failure modes your instrument
+can name* — and the fix is one sentence at the point of reporting.
+
+### 220d — checking beat filing, and the incumbent already existed
+
+The classifier reported **24 `.expected` files named nowhere in the Makefile**, which reads as dead
+weight and would have made a clean-looking ticket. Sixteen are corpus fixtures driven by
+`run_fgl_corpus.sh` and friends, and **`tools/check_test_wiring.py` already exists and already
+gates the tree clean.** The classifier's test was Makefile-only; filing would have duplicated a
+tool that was already right.
+
+*Grep for the incumbent before building* — applied to a **ticket** rather than to code, which is
+where nobody thinks to apply it. A ticket is cheaper to file than a tool and therefore gets less
+scrutiny, and a duplicate ticket costs a whole dispatch to discover.
+
+It did surface one real gap, and it was **frankB's own**: the minidom differential banked that
+morning, deliberately unwired because the shim hangs the compiler. Registered in
+`test/UNWIRED.txt` with its reason and the condition for wiring it — the 220a instruction applied
+one level down, by its author, to their own file.
