@@ -175,3 +175,100 @@ cannot be closed by fixing the library: the two are independent and sequential.
 
 **Not started beyond this.** The lane holds the ticket; the diagnosis above is
 banked rather than half a fix, per `devdocs/dev/root-cause-over-microfix.md`.
+
+## Update 3 (frankwasm, 2026-08-30): it IS an infinite loop, and it is in `_text`
+
+### It is a loop, not slow — proved, not assumed
+
+`PXXDBG=all`, same input, two horizons:
+
+| run | output |
+| --- | --- |
+| `timeout 20` | 54,577 lines |
+| `timeout 45` | 54,577 lines |
+
+`cmp` says **byte-identical**. The compiler emits 54,577 debug lines, stops
+emitting entirely, and then spins in a region that prints nothing. `VmRSS` is
+**flat at 7,616 kB** across 20s of sampling, so it is a tight non-allocating
+loop — not a runaway allocation and not a slow fixed point still making
+progress. Either of those would have shown movement in one of the two
+measurements; neither did.
+
+That distinction is the whole reason to record this: "it hangs" and "it loops
+forever emitting nothing after a known point" are different tickets, and only
+the second one tells you where to put a breakpoint.
+
+### Where it freezes
+
+The last lines emitted, in order, are the parameter list of `_text`:
+
+```
+PXXDBG n.shadow x         nilpyuser=TRUE
+PXXDBG n.shadow y         nilpyuser=TRUE
+PXXDBG n.shadow text      nilpyuser=TRUE
+PXXDBG n.shadow font      nilpyuser=TRUE
+PXXDBG n.shadow pdf_font  nilpyuser=TRUE
+PXXDBG n.shadow self      nilpyuser=TRUE      <- last line ever emitted
+```
+
+That is `def _text(self, x, y, text, font, pdf_font)` at `render_backend.py:244`.
+The bisect agrees independently: deleting methods 297-378 still hangs, and no
+truncation that stops before `_text` does.
+
+`_text`'s first interesting statement is the shape to look at first:
+
+```python
+name, size_pt = pdf_font        # unpack of an UNANNOTATED parameter
+```
+
+and `pdf_font` arrives on a genuine cycle — `_TkTextObject._flush` unpacks a
+list of tuples and feeds them straight back in:
+
+```python
+for (x, y, text, font, pdf_font) in self.lines:
+    self.b._text(x, y, text, font, pdf_font)
+```
+
+so `_text`'s parameter type depends on `_flush`'s tuples, which depend on
+`_TkTextObject.__init__`'s `backend._pdf_font`. A→B→A through tuple unpacking.
+
+### Corroborating: 18x re-derivation before the freeze
+
+Of the debug output, `a.opovl` (operator-overload resolution) is 34,970 lines.
+**17,485 queries, 967 distinct** — the same `(op, left, right)` triple asked up
+to 851 times. That is not itself the loop (the loop emits nothing), but it says
+the same resolution is being re-derived rather than memoised, which is the kind
+of pass that fails to reach a fixed point.
+
+### NOT minimised — and here is what is already excluded
+
+Recorded so the next attempt does not repeat mine. All of these compile fine:
+
+- mutual `A <-> B` class references, plain
+- `B` holds `A`, `A` calls back into `B` through a stored `backend`
+- the full cycle shape: `A.flush` unpacking a list of tuples into `B._text`,
+  with `B._text` unpacking one of its own parameters — **including** the
+  `name, size = pdf_font` line, which was my main suspect
+- module-constant default arguments (`def __init__(self, w=PAGE_W)`)
+- class declaration ORDER (swapping `_TkTextObject` before `TkCanvasBackend`
+  still hangs, so it is not a forward reference)
+- comment removal (still hangs, so it is not raw token count)
+
+So the cycle alone is not sufficient. What `_text` has that my reproduction did
+not: `self._y(y) + self._descent(font)`, `text.split(" ")`, `len(words) < 2`,
+`pdf_string_width(...) is None`, `... or 0.0`, and `self.cv.create_text(...)`
+into a Tk shim. One of those closes the loop.
+
+### A warning about bisecting this file
+
+Truncating with `head -n` lands inside method bodies and docstrings and produces
+**misleading errors** — including `undefined variable (PAGE_W)` at line 195 for a
+constant plainly defined at line 52. Delete whole method blocks with `sed
+'A,Bd'` instead. I lost time to that and the false error looks like a real
+second bug.
+
+### Attaching a debugger
+
+`ptrace_scope` blocks `gdb -p` on this box. Run the compiler as gdb's CHILD
+(`gdb --args`) instead; that works. `kill -INT` on a batch-mode gdb kills gdb
+rather than interrupting the inferior, so send the signal to the inferior.
