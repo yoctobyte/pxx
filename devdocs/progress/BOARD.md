@@ -82,7 +82,7 @@ _none_
 | bug-a-a-nested-routine-cannot-capture-a-fixed-size-array | A | 40→45 | bug | `nested routine: capture of fixed-size array 'x' not yet supported` — the lambda-lift machinery in pasparser_decl.inc:6701 captures scalars and DYNAMIC arrays by reference but refuses a fixed-size one, because a lifted param carries capTk/capArr/capDyn and has nowhere to put the array's length and low bound. Blocks refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths, where 21 fixed-size staging arrays are the exact thing a helper would need to see. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
-| bug-a-aarch64-has-no-stack-argument-passing-for-five-of-six-call-kinds | A | 55 | bug | aarch64 refuses `> 8` arguments at SIX separate sites — constructor, external, variadic external, cdecl indirect, indirect, virtual — while the DIRECT call passes stack args fine. One mechanism (AAPCS64 stack arguments) missing, refused six times. It is the live wall stopping NilPy from building for aarch64 AT ALL: `print(1+1)` dies on the indirect-call arm out of pyeval.pas, so ~53 .npy tests are cross-blind on that target. | — |
+| bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds | A | 30 | bug | The C half of bug-a-aarch64-has-no-stack-argument-passing-for-five-of-six-call-kinds, which fixed the four pxx-internal call kinds and measured that the other three are a DIFFERENT mechanism. External, variadic external and cdecl indirect calls still refuse past 8 parameters, because AAPCS64 allocates integer/pointer args from x0..x7 and FP args from v0..v7 as INDEPENDENT banks with a per-parameter classification -- not the internal convention's every-arg-is-8-bytes-in-an-x-register-by-position. Nothing reaches it today: no external we call declares more than 8 params. | — |
 | bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa | A+S | 45 | bug | ArgStr reads past argv into the environment on riscv32 and xtensa | — |
 | bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets | A | 50 | bug | x86-64's argv->frozen-string copy is now clamped and riscv32/xtensa clamp via PXXCStrToFrozen, but aarch64, arm32 and i386 were never checked — the parent ticket listed them and I did not close that gap. Also: the clamp is duplicated per path rather than shared, so a new target gets a new copy. | — |
 | bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area | A | 45 | bug | arm32 cdecl refuses any argument block over 4 core registers — so arm32 only HALF-joins the cdecl campaign | — |
@@ -737,9 +737,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2902)
+## done (2903)
 
-2902 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2903 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -870,7 +870,6 @@ _none_
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
-- [p 55] [A] bug-a-aarch64-has-no-stack-argument-passing-for-five-of-six-call-kinds
 - [p 55] [C] bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead [parked — re-claim, do not duplicate]
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
@@ -1102,6 +1101,7 @@ _none_
 - [p 30] [T] audit-t-verdict-functions-with-fewer-slots-than-outcomes
 - [p 30] [A] bug-a-a-bad-value-for-a-known-option-is-reported-as-an-unknown-option
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
+- [p 30] [A] bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds
 - [p 30] [A] bug-a-proc-map-emits-static-addresses-for-a-dynamic-build
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
 - [p 30] [A] bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code

@@ -1468,6 +1468,91 @@ begin
     EmitI32($AA0003E0 or (nTotal - 1));   { mov x(n-1), x0 }
 end;
 
+function EmitCallArgRegsA64(nArgs, nArgTotal, xtra1, xtra2: Integer): Integer;
+{ AAPCS64 argument marshalling for the pxx INTERNAL convention, where every
+  argument occupies 8 bytes in an x-register whatever its type.
+
+  On entry the nArgs argument temps are already on the stack in 16-byte slots,
+  arg0 deepest. `xtra1`/`xtra2` name registers to be loaded from the temps
+  pushed BELOW arg0 -- xtra1 from the one immediately below, xtra2 from the next
+  -- or -1 for none: an indirect call passes (16, 8) for callee and hidden
+  destination, a virtual call (8, -1), a plain call (-1, -1).
+  `nArgTotal` is whatever the site''s own push loop used for its -O3 last-argument
+  collapse decision, or -1 where the site does not collapse.
+
+  Returns the number of bytes the caller must drop AFTER the call: 0 on the
+  <= 8 path, which pops and therefore restores sp itself.
+
+  ONE MECHANISM, FOUR CALL KINDS. Passing arguments past x7 on the stack used to
+  be the DIRECT call''s alone, and constructor, indirect and virtual calls each
+  refused with an Error of their own -- one rule spelt four times, and three of
+  the spellings did not have it. That is a missing mechanism wearing four names,
+  not four bugs (normalise-dont-special-case.md).
+  bug-a-aarch64-has-no-stack-argument-passing-for-five-of-six-call-kinds }
+var i, nStack, blk, sz, wid, nx: Integer;
+begin
+  if nArgs <= 8 then
+  begin
+    { Pop each temp into its register, high index first, so x0 is restored LAST
+      -- a virtual call''s VMT load reads Self out of x0 straight after. }
+    for i := nArgs - 1 downto 0 do
+      if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
+        EmitLastArgMoveA64(nArgTotal)
+      else
+        EmitI32($F84107E0 + i);                       { ldr x[i], [sp], #16 }
+    if xtra1 >= 0 then EmitI32($F84107E0 + xtra1);
+    if xtra2 >= 0 then EmitI32($F84107E0 + xtra2);
+    EmitCallArgRegsA64 := 0;
+    Exit;
+  end;
+  { Args 0..7 in x0..x7, args 8.. in an outgoing block at sp. The temps are read
+    by OFFSET rather than popped, because the block has to be built from them
+    while they are all still live; everything is dropped in one add after the
+    call. }
+  if LastArgCollapseA64(nArgTotal) then
+    Error('compiler error: aarch64 last-arg collapse is live on the stack-arg '
+          + 'path, where every temp must exist (LastArgCollapseA64 caps at 8, '
+          + 'so nArgs > nArgTotal here and one of the two is wrong)');
+  nStack := nArgs - 8;
+  blk := ((nStack * 8 + 15) div 16) * 16;             { 16-aligned block bytes }
+  { Every temp read below is `ldr xN, [sp, #imm]`, whose scaled imm12 tops out
+    at 32760 bytes. With 16 bytes per temp that is about 2040 arguments -- far
+    past anything real, and a real limit rather than a decorative one. }
+  if blk + (nArgs + 2) * 16 > 32760 then
+    Error('target aarch64: call with ' + AIntToStr(nArgs) + ' arguments needs a '
+          + 'temp block past the 32760-byte reach of a scaled LDR immediate');
+  EmitI32($D10003FF or (blk shl 10));                 { sub sp, sp, #blk }
+  for i := 8 to nArgs - 1 do
+  begin
+    sz  := blk + (nArgs - 1 - i) * 16;                { temp byte offset }
+    wid := (i - 8) * 8;                               { outgoing byte offset }
+    EmitI32($F94003E9 or ((sz div 8) shl 10));        { ldr x9, [sp, #sz] }
+    EmitI32($F90003E9 or ((wid div 8) shl 10));       { str x9, [sp, #wid] }
+  end;
+  for i := 0 to 7 do
+  begin
+    sz := blk + (nArgs - 1 - i) * 16;
+    EmitI32($F94003E0 or i or ((sz div 8) shl 10));   { ldr x[i], [sp, #sz] }
+  end;
+  nx := 0;
+  if xtra1 >= 0 then
+  begin
+    sz := blk + nArgs * 16;
+    EmitI32($F94003E0 or xtra1 or ((sz div 8) shl 10));
+    nx := 1;
+    if xtra2 >= 0 then
+    begin
+      sz := blk + (nArgs + 1) * 16;
+      EmitI32($F94003E0 or xtra2 or ((sz div 8) shl 10));
+      nx := 2;
+    end;
+  end;
+  { The extras are 16-byte temps too, and forgetting them here leaks stack per
+    call rather than faulting -- the quiet half, and the reason this returns a
+    size instead of emitting the add itself. }
+  EmitCallArgRegsA64 := blk + (nArgs + nx) * 16;
+end;
+
 { -O3 W1 slice 10's aarch64 twin. Does the shift arm OPEN with a widen of the
   left operand? Both the pre-decision that SKIPS the left load and the emit site
   that must honour it call THIS function, so they cannot drift: a skip the widen
@@ -2604,13 +2689,31 @@ begin
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
-          if nArgs > 8 then
-            Error('target aarch64: constructor with more than 8 parameters not supported');
-          for i := nArgs - 1 downto 0 do
-            EmitI32($F84107E0 + i);           { ldr x[i], [sp], #16 }
-          EmitI32($F81F0FE0);                 { str x0, [sp,#-16]! (save Self) }
-          EmitCallProc(p1);
-          EmitI32($F84107E0);                 { ldr x0, [sp], #16 (Self = result) }
+          { -1 for nArgTotal: this loop pushes every argument unconditionally,
+            so the -O3 last-argument collapse is NOT live here and the helper
+            must not assume it is. }
+          sz := EmitCallArgRegsA64(nArgs, -1, -1, -1);
+          if sz = 0 then
+          begin
+            EmitI32($F81F0FE0);               { str x0, [sp,#-16]! (save Self) }
+            EmitCallProc(p1);
+            EmitI32($F84107E0);               { ldr x0, [sp], #16 (Self = result) }
+          end
+          else
+          begin
+            { THE ONE CALL KIND THAT DOES SOMETHING BETWEEN MARSHALLING AND THE
+              CALL, and it cannot be the same something here. Saving Self with a
+              push would move sp 16 bytes BELOW the outgoing argument block, and
+              the callee reads argument 8 at [sp] on entry -- so it would read
+              Self instead, silently, and only for calls with more than eight
+              parameters. Measured: the ctor row of test_a64_stack_args printed
+              1508537076 for 10936 while the other three kinds were already
+              right. Self is arg0, its temp is still live until the add below,
+              so reload it from there instead: arg0 sits at sz-16. }
+            EmitCallProc(p1);
+            EmitI32($F94003E0 or (((sz - 16) div 8) shl 10)); { ldr x0, [sp, #sz-16] }
+            EmitI32($910003FF or (sz shl 10));  { add sp, sp, #sz (temps + block) }
+          end;
           Exit;
         end;
         if procIdx = -Ord(tkFreeMem) then
@@ -3172,65 +3275,17 @@ begin
         if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
           Error('target aarch64: call argument count mismatch');
 
-        if nArgs <= 8 then
-        begin
-          { All args fit in x0..x7: pop each temp into its register. The last
-            one was never pushed at -O3 -- it is still in x0. }
-          for i := nArgs - 1 downto 0 do
-            if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
-              EmitLastArgMoveA64(nArgTotal)
-            else
-              EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
-          if ABIRetViaHiddenDestProc(procIdx) then
-            EmitI32($F84107E8);   { ldr x8, [sp], #16 (hidden destination) }
-          EmitCallProc(procIdx);
-        end
+        { AAPCS64: x0..x7 then an outgoing stack block, one helper for every
+          call kind -- see EmitCallArgRegsA64. The hidden indirect-result
+          pointer (x8) is the one extra temp, pushed before arg0 at the top of
+          this case. }
+        if ABIRetViaHiddenDestProc(procIdx) then
+          sz := EmitCallArgRegsA64(nArgs, nArgTotal, 8, -1)
         else
-        begin
-          { AAPCS: args 0..7 in x0..x7, args 8.. in an outgoing stack block at sp.
-            Build the block from the temp slots without consuming them, load the
-            register args by offset, then drop block + temps after the call.
-            (No proc in compiler.pas has >8 params, so this path never fires
-            during self-host — the <=8 path above stays byte-identical.) }
-          lo := nArgs - 8;                              { stack-arg count }
-          hi := ((lo * 8 + 15) div 16) * 16;            { outgoing block bytes (16-aligned) }
-          EmitI32($D10003FF or (hi shl 10));            { sub sp, sp, #hi }
-          { temp slot for arg k is at [sp + hi + (nArgs-1-k)*16] }
-          for i := 8 to nArgs - 1 do
-          begin
-            sz  := hi + (nArgs - 1 - i) * 16;           { temp byte offset }
-            wid := (i - 8) * 8;                         { outgoing byte offset }
-            EmitI32($F94003E9 or ((sz div 8) shl 10));  { ldr x9, [sp, #sz] }
-            EmitI32($F90003E9 or ((wid div 8) shl 10)); { str x9, [sp, #wid] }
-          end;
-          for i := 0 to 7 do
-          begin
-            sz := hi + (nArgs - 1 - i) * 16;
-            EmitI32($F94003E0 or i or ((sz div 8) shl 10)); { ldr x[i], [sp, #sz] }
-          end;
-          { THE HIDDEN DESTINATION, which this arm used to refuse outright.
-            AAPCS64 passes the indirect result location in x8, and the <=8 arm
-            above gets it by popping one slot further than the args. Here the
-            temps are read by OFFSET rather than popped, so x8 is loaded the
-            same way: the hidden-dest temp was pushed BEFORE arg0, so it sits
-            immediately past the nArgs arg temps at [sp + hi + nArgs*16].
-
-            Its absence was not a lowering difficulty -- the slot was already
-            being pushed at the top of this case, and the old Error fired after
-            that push. What was missing was this load and the 16 bytes below.
-            bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params }
-          sz := hi + nArgs * 16;                          { hidden-dest temp offset }
-          if ABIRetViaHiddenDestProc(procIdx) then
-            EmitI32($F94003E0 or 8 or ((sz div 8) shl 10)); { ldr x8, [sp, #sz] }
-          EmitCallProc(procIdx);
-          { Drop the outgoing block and every temp. The hidden-dest slot is one
-            MORE 16-byte temp than the args, and forgetting it here would leak
-            16 bytes of stack per call rather than fault -- the quiet half of
-            this fix, and the reason the cleanup is not simply left alone. }
-          if ABIRetViaHiddenDestProc(procIdx) then
-            sz := sz + 16;
-          EmitI32($910003FF or (sz shl 10));              { add sp, sp, #sz }
-        end;
+          sz := EmitCallArgRegsA64(nArgs, nArgTotal, -1, -1);
+        EmitCallProc(procIdx);
+        if sz > 0 then
+          EmitI32($910003FF or (sz shl 10));            { add sp, sp, #sz }
       end;
 
     IR_CALL_IND:
@@ -3305,8 +3360,6 @@ begin
           aggregate / frozen-string result pushes its hidden caller-destination
           deeper still and pops it into x8 (the AAPCS indirect-result register)
           last, after the arg and callee pops. }
-        if Procs[procIdx].ParamCount + Integer(IRC[node]) > 8 then
-          Error('target aarch64: indirect call with more than 8 parameters not supported');
         if IRCallDest[node] >= 0 then
         begin
           IREmitNodeAarch64(IRCallDest[node]);       { x0 = hidden destination }
@@ -3325,15 +3378,15 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        for i := nArgs - 1 downto 0 do
-          if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
-            EmitLastArgMoveA64(nArgTotal)            { last arg is still in x0 }
-          else
-            EmitI32($F84107E0 + i);                  { ldr x[i], [sp], #16 }
-        EmitI32($F84107F0);                          { ldr x16, [sp], #16 (callee) }
+        { The callee sits one temp below arg0 and the hidden destination one
+          below that, which is exactly EmitCallArgRegsA64's xtra1/xtra2. }
         if IRCallDest[node] >= 0 then
-          EmitI32($F84107E8);                        { ldr x8, [sp], #16 (hidden destination) }
+          sz := EmitCallArgRegsA64(nArgs, nArgTotal, 16, 8)
+        else
+          sz := EmitCallArgRegsA64(nArgs, nArgTotal, 16, -1);
         EmitI32($D63F0200);                          { blr x16 }
+        if sz > 0 then
+          EmitI32($910003FF or (sz shl 10));         { add sp, sp, #sz }
       end;
 
     IR_VIRTUAL_CALL:
@@ -3363,21 +3416,19 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        if nArgs > 8 then
-          Error('target aarch64: virtual call with more than 8 parameters not supported');
         { The pops run high-index first, so x0 (Self) is restored LAST and the
-          VMT load below still sees it -- the collapse only changes where the
-          highest-index argument comes from. }
-        for i := nArgs - 1 downto 0 do
-          if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
-            EmitLastArgMoveA64(nArgTotal)
-          else
-            EmitI32($F84107E0 + i);                  { ldr x[i], [sp], #16 }
+          VMT load below still sees it. On the stack-arg path nothing is popped
+          at all and x0 is loaded by offset, which is just as good -- and x9,
+          the block-building scratch, is dead again before the VMT load. }
         if IRCallDest[node] >= 0 then
-          EmitI32($F84107E8);                        { ldr x8, [sp], #16 (hidden destination) }
+          sz := EmitCallArgRegsA64(nArgs, nArgTotal, 8, -1)
+        else
+          sz := EmitCallArgRegsA64(nArgs, nArgTotal, -1, -1);
         EmitI32($F9400009);                          { ldr x9, [x0] (VMT ptr) }
         EmitI32($F9400129 or (j shl 10));            { ldr x9, [x9, #slot*8] }
         EmitI32($D63F0120);                          { blr x9 }
+        if sz > 0 then
+          EmitI32($910003FF or (sz shl 10));         { add sp, sp, #sz }
       end;
 
     IR_COSWITCH:

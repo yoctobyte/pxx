@@ -13428,6 +13428,20 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_many_params.pas $(TESTTMP)/test_aarch64_many_params
 	./$(COMPILER) test/test_cross_many_params.pas $(TESTTMP)/test_aarch64_many_params_x64
 	tools/expect_same.sh aarch64/test_aarch64_many_params "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_many_params)" "$$($(TESTTMP)/test_aarch64_many_params_x64)"
+	# AAPCS64 STACK ARGUMENTS, ONE ROW PER CALL KIND. test_cross_many_params
+	# above only exercises the DIRECT call, which is the one kind that already
+	# passed args past x7 -- so it is exactly the test that stayed green while
+	# constructor, indirect and virtual calls refused. Ten params, and every
+	# routine's answer depends on args 8 and 9, the two that travel on the
+	# stack: a callee summing only the register args would pass a weaker test
+	# while dropping them silently. -O3 too, because the last-argument collapse
+	# is the one optimisation that changes where an argument comes from.
+	# bug-a-aarch64-has-no-stack-argument-passing-for-five-of-six-call-kinds
+	./$(COMPILER) --target=aarch64 test/test_a64_stack_args.pas $(TESTTMP)/test_aarch64_stackargs
+	./$(COMPILER) --target=aarch64 -O3 test/test_a64_stack_args.pas $(TESTTMP)/test_aarch64_stackargs_o3
+	./$(COMPILER) test/test_a64_stack_args.pas $(TESTTMP)/test_aarch64_stackargs_x64
+	tools/expect_same.sh aarch64/test_aarch64_stackargs "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_stackargs)" "$$($(TESTTMP)/test_aarch64_stackargs_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_stackargs-O3 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_stackargs_o3)" "$$($(TESTTMP)/test_aarch64_stackargs_x64)"
 	./$(COMPILER) --target=aarch64 test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2_x64
 	tools/expect_same.sh aarch64/test_aarch64_conf2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_conf2)" "$$($(TESTTMP)/test_aarch64_conf2_x64)"
