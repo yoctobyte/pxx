@@ -12,3 +12,4 @@
 # binding constraint, at a sha 20+ testable commits stale, to re-answer an
 # answered question. Always --covering first, and check whether an existing
 # phase already produces the verdict before queueing.
+440c822e6a80921cbbb3a825f5c5d8c31185cf28	full	frankT	-O2 default changed for every lane: EmitStaticLitHandle(+A64) promoted -O3->-O2, literals now shared+refcounted instead of freshly allocated. --covering says no run at or after it. Watch in-place literal mutation, two evaluations assumed distinct, and aarch64 (its arm moved for parity, unmeasured).
