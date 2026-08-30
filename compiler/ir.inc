@@ -12154,14 +12154,40 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       condNode := IRLowerAST(ASTLeft[node]);
       first := condNode;
       last := IRAppend(IR_JUMP_IF_FALSE, elseLabel, condNode, -1, 0, 0);
+      { FLUSH PER ARM, not at the enclosing statement boundary.
+
+        A by-value record argument temp is finalized by IRFlushPostCallIntf,
+        which AN_SEQ calls once per statement. An `if` is ONE statement, so a
+        temp created inside a branch had its finalize emitted after the merge --
+        and therefore ran on EVERY call, including the calls that took the other
+        arm. That is the mechanism in
+        bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized:
+        a routine which merely MENTIONS a managed record in a branch it does not
+        take paid that branch's finalization anyway. Measured on its repro at
+        20M calls: three IR_COPY_REC_MANAGED finalizes sitting in the merge
+        block, each a heap-lock round trip, on a path that allocated nothing.
+
+        Flushing to a base taken AFTER the condition is lowered leaves the
+        condition's own temps to the outer boundary, where they belong -- they
+        are live across the branch. The arm's temps are not: an `if` is a
+        statement and yields no value, so nothing outside the arm can reference
+        what the arm created.
+
+        Same base-not-blanket discipline as the AN_SEQ call site for the same
+        reason: an inner statement lowers while the outer statement's temps are
+        still pending. }
+      pcBase := PostCallIntfCount;
       last := IRLowerAST(ASTLeft[pairNode]);
       IRMarkStatementNode(last);
+      IRFlushPostCallIntf(pcBase);
       last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
       last := IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
       if ASTRight[pairNode] <> -1 then
       begin
+        pcBase := PostCallIntfCount;
         last := IRLowerAST(ASTRight[pairNode]);
         IRMarkStatementNode(last);
+        IRFlushPostCallIntf(pcBase);
       end;
       endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);

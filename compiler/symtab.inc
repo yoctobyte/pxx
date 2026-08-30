@@ -10991,6 +10991,7 @@ end;
 
 procedure EmitManagedLocalCleanup(retSymIdx: Integer);
 var i, procIdx, mek: Integer;
+    recSz, q, pRecZero: Integer;
 begin
   if CurProc < 0 then Exit;
   { A STACKLESS GENERATOR step function RETURNS at every yield and is re-entered
@@ -11137,6 +11138,47 @@ begin
           retained on copy and never released, which is a LEAK per copy rather
           than the use-after-free that predates it.
           bug-a-a-record-copy-does-not-retain-an-interface-field }
+        { AN ALL-ZERO RECORD OWNS NOTHING, so skip the whole block including the
+          HEAP LOCK. Every managed field kind releases to a no-op when its slot
+          is zero -- a nil AnsiString handle, a nil dynamic array, a nil COM
+          interface, an all-zero nested record -- so a record whose bytes are
+          all zero has nothing to release, and the walk's only remaining effect
+          is the acquire/release pair around it.
+
+          That pair is the cost. A routine that merely MENTIONS a managed record
+          in a branch it does not take still reaches this loop for every temp the
+          branch would have used: the repro in
+          bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized
+          has NINE such temps and paid nine lock round-trips per call on a path
+          that allocated nothing, which is most of the 35-47x it measures against
+          the same function with the branch behind a call.
+
+          The test is sound on its own, not merely because the prologue zeroes
+          these slots: it reads the slot at run time, so a record that DOES own
+          something is never skipped. The zero-init contract
+          (feature-zero-init-contract) is what makes the fast path actually hit,
+          and this is the pairing that pays for it -- the cheap half (word
+          stores, 991fa5c15) guarantees the expensive half can be branched over.
+
+          Bounded to <= 8 qwords so the test cannot grow larger than the block it
+          guards; a bigger record keeps the unguarded path. A size that is not a
+          whole number of qwords also falls through, rather than growing a
+          tail-byte case for a shape padding makes rare. }
+        recSz := RecSize(SymTR[i].RecId);
+        pRecZero := -1;
+        if (recSz >= 8) and (recSz mod 8 = 0) and (recSz <= 64) then
+        begin
+          x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);   { mov rax, [rbp+off] }
+          q := 1;
+          while q < recSz div 8 do
+          begin
+            x64_mov_reg_mem(8, rRCX, rRBP, Syms[i].Offset + q * 8, True);
+            x64_or_reg_reg(8, rRAX, rRCX);                        { or rax, rcx }
+            Inc(q);
+          end;
+          x64_test_reg_reg(8, rRAX, rRAX);
+          EmitB($0F); EmitB($84); pRecZero := CodeLen; EmitI32(0); { jz past the walk }
+        end;
         x64_push_reg(rRBX);                                      { push rbx }
         x64_lea_reg_mem(8, rRBX, rRBP, Syms[i].Offset, True);     { lea rbx, [rbp+off] }
         EmitManagedRecordIntfWalk(SymTR[i].RecId, 'PXXRecordReleaseIntf');
@@ -11144,6 +11186,7 @@ begin
         EmitManagedRecordReleaseLocked(SymTR[i].RecId);
         EmitReleaseHeapLock;
         x64_pop_reg(rRBX);                                       { pop rbx }
+        if pRecZero >= 0 then Patch32(pRecZero, CodeLen - (pRecZero + 4));
       end;
     end;
   end;

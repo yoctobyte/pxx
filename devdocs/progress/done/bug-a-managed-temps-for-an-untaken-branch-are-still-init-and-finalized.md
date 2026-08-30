@@ -3,11 +3,11 @@ track: A
 prio: 65
 type: bug
 blocked-by: []
-status: new
-owner: ""
+status: done
+owner: frankA
 found: 2026-08-30
 found-by: frank-optimize, profiling bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
-summary: "A routine that merely MENTIONS a managed type in a branch it does not take pays that branch's temp init and finalization on every call. Measured in isolation at 44x: two functions with identical semantics and the same never-taken branch cost 0.294s and 13.060s for 20M calls. promocore.pas:796 documented this in 2026 and worked around it by hand-splitting three routines; eleven siblings kept the cost until 0c3ad8a10. The workaround does not scale and the codegen fix helps every program."
+summary: "FIXED. A routine that merely MENTIONED a managed type in a branch it did not take paid that branch's temp finalization on every call. Two causes, each worth about half: (a) IRFlushPostCallIntf ran at the enclosing STATEMENT boundary, so a by-value record temp created inside an if-arm had its finalize emitted after the merge -- now flushed per arm; (b) the epilogue walked every managed record local through a heap-lock round trip even when the slot was all zero -- now branched over by a run-time all-zero test. Repro 20M calls, interleaved on one box: 9.77-10.52s -> 0.43-0.45s, against 0.27s for the hand-split form the workaround demanded. promocore.pas:796's rule -- keep every hot routine free of the managed type -- is retired rather than restated."
 ---
 
 # Managed temps for an untaken branch are still init'd and finalized
@@ -266,3 +266,80 @@ branch.
 root cause rather than a perf item.** It is the ticket that retires the rule by
 making it unnecessary, which is worth more than any single site it fixes — the
 tickets-closed-per-change measure `root-cause-over-microfix` asks for.
+
+---
+
+## RESOLVED — two causes, each about half the cost
+
+Interleaved on one box (load 5.4-6.0), three rounds, `inline` arm, 20M calls,
+every binary named because the tree moved between builds:
+
+| binary | change | round 1 | 2 | 3 |
+| --- | --- | ---: | ---: | ---: |
+| `494fd9c21ad3` | HEAD, neither fix | 10.52 s | 9.77 | 9.93 |
+| `bda1155557b2` | + epilogue all-zero guard | 5.10 s | 5.15 | 5.23 |
+| `416c3640e2f0` | + per-arm flush | **0.43 s** | 0.45 | 0.44 |
+
+`split` is 0.27 s on the same binary, so the 35-47x gap closes to ~1.6x. Both
+arms still print `20000000`.
+
+### Cause 1 — the finalize was emitted after the merge, not in the arm
+
+`IRFlushPostCallIntf` finalizes by-value record argument temps, and `AN_SEQ`
+called it **once per statement**. An `if` is one statement, so a temp created
+inside a branch had its finalize emitted into the merge block and ran on **every**
+call — including the calls that took the other arm. `PXXDBG=a.ir` shows it
+plainly: three `default_mem` + `copy_rec_managed` pairs sitting in BB6, after
+both arms have joined.
+
+`AN_IF` now takes its own base after the condition is lowered and flushes at the
+end of each arm. The condition's temps stay with the outer boundary, where they
+belong — they are live across the branch. An `if` yields no value, so nothing
+outside an arm can reference what the arm created.
+
+**It cannot leak**, and this is the property that makes the change safe rather
+than merely faster: a path that skips the sunk flush — `exit` from inside the
+arm, a `goto` out — still meets `EmitManagedLocalCleanup` in the epilogue, which
+visits every local unconditionally. The epilogue is the backstop.
+
+### Cause 2 — an all-zero record still bought a heap lock
+
+`EmitManagedLocalCleanup`'s record arm is an interface walk plus
+`EmitAcquireHeapLock` / release / `EmitReleaseHeapLock`. Every managed field kind
+releases to a no-op when its slot is zero, so **the lock round trip is the only
+remaining effect** for an untouched temp. The repro has nine such temps and paid
+**nine heap-lock round trips per call on a path that allocated nothing** — which
+is the sentence that justifies the change, more than the multiplier does.
+
+Guarded by a run-time all-zero test (`or` the record's qwords, `jz` past the
+walk), bounded to <= 8 qwords so the test cannot exceed the block it guards.
+
+**The two halves of item 2 are jointly effective, and a future reader must not
+delete one.** The test is sound on its own — it reads the slot at run time, so a
+record that owns something is never skipped — but what makes the fast path
+actually *hit* is the zero-init contract, whose cheap word stores landed in
+`991fa5c15`. Removing the prologue zeroing would silently disarm the epilogue
+guard: still correct, no longer fast, and nothing would say so.
+
+### Deliberately NOT done: the NilPy watermark seed
+
+frank-optimize asked that whoever fixed item 2 also seed `PyZeroedUpTo`
+(`ir_codegen.inc:11292`) at the prologue's `SymCount` rather than
+`Procs[CurProc].ScopeBase`. **Not done, and not forgotten.** It needs a new
+recorded high-water mark (nothing stores the prologue's `SymCount` today), it
+lands in a pass whose own comments record three segfaults from getting zero-init
+coverage wrong, and frank-optimize priced it at ~4% — under the noise floor of
+its own measurement. Landing an unmeasurable risky change behind a 23x result is
+how a later regression becomes unattributable. Filed as its own item rather than
+folded in here.
+
+### The rule this retires
+
+`promocore.pas:796` — *"keep every hot routine free of TBig"* — was a correct
+diagnosis and a workaround enforced by nothing, forgotten three times in one day.
+The hand-splits in `promocore.pas` can now be measured against the unsplit form;
+if they converge, the `*Slow` routines are unnecessary rather than mandatory.
+That is a separate change and a separate measurement.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
