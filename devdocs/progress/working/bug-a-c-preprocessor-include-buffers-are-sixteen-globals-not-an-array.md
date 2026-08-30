@@ -153,3 +153,78 @@ moment the storage is an array; that half is mechanical.
 Priority is not hand-edited here — [[feature-c-corpus-busybox-applet]] (p60) is
 now marked `blocked-by` this ticket, so the ranker propagates 60 down the edge
 on its own, which is the mechanism CLAUDE.md describes for exactly this.
+
+---
+
+## A THIRD defect under this ticket, and raising the cap was the TRIGGER, not the bug
+
+Found by frankS while implementing, 2026-08-30. The ticket has now been
+re-scoped twice — filed as tidiness, corrected by frankC to *"blocks all 145
+busybox translation units"* — and this is the third layer.
+
+`cpreproc.inc` carried a **second** depth-bounded table:
+
+```pascal
+CPPathAtDepth: array[0..17] of AnsiString;          { declaration }
+if depth + 1 <= 17 then CPPathAtDepth[depth + 1] := CPrepPath;   { write site }
+CPCurPath := CPPathAtDepth[depth];                  { read site — UNGUARDED }
+```
+
+The `<= 17` clamp on the write is **dead code**: nothing could reach depth 17
+while the include buffers capped nesting at 16. The read at `CPProcessText` has
+no bound test at all, and did not need one for the same reason.
+
+**So the array's bound was correct only by the accident of a smaller bound
+somewhere else.** Raise `MAX_CPREP_INCLUDES` to the real limit — which is the
+entire point of this ticket — and `CPPathAtDepth[depth]` becomes an
+**out-of-bounds read at depth 18**, on the path that runs for every single
+`#include`. The dead clamp above it would silently stop recording paths from 18
+on, so `-g` line markers would name the wrong file before the read went out of
+bounds. Neither has a diagnostic.
+
+**Raising the cap was the trigger, not the bug.** The bug was already there, in
+the shape of a bound held up by an unrelated constant. This is why the fix sizes
+`CPPathAtDepth` to `MAX_CPREP_INCLUDES` and deletes the clamp rather than
+raising `17` to some new number: **one limit, spelled once**, so the class cannot
+recur here rather than this instance of it being repaired.
+
+frankA's phrasing, which is better than mine: *correct by convention, not by
+construction — and it fails silently at the exact moment someone does the
+obvious right thing.*
+
+## Two stages, because the compiler cannot compile its own new source
+
+`LoadFile(CPrepPath, CPrepInclude[depth])` did not compile:
+`LoadFile expects string variables in IR codegen`. **Not a language limit** — an
+ordinary `procedure F(var s: AnsiString)` accepts `arr[1]`, runs correctly and
+matches FPC. The restriction was in the intrinsic (`specialId = 100`), which
+matched its destination as a SYMBOL only.
+
+- **Stage 1 — landed `4f73f88fa`, green.** `EmitLoadFileManagedAt` publishes to
+  an ADDRESS, so an array element or a record field works. Under a bounded
+  window from frankA, kept strictly inside the LoadFile lowering — the shared
+  `EmitPublishManagedString` was not touched. Test
+  `test/test_loadfile_into_element_and_field.pas` covers plain/element/field,
+  asserts neighbouring slots are untouched, and republishes 50 times to exercise
+  the release path (measured separately: 500 republishes of a 264 KB file peak
+  at 512 KB RSS, where a leak would be ~132 MB).
+- **Stage 2 — written, builds, fixedpoint `f812166486cd`, HELD.** Needs a pin
+  first, and this was measured rather than assumed:
+
+  ```
+  $ ./stable_linux_amd64/default/pinned compiler/compiler.pas   # a fresh checkout
+  pascal26:2053: error: LoadFile expects string variables in IR codegen
+    in: compiler/cpreproc.inc
+  ```
+
+  Stage 2 builds on the implementer's box **only** because the binary on disk
+  already carries stage 1. Pushing it would leave master unbuildable from the
+  current pin for every fresh checkout, Track T's sweep clones included. This is
+  the mirror of CLAUDE.md's documented seeded-tree trap: that one is a build
+  that silently *succeeds* when it should have rebuilt; this is a build that
+  succeeds **on one box only**. Same root property — the compiler on disk and
+  the compiler the sources describe are two different things, and only running
+  the *pinned* one tells you which you have.
+
+  Pin requested from the coordinator rather than run here: it holds the repo-wide
+  lock and Track A had an atomic two-file commit in flight.
