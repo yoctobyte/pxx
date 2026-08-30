@@ -165,4 +165,4 @@ The other 531. Not bumping the ratchet, which this ticket explicitly forbids and
 is right to.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d9d166f7e.
