@@ -612,3 +612,30 @@ and find which coercion sees an object. Do NOT edit the app to get past it.
 variable" on the RHS of a later top-level assignment. It hides in this app
 because the same lines sit inside `def load_session()`, which is the working
 case; a three-line probe reproduces it.
+
+
+---
+
+## Status 2026-08-30 (frankwasm): the key_analysis wall is CLEARED; the wall moved
+
+`05eff4cc9` fixed the str/helper collision that stopped every module importing
+`key_analysis`. Measured now, same binary:
+
+| module | before | now |
+| --- | --- | --- |
+| `settings.py` | compiles | compiles |
+| `key_analysis.py` | compiles | compiles |
+| `convertrawtext.py` | `key_analysis.py:82 unexpected token` | reaches `render_backend.py:114` |
+| `SongFormatter.py` | same | reaches `render_backend.py:114` |
+| `render_backend.py` direct | does not terminate | does not terminate (unchanged) |
+
+Both blocked modules now stop at the SAME new place, in `render_backend.py`:
+`w, h = img.getSize()` -> "cannot unpack this value into several names -- it is
+not a list, tuple or variant". So the remaining blocker is
+[[bug-nilpy-render-backend-py-compile-does-not-terminate]], updated with the
+new failure; the key_analysis wall is closed as
+[[bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter]].
+
+Warnings seen on the way (both modules, not blocking, not investigated here):
+C-vs-Pascal declaration disagreements for `floor`, `ceil` and `pow` on result
+or parameter types, resolved by binding to the C declaration.

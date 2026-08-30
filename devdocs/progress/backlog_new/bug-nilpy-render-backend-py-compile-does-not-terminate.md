@@ -101,3 +101,40 @@ Track N's: `make test-nilpy` green + self-host byte-identical, plus
 `render_backend.py` compiling from `~/songformatter` in bounded time — and the
 timing recorded, since "it finished" is not a result here without a number next
 to it.
+
+---
+
+## Update 2026-08-30 (frankwasm): it now FAILS as an import, and still hangs direct
+
+With the str/helper collision fixed (`05eff4cc9`), `convertrawtext.py` and
+`SongFormatter.py` get past `key_analysis.py` and reach this module. Pulled as
+a UNIT it no longer hangs — it produces an error, at `render_backend.py:114`:
+
+```
+error: Nil Python: cannot unpack this value into several names
+       — it is not a list, tuple or variant
+  near:  img  getSize   >>>   Image
+```
+
+```python
+w, h = img.getSize()
+return Image.frombytes("RGB", (w, h), img.getRGBData())
+```
+
+Compiled **directly** it still does not terminate (timed out at 120s), so the
+non-termination this ticket is about is unchanged. The two faces are worth
+keeping apart: as an import it now gets far enough to type something and refuse,
+which is a *diagnosable* state and a better starting point than the hang.
+
+`getSize` is defined nowhere in the app — it is reportlab's `ImageReader`, so
+`img` is a shim-typed value the compiler resolved to something concrete and
+wrong. Note the refusal text: it accepts a **variant**, so an unknown type
+would have been fine. Something typed it definitely, and incorrectly.
+
+Probable sibling — check before treating this as its own animal:
+[[bug-n-a-tuple-returning-str-method-prints-raw-memory-when-returned-from-a-def]]
+is the same shape one family over (a METHOD result that should be a tuple and
+is not typed as one). If both come from how a method's result type is inferred,
+one fix closes both; if not, that is worth knowing early.
+
+This is now the wall for [[feature-demo-songformatter-pxx-target]].
