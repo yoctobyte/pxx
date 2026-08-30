@@ -9,6 +9,46 @@ const
   reg_s2 = 18; reg_s3 = 19; reg_s4 = 20; reg_s5 = 21; reg_s6 = 22; reg_s7 = 23; reg_s8 = 24; reg_s9 = 25; reg_s10 = 26; reg_s11 = 27;
   reg_t3 = 28; reg_t4 = 29; reg_t5 = 30; reg_t6 = 31;
 
+{ --- range checks for the PC-relative forms -----------------------------------
+  RISC-V branch and jump immediates are cut into pieces and OR'd into the
+  instruction word, and every one of those pieces is masked. A target out of
+  reach therefore does not fail -- it loses its high bits and produces a
+  perfectly well-formed instruction that jumps somewhere else. This backend has
+  already paid for that twice over, both times by working around the CALL SITE
+  and leaving the encoder sharp:
+
+    - `IR_JUMP_IF_FALSE` in ir_codegen_riscv32.inc emits bne-skip + jal rather
+      than a bare beq, because a large routine truncated the B-type offset and
+      "branches landed inside unrelated code (chess perft counted 164)".
+    - xtensa hit the same class and it "took a disassembly and the arithmetic
+      262591-262144=437 to name it" -- which is what produced XtensaRelCheck in
+      xtensaenc.inc, the template this mirrors. That fix stopped at its own
+      backend; this is the sibling it did not sweep.
+
+  MASKING IS CORRECT FOR NEGATIVE OFFSETS -- two's complement is exactly what
+  the field wants -- so this checks the SIGNED RANGE rather than asking whether
+  the mask changed the value. The naive form would reject every backward branch.
+  xtensaenc.inc states this and it is repeated here because it is the one way
+  this check is easy to write wrongly.
+
+  The ALIGNMENT check is not decoration: J- and B-type immediates encode bits
+  [20:1] and [12:1], so bit 0 is dropped rather than rejected, and an odd offset
+  silently becomes an even one -- a jump into the middle of an instruction, on a
+  target where every instruction this backend emits is 4 bytes and an odd offset
+  can therefore only be a bug in the caller.
+  bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards }
+procedure RISCVRelCheck(v, lo, hi: Integer; const what: AnsiString);
+begin
+  if (v < lo) or (v > hi) then
+    Error('target riscv32: ' + what + ' displacement ' + AIntToStr(v) +
+          ' is outside the encodable range ' + AIntToStr(lo) + '..' +
+          AIntToStr(hi) + '; the code is too large for this branch form');
+  if (v mod 2) <> 0 then
+    Error('target riscv32: ' + what + ' displacement ' + AIntToStr(v) +
+          ' is odd; this form encodes a 2-byte-aligned offset and would drop '
+          + 'the low bit, jumping into the middle of an instruction');
+end;
+
 procedure EmitRType(funct7, rs2, rs1, funct3, rd, opcode: Integer);
 begin
   EmitI32((funct7 shl 25) or (rs2 shl 20) or (rs1 shl 15) or (funct3 shl 12) or (rd shl 7) or opcode);
@@ -28,6 +68,7 @@ procedure EmitBType(imm, rs2, rs1, funct3, opcode: Integer);
 var
   i12, i11, i10_5, i4_1: Integer;
 begin
+  RISCVRelCheck(imm, -4096, 4094, 'conditional branch');
   i12   := (imm shr 12) and 1;
   i11   := (imm shr 11) and 1;
   i10_5 := (imm shr 5) and $3F;
@@ -44,6 +85,7 @@ procedure EmitJType(imm, rd, opcode: Integer);
 var
   i20, i19_12, i11, i10_1: Integer;
 begin
+  RISCVRelCheck(imm, -1048576, 1048574, 'jal');
   i20    := (imm shr 20) and 1;
   i19_12 := (imm shr 12) and $FF;
   i11    := (imm shr 11) and 1;
@@ -55,6 +97,7 @@ function EncodeRISCVJAL(rd: Integer; offset: Integer): Integer;
 var
   i20, i19_12, i11, i10_1: Integer;
 begin
+  RISCVRelCheck(offset, -1048576, 1048574, 'jal');
   i20    := (offset shr 20) and 1;
   i19_12 := (offset shr 12) and $FF;
   i11    := (offset shr 11) and 1;
@@ -163,6 +206,7 @@ procedure rv32_srai(rd, rs1, sh: Integer);  begin EmitIType((sh and $1F) or $400
 function EncodeRISCVBEQ(rs1, rs2, offset: Integer): Integer;
 var i12, i11, i10_5, i4_1: Integer;
 begin
+  RISCVRelCheck(offset, -4096, 4094, 'conditional branch');
   i12   := (offset shr 12) and 1;
   i11   := (offset shr 11) and 1;
   i10_5 := (offset shr 5) and $3F;
@@ -180,6 +224,7 @@ function EncodeRISCVBNE(rs1, rs2, offset: Integer): Integer;
   BRANCH itself, as RISC-V defines it. }
 var i12, i11, i10_5, i4_1: Integer;
 begin
+  RISCVRelCheck(offset, -4096, 4094, 'conditional branch');
   i12   := (offset shr 12) and 1;
   i11   := (offset shr 11) and 1;
   i10_5 := (offset shr 5) and $3F;

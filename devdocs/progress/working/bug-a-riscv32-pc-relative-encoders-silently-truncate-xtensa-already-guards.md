@@ -5,7 +5,8 @@ prio: 60
 type: bug
 found: 2026-08-30
 found-by: frankS
-owner: unassigned
+owner: frankS
+status: working
 ---
 
 > **prio 50 → 60 by the coordinator, 2026-08-30.** Not a disagreement with the filer's
