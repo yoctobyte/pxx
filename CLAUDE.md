@@ -123,39 +123,45 @@ never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
 
 ### Track C in one line
 Own the C-frontend files (`clexer`/`cparser`/`cpreproc`, C→IR lowering,
-`lib/crtl`, C tests) on `master`. **Shared compiler internals stay A's** — a new
-AST node / IR op / symtab field / backend change (anything in `lexer.inc`,
-`ir*.inc`, `symtab.inc`, `defs.inc`, the backends) → **file a Track
-A ticket**, do not edit it under Track C. That rule keeps A's self-host gate safe
-and is what stops AST-node-number / token collisions. Gate = C tests green +
-self-host byte-identical + cross. Land only green; big destabilizing work goes in
+`lib/crtl`, C tests) on `master`. **Shared internals are still A's TERRITORY,
+but that is ownership, not a lock** (2026-08-30): edit them when your ticket
+needs it, say so in the commit, and tell whoever else is in that file. Do NOT
+hand off a half-understood diff — that costs more than it saves. File a Track A
+ticket when the change needs MEMORY (a shared model accumulating across
+sessions), not to ask permission. Node-number and token collisions in
+`lexer.inc`/`defs.inc` are the one real interaction; coordinate those by message.
+Gate = C tests green + self-host byte-identical + cross. Land only green; big destabilizing work goes in
 behind a flag or incrementally, never a long-lived branch.
 
 ### Combined-track assignment (one agent, several tracks)
 The user may put a single agent on **more than one track** — e.g. "you are Track
-A *and* C". Then the tracks stay distinct (own files, own gates) and a shared-code
-change is **still filed as a Track A ticket** for traceability — but the *same
-agent may resolve its own ticket*, because the user has confirmed no other agent
-holds Track A concurrently, so there is no coordination hazard. File → (normally
-hand off) → here, file → self-resolve. Drop back to file-and-hand-off the moment
-the agent is single-track again.
+A *and* C". The tracks stay distinct (own files, own gates) and you respect every
+gate you span. **The file/hand-off/self-resolve ceremony is gone** (2026-08-30):
+there is nothing to hand off, because there was never permission to withhold.
+File a ticket when the work needs coordination, ranking or **memory** — and
+memory is usually the real one, since a shared model accumulating across sessions
+cannot live in a message thread.
 
-Not all combinations carry the same risk, and it's about **shared files, not
-topics**:
+Combinations differ in how much they overlap, and it is about **shared files,
+not topics**:
 - **Frontend + frontend** (C/N/P/R/Z pairs) is the low-risk combo — each owns a
   mostly-disjoint file set (`cparser` vs `pyparser` vs `zparser` vs the Rust files…),
   so their edits merge cleanly. So **A+N, B+N, N+C**, etc. are all fine — N owns
   `pylexer`/`pyparser`, disjoint from every other lane. The catch is **P**: the
   Pascal frontend still shares `lexer.inc` with A (its parser is carved out, its
-  lexer is not), so "P + anything" still touches A's ground — treat the P edits under A's gate + no-concurrent-edit
-  rule. (N does NOT have this catch — it's carved out like C/Z.) For automated /
+  lexer is not), so "P + anything" still touches A's ground — hold the P edits to
+  A's gate, and say so when you land in `lexer.inc`. (N does NOT have this catch
+  — it's carved out like C/Z.) For automated /
   scheduled workers the overlap rules may need tuning, but a single supervised
   agent holding e.g. A+N is exactly the intended combined-track case.
-- **Anything + A** is the combo that needs the "no other agent holds A"
-  confirmation, because A is where the shared files (`ir*.inc`, `symtab.inc`,
-  `defs.inc`, backends, and the P-shared `lexer`/`parser`) actually live. Two
-  agents editing one of those at once is the only real hazard the letters exist
-  to prevent.
+- **Anything + A** is the highest-overlap combo, because A is where the shared
+  files (`ir*.inc`, `symtab.inc`, `defs.inc`, backends, the P-shared `lexer`)
+  live. **No confirmation is required** — that guard was cut 2026-08-30 after
+  firing twice, indefensibly, in one night. Two agents in one of those files is
+  normal: `symtab.inc` took commits from seven lanes that day with zero
+  collisions. Tell the other agent what you are touching — not to ask, but
+  because the *reply* is where the value is ("I'm committing to that file all
+  night, rebase immediately before you write").
 
 Even when the source would merge, keep the *default* to one lane (top of this
 section) — combining is a deliberate call the user makes, not a convenience you
@@ -173,15 +179,19 @@ Full Pascal-language frontend (peer of C/Z), but its files aren't carved out yet
 — its PARSER is carved out (`pasparser_*.inc`) but its LEXER still lives in the
 SHARED `lexer.inc`. So same
 `master`, same gate = `make test` + self-host fixedpoint (byte-identical), plus
-cross where a target is touched, and **never edit those files concurrently with
-A**. IR / backends / ABI / ELF are core A: a Pascal feature needing a new IR op /
-AST node is an A change (self-resolve if you also hold A, else file + hand off).
+cross where a target is touched. `lexer.inc` is shared with A — edit it when you
+need to, and say so, because token/node numbering is the one place two edits
+genuinely interact. IR / backends / ABI / ELF are core A: a Pascal feature
+needing a new IR op or AST node is an A change you may simply make.
 
 ### Track R in one line
 Own the Rust-frontend files (`rfront` lexer/parser, Rust→IR lowering, `lib/rrtl`,
 Rust tests) on `master`; live work under `devdocs/progress/working/feature-rust-*`.
-**Shared compiler internals stay A's** — new AST node / IR op / symtab field /
-backend → **file a Track A ticket**, don't edit under R. Gate = Rust tests green +
+**Shared internals are still A's TERRITORY, but that is ownership, not a lock**
+(2026-08-30): edit them when your ticket needs it, say so in the commit, and
+tell whoever else is in that file. Do NOT hand off a half-understood diff —
+that costs more than it saves. File a Track A ticket when the change needs
+MEMORY (a shared model accumulating across sessions), not to ask permission. Gate = Rust tests green +
 self-host byte-identical + cross. Land only green; destabilizing work behind a
 flag or incrementally, never a long-lived branch.
 
@@ -194,8 +204,8 @@ an app hits → file it under the owning lane (A / the frontend), don't fix it u
 ### Track O in one line
 Optimization lane = **implicitly Track A**. Codegen/runtime speed (register
 allocation, `-O` passes, heap allocator). Edits A's shared files (`ir*.inc`,
-`symtab.inc`, backends, `compiler/builtin/**`), so file it as a Track A ticket
-(O is the visible grouping) and obey A's gate: `make test` + self-host
+`symtab.inc`, backends, `compiler/builtin/**`) — edit them; O is the visible
+grouping, not a permission boundary. Obey A's gate: `make test` + self-host
 byte-identical (+ cross where a backend/runtime is touched). New passes land
 behind `-O3`, promote to `-O2` per-pass only after the full gate; `-O2` is the
 proven default and the stable fallback. Land only green.
@@ -240,17 +250,18 @@ in `devdocs/progress/float/`, invisible to `ready`/`next`; picked up on request 
 
 ### Track Z in one line
 Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,
-Zig tests) on `master`. **Shared compiler internals stay A's** — a new AST node /
-IR op / symtab field / backend change → **file a Track A ticket**, don't edit it
-under Z (keeps A's self-host gate safe, stops node-number / token collisions).
-Gate = Zig tests green + self-host byte-identical + cross. Land only green; big
+Zig tests) on `master`. **Shared internals are still A's TERRITORY, but that is ownership, not a lock**
+(2026-08-30): edit them when your ticket needs it, say so in the commit, and
+tell whoever else is in that file. Do NOT hand off a half-understood diff —
+that costs more than it saves. File a Track A ticket when the change needs
+MEMORY (a shared model accumulating across sessions), not to ask permission. Node-number and token collisions are the real hazard; coordinate those
+by message. Gate = Zig tests green + self-host byte-identical + cross. Land only green; big
 destabilizing work behind a flag or incrementally, never a long-lived branch.
 
 ### Track N in one line
 Own the Nil-Python frontend files (`pylexer.inc` / `pyparser.inc`, Python→IR
-lowering, `.npy` tests) on `master`. Mainline + gated (peer of C, not X). **Shared
-compiler internals stay A's** — new AST node / IR op / symtab field / backend
-change → **file a Track A ticket**, don't edit under N. Gate = `test-nilpy` green +
+lowering, `.npy` tests) on `master`. Mainline + gated (peer of C, not X). **Shared internals: see the C line above** — territory, not a lock; edit when
+your ticket needs it and say so. Gate = `test-nilpy` green +
 self-host byte-identical + cross. Land only green. The language is N; an IDE/app
 built with NilPy is an E app (Track B), not N.
 
@@ -617,7 +628,9 @@ fix the doc, not the loop.
   mid-bisect binary and read as "still 552 MB" when HEAD was already flat;
   rebuilding a fixedpoint at HEAD showed the truth. The one-line discipline:
   **hunt async, verify against a known sha.**
-- `git pull --rebase` before pushing; push promptly. Stay in your lane's files.
+- `git pull --rebase` before pushing; push promptly. Your lane is where your
+  work normally lives — it is not a fence, and it never was a reason to hand off
+  a fix you already understand.
 - **Parking held work: park an EDIT you can re-apply (patch, stash, anchored
   scripted edits) — NEVER a whole-file copy of a shared file.** A copy is a
   snapshot of everyone else's work too, and restoring it over a moved tree
