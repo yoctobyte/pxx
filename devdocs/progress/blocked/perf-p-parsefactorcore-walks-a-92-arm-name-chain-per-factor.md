@@ -5,9 +5,7 @@ status: blocked
 owner: ""
 type: perf
 blocked-by: [perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call]
-summary: "Measured at 13e196cc8 on the real -O2 compiler: ParseFactorCore is 9.4% of the whole run — the largest single named function — because 41,032 calls issue 1,583,871 CaseEqual, i.e. 38.6 string compares per factor, walking a linear `else if CaseEqual(name, '...')` chain of 92 arms spread over ~7,180 lines."
-status: working
-owner: frankB
+summary: "SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat."
 ---
 
 # `ParseFactorCore` walks a 92-arm name chain for every factor
