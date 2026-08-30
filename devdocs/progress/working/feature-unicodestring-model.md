@@ -1363,3 +1363,68 @@ locked file for.
   `PXXStrFromWide` are exactly their bodies.
 - The default (undefined) direction is unchanged and still pinned by
   `test_widestring_alias_gate`.
+
+## 7c addendum — the ARGUMENT half was missing, and sysutils is real
+
+Two things landed after the 7c commit, and the first is a correction to it.
+
+### Arguments were never converted, and I built the carrier that proves it
+
+7c wired the width conversion into assignment, concat and `Write`. **It did not
+wire call ARGUMENTS**, so:
+
+| shape | before | FPC |
+| --- | --- | --- |
+| `TakesWide(narrowStr)` | 2 units of mojibake | `café`, 4 units |
+| `TakesNarrow(wideStr)` | 8 bytes of raw UTF-16 | `café`, 5 bytes |
+
+Both silent. `ProcParamStrElemTk` — the carrier built in **6c-params**, by me,
+for exactly this — had no reader until now.
+
+**This is the fourth instance of the pattern in one day, and the first where I
+built the carrier and then failed to read it.** The others were `ASTStrElemTk`
+(no writers), `UFldStrElemTk` (hardwired narrow), and the index node's element
+type (computed and discarded). The lesson is not "check your carriers" — it is
+that a carrier and its reader are one change, and splitting them across two
+steps means the gap is invisible in both.
+
+It also says something about the 7c test matrix as I first wrote it: six
+carriers, both concat orders, both round-trip directions — and no parameter.
+The matrix was built from the *entities that hold a width*, and an argument is
+not an entity, it is a POSITION. Positions were the axis I did not enumerate.
+Fixed at the single tail of `IRLowerCallArg`, value parameters only: a `var`
+parameter binds the variable, so a width mismatch there is a type error and not
+a conversion — FPC's answer too.
+
+### sysutils `UTF8Encode` / `UTF8Decode`: real, with the bodies unchanged
+
+The bodies are still `Result := s`. The entire conversion is in the two
+signatures:
+
+```pascal
+function UTF8Decode(const s: AnsiString): UnicodeString;
+function UTF8Encode(const s: UnicodeString): AnsiString;
+```
+
+`Result := s` across a width boundary lowers to `PXXWideFromStr` /
+`PXXStrFromWide` by 7c's assignment rule, so **there is one transcoder in this
+compiler and it is in the runtime.** Writing the loop out by hand in the RTL
+would have been a second implementation, and the second one is the one that
+stays broken.
+
+`test_sysutils_utf8_encode_decode.expected` is an **oracle** — FPC 3.2.2 byte
+for byte, including the unit values `99 97 102 233`. Non-ASCII on purpose: on
+ASCII a UTF-8 byte count and a UTF-16 unit count are the same number, so the
+identity these functions used to be would pass an ASCII test. That is precisely
+why the old ones survived.
+
+Default builds are unchanged and still the identity — measured, not assumed:
+without the define the same program answers 5 units for 5 bytes and the round
+trip is intact. The declaration comment now says which build gets which, rather
+than claiming there is no UTF-16 to convert to.
+
+### `IRPromoInitFromLiteral`'s comment now documents both ownership holes
+
+It described the ARGUMENT side of a synthesised call. The RESULT side is the
+same gap at the other end and is what leaked in 7c. The comment now says so and
+points at `IRStrWidthConv`, which parks both.
