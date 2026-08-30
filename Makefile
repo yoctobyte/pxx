@@ -11035,6 +11035,18 @@ test-core: $(COMPILER)
 	# must keep working and now composes with the widening.
 	# Cross-target rows live in the test-c-abi-cross target.
 	# bug-c-a-float-to-double-cast-is-a-retag-not-a-conversion
+	# THE THIRD CELL: C caller -> C callee with the C-ABI gate ON, i.e. inside a
+	# C translation unit that a PASCAL program uses. The other two subjects
+	# cannot reach it -- the bridge has a Pascal caller, the control is a pure C
+	# program where the gate is off -- which is how a commit regressed this
+	# population 1000 -> 0 on aarch64 and i386 while passing two independent
+	# verifications. Six shapes, because three targets fail three different ways:
+	# (int, double) is arm32's alone (AAPCS32 wants a 64-bit argument in an EVEN
+	# core-register pair) and i386 needs no float at all (argument ORDER).
+	# Cross-target rows live in the test-c-abi-cross target.
+	# bug-a-the-c-abi-gate-moved-the-callee-but-not-the-intra-c-call-sites
+	./$(COMPILER) -Futest test/test_c_abi_intra_c_calls.pas $(TESTTMP)/test_c_abi_intra26
+	tools/expect_same.sh test_c_abi_intra26 "$$($(TESTTMP)/test_c_abi_intra26)" "$$(printf 'dbl_first 1000\nint_first 1000\nthree_ints 123\ntwo_dbl 1750\nflt 1000\ndbl_arg_int_ret 1000')"
 	./$(COMPILER) test/c_float_to_double_cast_variadic.c $(TESTTMP)/c_f2d_cast26
 	tools/expect_same.sh c_f2d_cast26 "$$($(TESTTMP)/c_f2d_cast26)" "$$(printf '1 2.50\n2 2.50\n3 250\n4 250\n5 2.50\n6 2.50\n7 5.00\n8 2.50\n9 16777216.0\n10 16777216.0\n11 0.100000001')"
 	# feature-c-import-a-pascal-unit-under-a-mangled-name: `#include "x.pas"` is
@@ -14932,6 +14944,7 @@ test-c-conformance-i386: $(COMPILER)
 test-c-abi-cross: $(COMPILER)
 	@overall=0; \
 	exp="$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"; \
+	iexp="$$(printf 'dbl_first 1000\nint_first 1000\nthree_ints 123\ntwo_dbl 1750\nflt 1000\ndbl_arg_int_ret 1000')"; \
 	for t in aarch64 arm32 riscv32 i386; do \
 	  if [ "$$t" != "i386" ] && ! command -v qemu-$$t >/dev/null 2>&1 && \
 	     ! { [ "$$t" = "arm32" ] && command -v qemu-arm >/dev/null 2>&1; }; then \
@@ -14949,6 +14962,13 @@ test-c-abi-cross: $(COMPILER)
 	    cgot="$$(tools/run_target.sh $$t $(TESTTMP)/c_abi_ctl_$$t 2>&1)"; \
 	    if [ "$$cgot" = "$$exp" ]; then echo "test-c-abi-cross: PASS $$t (control)"; \
 	    else echo "test-c-abi-cross: CONTROL FAIL $$t (a REGRESSION)"; printf '%s\n' "$$cgot" | sed 's/^/    /'; overall=1; fi; \
+	  fi; \
+	  if ! ./$(COMPILER) --target=$$t -Futest test/test_c_abi_intra_c_calls.pas $(TESTTMP)/c_abi_intra_$$t >$(TESTTMP)/c_abi_intra_$$t.err 2>&1; then \
+	    echo "test-c-abi-cross: INTRA COMPILE FAIL $$t"; tail -2 $(TESTTMP)/c_abi_intra_$$t.err; overall=1; \
+	  else \
+	    igot="$$(tools/run_target.sh $$t $(TESTTMP)/c_abi_intra_$$t 2>&1)"; \
+	    if [ "$$igot" = "$$iexp" ]; then echo "test-c-abi-cross: PASS $$t (intra-C)"; \
+	    else echo "test-c-abi-cross: INTRA-C FAIL $$t"; printf '%s\n' "$$igot" | sed 's/^/    /'; overall=1; fi; \
 	  fi; \
 	done; \
 	test "$$overall" = "0" || { echo "test-c-abi-cross: RED (expected until bug-c-a-c-function-s-calling-convention-depends-on-the-target lands)"; exit 1; }
