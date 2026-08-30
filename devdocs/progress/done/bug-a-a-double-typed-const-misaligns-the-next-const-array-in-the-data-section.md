@@ -393,4 +393,4 @@ provenance trap visible in the first place.
 the 50-cell grid at HEAD.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit cd1a9d9a5.
