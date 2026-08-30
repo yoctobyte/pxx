@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `030c7e053dc9` | 2026-08-30T02:53:03Z | RED (native) | 485.5s | `e46dbffaa80d` RED |
-| seven | `b94f5190181b` | 2026-08-30T02:39:27Z | RED (native) | 111.0s | `0200df7eabcd` RED |
+| seven | `b94f5190181b` | 2026-08-30T02:54:19Z | RED (full) | 874.5s | `b94f5190181b` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -35,7 +35,6 @@
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
-- **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `30c06db1ae4e`, last good `b26e7ed366f3`, 14 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_max_min_iterables.npy** — test/test_nilpy_max_min_iterables.npy test/test_nilpy_max_min_iterables.expected (seven): bad `0200df7eabcd`, last good `3f854c927aac`, 6 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy** — test/test_nilpy_min_max_key_in_a_variable.npy test/test_nilpy_min_max_key_in_a_variable.expected (seven): bad `0200df7eabcd`, last good `3f854c927aac`, 6 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_min_max_key_none.npy** — test/test_nilpy_min_max_key_none.npy test/test_nilpy_min_max_key_none.expected (seven): bad `0200df7eabcd`, last good `3f854c927aac`, 6 commit(s) in range
