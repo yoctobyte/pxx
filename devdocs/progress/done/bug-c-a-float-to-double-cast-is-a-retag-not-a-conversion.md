@@ -87,4 +87,4 @@ one reached the broken shape.** Two controls disagreeing is what located the
 mechanism; one control agreeing with itself would have buried it.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 1bbd5d6f5.
