@@ -2819,6 +2819,20 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_CLASSREF:
+      { A metaclass value: a2 = the address of class ci's RTTI blob, through the
+        per-class sentinel data-ref the other backends use (patched after
+        EmitRTTI). One line, and without it `class of` and every classref
+        program stopped at
+
+            unsupported node in IR codegen: unknown
+
+        -- `unknown`, not `classref`, because IROpName has no entry for this op.
+        Seven of the 75 declared IR ops have no name there, so a missing arm for
+        any of them names nothing at all. Filed as
+        bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown. }
+      EmitLoadDataRefXtensa(reg_xtensa_a2, -(CLASSREF_DATAREF_BASE + IRA[node]));
+
     IR_SET_LIT:
       { a2 = the 32-byte set blob's address. }
       EmitLoadDataRefXtensa(reg_xtensa_a2, Integer(IRIVal[node]));

@@ -13029,7 +13029,15 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti_x64
 	tools/expect_same.sh xtensa/test_rtti "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_xtensa_test_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
-	@echo "hosted xtensa: 91 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	# +2: IR_CLASSREF. It reported `unsupported node in IR codegen: unknown`,
+	# not `classref` -- IROpName has no entry for seven of the 75 declared ops.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_class_of.pas $(TESTTMP)/test_xtensa_test_class_of
+	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_xtensa_test_class_of_x64
+	tools/expect_same.sh xtensa/test_class_of "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_class_of)" "$$($(TESTTMP)/test_xtensa_test_class_of_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_classref.pas $(TESTTMP)/test_xtensa_test_classref
+	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_xtensa_test_classref_x64
+	tools/expect_same.sh xtensa/test_classref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_classref)" "$$($(TESTTMP)/test_xtensa_test_classref_x64)"
+	@echo "hosted xtensa: 93 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
