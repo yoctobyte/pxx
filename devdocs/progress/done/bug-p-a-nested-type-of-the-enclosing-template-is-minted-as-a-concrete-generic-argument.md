@@ -311,4 +311,4 @@ stable enough to serve as citations, which is a fact about the area and not abou
 reporter.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 1be878631.
