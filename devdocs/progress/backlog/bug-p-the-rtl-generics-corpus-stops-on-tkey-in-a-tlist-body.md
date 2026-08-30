@@ -160,3 +160,68 @@ Three shapes, smallest first, each with a control:
 
 If 3 fails and 1 and 2 pass, the macro-defeats-the-parameter-check story is
 established rather than assumed, and the fix belongs beside the existing guard.
+
+---
+
+## The macro hypothesis is FALSIFIED — eight controlled negatives, two agents
+
+Every shape below **compiles and runs**, on binary `a9a4818ab6c8`. None
+reproduces. Recorded so nobody re-runs them.
+
+| # | shape | result |
+| --- | --- | --- |
+| 1 | literal parameter list + nested specialization on a parameter, inner template cross-unit | pass, prints 4 |
+| 2 | macro parameter list, no nested specialization, params used in bodies | pass |
+| 3 | macro parameter list **+** nested specialization on a macro-supplied parameter | **pass** |
+| 4 | shape 3 + the INCLUDE BOUNDARY (macro defined in the unit, template declared in a `{$I}` file) | pass, procs 244→245 |
+| 5 | shape 3 + `class abstract` + a nested `public type` block aliasing a two-parameter template on both enclosing params | pass, procs 245 |
+| 6 | `uses Generics.Defaults;` alone | **compiles clean** |
+| 7 | the corpus's own `TCustomDictionary<CUSTOM_DICTIONARY_CONSTRAINTS>` with `FEqualityComparer: IEqualityComparer<TKey>`, against the **real** Generics.Defaults | pass |
+| 8 | the corpus's `TCustomArrayHelper<T>` with `TComparerBugHack = TComparer<T>` and `IComparer<T>` parameters, against the **real** Generics.Defaults | pass |
+
+frankB independently ran shape 3 with an *interface* inner template and a
+`class abstract` outer, instantiated it non-vacuously (procs 242→245), and got
+the same negative.
+
+**So: the `{$DEFINE}` macro parameter list does not defeat the
+enclosing-parameter check.** Shapes 7 and 8 are the strongest of these — they are
+the corpus's own declarations against the corpus's own `Generics.Defaults`, and
+they compile. Whatever the trigger is, it is not in the declaration that
+produces the error.
+
+This is what filing the mechanism as a hypothesis rather than a cause bought:
+the hypothesis was wrong, and nothing downstream had been built on it.
+
+## One live lead, recorded as a lead
+
+Removing **only** the implementation-section include from a corpus copy
+(`{$I inc\generics.dictionaries.inc}` at `generics.collections.pas:2333`)
+does not merely drop the `TKey` error — it produces a **different and earlier**
+one:
+
+```
+pascal26:1313: error: unexpected token in a unit interface section:
+  it starts no declaration (a mistyped section header?)
+  near: Create ( AList : TCustomList < >>> T > )
+```
+
+An **interface**-section parse outcome that changes when an
+**implementation**-section include is removed is not something a clean
+declaration parser should produce. That is the same neighbourhood as
+[[bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface]]
+(fixed `d1d8a0800`), which was about method bodies being streamed into an
+interface section.
+
+**Not diagnosed.** Two readings are open and this measurement does not separate
+them: the `:1313` error may be newly *caused* by the removal, or it may have
+been there all along and *masked* by the earlier failure — the
+earlier-error-hides-a-later-one pattern that has already bitten this repo twice.
+Establish which before building on it.
+
+## Where the next person should start
+
+Not more ingredient guessing — that avenue is exhausted above. Bisect the corpus
+itself on a copy (`cp -r` the src tree; both includes are plain `{$I}` lines).
+The two halves to separate first are whether the trigger is in the interface
+half (through `:470`) or needs the implementation half (`:2333`), and the
+`:1313` lead above is the first thread.
