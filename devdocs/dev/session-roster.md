@@ -20112,3 +20112,75 @@ number is worth less than none."*
 3. **The wasm no-coupling claim stays HALF-checked** until b4 reads frankwasm's
    files. Two lanes each confirming their own side is not the claim being
    checked.
+
+## frank-rust STOOD DOWN CLEAN — and refuted a lead I had endorsed
+
+Verified in this checkout, not relayed: `bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template`
+is back in `backlog/` with `owner: unassigned`; `refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins`
+[P p55] is filed; tree clean, 0 unpushed; **`working/` still holds exactly two
+locks, both with a live owner.** `forwardlint` — run unpiped and its output read,
+not `$?` alone — prints `ok no use-before-declaration in the FPC include stream
+and no duplicate forward (219486 lines)`.
+
+**THE PART THAT IS MINE: I endorsed a sketch, it measured the sketch, the sketch
+was wrong.** I told frank-rust its `insertAt` / `EmitLateNestedSpecDecls` lead was
+worth writing into the ticket while it still had it in context. It wrote it in
+and then **tested three hand-written positions for the same program before
+building on any of them**:
+
+| where the alias goes | result |
+| --- | --- |
+| behind the template (what pxx does today) | fails — names a type declared later |
+| end of the type section (**my endorsement, its own morning sketch**) | **fails — named by a declaration that comes earlier** |
+| immediately before the declaration that uses it | works |
+
+**Only position B satisfies both constraints, and the two failures fail for
+opposite reasons** — which is why the wrong idea is the obvious one. It kept the
+struck-through sketch in the ticket with the table rather than deleting it.
+
+This is the fourth time this week that **measuring first dissolved a framing I
+supplied.** The pattern is not that my leads are bad; it is that **a coordinator's
+endorsement adds authority to a claim without adding evidence to it** — the worker
+had the same idea an hour earlier and my agreeing with it changed nothing except
+how hard it was to drop. *I keep supplying the binary.* The counter is the one
+this session already applies to peers: **relay a lead as a lead, and say which
+measurement would kill it.**
+
+Its consolidation ticket corrected my count too: **four doors, not three** — four
+fill sites, three emitters, four hand-written `NSpecInsCnt`/`InsertTokens` pairs,
+and *it added two of them today*. Ranked on the reduction argument rather than the
+smell: the Delphi ordering fix needs **per-use anchoring**, several splices instead
+of one ordered run, which is a change to a flush if there is one flush and a change
+to four sites if there are four. The design-flaw evidence is in the ticket — the
+leading `type` keyword is a correct rule living in one door and invisible from the
+other three; the capacity limit is encoded three ways; the ordering rule exists
+only as statement order inside one `begin`/`end`; the deferral trigger is three
+counters meaning one thing, so a fourth prerequisite kind means a fourth clause and
+forgetting one is silent.
+
+### NEAR-DUP: the axis is the REPRO, not the slug — and the peer declined to design it
+
+frank-rust on my tooling item: *"Slug distance was never going to catch mine, and
+I don't think token overlap is the axis. Both tickets quote the same error string
+at the same file and line; the slugs describe the same wall from opposite ends."*
+
+**That is a better aperture statement than the one I wrote.** Two people finding
+one wall from two directions produce slugs with near-zero overlap *by
+construction* — so the failure is not that the threshold was mis-tuned, it is that
+**the feature cannot represent the duplicate at all.** A slug scan asks whether two
+people named a thing similarly; the question is whether they hit the same thing.
+Candidate signal: a normalised `file:line` + error string lifted from the repro
+block. Population to state as a dated claim before landing it: how many live
+tickets even carry a machine-readable repro.
+
+It handed the observation and explicitly declined to hand a design — *"that's your
+file and your call"* — which is the right boundary and worth naming, because the
+opposite (a peer arriving with a patch for tooling it does not own) is how the
+`.claude/**` line gets tested.
+
+**Four P tickets closed today by this lane** — cross-unit Delphi generics,
+qualified arguments on both dialect arms, the nested-type hoist, and its own
+duplicate closed before anyone worked it.
+
+**Pre-merge tally now: five of six lanes clean and pushed. Outstanding: frankwasm
+(3 dirty) and frank-user (8 dirty), both live by the owner's decision.**
