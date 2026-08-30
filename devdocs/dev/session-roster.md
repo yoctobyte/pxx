@@ -21821,3 +21821,59 @@ cause; it is a hypothesis that the symptom has one cause.
 
 **Do not read the resolve as covering the corpus instance.** frank-rust flagged
 this before anyone could, which is the reason it costs nothing.
+
+## SECOND AMENDMENT: the symbol is SOUND but can be UNINFORMATIVE — a third failure mode
+
+frank-rust, 2026-08-30, retracting its own retraction and correcting the
+amendment above. **Read all three sections together.**
+
+The corpus diagnostic **was correct all along.** `PXXDBG=a.srcmap:*` on
+`a9a4818ab6c8`:
+
+```
+SPLICE start=42607 count=27 src=.../generics.defaults.pas resumes=3
+tok=42616 srcline=78 -> .../generics.defaults.pas
+```
+
+The error token sits **inside** a body spliced from `generics.defaults.pas`. File
+right, line right — and right before `dc7757a11` too, which is exactly why the
+output was byte-identical across the fix. *"Unchanged"* was read as *"unfixed"*;
+it was **"was never broken"**. So the coordinator's signature-similarity merge was
+fine, and there is no second mechanism. It was wrong for a smaller, different
+reason: **one of the two instances was not an instance of anything.**
+
+### Why the surviving instrument still misled
+
+`TKey` occurs zero times in `generics.defaults.pas` **because it is the
+substituted ARGUMENT**, pasted in from a macro in `generics.collections.pas`. A
+specialization argument is not in the template's own text — *that is what
+specialization means.* So the grep two agents and I leaned on, the one
+coordinate-free evidence still standing after line and `near:` were discredited,
+**measures the expected state of every specialization there has ever been.**
+
+**The third failure mode, and it is distinct from the two above:** a check can be
+**immune to the broken instrument and still answer a question nobody wanted
+asked.** Soundness is not informativeness. `PT occurs zero times` was a *valid*
+inference; `TKey occurs zero times` was an equally valid inference about a
+preordained null. The grep cannot tell them apart, and neither could I.
+
+**So amend, do not discard:** the symbol test is still the only coordinate-free
+one, and it is still the right instrument for *distinguishing two candidate
+tickets* — frankB's `PT` retraction stands. What it cannot do is establish that a
+symbol's **absence** is anomalous. Before treating a zero count as evidence, ask
+what the count would be **if nothing were wrong.** If the answer is also zero, the
+grep has told you nothing.
+
+### How a coherent wrong story survived three sessions for an afternoon
+
+`near:` printed `ACount * SizeOf(T)` and `[ANewIndex], SizeOf(T)` — stale
+pre-splice spellings that **really do occur** at `generics.collections.pas:1631`
+and `:1687`, in a file that really does contain `TKey` 65 times. **A broken
+instrument aimed at a plausible place, plus a preordained null result, composed
+into a fully coherent account** that two agents and a coordinator acted on.
+Neither error alone would have held; each supplied the other's missing
+corroboration.
+
+frank-rust left its incorrect sections in the ticket unedited rather than tidying
+them, because they are what was believed and acted on. That is right, and it is
+the only reason this sequence is reconstructible at all.
