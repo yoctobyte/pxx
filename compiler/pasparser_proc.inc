@@ -511,6 +511,7 @@ var
   ptypesRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   ptypesSetEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { `set of TEnum` param: element enum index, -1 otherwise }
   ptypesEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { enum-typed param: its enum index (the ELEMENT's, for an array param), -1 otherwise }
+  ptypesStrElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;  { managed-string param: the ELEMENT width, Ord(tyChar) or Ord(tyWideChar); 0 = not a managed string. Staged here and persisted to ProcParamStrElemTk, for the reason ptypesSetEnum's twin gives: a caller cannot read it back off the param symbol. }
   ptypesPtrElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesPtrElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   { The rest of a pointer PARAMETER's identity. Without these three a `^PChar`
@@ -754,6 +755,7 @@ begin
     paths below fill some slots without going through the typed-param branch. }
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetEnum[i] := -1;
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesEnum[i] := -1;
+  for i := 0 to MAX_PROC_PARAMS - 1 do ptypesStrElemTk[i] := 0;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
   retDynDepth := 0;
   retFixedArrBytes := 0; retArrAi := -1;
@@ -961,6 +963,23 @@ begin
           meaningful when the type just parsed WAS one. }
         if tk = tyInteger then ptypesEnum[i] := LastTypeEnumId
         else ptypesEnum[i] := -1;
+        { ...and the same rule a third time for a managed string's ELEMENT
+          WIDTH. LastTypeStrElemTk is a RETURN CHANNEL from the ParseTypeKind
+          that just returned -- valid only in this window, never as storage
+          (defs.inc's window rule) -- and meaningful only when the type it
+          returned WAS a managed string.
+          NORMALISED on the way in, unlike SymStrElemTk's raw store: tyUnknown
+          means "ParseTypeKind said nothing", which for a tyAnsiString is a byte
+          string, so it is written as Ord(tyChar) rather than passed through as
+          0. That keeps 0 meaning exactly one thing here -- not a managed string
+          -- instead of doing double duty as "narrow" as well, which is the
+          shape that let the pointer twin's sentinel fail open. }
+        if tk = tyAnsiString then
+        begin
+          if LastTypeStrElemTk = tyWideChar then ptypesStrElemTk[i] := Ord(tyWideChar)
+          else ptypesStrElemTk[i] := Ord(tyChar);
+        end
+        else ptypesStrElemTk[i] := 0;
         ptypesPtrElemTk[i] := LastTypePointerElemTk;
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
         ptypesPtrDepth[i] := LastTypePointerDepth;
@@ -1325,6 +1344,8 @@ begin
         ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
       if (i < MAX_PROC_PARAMS) and (ptypes[i] = tySet) then
         ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+      if (i < MAX_PROC_PARAMS) and (ptypes[i] = tyAnsiString) then
+        ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
     end;
     Procs[procIdx].BodyAddr := -1;
     ProcExternal[procIdx] := True;
@@ -1362,6 +1383,7 @@ begin
       ptypesRec[i] := ptypesRec[i-1];
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
       ptypesEnum[i] := ptypesEnum[i-1];
+      ptypesStrElemTk[i] := ptypesStrElemTk[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       ptypesPtrDepth[i] := ptypesPtrDepth[i-1];
@@ -1502,6 +1524,7 @@ begin
       ptypesRec[i] := ptypesRec[i-1];
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
       ptypesEnum[i] := ptypesEnum[i-1];
+      ptypesStrElemTk[i] := ptypesStrElemTk[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       ptypesPtrDepth[i] := ptypesPtrDepth[i-1];
@@ -1641,6 +1664,8 @@ begin
               ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
             if ptypes[i] = tySet then
               ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+            if ptypes[i] = tyAnsiString then
+              ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
           end;
         end;
       end
@@ -1976,7 +2001,31 @@ begin
       ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
       if ptypes[i] = tySet then
         ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+      if ptypes[i] = tyAnsiString then
+        ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
     end;
+    { The SYMBOL needs the width too, for a different reader than the durable
+      column above: that one answers a CALLER, this answers the callee's own
+      body, where ASTStrElemTkOf resolves a string parameter through its
+      AN_IDENT arm. AllocParam cannot do it -- it stamps ElemType := tk and has
+      no valid LastTypeStrElemTk to read, because a param's type is parsed long
+      before its symbol is allocated and the channel's window (defs.inc) closed
+      with the ParseTypeKind that set it. The staged value is the only live copy
+      here, which is what the staging array is for.
+
+      NOT FOR AN ARRAY PARAM, and this is the whole subtlety: `ptypes[i]` for an
+      array param is the ELEMENT kind, so `array of AnsiString` reaches this
+      line with ptypes[i] = tyAnsiString exactly as a scalar string does -- and
+      for an array, Syms[].ElemType legitimately IS the element kind
+      (tyAnsiString), which every backend's dyn-array arm reads to pick an
+      8-byte managed stride. Overwriting it with tyChar retyped the elements to
+      a 1-byte char and the compiler stopped reproducing itself: MEASURED as a
+      self-host fixedpoint failure (no convergence after 4 rounds), not
+      predicted. An array of managed strings keeps its ELEMENTS' width in
+      SymStrElemTk instead -- that is what 6b's carrier is for, and the same
+      IsArray split defs.inc:2502 already documents. }
+    if (ptypes[i] = tyAnsiString) and (not parr[i]) and (pDynDepth[i] = 0) then
+      Syms[idx].ElemType := IntToTypeKind(ptypesStrElemTk[i]);
     if (pFixedLen[i] > 0) and (pDynDepth[i] = 0) then
     begin
       Syms[idx].ArrLen := pFixedLen[i];

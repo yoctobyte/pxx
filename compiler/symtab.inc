@@ -9789,6 +9789,7 @@ begin
   SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
   SetLength(ProcParamHasDefault, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLen, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLo, n*MAX_PROC_PARAMS);
   SetLength(ProcParamElemDynDepth, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamStrElemTk, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDefaultVal, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsStr, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsNone, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDefaultIsFloat, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsBool, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultSym, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDefaultGName, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsSet, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultSOff, n*MAX_PROC_PARAMS);
@@ -9857,6 +9858,7 @@ begin
     ProcParamPtrDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamPtrElemTk[ProcCount * MAX_PROC_PARAMS + i] := Ord(tyUnknown);
     ProcParamPtrElemRec[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
+    ProcParamStrElemTk[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamIsConst[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamCapRef[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamExplicitByRef[ProcCount * MAX_PROC_PARAMS + i] := False;
