@@ -11994,3 +11994,58 @@ Both entries share a shape with 225 and with the silent cap that produced the 3:
 confident answer.** Adjacent is the dangerous distance. A wholly wrong instrument
 fails loudly; an adjacent one answers a nearby question fluently and never says
 which question it answered.
+
+### 229 — TWO DEFECTS CAN AGREE, AND THEIR AGREEMENT IS A CONFIDENT GREEN (frank-optimize-b4, 2026-08-30)
+
+The `test-asm` row that was supposed to notice `test_asmcore_x64` had been reading:
+
+```make
+$(TESTTMP)/test_asmcore_x64_26 | tail -1 | grep -q "all asmcore_x64 checks passed"
+```
+
+It ran green for the entire window in which that binary was **SIGSEGVing**. Not
+flaky, not skipped — green, every run, while the program it tests died on signal
+11. It was found by a bisect done by hand for an unrelated reason.
+
+Faces 212 / 223 / 224 / 227 are each one broken link. This one is two, and the
+interesting property is that **they failed in the same direction, so they
+corroborated each other:**
+
+1. `$?` after a pipeline is the **last** command's status, so `grep`'s success
+   was reported as the program's. The status was eaten.
+2. The program prints `all asmcore_x64 checks passed` and *then* dies in
+   temporary cleanup. So the output was genuinely, correctly, fully present.
+
+Fix either one alone and the row still passes. Assert the exit code and drop the
+`tail`, and the output is still right. Compare the output more strictly and the
+status is still laundered. **Neither defect is detectable through the other**,
+because each supplies exactly the evidence the other's absence would have
+removed. A single missing check leaves a hole; two agreeing ones leave a green
+row that looks better-tested than a correct one, since it has both a status and
+a string behind it.
+
+> **A check with N outcome slots can only distinguish N outcomes. If the subject
+> can die, "died" is one of them — and it is never the one the string carries.**
+
+The trap is that "print a success line at the end and grep for it" is the
+idiomatic shape, is right nearly always, and is wrong precisely when the subject
+crashes *after* its last statement: destructors, refcount epilogues, ARC
+cleanup, `atexit`, anything in the frame between the final `WriteLn` and
+`_exit`. That is a small window and it is exactly where memory bugs live, so the
+idiom's blind spot and the defect class it hides are the same region.
+
+Same night, same lane, the mirror image: the ticket proposing the *new* xtensa
+windowed canary — a row written specifically to catch a **SIGBUS** — spelled it
+as a single `"$$(tools/run_target.sh xtensa …)"` capture. One slot, and a SIGBUS
+is a status, not a string, so it would have compared truncated stdout and
+reported a **value mismatch** for a signal death. A canary that names the wrong
+cause is worse than no canary, because a wrong cause is actionable: someone
+spends the night in the codegen looking for the bad value. Both rows now assert
+status and output as separate assertions.
+
+The scoping lesson is separate and is Track T's to act on. The campaign that
+would have caught these is `chore-t-make-every-cross-target-row-assert-the-exit-code`
+— and it did not, because it is scoped by **where the row runs** (cross-target)
+when the property is **whether the row's subject can crash**. These two are
+native. Scope a sweep by the property, not by the neighbourhood the first
+instances were found in.
