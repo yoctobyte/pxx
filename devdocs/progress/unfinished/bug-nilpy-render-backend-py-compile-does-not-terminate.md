@@ -3,12 +3,23 @@ track: N
 prio: 55
 type: bug
 blocked-by: []
-summary: "songformatter's render_backend.py (413 lines) does not finish compiling: killed at 25:00.06 wall clock, 95% CPU, RSS FLAT at 102 MB, state R — spinning, not allocating. The 2026-07-31 record says it compiled. Bounded rather than diagnosed: lines 1..296 compile in 7s, the whole file spins. Filed with no proposed cause because every cause tried so far has been wrong, and each wrong one is recorded so nobody re-walks it."
-status: working
-owner: frankwasm
+summary: "It loops forever after a known point emitting nothing — not slowness. PXXDBG=all output is byte-identical at 20s and 45s (54,577 lines, cmp-clean) with VmRSS flat at 7,616 kB, so it is a tight non-allocating spin entered right after _text's parameter list (render_backend.py:244); the method-block bisect agrees independently. NOT minimised: seven candidate shapes are recorded as DISPROVED, including the tuple-unpack cycle that was the leading suspect."
+status: unfinished
+owner: ""
 ---
 
 # `render_backend.py` does not finish compiling
+
+> **"It hangs" and "it loops forever after a known point emitting nothing" are
+> different tickets, and only the second one tells you where to put a
+> breakpoint.** This ticket is the second. The proof, the freeze point, and —
+> most usefully — the seven shapes already DISPROVED are in "Update 3" and its
+> follow-up near the bottom; read those before reproducing anything.
+>
+> Parked by frankwasm 2026-08-30, deliberately and not for lack of leads: the
+> one remaining suspect is keyword-call-into-shim resolution, which is adjacent
+> to that session's own `pasparser_call.inc` work, making it the least neutral
+> reader of it.
 
 - **Type:** bug (compiler non-termination) — **Track N** by the file's language;
   re-lane to A if the loop turns out to be below the frontend.
