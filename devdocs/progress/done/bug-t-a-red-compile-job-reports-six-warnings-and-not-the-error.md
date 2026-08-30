@@ -166,4 +166,4 @@ design and the docstring's argument for it, which is right and now states its
 own exception.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3c769e06e.
