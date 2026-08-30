@@ -10988,6 +10988,10 @@
   "verdict": "RED",
   "wall": 548.4
  },
+ "last_slow": {
+  "date": "2026-08-30T09:59:41Z",
+  "sha": "be6dbd7fba7e8428c6ffb2b64161af755559d910"
+ },
  "open_regressions": [
   {
    "bad": "154d1aa3fba6c0500271d12a8578158dc04975a7",
