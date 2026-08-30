@@ -201,6 +201,24 @@ into the work. Ones that have actually gone wrong:
   independently declined to use it on the grounds that it is the user's to grant,
   and they were right: a coordinator cannot grant it either. If a worker asks,
   the answer is to escalate to the owner, not to authorise it.
+- **IF A C-CORPUS RED ARRIVES FROM THE `#include "unit.pas"` CHANGE, DO NOT
+  RESTORE THE PASCAL FALLBACK.** `feature-c-import-a-pascal-unit-under-a-mangled-name`
+  §6 says in its own words *"if something breaks, those failures ARE the spec for
+  what must stay"* — and the owner's math-split ruling (2026-08-30) **inverts**
+  that reading: *"we deliberately split math and do NOT want to fall back to
+  pascal functions, because some make different assumptions — like round()
+  returning int or float. We totally re-implement math for both languages, there
+  is no fallback. PAL stays a shared layer."* So:
+  - §6 as literally written → restore the bind for that case;
+  - **actually → `lib/crtl` is MISSING a C implementation; write it. The bind does
+    not come back.**
+  This is the dangerous shape: an agent reading §6 literally will restore the
+  coupling the split exists to prevent **and be able to cite the ticket while
+  doing it**. The corrected reading is in the resolved ticket body; when routing
+  any regression from `fd1bd8abae8a` / the `cparser.inc` RUNG 0 change, point the
+  ticket at it explicitly. The change is deliberately ONE token
+  (`if isDefinition then procIdx := -1` -> `procIdx := -1`), so a red is one
+  revert — but reverting is also not the fix.
 - **A LENIENT HOST IS NOT A NEUTRAL INSTRUMENT.** frankwasm, 2026-08-30: node's
   WASI does not enforce WASI's 8-alignment requirement on `fd_seek`'s `filesize`
   pointer, so a genuine GUEST defect was invisible *as* a guest defect and
