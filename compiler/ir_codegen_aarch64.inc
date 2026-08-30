@@ -165,6 +165,18 @@ begin
   EmitI32($F84107E0);             { ldr x0, [sp], #16 }
 end;
 
+procedure EmitObjReleaseA64;
+{ x0 = class instance pointer (nil ok). Release; x0 CLOBBERED, like
+  EmitStrDecRefA64 below and unlike EmitObjRetainA64 above — every caller here
+  reloads from the saved slot address, and the Pascal callee carries the nil
+  check, the PXX_OBJ_MAGIC population guard and the recursive finalizer hook. }
+var procIdx: Integer;
+begin
+  procIdx := FindProc('PXXObjRelease');
+  if procIdx < 0 then Error('compiler error: PXXObjRelease not found');
+  EmitCallProc(procIdx);
+end;
+
 procedure EmitStrDecRefA64;
 { x0 = managed-string handle. x0 clobbered. }
 var procIdx: Integer;
@@ -607,7 +619,7 @@ procedure EmitVariantClearA64Ex(zeroSlot: Boolean);
   bytes, and zeroing dest when dest IS src wiped the bytes the copy was about to
   read, so `v := v` came back Empty.
   bug-a-a-variant-assigned-to-itself-becomes-empty }
-var pDone, pRel: Integer;
+var pDone, pRel, pObj, pObj2, pSkip: Integer;
 begin
   { Managed payload = VT_STRING, or any tag in the promotable-int block (a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
@@ -619,6 +631,24 @@ begin
   EmitI32($F100181F);                                           { cmp x0, #6 (VT_STRING) }
   pRel := CodeLen;
   EmitI32($54000000);                                           { b.eq .rel }
+  { The OBJECT tags are a RANGE (VT_OBJ_FIRST..VT_OBJ_LAST), released through
+    the object blob because a refcounted object block shares the string header
+    protocol but needs the [p-8] population guard and the recursive finalizer.
+    Tags ABOVE the range fall through to the promo test and out, which is what
+    they need: a classref / callable / builtin-type owns no heap block.
+    Without this arm every object-holding variant slot LEAKED on this target,
+    while x86-64 and i386 released it — measured on aarch64 under qemu once
+    NilPy could build for it at all: storing `Inner(i)` into a variant field
+    400k times went 10604 kB -> 31212 kB, and is flat with the arm.
+    feature-nilpy-object-reclamation }
+  EmitI32($F1001C1F);                                           { cmp x0, #7 (VT_OBJ_FIRST) }
+  pObj2 := CodeLen;
+  EmitI32($5400000B);                                           { b.lt .notobj }
+  EmitI32($F100281F);                                           { cmp x0, #10 (VT_OBJ_LAST) }
+  pObj := CodeLen;
+  EmitI32($5400000D);                                           { b.le .objchk }
+  { .notobj }
+  Patch32(pObj2, $5400000B or (((CodeLen - pObj2) div 4) and $7FFFF) shl 5);
   EmitI32($F140081F);                                           { cmp x0, #2, lsl #12 (8192) }
   pDone := CodeLen;
   EmitI32($5400000B);                                           { b.lt .done }
@@ -626,8 +656,16 @@ begin
   EmitI32($F94003E0);                                           { ldr x0, [sp] (addr) }
   EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
   EmitStrDecRefA64;
+  pSkip := CodeLen;
+  EmitI32($14000000);                                           { b .done }
+  { .objchk }
+  Patch32(pObj, $5400000D or (((CodeLen - pObj) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] (addr) }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitObjReleaseA64;
   { .done }
   Patch32(pDone, $5400000B or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
+  Patch32(pSkip, $14000000 or (((CodeLen - pSkip) div 4) and $03FFFFFF));
   if zeroSlot then
   begin
     EmitI32($F94003E0);                                         { ldr x0, [sp] }
@@ -649,14 +687,24 @@ begin
 end;
 
 procedure EmitVariantRetainA64;
-var pDone, pRel: Integer;
+var pDone, pRel, pObj, pObj2, pSkip: Integer;
 begin
-  { Same managed-payload test as EmitVariantClearA64 — see there. }
+  { Same managed-payload test as EmitVariantClearA64, object arm included — see
+    there. The two MUST agree: a slot that retains an object and does not
+    release it is a leak, and the reverse is a use-after-free. }
   EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
   EmitI32($F9400000);                                           { ldr x0, [x0] (tag) }
   EmitI32($F100181F);                                           { cmp x0, #6 (VT_STRING) }
   pRel := CodeLen;
   EmitI32($54000000);                                           { b.eq .rel }
+  EmitI32($F1001C1F);                                           { cmp x0, #7 (VT_OBJ_FIRST) }
+  pObj2 := CodeLen;
+  EmitI32($5400000B);                                           { b.lt .notobj }
+  EmitI32($F100281F);                                           { cmp x0, #10 (VT_OBJ_LAST) }
+  pObj := CodeLen;
+  EmitI32($5400000D);                                           { b.le .objchk }
+  { .notobj }
+  Patch32(pObj2, $5400000B or (((CodeLen - pObj2) div 4) and $7FFFF) shl 5);
   EmitI32($F140081F);                                           { cmp x0, #2, lsl #12 (8192) }
   pDone := CodeLen;
   EmitI32($5400000B);                                           { b.lt .done }
@@ -664,8 +712,16 @@ begin
   EmitI32($F94003E0);                                           { ldr x0, [sp] }
   EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
   EmitStrIncRefA64;
+  pSkip := CodeLen;
+  EmitI32($14000000);                                           { b .done }
+  { .objchk }
+  Patch32(pObj, $5400000D or (((CodeLen - pObj) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitObjRetainA64;
   { .done }
   Patch32(pDone, $5400000B or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
+  Patch32(pSkip, $14000000 or (((CodeLen - pSkip) div 4) and $03FFFFFF));
   EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
 end;
 

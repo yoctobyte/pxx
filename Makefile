@@ -13451,6 +13451,17 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) test/test_a64_stack_args.pas $(TESTTMP)/test_aarch64_stackargs_x64
 	tools/expect_same.sh aarch64/test_aarch64_stackargs "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_stackargs)" "$$($(TESTTMP)/test_aarch64_stackargs_x64)"
 	tools/expect_same.sh aarch64/test_aarch64_stackargs-O3 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_stackargs_o3)" "$$($(TESTTMP)/test_aarch64_stackargs_x64)"
+	# The FIRST .npy row on this target, and it is the one that could not exist
+	# until NilPy built for aarch64 at all (20e1ca641). aarch64's inline
+	# EmitVariantClearA64/RetainA64 tested VT_STRING and the promo block and
+	# nothing else, so an OBJECT in a variant slot was never released here while
+	# x86-64 and i386 released it: storing `Inner(i)` into a variant field 400k
+	# times measured 10604 kB -> 31212 kB under qemu, flat with the arm. The
+	# assertion is against CPython's own output, and it reads `keep.v` and an
+	# `a is b` pair AFTER 50k constructions, so it fails in the over-release
+	# direction too. feature-nilpy-object-reclamation
+	./$(COMPILER) --target=aarch64 test/test_nilpy_object_in_variant_slot_survives_churn.npy $(TESTTMP)/test_aarch64_objvarchurn
+	tools/expect_same.sh aarch64/test_aarch64_objvarchurn "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_objvarchurn)" "$$(cat test/test_nilpy_object_in_variant_slot_survives_churn.expected)"
 	./$(COMPILER) --target=aarch64 test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2_x64
 	tools/expect_same.sh aarch64/test_aarch64_conf2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_conf2)" "$$($(TESTTMP)/test_aarch64_conf2_x64)"
