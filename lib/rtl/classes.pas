@@ -89,6 +89,45 @@ const
 
 type
 
+  { ---- IEnumerator<T> / IEnumerable<T>: the for-in / AddRange interface pair ----
+
+    FPC declares these in the *implicit* ObjPas unit (rtl/objpas/objpas.pp:79 and
+    :86), so FPC code sees them with no `uses` at all. We have no implicit-unit
+    slot for a library declaration, and they are HERE rather than in a new unit
+    for a measured reason: the code that wants them — rtl-generics'
+    `TList<T>.AddRange(const AEnumerable: IEnumerable<T>)` and its five siblings
+    — already does `uses RtlConsts, Classes, SysUtils`, so `Classes` is the
+    narrowest place that actually reaches it. A separate unit would be more
+    faithful to FPC's file layout and would NOT fix the caller, because the
+    caller does not use it.
+
+    The limit that buys, stated plainly: a program that uses these WITHOUT
+    `uses Classes` still fails, where FPC would succeed. That residue is
+    bug-b-rtl-provides-no-ienumerable-generic-interface's follow-on, not a
+    silent gap.
+
+    NO `property Current: T read GetCurrent;` — FPC's IEnumerator has one and
+    ours deliberately does not, because pxx REJECTS a property inside an
+    interface declaration outright (`expected 'end' before 'property'`). That is
+    bug-p-a-property-in-an-interface-declaration-is-rejected, filed with the
+    control that proves it: an uninstantiated generic interface carrying a
+    property compiles fine — its body is never parsed — and only fails once you
+    instantiate it, so the obvious quick check on this returns a FALSE GREEN.
+    Call GetCurrent directly until that lands.
+
+    The non-generic TObject-based pair FPC keeps in objpash.inc:273/280 is not
+    here either; nothing in the corpus references it. Add it when something
+    does. }
+  IEnumerator<T> = interface
+    function GetCurrent: T;
+    function MoveNext: Boolean;
+    procedure Reset;
+  end;
+
+  IEnumerable<T> = interface
+    function GetEnumerator: IEnumerator<T>;
+  end;
+
   { ---- TPersistent: assignable base (FPC Classes surface) ---- }
   TPersistent = class(TObject)
   protected

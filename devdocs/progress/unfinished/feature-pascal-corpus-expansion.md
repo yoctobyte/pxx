@@ -3,7 +3,7 @@ prio: 75
 track: P
 status: unfinished
 owner:
-summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and is RED. Re-compiled 2026-08-30 (first actual compile since 08-28, binary faf762981c3c = pin v397): 6a Generics.Defaults is CLEAN and the green is control-verified non-vacuous (+11 procs with the generic actually instantiated); 6b Generics.Collections still fails with TKey/TValue/TDictionaryPair/PDictionaryPair unbound — that wall is bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body [P p55], do NOT open a new ticket for it. The object-types blocker IS discharged (option C, verified by compiling). Every OTHER wall table in this file is a dated snapshot and they disagree by design — read THE ONE CANONICAL TABLE only. Diagnostic coordinates in this corpus are unreliable: identify a wall by SYMBOL, never by file or line."
+summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and is RED, but the edge MOVED on 2026-08-30: the four-identifier TKey/TValue/TDictionaryPair/PDictionaryPair wall is FIXED (frank-rust, 28b2851cd -- a bodiless nested class made TList<T> overrun its template capture by 10,914 tokens). Re-compiled at HEAD 4dae78ad9 / fixedpoint e8cbe7767cc6: 6a Generics.Defaults clean and control-verified non-vacuous (+11 procs); 6b Generics.Collections now stops on EXACTLY TWO errors, both unknown type: IEnumerable at generics.collections.pas:259. That is a MISSING RTL DECLARATION, not a compiler defect (control: a locally-declared generic interface used as a generic class parameter compiles and runs), and it is bug-b-rtl-provides-no-ienumerable-generic-interface [B p55] -- do NOT open a new ticket. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy by default: near: is stale after a token splice and file/line has been mispaired, so corroborate whichever you use. library_candidates/ is gitignored, so cross-checkout comparison needs a CONTENT HASH, not a commit."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -11,7 +11,7 @@ summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-gen
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** unfinished — **parked 2026-08-30 (frankB) with the wall measured.**
+- **Status:** working
   The object blocker IS discharged: `decide-revisit-object-types-rtl-generics-fired-the-trigger`
   is in `decided/` as **option C** (`object` = a value type with a hard error on
   inheritance; **option B, "`object` becomes `TObject`", was explicitly
@@ -281,6 +281,81 @@ last — right for the record, wrong for anyone asking "where is this now", who
 then reads whichever table they scroll to first. Wall 4 sat `filed` in one table
 and `(to file / relay to frankB)` in another while it was actually **done**.
 **Update THIS table. Leave the snapshots alone.**
+
+> **RUNG 6b ADVANCED TWICE MORE, same evening (frankB) — it is now ONE error.**
+> Supersedes every note below, which are kept as snapshots.
+>
+> | when | rung 6b stops on | errors |
+> | --- | --- | --- |
+> | earlier today | `unknown type: TKey` + 3 more identifiers | 14 |
+> | after `28b2851cd` | `unknown type: IEnumerable` | 2 |
+> | after the RTL fix | **`too many generic parameters (MAX_TEMPLATE_PARAMS)`** | **1** |
+>
+> The `IEnumerable` wall was a **library** gap, closed under
+> [[bug-b-rtl-provides-no-ienumerable-generic-interface]] by declaring
+> `IEnumerator<T>` / `IEnumerable<T>` in `lib/rtl/classes.pas` — *not* by any
+> implicit-unit machinery, because `generics.collections.pas:43` already does
+> `uses RtlConsts, Classes, SysUtils` and all three are ours. `make lib-test`
+> green against stable v398.
+>
+> The remaining wall is [[bug-a-max-template-params-is-4-but-rtl-generics-declares-6]]:
+> `TDictionaryEnumerable` declares **six** type parameters (three via the
+> `CUSTOM_DICTIONARY_CONSTRAINTS := TKey, TValue, THashFactory` macro) against
+> `MAX_TEMPLATE_PARAMS = 4` in `compiler/defs.inc:1818`. Track A — the constant is
+> a *stride* into flat arrays, so raising it is one line plus a bss measurement.
+>
+> **Rung 6b is now blocked on exactly one Track A constant.** That is the closest
+> this rung has been to green since it was opened.
+>
+> Probe timing rose **75s -> 118s** across these fixes. Worth recording because a
+> longer run reads as a hang: here it is the compiler getting *further*, and a
+> 2-minute harness timeout will cut it off mid-success.
+
+> **RE-COMPILED 2026-08-30, LATER (frankB) — the TKey wall is DOWN and rung 6b
+> now stops on ONE thing.** This supersedes the `4f42b78b9` note below, which is
+> kept as a snapshot. Binary: HEAD `4dae78ad9`, self-host fixedpoint
+> `e8cbe7767cc6` (`converged after 1 round(s)`, confirmed — not a copied-in seed).
+>
+> | rung | probe | result |
+> | --- | --- | --- |
+> | 6a | `uses Generics.Defaults` | **ok** (unchanged) |
+> | 6b | `uses Generics.Collections` | **ERROR — exactly 2, both `IEnumerable` at `generics.collections.pas:259`** |
+>
+> The four-identifier wall (`TKey`/`TValue`/`TDictionaryPair`/`PDictionaryPair`,
+> 14 errors) is **gone**: [[bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body]]
+> was fixed by frank-rust at `28b2851cd`. `TList<T>`'s template capture overran by
+> 10,914 tokens and swallowed `TCustomDictionary`, whose `IEqualityComparer<TKey>`
+> was then registered as a prerequisite OF TList under TList's substitution set;
+> the trigger was a **bodiless nested class** (`TEnumerator = class(TCustomListEnumerator<T>);`)
+> counted as opening a body. Their corpus control: TList 10,914 → 515 tokens, every
+> other template unchanged.
+>
+> **Independently confirmed in this checkout, not taken on report** — same two
+> errors, same line, and `lib/rtl` grep for `IEnumerable` is empty. Wall 6b is now
+> [[bug-b-rtl-provides-no-ienumerable-generic-interface]] [B p55]: a **missing RTL
+> declaration, not a compiler defect**. frank-rust's control is what settles that —
+> a generic interface declared locally and used as a parameter type of a generic
+> class compiles and runs, so the shape is supported and the four declarations are
+> simply absent. FPC supplies them from the *implicit* ObjPas unit
+> (`rtl/objpas/objpas.pp:79-88`, plus the non-generic pair in `objpash.inc:273/280`),
+> which is why anything requiring an explicit `uses` will not move this rung.
+>
+> **Two instrument facts this measurement adds, both costly if rediscovered:**
+>
+> 1. **`near:` is misleading on THIS error too** — it points at
+>    `TOpenAddressingPointersEnumerator < TItem , PDictionaryPair >`, a different
+>    construct. Stale after a token splice
+>    ([[bug-a-the-near-context-window-is-stale-after-a-token-splice]]). On this
+>    wall the file+line IS sound and `near:` is not, which **inverts** this
+>    ticket's own "identify by SYMBOL, never by file or line" rule. Both rules are
+>    really one rule: *no coordinate field on this corpus is trustworthy by
+>    default — corroborate whichever one you use.*
+> 2. **`library_candidates/` is gitignored.** So "confirm both checkouts are at
+>    the same commit" — the natural cross-checkout control — **cannot be answered
+>    at all**, because the corpus is in no commit. The substitute is a content
+>    hash: my `generics.collections.pas` is `5a3402725ab53181...`,
+>    `generics.defaults.pas` is `0c4f53b5cf13781e...`. Quote hashes, not commits,
+>    when comparing corpus results across sessions.
 
 Last measured 2026-08-28 against binary `c3cd377d5`, on the **pristine**
 corpus (no stubs). **Wall states re-checked against HEAD 2026-08-30 by frankD**
