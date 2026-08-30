@@ -64,7 +64,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (389)
+## backlog (388)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -75,7 +75,6 @@ _none_
 | bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing | A+S | 40 | bug | A bare ESP boot compiles a raw `clock_gettime64` into `Randomize`, behind a guard that never ran | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
-| bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc | C | 55 | bug | DIAGNOSED, and the lane moved to C. The spin is not in func_58 but one frame below it, in lib/crtl/src/stdlib.c:528 __pxx_builtin_clz64, whose loop cannot terminate when x is 0: no left shift ever sets the MSB. Four routines are affected -- clz32/clz64/ctz32/ctz64, six spellings -- while the other 12 builtins agree with gcc at zero; ffs is already guarded, with a comment naming clz/ctz as the deliberate exception. Reduces to three lines: int main(void){ volatile unsigned long long v=0; return __builtin_clzll(v); }. clz(0) is UB in C and gcc's answers are garbage (64/36/63 from one expression), so the property to match is that gcc TERMINATES. Guarding the four routines makes the full 1939-line repro print gcc's checksum 5ABA20EA -- but that checksum is insensitive to the guard value (0, 7 and 63 all give it), so it proves termination only. Fix is Track C's file; frankA did not edit it. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
 | bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted | A | 55 | bug | A routine declared `external` never reaches the durable param-pointee store, so `ProcParamPtrElemTk` stays at the `tyUnknown` sentinel for every one of its pointer params — and the narrowing guard that sentinel feeds fails OPEN. Identical signature, body vs `external`, is the whole difference: `procedure g(p: PInteger)` with a body correctly rejects a class argument; the same line declared `external 'c' name 'abs'` compiles clean and passes an object pointer to libc `abs`. FPC rejects it. This is the SAME fail-open as bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching, on the one registration path that fix did not cover. | — |
@@ -730,9 +729,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2835)
+## done (2836)
 
-2835 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2836 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -860,7 +859,6 @@ _none_
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
-- [p 55] [C] bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc
 - [p 55] [A] bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted
 - [p 55] [A] bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized
 - [p 55] [C] bug-c-a-c-function-s-calling-convention-depends-on-the-target

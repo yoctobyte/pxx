@@ -2,7 +2,7 @@
 track: C
 prio: 55
 type: bug
-status: diagnosed
+status: done
 blocked-by: []
 owner: ""
 summary: "DIAGNOSED, and the lane moved to C. The spin is not in func_58 but one frame below it, in lib/crtl/src/stdlib.c:528 __pxx_builtin_clz64, whose loop cannot terminate when x is 0: no left shift ever sets the MSB. Four routines are affected -- clz32/clz64/ctz32/ctz64, six spellings -- while the other 12 builtins agree with gcc at zero; ffs is already guarded, with a comment naming clz/ctz as the deliberate exception. Reduces to three lines: int main(void){ volatile unsigned long long v=0; return __builtin_clzll(v); }. clz(0) is UB in C and gcc's answers are garbage (64/36/63 from one expression), so the property to match is that gcc TERMINATES. Guarding the four routines makes the full 1939-line repro print gcc's checksum 5ABA20EA -- but that checksum is insensitive to the guard value (0, 7 and 63 all give it), so it proves termination only. Fix is Track C's file; frankA did not edit it."
@@ -239,3 +239,61 @@ expression). Worth deciding before the axis is trusted at scale —
 `feature-c-csmith-differential-fuzzing`. Note this cuts only one way here: the
 UB does not excuse the hang, it just means the *checksum* comparison on such
 programs proves less than it appears to.
+
+## RESOLVED — `__builtin_clz(0)` spun in `lib/crtl`. And one claim above is FALSE.
+
+Diagnosed by frankA (`defee4ab2`), fixed under Track **C** (`99b556c43`) since
+`lib/crtl` is C's. The lane guess in this ticket was wrong in the direction the
+ticket said to expect — it was not IR/codegen — and re-filing rather than arguing
+the letter is what the "lane is a guess" note was for.
+
+```c
+int __pxx_builtin_clz64(unsigned long long x) {
+  int n = 0;
+  while (!(x & 0x8000000000000000ull)) { x <<= 1; n++; }   /* x == 0: never terminates */
+```
+
+Six spellings over four routines (`clz`/`clzl`/`clzll`, `ctz`/`ctzl`/`ctzll`).
+`ffs` in the same file was **already guarded**, under a comment saying ffs is
+DEFINED at zero "unlike clz/ctz" — so the defined case was protected and the two
+undefined ones were left to spin.
+
+### The false claim: "all 15 builtins agree with gcc, six values each including 0"
+
+**That row is wrong and should not be relied on.** My harness guarded the
+bit-scan builtins:
+
+```c
+if (u[i])  printf("clz %d=%d ctz=%d\n", i, __builtin_clz(u[i]), __builtin_ctz(u[i]));
+```
+
+`u[0]` is 0, so `clz`/`ctz` **never saw zero** — the harness skipped precisely the
+input that hangs, then reported agreement. A check that reports agreement at zero
+on a routine which cannot return at zero is measuring something else. frankA
+questioned the row rather than accepting it, which is how it was caught.
+
+The other builtins (`popcount`, `parity`, `ffs`, `bswap`) were genuinely tested at
+zero and do agree.
+
+### `func_58` was as close as entry-counting can get
+
+The instrumentation named the last **instrumented** frame. The routine that never
+returned is in the runtime library and had no probe of its own, so the method
+could not point past it. Found instead by step-sampling: 30,000 `stepi` under gdb,
+histogrammed by (function, line), 95% on one line.
+
+### Carry-in for the campaign — the axis generates UB
+
+`__builtin_clz(0)` is **undefined** in C, and gcc's own answers vary with how the
+argument arrives (64 folded for a literal, other values at runtime). That does not
+excuse a hang — a hang is never an acceptable response to UB, and this one is
+fixed — but it does mean **a checksum divergence on such a program is not by
+itself a defect**. `feature-c-csmith-differential-fuzzing` should carry a
+UB-rejecting predicate before `--builtins` is trusted at scale; noted there.
+
+Regression test `test/c_builtin_bitscan_zero.c`, wired with a **timeout**, because
+the failure mode is a hang and a plain run of a hanging test hangs the suite
+rather than failing it.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

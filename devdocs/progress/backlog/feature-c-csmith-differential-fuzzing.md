@@ -1103,3 +1103,33 @@ evidence.** If it does not move, the program is not the test — write one that 
 Same family as the campaign's other blind instruments: pxx↔pxx agreement, the
 nine-word probe where two formulas coincide, and byte-identity over a corpus that
 never reaches the case.
+
+## The `--builtins` axis generates UNDEFINED programs — needs a predicate
+
+Carried back from the hang this axis found
+(`bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc`,
+fixed as `99b556c43`). frankA's observation while diagnosing it, and it is a
+property of the axis rather than of that one program:
+
+**`__builtin_clz(0)` and `__builtin_ctz(0)` are UNDEFINED in C**, and gcc's own
+answers show it — the same expression yielded 64 when folded from a literal and
+other values when the argument arrived at runtime. csmith's `--builtins` mode
+emits these calls without proving the argument is non-zero, so a generated
+program can be UB in a way csmith's usual safe-math machinery does not cover.
+
+Consequence for this campaign: **a checksum divergence on such a program is not
+by itself a defect.** Two conforming compilers may legitimately disagree. The
+axis is still worth running — it found a genuine hang, and a hang is never an
+acceptable response to UB — but its divergences need adjudication that the
+integer axis does not.
+
+Before `--builtins` is trusted at scale it wants a predicate that rejects UB
+candidates: cheapest is probably to reject any program whose bit-scan arguments
+are not provably non-zero, or to compare gcc against itself at two `-O` levels
+first and drop programs where gcc disagrees with gcc. The second is more general
+and needs no analysis of the source — and it is the same shape as the
+data-model oracle rule already in this ticket: **do not score a comparison whose
+oracle is not entitled to an opinion.**
+
+Tuning the harness is Track T's file, so this is a note for whoever picks that
+up rather than work claimed here.
