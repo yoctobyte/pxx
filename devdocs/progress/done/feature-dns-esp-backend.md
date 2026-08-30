@@ -362,4 +362,4 @@ for the ESP side. The compiler was not rebuilt; everything used
 `$(PXX_STABLE)`.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit fecc7f85c.
