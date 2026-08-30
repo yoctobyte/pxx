@@ -21392,3 +21392,55 @@ MSG
 The quoted delimiter (`<<'MSG'`, not `<<MSG`) is the part that matters — an
 unquoted heredoc still substitutes. Same applies to ticket bodies written with
 `cat >> file <<'EOF'`.
+
+## The counterweight to enumerate-and-read: which subset can produce your case?
+
+frankwasm, 2026-08-30, sizing 6d-1. **The enumeration method has a twin that pulls
+the other way, and only reading tells you which one you are in.**
+
+Four times that day a count **grew** under reading — 1→3→5 riscv32 convention
+sites, 1→3 durable-copy paths, three→seven return write sites, one→two bitfield
+call sites — because grepping for the thing you are *adding* cannot find sites
+that do not mention it yet. The fix was: enumerate the writes to the analogous
+existing column, then read each enclosing routine.
+
+Then it **collapsed**: `LastTypePointerElemTk` is written on **29 paths across 8
+routines**, and mirroring all of them was the obvious plan. Reading showed **28 of
+them name a builtin pointer type** — `PChar`, `PWideChar`, `PPChar`, `TClass`,
+`TObject` — none of which can have a managed-string pointee. The general `^T`
+form is a **single** site, right after the recursive `ParseTypeKind` returns, and
+it is the only window where the pointee's width is knowable.
+
+| method | finds | costs you if skipped |
+| --- | --- | --- |
+| enumerate the analogous column, read each enclosing routine | sites that never mention your identifier | a half-wired feature |
+| ask which subset of the family can actually *produce* your case | that most sites are structurally impossible | 28 edits of wasted work |
+
+They point in opposite directions and **the reading is the same work**. What you
+cannot do is trust the count either way without doing it.
+
+### The near-miss underneath it — a name that describes the wrong channel
+
+At alias registration the pointee width comes from **`LastTypeStrElemTk`**, not
+`LastTypePointerStrElemTk` — the opposite of what the names suggest. Both arms
+there parse the *pointee* directly, so the live channel describes the pointee
+itself; the pointer-side channel belongs to `ParseTypeKind`'s own `^` arm and is
+**0** on that path.
+
+frankwasm wrote the pointer-side one first. It would have recorded **nothing,
+silently, for every `PWStr = ^WideString`** — the one spelling the carrier exists
+to serve — **and every neutrality test would still have passed**, because
+everything is narrow today and `0` is indistinguishable from "narrow" until a
+wide program exists. Caught by reading how the value is *obtained* rather than
+trusting the variable's name.
+
+### And the sequencing consequence, which generalises
+
+Every carrier in that campaign writes a width that is always `Ord(tyChar)` today;
+nothing has ever read one that differs. **So the first program that exercises the
+feature is the test for the whole carrier set, not for the step that introduces
+it** — and a carrier wired to the wrong source is invisible until exactly that
+moment. Plan that step expecting to debug its predecessors through it, and do not
+read its first failure as its own bug. Corollary: **do not stack more unverified
+carriers before the first reader** — each one adds to what that first failure
+could be.
