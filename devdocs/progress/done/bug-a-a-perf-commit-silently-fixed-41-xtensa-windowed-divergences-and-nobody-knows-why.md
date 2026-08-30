@@ -4,10 +4,10 @@ track: A+S
 prio: 60
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-08-30
 found-by: frankS
-owner: unassigned
+owner: frank-optimize
 summary: "75d2ba662 pads Code[] so data starts on its own page — filed and reviewed as a qemu PERFORMANCE fix (287x). Bisected: it also takes xtensa/windowed from 53 to 94 of 129 programs matching the oracle, lost=0 gained=41. A layout change fixed 41 CORRECTNESS divergences on a target its author was not looking at, the mechanism is unknown, and an unrelated layout change could take all 41 back."
 ---
 
@@ -235,3 +235,87 @@ sweep is the merged tree's first breadth measurement, and it is clean.
 **Not resolving this ticket** — the fix is b4's and so is the close. Recording
 the confirmation it asked for by name, in the ticket rather than in a message,
 because a finding that lives in a message is not recorded.
+
+## VERIFIED and CLOSED 2026-08-30 (frank-optimize) — the guard fires; and one prediction in §5 was inverted
+
+This ticket's Gate had two clauses. Both are met, and the second one — *"the
+property that keeps the 41 green must be asserted by something other than the
+page padding"* — is the one nobody had yet tested, as opposed to argued. Tested
+now, at HEAD, compiler `4bc7cd1205bc` (`converged after 1 round(s)`).
+
+### The guard is real: it refuses a genuine violation
+
+`CheckDataBaseAligned` is what holds the invariant. Shown to fire rather than
+asserted to, by injecting a one-byte misalignment after `AlignCodeForData` on the
+ESP writer and rebuilding:
+
+```
+error: internal: data section base is not 8-byte aligned -- xtensa l32i will
+fault on it
+```
+
+That is the difference between this and
+`bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire`. Tree
+restored and re-verified afterwards: `git diff` on `compiler/` empty, ESP bare
+back to `code=44940`, windowed `test_cross_record` rc=0 and output matching the
+x86-64 oracle.
+
+### §5's first predicted route is INVERTED, and should not be chased
+
+§5 lists *"a second PT_LOAD so data is not executable"* as one of four routes that
+could take the 41 back. It has since landed, and it does the **opposite**. At HEAD
+the hosted image is:
+
+```
+LOAD 0x000000 0x08048000 ... 0x30000 R E
+LOAD 0x030000 0x08078000 ... 0x00aec RW     <- data, on a page boundary
+```
+
+Data now begins at a 4096-byte boundary **structurally**, which is 512× stronger
+than the 8 the invariant asks for. On the hosted path the alignment can no longer
+be lost by any arithmetic in this file; it is a property of the segment layout.
+Anyone auditing the four routes should strike this one rather than re-deriving it.
+
+The ESP bare image is still a single `RWE` PT_LOAD with data immediately after
+code, so **the ESP path is the only one where `AlignCodeForData` is load-bearing**
+— which is exactly where §5 said the exposure was, and that half stands.
+
+### A coverage limit worth knowing, which is NOT a defect
+
+Removing the ESP writer's `AlignCodeForData` call entirely, with `ELF_DATA_ALIGN`
+left at 8, **does not** fail the build for `test_esp_bare`: that program's code
+length lands aligned anyway (`code=44940`, plus an 84-byte ELF/phdr prefix =
+45024 = 8·5628). So the one ESP program in the suite cannot detect a pad
+regression; roughly seven code lengths in eight would.
+
+That is a coverage observation and deliberately not filed as a bug, because the
+invariant asserted is the **outcome** (data base aligned), checked at all three
+`dataBase :=` sites in all three writers — not "the pad ran". A program that
+lands aligned without the pad is genuinely correct, and any program that would
+actually fault is refused **at build time** rather than SIGBUSing on device.
+Failing at the build is the right end of that trade. Worth a follow-on only if
+someone wants a deterministic ESP-side assertion; frankS owns that call.
+
+### A confounded experiment, recorded because the result looked like a finding
+
+My first attempt set `ELF_DATA_ALIGN = 1` and observed the gated windowed row
+still passing — which reads as "the guard cannot fire". It is worthless as
+evidence: that constant drives **both** the pad and `CheckDataBaseAligned`'s own
+modulus, so `mod 1` makes the assertion vacuous at the same moment it disables
+the padding. Two mechanisms, one knob, and the experiment cannot tell you which
+one it disabled. The clean experiments are the two above: remove the pad call
+with the constant intact, and inject a misalignment with everything intact.
+
+### Gate clause 1
+
+The windowed canary is green at HEAD (rc=0, output matches oracle). The full
+129-source differential is frankS's scratch harness and a breadth sweep — not my
+lane's gate — so the `94 / lost=0 / gained=0` figure stands as frankS confirmed
+it at `df98fea47`; I did not re-run it and do not claim to have.
+
+**Resolving.** The mechanism is known, named, and asserted by something that
+demonstrably fails when the property does. The unexplained green this ticket was
+opened about is now an explained and guarded one.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
