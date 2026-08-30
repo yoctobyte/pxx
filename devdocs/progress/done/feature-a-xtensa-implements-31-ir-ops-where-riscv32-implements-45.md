@@ -2,7 +2,7 @@
 track: A+S
 type: feature
 prio: 50
-status: working
+status: done
 found: 2026-08-30
 found-by: frankS
 owner: frankS
@@ -141,3 +141,100 @@ its totals do not.
 `SET_CMP`), the read family (`READLINE` / `READ_VAR` / `READ_DISCARD`),
 `IR_CLASSREF`, `IR_FRAME`, `IR_SET_SIGNAL`, plus `SetLength` on a var-array
 param and the non-scalar function result. 38 sources still do not compile.
+
+## RESOLVED — 69 → 96 matching, 12 of the 14 ops, and the two left out are named
+
+Measured end to end against **one** clean baseline: the pre-change compiler
+rebuilt at HEAD `3b567373c1ef`, so the numbers are not confounded by the Track A
+alignment fix that landed mid-way. Both compilers are self-host fixedpoints of
+the same tree, 129-source list, Call0, `--xtensa-soft-mulhigh`:
+
+| | HEAD `3b567373c1ef` | final `69403fede2e5` |
+| --- | --- | --- |
+| MATCH | 69 | **96** |
+| CFAIL | 52 | **25** |
+| DIFF | 7 | **7** |
+| regressions | — | **NONE**, at any of the six steps |
+
+Windowed swept separately at each step: 45 → 46 matching, no regression.
+`test-xtensa` grew 64 → **97** rows.
+
+### Landed
+
+`IR_SETLEN_DYN`, `IR_STORE_DYN`, `IR_DYNUNIQUE`, `IR_COPY_REC_MANAGED`,
+`IR_RTTI_REG`, `IR_RESOURCES`, `IR_CLASSREF`, `IR_SET_LIT`, `IR_SET_COPY`,
+`IR_SET_BINOP`, `IR_SET_CMP`, `IR_READLINE`, `IR_READ_VAR`, `IR_READ_DISCARD`
+— plus, because each op exposed the next, four things that were not on the list:
+
+- the whole-dynamic-array store arm (`b := a`, `IR_STORE_SYM`) — xtensa was the
+  last backend without it, and it SEGFAULTED
+- the `in` operator (`tkIn`) — the only binary operator xtensa lacked
+- by-value **set parameters**, passed as one address word, so `CountIn(s)`
+  counted members of the stack
+- `SetLength` on a var-array parameter, and the `-210` `Eof` builtin
+
+### NOT landed, and named rather than quietly skipped
+
+`IR_FRAME` and `IR_SET_SIGNAL`. **No program in the 129-source corpus reaches
+either**, so anything written for them would be unverifiable code in a backend
+whose whole problem was unverifiable code. `IR_FRAME` additionally needs the
+xtensa frame layout (which register, and where the saved fp / return address
+sit relative to it) — riscv32's arm is `mv a0, s0` plus a comment about its own
+offsets, which does not transfer.
+
+### The residue, and it is mostly not this ticket's
+
+25 sources still do not compile:
+
+| cause | n | owner |
+| --- | --- | --- |
+| `SYS_openat` / `SYS_gettid` missing from the POSIX syscall table | 14 | **Track B**, `lib/rtl/platform/posix/platform_backend.pas` |
+| builtin `-999` | 2 | **riscv32 has the SAME gap** — verified by compiling `test_cross_in_operator` for riscv32: `builtin id 999` |
+| builtin `-55` (`ParamCount`) | 1 | needs the xtensa **entry stub** to save the initial sp to `BSS_INITIAL_RSP`, which it does not — that is `ir_codegen.inc`, a different procedure from my grant. Filed separately. |
+| builtin `-100` (`LoadFile`), `-50` | 2 | portable from arm32/i386; this backend's file |
+| SA_SIGINFO | 3 | [[feature-signal-siginfo-ucontext]] |
+| dynamic symbols (`atoi`, `atof`) | 2 | **by design** — no dynamic segment |
+| non-scalar function result | 1 | [[feature-cross-virtual-indirect-hidden-dest]] adjacent |
+
+### Two diagnostics fixed, and that is the transferable part
+
+Both messages named a cause they no longer had and named no subject:
+
+```
+target xtensa: unsupported binary operator (div/mod/shifts pending)   -> op 99 was tkIn
+target xtensa: builtin calls not supported in bare-metal stage 1      -> under --platform=posix
+```
+
+Finding what the first one meant cost an edit and a self-compile. Fixing the
+second **immediately partitioned six programs that read as one category into
+five distinct builtins, one of which is not an xtensa gap at all.** That is the
+cost worth stating: a diagnostic that cannot name its own subject does not just
+cost a build, it **merges distinct defects into a bucket**, and a bucket is what
+nobody picks up. Same argument as
+[[bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown]],
+which is the third instance and was found the same way.
+
+### The general form, which paid out four times in one session
+
+**A missing op hides every bug in the programs it stops from compiling.**
+`test_dynarray_whole_assign` never compiled, so nothing had run the store arm it
+exists to assert — and that arm was missing too. `test_cross_set_param` was
+written for the riscv32 chess-perft corruption and could not run here until
+`IR_SET_COPY` landed; the by-value set param it checks was broken. `rtti_reg`
+hid a missing `in`, which hid a missing `set_copy`, which hid the set param.
+Peeling, not a list.
+
+### Bound
+
+Hosted xtensa, `--platform=posix --xtensa-soft-mulhigh`, qemu-xtensa user mode.
+Windowed checked for regression only — the newly compiling programs mostly DIFF
+there, which is
+[[bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength]]
+and was confirmed pre-existing by running plain `SetLength` on a local against
+the HEAD compiler. Not run on real or emulated ESP silicon. The source list is
+129 (the union of `test-riscv32` and `test-xtensa`); the "142" this ticket
+opened with cannot be reproduced from the Makefile and its category table's
+totals are superseded, though its categories stand.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
