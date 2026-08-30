@@ -2,7 +2,7 @@
 track: A
 prio: 30
 type: bug
-status: working
+status: done
 blocked-by: []
 owner: frank-optimize
 summary: "A failed Expect() writeln's `Expected: X, but got:  (Kind: 57, Line: 2)` -- a token ORDINAL, no source path, and no `error:` prefix, so anything keying on `error:` does not see it as an error at all. lexer.inc:2838, shared by every frontend. Reached from C by an unclosed initializer followed by a real declaration."
@@ -171,3 +171,6 @@ same line numbers, one such line each, before and after.
 
 `make compiler/pascal26` -> converged after 1 round(s), `1432cdb1401a`;
 `tools/gate.sh quick` -> GREEN 7/7.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
