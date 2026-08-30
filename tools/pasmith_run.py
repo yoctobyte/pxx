@@ -332,19 +332,7 @@ def localize(src, workdir, oracles, groups):
     # needs to be threaded here -- the source is self-describing.
     seed = seed_of(src)
     gargs = gen_args_of(src)
-    if "--units" in gargs:
-        # The whole SET has to be re-emitted in trace mode, into its own
-        # directory: the units are where the behaviour lives, and a traced
-        # program linked against untraced units would compile and mislead.
-        tdir = os.path.join(workdir, "traced_u%d" % seed)
-        shutil.rmtree(tdir, ignore_errors=True)
-        rc, _ = run([sys.executable, PASMITH, "--seed", str(seed), "--trace",
-                     "--outdir", tdir] + gargs, 60)
-        traced = os.path.join(tdir, "pasmith_%d.pas" % seed)
-    else:
-        traced = os.path.join(workdir, "traced.pas")
-        rc, _ = run([sys.executable, PASMITH, "--seed", str(seed),
-                     "--trace", "-o", traced] + gargs, 60)
+    rc, _, traced = emit(gargs, workdir, seed, trace=True, tag="traced_")
     if rc != 0:
         return None, None
     kinds = checkpoint_kinds(traced)
@@ -765,14 +753,22 @@ def check(nseeds, args):
     bad = []
     t0 = time.time()
     for seed in range(1, nseeds + 1):
-        src = os.path.join(workdir, "c%d.pas" % seed)
-        rc, out = run([sys.executable, PASMITH] + gen_args_for(args, seed)
-                      + ["-o", src], 60)
+        # emit(), not a hand-rolled -o: this was the FOURTH site that knew a
+        # unit set is written with --outdir, and like recheck() it had it wrong,
+        # so `--check --units N` could not generate a single seed.
+        rc, out, src = emit(gen_args_for(args, seed), workdir, seed, tag="chk_")
         if rc != 0:
             bad.append((seed, "generator crashed: %s" % out.strip()[:120]))
             continue
         outbin = os.path.join(workdir, "c%d" % seed)
-        rc, txt = run(["fpc", "-Mobjfpc", "-vw", "-O-", "-o" + outbin, src],
+        # -Fu the program's OWN directory, unconditionally, exactly as evaluate()
+        # does and for the same reason: with --units that is how the unit set is
+        # found, without it the directory holds no units and the flag is inert.
+        # A unit path that depends on a mode is a way for two modes to diverge
+        # for a reason that is not a generator bug.
+        rc, txt = run(["fpc", "-Mobjfpc", "-vw", "-O-",
+                       "-Fu" + os.path.dirname(os.path.abspath(src)),
+                       "-o" + outbin, src],
                       COMPILE_TIMEOUT, cwd=workdir)
         if rc != 0:
             errs = [l for l in txt.split("\n") if "Error:" in l or "Fatal:" in l]
@@ -817,21 +813,43 @@ def gen_args_for(a, seed):
     return args
 
 
-def generate(gen_args, workdir, seed):
-    """Emit one subject and return its path — a single file, or a unit set.
+def emit(gen_args, workdir, seed, trace=False, tag=""):
+    """Emit one subject; returns (rc, output, the .pas to compile).
 
-    Both shapes end up as "a .pas to compile with its directory on the unit
+    THE one place that knows a unit set is written with --outdir and a single
+    file with -o. Three call sites used to know that independently — generate(),
+    localize() and recheck() — and the third had it WRONG: it passed -o with
+    --units, which pasmith rejects, so every multi-unit finding failed to
+    regenerate on every tick and was then reported as still reproducing. Three
+    mechanisms serving one concept was the design flaw; teaching the third the
+    rule would have made it a fourth. Add a caller here, never another copy.
+
+    Both shapes end up as "a .pas to compile with its own directory on the unit
     path", so everything downstream (evaluate, localize, the ledger) is
-    unchanged; only the writing differs.
+    unchanged; only the writing differs. `tag` namespaces the output so a traced
+    rebuild cannot overwrite the subject it is tracing.
     """
-    if "--units" in gen_args:
-        udir = os.path.join(workdir, "u%d" % seed)
-        shutil.rmtree(udir, ignore_errors=True)
-        rc, out = run([sys.executable, PASMITH] + gen_args + ["--outdir", udir], 60)
-        return (rc, out, os.path.join(udir, "pasmith_%d.pas" % seed))
-    src = os.path.join(workdir, "p%d.pas" % seed)
-    rc, out = run([sys.executable, PASMITH] + gen_args + ["-o", src], 60)
+    args = list(gen_args)
+    if "--seed" not in args:
+        args = ["--seed", str(seed)] + args
+    if trace:
+        args = args + ["--trace"]
+    if "--units" in args:
+        # The whole SET goes into its own directory: the units are where the
+        # behaviour lives, and a traced program linked against untraced units
+        # would compile and mislead.
+        d = os.path.join(workdir, "%su%d" % (tag, seed))
+        shutil.rmtree(d, ignore_errors=True)
+        rc, out = run([sys.executable, PASMITH] + args + ["--outdir", d], 60)
+        return rc, out, os.path.join(d, "pasmith_%d.pas" % seed)
+    src = os.path.join(workdir, "%sp%d.pas" % (tag, seed))
+    rc, out = run([sys.executable, PASMITH] + args + ["-o", src], 60)
     return rc, out, src
+
+
+def generate(gen_args, workdir, seed):
+    """The fuzz loop's subject for one seed. See emit()."""
+    return emit(gen_args, workdir, seed)
 
 
 # --intfs is deliberately NOT here: the interface rung diverges on ~100% of seeds

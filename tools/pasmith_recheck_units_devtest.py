@@ -120,13 +120,67 @@ def t_recheck_regenerates_through_generate():
     return "recheck regenerates via generate()"
 
 
-def t_generate_uses_outdir_for_units():
-    """The other half of the pair: generate() itself must special-case --units."""
+def t_emit_uses_outdir_for_units():
+    """The other half of the pair: emit() must special-case --units."""
     src = io.open(SRC, encoding="utf-8").read()
-    body = src[src.index("def generate("):src.index("WIDE_DEFAULTS")]
-    assert '"--units" in gen_args' in body, "generate() no longer branches on --units"
-    assert '"--outdir"' in body, "generate() no longer passes --outdir for a unit set"
-    return "generate() emits a unit set with --outdir"
+    body = src[src.index("def emit("):src.index("def generate(")]
+    assert '"--units" in args' in body, "emit() no longer branches on --units"
+    assert '"--outdir"' in body, "emit() no longer passes --outdir for a unit set"
+    return "emit() writes a unit set with --outdir"
+
+
+def t_the_generator_command_line_exists_once():
+    """THE structural guard. Four sites knew that a unit set needs --outdir:
+    generate(), localize(), recheck() and --check. Two of the four had it wrong.
+
+    Three mechanisms serving one concept is a design flaw, and teaching the
+    broken ones the rule would have made it four. So the rule lives in emit()
+    and the invocation appears nowhere else. If this goes red, someone added a
+    fifth copy -- add a caller, not another copy.
+    """
+    src = io.open(SRC, encoding="utf-8").read()
+    lines = [(i + 1, l) for i, l in enumerate(src.split("\n")) if "PASMITH]" in l]
+    body = src[src.index("def emit("):src.index("def generate(")]
+    outside = [(n, l.strip()) for n, l in lines if l.strip() not in
+               [x.strip() for x in body.split("\n")]]
+    assert not outside, "the generator is invoked outside emit(): %r" % outside
+    assert len(lines) == 2, "emit() should invoke it twice (-o and --outdir), got %d" % len(lines)
+    return "the generator command line exists only in emit()"
+
+
+def t_check_mode_goes_through_emit():
+    """--check was the FOURTH site, and it was broken the same way: it passed
+    -o unconditionally, so `--check --units N` could not generate one seed."""
+    src = io.open(SRC, encoding="utf-8").read()
+    body = src[src.index("fpc = Oracle("):src.index("GEN_FLAGS = ")]
+    assert "emit(" in body, "--check no longer regenerates through emit()"
+    assert '"-o", src' not in body, "--check builds its own -o command line again"
+    return "--check generates through emit()"
+
+
+def t_check_mode_puts_the_source_dir_on_the_unit_path():
+    """The second half of --check's --units breakage: even once the unit SET is
+    written, FPC cannot find the units without -Fu. evaluate() applies that
+    unconditionally and says why; --check must match, or the two modes diverge
+    for a reason that is not a generator bug.
+    """
+    src = io.open(SRC, encoding="utf-8").read()
+    body = src[src.index("fpc = Oracle("):src.index("GEN_FLAGS = ")]
+    assert '"-Fu"' in body or '"-Fu" +' in body, "--check does not -Fu the source dir"
+    return "--check puts the program's own directory on the unit path"
+
+
+def t_localize_no_longer_duplicates_the_rule():
+    """localize() had a CORRECT copy of the --units rule. Correct-but-duplicated
+    is still the design flaw: it is the copy that stays right while another
+    drifts, which is exactly what happened here.
+    """
+    src = io.open(SRC, encoding="utf-8").read()
+    body = src[src.index("def localize("):src.index("def sentinel_kind(")]
+    assert "emit(" in body, "localize() no longer regenerates through emit()"
+    assert "traced_u" not in body, "localize() still builds its own unit-set path"
+    assert "trace=True" in body, "localize() must still ask for a TRACED rebuild"
+    return "localize() shares the rule instead of copying it"
 
 
 def t_multi_unit_example_is_judgeable():
@@ -237,7 +291,11 @@ def t_summary_line_surfaces_unknowns():
 
 TESTS = [t_pasmith_still_rejects_units_with_dash_o,
          t_recheck_regenerates_through_generate,
-         t_generate_uses_outdir_for_units,
+         t_emit_uses_outdir_for_units,
+         t_the_generator_command_line_exists_once,
+         t_check_mode_goes_through_emit,
+         t_check_mode_puts_the_source_dir_on_the_unit_path,
+         t_localize_no_longer_duplicates_the_rule,
          t_multi_unit_example_is_judgeable,
          t_returns_three_counts,
          t_unmeasurable_is_not_reported_as_reproducing,
