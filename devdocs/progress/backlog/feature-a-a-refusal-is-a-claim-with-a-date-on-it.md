@@ -11841,3 +11841,52 @@ its absence. Two consequences worth carrying:
   interesting cell was the one nobody sampled, and both groups had to be measured before the
   split meant anything. Measuring only the group that looks wrong was the mistake available all
   night.
+
+## 227 — ASK THE SUBJECT TO EMIT; DO NOT ASK THE SYSTEM WHETHER THE SUBJECT SUCCEEDED
+
+Faces 212, 223 and 224 are all one shape: a *verdict* landing in the wrong slot. This is a
+different mechanism and it is worth separating, because in this one **the failure was reported
+correctly and then ignored by the thing composing the steps.**
+
+Resolving a conflict in this very file, a resolver script asserted on a line-wrapped
+cross-reference and exited **before writing**. The `git add` and `git rebase --continue` that
+followed on the same command line ran anyway, and committed the index **with its conflict markers
+intact** — in a commit that looked entirely normal, with a plausible message, in a lane whose
+work had been careful all night. Nothing misreported anything. The script said it failed. The
+shell did not care.
+
+> **A chain of steps where each assumes its predecessor ran is only as good as whatever enforces
+> that, and often nothing does.** This generalises past shells: any pipeline, any `&&`-less
+> sequence, any orchestration where step N's precondition is "step N-1 worked" and no one checks.
+
+The repair is the same one that keeps turning up, stated at the level that covers all of them:
+
+> **Ask the SUBJECT to emit. Do not ask the SYSTEM whether the subject succeeded.**
+
+- Did the resolver resolve? `grep` the file for conflict markers — do not read its exit status.
+- Is the long job alive? Read its log and its workdir — do not read the process table, which
+  self-matches (face 223d, three victims in this repo now).
+- Did the compiler produce a fixedpoint? Look for `converged after N round(s)` and diff the
+  sha256 — do not accept `make` exiting 0, which a copied-in binary makes a silent no-op.
+
+Each of those is a case where the system's answer is *about* the subject rather than *from* it,
+and each has been wrong in this repo within one week.
+
+### 227a — if you depend on the subject emitting, the subject must be ABLE to emit
+
+Found immediately after, and it is the failure mode this face creates if you adopt it carelessly.
+
+Asked whether an hour-old fuzz run was stuck, the log was the right place to look — and it had
+**zero lines**, because Python block-buffers stdout when it is not a tty. Every line of a
+`--minutes 40` run sat in an 8 KB buffer until exit.
+
+> **The one artifact capable of distinguishing "slow" from "stuck" was empty for exactly as long
+> as the question was live**, and it would have filled in completely the moment the answer stopped
+> mattering.
+
+The answer came from the workdir instead — 179 generated seeds, newest artifact 0 seconds old —
+which is the same principle applied one level down, to a tool that should not have needed it. One
+line of `line_buffering=True` fixed it; 4 lines in 6 seconds after, 0 in an hour before.
+
+Worth guarding precisely because it has **no local effect**: buffering is invisible interactively,
+which is the only place anyone would notice it missing.
