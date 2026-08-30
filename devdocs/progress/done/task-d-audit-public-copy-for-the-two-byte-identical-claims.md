@@ -163,5 +163,31 @@ a launch-facing page.
 `e2ea9034a65ea8b6`. `tools/doclinks.py` — 8 distinct external links, **BROKEN 0**.
 No compiler rebuild; no `lib/**`; no code touched.
 
+### Gate re-stamped — v394 was withdrawn an hour after it was blessed
+
+The line above is left as written: it records what was actually run, and this
+repo does not rewrite that. But **v394 no longer exists.** It was reverted to
+v393 `1d69760deabe2865` in `b8fd07377` after breaking Track B's gate — vendored
+Synapse stopped compiling, because a parameter typed as an *alias* of `Pointer`
+rejects a class instance a plain `Pointer` parameter accepts
+(`bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts`
+[P p75]).
+
+**Re-run against the pin that exists**, 2026-08-30, `$(PXX_STABLE)` = v393
+`1d69760deabe2865` (sha256 of `stable_latest` confirmed, not taken on trust):
+
+- `tools/docsnip.py` — 191 blocks, 39 complete programs, **BROKEN 0**
+- `tools/doclinks.py` — 8 distinct external links, **BROKEN 0**
+
+Unchanged, as expected: this audit edited prose, and none of its claims depend on
+a compiler version. Recorded anyway, because *"the gate was green"* is worthless
+without the sha it was green against, and for one hour today that sha was a
+binary now withdrawn.
+
+**Appended rather than corrected in place**, which is the same call this ticket's
+own subject argues for: a stale claim gets a dated banner, never a silent
+overwrite. A reader who finds the v394 line and wonders whether it was ever true
+gets the answer in the next paragraph instead of an inconsistency.
+
 ## Log
 - 2026-08-30 — resolved, commit ef229ba7d.
