@@ -1015,3 +1015,43 @@ looking like progress. They belong in the same window, not in sequence.
 landed. Then re-run the A/B in this file — `tools/nilpy_ladder.py`, both roots,
 against a pin, naming the sha — and report files moved PAST a wall separately
 from files moved ONTO the next one. Only then choose the next rung.
+
+## 2026-08-30 — RE-MEASURE: the resume condition has been met for 12 days
+
+Not a work pass. The park above names an explicit resume condition, and this
+note records only whether it holds. It does.
+
+> **Resume condition:** the `CodecInfo` fix has landed AND the module shims have
+> landed.
+
+| ticket | lane | state | landed |
+| --- | --- | --- | --- |
+| `bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim` | A | **done** | 2026-08-18 `68b67a53a` |
+| `feature-b-module-shims-for-the-html5lib-corpus` | B | **done** | 2026-08-18 `1b2164b35` |
+| `feature-nilpy-yield-outside-a-for-loop` | N | **done** | 2026-08-18 `cbe88d992` |
+| `feature-nilpy-subclass-a-builtin-type` | N | **done** | 2026-08-18 `1cbe666b5` |
+
+All four — including the two N walls the park listed as dedicated passes, and
+which the sequencing note said had to land in the same window as the shims so
+the 11 files that stop on a shim first would not merely move ONTO the yield
+wall. They did land in the same window. **All four resolved on 2026-08-18, the
+same day this ticket was parked**, so the condition was satisfied within hours
+of the park being written and has gone unread since.
+
+That is the failure mode, and it is worth naming because it is not the usual
+one: nothing here was WRONG. The park was accurate, the sequencing analysis was
+right, and the resume condition was precise and checkable. It went stale because
+a condition phrased as *"resume when X lands"* has **no owner** — the ticket
+cannot notice X landing, and X's author has no reason to look here. A blocker
+that names other tickets is a promise to re-read, and re-reading is nobody's
+queue item.
+
+**Re-priced.** From "blocked on four tickets across three lanes" to a bounded
+measurement: re-run `tools/nilpy_ladder.py` over both roots against a named
+pin, and report files moved PAST a wall separately from files moved ONTO the
+next one, exactly as the park specifies. The one prerequisite is that
+`library_candidates/` is gitignored and fetched on demand, and is **not present
+in this checkout** — so the next holder fetches the three corpora first. No
+architecture is in the way; the next step is an instrument run and a re-rank.
+
+Nothing applied. Measured at `7b73a385d`.
