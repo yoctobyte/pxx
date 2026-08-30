@@ -10,13 +10,21 @@ block with a full call stack.
 ## Quick start
 
 ```sh
-# 1. compile with the libc heap + a proc map
-./compiler/pascal26 -dPXX_LIBC_HEAP --proc-map prog.npy /tmp/prog
+# 1. compile with the libc heap. The <out>.map file is written BY DEFAULT
+#    (--no-map suppresses it); no extra flag is needed.
+./compiler/pascal26 -dPXX_LIBC_HEAP prog.npy /tmp/prog
 
 # 2. run under valgrind, symbolize through the map
 valgrind --leak-check=full --num-callers=10 /tmp/prog 2>&1 \
     | tools/vgsym.py /tmp/prog.map
 ```
+
+> **Corrected 2026-08-30 (frankD).** Step 1 used to pass `--proc-map`, and the
+> prose below used to say that flag is what writes `<out>.map`. Both wrong, and
+> the second one dangerously: **`--proc-map` writes to stderr, and for a DYNAMIC
+> build its addresses are 0x70 too low** — see "Do not use `--proc-map` here"
+> below. The pipeline above was always right; it reads the `.map` file, which
+> `--proc-map` never wrote and which you get without asking.
 
 Works for any frontend (`.pas`, `.npy`, `.c`, ...). The output looks like:
 
@@ -51,12 +59,50 @@ NOT for production or benchmarks: no size-class bins, libc's lock
 discipline instead of the pxx one, and RSS behaves differently (libc
 returns memory to the OS; the arena allocator does not).
 
-## Symbolizing: `--proc-map` + `tools/vgsym.py`
+## Symbolizing: `<out>.map` + `tools/vgsym.py`
 
-Valgrind prints raw addresses (pxx ELFs carry no symtab). The compiler's
-`--proc-map` flag writes `<out>.map` with one `PROC <hex-addr> <name>`
-line per routine; `tools/vgsym.py <map>` is a stdin→stdout filter that
-rewrites every `0x...` in the valgrind output to `name+offset`.
+Valgrind prints raw addresses (pxx ELFs carry no symtab). The compiler writes
+`<out>.map` alongside every binary unless you pass `--no-map`
+(`compiler.pas`, `grep -n 'EmitMapFile'`), one `0x<16-hex-addr> <name>` line per
+routine; `tools/vgsym.py <map>` is a stdin→stdout filter that rewrites every
+`0x...` in the valgrind output to `name+offset`. It accepts both that format and
+the `PROC <addr> <name>` one, which is why the wrong input below produced wrong
+answers instead of an error.
+
+### Do not use `--proc-map` here — it is 0x70 low on exactly this profile
+
+`--proc-map` is a *profiler* flag: it prints `PROC <addr> <name>` to **stderr**,
+computing each address as `LOAD_ADDR + CODE_OFFSET + BodyAddr`, and
+`compiler.pas` says so in its own comment — *"x86-64 static layout only … a
+dynamic build shifts by the dynamic header delta."*
+
+`-dPXX_LIBC_HEAP` **is** a dynamic build. That is the whole point of the profile:
+declaring the libc externals flips the ELF writer into dynamic mode, so the code
+sits at `DYNAMIC_CODE_OFFSET` (0x120), not `CODE_OFFSET` (0xb0)
+(`defs.inc:1323` and `:1432`, both by grep for the names). Measured on the pinned
+binary, one routine, one program compiled twice:
+
+| build | `<out>.map` | `--proc-map` on stderr |
+| --- | --- | --- |
+| default (static) | `0x40efb0 Foo` | `0040efb0 Foo` — agree |
+| `-dPXX_LIBC_HEAP` (dynamic) | `0x40eb61 Foo` | `0040eaf1 Foo` — **0x70 low** |
+
+0x70 is exactly `DYNAMIC_CODE_OFFSET - CODE_OFFSET`, so the error is a constant
+shift over every routine, not noise.
+
+**It does not fail; it lies.** `vgsym.py` resolves with `bisect_right - 1` and a
+0x20000 tolerance, so a shifted address still matches *something* — the routine
+before the right one, whenever 0x70 crosses a boundary. Most routines are shorter
+than 0x70.
+
+The two caveats below about the emitted blobs were recorded against `--proc-map`
+output and should be re-read with that in mind: the blobs begin at 0x400120 in a
+dynamic build, and a uniform 0x70 under-shift pushes the first of them back into
+`_start`'s range — which is precisely the reported symptom. Whether anything is
+left of them once you symbolize through `<out>.map` has **not** been measured
+here (valgrind is not installed on this box, so this correction is from the
+compiler's output, not from a run). Track A ticket for the flag itself:
+[[bug-a-proc-map-emits-static-addresses-for-a-dynamic-build]].
 
 Caveats:
 - Addresses inside the emitted runtime blobs (AnsiStr*/obj retain/release
