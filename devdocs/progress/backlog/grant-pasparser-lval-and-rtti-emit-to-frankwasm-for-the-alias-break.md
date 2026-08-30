@@ -210,3 +210,46 @@ that mattered: it is what made the missing `pasparser_proc.inc` grant invisible
 to both of us. Same error the coordinator made twice today, in the other
 direction — **inferring a working set from what the change is about instead of
 from where it has to happen.**
+
+## `ir.inc` RETURNED, untouched — the span was never needed (2026-08-30)
+
+**frankC released `ir.inc` without editing it. `ir.inc` is frankwasm's again, whole,
+effective immediately — nothing to rebase around.**
+
+The corrected line numbers above stand as a record of how stale spans travel, but
+**the underlying claim they were correcting was itself wrong**, and that is the
+part the next reader needs.
+
+frankC had said the bitfield fix must change `IRLowerBitFieldRead`'s signature,
+because a per-field byte span is not a `TTypeKind`. **That came from reading the
+DECLARATION.** Reading the bodies says otherwise — both functions overwrite the
+parameter before using it:
+
+```
+IRLowerBitFieldRead:   storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
+IRLowerBitFieldStore:  storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
+```
+
+Fifth statement in `Read`, line 5 in `Store`, nothing touching `storageTk` before
+either. **The caller-passed `storageTk` is dead at all three call sites.** The
+access width is already a per-field property, read back out of the record via
+`RecFieldBitBytes` — which is precisely the "derive the width from the field's
+actual bit span" the fix was thought to need to introduce. It already exists.
+
+So the entanglement banked that morning is real but **contained**: change what
+`cparser.inc` records for a field's offset, shift and `BitBytes`, and the
+load/store width follows. No signature change, no call-site change, no `ir.inc`.
+The whole fix is `cparser.inc` — frankC's own lane, no grant required.
+
+The two-vs-one call-site question is **moot rather than answered**: the parameter
+is dead at all of them.
+
+**How it surfaced, because the route matters more than the result.** The
+coordinator's stale-line-number correction told frankC to re-locate by symbol
+rather than by line. That put it in the function *bodies* instead of at the
+declaration it had been quoting for hours, and the dead parameter was the first
+thing visible there. **A correction about line numbers exposed a wrong mechanism**
+— not because the line numbers mattered, but because "grep for the symbol" lands
+you in code that runs and "read the signature" does not. `debugging-playbook`'s
+rule, arriving sideways: reading the interface and inferring the behaviour is not
+reading the code.
