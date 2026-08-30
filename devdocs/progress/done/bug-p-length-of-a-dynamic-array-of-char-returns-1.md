@@ -4,8 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`Length(w)` on a dynamic `array of Char` returns 1 where FPC returns 6, silently. `High(w)` on the SAME variable returns 5 (correct), the elements store and read correctly, and `array of WideChar` / `array of Byte` are both right — so it is Length alone, and only for the Char element type. A loop written `for i := 0 to Length(w)-1` runs zero times on data that is there."
-status: new
-owner: ""
+status: done
+owner: frankB
 ---
 
 # `Length` of a dynamic `array of Char` returns 1
@@ -83,3 +83,6 @@ nobody diffed against an oracle.
 ## Gate
 
 `make compiler/pascal26` + the program above matching FPC on all four lines.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -1,0 +1,9 @@
+dyn char  =6
+static char=8
+bare char =1
+lit       =5
+widechar  =3
+byte      =6
+high dyn  =5
+elems     =AF
+openparam=6

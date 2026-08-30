@@ -5776,13 +5776,32 @@ begin
           if lenFieldRec >= REC_UCLASS_BASE then
             lenFieldIdx := FindUField(lenFieldRec - REC_UCLASS_BASE, GetASTIdentName(valNode));
         end;
-        if (IntToTypeKind(ASTTk[valNode]) = tyChar) and (ASTCharArrayCap(valNode) < 0) then
+        if (IntToTypeKind(ASTTk[valNode]) = tyChar) and (ASTCharArrayCap(valNode) < 0) and
+           not ((ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+                (ASTIVal[valNode] < SymCount) and Syms[ASTIVal[valNode]].IsArray) then
         begin
           { …but NOT a static `array of Char`, whose AST node is ALSO typed
             tyChar (the arrayness is on the symbol). `Length(a)` on an
             array[0..7] of Char is 8, the array's length — this arm answered 1,
             the length of a Char, for as long as it has existed.
-            bug-p-a-char-array-is-not-a-string-in-any-direction }
+            bug-p-a-char-array-is-not-a-string-in-any-direction
+
+            …and NOT a DYNAMIC `array of Char` either, which is the same
+            oversight one shape further out. `ASTCharArrayCap` answers the
+            STATIC capacity, so it is < 0 for a dyn array exactly as it is for a
+            bare Char — the guard above cannot tell them apart, and every
+            `Length(w)` on a `w: array of Char` folded to the constant 1 while
+            `High(w)` answered 5 and the elements read back correctly. The
+            IsArray test is what distinguishes a symbol that HAS a length from a
+            scalar Char; it covers the static case too, so the capacity test is
+            now belt-and-braces rather than the only guard.
+
+            Why it folded rather than merely mis-lowering: this arm replaces the
+            call with an AN_INT_LIT, so `Length(w)` never reached codegen at all
+            — `PXXDBG=a.ir` shows `const_int ival=1` where `array of Byte` emits
+            a real `call -44`. A fold is invisible to every backend, which is
+            why no target-specific test caught it.
+            bug-p-length-of-a-dynamic-array-of-char-returns-1 }
           { `Length(c)` where c is a CHAR is 1 — FPC's answer, and the same one
             `Length('y')` on a character LITERAL already gave. A Char VARIABLE
             fell through to the runtime -tkLength path, which read the value as
