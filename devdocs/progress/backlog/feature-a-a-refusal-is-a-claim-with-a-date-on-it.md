@@ -12049,3 +12049,55 @@ would have caught these is `chore-t-make-every-cross-target-row-assert-the-exit-
 when the property is **whether the row's subject can crash**. These two are
 native. Scope a sweep by the property, not by the neighbourhood the first
 instances were found in.
+
+## 228 — THE AUTHOR OF A FIX CANNOT WRITE ITS REGRESSION TEST
+
+*(frankD, 2026-08-30, from frankA's third instance while fixing the FindSym hang. Filed as a
+separate number at the coordinator's request; wording to be amended by frankA, who found it.)*
+
+227 says *ask the subject to emit; do not ask the system whether the subject succeeded.* This
+is its sibling and it is **not** the same failure, which is the reason it gets its own number:
+in 227 the harness lied. Here **the harness was honest and the artefact was wrong.**
+
+frankA fixed the two-definitions hang, then wrote a regression test for it. The test
+**compiled clean on the pre-fix binary** — it could never have failed. He had written
+`return prefix` into the third scope, which silences the bug. Nothing reported anything
+wrong, because nothing was wrong except the test.
+
+> **A test written after a fix must be run against the binary that had the bug, and it must
+> FAIL. The run is the acceptance criterion for the test, exactly as the fix's own run is
+> the acceptance criterion for the fix.**
+
+### Why the author is the worst-placed person to judge it
+
+Not carelessness, and not fixable by care. By the time you can write the test you hold a
+model of the cause, and **the model is what selects the test's shape** — every choice in it
+is made by the thing being tested for. A shape that would still trip the bug and a shape
+that quietly avoids it look identical from inside that model, because the model is what
+declared them equivalent.
+
+The only party with no model of the cause is **the broken binary**, and in this repo we
+always still have it: it is `pinned`, or any earlier `stable_pinned`. So the check is
+available, cheap, and requires no judgement at all — which puts it in 220's family (the
+strong check was available and looked unavailable) with a specific reason for the blindness:
+**a passing test does not look like a missing test.** Green is the outcome you wanted, and
+green from a test that cannot fail is indistinguishable from green from a test that can.
+
+### Generalisation, and the part that costs later
+
+This is not only about tests. **Any artefact built to demonstrate a defect must be validated
+against the defect, not against the author's account of it** — a repro in a ticket, a probe,
+a benchmark, an assertion added while debugging. 214 is the same family from the other side
+(a hand-built minimal case cannot falsify the hypothesis it was built from); 214 is about a
+case that *confirms* too easily, and 228 is about a case that *cannot fire at all*.
+
+The costs differ, and 228's is the worse one. A too-permissive repro wastes the session that
+made it. **A regression test that cannot fail is banked** — wired into a tier, run for
+months, reported green forever, and it is counted as coverage of exactly the bug it does not
+cover. It is a permanent false negative that arrived labelled as a fix's own evidence.
+
+### The one-line practice
+
+**Run the new test against the old binary before you commit it.** If it passes, the test is
+wrong — not the binary, not the fix. Record the failure output in the commit or the ticket,
+because that output, and nothing else, is what proves the test tests the thing.
