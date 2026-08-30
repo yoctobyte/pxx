@@ -317,6 +317,8 @@ reader checks whether the instrument worked, and it did.
 | which commits are in this range? | which commits are reachable from `origin/master` **OR** from the range? (a stray ref beside a range is a **union**, not a restriction) | **40 commits, 5 touching code** — the range holds **4**, and **1**. Produced while auditing someone else's ancestry arithmetic |
 | is this `new_red: []` vacuous? | here is `new_red: []`. (`parent_tested` lives in the REPORT front-matter and is **absent from the ndjson row** — not empty, *not present*) | correct about the field, silent about its scope, and **no sign that the question cannot be answered from here** |
 | did my edit land? | did `git commit` succeed? (the script before it printed a traceback and exited nonzero; a shell newline is `;`, not `&&`) | **a commit whose SUBJECT announces a playbook row, whose DIFF touches only the logbook** |
+| is this NilPy class leaking its fields? | is the field walker correct? (it was — `PXXObjFinalizeHook` was **nil**, so the walker was never reached; the hook's nine install sites are all pylib CONTAINER constructors) | three probes in a row "confirmed" a bug in the FINALIZER. The tell was that adding an unrelated `dummy = [1]` made the same program flat |
+| does this field store balance? | does it cost MEMORY? (it leaked a REFCOUNT on one shared string — same object every iteration) | **flat RSS, and a real over-retain**. The next probe, with a fresh string per iteration, leaked 2000 B/iter through the same line |
 
 **The two git rows are the cleanest instances in the table and the only ones
 that need nothing to be wrong.** No stale tree, no missing file, no unfetched
@@ -399,6 +401,40 @@ this repo.
 fixing the crashing rows is what **exposed** a second silent arm (a 264-byte
 stride for a 15-byte slot). A sweep that stops when the segfaults stop is not an
 incomplete sweep — it has *guaranteed* it cannot see what remains.
+
+## A flat RSS is not a balanced refcount
+
+**Measured 2026-08-31, and it cost two probes read backwards.** RSS is the
+instrument everyone reaches for first on a lifetime bug, and it is blind to the
+whole class of errors where the COUNT is wrong and the ALLOCATION is not.
+
+`self.s = s` where `s` is built once outside the loop, stored into a fresh
+instance every iteration: the store over-retained, so every instance's
+reference leaked. **Flat at 976 kB over 200k iterations**, because 200k leaked
+references to ONE string cost nothing. Change the source to `s + "!"` — a fresh
+string per iteration, same line of compiler code — and the identical bug reads
+**399 MB**. Nothing about the defect changed; what changed is whether it had to
+allocate to be visible.
+
+So the rule is about how you build the probe, not about which tool you pick:
+
+- **Make each iteration allocate.** A shared payload converts a refcount leak
+  into silence. A fresh one converts it into a slope. This is free — it is one
+  concatenation.
+- **Two loop counts, always.** An absolute number answers nothing; only the
+  slope does. Both of tonight's confirmed leaks were read off `20000` vs
+  `400000`, and both of tonight's false negatives were flat at BOTH.
+- **A leak whose object is immortal by construction is unreachable by RSS
+  entirely** — a module-level binding, an interned literal, a singleton. If the
+  shape under test can only ever hold one object, RSS cannot answer and you need
+  `-dPXX_OBJTRACE` (which prints `A`/`r`/`F` per object and *can* show a
+  refcount that never reaches zero) or a counter.
+
+The mirror is worth stating too, because it is what made the first fix look
+harder than it was: **an RSS number that moves is not proof you found the right
+mechanism.** `dummy = [1]` — a statement with no relationship to the failing
+code — took the same program from 399 MB to 980 kB. A one-line change that
+flips the measurement is a *bisect step*, not a diagnosis.
 
 ## Do not read a green as coverage
 
