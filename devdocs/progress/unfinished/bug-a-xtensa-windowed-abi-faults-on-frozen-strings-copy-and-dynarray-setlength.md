@@ -2,7 +2,7 @@
 track: A+S
 type: bug
 prio: 50
-status: working
+status: unfinished
 found: 2026-08-30
 found-by: frankS
 owner: frankS
@@ -435,3 +435,35 @@ Still unestablished, and no narrower than it was: **what `Copy` supplies that
    move exists; all five are prologue-local, 6 bytes after `entry`.
 5. "Wrap + reload + large frames is sufficient" — a program matching all of it,
    including the exact fault state, passes.
+
+---
+
+## PARKED 2026-08-30 (frankS) — released from `working/`, no code touched
+
+Moved to `unfinished/` because the session is ending, not because the work is
+blocked. **The live lock in `working/` was the only thing here that needed
+releasing**: this ticket produced five falsifications and zero edits, so there is
+no half-applied compiler change to revert and no stable-binary risk — the tree is
+clean and `compiler/**` is untouched by this ticket.
+
+**Resume state — everything needed is above, nothing is in a session's head.**
+
+- **Do not re-run rounds 1-5.** The falsified list is complete and each entry
+  names the measurement that killed it. Round 5 in particular cost a program that
+  reproduces the exact fault state (`wb=2 ws=04`) and *passes*; re-deriving it is
+  the expensive mistake available here.
+- **The next instrument must be a different class.** Rounds 1-5 were all *shape*
+  instruments (path, `sp` delta, depth, frame size, window state). Every shape
+  explanation is now matched by a working program, so the remaining hypothesis is
+  a **content or address** property of what `Copy` puts into or reloads out of
+  those frames. No such instrument has been built yet — that is the open work.
+- **Do not raise
+  [[bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp]]
+  on this ticket's evidence.** Round 5 exonerated it as the cause here. It is a
+  real ABI divergence, confirmed against the gcc oracle, and it stands on its own
+  separate grounds.
+
+`owner:` stays `frankS` as attribution for the five rounds, **not as a claim** —
+it is unheld and free to take. A fresh session with context to spend is arguably
+the better holder now, since what it needs next is a new instrument rather than
+more analysis of the existing measurements.

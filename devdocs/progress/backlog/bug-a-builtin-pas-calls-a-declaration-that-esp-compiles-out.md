@@ -5,7 +5,7 @@ type: bug
 status: backlog
 owner: ""
 blocked-by: []
-summary: "`builtin.pas:1702` calls `PxxSciDigits17` unconditionally, but its forward declaration in `builtinheap.pas` sits inside `{$ifndef PXX_ESP}` (407-441) while its BODY at :5148 is unguarded. So on a bare ESP target the body compiles and nothing can reach it, and `builtin.pas` fails with `undefined variable (PxxSciDigits17)`. This is why `builtin.pas` does not compile on bare xtensa or bare riscv32 at all -- and why 22 arms of `needsBuiltin` carry `(not TargetIsEspClass)` to route around it."
+summary: "`builtin.pas` will not compile on a bare ESP target (xtensa or riscv32, identical): it calls two names — `PXXVarBinOp` (:1148) and `PxxSciDigits17` (:1702) — from UNGUARDED code, while their declarations sit inside `{$ifndef PXX_ESP}` (`builtinheap.pas:407-441`). MEASURED 2026-08-30: exactly those two, of the 17 declarations that block removes; the other 15 have no caller in `builtin.pas` and are cleanly excluded, so the guard is 15/17 correct and this is a two-callsite leak, NOT a root cause behind the 22 `(not TargetIsEspClass)` arms. The ticket's own disproof check fired — see DISPROOF RUN."
 ---
 
 # `builtin.pas` does not compile on bare ESP: a one-sided `{$ifndef PXX_ESP}`
@@ -83,3 +83,88 @@ guards stay.
   regardless of what happens here, because it must work whether or not the pull
   is ever repaired.
 - [[feature-random-library]] (B, p45) is blocked behind that one.
+
+---
+
+## DISPROOF RUN (frankS, 2026-08-30, at HEAD `3bb4dce4b`) — the check above was run, and it fires
+
+The ticket names its own disproof condition:
+
+> *"`PxxSciDigits17` may not be the only unresolved symbol on that path, only the
+> first one the parser reaches. Re-run `uses builtin;` on bare xtensa and see
+> whether a second name appears. If a queue of them appears, this is one of N and
+> the guards stay."*
+
+**A second name appears — and `PxxSciDigits17` is not even the first.** No fix was
+needed to see it; the full error list was already there behind a `head`:
+
+```
+$ ./stable_linux_amd64/default/pinned --target=xtensa --platform=esp \
+      --esp-profile=bare -Fulib/rtl ub.pas
+pascal26:1148: error: undefined variable (PXXVarBinOp)
+  in: ./stable_linux_amd64/default/builtin/builtin.pas
+pascal26:1702: error: undefined variable (PxxSciDigits17)
+  in: ./stable_linux_amd64/default/builtin/builtin.pas
+```
+
+Identical, name for name and line for line, on bare riscv32. **N = 2**, and it is
+ISA-independent — a profile property, not an xtensa one.
+
+**2 is the true total, not a truncation.** `defs.inc:189` caps reporting at
+`MAX_REPORTED_ERRORS = 20`; we saw two. Nothing is hidden behind the cap.
+
+### The guard is NOT "protecting nothing" — it is 15/17 correct
+
+The block at `builtinheap.pas:407-441` removes **17** declarations on ESP. Grepping
+each of the 17 for a call site in `builtin.pas`:
+
+| names in the block | call sites in `builtin.pas` |
+| --- | --- |
+| `PXXVarBinOp` | 1 — line 1148 |
+| `PxxSciDigits17` | 1 — line 1702 |
+| the other **15** (`PXXStrLoadFile`, `PXXRecordRetain/Release`, `…Intf`, `…Initialize/Finalize`, `PXXDynArrayRelease/Unique`, `PXXVarNot`, `PXXVarStrAppend`, `PXXVarClear`, `PXXVarReleasePayload`, `PXXVarRetain`, `PXXWriteVariant`) | **0** |
+
+Two independent measurements agree exactly: the compiler's own error list and the
+static call-site grep both return the same two names. So the guard is doing its
+job for 15 of 17 declarations, and **two callers leaked out of it**. That is a
+two-line omission, not a design fault in the guard.
+
+### The asymmetry is CALLER-side, and "BODY, NOT guarded" is unconfirmed
+
+`builtin.pas` has exactly three `{$ifndef PXX_ESP}` regions — 62-85, 436-438,
+1409-1469. **Neither call site (1148, 1702) is inside any of them.** The callers
+are unguarded, full stop; that half of the mechanism section is confirmed.
+
+The *body* half is not. A directive trace puts `builtinheap.pas:5148` inside
+`{$ifndef PXX_ESP}` at :4407 — i.e. the body would be guarded after all — but that
+trace is unreliable on this file, because the header comment at lines 12-17
+contains directive *text* (`{$ifdef CPU_XTENSA}`, `{$ifndef PXX_ESP}`) inside a
+`{ }` comment and any naive scanner counts it. What the compiler actually reports
+is **declaration-visibility errors only**: no duplicate-body and no unreachable-body
+diagnostic appears on either bare target. Treat "the body compiles and is
+unreachable" as unproven until someone reads it with the real lexer.
+
+### Consequence for the fix
+
+By the ticket's own stated rule, **this is one of N and the guards stay.** It is
+not a root cause with 22 consequences: it is two unguarded call sites. Fixing it
+is still worth doing — a compiler-shipped unit that will not compile for two
+supported targets is a Track A bug at ordinary priority — but it should be
+scoped and ranked as *"guard two callers"*, not as *"delete the 22-arm
+workaround"*. Anyone hoping to retire `(not TargetIsEspClass)` on the back of
+this should re-derive that from scratch.
+
+**[[bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target]]'s
+option (3) is unaffected** and remains correct for the reason already given: a
+False stub must reach a bare target whether or not the pull is ever repaired.
+
+### Trap for whoever takes this — you will be editing a file the compiler is not reading
+
+The error text cites `./stable_linux_amd64/default/builtin/builtin.pas`, **not**
+`compiler/builtin/builtin.pas`. The pinned compiler resolves its builtin unit from
+its own stable tree. The two trees are byte-identical right now (`diff -rq
+compiler/builtin stable_linux_amd64/default/builtin` is clean), so the line
+numbers above are interchangeable — but **a fix applied to `compiler/builtin/`
+alone will not change this measurement until a pin**, and re-running the
+falsifier with `pinned` will show the identical two errors. That reads exactly
+like "the fix didn't work".

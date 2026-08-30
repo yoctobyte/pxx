@@ -209,3 +209,25 @@ The fix itself is not written — this is the falsifier the dispatch asked for, 
 it changed the answer. Whoever implements (3) should confirm how a False stub
 reaches a bare target without the builtin pull, since that mechanism is precisely
 what the measurement above shows is unavailable.
+
+### Follow-on, same day: the constraint is real but SMALLER than it looked
+
+[[bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out]] (A p50) was filed
+off the falsifier's error message. Its DISPROOF RUN narrows what that ticket can
+do for this one: the bare-ESP `builtin` failure is **two unguarded call sites**
+(`PXXVarBinOp`, `PxxSciDigits17`), not a root cause standing behind all 22 arms —
+15 of the 17 declarations in the same guarded block have no caller at all and are
+cleanly excluded.
+
+**Nothing here changes.** Option (3) — a False stub that reaches a bare target
+**without** the builtin pull — was already chosen on the ground that it must hold
+whether or not the pull is ever repaired, and that ground is untouched. What does
+change is the expectation someone might have carried in: **do not wait for the
+`builtin.pas` fix hoping it retires this arm.** It will not. Repairing those two
+call sites makes `uses builtin;` compile on bare ESP; it says nothing about
+whether pulling the whole `builtin` unit is the right way to reach
+`__pxxHwRandom64` on a bare target, which is the actual question here.
+
+The open question for whoever implements (3) is unchanged and is still the
+ticket's real content: **how does a False stub reach a bare target without the
+builtin pull?** That route is precisely what the falsifier shows is unavailable.
