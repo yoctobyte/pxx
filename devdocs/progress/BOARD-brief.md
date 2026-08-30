@@ -5,17 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:26 blocked:7 backlog:337 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2718 rejected:56`
+`working:4 unfinished:27 blocked:7 backlog:337 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2718 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen` [A+O] — owner: frank-optimize-b4
-- `feature-pascal-corpus-expansion` [P] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (26) — parked mid-flight; re-claim, do not duplicate
+## unfinished (27) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -36,6 +35,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-nilpy-user-defined-decorators` [N]
 - `feature-pal-esp-posix-fd-semantics` [S] — blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
+- `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P]
 - `feature-pascal-type-helpers` [A]
@@ -54,8 +54,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 357, ranked
+## Ready — top 30 of 358, ranked
 
+- `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [A+S]` bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable
@@ -85,6 +86,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
-- `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 
-_327 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_328 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

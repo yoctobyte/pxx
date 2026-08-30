@@ -1099,3 +1099,16 @@ read zero — which is the exact thing that decision refuses.
 
 **Do not file the remaining error as a corpus bug.** If the `object` decision is
 ever revisited, it is revisited on its own ticket, not because a corpus wants it.
+
+### PARKED 2026-08-30 (frankA) — rung 6 done, lock released, nothing half-applied
+
+Released from `working/` because rung 6 is finished as far as it goes and this
+is a multi-rung ladder: holding it open on one completed rung blocks the file
+for no gain. Everything is committed and pushed; there is no in-flight edit.
+
+Rung 6 (rtl-generics) this session: **20 errors → 1**, and the 1 is the decided
+non-goal recorded in the section above. Do not read that as blocked.
+
+**Next holder: read the section above before the LIVE STATUS table.** That table
+has now been stale three times on the same field, and the two corrections above
+it are dated. The re-derivation recipe is four commands and is the reliable part.
