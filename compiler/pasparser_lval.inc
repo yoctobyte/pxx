@@ -5028,6 +5028,7 @@ begin
     tk := IntToTypeKind(ArrTypeElemTk[arrAi]);
     LastTypeRecId := ArrTypeElemRec[arrAi];
     LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[arrAi]);
+    LastTypePointerStrElemTk := ArrTypePtrElemStrTk[arrAi];
     LastTypePointerElemRec := ArrTypePtrElemRec[arrAi];
     if (tk = tyFixedString) or (tk = tyShortString) then
       LastTypeStrCap := ArrTypeElemStrCap[arrAi];

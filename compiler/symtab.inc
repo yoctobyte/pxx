@@ -9839,6 +9839,7 @@ begin
   SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcRetElemTk, n);
   SetLength(ProcRetStrElemTk, n);
   SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);
+  SetLength(ProcRetPtrElemStrTk, n);
   SetLength(ProcRetEnumId, n);
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
   SetLength(ProcRetDynDepth, n);
@@ -9902,6 +9903,7 @@ begin
   ProcRetElemTk[ProcCount]     := tyUnknown;
   ProcRetElemRec[ProcCount]    := REC_NONE;
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
+  ProcRetPtrElemStrTk[ProcCount] := 0;   { the POINTEE's width, same recycled-slot rule }
   ProcRetStrElemTk[ProcCount]  := 0;
   ProcRetEnumId[ProcCount]     := -1;
   ProcRetPtrDepth[ProcCount]   := 0;

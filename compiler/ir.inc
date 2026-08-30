@@ -1500,6 +1500,30 @@ begin
           (ASTKind[ASTLeft[node]] = AN_FIELD) then
     Result := RecFieldPtrElemStrTk(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
                                    GetASTIdentName(ASTLeft[node]))
+  { `a[i]^` -- the pointer is an array ELEMENT. This one needs NO new carrier,
+    and finding that out is the whole content of the arm: AllocArray already
+    stamps SymPtrElemStrTk from LastTypePointerStrElemTk, because for
+    `a: array[0..1] of PW` the POINTEE width is a property of the element type
+    and every element of an array shares it. The array symbol's own row is
+    therefore the right and only place to ask, exactly as the AN_IDENT arm asks
+    it -- what was missing was a reader, not a fact. The ticket sized this as a
+    third carrier (ArrTypePtrElemStrTk, two write sites); it is four lines.
+    feature-unicodestring-model }
+  else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_INDEX) and (ASTLeft[ASTLeft[node]] >= 0) and
+          (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) then
+    Result := SymPtrElemStrTk[ASTIVal[ASTLeft[ASTLeft[node]]]]
+  { `F^` -- the pointer is a call RESULT. A call node has no symbol and no field
+    to ask, so the callee's row answers, exactly as the ProcRetStrElemTk arm
+    below reads it for a string result. All three call shapes, for the reason
+    that arm gives: a method reached through a VMT or an interface returns just
+    as concrete a pointer as a direct call does. feature-unicodestring-model }
+  else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+          ((ASTKind[ASTLeft[node]] = AN_CALL) or
+           (ASTKind[ASTLeft[node]] = AN_VIRTUAL_CALL) or
+           (ASTKind[ASTLeft[node]] = AN_INTF_CALL)) and
+          (ASTIVal[ASTLeft[node]] >= 0) and (ASTIVal[ASTLeft[node]] < ProcCount) then
+    Result := ProcRetPtrElemStrTk[ASTIVal[ASTLeft[node]]]
   { The RESULT of a call. A call node has no symbol and no field to ask, so the
     callee's row is the only place the width can live -- the same argument
     ProcRetEnumId makes for an enum-typed result. All three call shapes carry

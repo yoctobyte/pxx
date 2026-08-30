@@ -559,6 +559,7 @@ var
   retFixedArrBytes : Integer;   { a FIXED-array result's byte size; 0 = not one }
   retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
   retPtrElemTk, retPtrElemRec : Integer;
+  retPtrStrElemTk : Integer;   { ...and that pointee's element width when it is a managed string }
   retStrElemTk : Integer;   { managed-string result: element width ord, 0 = not one }
   retEnumId : Integer;   { enum-typed result: its enum index, else -1 }
   retPtrDepth, retPtrBaseTk, retPtrBaseRec : Integer;
@@ -761,6 +762,7 @@ begin
   retDynDepth := 0;
   retFixedArrBytes := 0; retArrAi := -1;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
+  retPtrStrElemTk := 0;
   retStrElemTk := 0;
   retEnumId := -1;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
@@ -836,6 +838,7 @@ begin
         tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
         LastTypeRecId := ArrTypeElemRec[paramAi];
         LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
+        LastTypePointerStrElemTk := ArrTypePtrElemStrTk[paramAi];
         LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
         isArr := True;
         { Named dynamic-array type param (`TDynArr = array of T`): mark it a real
@@ -901,6 +904,7 @@ begin
             tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
             LastTypeRecId := ArrTypeElemRec[paramAi];
             LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
+            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[paramAi];
             LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
             if (tk = tyAnsiString) or (tk = tyString) or
                (tk = tyFixedString) or (tk = tyShortString) or
@@ -925,6 +929,7 @@ begin
             tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
             LastTypeRecId := ArrTypeElemRec[paramAi];
             LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
+            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[paramAi];
             LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
             paramElemDynDepth := ArrTypeDynDepth[paramAi];
             if paramElemDynDepth <= 0 then paramElemDynDepth := 1;
@@ -1047,6 +1052,7 @@ begin
       retElemTk := IntToTypeKind(ArrTypeElemTk[paramAi]);
       retElemRec := ArrTypeElemRec[paramAi];
       retPtrElemTk  := ArrTypePtrElemTk[paramAi];
+      retPtrStrElemTk := ArrTypePtrElemStrTk[paramAi];
       retPtrElemRec := ArrTypePtrElemRec[paramAi];
     end
     else
@@ -1088,6 +1094,7 @@ begin
         retType := IntToTypeKind(ArrTypeElemTk[retArrAi]);
         LastTypeRecId := ArrTypeElemRec[retArrAi];
         LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[retArrAi]);
+        LastTypePointerStrElemTk := ArrTypePtrElemStrTk[retArrAi];
         LastTypePointerElemRec := ArrTypePtrElemRec[retArrAi];
         if (retType = tyFixedString) or (retType = tyShortString) then
           LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
@@ -1136,6 +1143,7 @@ begin
       if retType = tyPointer then
       begin
         retPtrElemTk := Ord(LastTypePointerElemTk);
+        retPtrStrElemTk := LastTypePointerStrElemTk;
         retPtrDepth := LastTypePointerDepth;
         retPtrBaseTk := LastTypePointerBaseTk;
         retPtrBaseRec := LastTypePointerBaseRec;
@@ -1357,6 +1365,7 @@ begin
     ProcRetElemTk[procIdx] := retElemTk;
     ProcRetElemRec[procIdx] := retElemRec;
     ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+    ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
     ProcRetStrElemTk[procIdx] := retStrElemTk;
     ProcRetEnumId[procIdx] := retEnumId;
     ProcRetPtrElemRec[procIdx] := retPtrElemRec;
@@ -1707,6 +1716,7 @@ begin
       ProcRetElemTk[procIdx] := retElemTk;
       ProcRetElemRec[procIdx] := retElemRec;
       ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+      ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
       ProcRetStrElemTk[procIdx] := retStrElemTk;
       ProcRetEnumId[procIdx] := retEnumId;
       ProcRetPtrElemRec[procIdx] := retPtrElemRec;
@@ -1742,6 +1752,7 @@ begin
   ProcRetElemTk[procIdx] := retElemTk;
   ProcRetElemRec[procIdx] := retElemRec;
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+  ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
   ProcRetStrElemTk[procIdx] := retStrElemTk;
   ProcRetEnumId[procIdx] := retEnumId;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;

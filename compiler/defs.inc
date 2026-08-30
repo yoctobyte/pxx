@@ -2672,6 +2672,25 @@ var
   ProcRetElemRec : array of Integer;     { element record id of a dyn-array result }
   ProcRetStrElemTk : array of Integer; { managed-string RESULT: the element width as a TTypeKind ord -- Ord(tyChar) for a byte string, Ord(tyWideChar) for a wide one; 0 = not a managed string. The return half of the fifth carrier (see ProcParamStrElemTk); a call node has no symbol and no field to ask, so the callee's row is the only place the width can live -- the same argument ProcRetEnumId makes for an enum-typed result. Read by ASTStrElemTkOf's AN_CALL arm. Normalised on the way in, so 0 means "not a managed string" and never doubles as "narrow". feature-unicodestring-model }
   ProcRetPtrElemTk : array of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
+  { ...and the POINTEE's element width when that pointee is a managed string:
+    `function F: PW` where `PW = ^WideString` -- Ord(tyWideChar), else 0. The
+    RESULT member of the pointee-side carrier set, and the last of the four: a
+    call node has no symbol and no field to ask, so the callee's row is the only
+    place this can live -- the same argument ProcRetPtrElemTk itself makes one
+    fact over, and ProcRetEnumId one type over.
+
+    Written wherever ProcRetPtrElemTk is: seven sites in pasparser_proc.inc
+    (the plain routine, both of its late stores) and twelve in
+    pasparser_decl.inc (a record method, a class-type method, an interface
+    method), plus the recycled-slot reset in AllocProc. The C frontend's two
+    write sites are deliberately NOT paired -- C has no WideString, so the
+    reset is the whole correct answer there, and adding a C store would be a
+    line that can only ever write 0.
+
+    Read by ASTStrElemTkOf's AN_DEREF arm for a call base, which is what makes
+    `Length(F^)` answer 4 for 'abcd' instead of 8.
+    feature-unicodestring-model }
+  ProcRetPtrElemStrTk : array of Integer;
   ProcRetEnumId : array of Integer;      { enum-typed RESULT: its enum type index, else -1. A call node has no symbol and no field to ask, so the callee's row is the only place the identity can live; read by NodeEnumIdOf's AN_CALL arm. }
   { ...and the rest of the returned pointer's identity, so `GetQ^` on a
     `function GetQ: ^PChar` knows a level remains. The pointee alone cannot say
@@ -4738,6 +4757,28 @@ var
     written and read together, at every site.
     bug-p-typed-constants-cannot-hold-a-pointer-a-nested-aggregate-or-storage }
   ArrTypePtrElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
+  { ...and the POINTEE's element width when that pointee is a managed string:
+    `TArr = array[0..1] of PW` where `PW = ^WideString` -- Ord(tyWideChar), else
+    0. The array-TYPE member of the pointee-side carrier set, and NOT the same
+    fact as ArrTypeStrElemTk below: that one is how wide the array's own string
+    ELEMENTS are, this one how wide the string those elements POINT AT is. An
+    array of pointers has no string elements at all, so the two never both
+    apply and neither can stand in for the other.
+
+    Why the type row and not the symbol row, when the INLINE `a: array[0..1] of
+    PW` needs no carrier at all: for an inline array the pointee width is still
+    live in LastTypePointerStrElemTk when AllocArray runs, so the symbol picks
+    it up for free. A USE of a NAMED array type is arbitrarily far from where
+    that type was parsed, and by then LastTypePointerStrElemTk describes
+    something else entirely -- the same staleness argument ArrTypeStrElemTk
+    gives, one level of indirection down. Measured: the inline form answered
+    Length 4 and the named form 8, for the identical declaration.
+
+    Written at the TWO array-type creation sites and read back into
+    LastTypePointerStrElemTk everywhere ArrTypePtrElemTk is read into
+    LastTypePointerElemTk -- the reads are the cost here, not the writes.
+    feature-unicodestring-model }
+  ArrTypePtrElemStrTk : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeNDims  : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeDimLo  : array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;

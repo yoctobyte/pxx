@@ -854,6 +854,7 @@ begin
       VDIdxTk := ArrTypeIdxTk[ai]; VDIdxEnumId := ArrTypeIdxEnumId[ai];
       LastTypeRecId := ArrTypeElemRec[ai];
       LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
+      LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
       LastTypePointerElemRec := ArrTypePtrElemRec[ai];
       { The alias records its frozen-string element width; LastTypeStrCap here
         is whatever the last unrelated `string[N]` anywhere left behind. }
@@ -965,6 +966,7 @@ begin
             VDElemEnumId := ArrTypeElemEnumId[ai];
             LastTypeRecId := ArrTypeElemRec[ai];
             LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
+            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
             LastTypePointerElemRec := ArrTypePtrElemRec[ai];
             VDDynDepth := VDDynDepth + ArrTypeDynDepth[ai];
             Next;                 { consume the alias name }
@@ -987,6 +989,7 @@ begin
             VDElemEnumId := ArrTypeElemEnumId[ai];
             LastTypeRecId := ArrTypeElemRec[ai];
             LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
+            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
             LastTypePointerElemRec := ArrTypePtrElemRec[ai];
             if (VDElemTk = tyAnsiString) or (VDElemTk = tyString) or
                (VDElemTk = tyFixedString) or (VDElemTk = tyShortString) or
@@ -1015,6 +1018,7 @@ begin
           VDElemEnumId := ArrTypeElemEnumId[ai];
           LastTypeRecId := ArrTypeElemRec[ai];
           LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
+          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
           LastTypePointerElemRec := ArrTypePtrElemRec[ai];
           VDElemDynDepth := ArrTypeDynDepth[ai];
           Next;                 { consume the alias name }
@@ -1053,6 +1057,7 @@ begin
           VDElemEnumId := ArrTypeElemEnumId[ai];
           LastTypeRecId := ArrTypeElemRec[ai];
           LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
+          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[ai];
           LastTypePointerElemRec := ArrTypePtrElemRec[ai];
           VDTk := VDElemTk;
           elemResolved := True;
@@ -2274,6 +2279,7 @@ begin
           cElemTk := IntToTypeKind(ArrTypeElemTk[cAi]);
           LastTypeRecId := ArrTypeElemRec[cAi];
           LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[cAi]);
+          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[cAi];
           LastTypePointerElemRec := ArrTypePtrElemRec[cAi];
         end
         else
@@ -3245,6 +3251,7 @@ var
     answers False, and `AnsiString(ref.GetP())` lowers as a raw pointer cast:
     an EMPTY string where FPC gives the text. Silent wrong value, no diagnostic.
     refactor-centralize-managed-string-pchar-conversion }
+  retPtrStrElemTk: Integer;   { ...and that pointee's element width when it is a managed string }
   pn: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   pt: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptRec: array[0..MAX_PROC_PARAMS-1] of Integer;
@@ -3374,6 +3381,7 @@ begin
   retTk := tyInteger;
   LastTypeRecId := REC_NONE;
   retPtrElemTk := Ord(tyUnknown);
+  retPtrStrElemTk := 0;
   retPtrElemRec := REC_NONE;
   retStrElemTk := 0;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
@@ -3394,6 +3402,7 @@ begin
       else retStrElemTk := Ord(tyChar);
     end;
     retPtrElemTk := Ord(LastTypePointerElemTk);
+    retPtrStrElemTk := LastTypePointerStrElemTk;
     retPtrElemRec := LastTypePointerElemRec;
     retPtrDepth := LastTypePointerDepth;
     retPtrBaseTk := LastTypePointerBaseTk;
@@ -3463,6 +3472,7 @@ begin
   if isFunc and (retTk = tyPointer) then
   begin
     ProcRetPtrElemTk[mpi] := retPtrElemTk;
+    ProcRetPtrElemStrTk[mpi] := retPtrStrElemTk;
     ProcRetPtrElemRec[mpi] := retPtrElemRec;
     ProcRetPtrDepth[mpi] := retPtrDepth;
     ProcRetPtrBaseTk[mpi] := retPtrBaseTk;
@@ -3808,6 +3818,7 @@ begin
             the LastTypePointerElemRec global -- prime it here (see
             ArrTypePtrElemRec's comment in defs.inc for the general landmine). }
           LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
+          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
           LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
           Next;   { consume the named array type }
         end
@@ -3823,6 +3834,7 @@ begin
           fRec := ArrTypeElemRec[fAi];
           fEnumId := ArrTypeElemEnumId[fAi];
           LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
+          LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
           LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
           if ArrTypeNDims[fAi] >= 2 then
           begin
@@ -4098,6 +4110,7 @@ begin
       if mIsFunc and (mRetType = tyPointer) then
       begin
         ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
+        ProcRetPtrElemStrTk[mpi] := LastTypePointerStrElemTk;
         ProcRetPtrElemRec[mpi] := LastTypePointerElemRec;
         ProcRetPtrDepth[mpi] := LastTypePointerDepth;
         ProcRetPtrBaseTk[mpi] := LastTypePointerBaseTk;
@@ -4209,6 +4222,7 @@ var
     answers False, and `AnsiString(ref.GetP())` lowers as a raw pointer cast:
     an EMPTY string where FPC gives the text. Silent wrong value, no diagnostic.
     refactor-centralize-managed-string-pchar-conversion }
+  mRetPtrStrElemTk: Integer;   { ...and that pointee's element width when it is a managed string }
   mPDefaultSOff: array[0..MAX_PROC_PARAMS-1] of Integer;
   mPDefaultSLen: array[0..MAX_PROC_PARAMS-1] of Integer;
   mHasDefault: Boolean;
@@ -4415,6 +4429,7 @@ begin
           end;
           mRetRecId := REC_NONE;
           mRetPtrElemTk := Ord(tyUnknown);
+          mRetPtrStrElemTk := 0;
           mRetPtrElemRec := REC_NONE;
           mRetStrElemTk := 0;
           mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
@@ -4429,6 +4444,7 @@ begin
               else mRetStrElemTk := Ord(tyChar);
             end;
             mRetPtrElemTk := Ord(LastTypePointerElemTk);
+            mRetPtrStrElemTk := LastTypePointerStrElemTk;
             mRetPtrElemRec := LastTypePointerElemRec;
             mRetPtrDepth := LastTypePointerDepth;
             mRetPtrBaseTk := LastTypePointerBaseTk;
@@ -4458,6 +4474,7 @@ begin
           if mIsFunc and (mRetType = tyPointer) then
           begin
             ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
+            ProcRetPtrElemStrTk[mpi] := mRetPtrStrElemTk;
             ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
             ProcRetPtrDepth[mpi] := mRetPtrDepth;
             ProcRetPtrBaseTk[mpi] := mRetPtrBaseTk;
@@ -5026,6 +5043,7 @@ begin
             end;
 
             mRetPtrElemTk := Ord(tyUnknown);
+            mRetPtrStrElemTk := 0;
             mRetPtrElemRec := REC_NONE;
             mRetStrElemTk := 0;
             mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
@@ -5040,6 +5058,7 @@ begin
                 else mRetStrElemTk := Ord(tyChar);
               end;
               mRetPtrElemTk := Ord(LastTypePointerElemTk);
+              mRetPtrStrElemTk := LastTypePointerStrElemTk;
               mRetPtrElemRec := LastTypePointerElemRec;
               mRetPtrDepth := LastTypePointerDepth;
               mRetPtrBaseTk := LastTypePointerBaseTk;
@@ -5113,6 +5132,7 @@ begin
               if mIsFunc and (mRetType = tyPointer) then
               begin
                 ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
+                ProcRetPtrElemStrTk[mpi] := mRetPtrStrElemTk;
                 ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
                 ProcRetPtrDepth[mpi] := mRetPtrDepth;
                 ProcRetPtrBaseTk[mpi] := mRetPtrBaseTk;
@@ -5540,6 +5560,7 @@ begin
                 fRec := ArrTypeElemRec[fAi];
                 fEnumId2 := ArrTypeElemEnumId[fAi];
                 LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
+                LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
                 LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
                 Next;   { consume the named array type }
               end
@@ -5555,6 +5576,7 @@ begin
                 fRec := ArrTypeElemRec[fAi];
                 fEnumId2 := ArrTypeElemEnumId[fAi];
                 LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
+                LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
                 LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
                 if ArrTypeNDims[fAi] >= 2 then
                 begin
@@ -5961,6 +5983,7 @@ begin
             aElemStrCap := ArrTypeElemStrCap[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
             LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
+            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
             aElemDynDepth := ArrTypeDynDepth[fAi];
             Next;   { consume the alias name }
@@ -6013,6 +6036,7 @@ begin
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           ArrTypePtrElemTk[ArrTypeCount]  := Ord(LastTypePointerElemTk);
+          ArrTypePtrElemStrTk[ArrTypeCount] := LastTypePointerStrElemTk;
           ArrTypeIdxTk[ArrTypeCount]      := tdIdxTk;
           ArrTypeIdxEnumId[ArrTypeCount]  := tdIdxEnumId;
           if tdCnt >= 2 then ArrTypeNDims[ArrTypeCount] := tdCnt
@@ -6076,6 +6100,7 @@ begin
             aElemStrCap := ArrTypeElemStrCap[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
             LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
+            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
             tdCnt := tdCnt + ArrTypeDynDepth[fAi];
             Next;               { consume the alias name }
@@ -6088,6 +6113,7 @@ begin
             aElemEnumId := ArrTypeElemEnumId[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
             LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
+            LastTypePointerStrElemTk := ArrTypePtrElemStrTk[fAi];
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
             if (aElemTk = tyAnsiString) or (aElemTk = tyString) or
                (aElemTk = tyFixedString) or (aElemTk = tyShortString) or
@@ -6117,6 +6143,7 @@ begin
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           ArrTypePtrElemTk[ArrTypeCount]  := Ord(LastTypePointerElemTk);
+          ArrTypePtrElemStrTk[ArrTypeCount] := LastTypePointerStrElemTk;
           ArrTypeNDims[ArrTypeCount] := 0;
           ArrTypeIsDyn[ArrTypeCount] := True;
           ArrTypeElemDynDepth[ArrTypeCount] := 0;
