@@ -21287,3 +21287,50 @@ Three checks, cheap, in the order they would have caught these:
 Related, above: *a native-green repro does not close a bug that was never
 native-only*; *an alarming measurement earns a second instrument, not a ticket*;
 *"I looked again" is not a check*.
+
+## Reading a conditional cannot tell you whether it runs — plant a canary
+
+Three sessions produced three different wrong mechanisms for one ticket on
+2026-08-30 (`bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out`), two
+of them the coordinator's. **Every one came from reading directives**, in a file
+family that actively defeats reading:
+
+- `builtin.pas`'s header comment embeds directive *text* (`{$ifdef CPU_XTENSA}`,
+  `{$ifndef PXX_ESP}`) inside a `{ }` comment, so a naive scanner counts prose as
+  directives — this defeated frankS's directive trace and made a body look
+  guarded.
+- The coordinator asserted "the body compiles and is unreachable" from a grep,
+  and "one root cause behind 22 arms" from one error name past a `head`.
+- The real answer was one level up, at the **define**: `PXX_ESP` is compiler-
+  provided nowhere. `PXX_ESP_BARE` is (`lexer.inc:1148`), and `PXX_ESP` is created
+  by one line in `builtinheap.pas:18`. Conditional defines do not cross unit
+  boundaries, so `builtin.pas`'s three `{$ifndef PXX_ESP}` regions had compiled
+  unconditionally, on every target, since they were written.
+
+**The instrument that settles it in one build:** plant something that cannot
+compile inside the region and see whether it does.
+
+```
+CANARY_NOT_PASCAL @@@ ;      planted inside builtin.pas's region at line 62
+
+without the define:  pascal26:63: error: unexpected token   <- guard INERT, canary compiled
+with the define:     (no error at 63)                       <- guard now honoured
+```
+
+Two states, one question, no reading. The same shape as frankA's mutation test
+(revert one site, confirm the test notices) and frankC's line-13 `#include` (put
+the case where the bug would have made the obvious test pass).
+
+**The corollary, and it is what makes the fix safe:** deleting a guard that truly
+never ran must be a *textual* no-op, so the falsifier is byte-identity. frankA's
+deletion gave 17/17 emitted binaries byte-identical across all six targets plus
+both bare-ESP profiles — the exact configurations the directive was supposed to
+affect. That falsifier was doing real work, not ceremony: it was the only thing
+that would have caught "the define arrives from somewhere we have not found."
+
+**And the trap bites while you document it.** frankA's explanatory comment first
+contained `{$ifndef PXX_ESP}` with braces — a `{ }` comment ends at the FIRST
+`}`, so it would have closed early and turned the rest of the note into code.
+Write it `$ifndef PXX_ESP`, no braces. Same hazard as frankS's, pointed the other
+way: there it made a scanner see directives that were prose; here it would have
+made the compiler see code that was prose.
