@@ -26,6 +26,7 @@ of this page for what happened the last time nobody did.
 | `tools/lib_cross_sweep.sh` | **pxx on x86-64** | does a cross target agree with the native build? | B |
 | `tools/crtl_decl_probe.sh` | — (census) | is a declared crtl function actually IMPLEMENTED, or silently binding to libc? | B |
 | `tools/c_array_shape_census.py` | gcc | does every way C can *reach* an array agree with every way it can *use* one? | C |
+| `tools/c_strlit_decay_census.py` | gcc | does every way to *wrap* a C string literal agree with every site that *consumes* one? | C |
 
 `crtl_decl_probe` is the odd one out: it has no oracle. It answers *"is the
 symbol there at all"*, which is the question **before** `gcc_diff_probe`'s
@@ -96,6 +97,51 @@ to them unaided rather than assumed to.
   as a specific one — which is the only form it is useful in.
 - **Native x86-64 at the default `-O` only**, and gcc is the judge, so anything
   C leaves implementation-defined or undefined is not adjudicated.
+
+`c_strlit_decay_census.py` is the array-shape census's sibling, one axis over.
+It crosses **every way to wrap a C string literal** — parenthesised, comma,
+nested comma, both ternary arms, cast, and the pairwise combinations — with
+**every site that consumes one**: assignment, `return`, call argument, static
+initializer, direct use. gcc decides each cell.
+
+**Why a matrix and not a reading of the consumers.** In C a literal IS a
+`char *`, but it lowers to a frozen-string HANDLE: an 8-byte length prefix,
+then the data. Consumers that add the 8 themselves have to recognise the
+literal — and the ones keyed on `ASTKind[<their own operand>] = AN_STR_LIT` are
+asking *what node produced this operand*, so **any** node in between defeats
+them. Reading those sites tells you nothing about which wrappers exist;
+enumerating the wrappers does. Every one of the five live wrong values it found
+was a **comma operator** — not an exotic construct, just a shape nobody had
+written a test for.
+
+The failure it catches is silent and looks benign: the pointer lands on the
+length prefix, whose first byte is the length and whose remainder is zero, so
+the program prints an **empty string** rather than crashing. `return (1, "s")`
+returned `""`.
+
+**It also demonstrated the value-vs-node rule this index should carry.** The
+call-argument row was green across all thirteen wrappers while the `return` and
+assignment rows were not — because that path keys on the **lowered value's**
+type (`IRTk = tyString`), not the node kind. *Asking what a value IS cannot be
+defeated by wrapping it; asking what node produced it always can.* When two
+sites answer one question and only one of them is robust, the robust one is
+usually already there.
+
+**Blind spots:**
+
+- **It is an enumeration of one person's model of C.** A wrapper nobody listed
+  is invisible and it will not say so. Closed and countable in principle;
+  incomplete in practice.
+- **`n/a` cells are ones gcc itself rejects** (a static initializer must be a
+  constant expression) — neither passes nor failures. The first version scored
+  them as failures and reported **11 wrong where 5 was right**. A skip counted
+  as a verdict is a lie in whichever direction you count it, and the fix is a
+  third symbol, not a choice between the two.
+- One literal, one element type, native x86-64 at the default `-O`.
+- **It says nothing about Pascal.** The producer arm it exercises is guarded by
+  `CProgramMode`; the Pascal claim needs a separate instrument, and for that one
+  **binary** equality is the right test rather than output equality, because
+  Pascal's emitted code must be unchanged rather than merely equivalent.
 
 ## Self-differential probes — pxx against pxx under a changed condition
 

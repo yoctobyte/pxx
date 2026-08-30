@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (328)
+## backlog (327)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -376,7 +376,6 @@ _none_
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 55 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-a-unify-the-five-remaining-pascal-postfix-suffix-walks | A | 35 | refactor | Successor to the six-copies ticket. Its inventory measured all six copies against FPC and found only site 6 diverging; site 6 is fixed. Unifying the remaining five is worth doing to prevent the NEXT site 6, but it has zero measured behavioural payoff and five conversions of regression risk, so it is filed at its real priority rather than inherited. Blocking design question inside: ASTIVal on an AN_DEREF currently means two different things. | — |
 | refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count | A | 45 | refactor | VisCacheVis is subscripted by a Strs[] index but sized by MAX_UNITS, a unit COUNT. The two are unrelated quantities, so the array's bound has no relationship to the values that index it. Three range checks now stand between that mismatch and memory corruption; one of them was missing and cost a multi-session bug (bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream). Separate the domains so the checks are belt-and-braces rather than load-bearing. | — |
-| refactor-c-string-literal-decay-belongs-at-the-producer | C | 50 | refactor | The +8 that turns a C string literal's handle into a char* is duplicated at three consumers (assign, return, call argument), each keyed on `ASTKind[...] = AN_STR_LIT`. Any wrapper node defeats all three at once -- which is exactly how bug-c-a-pointer-cast-of-a-string-literal-points-at-the-length-prefix happened. Do the decay once, at the producer. | — |
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 55 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
@@ -641,9 +640,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2710)
+## done (2711)
 
-2710 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2711 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -817,7 +816,6 @@ _none_
 - [p 50] [A] feature-nested-routine-fixed-array-capture
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
-- [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol

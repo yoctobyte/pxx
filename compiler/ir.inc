@@ -1669,8 +1669,13 @@ begin
         (s[1] -> data[0], lo=-7); C is 0-based ("lit"[0] -> data[0], lo=-8).
         Without the C offset, "1.3.1"[0] read base+7 (the length word's high
         byte, 0) instead of '1'. }
+      { C's base is now the DATA pointer (the producer decayed it), so index 0
+        is at base+0 and the lo adjustment is 0 — it was -8 while the base was
+        the handle. Pascal is unchanged: its base is still the handle and it is
+        1-based, so s[1] -> data[0] is lo=-7.
+        refactor-c-string-literal-decay-belongs-at-the-producer }
       if CProgramMode then
-        Result := IRAppend(IR_INDEX, baseAddr, indexNode, -8, 1, Ord(tyChar))
+        Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, 1, Ord(tyChar))
       else
         Result := IRAppend(IR_INDEX, baseAddr, indexNode, -7, 1, Ord(tyChar));
       Exit;
@@ -5929,7 +5934,33 @@ begin
       Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], ASTTk[node]);
 
     AN_STR_LIT:
+    begin
       Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
+      { IN C, A STRING LITERAL *IS* A `char *`, so decay it HERE, once, rather
+        than at each consumer. IR_CONST_STR's value is the frozen string's
+        HANDLE — an 8-byte length prefix then the data — and C wants the data.
+
+        Three consumers used to add the 8 themselves (assign, return, binop),
+        each testing `ASTKind[<its own operand>] = AN_STR_LIT`. That test asks
+        what NODE produced the operand, so ANY node in between defeated all of
+        them at once. Measured before this change: `return (1, "s")` returned a
+        pointer at the length prefix and printed nothing, and so did
+        `return (const char *)(1, "s")`, `return (1, (const char *)"s")`,
+        `return (1, (2, "s"))` and `const char *v = (const char *)(1, "s")` —
+        five silent wrong values, every one of them a comma operator, which is
+        simply a wrapper nobody had thought to test.
+
+        Deciding at the producer cannot be defeated that way: there is no
+        "in between" to hide in. The call-argument path already worked for
+        exactly this reason — it keys on the LOWERED VALUE's tk
+        (`IRTk[aval] = tyString`), not on the node kind — and its whole column
+        was green while the node-kind columns were not.
+        refactor-c-string-literal-decay-belongs-at-the-producer }
+      if CProgramMode then
+        Result := IRAppend(IR_BINOP, Result,
+                           IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                           Ord(tkPlus), 0, Ord(tyPointer));
+    end;
 
     AN_DEFAULT:
       { C switch-default MARKER (ASTSLen=1): drop its dispatch IR_LABEL in place.
@@ -9115,17 +9146,9 @@ begin
             the 8-byte Pascal length prefix — same +8 as the store/call paths).
             Without this, `"abc" == (void*)0` hit the Pascal content-compare,
             which dereferences the NULL operand -> SIGSEGV. }
-          if CProgramMode then
-          begin
-            if ASTKind[ASTLeft[node]] = AN_STR_LIT then
-              left := IRAppend(IR_BINOP, left,
-                               IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                               Ord(tkPlus), 0, Ord(tyPointer));
-            if ASTKind[ASTRight[node]] = AN_STR_LIT then
-              right := IRAppend(IR_BINOP, right,
-                                IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                                Ord(tkPlus), 0, Ord(tyPointer));
-          end;
+          { The two +8 adjustments this arm used to apply are gone: a C literal
+            is decayed at the producer, so `"abc" == (void*)0` already compares
+            char pointers. refactor-c-string-literal-decay-belongs-at-the-producer }
           { {$Q+} arithmetic: ival=1 marks the op overflow-checked; codegen
             traps a wrapped result into PXXOverflow (RE 215 / EIntOverflow).
             Only ordinal +,-,* carry the tag (parser sets ASTQChk). }
@@ -10252,8 +10275,14 @@ begin
           the DESTINATION instead, because Pascal does not permit a string
           literal in a `p: Pointer` at all and pxx should not invent a meaning
           for it. }
+        { PASCAL ONLY. C's literals arrive already decayed from the producer
+          arm of IRLowerAST, so adding 8 again would step past the first eight
+          characters. Pascal keeps the destination-keyed rule below because
+          Pascal does not permit a literal in a plain `p: Pointer` and pxx
+          should not invent a meaning for it.
+          refactor-c-string-literal-decay-belongs-at-the-producer }
         if (ASTKind[ASTRight[node]] = AN_STR_LIT) and (lhsTk = tyPointer) and
-           (CProgramMode or IsNodePChar(ASTLeft[node])) then
+           (not CProgramMode) and IsNodePChar(ASTLeft[node]) then
           value := IRAppend(IR_BINOP, value,
                             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                             Ord(tkPlus), 0, Ord(tyPointer));
@@ -10462,11 +10491,11 @@ begin
             apply. Without it `const char *ver(void){ return "1.3.1"; }` returns a
             pointer at the length byte, so ver()[0] is 5 not '1' (zlib's version
             check). C-mode only; Pascal self-build unaffected. }
-          if CProgramMode and (ASTKind[ASTLeft[node]] = AN_STR_LIT) and
-             (CurProc >= 0) and (Procs[CurProc].RetType = tyPointer) then
-            value := IRAppend(IR_BINOP, value,
-                              IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                              Ord(tkPlus), 0, Ord(tyPointer));
+          { The +8 this arm used to apply now happens once at the producer, so
+            it is gone from here. It was the site that failed most visibly:
+            keyed on ASTKind[ASTLeft[node]], it saw through nothing, and
+            `return (1, "s")` returned the length prefix.
+            refactor-c-string-literal-decay-belongs-at-the-producer }
           if (CurProc >= 0) and (Procs[CurProc].RetSymIdx >= 0) then
           begin
             varIdx := Procs[CurProc].RetSymIdx;
