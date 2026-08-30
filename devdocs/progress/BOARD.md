@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (366)
+## backlog (367)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -363,6 +363,7 @@ _none_
 | feature-rtl-libc-frontend-sites-and-thread-errno | A | 40 | feature | Finish --rtl-libc: convert the C/Rust/Zig frontend syscall sites, and test the thread errno hazard the raw clone stub creates | — |
 | feature-t-a-second-oracle-dimension-section-alignment | T | 25 | feature | An external alignment oracle: what is left after `df98fea47`, measured | — |
 | feature-t-audit-tests-that-pass-with-the-implementation-removed | T | 40 | feature | frankB wrote a regression test for bug-b-resolver-sends-localhost-to-the-wire, got eight green rows, then reverted the fix to control it — and the test still passed, every row. This box's systemd-resolved is itself RFC 6761 compliant and synthesises the localhost subtree, so the broken code returned the right ANSWER and merely emitted 20 DNS queries to get it. A value assertion was testing systemd-resolved. Three instances of this shape landed in one night. This ticket is the sweep for others. | — |
+| feature-t-dead-commit-is-a-closed-stock-and-a-counter-nobody-will-read | T | 30 | feature | The 350 dead citations are unrecoverable and finished; the risk is now the counter | — |
 | feature-t-lint-token-text-compared-against-a-keyword | T | 35 | feature | Make the never-true guard a lint instead of an audit | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 30 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
@@ -1041,6 +1042,7 @@ _none_
 - [p 30] [P] feature-p-assertions-switch-and-strict-default
 - [p 30] [P] feature-pascal-corpus-passrc
 - [p 30] [P] feature-pascal-management-operators-copy-and-addref
+- [p 30] [T] feature-t-dead-commit-is-a-closed-stock-and-a-counter-nobody-will-read
 - [p 30] [T] feature-t-pasmith-rung-selftest
 - [p 30] [A] feature-toolchain-cli-ux
 - [p 30] [W] feature-web-syndication-feeds

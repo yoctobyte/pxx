@@ -93,4 +93,7 @@ Gate: `tools/pasmith_*_devtest.py` green; the negative control above is
 mandatory, not optional.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — re-scoped 55 -> 25 after measuring; NOT resolved. A stale
+  resolve line stood here, residue from a `progress.sh resolve` run by mistake
+  while moving the file. Removed rather than filled: no work landed, so there is
+  no sha to fill it with.
