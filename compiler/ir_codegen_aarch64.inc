@@ -9,24 +9,43 @@ procedure IREmitNodeAarch64(node: Integer); forward;
 procedure EmitLoadArgvPtrA64;
 { On entry x0 = argv index. Returns x0 = argv[index] C-string pointer. }
 begin
-  EmitI32($D37DF000);                         { lsl x0, x0, #3 }
+  { BOUND THE INDEX AGAINST argc, which this used to skip entirely: the index
+    was scaled and added to the argv base with no compare, so ParamStr(3) with
+    no arguments read past argv's NULL terminator into envp and returned 62
+    characters of an ENVIRONMENT string -- or segfaulted where that slot was
+    unmapped. LO is the UNSIGNED compare, so a negative index is rejected by the
+    same instruction, exactly as x86-64's `jb` does.
+
+    Branch-free: neither LSL, ADD nor LDR touches the flags, so one CMP serves
+    both CSELs. The index is neutralised BEFORE the load so the load itself
+    stays inside the array (out of range reads argv[0], always mapped), and the
+    loaded pointer is neutralised after so the caller gets nil. This is the ONE
+    loader both the managed and the frozen path call, so both are fixed here.
+    bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets }
   EmitI32($18000041);                         { ldr w1, [pc+8] }
   EmitI32($14000002);                         { b [pc+8] }
   EmitGlobRef(BSS_INITIAL_RSP);
   EmitI32($F9400021);                         { ldr x1, [x1] = initial sp }
+  EmitI32($F9400022);                         { ldr x2, [x1] = argc }
+  EmitI32($EB02001F);                         { cmp x0, x2 }
+  EmitI32($9A9F3000);                         { csel x0, x0, xzr, lo (index) }
+  EmitI32($D37DF000);                         { lsl x0, x0, #3 }
   EmitI32($91002021);                         { add x1, x1, #8 (argv base) }
   EmitI32($8B000020);                         { add x0, x1, x0 }
   EmitI32($F9400000);                         { ldr x0, [x0] }
+  EmitI32($9A9F3000);                         { csel x0, x0, xzr, lo (pointer) }
 end;
 
 procedure EmitArgvToAnsiStringA64;
 { On entry x0 = argv index. Returns x0 = managed string handle. }
-var loopStart, donePos, jmpPos, procIdx: Integer;
+var loopStart, donePos, jmpPos, procIdx, nilPos: Integer;
 begin
-  EmitLoadArgvPtrA64;                         { x0 = src }
+  EmitLoadArgvPtrA64;                         { x0 = src, nil when out of range }
   EmitI32($AA0003E1);                         { mov x1, x0 (src) }
   EmitI32($AA0003E3);                         { mov x3, x0 (scan) }
   EmitLoadImmA64(2, 0);                       { x2 = len }
+  { a nil src must not enter the loop -- the first ldrb would fault }
+  nilPos := CodeLen; EmitI32($B4000003);      { cbz x3, done }
   loopStart := CodeLen;
   EmitI32($39400064);                         { ldrb w4, [x3] }
   donePos := CodeLen; EmitI32($34000004);     { cbz w4, done }
@@ -35,6 +54,7 @@ begin
   jmpPos := CodeLen; EmitI32($14000000);      { b loop }
   Patch32(donePos, $34000004 or (((CodeLen - donePos) div 4) and $7FFFF) shl 5);
   Patch32(jmpPos, $14000000 or (((loopStart - jmpPos) div 4) and $03FFFFFF));
+  Patch32(nilPos, $B4000003 or (((CodeLen - nilPos) div 4) and $7FFFF) shl 5);
   EmitI32($AA0203E0);                         { mov x0, x2 (len) }
   procIdx := FindProc('PXXStrFromLit');
   if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
@@ -1698,7 +1718,7 @@ procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
-  classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2: Integer;
+  classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2, p3: Integer;
   pNilPos, pDonePos: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
@@ -2951,10 +2971,12 @@ begin
             end;
             if IRKind[valNode] <> IR_LEA then
               Error('target aarch64: ArgStr expects a string variable');
-            EmitLoadArgvPtrA64;               { x0 = src }
+            EmitLoadArgvPtrA64;               { x0 = src, nil when out of range }
             EmitI32($AA0003E5);               { mov x5, x0 (src) }
             EmitI32($AA0003E3);               { mov x3, x0 (scan) }
             EmitLoadImmA64(4, 0);             { x4 = len }
+            { a nil src must not enter the loop -- the first ldrb would fault }
+            p3 := CodeLen; EmitI32($B4000003); { cbz x3, done }
             p1 := CodeLen;
             EmitI32($39400066);               { ldrb w6, [x3] }
             p2 := CodeLen; EmitI32($34000006); { cbz w6, done }
@@ -2963,9 +2985,15 @@ begin
             j := CodeLen; EmitI32($14000000); { b loop }
             Patch32(p2, $34000006 or (((CodeLen - p2) div 4) and $7FFFF) shl 5);
             Patch32(j, $14000000 or (((p1 - j) div 4) and $03FFFFFF));
-            EmitI32($F104009F);               { cmp x4, #256 }
+            Patch32(p3, $B4000003 or (((CodeLen - p3) div 4) and $7FFFF) shl 5);
+            { 255, not 256. FPC answers 255 for this program (ParamStr returns a
+              ShortString) and so do x86-64, riscv32 and xtensa via
+              FROZEN_CSTR_CAP; aarch64, arm32 and i386 each capped at 256 and
+              were the only three that disagreed. Measured: Length(ParamStr(1))
+              with a 300-byte argument printed 256 here, 255 on the other three. }
+            EmitI32($F103FC9F);               { cmp x4, #FROZEN_CSTR_CAP }
             j := CodeLen; EmitI32($5400000D); { b.le cap_done }
-            EmitLoadImmA64(4, 256);
+            EmitLoadImmA64(4, FROZEN_CSTR_CAP);
             Patch32(j, $5400000D or (((CodeLen - j) div 4) and $7FFFF) shl 5);
             EmitLoadVarAddrA64(IRA[valNode]); { x0 = dst }
             EmitI32($F9000004);               { str x4, [x0] }

@@ -26,28 +26,53 @@ function Is64Bit386(tk: TTypeKind): Boolean; forward;
 procedure IREmitNode386(node: Integer); forward;
 
 procedure EmitLoadArgvPtr386;
-{ On entry eax = argv index. Returns eax = argv[index] C-string pointer. }
+{ On entry eax = argv index. Returns eax = argv[index] C-string pointer, or nil
+  when the index is outside 0..argc-1. }
+var inRange, outDone: Integer;
 begin
-  EmitB($C1); EmitB($E0); EmitB($02);        { shl eax, 2 }
+  { BOUND THE INDEX AGAINST argc, which this used to skip entirely: the index
+    was scaled and added to the argv base with no compare, so ParamStr(3) with
+    no arguments read past argv's NULL terminator into envp and returned 62
+    characters of an ENVIRONMENT string -- or segfaulted where that slot was
+    unmapped. `jb` is the UNSIGNED test, so a negative index is rejected by the
+    same instruction; this is the shape x86-64's EmitArgvToString has had since
+    its own fix, and five backends did not.
+
+    Branched rather than CMOV: this is the i386 target and CMOV is Pentium Pro
+    and later, which is a floor this backend does not otherwise impose. This is
+    the ONE loader both the managed and the frozen path call, so both are fixed
+    here; out of range yields nil and each loop below tests for it.
+    bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets }
   EmitB($8B); EmitB($0D); EmitGlobRef(BSS_INITIAL_RSP); { mov ecx, [initial_sp] }
+  EmitB($3B); EmitB($01);                    { cmp eax, [ecx] (argc) }
+  EmitB($72); inRange := CodeLen; EmitB(0);  { jb in_range }
+  EmitB($31); EmitB($C0);                    { xor eax, eax (nil) }
+  EmitB($EB); outDone := CodeLen; EmitB(0);  { jmp done }
+  PatchRel8(inRange);
+  EmitB($C1); EmitB($E0); EmitB($02);        { shl eax, 2 }
   EmitB($83); EmitB($C1); EmitB($04);        { add ecx, 4 (argv base) }
   EmitB($01); EmitB($C8);                    { add eax, ecx }
   EmitB($8B); EmitB($00);                    { mov eax, [eax] }
+  PatchRel8(outDone);
 end;
 
 procedure EmitArgvToAnsiString386;
 { On entry eax = argv index. Returns eax = managed string handle. }
-var loopStart, donePos, procIdx: Integer;
+var loopStart, donePos, procIdx, nilPos: Integer;
 begin
-  EmitLoadArgvPtr386;                        { eax = src }
+  EmitLoadArgvPtr386;                        { eax = src, nil when out of range }
   EmitB($89); EmitB($C6);                    { mov esi, eax (src) }
   EmitB($31); EmitB($C9);                    { xor ecx, ecx (len) }
+  { a nil src must not enter the loop -- the compare below would fault }
+  EmitB($85); EmitB($F6);                    { test esi, esi }
+  EmitB($0F); EmitB($84); nilPos := CodeLen; EmitI32(0);   { jz done }
   loopStart := CodeLen;
   EmitB($80); EmitB($3C); EmitB($0E); EmitB($00); { cmp byte [esi+ecx], 0 }
   EmitB($0F); EmitB($84); donePos := CodeLen; EmitI32(0);
   EmitB($41);                                { inc ecx }
   EmitB($E9); EmitI32(loopStart - (CodeLen + 4));
   Patch32(donePos, CodeLen - (donePos + 4));
+  Patch32(nilPos, CodeLen - (nilPos + 4));
   EmitB($51);                                { push len }
   EmitB($56);                                { push src }
   procIdx := FindProc('PXXStrFromLit');
@@ -58,20 +83,29 @@ end;
 
 procedure EmitArgvToFixedString386(dstIdx: Integer);
 { On entry eax = argv index. Copy argv[index] into fixed string dstIdx. }
-var loopStart, donePos, capDone, copyLoop, copyDone: Integer;
+var loopStart, donePos, capDone, copyLoop, copyDone, nilPos: Integer;
 begin
-  EmitLoadArgvPtr386;                        { eax = src }
+  EmitLoadArgvPtr386;                        { eax = src, nil when out of range }
   EmitB($89); EmitB($C6);                    { mov esi, eax }
   EmitB($31); EmitB($C9);                    { xor ecx, ecx (len) }
+  { a nil src must not enter the loop -- the compare below would fault }
+  EmitB($85); EmitB($F6);                    { test esi, esi }
+  EmitB($0F); EmitB($84); nilPos := CodeLen; EmitI32(0);   { jz done }
   loopStart := CodeLen;
   EmitB($80); EmitB($3C); EmitB($0E); EmitB($00); { cmp byte [esi+ecx], 0 }
   EmitB($0F); EmitB($84); donePos := CodeLen; EmitI32(0);
   EmitB($41);                                { inc ecx }
   EmitB($E9); EmitI32(loopStart - (CodeLen + 4));
   Patch32(donePos, CodeLen - (donePos + 4));
-  EmitB($81); EmitB($F9); EmitI32(256);      { cmp ecx, 256 }
+  Patch32(nilPos, CodeLen - (nilPos + 4));
+  { 255, not 256. FPC answers 255 for this program (ParamStr returns a
+    ShortString) and so do x86-64, riscv32 and xtensa via FROZEN_CSTR_CAP;
+    i386, arm32 and aarch64 each capped at 256 and were the only three that
+    disagreed. Measured: Length(ParamStr(1)) with a 300-byte argument printed
+    256 here, 255 on the other three. }
+  EmitB($81); EmitB($F9); EmitI32(FROZEN_CSTR_CAP);  { cmp ecx, cap }
   EmitB($0F); EmitB($8E); capDone := CodeLen; EmitI32(0); { jle cap_done }
-  EmitB($B9); EmitI32(256);                  { mov ecx, 256 }
+  EmitB($B9); EmitI32(FROZEN_CSTR_CAP);      { mov ecx, cap }
   Patch32(capDone, CodeLen - (capDone + 4));
   if Syms[dstIdx].Kind = skGlobal then
     begin EmitB($BF); EmitGlobRef(Syms[dstIdx].Offset); end

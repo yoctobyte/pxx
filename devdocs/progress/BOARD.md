@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets | A | 50 | bug | MEASURED 2026-08-31, and it is BIGGER than filed. Two defects, not one. (A) the frozen clamp answers 256 on aarch64/arm32/i386 where x86-64/riscv32/xtensa and FPC answer 255. (B) THE ONE THAT MATTERS: an OUT-OF-RANGE ParamStr is unbounded on all FIVE cross targets -- `ParamStr(3)` with ParamCount=0 returns a 62-character string of ENVIRONMENT bytes on aarch64, arm32, i386, riscv32 and xtensa, and segfaults outright when the slot past argv is unmapped. x86-64 alone bounds the index against argc and returns ''. This is ordinary code -- `ParamStr(1)` before checking ParamCount -- so it is a crash and an information leak, not an edge case. The riscv32 source carries a comment saying `Pascal callers pass 0..ParamCount`, which is not true of the language and was read as a guard. | — |
 | bug-a-no-cross-target-can-build-the-compiler-itself | A | 60 | bug | PARTLY FIXED 2026-08-30. i386, aarch64 and arm32 now BUILD the compiler, and the i386 and aarch64 binaries RUN under qemu and compile a working program -- their shared blocker was `LoadFile` with an array-element destination (cpreproc.inc), fixed by normalising in the frontend rather than teaching five backends a slot-address shape. TWO TARGETS REMAIN, with DIFFERENT causes, neither related to the first: riscv32 `jal displacement 2197196 is outside the encodable range` (reach) and xtensa `stack frame too large (> 32 KB) for a single ADDMI` (frame size) -- the latter is a THIRD defect this ticket originally missed. And the title claim was too strong: wasm32 built the compiler all along and was never measured. arm32 builds but its cross-built compiler SEGFAULTS, which is a fourth, separate defect. | — |
 | bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign | A | 55 | bug | `--threadsafe` on x86-64 gates PXXClassFinalize's string/dynarray pass off (PXX_TS_HARDLOCK), so EVERY managed field of EVERY destroyed class instance leaks: 392 kB -> 398336 kB on 200k instances, in plain Pascal. MEASURED 2026-08-31: the guard is LOAD-BEARING — deleting it segfaults 3/3 at NT=4 and runs clean 3/3 at NT=1, so it is a real allocator race, not a double free. test_threadsafe_class_finalize_race.pas is the positive control, green today. Parked with the fix shape and the kind-6 recursion constraint that kills the one-line version. | — |
 | feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64. | — |
@@ -69,7 +68,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (390)
+## backlog (391)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -299,6 +298,7 @@ _none_
 | feature-a-getinterface-refcounting | A | 45 | feature | __pxxGetInterface stores the instance pointer into the caller's interface variable without an AddRef, so the slot holds a borrowed reference while the compiler treats the variable as managed and releases it at scope exit. Every Supports/GetInterface hit is therefore one release the object never got a retain for. Nothing observed to crash yet, which is why it is a ticket and not an urgent bug — but the asymmetry is real and worth settling deliberately. | — |
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 40 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
 | feature-a-merge-the-wasm-branch-the-shared-file-arms | A | 20 | feature | Branch `wasm` modifies four existing files: compiler.pas (5 edits), exception_emit.inc (1 arm), ir_codegen.inc (1 arm), and lib/rtl/platform.pas (1 additive constant). The last is Track B and carries B's gate, so the merge review spans two lanes, not one. Nothing on the branch is pre-approved. This ticket is the ledger; the branch's own CHARTER table is not visible from master and was stale. | — |
+| feature-a-one-argv-to-frozen-filler-instead-of-x86-64s-inline-copy | A | 30 | feature | argv -> frozen string is implemented TWICE: five backends call the RTL's PXXCStrToFrozen, and x86-64's EmitArgvToString open-codes the same contract as emitted bytes (its own strlen, its own cmp against FROZEN_CSTR_CAP, its own rep movsb). They agree on 255 today, and the agreement is maintained by hand. Normalising means deleting the inline copy and making x86-64 call what the other five already call -- no observable behaviour change. Filed rather than bundled into the crash fix that measured it. | — |
 | feature-a-promoint-variant-esp-targets | A+S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 45 | feature | Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix. | — |
 | feature-a-report-fixed-cap-headroom | A | 40 | feature | Three fixed caps in defs.inc have now been raised AFTER a user hit them — MAX_CODE 8->16 MB, MAX_STRS 8192->65536, MAX_CODE 16->32 MB — and each was found by a program failing, never by anyone looking. Nothing reports how close a compile came to any cap, so the only headroom signal the project has is an overflow. Proposal: a PXXDBG=a.caps topic printing per-cap utilisation at end of compile, so `the next one` is a number someone can read instead of an incident. Small, additive, no behaviour change. | — |
@@ -737,9 +737,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2903)
+## done (2904)
 
-2903 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2904 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -1124,6 +1124,7 @@ _none_
 - [p 30] [A] feature-a-a-general-x86-64-relocatable-object-writer
 - [p 30] [A+S] feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
+- [p 30] [A] feature-a-one-argv-to-frozen-filler-instead-of-x86-64s-inline-copy
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
 - [p 30] [E] feature-demo-nilpy-ide
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised

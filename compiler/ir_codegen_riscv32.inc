@@ -2669,24 +2669,53 @@ begin
             if argNode = -1 then
               Error('target riscv32: ArgStr expects a destination string');
             valNode := IRA[argNode];
-            rv32_slli(reg_a0, reg_a0, 2);
+            { BOUND THE INDEX AGAINST argc. It used to be scaled and added to the
+              argv base with no comparison at all, on the strength of a comment
+              saying "Pascal callers pass 0..ParamCount" -- which the language
+              does not require and FPC does not assume: ParamStr(3) with no
+              arguments is legal and answers ''. Measured before this line
+              existed: it read PAST argv's NULL terminator into envp and
+              returned 62 characters of an ENVIRONMENT string, or segfaulted
+              where that slot was unmapped. x86-64's EmitArgvToString has had
+              the compare since its own fix; five backends did not.
+
+              Branch-free, because a mask is shorter than a branch here and the
+              index has to be neutralised TWICE: once so the load itself stays
+              inside the array (out of range reads argv[0], always mapped), and
+              once on the loaded pointer so the caller gets nil.
+              PXXCStrToFrozen turns nil into '' and the managed arm below tests
+              it, so the whole contract falls out of these four instructions.
+              bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets }
             EmitLoadGlobAddrRISCV32(reg_t1, BSS_INITIAL_RSP);
             rv32_lw(reg_t1, reg_t1, 0);               { initial sp }
+            rv32_lw(reg_t2, reg_t1, 0);               { argc }
+            rv32_sltu(reg_t2, reg_a0, reg_t2);        { 1 when 0 <= index < argc }
+            rv32_sub(reg_t2, reg_zero, reg_t2);       { -1 in range, 0 out }
+            rv32_and(reg_a0, reg_a0, reg_t2);         { out of range -> index 0 }
+            rv32_slli(reg_a0, reg_a0, 2);
             rv32_addi(reg_t1, reg_t1, 4);             { argv base }
             rv32_add(reg_a0, reg_t1, reg_a0);
-            rv32_lw(reg_a0, reg_a0, 0);               { argv[index] (or junk past envp for a huge index — Pascal callers pass 0..ParamCount) }
+            rv32_lw(reg_a0, reg_a0, 0);               { argv[index] }
+            rv32_and(reg_a0, reg_a0, reg_t2);         { out of range -> nil }
             if (IRKind[valNode] = IR_LOAD_SYM) and
                (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
             begin
-              { managed dest: handle = FromLit(strlen(src), src); publish }
+              { managed dest: handle = FromLit(strlen(src), src); publish.
+                A nil src (index out of range) must not enter the strlen loop --
+                the first lbu would fault. Masking the loop's own guard is
+                enough: with a1 = 0 the beq below is never reached, so skip
+                straight past by testing src first. }
               rv32_addi(reg_a1, reg_a0, 0);           { a1 = src }
               rv32_addi(reg_a2, reg_zero, 0);         { len }
+              j := CodeLen;                           { patched: skip strlen when src = nil }
+              rv32_beq(reg_a1, reg_zero, 0);
               i := CodeLen;                           { strlen loop }
               rv32_add(reg_t0, reg_a1, reg_a2);
               rv32_lbu(reg_t0, reg_t0, 0);
               rv32_beq(reg_t0, reg_zero, 12);
               rv32_addi(reg_a2, reg_a2, 1);
               EmitI32(EncodeRISCVJAL(reg_zero, i - CodeLen));
+              Patch32(j, EncodeRISCVBranch(0, reg_a1, reg_zero, CodeLen - j));
               rv32_addi(reg_a0, reg_a2, 0);           { a0 = len (a1 = src) }
               i := FindProc('PXXStrFromLit');
               if i < 0 then Error('compiler error: PXXStrFromLit not found');

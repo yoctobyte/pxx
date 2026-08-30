@@ -922,23 +922,43 @@ end;
 procedure EmitLoadArgvPtrArm32;
 { On entry r0 = argv index. Returns r0 = argv[index] C-string pointer. }
 begin
-  EmitI32($E1A00100);                 { lsl r0, r0, #2 }
+  { BOUND THE INDEX AGAINST argc, which this used to skip entirely: the index
+    was scaled and added to the argv base with no compare, so ParamStr(3) with
+    no arguments read past argv's NULL terminator into envp and returned 62
+    characters of an ENVIRONMENT string -- or segfaulted where that slot was
+    unmapped. The compare is UNSIGNED (CS/CC, not GE/LT) so a negative index is
+    rejected by the same instruction, exactly as x86-64's `jb` does.
+
+    Predicated rather than branched: ARM's conditional execution expresses
+    "in range: index it; out of range: nil" without a forward patch, and this
+    is the ONE loader both the managed and the frozen path call, so both are
+    fixed here. Out of range yields nil, which PXXStrFromLit's caller and the
+    frozen copy below both already have to handle.
+    bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets }
   EmitI32($E59F1000);                 { ldr r1, [pc] }
   EmitI32($EA000000);                 { b .+8 }
   EmitGlobRef(BSS_INITIAL_RSP);
   EmitI32($E5911000);                 { ldr r1, [r1] = initial sp }
-  EmitI32($E2811004);                 { add r1, r1, #4 (argv base) }
-  EmitI32($E0810000);                 { add r0, r1, r0 }
-  EmitI32($E5900000);                 { ldr r0, [r0] = argv[index] }
+  EmitI32($E5912000);                 { ldr r2, [r1] = argc }
+  EmitI32($E1500002);                 { cmp r0, r2 (unsigned) }
+  EmitI32($31A00100);                 { lslcc r0, r0, #2 }
+  EmitI32($32811004);                 { addcc r1, r1, #4 (argv base) }
+  EmitI32($30810000);                 { addcc r0, r1, r0 }
+  EmitI32($35900000);                 { ldrcc r0, [r0] = argv[index] }
+  EmitI32($23A00000);                 { movcs r0, #0 (out of range -> nil) }
 end;
 
 procedure EmitArgvToAnsiStringArm32;
 { On entry r0 = argv index. Returns r0 = managed string handle. }
-var procIdx, loopStart, donePos: Integer;
+var procIdx, loopStart, donePos, nilPos: Integer;
 begin
-  EmitLoadArgvPtrArm32;               { r0 = src }
+  EmitLoadArgvPtrArm32;               { r0 = src, nil when out of range }
   EmitI32($E1A01000);                 { mov r1, r0 (src) }
   EmitI32($E3A02000);                 { mov r2, #0 (len) }
+  { a nil src must not enter the loop -- the first ldrb would fault }
+  EmitI32($E3510000);                 { cmp r1, #0 }
+  nilPos := CodeLen;
+  EmitI32($0A000000);                 { beq done }
   loopStart := CodeLen;
   EmitI32($E7D13002);                 { ldrb r3, [r1, r2] }
   EmitI32($E3530000);                 { cmp r3, #0 }
@@ -947,6 +967,7 @@ begin
   EmitI32($E2822001);                 { add r2, r2, #1 }
   EmitI32($EA000000 or ((((loopStart - CodeLen) div 4) - 2) and $00ffffff));
   Patch32(donePos, $0A000000 or ((((CodeLen - donePos) div 4) - 2) and $00ffffff));
+  Patch32(nilPos, $0A000000 or ((((CodeLen - nilPos) div 4) - 2) and $00ffffff));
   EmitI32($E1A00002);                 { mov r0, r2 (len) }
   procIdx := FindProc('PXXStrFromLit');
   if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
@@ -955,11 +976,15 @@ end;
 
 procedure EmitArgvToFixedStringArm32(dstIdx: Integer);
 { On entry r0 = argv index. Copy argv[index] into fixed string dstIdx. }
-var loopStart, donePos, capDone: Integer;
+var loopStart, donePos, capDone, nilPos: Integer;
 begin
-  EmitLoadArgvPtrArm32;               { r0 = src }
+  EmitLoadArgvPtrArm32;               { r0 = src, nil when out of range }
   EmitI32($E1A05000);                 { mov r5, r0 (src) }
   EmitI32($E3A04000);                 { mov r4, #0 (len) }
+  { a nil src must not enter the loop -- the first ldrb would fault }
+  EmitI32($E3550000);                 { cmp r5, #0 }
+  nilPos := CodeLen;
+  EmitI32($0A000000);                 { beq done }
   loopStart := CodeLen;
   EmitI32($E7D58004);                 { ldrb r8, [r5, r4] }
   EmitI32($E3580000);                 { cmp r8, #0 }
@@ -968,10 +993,16 @@ begin
   EmitI32($E2844001);                 { add r4, r4, #1 }
   EmitI32($EA000000 or ((((loopStart - CodeLen) div 4) - 2) and $00ffffff));
   Patch32(donePos, $0A000000 or ((((CodeLen - donePos) div 4) - 2) and $00ffffff));
-  EmitI32($E3540C01);                 { cmp r4, #256 }
+  Patch32(nilPos, $0A000000 or ((((CodeLen - nilPos) div 4) - 2) and $00ffffff));
+  { 255, not 256. FPC answers 255 for this program (ParamStr returns a
+    ShortString) and so do x86-64, riscv32 and xtensa via FROZEN_CSTR_CAP;
+    arm32, aarch64 and i386 each capped at 256 and were the only three that
+    disagreed. Measured, not read: `Length(ParamStr(1))` with a 300-byte
+    argument printed 256 here and 255 on the other three. }
+  EmitI32($E35400FF);                 { cmp r4, #FROZEN_CSTR_CAP }
   capDone := CodeLen;
   EmitI32($DA000000);                 { ble cap_done }
-  EmitLoadImmArm32(4, 256);
+  EmitLoadImmArm32(4, FROZEN_CSTR_CAP);
   Patch32(capDone, $DA000000 or ((((CodeLen - capDone) div 4) - 2) and $00ffffff));
   EmitLoadVarAddrArm32(dstIdx);       { r0 = dst }
   EmitI32($E5804000);                 { str r4, [r0] }

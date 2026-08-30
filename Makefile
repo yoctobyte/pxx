@@ -13284,7 +13284,31 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh test_i386_pwa.out.1 "$$(tail -n1 $(TESTTMP)/test_i386_pwa.out)" "PARWROK"
 	tools/expect_same.sh test_i386_pwa.out.2 "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_i386_pwa.out)" "200"
 	tools/expect_same.sh test_i386_pwa.out.3 "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_i386_pwa.out | sort -u | wc -l)" "200"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + frozen-strlen-deref + rec-arr-store + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin ok (output identical to x86-64)"
+	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL
+	# terminator and everything past it is envp, so an index one too large is a
+	# nil deref and an index a little larger reads live environment memory out
+	# as a string. `ParamStr(1)` before checking ParamCount is ordinary code.
+	# Before the bound landed, the pre-fix compiler SIGSEGV'd here on every
+	# cross target -- i386/arm32/aarch64 on the first nil, riscv32/xtensa after
+	# first printing 62 characters of the environment, because those two reach
+	# PXXCStrToFrozen (which answers '' for nil) on the frozen path but not on
+	# the managed one. Compared against the x86-64 build rather than a literal:
+	# x86-64 is the backend that always had the argc comparison.
+	# bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
+	./$(COMPILER) --target=i386 test/test_paramstr_out_of_range.pas $(TESTTMP)/test_i386_paramstr_oor
+	./$(COMPILER) test/test_paramstr_out_of_range.pas $(TESTTMP)/test_i386_paramstr_oor_x64
+	tools/expect_same.sh i386/test_i386_paramstr_oor "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_paramstr_oor 2>&1; echo "exit=$$?")" "$$($(TESTTMP)/test_i386_paramstr_oor_x64 2>&1; echo "exit=$$?")"
+	# ...and the same construct with an IN-range argument longer than the hidden
+	# frozen temp. 255 on the two expression rows is FPC parity, not a capacity;
+	# the managed row must stay 300, since that path sizes its allocation from
+	# the length and must NOT gain a clamp. rc is checked separately because the
+	# x86-64 form of this bug was a runaway loop, not a wrong string.
+	./$(COMPILER) --target=i386 test/test_paramstr_long_arg.pas $(TESTTMP)/test_i386_paramstr_long
+	@long=$$(printf 'x%.0s' $$(seq 1 300)); \
+	  out=$$(timeout 120 tools/run_target.sh i386 $(TESTTMP)/test_i386_paramstr_long alpha "$$long" 2>&1); rc=$$?; \
+	  if [ $$rc -ne 0 ]; then echo "i386/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
+	  tools/expect_same.sh i386/test_i386_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + frozen-strlen-deref + rec-arr-store + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin + paramstr-bounds ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas $(TESTTMP)/test_aarch64_hello
@@ -13745,7 +13769,31 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh test_aarch64_pwa.out.1 "$$(tail -n1 $(TESTTMP)/test_aarch64_pwa.out)" "PARWROK"
 	tools/expect_same.sh test_aarch64_pwa.out.2 "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_aarch64_pwa.out)" "200"
 	tools/expect_same.sh test_aarch64_pwa.out.3 "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_aarch64_pwa.out | sort -u | wc -l)" "200"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin ok (output identical to x86-64)"
+	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL
+	# terminator and everything past it is envp, so an index one too large is a
+	# nil deref and an index a little larger reads live environment memory out
+	# as a string. `ParamStr(1)` before checking ParamCount is ordinary code.
+	# Before the bound landed, the pre-fix compiler SIGSEGV'd here on every
+	# cross target -- i386/arm32/aarch64 on the first nil, riscv32/xtensa after
+	# first printing 62 characters of the environment, because those two reach
+	# PXXCStrToFrozen (which answers '' for nil) on the frozen path but not on
+	# the managed one. Compared against the x86-64 build rather than a literal:
+	# x86-64 is the backend that always had the argc comparison.
+	# bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
+	./$(COMPILER) --target=aarch64 test/test_paramstr_out_of_range.pas $(TESTTMP)/test_aarch64_paramstr_oor
+	./$(COMPILER) test/test_paramstr_out_of_range.pas $(TESTTMP)/test_aarch64_paramstr_oor_x64
+	tools/expect_same.sh aarch64/test_aarch64_paramstr_oor "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_paramstr_oor 2>&1; echo "exit=$$?")" "$$($(TESTTMP)/test_aarch64_paramstr_oor_x64 2>&1; echo "exit=$$?")"
+	# ...and the same construct with an IN-range argument longer than the hidden
+	# frozen temp. 255 on the two expression rows is FPC parity, not a capacity;
+	# the managed row must stay 300, since that path sizes its allocation from
+	# the length and must NOT gain a clamp. rc is checked separately because the
+	# x86-64 form of this bug was a runaway loop, not a wrong string.
+	./$(COMPILER) --target=aarch64 test/test_paramstr_long_arg.pas $(TESTTMP)/test_aarch64_paramstr_long
+	@long=$$(printf 'x%.0s' $$(seq 1 300)); \
+	  out=$$(timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_paramstr_long alpha "$$long" 2>&1); rc=$$?; \
+	  if [ $$rc -ne 0 ]; then echo "aarch64/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
+	  tools/expect_same.sh aarch64/test_aarch64_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin + paramstr-bounds ok (output identical to x86-64)"
 
 test-riscv32: $(COMPILER)
 	# frozen inline strings (string[N]): riscv32 had NO frozen store, no frozen Length
@@ -14240,7 +14288,31 @@ test-riscv32: $(COMPILER)
 	  { echo "rv32_bigbody: code=$$sz does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for"; exit 1; }
 	./$(COMPILER) $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody_x64
 	tools/expect_same.sh riscv32/test_rv32_bigbody "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_bigbody)" "$$($(TESTTMP)/test_rv32_bigbody_x64)"
-	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery + far-jump body ok"
+	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL
+	# terminator and everything past it is envp, so an index one too large is a
+	# nil deref and an index a little larger reads live environment memory out
+	# as a string. `ParamStr(1)` before checking ParamCount is ordinary code.
+	# Before the bound landed, the pre-fix compiler SIGSEGV'd here on every
+	# cross target -- i386/arm32/aarch64 on the first nil, riscv32/xtensa after
+	# first printing 62 characters of the environment, because those two reach
+	# PXXCStrToFrozen (which answers '' for nil) on the frozen path but not on
+	# the managed one. Compared against the x86-64 build rather than a literal:
+	# x86-64 is the backend that always had the argc comparison.
+	# bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
+	./$(COMPILER) --target=riscv32 test/test_paramstr_out_of_range.pas $(TESTTMP)/test_riscv32_paramstr_oor
+	./$(COMPILER) test/test_paramstr_out_of_range.pas $(TESTTMP)/test_riscv32_paramstr_oor_x64
+	tools/expect_same.sh riscv32/test_riscv32_paramstr_oor "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_paramstr_oor 2>&1; echo "exit=$$?")" "$$($(TESTTMP)/test_riscv32_paramstr_oor_x64 2>&1; echo "exit=$$?")"
+	# ...and the same construct with an IN-range argument longer than the hidden
+	# frozen temp. 255 on the two expression rows is FPC parity, not a capacity;
+	# the managed row must stay 300, since that path sizes its allocation from
+	# the length and must NOT gain a clamp. rc is checked separately because the
+	# x86-64 form of this bug was a runaway loop, not a wrong string.
+	./$(COMPILER) --target=riscv32 test/test_paramstr_long_arg.pas $(TESTTMP)/test_riscv32_paramstr_long
+	@long=$$(printf 'x%.0s' $$(seq 1 300)); \
+	  out=$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_paramstr_long alpha "$$long" 2>&1); rc=$$?; \
+	  if [ $$rc -ne 0 ]; then echo "riscv32/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
+	  tools/expect_same.sh riscv32/test_riscv32_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
+	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery + far-jump body + paramstr-bounds ok"
 
 
 # ---------------------------------------------------------------------------
@@ -14739,6 +14811,14 @@ test-xtensa: $(COMPILER)
 	  out=$$(timeout 60 $(TESTTMP)/test_paramstr_long26 alpha "$$long" 2>&1); rc=$$?; \
 	  if [ $$rc -ne 0 ]; then echo "test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
 	  tools/expect_same.sh test_paramstr_long26 "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
+	# The x86-64 half of the out-of-range bound, so the oracle the five cross
+	# rows compare against is itself asserted rather than assumed. This is the
+	# only backend that had the argc comparison before 2026-08-31, and the cross
+	# rows are written as "same as x86-64" -- if this one regressed they would
+	# all agree on the wrong answer and stay green.
+	# bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
+	./$(COMPILER) test/test_paramstr_out_of_range.pas $(TESTTMP)/test_paramstr_oor26
+	tools/expect_same.sh test_paramstr_oor26 "$$($(TESTTMP)/test_paramstr_oor26 2>&1; echo "exit=$$?")" "$$(printf 'count=0\nnil=0\nlit=0\nvar=0\nmanaged=0\nnilmanaged=0\ndone\nexit=0')"
 	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
 	# which answered FALSE while b printed BBBB with Length 4 -- the equality
 	# guard was gated on tyAnsiString only, so both-frozen fell through to the
@@ -14993,7 +15073,31 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall_x64
 	tools/expect_same.sh xtensa/xt_bigcall "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_bigcall)" "$$($(TESTTMP)/xt_bigcall_x64)"
 	tools/expect_same.sh xtensa-windowed/xt_bigcall "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_bigcall_w)" "$$($(TESTTMP)/xt_bigcall_x64)"
-	@echo "hosted xtensa: 110 programs Call0 + 8 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
+	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL
+	# terminator and everything past it is envp, so an index one too large is a
+	# nil deref and an index a little larger reads live environment memory out
+	# as a string. `ParamStr(1)` before checking ParamCount is ordinary code.
+	# Before the bound landed, the pre-fix compiler SIGSEGV'd here on every
+	# cross target -- i386/arm32/aarch64 on the first nil, riscv32/xtensa after
+	# first printing 62 characters of the environment, because those two reach
+	# PXXCStrToFrozen (which answers '' for nil) on the frozen path but not on
+	# the managed one. Compared against the x86-64 build rather than a literal:
+	# x86-64 is the backend that always had the argc comparison.
+	# bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_paramstr_out_of_range.pas $(TESTTMP)/test_xtensa_paramstr_oor
+	./$(COMPILER) test/test_paramstr_out_of_range.pas $(TESTTMP)/test_xtensa_paramstr_oor_x64
+	tools/expect_same.sh xtensa/test_xtensa_paramstr_oor "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_paramstr_oor 2>&1; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_paramstr_oor_x64 2>&1; echo "exit=$$?")"
+	# ...and the same construct with an IN-range argument longer than the hidden
+	# frozen temp. 255 on the two expression rows is FPC parity, not a capacity;
+	# the managed row must stay 300, since that path sizes its allocation from
+	# the length and must NOT gain a clamp. rc is checked separately because the
+	# x86-64 form of this bug was a runaway loop, not a wrong string.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_paramstr_long_arg.pas $(TESTTMP)/test_xtensa_paramstr_long
+	@long=$$(printf 'x%.0s' $$(seq 1 300)); \
+	  out=$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_paramstr_long alpha "$$long" 2>&1); rc=$$?; \
+	  if [ $$rc -ne 0 ]; then echo "xtensa/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
+	  tools/expect_same.sh xtensa/test_xtensa_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
+	@echo "hosted xtensa: 112 programs Call0 + 8 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
@@ -15448,7 +15552,31 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh test_arm32_pwa.out.1 "$$(tail -n1 $(TESTTMP)/test_arm32_pwa.out)" "PARWROK"
 	tools/expect_same.sh test_arm32_pwa.out.2 "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_arm32_pwa.out)" "200"
 	tools/expect_same.sh test_arm32_pwa.out.3 "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_arm32_pwa.out | sort -u | wc -l)" "200"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + aggregate-stackargs + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin ok (output identical to x86-64)"
+	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL
+	# terminator and everything past it is envp, so an index one too large is a
+	# nil deref and an index a little larger reads live environment memory out
+	# as a string. `ParamStr(1)` before checking ParamCount is ordinary code.
+	# Before the bound landed, the pre-fix compiler SIGSEGV'd here on every
+	# cross target -- i386/arm32/aarch64 on the first nil, riscv32/xtensa after
+	# first printing 62 characters of the environment, because those two reach
+	# PXXCStrToFrozen (which answers '' for nil) on the frozen path but not on
+	# the managed one. Compared against the x86-64 build rather than a literal:
+	# x86-64 is the backend that always had the argc comparison.
+	# bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
+	./$(COMPILER) --target=arm32 test/test_paramstr_out_of_range.pas $(TESTTMP)/test_arm32_paramstr_oor
+	./$(COMPILER) test/test_paramstr_out_of_range.pas $(TESTTMP)/test_arm32_paramstr_oor_x64
+	tools/expect_same.sh arm32/test_arm32_paramstr_oor "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_paramstr_oor 2>&1; echo "exit=$$?")" "$$($(TESTTMP)/test_arm32_paramstr_oor_x64 2>&1; echo "exit=$$?")"
+	# ...and the same construct with an IN-range argument longer than the hidden
+	# frozen temp. 255 on the two expression rows is FPC parity, not a capacity;
+	# the managed row must stay 300, since that path sizes its allocation from
+	# the length and must NOT gain a clamp. rc is checked separately because the
+	# x86-64 form of this bug was a runaway loop, not a wrong string.
+	./$(COMPILER) --target=arm32 test/test_paramstr_long_arg.pas $(TESTTMP)/test_arm32_paramstr_long
+	@long=$$(printf 'x%.0s' $$(seq 1 300)); \
+	  out=$$(timeout 120 tools/run_target.sh arm32 $(TESTTMP)/test_arm32_paramstr_long alpha "$$long" 2>&1); rc=$$?; \
+	  if [ $$rc -ne 0 ]; then echo "arm32/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
+	  tools/expect_same.sh arm32/test_arm32_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + aggregate-stackargs + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin + paramstr-bounds ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

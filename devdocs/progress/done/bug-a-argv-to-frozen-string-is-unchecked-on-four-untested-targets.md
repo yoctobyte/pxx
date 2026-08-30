@@ -3,10 +3,11 @@ slug: bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
 track: A
 prio: 50
 type: bug
-status: working
+status: done
 owner: frankA
 blocked-by: []
-summary: "MEASURED 2026-08-31, and it is BIGGER than filed. Two defects, not one. (A) the frozen clamp answers 256 on aarch64/arm32/i386 where x86-64/riscv32/xtensa and FPC answer 255. (B) THE ONE THAT MATTERS: an OUT-OF-RANGE ParamStr is unbounded on all FIVE cross targets -- `ParamStr(3)` with ParamCount=0 returns a 62-character string of ENVIRONMENT bytes on aarch64, arm32, i386, riscv32 and xtensa, and segfaults outright when the slot past argv is unmapped. x86-64 alone bounds the index against argc and returns ''. This is ordinary code -- `ParamStr(1)` before checking ParamCount -- so it is a crash and an information leak, not an edge case. The riscv32 source carries a comment saying `Pascal callers pass 0..ParamCount`, which is not true of the language and was read as a guard."
+resolved: PENDING-COMMIT
+summary: "FIXED 2026-08-31 on all five cross targets, verified under each runner and against the pre-fix binary. Two defects, not one. (A) an OUT-OF-RANGE ParamStr was unbounded on i386/arm32/aarch64/riscv32/xtensa: `ParamStr(ParamCount+1)` dereferences argv[argc], the vector's own NULL terminator, and a larger index reads envp out as a string -- three targets SIGSEGV'd on the first nil, two printed 62 characters of environment memory first and crashed on the managed path. x86-64 alone compared against argc. (B) the frozen clamp answered 256 on aarch64/arm32/i386 where x86-64, riscv32, xtensa and FPC answer 255. Each backend now bounds the index and yields nil out of range, which `PXXCStrToFrozen` already turns into ''. New test/test_paramstr_out_of_range.pas plus test_paramstr_long_arg wired into all five per-target recipes and into a native row that asserts the oracle. Design half filed separately: only x86-64 still open-codes the filler the other five call."
 ---
 
 # argv → frozen string: four targets never checked, and the clamp is per-path
@@ -158,3 +159,70 @@ already shared: five of six backends call `PXXCStrToFrozen`, and only
 one copy not three, and normalising it means making x86-64 call the RTL routine
 the other five already use. Separate change, no observable behaviour, so not
 bundled with a crash fix.
+
+## Fixed 2026-08-31 — both defects, all five targets, run not read
+
+Each cross backend now compares the index against `argc` and produces a **nil**
+source pointer when it is out of range. That single change answers both halves
+on the frozen path, because `PXXCStrToFrozen` already maps `nil` to `''` and
+already caps at `FROZEN_CSTR_CAP` = 255; the managed path needed its own nil arm
+before its inline strlen loop, which is where riscv32 and xtensa were still
+crashing after the frozen path was correct.
+
+Per target, and they are not the same edit:
+
+| target | bound | nil arm on the managed path |
+| --- | --- | --- |
+| i386 | `cmp eax,[ecx]` / `jb`, `xor eax,eax` out of range | `test esi,esi` / `jz` |
+| arm32 | predicated: `cmp r0,r2` then `lslcc/addcc/ldrcc`, `movcs r0,#0` | `cmp rX,#0` / `beq` |
+| aarch64 | `ldr x2,[x1]`, `cmp x0,x2`, two `csel x0,x0,xzr,lo` | `cbz x3` |
+| riscv32 | branch-free: `sltu` + `sub` from zero → a mask, ANDed over both the index and the loaded pointer | `beq` before the strlen loop |
+| xtensa | `bgeu a2,a9,.oor` in the existing `EmitAsmXtensa` block | `beq a3,a6,.done` first in the loop |
+
+The three that also answered **256** (aarch64, arm32, i386) now clamp with
+`FROZEN_CSTR_CAP` rather than a literal, so the constant has one definition.
+
+### Verified under each runner, both directions
+
+`test/test_paramstr_out_of_range.pas` (new) with no arguments, and
+`test/test_paramstr_long_arg.pas` with a 300-byte argument. All six targets:
+
+```
+oor : count=0 nil=0 lit=0 var=0 managed=0 nilmanaged=0 done
+long: count=2 expr[1]len=5 expr[2]len=255 managed=300 done
+```
+
+**And the same rows against `pinned`, which is the pre-fix compiler** — because
+a test written after a fix that has never failed is not a test:
+
+```
+i386 aarch64 arm32   nil= SIGSEGV                        (frozen fill, first nil)
+riscv32 xtensa       nil=0 lit=62 var=62 managed=62 then SIGSEGV
+i386 aarch64 arm32   long: expr[2]len=256                (the clamp half)
+```
+
+Every row fires on the old binary and passes on the new one, on every target it
+is wired to. The riscv32/xtensa split is the reason the new test has SIX rows
+and not two: a probe that stopped at `nil=` would have called those two clean
+while they were still reading environment memory out as a string.
+
+### Wired
+
+`test-i386`, `test-aarch64`, `test-riscv32`, `test-xtensa`, `test-arm32` each
+gained both rows, compared against the x86-64 build of the same program. The
+x86-64 oracle is itself asserted by a native row against a literal expectation —
+otherwise a regression in the one backend that was always right would make all
+five cross rows agree on the wrong answer and stay green.
+
+### The third row that is not in the table
+
+`ParamStr(3)` and `ParamStr(n)` are both in the test on purpose. Only the
+variable form was exercised before, and a literal index is the arm any future
+constant-fold would take. Neither costs anything to keep.
+
+### Design half — filed, not bundled
+
+`feature-a-one-argv-to-frozen-filler-instead-of-x86-64s-inline-copy`. Measured,
+the duplication is **one copy, not three**: five of six backends already call
+`PXXCStrToFrozen`, and only x86-64's `EmitArgvToString` reimplements it as
+emitted bytes. No observable behaviour, so it does not belong in a crash fix.

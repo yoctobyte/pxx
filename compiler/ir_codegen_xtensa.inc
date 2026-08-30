@@ -2723,20 +2723,35 @@ begin
             if argNode = -1 then
               Error('target xtensa: ArgStr expects a destination string');
             valNode := IRA[argNode];
-            { index*4: xtensa has no shift-immediate, so two adds. }
-            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a2);
-            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a2);
+            { BOUND THE INDEX AGAINST argc, which this used to skip entirely:
+              the index was scaled and added to the argv base with no compare,
+              so ParamStr(3) with no arguments read past argv's NULL terminator
+              into envp and returned 62 characters of an ENVIRONMENT string --
+              or segfaulted where that slot was unmapped. `bgeu` is unsigned, so
+              it rejects a negative index in the same instruction, exactly as
+              x86-64's `jb` does. Out of range yields NIL, and PXXCStrToFrozen
+              turns nil into '' for free.
+              bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets }
             EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
-            xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 0);  { initial sp }
-            xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, 4);  { argv base }
-            xtensa_add(reg_xtensa_a2, reg_xtensa_a8, reg_xtensa_a2);
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { argv[index] }
+            EmitAsmXtensa(['l32i a8, a8, 0',            { initial sp }
+                           'l32i a9, a8, 0',            { argc }
+                           'bgeu a2, a9, .oor',         { unsigned: catches < 0 too }
+                           'add a2, a2, a2', 'add a2, a2, a2',  { index*4, no shift-imm }
+                           'addi a8, a8, 4',            { argv base }
+                           'add a2, a8, a2',
+                           'l32i a2, a2, 0',            { argv[index] }
+                           'j .done',
+                           '.oor:', 'movi a2, 0',
+                           '.done:']);
             if (IRKind[valNode] = IR_LOAD_SYM) and
                (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
             begin
               { managed dest: strlen, PXXStrFromLit(len, src), publish. }
               xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);    { a3 = src }
+              { `beq a3, a6, .done` first: a nil src must not enter the loop,
+                whose first l8ui would fault. }
               EmitAsmXtensa(['movi a4, 0', 'movi a6, 0',
+                             'beq a3, a6, .done',
                              '.lp:', 'add a5, a3, a4', 'l8ui a5, a5, 0',
                              'beq a5, a6, .done', 'addi a4, a4, 1', 'j .lp',
                              '.done:']);
