@@ -368,7 +368,7 @@ _none_
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 15 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
-| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall, feature-a-rdrand-cpuid-compiler-builtins |
+| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-libc-frontend-sites-and-thread-errno | A | 40 | feature | Finish --rtl-libc: convert the C/Rust/Zig frontend syscall sites, and test the thread errno hazard the raw clone stub creates | — |
 | feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets | T | 40 | feature | The csmith oracle is a checksum of the globals, so it is complete for VALUES and structurally blind to LAYOUT: a struct whose members sit at the wrong offsets stores and loads consistently and produces an identical checksum. Predicted 2026-07-13, unacted on, and a real offset bug then survived every batch since -- 443 on 2026-08-30 alone. Proposes a layout dimension: emit offsetof for every member of every generated struct and diff against gcc. | — |
@@ -452,12 +452,13 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (22)
+## backlog_new (23)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data | A | 35 | bug | The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros. | — |
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 25 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
+| bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target | A+S | 45 | bug | __pxxCpuHasHwRandom / __pxxHwRandom64 are excluded from the builtin-unit pull by an `and (not TargetIsEspClass)` guard in pasparser_prog.inc, so naming either on any ESP target is `error: undefined variable`. lib/rtl/random.pas calls them unconditionally -- by design, since its mandate is no per-arch branching -- so the random library is UNCOMPILABLE on xtensa and riscv32, the primary ESP targets. Blocks feature-random-library. | — |
 | bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings | A | 25 | bug | RE-SCOPED 2026-08-30 after an attempt: this is NOT eleven mechanical lexer edits. SOffset/SLen is an OVERLOADED channel, not a text field -- for tkInteger, SLen>0 MEANS 'wider than Int64', so giving ordinary tokens their text makes every integer literal promotable and `writeln(42)` fails to compile. A correct fix needs a SEPARATE span channel, i.e. new parallel arrays in defs.inc, before any lexer is touched. Original finding stands: every lexer stores token text for tkIdent and tkString only; keywords, punctuation, operators and numbers get SOffset := 0. That if/else is hand-copied across eleven lexers. So the `near:` window under EVERY diagnostic in the compiler prints the identifiers and silently discards the syntax -- `near: begin x >>> end` for `x := (1 ;` -- and no diagnostic can name an offending keyword. Sized: 3.24 MiB of token text against a fixed 8 MiB STRING_CAP, 40.5%, so this is a mechanical change to eleven files, not a pool redesign. | — |
 | bug-n-a-frozenset-returned-from-a-def-arrives-empty | N | 60 | bug | A frozenset returned from a def arrives at the caller EMPTY -- len 0, repr 'frozenset()', membership False -- no matter how it was built. set, list, dict and tuple returned from the same shape are all correct, and a frozenset that never crosses a return is correct too. Silent data loss, no crash, no error. | — |
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
@@ -920,6 +921,7 @@ _none_
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A+S] bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target (unblocks 1)
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
 - [p 45] [A] bug-a-2d-array-row-as-a-const-array-param-still-segfaults
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
@@ -969,7 +971,6 @@ _none_
 - [p 45] [A+O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [A+O] feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
-- [p 45] [B] feature-random-library [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [A] refactor-a-the-managed-string-index-cow-rule-is-spelled-seven-times
@@ -1216,6 +1217,7 @@ _none_
 - **1** — bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
 - **1** — bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
 - **1** — bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
+- **1** — bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees

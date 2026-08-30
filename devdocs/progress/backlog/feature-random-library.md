@@ -1,7 +1,7 @@
 ---
 track: B
 prio: 45  # auto
-blocked-by: [feature-a-rdrand-cpuid-compiler-builtins, bug-a-xtensa-refuses-to-lower-an-unreachable-syscall]   # Track B portion done 2026-08-15; only the HW tier remains and it is Track A
+blocked-by: [bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target]   # Track B portion done 2026-08-15; only the HW tier remains and it is Track A. The two original blockers CLOSED and both fixes hold — re-verified at v395 2026-08-30 — but a new wall stood behind them; see the note at the end.
 owner: claude-B
 ---
 
@@ -394,3 +394,43 @@ Track B's queue and the coordinator dispatched a session onto it.** Adding it no
 
 > **A ranked queue says a ticket is UNBLOCKED, not that it has WORK LEFT IN IT.**
 > Those are different claims and the board only checks the first.
+
+
+## Blockers re-verified at pin v395, 2026-08-30 (frankB)
+
+Asked by the coordinator to check whether the two recorded blockers were still
+true at HEAD, since a blocker that was fixed and never unlinked holds a ticket
+as effectively as a real one. **Both are closed and both fixes hold.** Neither
+is the reason this is still unbuildable.
+
+- [[bug-a-xtensa-refuses-to-lower-an-unreachable-syscall]] — the
+  `unsupported node in IR codegen: syscall` error is **gone**. xtensa now gets
+  further and stops on a different symbol entirely.
+- [[feature-a-rdrand-cpuid-compiler-builtins]] — the intrinsics exist and work
+  on **x86-64, aarch64, arm32 and i386**, verified with a five-line program
+  that names `__pxxCpuHasHwRandom` and nothing else.
+
+**A new wall stood behind the old one**, and it is filed as
+[[bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target]] (A+S,
+p45), now this ticket's only `blocked-by:` edge. `pasparser_prog.inc:1056`
+excludes `__pxxCpuHasHwRandom` / `__pxxHwRandom64` from the builtin-unit pull
+with `and (not TargetIsEspClass)`, so naming either on an ESP target is
+`error: undefined variable`. `random.pas:321` names it unconditionally — as its
+mandate requires — so **this unit does not compile on xtensa or riscv32 at all**,
+which is a harder statement than "tier 1 is missing there".
+
+Measured with a driver that only does `v := Random64`, and — the part without
+which none of it means anything — **against a control**: an empty program with
+no `uses random` builds fine under `--esp-profile=bare` on both ESP targets, and
+fails identically to the driver on the non-bare ESP profile (`calloc`, an
+external-symbol limitation belonging to any program on that profile). So the
+non-bare failures are not this unit's, and only the `bare` rows isolate a real
+defect. Hosted riscv32 also builds an empty program, which is what makes its
+`atomics need machine-mode CSR access` failure genuinely this unit's — the
+separate limitation already recorded above, still true, still hitting no
+shipping configuration.
+
+**Still nothing here for Track B.** The remaining work is a Track A decision
+about the builtin unit on ESP (three options are laid out in the new ticket),
+and the `{$ifdef}` that would make `random.pas` compile today is exactly the
+compiler-appeasement workaround the platonic-code rule forbids.
