@@ -251,7 +251,11 @@ def oracle_c(tmp=None):
     b2s = {}
     for l in mk:
         for m in CMAP.finditer(l):
-            b2s.setdefault(m.group(2), m.group(1))
+            # Keep the COMPILE line: it carries the -Fu/-I unit paths, and FPC
+            # cannot resolve a test's companion units without them. Building
+            # without them reported 14 sources as "fpc cannot build it" that
+            # build fine -- an aperture overstated by the harness, not by fpc.
+            b2s.setdefault(m.group(2), (m.group(1), l))
     E2 = re.compile(r'expect_same\.sh\s+([A-Za-z0-9_./-]+)\s+(".*")\s*$')
     BIN = re.compile(r'\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
     OTHER = re.compile(r'\$\((?!TESTTMP\))[A-Za-z_]+\)')
@@ -340,10 +344,15 @@ def oracle_pas(limit=None):
     built = set()
     nbuild = 0
     for b in sorted({r[0] for r in rows}):
+        src, cline = b2s[b]
+        cmd = ['fpc', '-Mobjfpc', '-vw', '-FU' + units, '-o' + os.path.join(tmp, b)]
+        for d in re.findall(r'-(?:Fu|I)([A-Za-z0-9_./-]+)', cline):
+            if os.path.isdir(d):
+                cmd += ['-Fu' + d, '-Fi' + d]
+        cmd.append(src)
         try:
-            p = subprocess.run(['fpc', '-Mobjfpc', '-vw', '-FU' + units,
-                                '-o' + os.path.join(tmp, b), b2s[b]],
-                               capture_output=True, text=True, errors='replace', timeout=90)
+            p = subprocess.run(cmd, capture_output=True, text=True,
+                               errors='replace', timeout=90)
         except subprocess.TimeoutExpired:
             continue
         nbuild += 1
