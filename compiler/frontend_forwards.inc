@@ -78,6 +78,13 @@ procedure ParseExpr; forward;   { body in pasparser_expr.inc — called from pas
                                   which compiler.pas includes first. pxx pre-scans and does not
                                   need this; FPC does, so dropping it breaks ONLY the seed build
                                   (bug-a-fpc-seed-drift-emitasmx64-forward). }
+{ Same seed-only hazard, same file, recurrence of 2026-08-30: 3ee9a672f uses both
+  of these at pasparser_generic.inc:844/:1022 and defines them at :1476/:1525.
+  pxx pre-scans, so `make compiler/pascal26` stayed green and the break was
+  invisible to the per-fix loop — it surfaces ONLY in `make bootstrap`, which is
+  the cold-start path a fresh box takes. }
+function QualArgAliasName(const path: AnsiString): AnsiString; forward;
+procedure EmitQualAliasDecl(const aliasNm, path: AnsiString); forward;
 
 { ===== Where the Pascal parser went =========================================
 
