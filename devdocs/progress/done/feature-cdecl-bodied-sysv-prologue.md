@@ -48,4 +48,4 @@ Not a bug under the mandate's test: nothing produces a wrong value and the
 unsupported shape is refused at compile time with a reason.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit c5b8442e1.
