@@ -62,6 +62,14 @@ var
   CPMarkFile   : Integer;   { state of the last marker emitted }
   CPMarkLine   : Integer;
   CPMarkOutLine: Integer;
+  { Where the file currently being processed would look for an `#include`.
+    `__has_include` is evaluated inside a `#if`, i.e. from the expression
+    evaluator, which is handed a line and nothing else — but the question it
+    asks ("would an #include of this name find a file?") is only answerable
+    against the SAME search this file's #include would run. Saved and restored
+    across recursion by CPProcessText, exactly like CPCurPath/CPCurLine. }
+  CPCurDepth   : Integer;
+  CPCurBaseDir : AnsiString;
 
 procedure CPrepOutEnsure(extra: NativeInt);
 var need, cap: NativeInt;
@@ -225,7 +233,20 @@ end;
 
 function CPMacroDefined(const src: AnsiString; a, b: Integer): Boolean;
 begin
-  Result := CPFindMacro(src, a, b) >= 0;
+  { `__has_include` is an OPERATOR, not a macro — but gcc and clang both make it
+    answer true to `#ifdef` / `defined()`, and real headers test it that way
+    before using it. pdfgen wraps its whole endian probe in
+    `#ifdef __has_include`; reporting it undefined skipped the probe, and the
+    fallback below it then selected BIG endian on x86-64.
+
+    Answered here rather than by registering a real macro named
+    `__has_include`: a registered macro would also be expanded in ordinary
+    text and in the `#if` operand itself, where `(<endian.h>)` is not something
+    macro expansion can survive. }
+  if CPRangeIsLiteral(src, a, b, '__has_include') then
+    Result := True
+  else
+    Result := CPFindMacro(src, a, b) >= 0;
 end;
 
 procedure CPAddLiteral(const name, value: AnsiString);
@@ -547,6 +568,10 @@ end;
 
 function CPExprOr: Int64; forward;
 function CPExprCond: Int64; forward;   { `?:` level, above Or — see its body }
+{ The include search itself, shared with `#include` — see its body, far below,
+  for why `__has_include` must not get a search of its own. }
+function CPSearchInclude(const nm, baseDir: AnsiString;
+                         depth: Integer; probe: Boolean): Boolean; forward;
 
 { Forward decls for the recursive macro expander, hoisted above CPExprAtom
   which calls them at #if-eval time. pascal26 sees these via whole-section
@@ -558,6 +583,66 @@ procedure CPExpandFunctionForLevel(mi: Integer; const src: AnsiString; argCount,
 procedure CPSetExpandedArgLength(level, len: Integer); forward;
 procedure CPExpandRangeForArgLevel(level: Integer; const src: AnsiString; first, last: Integer); forward;
 procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString); forward;
+
+{ `__has_include(<name>)` / `__has_include("name")`, evaluated here in the `#if`
+  expression rather than by macro expansion — which is what the C standard
+  (C23 6.10.1) and both gcc and clang do, and it is not a stylistic choice: the
+  operand `<endian.h>` is not a token sequence ordinary macro rules can survive
+  (`<`, an identifier, `.`, an identifier, `>` — division and comparison,
+  followed by a macro-expandable `endian`).
+
+  The answer is produced by the SAME CPSearchInclude that `#include` runs. That
+  matters more than it looks: `__has_include` does not mean "does this file
+  exist on the system", it means "would my #include of this name find one", and
+  pxx's search is not gcc's (no `<>`-vs-`""` split, a crtl anchor, a `-nostdinc`
+  rule of its own). A probe with a search of its own would answer a question
+  nobody asked and drift the moment either search changed.
+
+  Not handled: a macro-expanded operand, `__has_include(HEADER)`. gcc supports
+  it; nothing in our corpora writes it. It answers 0, which is the same answer
+  the whole operator gave before this existed. }
+function CPExprHasInclude: Int64;
+var a, closer: Integer; nm, savedPath: AnsiString;
+begin
+  Result := 0;
+  CPSkipExprSpace;
+  if (CPExprPos > CPExprEnd) or (CPExprText[CPExprPos] <> '(') then Exit;
+  Inc(CPExprPos);
+  CPSkipExprSpace;
+  if CPExprPos > CPExprEnd then Exit;
+  if CPExprText[CPExprPos] = '<' then closer := Ord('>')
+  else if CPExprText[CPExprPos] = '"' then closer := Ord('"')
+  else
+  begin
+    { unrecognised operand — consume to the closing paren so the rest of the
+      expression still parses, and answer 0 }
+    while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] <> ')') do Inc(CPExprPos);
+    if CPExprPos <= CPExprEnd then Inc(CPExprPos);
+    Exit;
+  end;
+  Inc(CPExprPos);
+  a := CPExprPos;
+  while (CPExprPos <= CPExprEnd) and (Ord(CPExprText[CPExprPos]) <> closer) do
+    Inc(CPExprPos);
+  nm := '';
+  while a < CPExprPos do
+  begin
+    AppendChar(nm, CPExprText[a]);
+    Inc(a);
+  end;
+  if CPExprPos <= CPExprEnd then Inc(CPExprPos);   { the > or " }
+  CPSkipExprSpace;
+  if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = ')') then Inc(CPExprPos);
+  if Length(nm) = 0 then Exit;
+  { The probe loads into this depth's include slot — free at this point, since
+    it is the slot our own #include directives load INTO, not the one holding
+    the text we are reading. Above the slot table it cannot probe at all, and
+    0 is then the honest answer rather than a read of an unwritten Result. }
+  if (CPCurDepth < 0) or (CPCurDepth > 15) then Exit;
+  savedPath := CPrepPath;
+  if CPSearchInclude(nm, CPCurBaseDir, CPCurDepth, True) then Result := 1;
+  CPrepPath := savedPath;
+end;
 
 function CPExprAtom: Int64;
 var a, b, mi, p, q, depth, argc, argBase, ai, hd: Integer;
@@ -644,6 +729,8 @@ begin
       c-testsuite 00152. bug-cfront-line-directive-unimplemented }
     else if CPRangeIsLiteral(CPExprText, a, b, '__LINE__') then
       Result := CPCurLine
+    else if CPRangeIsLiteral(CPExprText, a, b, '__has_include') then
+      Result := CPExprHasInclude
     else
     begin
       mi := CPFindMacro(CPExprText, a, b);
@@ -2234,6 +2321,88 @@ begin
     (UpCase(line[e]) = 'S');
 end;
 
+{ THE include search — one copy, run by both `#include` and `__has_include`.
+
+  Two callers asking "where does this header live?" must not each own a search.
+  This one is three tiers (including file's directory, `-I` roots, host system
+  fallbacks) with a `-nostdinc` rule and a crtl anchor, and the tiers are not
+  the same as gcc's; whichever of the two copies was not being read while the
+  order changed would be the one that answered wrong, silently, by finding a
+  different file or none. `__has_include` means "would my #include find one",
+  so sharing is not a tidiness argument — it is the definition of the operator.
+
+  `probe` = answer only, do not report. A probe that finds a header does not
+  include it, so the host-fallback warning belongs to the include that follows,
+  not to the question; and a probe that finds nothing is a legitimate 0, never
+  the fatal "include file not found" (that diagnostic stays in CPInclude, where
+  the search list can be built).
+
+  Existence is decided by LOADING, as it always was: there is no file-exists
+  primitive here, LoadFile leaves the buffer empty on a miss, and reusing the
+  real load is what makes the two answers identical by construction. }
+function CPSearchInclude(const nm, baseDir: AnsiString;
+                         depth: Integer; probe: Boolean): Boolean;
+var k: Integer;
+begin
+  { 1. The including file's own directory (baseDir is threaded as the resolved
+       dir of each nested include via CPProcessInclude). }
+  CPConcat2(baseDir, nm, CPrepPath);
+  CPLoadInclude(depth);
+  { 2. User `-I` project/library roots, in order — these win over any system
+       header so a project's own header (e.g. our zlib.h) is not shadowed. }
+  k := 0;
+  while (CPIncludeLength(depth) = 0) and (k < CIncludeDirCount) do
+  begin
+    CPConcat2(CIncludeDirs[k], nm, CPrepPath);
+    CPLoadInclude(depth);
+    Inc(k);
+  end;
+  { 3. Host system fallbacks. Only for a native (x86_64) build, and only when
+       -nostdinc is not set: these are the host's headers, wrong for any cross
+       target — our libraries are meant to be cross-platform and must resolve
+       from project/-I roots or pxx's own crtl headers, not /usr. -nostdinc
+       disables both this fallback and the default crtl search.
+
+       ONE table, ONE loop. This was SIXTEEN copies of the same five-line
+       block, each differing only by a literal path and a HAND-COUNTED length
+       — and a hand-counted length is a silent truncation waiting to happen,
+       which is the whole reason the table stores whole strings instead. The
+       list is also what the ticket asks for: a search order that can be
+       EXTENDED from config rather than recompiled
+       (feature-dynamic-include-paths-config). }
+  if (CPIncludeLength(depth) = 0) and (TargetArch = TARGET_X86_64) and (not NoStdInc) then
+  begin
+    BuildCSysIncludeDirs;
+    k := 0;
+    while (CPIncludeLength(depth) = 0) and (k < CSysIncludeCount) do
+    begin
+      CPConcat2(CSysIncludeDirs[k], nm, CPrepPath);
+      CPLoadInclude(depth);
+      { A header pxx has no `-I`/crtl-anchored match for fell all the way
+        through to the bare host system root. Harmless for a genuinely
+        host-only header (X11, GTK, ...) but silently wrong for a libc header
+        pxx SHIPS its own version of (stdarg.h, math.h, ...): the host's
+        va_list/gcc-builtin spellings pxx does not understand, or a constant
+        like M_SQRT2 the host header defines a way pxx's preprocessor cannot
+        follow, both degrade to "undefined identifier, treated as 0" with no
+        further diagnostic (bug-crtl-headers-lost-when-cwd-is-not-the-repo-
+        root). This is exactly the case the crtl anchor was supposed to
+        prevent — warn so a user sees why, instead of chasing a wrong VALUE
+        with no lead back to its cause.
+
+        Scoped to entry 0, the bare `/usr/include/`, exactly as before the
+        table: the library roots below it (gtk, glib, ...) have no pxx-shipped
+        twin to be confused with, so warning on them would be noise. }
+      if (CPIncludeLength(depth) > 0) and (k = 0) and (not probe) then
+        Warn('#include <' + nm +
+             '> resolved from the host system (/usr/include), not pxx''s own headers — ' +
+             'ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave');
+      Inc(k);
+    end;
+  end;  { native (x86_64) system-fallback block }
+  Result := CPIncludeLength(depth) > 0;
+end;
+
 procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
 var a, b, k: Integer; hdrResolved, incName, searchList: AnsiString;
@@ -2259,80 +2428,21 @@ begin
       The state rides in the TOKEN STREAM, not in a preprocessor global: order
       is then preserved for free (a later declaration sees an earlier import),
       and the C frontend needs no new shared-internals storage. }
+    incName := '';
+    for k := a to p - 1 do AppendChar(incName, line[k]);
     if CPIncIsPascalUnit(line, a, p - 1) then
     begin
-      incName := '';
-      for k := a to p - 1 do AppendChar(incName, line[k]);
       CPrepOutAppendStr('__pxx_pascal_unit "' + baseDir + '" "' + incName +
                         '";' + #10);
       Exit;
     end;
-    { 1. The including file's own directory (baseDir is threaded as the resolved
-         dir of each nested include via CPProcessInclude below). }
-    CPConcat2(baseDir, '', CPrepPath);
-    CPAppendRange(CPrepPath, line, a, p - 1);
-    CPLoadInclude(depth);
-    { 2. User `-I` project/library roots, in order — these win over any system
-         header so a project's own header (e.g. our zlib.h) is not shadowed. }
-    k := 0;
-    while (CPIncludeLength(depth) = 0) and (k < CIncludeDirCount) do
-    begin
-      CPConcat2(CIncludeDirs[k], '', CPrepPath);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-      Inc(k);
-    end;
-    { 3. Host system fallbacks. Only for a native (x86_64) build, and only when
-         -nostdinc is not set: these are the host's headers, wrong for any cross
-         target — our libraries are meant to be cross-platform and must resolve
-         from project/-I roots or pxx's own crtl headers, not /usr. -nostdinc
-         disables both this fallback and the default crtl search.
-
-         ONE table, ONE loop. This was SIXTEEN copies of the same five-line
-         block, each differing only by a literal path and a HAND-COUNTED length
-         — and a hand-counted length is a silent truncation waiting to happen,
-         which is the whole reason the table stores whole strings instead. The
-         list is also what the ticket asks for: a search order that can be
-         EXTENDED from config rather than recompiled
-         (feature-dynamic-include-paths-config). }
-    if (CPIncludeLength(depth) = 0) and (TargetArch = TARGET_X86_64) and (not NoStdInc) then
-    begin
-      BuildCSysIncludeDirs;
-      k := 0;
-      while (CPIncludeLength(depth) = 0) and (k < CSysIncludeCount) do
-      begin
-        CPConcat2(CSysIncludeDirs[k], '', CPrepPath);
-        CPAppendRange(CPrepPath, line, a, p - 1);
-        CPLoadInclude(depth);
-        { A header pxx has no `-I`/crtl-anchored match for fell all the way
-          through to the bare host system root. Harmless for a genuinely
-          host-only header (X11, GTK, ...) but silently wrong for a libc header
-          pxx SHIPS its own version of (stdarg.h, math.h, ...): the host's
-          va_list/gcc-builtin spellings pxx does not understand, or a constant
-          like M_SQRT2 the host header defines a way pxx's preprocessor cannot
-          follow, both degrade to "undefined identifier, treated as 0" with no
-          further diagnostic (bug-crtl-headers-lost-when-cwd-is-not-the-repo-
-          root). This is exactly the case the crtl anchor was supposed to
-          prevent — warn so a user sees why, instead of chasing a wrong VALUE
-          with no lead back to its cause.
-
-          Scoped to entry 0, the bare `/usr/include/`, exactly as before the
-          table: the library roots below it (gtk, glib, ...) have no pxx-shipped
-          twin to be confused with, so warning on them would be noise. }
-        if (CPIncludeLength(depth) > 0) and (k = 0) then
-          Warn('#include <' + Copy(line, a, p - a) +
-               '> resolved from the host system (/usr/include), not pxx''s own headers — ' +
-               'ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave');
-        Inc(k);
-      end;
-    end;  { native (x86_64) system-fallback block }
-    if CPIncludeLength(depth) = 0 then
+    { The search itself lives in CPSearchInclude, shared with `__has_include`
+      so the operator cannot answer a different question from the directive. }
+    if not CPSearchInclude(incName, baseDir, depth, False) then
     begin
       { Report the requested NAME and the search list, not the last dir probed
         (which pointed triage at the wrong place — bug-cpp-include-not-found-
         diagnostic-path). }
-      incName := '';
-      for k := a to p - 1 do incName := incName + line[k];
       searchList := '';
       if baseDir <> '' then searchList := baseDir;
       for k := 0 to CIncludeDirCount - 1 do
@@ -2521,7 +2631,8 @@ end;
 
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
 var pos, p, q: Integer; inComment, emitted: Boolean; cont: AnsiString;
-    savedFileId, savedLine: Integer; savedPath: AnsiString;
+    savedFileId, savedLine, savedDepth: Integer;
+    savedPath, savedBaseDir: AnsiString;
 begin
   pos := 1;
   inComment := False;
@@ -2529,9 +2640,13 @@ begin
     on the way out, so returning from an #include resumes the outer line count
     (the marker for that is emitted by the next CPSyncLine, which sees drift). }
   savedFileId := CPCurFileId; savedLine := CPCurLine; savedPath := CPCurPath;
+  savedDepth := CPCurDepth; savedBaseDir := CPCurBaseDir;
   CPCurPath := CPPathAtDepth[depth];
   CPCurFileId := DbgFileId(CPCurPath);
   CPCurLine := 0;
+  { what an `#include` on a line of THIS file would search — the only thing
+    `__has_include` can honestly be asked about from inside a `#if` }
+  CPCurDepth := depth; CPCurBaseDir := baseDir;
   while pos <= Length(src) do
   begin
     CPReadLine(src, pos, inComment, CPrepLine);
@@ -2602,6 +2717,7 @@ begin
     end;
   end;
   CPCurFileId := savedFileId; CPCurLine := savedLine; CPCurPath := savedPath;
+  CPCurDepth := savedDepth; CPCurBaseDir := savedBaseDir;
 end;
 
 { Seed the C `-D`/`-U` command-line predefines (captured raw at arg-parse time).

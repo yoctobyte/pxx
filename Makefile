@@ -6215,6 +6215,15 @@ test-core: $(COMPILER)
 	# pre-fix pxx said B/B/3 -- compiled clean, ran clean, printed a wrong answer.
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
 	tools/expect_same.sh test_c_recname26 "$$($(TESTTMP)/test_c_recname26)" "$$(printf 'other\nother\n3')"
+	# __has_include, and pdfgen's endian chain that depends on it. Undefined, the
+	# `#ifdef __has_include` guard skipped the <endian.h> probe, and the fallback
+	# below it compared two macros only endian.h defines -- 0 == 0, true -- so
+	# pdfgen selected BIG endian on x86-64, byte-swapped every 32-bit PNG header
+	# field, and failed to embed PNGs while compiling and running clean. The last
+	# line is the assertion that matters; the five before it are the operator.
+	# Every value here matches gcc on the same file, and all six differ pre-fix.
+	./$(COMPILER) test/chas_include.c $(TESTTMP)/chas_include26
+	tools/expect_same.sh chas_include26 "$$($(TESTTMP)/chas_include26)" "$$(printf 'ifdef 1\ndefined 1\nstdio 1\nbogus 0\nrel 1\npdfgen little')"
 	# Rust chess FULL legality (feature-rust-corpus-chess): Move packed into one i64
 	# (from|to<<6|flags<<12) replaces the engine's Move struct + ArrayVec; EP, castling,
 	# promotion, underpromotion + check detection. Node counts match the reference perft
