@@ -9,6 +9,40 @@ found: 2026-08-28
 found-by: frankwasm (measured on the wasm branch), generalised by frank-coordinator
 ---
 
+## READ THIS FIRST — WHAT THIS FILE ACTUALLY IS
+
+**Two things live in this file, and the frontmatter only describes the first.**
+
+1. The original ticket, which is what the title and `summary` are about:
+   refusals cite blocker slugs that may have landed, and a ~15-line check can
+   flag the ones whose slug has reached `done/`. Still open, still Track A p35.
+
+2. **The fleet's numbered METHOD INDEX** — faces `113` through the tail, starting
+   around line 4460 and running to the end of the file. This is where every lane
+   files a generalised finding about how we measure, verify and fool ourselves.
+   Five lanes appended to it on 2026-08-30 alone.
+
+**This note exists because a careful reader got it wrong.** On 2026-08-30 a lane
+was asked to file a method finding here, **read the ticket first** — the correct
+behaviour — reached the end of the frontmatter thesis, and concluded reasonably
+that its finding would give the ticket a second unrelated subject. It would not
+have; it would have been face 229. The head describes one thing and the body has
+been another for months, and **the head is what a careful reader consults.**
+That is this index's own material: a stated purpose that stopped matching the
+artefact, with nothing printing the difference.
+
+**How to append a face:** take the next free number from the TAIL of this file,
+not from memory. `## N — TITLE IN CAPS` for a new family, `### Na — lower case`
+for a sub-entry of one. Write it in your own words with the measurement attached;
+an entry nobody can trace to a measurement is an opinion.
+
+**Numbering collides and git cannot see it.** Every lane computes the next number
+from a tail that is already stale, and two pure appends of different content
+merge clean — a lane collided twice in ten minutes on 2026-08-30 and got a
+conflict only because the appends landed on adjacent lines. `tools/progress.sh
+check` now reports `DUP-FACE-NUMBER`. On a collision, **renumber the later entry
+and fix its citations; never delete either** — they are different findings.
+
 ## The observation
 
 Measuring a string-heavy program for the wasm backend, frankwasm found **9 refusals reading
