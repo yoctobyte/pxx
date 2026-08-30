@@ -1069,3 +1069,33 @@ printf 'program d;\nuses generics.collections;\nbegin\nend.\n' > /tmp/d.pas
 ```
 
 **Do not trust any error line in this unit without a truncation bisect.**
+
+### The last error is a DECIDED NON-GOAL, so rung 6 is finished as far as it goes
+
+`generics.collections.pas:146`, `TCustomPointersCollection<T, PT> = object`,
+is not a small gap in the generic path. **pxx has no `object` type at all** —
+measured, not assumed: a plain non-generic
+
+```pascal
+type TObj = object F: Integer; end;
+```
+
+fails identically (`Expected: begin, but got: F`). So adding `tkObject` to
+`ParseGenericTemplateNamed`'s accepted set would buy nothing; the type itself
+does not exist.
+
+That is already tracked and already answered:
+
+- [[feature-p-legacy-value-object-types]] [P p15] — the feature, `gated-by` ↓
+- [[decide-old-style-object-types]] — **DECIDED 2026-08-25, option A: we do
+  not implement `object` types. Not now.** On the principle that *a corpus is a
+  measuring instrument, not a dependency.*
+
+**So rtl-generics will not compile fully, by design, and rung 6 should not be
+read as blocked.** It went 20 errors → 1, and the 1 is a construct we have
+decided not to support. Anyone who picks this up to "finish rtl-generics" would
+be reversing a standing decision, at prio 15, to make a measuring instrument
+read zero — which is the exact thing that decision refuses.
+
+**Do not file the remaining error as a corpus bug.** If the `object` decision is
+ever revisited, it is revisited on its own ticket, not because a corpus wants it.
