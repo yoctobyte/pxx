@@ -257,9 +257,11 @@ function wasi_random_get(buf: Pointer; len: Integer): Integer;
   decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
   settled. The layering question (a shared home, and what may depend on what) is
   decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner,
-  and it is DECIDED: keep both copies, guard the drift with a test, and do not
-  invert the layering by pointing this unit at compiler/builtin. Two copies is
-  the intended state, not a transitional one.
+  and it resolved as: keep both copies, guard the drift with a test, and do not
+  invert the layering by pointing this unit at compiler/builtin. It has since
+  been REOPENED on the ground that the cost is paid per FIX rather than per
+  divergence, so two copies is the CURRENT intended state rather than a settled
+  one. Either way, do not unify it yourself.
 
   SO: A FIX HERE PROBABLY BELONGS THERE TOO. That is the duplication's real
   cost, and it is not the one people expect -- test/wasm/check_wasidiff.sh

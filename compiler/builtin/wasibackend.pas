@@ -50,12 +50,13 @@ unit wasibackend;
   invert the layering by pointing a lib/rtl unit at compiler/builtin. It follows
   from the owner's standing constraint that no PAL belongs in the compiler's
   sources, which is the same constraint that put this unit here in the first
-  place. So TWO COPIES IS THE INTENDED STATE, not a transitional one.
+  place. So TWO COPIES IS THE CURRENT INTENDED STATE — and the ticket has since
+  been REOPENED on one specific ground: that the cost is paid per FIX rather
+  than per divergence (see below), which is a quantity the differential test
+  cannot reduce. So do not read "decided" as settled forever.
 
-  (A re-examination is in flight on one specific ground — that the cost is paid
-  per FIX rather than per divergence, see below — so the resolution may be
-  revisited. It does not change what to do while reading this: keep them in
-  step.)
+  What to do while reading this is unchanged either way: do not unify, and keep
+  the two copies in step.
 
   WHAT GUARDS IT MEANWHILE, and what does not:
 
