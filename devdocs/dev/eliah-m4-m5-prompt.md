@@ -61,6 +61,26 @@ tree, **mode = pure layout (no `if DesignMode` branching)**.
 
 ## TODO — M4 and M5
 
+> **Discharged. Checked 2026-08-30 (frankD): every ticket this section carries is
+> in `done/`.** `feature-eliah-component-palette` (M4),
+> `feature-eliah-selection-link` (M5), and the dependency it hands forward,
+> `feature-pcl-component-ctor-owner` — which this page cites as
+> `unfinished/` — along with `bug-lfm-streaming-skips-constructors` and the
+> already-ticked `feature-eliah-perspectives`. Five for five.
+>
+> The prose below is left as written, because `README.md` classifies this file as
+> a **carried prompt** — a brief for a future session, not a record and not a
+> live reference — and a discharged brief is still readable as the reasoning
+> behind what was built. **Do not pick this up as work.**
+>
+> Two things about it are worth keeping. The section is titled `TODO`, which no
+> ticket state can contradict — a heading is an assertion nothing checks. And its
+> ticket citations went stale in **both** directions at once: `(backlog)` for
+> tickets now `done/`, and `unfinished/feature-pcl-component-ctor-owner` for one
+> that finished too. A directory embedded in a citation is a claim about state
+> that ages the moment the work moves, which is exactly what
+> `tools/docaudit.py cites` was written to catch.
+
 ### M4 — `feature-eliah-component-palette` (backlog)
 Registry-driven designer palette: a component is any `RegisterClass`'d
 `TComponent` with published RTTI — visual widgets AND non-visual libraries are
