@@ -96,4 +96,4 @@ half — a break that is an identity looks exactly like a vacuous test).
 - Sibling split out at the same time: `feature-opt-o3-operand-order-for-non-commutative-binops` (item C, worth −2)
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 2365dafa2.
