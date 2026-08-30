@@ -42,6 +42,19 @@ ALLOWED = {
     "tstate_stats.py":
         "runs from a dev checkout on a branch, never from the watcher clone",
     "tstate_reader_devtest.py": "this file",
+    "vanish.py":
+        "a WRITER, and only under --publish: it writes tstate/vanished.md and "
+        "reads nothing there. Runs from a dev checkout on a branch, never from "
+        "the watcher clone — same category as uforth_bench.py",
+    "twatch_code_stamp_devtest.py":
+        "joins TSTATE_REL onto a tempfile dir it just created, so a fixture "
+        "host json has somewhere to live; it never opens the repo's tstate. "
+        "Same fixture case as the three twatch_* entries below",
+    "pasmith_ledger_throttle_devtest.py":
+        "reads the LIVE published fuzz/LEDGER.json ON PURPOSE, read-only, and "
+        "skips when it is absent. That is the point of the guard it carries: a "
+        "fixture cannot notice a schema drift in the real file, and the number "
+        "a human reads is the real one",
     "uforth_bench.py":
         "a WRITER — appends bench rows, and runs from a dev checkout on a "
         "branch, never from the watcher clone",

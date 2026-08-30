@@ -56,10 +56,20 @@ class _J(object):
 # ------------------------------------------------------------ skip_summary --
 
 def t_summary_is_present_when_empty():
-    """A consumer tests a field; it never infers from absence. (break D)"""
+    """A consumer tests a field; it never infers from absence. (break D)
+
+    KEYED ON THE CONTRACT, NOT ON THE EXACT DICT. This asserted equality with a
+    three-key literal and went red the day `hole_jobs` was added -- a guard
+    whose subject is "every key is always present" should not fail because
+    another always-present key arrived. The property is that each named key
+    exists and is empty; a new field is not a regression, and a MISSING one is.
+    """
     s = tm.skip_summary([_J("a", "pass"), _J("b", "fail")])
-    assert s == {"count": 0, "coverage_holes": 0, "by_reason": {}}, s
-    return "always a dict with all three keys"
+    for k, empty in (("count", 0), ("coverage_holes", 0),
+                     ("by_reason", {}), ("hole_jobs", [])):
+        assert k in s, "%s absent from an empty summary: %s" % (k, s)
+        assert s[k] == empty, "%s should be %r on an empty summary: %s" % (k, empty, s)
+    return "every documented key is present and empty, whatever else is added"
 
 
 def t_only_skip_status_counts():
