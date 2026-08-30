@@ -3,9 +3,9 @@ summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython
 type: bug
 track: O
 prio: 65
-status: unfinished
+status: working
 
-owner: ""
+owner: frank-optimize
 ---
 
 # pxx-compiled uforth is 2.1x slower than CPython on `blocktest`
