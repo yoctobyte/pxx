@@ -680,21 +680,10 @@ begin
           mpi := UMthProc_[mmi];
           Expect(tkAssign, ':=');
           ParseExpr;
-          if UMthVirSlot[mmi] >= 0 then
-          begin
-            mcallNode := AllocNode(AN_VIRTUAL_CALL);
-            ASTRight[mcallNode] := UMthVirSlot[mmi];
-          end
-          else
-            mcallNode := AllocNode(AN_CALL);
-          ASTIVal[mcallNode] := mpi;
-          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-          mselfArg := AllocNode(AN_ARG);
-          ASTLeft[mselfArg] := selfNode;
-          ASTLeft[mcallNode] := mselfArg;
+          { Setter args: the value; MakeAccessorCall places Self. }
           margSeq := AllocNode(AN_ARG);
           ASTLeft[margSeq] := CurASTNode;   { value }
-          ASTRight[mselfArg] := margSeq;
+          mcallNode := MakeAccessorCall(selfClassCi, mmi, mpi, selfNode, margSeq);
           Result := mcallNode;
           Exit;
         end
@@ -762,18 +751,7 @@ begin
         mmi := FindUMeth(selfClassCi, methName);
         if mmi < 0 then Error('property getter method not found: ' + methName);
         mpi := UMthProc_[mmi];
-        if UMthVirSlot[mmi] >= 0 then
-        begin
-          mcallNode := AllocNode(AN_VIRTUAL_CALL);
-          ASTRight[mcallNode] := UMthVirSlot[mmi];
-        end
-        else
-          mcallNode := AllocNode(AN_CALL);
-        ASTIVal[mcallNode] := mpi;
-        ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-        mselfArg := AllocNode(AN_ARG);
-        ASTLeft[mselfArg] := selfNode;
-        ASTLeft[mcallNode] := mselfArg;
+        mcallNode := MakeAccessorCall(selfClassCi, mmi, mpi, selfNode, -1);
         tk := Procs[mpi].RetType;
         recName := REC_NONE;
         node := mcallNode;
@@ -1255,12 +1233,9 @@ begin
               ASTTk[augNode] := Ord(tyVariant);
               CurASTNode := augNode;
             end;
-            if UMthVirSlot[mmi] >= 0 then begin mcallNode := AllocNode(AN_VIRTUAL_CALL); ASTRight[mcallNode] := UMthVirSlot[mmi]; end
-            else mcallNode := AllocNode(AN_CALL);
-            ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-            mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
-            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := CurASTNode;  { value }
-            ASTRight[mselfArg] := margIdx; ASTRight[mlastArg] := margSeq;
+            { Setter args: index..., value; MakeAccessorCall places Self. }
+            mcallNode := MakeAccessorCall(mci, mmi, mpi, node,
+                           AccessorArgChain(margIdx, mlastArg, CurASTNode));
             node := mcallNode; Result := node; Exit;
           end
           else
@@ -1271,11 +1246,7 @@ begin
             mmi := FindUMeth(mci, methName);
             if mmi < 0 then Error('getter method not found: ' + methName);
             mpi := UMthProc_[mmi];
-            if UMthVirSlot[mmi] >= 0 then begin mcallNode := AllocNode(AN_VIRTUAL_CALL); ASTRight[mcallNode] := UMthVirSlot[mmi]; end
-            else mcallNode := AllocNode(AN_CALL);
-            ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-            mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
-            ASTRight[mselfArg] := margIdx;
+            mcallNode := MakeAccessorCall(mci, mmi, mpi, node, margIdx);
             node := mcallNode;
             tk := IntToTypeKind(UPropTk[pri]); recName := UPropRec[pri];
             ASTTk[node] := StrValTk(tk);
@@ -2177,19 +2148,7 @@ begin
           mmi := FindUMeth(mci, methName);
           if mmi < 0 then Error('getter method not found: ' + methName);
           mpi := UMthProc_[mmi];
-          if UMthVirSlot[mmi] >= 0 then
-          begin
-            augRead := AllocNode(AN_VIRTUAL_CALL);
-            ASTRight[augRead] := UMthVirSlot[mmi];
-          end
-          else
-            augRead := AllocNode(AN_CALL);
-          ASTIVal[augRead] := mpi;
-          ASTTk[augRead] := Ord(Procs[mpi].RetType);
-          mselfArg := AllocNode(AN_ARG);
-          ASTLeft[mselfArg] := node;
-          ASTRight[mselfArg] := -1;
-          ASTLeft[augRead] := mselfArg;
+          augRead := MakeAccessorCall(mci, mmi, mpi, node, -1);
 
           Next;                       { the property name }
           augBin := PyAugBinTok(CurTok.Kind);
@@ -2207,22 +2166,9 @@ begin
           mmi := FindUMeth(mci, methName);
           if mmi < 0 then Error('setter method not found: ' + methName);
           mpi := UMthProc_[mmi];
-          if UMthVirSlot[mmi] >= 0 then
-          begin
-            mcallNode := AllocNode(AN_VIRTUAL_CALL);
-            ASTRight[mcallNode] := UMthVirSlot[mmi];
-          end
-          else
-            mcallNode := AllocNode(AN_CALL);
-          ASTIVal[mcallNode] := mpi;
-          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-          mselfArg := AllocNode(AN_ARG);
-          ASTLeft[mselfArg] := node;
           margSeq := AllocNode(AN_ARG);
           ASTLeft[margSeq] := augNode;
-          ASTRight[margSeq] := -1;
-          ASTRight[mselfArg] := margSeq;
-          ASTLeft[mcallNode] := mselfArg;
+          mcallNode := MakeAccessorCall(mci, mmi, mpi, node, margSeq);
 
           node := mcallNode;
           Result := node; Exit;
@@ -2254,32 +2200,9 @@ begin
             Expect(tkAssign, ':=');
             ParseExpr;
 
-            if UMthVirSlot[mmi] >= 0 then
-            begin
-              mcallNode := AllocNode(AN_VIRTUAL_CALL);
-              ASTRight[mcallNode] := UMthVirSlot[mmi];
-            end
-            else
-            begin
-              mcallNode := AllocNode(AN_CALL);
-            end;
-            ASTIVal[mcallNode] := mpi;
-            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-
-            mselfArg := AllocNode(AN_ARG);
-            ASTLeft[mselfArg] := node;
-            ASTLeft[mcallNode] := mselfArg;
-
-            margSeq := AllocNode(AN_ARG);
-            ASTLeft[margSeq] := CurASTNode;   { value }
-            { Setter args: self [, index...], value }
-            if margIdx >= 0 then
-            begin
-              ASTRight[mselfArg] := margIdx;
-              ASTRight[mlastArg] := margSeq;
-            end
-            else
-              ASTRight[mselfArg] := margSeq;
+            { Setter args: [index...], value; MakeAccessorCall places Self. }
+            mcallNode := MakeAccessorCall(mci, mmi, mpi, node,
+                           AccessorArgChain(margIdx, mlastArg, CurASTNode));
 
             node := mcallNode;
             Result := node; Exit;
@@ -2311,23 +2234,8 @@ begin
             margIdx := -1;
             if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg)
             else PropIndexConstArg(pri, margIdx, mlastArg);
-            if UMthVirSlot[mmi] >= 0 then
-            begin
-              mcallNode := AllocNode(AN_VIRTUAL_CALL);
-              ASTRight[mcallNode] := UMthVirSlot[mmi];
-            end
-            else
-            begin
-              mcallNode := AllocNode(AN_CALL);
-            end;
-            ASTIVal[mcallNode] := mpi;
-            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-
-            mselfArg := AllocNode(AN_ARG);
-            ASTLeft[mselfArg] := node;
-            ASTLeft[mcallNode] := mselfArg;
-            { Getter args: self [, index...] }
-            if margIdx >= 0 then ASTRight[mselfArg] := margIdx;
+            { Getter args: [index...]; MakeAccessorCall places Self. }
+            mcallNode := MakeAccessorCall(mci, mmi, mpi, node, margIdx);
 
             node := mcallNode;
             { trailing ^ on the getter result — T(FList.Items[i]^) in fgl's
@@ -4142,28 +4050,9 @@ begin
             else PropIndexConstArg(pri, margIdx, lastA);
             Expect(tkAssign, ':=');
             ParseExpr;
-            if UMthVirSlot[mmi] >= 0 then
-            begin
-              callN := AllocNode(AN_VIRTUAL_CALL);
-              ASTRight[callN] := UMthVirSlot[mmi];
-            end
-            else
-              callN := AllocNode(AN_CALL);
-            ASTIVal[callN] := mpi;
-            ASTTk[callN] := Ord(Procs[mpi].RetType);
-            selfArg := AllocNode(AN_ARG);
-            ASTLeft[selfArg] := node;
-            ASTLeft[callN] := selfArg;
-            aSeq := AllocNode(AN_ARG);
-            ASTLeft[aSeq] := CurASTNode;   { value }
-            { Setter args: self [, index...], value }
-            if margIdx >= 0 then
-            begin
-              ASTRight[selfArg] := margIdx;
-              ASTRight[lastA] := aSeq;
-            end
-            else
-              ASTRight[selfArg] := aSeq;
+            { Setter args: [index...], value; MakeAccessorCall places Self. }
+            callN := MakeAccessorCall(ci, mmi, mpi, node,
+                       AccessorArgChain(margIdx, lastA, CurASTNode));
             outTk := Procs[mpi].RetType;
             Result := callN;   { a complete call statement; caller uses it as-is }
             Exit;
@@ -4201,20 +4090,8 @@ begin
             margIdx := -1;
             if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA)
             else PropIndexConstArg(pri, margIdx, lastA);
-            if UMthVirSlot[mmi] >= 0 then
-            begin
-              callN := AllocNode(AN_VIRTUAL_CALL);
-              ASTRight[callN] := UMthVirSlot[mmi];
-            end
-            else
-              callN := AllocNode(AN_CALL);
-            ASTIVal[callN] := mpi;
-            ASTTk[callN] := Ord(Procs[mpi].RetType);
-            selfArg := AllocNode(AN_ARG);
-            ASTLeft[selfArg] := node;
-            ASTLeft[callN] := selfArg;
-            { Getter args: self [, index...] }
-            if margIdx >= 0 then ASTRight[selfArg] := margIdx;
+            { Getter args: [index...]; MakeAccessorCall places Self. }
+            callN := MakeAccessorCall(ci, mmi, mpi, node, margIdx);
             tk := Procs[mpi].RetType;
             if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]
             else recId := REC_NONE;

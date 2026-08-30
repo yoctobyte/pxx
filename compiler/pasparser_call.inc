@@ -557,6 +557,71 @@ begin
   Expect(tkRBrack, ']');
 end;
 
+{ ---- One place that knows how a property ACCESSOR is dispatched ------------
+  Eleven sites built this by hand -- every default-property arm, both
+  Self-relative arms, the qualified `o.Prop`, the grouped `(expr).Prop` in
+  pasparser_expr.inc -- and all eleven spelled the SAME two-way choice:
+  AN_VIRTUAL_CALL when the accessor has a vtable slot, AN_CALL when it does
+  not. The choice is THREE-way. An interface receiver dispatches through the
+  IMT (AN_INTF_CALL), takes Self from the fat pointer instead of argument 0,
+  and carries its slot in ASTSOffset rather than ASTRight. None of the eleven
+  copies knew that, so a property declared in an interface read a class VMT off
+  a fat pointer -- the ordinary method call `i.M(...)` had the arm (see the
+  AN_INTF_CALL site in ParseClassRecordSelectors) and the property path, being
+  a separate copy, did not.
+
+  recvNode = the receiver (instance or interface value). firstArg = the head of
+  the caller's already-built AN_ARG chain of REAL arguments -- index args, then
+  a setter's value -- or -1. Self is deliberately NOT in that chain: where Self
+  goes is exactly the difference between the three shapes, and is this
+  function's job rather than each caller's. }
+function MakeAccessorCall(mci, mmi, mpi, recvNode, firstArg: Integer): Integer;
+var callN, selfArg: Integer;
+begin
+  if (mci >= 0) and UClsIsInterface[mci] then
+  begin
+    callN := AllocNode(AN_INTF_CALL);
+    ASTRight[callN] := recvNode;              { the interface value }
+    ASTSOffset[callN] := UMthVirSlot[mmi];    { IMT slot }
+    ASTLeft[callN] := firstArg;               { args, with NO Self at the head }
+  end
+  else
+  begin
+    if UMthVirSlot[mmi] >= 0 then
+    begin
+      callN := AllocNode(AN_VIRTUAL_CALL);
+      ASTRight[callN] := UMthVirSlot[mmi];
+    end
+    else
+      callN := AllocNode(AN_CALL);
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := recvNode;
+    ASTRight[selfArg] := firstArg;
+    ASTLeft[callN] := selfArg;                { args, Self first }
+  end;
+  ASTIVal[callN] := mpi;
+  ASTTk[callN] := Ord(Procs[mpi].RetType);
+  Result := callN;
+end;
+
+{ A SETTER's argument chain: the index args (if any) followed by the value,
+  spliced onto the tail that ParsePropIndexArgs / PropIndexConstArg reported.
+  Returns the head, for MakeAccessorCall's firstArg. Five of the eleven sites
+  spelled this same if/else out. }
+function AccessorArgChain(margIdx, mlastArg, valueNode: Integer): Integer;
+var vArg: Integer;
+begin
+  vArg := AllocNode(AN_ARG);
+  ASTLeft[vArg] := valueNode;
+  if margIdx >= 0 then
+  begin
+    ASTRight[mlastArg] := vArg;
+    Result := margIdx;
+  end
+  else
+    Result := vArg;
+end;
+
 { Append AN_INT_LIT default-value args for method params fromIdx..ParamCount-1
   (a call that omitted trailing defaulted args — mirrors the ctor fill at the
   TFoo.Create arity check). Errors if a remaining param has no default. The

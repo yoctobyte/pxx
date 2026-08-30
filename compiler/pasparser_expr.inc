@@ -1321,20 +1321,8 @@ begin
               margIdx := -1;
               if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg)
             else PropIndexConstArg(pri, margIdx, mlastArg);
-              if UMthVirSlot[mmi] >= 0 then
-              begin
-                mcallNode := AllocNode(AN_VIRTUAL_CALL);
-                ASTRight[mcallNode] := UMthVirSlot[mmi];
-              end
-              else
-                mcallNode := AllocNode(AN_CALL);
-              ASTIVal[mcallNode] := mpi;
-              ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-              margSeq := AllocNode(AN_ARG);
-              ASTLeft[margSeq] := node;
-              ASTLeft[mcallNode] := margSeq;
-              { Getter args: self [, index...] }
-              if margIdx >= 0 then ASTRight[margSeq] := margIdx;
+              { Getter args: [index...]; MakeAccessorCall places Self. }
+              mcallNode := MakeAccessorCall(mci, mmi, mpi, node, margIdx);
               node := mcallNode;
             end
             else if pri >= 0 then

@@ -4152,6 +4152,209 @@ begin
   end;
 end;
 
+{ A `property` declaration, wherever it appears.
+
+  ONE PARSER FOR TWO DECLARATION FORMS. This was ~170 lines inline in the CLASS
+  body loop, so an INTERFACE body -- parsed by a different routine a thousand
+  lines up -- simply had no arm for `property` at all: the member loop accepted
+  only `procedure`/`function`, a `property` ended the loop, and the following
+  `Expect(tkEnd)` reported `expected 'end' before 'property'` at the property's
+  line. FPC's own IEnumerator and fcl-xml's IXmlLineInfo both declare properties
+  on interfaces, so the whole DOM corpus stopped on it.
+
+  Writing a second, smaller parser for the interface case was the obvious move
+  and is the one normalise-dont-special-case.md exists to refuse: interface
+  properties take `index`, `default`, hint directives and inherited
+  redeclaration exactly as class properties do, and the second path is the one
+  that stays broken. Extracted verbatim instead -- no behaviour change for the
+  class case, which is what makes it reviewable.
+
+  `ci` is the class-like type (a class OR an interface -- interfaces live in the
+  same UCls tables). An interface has no FIELDS, so FindUField always misses and
+  a read/write name always lands in the METHOD slot, which is the correct
+  reading for an interface property with no further work.
+  bug-p-a-property-in-an-interface-declaration-is-rejected }
+procedure ParsePropertyDecl(ci: Integer; curPublished: Integer);
+var
+  propName, readName, writeName: AnsiString;
+  pnOff, pnLen, rnOff, rnLen, wnOff, wnLen: Integer;
+  rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen: Integer;
+  propTk: TTypeKind;
+  propRec, propEnumId, propSetEnumId, propIndexVal, propBase, i: Integer;
+  propIsIndexed, propIsDefault, propHasIndex, propRedecl: Boolean;
+begin
+  Next;
+  if not IsMemberNameTok then Error('expected property name');
+  propName := GetTokenStr(TokPos - 1);   { keyword-token names (ParamCount) carry no SVal }
+  pnOff := Tokens[TokPos-1].SOffset;
+  pnLen := Tokens[TokPos-1].SLen;
+  Next;
+  { Indexed (array) property: `property Items[i: TIdx]: T ...`. The index
+    parameter's name/type are defined by the accessor signature, so the
+    declaration clause is parsed and discarded; we only mark the property
+    indexed so accesses pass the subscript as an extra accessor arg. }
+  propIsIndexed := False;
+  propIsDefault := False;
+
+  { `property Items;` / `property Items; default;` -- a REDECLARATION of an
+    INHERITED property. FPC lets a descendant re-expose an ancestor's property by
+    naming it alone, optionally adding a directive (fpjson's TJSONArray does
+    exactly `property Items;default;` to make the inherited indexed property the
+    class's default one). No type, no accessors: everything comes from the
+    ancestor.
+
+    Re-register it on THIS class with the ancestor's accessors copied, rather
+    than just letting FindUProp find the ancestor's entry -- because the point of
+    the redeclaration is usually to CHANGE something (here, `default`), and that
+    change must not be written onto the ancestor's row. }
+  propRedecl := (CurTok.Kind = tkSemicolon);
+  if propRedecl then
+  begin
+    Next;                                { the ';' after the name }
+    if CurTok.Kind = tkDefault then
+    begin
+      propIsDefault := True;
+      Next;
+      Eat(tkSemicolon);
+    end;
+    while (CurTok.Kind = tkIdent) and
+          (CaseEqual(CurTok.SVal, 'deprecated') or
+           CaseEqual(CurTok.SVal, 'platform') or
+           CaseEqual(CurTok.SVal, 'experimental') or
+           CaseEqual(CurTok.SVal, 'unimplemented')) do
+    begin
+      if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkString) then
+        Next;
+      Next;
+      Eat(tkSemicolon);
+    end;
+
+    propBase := FindUProp(ci, propName);
+    if propBase < 0 then
+      Error('redeclared property has no ancestor declaration: ' + propName);
+    i := AddUProperty(ci, pnOff, pnLen, UPropTk[propBase], UPropRec[propBase]);
+    UPropReadFOff[i] := UPropReadFOff[propBase]; UPropReadFLen[i] := UPropReadFLen[propBase];
+    UPropReadMOff[i] := UPropReadMOff[propBase]; UPropReadMLen[i] := UPropReadMLen[propBase];
+    UPropWriteFOff[i] := UPropWriteFOff[propBase]; UPropWriteFLen[i] := UPropWriteFLen[propBase];
+    UPropWriteMOff[i] := UPropWriteMOff[propBase]; UPropWriteMLen[i] := UPropWriteMLen[propBase];
+    UPropPub[i] := curPublished;
+    UPropEnumId[i] := UPropEnumId[propBase];
+    UPropSetEnumId[i] := UPropSetEnumId[propBase];
+    UPropIsIndexed[i] := UPropIsIndexed[propBase];
+    UPropIsDefault[i] := propIsDefault or UPropIsDefault[propBase];
+    UPropHasIndex[i] := UPropHasIndex[propBase];
+    UPropIndexVal[i] := UPropIndexVal[propBase];
+  end
+  else
+  begin
+  if CurTok.Kind = tkLBrack then
+  begin
+    propIsIndexed := True;
+    Next;
+    while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRBrack, ']');
+  end;
+  Expect(tkColon, ':');
+  LastTypeSetEnumId := -1;
+  propTk := ParseTypeKind;
+  propRec := LastTypeRecId;
+  propEnumId := LastTypeEnumId;
+  propSetEnumId := LastTypeSetEnumId;
+
+  { `index N` — a COMPILE-TIME constant handed to the accessor as its first
+    argument, so several properties can share one getter/setter. Distinct from an
+    indexed property, whose index is a runtime subscript. }
+  propHasIndex := False;
+  propIndexVal := 0;
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'index') then
+  begin
+    Next;
+    propIndexVal := ConstEval;
+    propHasIndex := True;
+  end;
+
+  rFOff := 0; rFLen := 0;
+  rMOff := 0; rMLen := 0;
+  wFOff := 0; wFLen := 0;
+  wMOff := 0; wMLen := 0;
+
+  if CurTok.Kind = tkRead then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('expected read field or method name');
+    readName := CurTok.SVal;
+    rnOff := Tokens[TokPos-1].SOffset;
+    rnLen := Tokens[TokPos-1].SLen;
+    Next;
+    if FindUField(ci, readName) >= 0 then
+    begin
+      rFOff := rnOff; rFLen := rnLen;
+    end
+    else
+    begin
+      rMOff := rnOff; rMLen := rnLen;
+    end;
+  end;
+
+  if CurTok.Kind = tkwrite then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('expected write field or method name');
+    writeName := CurTok.SVal;
+    wnOff := Tokens[TokPos-1].SOffset;
+    wnLen := Tokens[TokPos-1].SLen;
+    Next;
+    if FindUField(ci, writeName) >= 0 then
+    begin
+      wFOff := wnOff; wFLen := wnLen;
+    end
+    else
+    begin
+      wMOff := wnOff; wMLen := wnLen;
+    end;
+  end;
+
+  Eat(tkSemicolon);
+  { Optional `default;` on an indexed property → obj[i] routes here. }
+  if CurTok.Kind = tkDefault then
+  begin
+    propIsDefault := True;
+    Next;
+    Eat(tkSemicolon);
+  end;
+  { Trailing hint directives — `property Tests: TFPList read FTests;
+    deprecated;` (fpcunit). Parse-and-ignore, like the method path: they
+    only drive an FPC warning. Unconsumed, `deprecated` was read as the
+    next FIELD name and demanded a ':'. `deprecated` may carry a message
+    literal. }
+  while (CurTok.Kind = tkIdent) and
+        (CaseEqual(CurTok.SVal, 'deprecated') or
+         CaseEqual(CurTok.SVal, 'platform') or
+         CaseEqual(CurTok.SVal, 'experimental') or
+         CaseEqual(CurTok.SVal, 'unimplemented')) do
+  begin
+    if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkString) then
+      Next; { skip the message literal (consumed by the Next below) }
+    Next;
+    Eat(tkSemicolon);
+  end;
+  i := AddUProperty(ci, pnOff, pnLen, Ord(propTk), propRec);
+  UPropReadFOff[i] := rFOff; UPropReadFLen[i] := rFLen;
+  UPropReadMOff[i] := rMOff; UPropReadMLen[i] := rMLen;
+  UPropWriteFOff[i] := wFOff; UPropWriteFLen[i] := wFLen;
+  UPropWriteMOff[i] := wMOff; UPropWriteMLen[i] := wMLen;
+  UPropPub[i] := curPublished;
+  UPropEnumId[i] := propEnumId;
+  UPropSetEnumId[i] := propSetEnumId;
+  UPropIsIndexed[i] := propIsIndexed;
+  UPropIsDefault[i] := propIsDefault;
+  UPropHasIndex[i] := propHasIndex;
+  UPropIndexVal[i] := propIndexVal;
+  end;   { close the non-redeclaration branch }
+end;
+
 procedure ParseTypeSection;
 { Handles enum types, record/class type declarations }
 var
@@ -4359,8 +4562,30 @@ begin
           while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
           Expect(tkRBrack, ']');
         end;
-        while (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) do
+        while (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
+              (CurTok.Kind = tkProperty) do
         begin
+          { A PROPERTY on an interface -- `property HasLineInfo: Boolean read
+            GetHasLineInfo;`. Pure sugar over the accessor methods declared
+            beside it: an interface has no fields, so the read/write name always
+            resolves to a method, and the ordinary property-access path then
+            dispatches through the IMT like any other interface call.
+
+            The same parser the CLASS body uses, extracted for this (see
+            ParsePropertyDecl). Only the member LOOP had to learn the keyword;
+            everything about a property declaration -- `index`, `default`, hint
+            directives, inherited redeclaration -- is unchanged and shared,
+            which is the point. Published is 0: an interface has no visibility
+            sections and nothing streams from one.
+
+            FPC's own IEnumerator declares one, and fcl-xml's IXmlLineInfo
+            declares three, so this held the whole DOM corpus at its first unit.
+            bug-p-a-property-in-an-interface-declaration-is-rejected }
+          if CurTok.Kind = tkProperty then
+          begin
+            ParsePropertyDecl(ci, 0);
+            continue;
+          end;
           mIsFunc := CurTok.Kind = tkFunction;
           Next;
           if CurTok.Kind <> tkIdent then Error('expected interface method name');
@@ -5296,178 +5521,7 @@ begin
             end;
           end
           else if CurTok.Kind = tkProperty then
-          begin
-            Next;
-            if not IsMemberNameTok then Error('expected property name');
-            propName := GetTokenStr(TokPos - 1);   { keyword-token names (ParamCount) carry no SVal }
-            pnOff := Tokens[TokPos-1].SOffset;
-            pnLen := Tokens[TokPos-1].SLen;
-            Next;
-            { Indexed (array) property: `property Items[i: TIdx]: T ...`. The index
-              parameter's name/type are defined by the accessor signature, so the
-              declaration clause is parsed and discarded; we only mark the property
-              indexed so accesses pass the subscript as an extra accessor arg. }
-            propIsIndexed := False;
-            propIsDefault := False;
-
-            { `property Items;` / `property Items; default;` -- a REDECLARATION of an
-              INHERITED property. FPC lets a descendant re-expose an ancestor's property by
-              naming it alone, optionally adding a directive (fpjson's TJSONArray does
-              exactly `property Items;default;` to make the inherited indexed property the
-              class's default one). No type, no accessors: everything comes from the
-              ancestor.
-
-              Re-register it on THIS class with the ancestor's accessors copied, rather
-              than just letting FindUProp find the ancestor's entry -- because the point of
-              the redeclaration is usually to CHANGE something (here, `default`), and that
-              change must not be written onto the ancestor's row. }
-            propRedecl := (CurTok.Kind = tkSemicolon);
-            if propRedecl then
-            begin
-              Next;                                { the ';' after the name }
-              if CurTok.Kind = tkDefault then
-              begin
-                propIsDefault := True;
-                Next;
-                Eat(tkSemicolon);
-              end;
-              while (CurTok.Kind = tkIdent) and
-                    (CaseEqual(CurTok.SVal, 'deprecated') or
-                     CaseEqual(CurTok.SVal, 'platform') or
-                     CaseEqual(CurTok.SVal, 'experimental') or
-                     CaseEqual(CurTok.SVal, 'unimplemented')) do
-              begin
-                if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
-                   (Tokens[TokPos].Kind = tkString) then
-                  Next;
-                Next;
-                Eat(tkSemicolon);
-              end;
-
-              propBase := FindUProp(ci, propName);
-              if propBase < 0 then
-                Error('redeclared property has no ancestor declaration: ' + propName);
-              i := AddUProperty(ci, pnOff, pnLen, UPropTk[propBase], UPropRec[propBase]);
-              UPropReadFOff[i] := UPropReadFOff[propBase]; UPropReadFLen[i] := UPropReadFLen[propBase];
-              UPropReadMOff[i] := UPropReadMOff[propBase]; UPropReadMLen[i] := UPropReadMLen[propBase];
-              UPropWriteFOff[i] := UPropWriteFOff[propBase]; UPropWriteFLen[i] := UPropWriteFLen[propBase];
-              UPropWriteMOff[i] := UPropWriteMOff[propBase]; UPropWriteMLen[i] := UPropWriteMLen[propBase];
-              UPropPub[i] := curPublished;
-              UPropEnumId[i] := UPropEnumId[propBase];
-              UPropSetEnumId[i] := UPropSetEnumId[propBase];
-              UPropIsIndexed[i] := UPropIsIndexed[propBase];
-              UPropIsDefault[i] := propIsDefault or UPropIsDefault[propBase];
-              UPropHasIndex[i] := UPropHasIndex[propBase];
-              UPropIndexVal[i] := UPropIndexVal[propBase];
-            end
-            else
-            begin
-            if CurTok.Kind = tkLBrack then
-            begin
-              propIsIndexed := True;
-              Next;
-              while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
-              Expect(tkRBrack, ']');
-            end;
-            Expect(tkColon, ':');
-            LastTypeSetEnumId := -1;
-            propTk := ParseTypeKind;
-            propRec := LastTypeRecId;
-            propEnumId := LastTypeEnumId;
-            propSetEnumId := LastTypeSetEnumId;
-
-            { `index N` — a COMPILE-TIME constant handed to the accessor as its first
-              argument, so several properties can share one getter/setter. Distinct from an
-              indexed property, whose index is a runtime subscript. }
-            propHasIndex := False;
-            propIndexVal := 0;
-            if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'index') then
-            begin
-              Next;
-              propIndexVal := ConstEval;
-              propHasIndex := True;
-            end;
-
-            rFOff := 0; rFLen := 0;
-            rMOff := 0; rMLen := 0;
-            wFOff := 0; wFLen := 0;
-            wMOff := 0; wMLen := 0;
-
-            if CurTok.Kind = tkRead then
-            begin
-              Next;
-              if CurTok.Kind <> tkIdent then Error('expected read field or method name');
-              readName := CurTok.SVal;
-              rnOff := Tokens[TokPos-1].SOffset;
-              rnLen := Tokens[TokPos-1].SLen;
-              Next;
-              if FindUField(ci, readName) >= 0 then
-              begin
-                rFOff := rnOff; rFLen := rnLen;
-              end
-              else
-              begin
-                rMOff := rnOff; rMLen := rnLen;
-              end;
-            end;
-
-            if CurTok.Kind = tkwrite then
-            begin
-              Next;
-              if CurTok.Kind <> tkIdent then Error('expected write field or method name');
-              writeName := CurTok.SVal;
-              wnOff := Tokens[TokPos-1].SOffset;
-              wnLen := Tokens[TokPos-1].SLen;
-              Next;
-              if FindUField(ci, writeName) >= 0 then
-              begin
-                wFOff := wnOff; wFLen := wnLen;
-              end
-              else
-              begin
-                wMOff := wnOff; wMLen := wnLen;
-              end;
-            end;
-
-            Eat(tkSemicolon);
-            { Optional `default;` on an indexed property → obj[i] routes here. }
-            if CurTok.Kind = tkDefault then
-            begin
-              propIsDefault := True;
-              Next;
-              Eat(tkSemicolon);
-            end;
-            { Trailing hint directives — `property Tests: TFPList read FTests;
-              deprecated;` (fpcunit). Parse-and-ignore, like the method path: they
-              only drive an FPC warning. Unconsumed, `deprecated` was read as the
-              next FIELD name and demanded a ':'. `deprecated` may carry a message
-              literal. }
-            while (CurTok.Kind = tkIdent) and
-                  (CaseEqual(CurTok.SVal, 'deprecated') or
-                   CaseEqual(CurTok.SVal, 'platform') or
-                   CaseEqual(CurTok.SVal, 'experimental') or
-                   CaseEqual(CurTok.SVal, 'unimplemented')) do
-            begin
-              if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
-                 (Tokens[TokPos].Kind = tkString) then
-                Next; { skip the message literal (consumed by the Next below) }
-              Next;
-              Eat(tkSemicolon);
-            end;
-            i := AddUProperty(ci, pnOff, pnLen, Ord(propTk), propRec);
-            UPropReadFOff[i] := rFOff; UPropReadFLen[i] := rFLen;
-            UPropReadMOff[i] := rMOff; UPropReadMLen[i] := rMLen;
-            UPropWriteFOff[i] := wFOff; UPropWriteFLen[i] := wFLen;
-            UPropWriteMOff[i] := wMOff; UPropWriteMLen[i] := wMLen;
-            UPropPub[i] := curPublished;
-            UPropEnumId[i] := propEnumId;
-            UPropSetEnumId[i] := propSetEnumId;
-            UPropIsIndexed[i] := propIsIndexed;
-            UPropIsDefault[i] := propIsDefault;
-            UPropHasIndex[i] := propHasIndex;
-            UPropIndexVal[i] := propIndexVal;
-            end;   { close the non-redeclaration branch }
-          end
+            ParsePropertyDecl(ci, curPublished)
           else if CurTok.Kind = tkIdent then
           begin
             { comma-separated names share one type: `A, B: Integer` }

@@ -2769,6 +2769,13 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_method_ref_through_a_metaclass_variable.pas $(TESTTMP)/test_mcvar26
 	@$(TESTTMP)/test_mcvar26 | diff -u test/test_method_ref_through_a_metaclass_variable.expected - \
 	  || { echo 'test_method_ref_through_a_metaclass_variable: FAIL - a metaclass-variable receiver or its VMT lookup'; exit 1; }
+	@# A PROPERTY inside an INTERFACE: parsed at all, and then dispatched through
+	@# the IMT rather than a class VMT. The `direct` row is the control (the
+	@# ordinary-call arm, which already worked), so breaking interface dispatch
+	@# generally is distinguishable from breaking only the property path.
+	@./$(COMPILER) test/test_property_in_an_interface.pas $(TESTTMP)/test_iprop26
+	@$(TESTTMP)/test_iprop26 | diff -u test/test_property_in_an_interface.expected - \
+	  || { echo 'test_property_in_an_interface: FAIL - interface property parse or accessor dispatch'; exit 1; }
 	@# A method may be NAMED `Default` -- rtl-generics' central idiom, and a
 	@# collision with nothing to do with generics. Exercises the property
 	@# `default` MODIFIER alongside it, since that is what a too-eager fix breaks.
