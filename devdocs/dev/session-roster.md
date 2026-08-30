@@ -21511,3 +21511,49 @@ exist.
 Corollary for the regression test: gate on the **silent** assertion, not the loud
 one. Here that is `SizeOf(y)` expecting 8. The indexing errors vanish on any
 partial fix, so a test watching only them passes while the alias is still wrong.
+
+## Deletion proves inert-TODAY, never irrelevant-AFTER — and I dispatched on the difference
+
+Same afternoon as the note above, 2026-08-30, and it is that note's necessary
+qualifier. I got the instrument right and its **scope** wrong, in the space of an
+hour.
+
+frankA deleted seven `not CProgramMode` guards and the failures were byte-for-byte
+identical. Sound. I concluded the guards were not part of the fix, and therefore
+that frankC's "both halves in one commit" constraint had dissolved — so I split
+the ticket, sending the codegen half to frankA and the test half to frankC.
+
+frankC then measured **both halves paired** (baseline `faf762981c3c` → experiment
+`e4d7c60f3dab`): routing the prologue through `EmitParamSpillsForTarget` moves
+aarch64 from 2/6 to 5/6 and i386's `321` to `123` on the bridge — and breaks the
+**pure-C** path on three targets, from clean to `dbl_first 0` on aarch64, a
+compile failure on arm32, and a **segfault** on i386. The guards hold C-mode call
+sites positional to match the positional prologue. They are inert *today* and
+load-bearing *the moment the prologue is fixed*.
+
+**The rule.** Deleting a thing and observing no change proves it is not
+load-bearing **in the current configuration**. It proves nothing about the
+configuration after the fix — and a *compensating* mechanism is inert exactly
+while the thing it compensates for is still broken. That is what makes it a
+compensation. So the deletion test is a valid falsifier of "X causes the bug" and
+an invalid one for "X is not part of the fix", and those are different questions
+that a dispatch collapses into one.
+
+**Why I could not have read my way out of it either:** *inert-today* and
+*irrelevant-after* look identical in the source. The same confounding as the
+guard/backend correlation one level down — only the **paired** experiment, moving
+both halves and measuring both paths, separates them. Note also that frankC
+measured the **pure-C baseline** rather than assuming it, which is the only reason
+the arm32 compile failure did not read as pre-existing.
+
+**For dispatch specifically:** a disproof narrows *what to fix*; it does not
+license *splitting the work*. Before turning "X is not the cause" into two
+assignments, ask what the experiment would have to look like to show the halves
+are separable — and if that experiment has not been run, keep them together. The
+cheaper error is one agent doing slightly too much; the expensive one is two
+agents each landing a half that is a regression on its own.
+
+**And the good outcome to keep in view:** frankC's original conclusion was right
+with wrong reasoning, frankA's falsification destroyed the reasoning, and frankC
+then found the right reasoning *because* the wrong one was gone. Nobody wasted a
+step. The falsifier worked.

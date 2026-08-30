@@ -191,3 +191,68 @@ wrong root cause **one step before it was written into a dispatch**.
 - **The arm32 `refused` row is a separate, already-filed defect**:
   [[bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area]], which already carries
   frankA's warning about lifting the refusal. Do not fold it in here.
+
+## RE-REVERSED: both halves or neither — measured paired (frankC, 2026-08-30)
+
+**This section supersedes the dispatch in the two sections above. Read all three
+in order; the sequence is the point.** frankA's disproof stands and is not in
+dispute. What does not follow from it is the inference *I* drew — that the
+partial-landing hazard was dissolved. **The guards are inert today and
+load-bearing the moment the prologue is fixed, and those two states are
+indistinguishable from the source.**
+
+frankC measured both halves, paired, same source, one change: route a `ProcCdecl`
+proc's prologue through `EmitParamSpillsForTarget` on i386/arm32/aarch64 instead
+of `cparser.inc`'s local positional arms. Baseline `faf762981c3c` → experiment
+`e4d7c60f3dab`, both converged in 1 round.
+
+```
+Pascal->C bridge          Pure C (C caller -> C callee)
+x86-64   6/6  ->  6/6     x86-64   clean -> clean
+aarch64  2/6  ->  5/6     aarch64  clean -> dbl_first 0, two_dbl 1.79e308
+riscv32  6/6  ->  6/6     arm32    clean -> COMPILE FAIL
+i386     0/6  ->  1/6     riscv32  clean -> clean
+                          i386     clean -> SEGFAULT
+```
+
+The **pure-C baseline was measured, not assumed** — clean on all five — because
+otherwise the arm32 compile failure would have read as pre-existing.
+
+### What this establishes
+
+- **The mechanism is `cparser.inc`'s positional prologue arms, not codegen.**
+  Fixing them alone takes aarch64's four double shapes and turns i386's `321` into
+  `123`.
+- **The seven guards do exactly what their comments claim** — they hold C-mode
+  call sites positional to match that positional prologue.
+- **Delete the arms alone:** every C-to-C call on three targets breaks in order to
+  fix the bridge. **Delete the guards alone:** nothing moves — which is precisely
+  what frankA measured. **Both halves or neither, in one commit.**
+
+frankC's original conclusion stands; the reasoning it first gave for it was wrong,
+and frankA's falsification is what let it find the right one. That is the falsifier
+working as intended, not a wasted step.
+
+### The coordinator's error, recorded because the dispatch turned on it
+
+I read "deleting X alone changes nothing" as "X is not part of the fix." It does
+not follow. **Deletion tests whether something is load-bearing in the CURRENT
+configuration; it says nothing about the configuration after the fix.** A
+compensating mechanism is inert exactly while the thing it compensates for is
+still broken — that is what makes it a compensation. So the instrument frankA used
+was sound and my reading of its scope was not, and I converted that reading
+directly into a split dispatch. This is the same confounding as the guard/backend
+correlation, one level down: *inert-today* and *irrelevant-after* look identical
+from the source, and only the paired experiment separates them.
+
+### Three residues, surfacing only once the prologue is fixed — all Track A
+
+Not in scope for the primary commit; file as a follow-on.
+
+- **aarch64 `f(float,int)` still `0.00`** — Single only; every double came right.
+  So it is float **classification** of Single, not argument order.
+- **i386 floats still `Nan` across the board** — order fixed, classification not.
+- **arm32's shared cdecl arm fails to compile** a plain C program that builds
+  fine today. Distinct from
+  [[bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area]]; that ticket owns the
+  bridge's four-arg refusal, this is the shared arm regressing pure C.
