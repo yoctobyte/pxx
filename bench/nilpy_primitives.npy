@@ -1,0 +1,123 @@
+# NilPy primitive micro-benchmark -- marginal cost of ONE added statement in a
+# while loop, baseline subtracted. Committed 2026-08-31 because it had lived
+# only in a session scratchpad, and a benchmark that lives only in /tmp cannot
+# be re-measured: feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython
+# recorded numbers nobody could reproduce four days later.
+#
+# Run BOTH sides on the same box, back to back, min-of-N -- the ratios move
+# with the box and only a paired run is comparable:
+#     ./compiler/pascal26 bench/nilpy_primitives.npy /tmp/hot && /tmp/hot
+#     python3 bench/nilpy_primitives.npy
+#
+# It is a measuring stick, not a test. Nothing in the Makefile runs it, and it
+# asserts nothing -- do not add it to a gate.
+#
+# Read the BOTTOM of the output before the top: NilPy beats CPython at
+# isinstance and at a bare call, which is what makes subscript an outlier
+# against the language's own baseline rather than one more slow thing.
+import time
+N = 300000
+class F:
+    def __init__(self, b):
+        self.body = b
+        self.ip = 0
+class VM:
+    def __init__(self):
+        self.stack = []
+    def push(self, v):
+        self.stack.append(v)
+    def pop(self):
+        return self.stack.pop()
+
+def bench(name, fn):
+    t = time.time(); fn(); d = time.time() - t
+    print(name, round(d, 4), "s  ", round(d * 1000000000.0 / N, 1), "ns/iter")
+
+def base():
+    i = 0
+    while i < N:
+        i = i + 1
+
+def idx_lit():
+    b = [1, 2, 3, 4]
+    x = 0
+    i = 0
+    while i < N:
+        x = b[2]
+        i = i + 1
+
+def idx_var():
+    b = [1, 2, 3, 4]
+    k = 2
+    x = 0
+    i = 0
+    while i < N:
+        x = b[k]
+        i = i + 1
+
+def idx_attr():
+    f = F([1, 2, 3, 4])
+    x = 0
+    i = 0
+    while i < N:
+        x = f.body[f.ip]
+        i = i + 1
+
+def dget():
+    d = {"AAA": 1, "BBB": 2}
+    x = 0
+    i = 0
+    while i < N:
+        x = d["AAA"]
+        i = i + 1
+
+def dgetm():
+    d = {"AAA": 1, "BBB": 2}
+    x = 0
+    i = 0
+    while i < N:
+        x = d.get("AAA")
+        i = i + 1
+
+def meth():
+    vm = VM()
+    i = 0
+    while i < N:
+        vm.push(1)
+        vm.pop()
+        i = i + 1
+
+def appendpop():
+    s = []
+    i = 0
+    while i < N:
+        s.append(1)
+        s.pop()
+        i = i + 1
+
+def isin_tuple2():
+    tok = "x"
+    i = 0
+    while i < N:
+        if isinstance(tok, (int, float)):
+            i = i
+        i = i + 1
+
+def isin_int():
+    tok = "x"
+    i = 0
+    while i < N:
+        if isinstance(tok, int):
+            i = i
+        i = i + 1
+
+bench("base                 ", base)
+bench("+ b[2]   list/lit idx", idx_lit)
+bench("+ b[k]   list/var idx", idx_var)
+bench("+ f.body[f.ip]       ", idx_attr)
+bench("+ d['AAA']  dict idx ", dget)
+bench("+ d.get('AAA')       ", dgetm)
+bench("+ vm.push/pop (meth) ", meth)
+bench("+ s.append/pop       ", appendpop)
+bench("+ isinstance(t,(i,f))", isin_tuple2)
+bench("+ isinstance(t,int)  ", isin_int)

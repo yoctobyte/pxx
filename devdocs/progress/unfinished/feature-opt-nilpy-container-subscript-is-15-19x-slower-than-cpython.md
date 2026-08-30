@@ -4,10 +4,10 @@ prio: 55
 type: feature
 blocked-by: []
 status: unfinished
-owner: frank-optimize
+owner: 
 found: 2026-08-30
 found-by: frank-optimize, profiling bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
-summary: "Container subscript is NilPy's worst primitive against CPython: b[2] 234 ns vs 12 (19x), d['k'] 495 vs 30 (16x), while pxx BEATS CPython at isinstance, len, exec and a zero-arg call. One allocation removed (PyVarSlotSet's unconditional s := ''), giving b[2] -41%. RESOLVED SINCE (2026-08-30): all three remaining candidates are now measured and NONE is worth chasing here -- per-call managed-temp init was a codegen bug, fixed by frankA in d27b4a28a; the dict half is the static-literal pass, now named in decide-the-o3-tier-*; the 16-byte rep-stosb clears are ~4%, under the noise floor. What is left of this ticket is a re-measurement, not an investigation."
+summary: "Container subscript is NilPy's worst primitive against CPython. RE-MEASURED 2026-08-31 on a quiet box: b[2] is now 117 ns vs 11 (10.6x, was 234 vs 12 = 19.2x) and d['k'] 262 vs 25 (10.6x, was 16.5x) -- the absolute cost roughly HALVED, and the -O3 reserve this ticket recorded as 30-40% is now 3-7% because the static-literal pass promoted to -O2 exactly as predicted. All FOUR previously-named drivers are now resolved, so a ~10x gap remains with no cause. New suspect, named categorically: a subscript costs 11 out-of-line calls, 8 of them into three tag-dispatch routines sharing an identical 18-instruction preamble that re-tests the type tag with six compares. Benchmark committed as bench/nilpy_primitives.npy. Next step is confirm-then-decide, not a fix."
 ---
 
 # NilPy container subscript is 15-19x slower than CPython
@@ -215,3 +215,100 @@ exactly like a fix. It did that to me twice — once from a filename with a spac
 in it, once from a locator that silently found nothing — and both times the
 false reading was "0", the answer I was hoping for. Make the script print
 `NOBIN`/`NOADDR` rather than defaulting to zero.
+
+## 2026-08-31 (frank-optimize) — the re-measurement this ticket was parked for. Headline halved; all four named drivers are gone; ONE new suspect
+
+Parked waiting for a quiet box. Box at load ~4.4, compiler `3c31befa1704`.
+**Re-measured first and re-scoped second**, in that order, per the instruction
+above.
+
+### The numbers, min-of-5 each side, both run back to back on this box
+
+| operation | pxx then | **pxx now** | ratio then | **ratio now** |
+| --- | ---: | ---: | ---: | ---: |
+| `b[2]` list, const index | 234 ns | **117.2** | 19.2x | **10.6x** |
+| `b[k]` list, var index | 229 ns | **117.3** | 9.4x | 11.4x |
+| `d['AAA']` dict | 495 ns | **261.7** | 16.5x | **10.6x** |
+| `d.get('AAA')` | 504 ns | **263.4** | 11.1x | 6.6x |
+| `f.body[f.ip]` | 492 ns | **310.4** | 15.0x | 13.9x |
+| `s.append`+`pop` | 654 ns | **397.9** | 8.6x | 6.1x |
+| `isinstance(t,(int,float))` | 62 ns | 54.1 | 0.39x | 0.39x |
+
+**pxx's absolute cost roughly halved on the whole subscript family.** `d['AAA']`
+495 → 262 is the static-literal promotion landing exactly where this ticket
+predicted it would.
+
+**Read the ratios with care, and this is why the benchmark is now committed.**
+`b[k]`'s ratio got *worse* (9.4x → 11.4x) while pxx got *twice as fast*, because
+CPython's own number moved 24 → 10.3 ns between the two runs. **A ratio moves
+with both sides**, so only the paired same-box run is comparable, and the "then"
+column is a different box-day. The absolute pxx column is the one that travels.
+
+### The `-O3` reserve is GONE, and that is a confirmed prediction, not a loss
+
+This ticket recorded *"`-O3` already recovers 30-40% of subscript cost over
+`-O2`, which suggests an inlining-tier question"*. Measured now, min-of-3:
+
+| | `-O2` | `-O3` | gain |
+| --- | ---: | ---: | ---: |
+| `b[2]` | 116.6 | 108.4 | **7.0%** |
+| `d['AAA']` | 260.6 | 244.6 | **6.1%** |
+| `f.body[f.ip]` | 315.0 | 302.6 | 3.9% |
+
+**3-7%, not 30-40%.** The thing `-O3` was holding was `EmitStaticLitHandle`,
+which is now at `-O2` — so the tier gap closed by promotion, exactly as this
+ticket said it would. **Inlining tier is no longer a lever here.**
+
+### So all four previously-named drivers are resolved, and the gap is ~10x with no cause
+
+Allocation (fixed), managed-temp init (`d27b4a28a`), the static-literal pass
+(promoted), the `-O3` tier gap (closed). `b[2]` is still **117 ns against
+CPython's 11**. **A ticket whose every suspect has been cleared is not a solved
+ticket** — it is an open question with no owner for the residual, which is the
+state that reads as finished.
+
+### The new suspect, named categorically — 11 calls per subscript, 8 into tag dispatch
+
+Zero-variance method, no profiler: compile the loop **with** and **without**
+`x = b[2]` and diff the emitted binaries. Adding the statement costs **+57
+instructions and +11 static call sites**. pxx emits a minimal ELF with no symbol
+table, so the targets are bare addresses; six gain calls:
+
+| target | added | what the code is |
+| --- | ---: | --- |
+| `0x4004c5` | +4 | tag dispatch, 21 instructions |
+| `0x400529` | +2 | tag dispatch, 19 instructions |
+| `0x40057e` | +2 | tag dispatch, 19 instructions |
+| `0x40870e` | +1 | global-guard prologue |
+| `0x40acbe` | +1 | small accessor, full frame |
+| `0x452736` | +1 | `lea; xor; mov $0x10,%rcx` — the 16-byte variant clear |
+
+**The three tag dispatchers share an identical 18-instruction preamble** and
+diverge only in the tail (21 vs 19 instructions; the long one writes a tag back).
+Each re-tests the value's type tag with **six compare-and-branch pairs** before
+doing anything. **8 of the 11 added calls are into these three.**
+
+So the shape of the remaining cost is: **a list subscript re-derives the type tag
+from scratch, out of line, eight times.** That is one concept served by three
+near-identical mechanisms, which `root-cause-over-microfix.md` calls a design
+flaw rather than a smell — but they are **not** literal duplicates, and anyone
+acting on this should confirm the tails are genuinely specialisations before
+proposing to merge them.
+
+### What I did NOT do
+
+Not attempted the fix. Removing repeated out-of-line tag dispatch is type
+inference or an inline cache, not a peephole, and it is a fresh investigation
+rather than the re-scope this ticket asked for. **Next step for whoever takes
+it: confirm the three tails are specialisations of one routine, then decide
+between merging them and not calling them at all.**
+
+`bench/nilpy_primitives.npy` is **committed** now, with the paired-run
+instructions in its header — this ticket's numbers were unreproducible four days
+later because the benchmark lived in a scratchpad.
+
+## Parked 2026-08-31
+
+re-measurement and re-scope done; the fix is a fresh investigation (out-of-line tag dispatch), not this ticket's remaining work
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
