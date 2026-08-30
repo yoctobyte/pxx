@@ -23178,3 +23178,87 @@ no error.
 not say* now pairs with **the record knows and the reader's instrument does not show
 it** — its `tail -8` truncation, two behind-checkout misreads, my worktree/ref-space
 mixup. **The first family is a design defect; the second is a discipline one.**
+
+## Every instrument tonight that lied, lied by being CORRECT ABOUT SOMETHING ELSE
+
+frank-optimize's line, and it is the closing summary of 2026-08-30. Tonight's
+instruments: a stale binary, a stale **tree**, a `-g`-less objdump, an under-powered
+null, a half-applied document, a store-local `cat-file`, a `tail -8` truncation, a
+`job_reason` from the newest run rendered beside an older verify.
+
+**None of them errored. All of them answered.** That is why *"check the answer"* is
+not a sufficient guard, and why the working form is **"prove the instrument was
+pointed at the world you mean."**
+
+frankT's parity-guard misread is the cleanest instance and it is one level up from
+the stale-binary trap: not *which binary am I measuring* but **which tree is this
+tool reading.** Its checkout was 2 commits behind, the guard reported
+`x86-64=23, aarch64=11, OK`, which reads as *a promotion partly reverted*, and it was
+one step from reporting that. Internally consistent, correct about a tree that no
+longer existed. It caught it itself.
+
+## Coverage geometry — the affected population lived in a tier the author cannot run
+
+The `9588c8535` regression, resolved end to end tonight. `x = "a" * 3` gave **285**
+at HEAD and **3** on `pinned`; a callee declaring a `tyAnsiString` parameter while
+consuming the **frozen** form read a length prefix at `Offset` where the arm now
+handed it `Offset + 8`. Reverted as `72b4c47a7`.
+
+**This is not a diligence story.** Eight string-heavy tests, both widestring
+canaries, `argLW=6`, the self-host fixedpoint and `gate.sh quick` were green at push
+time **and are all still green now** — not one was wrong. `gate.sh quick` drops
+`test-nilpy` deliberately (625 of 649 seconds). The affected population is
+`test-nilpy`, **full-tier only, and the hook denies it to the author.**
+
+> **A change to a cross-frontend marshalling path has its affected population in a
+> tier the author cannot run.**
+
+**The answer is NOT to widen the gate** — that spends the machine producing T's
+median-8 sampling, which is what caught this. It is **one canary in the evidence**:
+`x = "a" * 3` costs under a second. *For a marshalling change, carry a repro from
+each frontend your quick tier does not cover.*
+
+**Two independent single-hunk A/Bs before any revert**, and the reason matters:
+`EmitStaticLitHandle`'s `-O2` promotion is **also** string-literal-handle work in the
+same window, so *"the subject matches"* would not have narrowed to one commit. **With
+a named suspect, disabling the hunk beats bisecting the window** — it answers *which
+commit* and *which hunk* in one build, and fails safe, since a still-red repro
+refutes the lead in seconds with the bisect still available.
+
+## An exculpation needs an owner for the residual question
+
+frankwasm's, and it is aimed squarely at me.
+
+> **Being cleared was never the risk. The risk was that the clearing was so clean it
+> would read as a complete explanation** — and a real miscompile blocking the pin
+> would have sat behind a satisfying answer.
+
+24 of 24 never-seen-before, the commit touching no code, arithmetically impossible.
+**Three of us reached "not frankwasm" independently and only one then asked "then
+what?"** The exoneration and the residual question are separate deliverables, and the
+cleaner the exoneration, the more likely the second is dropped. **Assign the "then
+what?" when you accept an exculpation.**
+
+Sibling already recorded tonight, same mechanism: *a wrong cause gets challenged, a
+dismissed question just stops.*
+
+## Closing the -O3 campaign: one pass took the tier from 28% to ~6%
+
+frank-optimize recommends **stopping**, and I endorse it. After `440c822e6`, the
+`-O3`-vs-`-O2` gap on `compiler.pas` fell from **28% to ~5-7%** (min-of-9 6.6%,
+**7 of 9 paired runs** favouring `-O3` — a **sign test reported deliberately in place
+of a mean**, because at that effect size a mean on a loaded box is partly a
+measurement of the other agents).
+
+**The remainder is worth ~6% collectively while the one-at-a-time rule requires a
+full gate per pass** — and that rule, which is right, makes the collective figure the
+wrong thing to promote against. No individual remaining pass is likely to clear the
+bar. Re-measure on a quiet box before anyone picks it up.
+
+**What the remainder is made of**, from a mnemonic diff of two 1.95M-instruction
+builds with no timing involved: `push`/`pop` **−26,965 each, exactly matched pairs**,
+`movslq` −17,241, `mov` +55,717 — the W1/W2 scratch-register work plus
+sign-extension elimination. **And it flagged in its own ticket that this is a large
+INSTRUCTION change for a small TIME change**, because that is the exact trap the
+ticket already fell into once: **an instruction count is a very good way to FIND a
+candidate and a very bad way to PRICE one.**
