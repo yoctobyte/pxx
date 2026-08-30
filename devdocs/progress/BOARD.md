@@ -391,7 +391,7 @@ _none_
 | regression-test-core-test-c-gtk-window-2 | P | 70 | regression | regression: test-core#src:test/test_c_gtk_window.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk | P | 70 | regression | regression: test-core#src:test/test_c_gtk.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk3-stock | P | 70 | regression | regression: test-core#src:test/test_c_gtk3_stock.pas red at bfec13534396 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard0-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 red at 30c06db1ae4e (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard0-6-2 | P | 70 | regression | regression: `^specialize T<Args>` in a TYPED CONST no longer parses (tgeneric87) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
@@ -720,7 +720,7 @@ _none_
 - [p 70] [P] regression-test-core-test-c-gtk-types [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-c-gtk-window-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-c-gtk3-stock [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-pascal-conformance-shard0-6-2
+- [p 70] [P] regression-test-pascal-conformance-shard0-6-2
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
