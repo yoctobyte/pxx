@@ -5083,3 +5083,70 @@ path with no minimal reproducer — kept, with the measurement written down). Th
 three do not belong under "waiting on an open bug" either: **they are not waiting
 on anything.** Parking permanent decisions under a heading that means *pending* is
 what converts a queue into scenery.
+
+### 126 — an instrument that CANNOT SEE a defect reads exactly like one reporting its absence
+
+*frankA, 2026-08-30, fixing `--emit-obj` and finding the ticket's scope was short
+by one writer.*
+
+The reported bug was `--emit-obj` discarding `external name 'sym'`. The cause was
+**five hand-rolled copies of one decision** in `elfwriter.inc` — two correct, three
+wrong — and **each wrong writer was wrong twice**, because sizing the string table
+and writing it are separate loops. Ten call sites for one rule.
+
+The fifth copy is `writeELFSharedX64`, i.e. `--shared`, and **the ticket did not
+know it was affected.** Not because anyone was careless — because the obvious check
+cannot see it:
+
+> The `.so` this writer emits has **no section header table**, so
+> `readelf --dyn-syms` prints *"Dynamic symbol information is not available"* and a
+> symbol-level check sees **nothing at all** — not a wrong name, nothing.
+
+That is the face. A blind instrument and a clean instrument produce the same
+output, and the natural reading of "no wrong symbols reported" is "no wrong
+symbols". `strings` showed the three `PalSys` names present before the fix and
+absent after — a cruder tool that could actually see.
+
+It was found only because the **sibling grep** found the site and the lane then had
+to prove the site *mattered*. Note the order: the site came from the duplication
+rule (*if you fix a bug on one arm of a double case, grep for the sibling*), and
+the *significance* came from picking a different instrument once the first one
+returned nothing. **"My check reports nothing" is a claim about the check until you
+have seen it report something.**
+
+**The fix is the structural one, not the ten-site one.** One resolver,
+`ExternalLinkName`, with all ten sites routed through it, so sizing and writing
+**cannot drift apart again** — the same move as flooring alignment in the allocator
+(121a) rather than patching two callers. And the regression asserts the name in
+both directions and was confirmed as a **control**: against the pinned pre-fix
+binary it fails on both riscv32 and xtensa *while compiling cleanly*, which is
+exactly why the defect survived.
+
+### 127 — a confident MECHANISM attached to an uncounted number
+
+*frankA, 2026-08-30, retracting its own PENDING-COMMIT report — and this is a
+better statement of face 123's cause than the coordinator's.*
+
+> *"A confident mechanism attached to an uncounted number is worse than the number
+> alone, because it explains away the very check that would have caught it."*
+
+The report was: 7 PENDING-COMMIT tickets, 5 real. The 7 came from
+`grep -rl PENDING-COMMIT` — **a line count reported as a ticket count**, when
+`progress.sh pending` is the thing that defines the set and returns **empty**.
+
+But the count alone would have invited a check. What suppressed the check was the
+*explanation* bolted to it: a correct, well-argued account of why these five could
+never clear — `sync.sh` fills at push time, these already landed, so no future sync
+will reach back for them. Every clause true. The mechanism made the number feel
+**derived** rather than counted, and a derived number does not get re-measured.
+
+Same family as face 32 (a derived number standing in for a measured one reads as
+*more* rigorous — arithmetic looks like work), but sharper: here the derivation was
+not of the number, it was of the number's *permanence*, which is the property that
+made it actionable.
+
+**And the lane named its own general fix:** *"I read the count and never asked what
+the population was."* It already carried that discipline for zeros — a
+non-existence claim demands you state the search — and did not apply it to a
+**non-zero**. **Same failure, opposite sign.** A count of 7 is as much a claim about
+a population as a count of 0, and only one of the two triggers the habit.
