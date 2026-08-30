@@ -10961,3 +10961,96 @@ DANGLING SHAS BY DESIGN — this index quotes shas that are deliberately unreach
 `75d66c356` precisely to record that it was a pre-rebase sha which nearly became a premise;
 replacing it with the sha it landed as (`ae26693a3`) would delete the finding. Read a bare sha
 here as evidence in a case, not as a pointer to code.
+
+---
+
+## 217 — DUMP THE IR AT BOTH LEVELS FIRST: A DISCONFIRMING MEASUREMENT THAT COSTS ONE COMMAND
+
+*(frank-optimize-b4, 2026-08-30, closing both `-O3` wrong-code bugs with one change after
+establishing they were the same defect.)*
+
+Nine gate sites were in scope. Before probing any of them, b4 dumped the IR of the diverging body
+at both optimisation levels: **byte-identical at `-O2` and `-O3` — 33 nodes, same numbering.**
+
+That eliminated `ir.inc` **entirely**, two of the nine, and moved the search into the x86-64
+emitter where it belonged. One command, run first, and it works by proving where the bug is
+**not**.
+
+> Nearly every instrument in this index confirms. **This one excludes** — and exclusion is what
+> makes a nine-site search tractable, because a confirmation tells you about one site and an
+> exclusion tells you about a whole layer.
+
+The practical wrinkle, without which the next person concludes the tool does not apply: **the main
+body has no name to ask `PXXDBG=a.ir:<proc>` for**, so wrap the lines in a procedure first.
+
+### 217a — a hand-sync requirement is not mitigated by documenting it
+
+The cause: `IRFirstEvaluated` is a **hand-maintained mirror** of the emitter's operand-order guard
+chain, missing the arm for `-O3` W1 slice 9 ("both subtrees pure → park the RIGHT value and
+evaluate it first"). The mirror walks LEFT unconditionally. So `h := h * 31 xor qword(c)` marked
+the load of `h` redundant, the emitter put `qword(c)` in rax first, and the load emitted
+**nothing** — `EmitReExtendRax` on a qword is a no-op. `(c*31) xor c` = 222.
+
+The mirror's own comment says **"MUST MOVE TOGETHER WITH IREmitMachineCode's arms."** The hazard
+was known, written down, and adjacent to the code. It drifted anyway, and the reason is structural:
+
+> **The warning is read by whoever edits the MIRROR. The drift happens when someone edits the
+> AUTHORITY.** A note on the copy is invisible from the original, which is the only place the
+> divergence can begin.
+
+This is 200 (*the reporting half drifts from the deciding half*) with the excuse removed — here
+the coupling *was* documented, in the right words, in the right file.
+
+### 217b — check the prediction where it is USED, not where it is modelled
+
+**The fix is not "add the missing arm".** That repairs this shape and leaves two models of one
+decision synced by hand. Instead the pass's premise is now evaluated against what the emitter
+**did**: `ReloadRaxCodeLen` holds `CodeLen` as each statement begins emitting, and the elision
+requires `CodeLen = ReloadRaxCodeLen` — literally *"nothing has been emitted yet in this
+statement"*, which is what the pass always claimed to be checking.
+
+The consequence is the part to copy: **a mirror that drifts again now costs a missed
+optimisation** — which is exactly what the old comment already claimed was the worst case. The
+comment was true about the *consequence* and wrong about the *mechanism*, and being right about
+the consequence is what stopped anyone re-checking the mechanism.
+
+### 217c — 19,941 marks, 1 declined
+
+On `compiler.pas` at `-O3`. **Wrong once in twenty thousand**, and the one time it was wrong it
+produced a plausible integer rather than a crash. That single decline (`sym imm8`, 24 bytes
+already emitted) was **a live wrong-code site in the compiler's own `-O3` build.**
+
+No sampling finds a 1-in-20,000 rate; no reviewer suspects it; and 190 says the self-host gate
+cannot see it, because a consistently-wrong compiler reproduces itself. This is 187 and 201
+meeting — an enormous population, a quiet and well-formed failure.
+
+### 217d — a guard that never declines cannot be shown to work
+
+The regression rows assert the **values** 635218 / 635317, never "the two `-O` levels agree" — the
+levels agreed at **222** too, in the broken build. That much was asked for. The half that was not
+asked for is better: a row asserts **the refusal actually fires**, via `PXXDBG=a.reload:*` now
+emitting `DECLINED` lines.
+
+And non-vacuity was proven the hard way rather than argued: **deleting the `CodeLen` half makes
+both new rows print 222, and b4 ran that build.** A control that has failed once, on purpose, at
+the cost of one build.
+
+### 217e — the refuted ranking is a result, and it was refuted at the right price
+
+pxx-a5 had pre-ranked three sites matching `(op = tkStar) and (IRKind[left] = IR_LOAD_SYM)`. b4
+disabled each individually, one build each: **all three still printed 222.**
+
+> **The shape that matches was not the shape that fires.**
+
+Recorded as a negative rather than skipped, because a well-formed ranking refuted in three builds
+is worth more to the next hunt than a silent pass — it is what stops the same three sites being
+re-ranked first next time. Cheap refutation is the return on ranking at all; the alternative is
+nine sites probed in arbitrary order.
+
+And the confirmation that it was **the** cause rather than *a* cause: each of the four axes in
+pxx-a5's original characterisation falls out of the mechanism — the chain is needed for the mark,
+`* 31` makes the mirror walk down to the leaf instead of answering "cannot say", `qword` is needed
+because a cast lowers to a binop so the right operand is not a leaf, and the middle operand is
+irrelevant because statement one's result is genuinely never read. **All-int64 was clean because
+it never reaches that arm.** A mechanism that re-derives every axis of an independently-measured
+characterisation is a different grade of evidence from one that merely fixes the repro.
