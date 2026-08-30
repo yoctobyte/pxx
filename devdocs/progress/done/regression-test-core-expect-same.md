@@ -104,4 +104,4 @@ supposed to stay apart, because a producer line for the second chain sat inside
 the first chain's group and chained all three. It merged identically **before**
 the fix, which is how it was caught — when a guard fails, the first question is
 whether it fails pre-fix too.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d78ce2f35.
