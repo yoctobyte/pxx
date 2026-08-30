@@ -366,11 +366,21 @@ all under the floor and none of them resolved. What survived cleared it by a
 wide margin: `compiler.pas` at +6.95%, and an aarch64 change at **−33.9%, 9 of
 9** — clear by a factor of five.
 
-**Anything under your measured floor is UNRESOLVED, regardless of how many pairs
-agree.** A mixed microbenchmark near the break-even flipped sign between runs:
-`+2.3%` at 1/11, then `−3.04%` at 10/15 — same program, same isolated change.
-Pair counts do not rescue an effect smaller than the noise; they just make a coin
-flip look deliberate.
+**A change smaller than the floor is not one that FAILED A BAR — it is one your
+instrument CANNOT RULE ON** (frank-optimize's phrasing, and the distinction is
+the whole point: "no win" and "no answer" get written up in the same grammar and
+mean opposite things). A mixed microbenchmark near the break-even flipped sign
+between runs: `+2.3%` at 1/11, then `−3.04%` at 10/15 — same program, same
+isolated change. Pair counts do not rescue an effect smaller than the noise; they
+just make a coin flip look deliberate.
+
+**So when the magnitude is inside the floor, report the SIGN COUNT and say
+unresolved.** `7/15` is an honest sentence; `+6.27%` is not, and the second is
+what a benchmark prints if you let it.
+
+**The mechanism, in one line, and it is the guard rule turned inside out:** *a
+guard that cannot fail prints PASS; a benchmark with no null row cannot output
+"unresolved", so it outputs a number.* Neither errors. Both answer.
 
 **This is the positive-control rule pointed at benchmarks.** A guard needs a case
 it **must reject**; a measurement needs a case that **must not move**. In both,
