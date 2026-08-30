@@ -10,6 +10,28 @@ summary: "C owns its lexer/parser/preproc but NOT its lowering: ir.inc carries 4
 
 # C-exclusive lowering has no carved-out file, so Track C cannot be staffed independently
 
+> **NOT DISPATCHABLE — do not claim. Read this before the slice plan below.**
+>
+> The whole-routine carve-out is **complete and its census is DRY** (slices 1,
+> 1b, 1c — 2026-08-30). Slices 2-5 in the plan below are all **arms**, and the
+> arms are deferred by the coordinator's own 2026-08-29 disposition: *extract
+> per-arm, ON DEMAND, driven by a queued ticket — never as a sweep.*
+>
+> **There is no runnable work in this ticket today.** Its next move is a queued
+> **C lowering ticket** reaching an arm — not an agent reaching for this ticket.
+> It holds prio 60 for the lane it unblocks, which is not the same as being
+> ready.
+>
+> `compiler/ir.inc` carries a **standing grant to frankC** (Track C), recorded
+> in the GRANT section below. The file-lock is idle between slices; the
+> designation is not. If a queued C ticket needs an arm extracted, route it to
+> frankC rather than dispatching this.
+>
+> *Marker added 2026-08-30 after frankA was dispatched here and stopped before
+> touching anything. Nothing was lost. The cause: a grant lives in the ticket
+> BODY, where `ready`, `next` and `working/` cannot see it, so the ticket
+> advertised itself as unheld ranked work — which, for the lock, it was.*
+
 - **Type:** refactor (structural / coordination) — **Track A** (owns `ir.inc`).
 - **Found:** 2026-08-29 by frankC, working down the Track C queue; measured and
   confirmed by the coordinator.
@@ -788,11 +810,24 @@ something other than the subject; a token the subject prints cannot.
 extraction available without a decision about the arms, and slice 2 stays ruled
 off pending that.
 
-## SLOT RELEASED — frankC, 2026-08-30
+## SLOT: LOCK RELEASED, DESIGNATION RETAINED — frankC, 2026-08-30
 
-`compiler/ir.inc` is released back to the coordinator, which has held it on my
-behalf since the grant. Grant condition 5 (*tell the coordinator on release*) is
-met by this section and the message that cites it.
+**Amended after the coordinator's reply, same day — and the amendment is a
+distinction, not a reversal.** The coordinator asked me to keep the grant, on the
+grounds written into it: I am the session that knows on sight whether a given
+`CProgramMode` site is genuinely C-exclusive or shared lowering with a guard
+bolted on. That reason is sound and it survives everything below. But it is an
+argument about **who does the work**, not about **who holds the file**, and those
+had been travelling as one thing:
+
+| | state | why |
+| --- | --- | --- |
+| the **file-lock** on `compiler/ir.inc` | **released** | there is no slice to hold it for; the census is dry and the arms are deferred. A lock over a file with no queued work is the near-miss generator, not a safeguard. |
+| the **designation** for this refactor | **retained by frankC** | unchanged, for the coordinator's stated reason. Re-take the lock on demand when a queued C ticket reaches an arm. |
+
+Grant condition 5 (*tell the coordinator on release*) is met by this section and
+the message citing it. Resuming re-claims first, per CLAUDE.md's rule that a lock
+is a claim about the present and nothing re-asserts it.
 
 **Verified, not asserted:** my tree is clean and has been since `06c3cd966`
 (09:08). Nothing of this campaign is uncommitted in this checkout, and no slice
