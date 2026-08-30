@@ -8735,6 +8735,22 @@ noisy to run once.
 
 > **Do not filter the 71 cleverly. The filter is what created the blind spot.**
 
+**The provenance of the catch is the transferable half, and both parties missed it
+independently.** frankD, closing: *"Worth noting it came out of arguing about the METHOD
+rather than the subject — I had no reason to think anything was missing, and neither did
+you."* Nobody was auditing the index. The three fuzzers surfaced because two people
+disagreed about **how to enumerate**, and running the disputed instrument to settle the
+argument *was* the audit.
+
+> **A method dispute is a free audit of the thing the method is about.** Neither side has
+> to suspect the subject — the check gets run because each wants to be right about the
+> instrument, which is the one motivation strong enough to make anyone actually run it.
+
+Note this is the inverse of the standing warning that *the check gets spent on the
+candidate you doubt, not the one you like*: here the doubt was aimed at a **method**, and
+it paid out on a **subject** nobody doubted at all. Cf. 179a — the unchosen source
+answering a question nobody asked, arriving from a third direction.
+
 And frankD's refusal to take the obvious shortcut is the other half: it **declined to
 rename the two tools** to match the grep's pattern, because *"their names are cited in
 resolved tickets, and a citation that stops resolving is a worse defect than a grep that
