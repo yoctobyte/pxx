@@ -61,7 +61,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (354)
+## backlog (355)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -114,6 +114,7 @@ _none_
 | bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer | A+S | 45 | bug | `CALL0`/`CALL8` encode an 18-bit WORD offset, so a call can reach at most +-512 KiB. Nothing emits a veneer, so once the image passes that, EVERY sufficiently distant call is a hard compile error: `call0 displacement -131454 is outside the encodable range`. Five test programs hit it the moment the xtensa syscall table let them reach codegen at all. This is not an edge case — 512 KiB is a SMALL image here: test_overflow_qplus_narrow is 758 KiB of code on riscv32. | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 40 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
 | bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works | A+S | 45 | bug | `Write` of any real SIGBUSes on xtensa — while `Str` of the same value is correct | — |
+| bug-b-gui-shot-blank-frame-detector-no-longer-detects-a-blank-frame | B | 30 | bug | tools/gui_shot.sh rejects a capture as blank when it is <= BLANK_MAX=4000 bytes, on a comment claiming 'a blank frame is ~1-3 KB'. Measured 2026-08-30 at the script's own default 1100x700 under ffmpeg 8.0.1: a fully blank frame is 4013 bytes, five samples, no variance. 4013 > 4000, so the blank check passes every blank capture and the Xvfb restart-and-retry path it guards can never fire. The number was right when written; the encoder or the default size moved under it. Lane note: gui_shot.sh is not in Track T's listed file set, so this is filed to the lane that uses it for PCL/GUI work — reroute if that reading is wrong. | — |
 | bug-b-platform-backend-rv32-comment-claims-plain-lseek-is-tolerated | B | 30 | bug | platform_backend's rv32 block says qemu tolerates plain lseek; strace says no | — |
 | bug-c-has-include-with-a-macro-operand-answers-0 | C | 35 | bug | `__has_include(HDR)` where HDR is a macro expanding to `<stdio.h>` answers 0 under pxx and 1 under gcc. Same silent shape as the pdfgen endian bug it was found beside: no error, no warning, the guarded #include is simply skipped and whatever the header would have defined stays undefined. The literal forms `__has_include(<x>)` and `__has_include(\"x\")` are correct; only a macro-expanded operand is affected. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
@@ -993,6 +994,7 @@ _none_
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
 - [p 30] [A] bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code
 - [p 30] [A] bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc
+- [p 30] [B] bug-b-gui-shot-blank-frame-detector-no-longer-detects-a-blank-frame
 - [p 30] [B] bug-b-platform-backend-rv32-comment-claims-plain-lseek-is-tolerated
 - [p 30] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
 - [p 30] [N] bug-n-property-works-as-a-decorator-but-is-not-a-builtin-name
