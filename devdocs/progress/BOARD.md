@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
-| perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call | A | 70 | perf | Passing a string LITERAL to an AnsiString parameter allocates and copies it on every call — 28x slower than passing a typed constant, and the cost scales with the literal's length. `const` does not help, though by definition it needs no copy. Comparing against a literal INLINE is free, so this is parameter marshalling specifically. Compiler-wide: every CaseEqual(x,'lit') pays it, and so does every pxx program. Found while diagnosing perf-p-parsefactorcore, whose 9.4% is this defect rather than the 92-arm walk the ticket describes. | — |
 
 ## unfinished (34)
 
@@ -730,9 +729,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2855)
+## done (2856)
 
-2855 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2856 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (60)
 
@@ -1259,4 +1258,3 @@ _none_
 - **1** — feature-port-freebsd-native
 - **1** — feature-t-freebsd-image-and-runner
 - **1** — feature-tls13-from-scratch
-- **1** — perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call

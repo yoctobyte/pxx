@@ -4170,6 +4170,66 @@ begin
       end;
     end;
   end;
+  { A string LITERAL passed to a managed AnsiString parameter is ALREADY a valid
+    managed handle -- point at it instead of building a fresh one per call.
+
+    InternStr lays a complete [meta][rc][len] header in front of every literal
+    (emit.inc), refcount born saturated, so the bytes at Offset+8 are
+    simultaneously the frozen payload every existing consumer reads AND a fully
+    formed managed handle. The managed object exists; this arm simply did not
+    point at it. `IR_CONST_STR` yields Offset (the frozen form, length prefix
+    first), so the handle is that value + 8 -- the same address C mode already
+    computes for a literal's `char *`, for the same reason.
+
+    What it costs today, measured (5M calls, ratio not absolutes -- this box
+    runs several compiling sessions):
+
+      literal  -> const AnsiString   561 ms      <- allocate + copy, every call
+      literal  -> const ShortString   32 ms
+      AnsiString variable -> const AnsiString  31 ms
+
+    Only frozen-literal -> managed-param allocates, and it is a COPY rather than
+    call overhead: the cost scales with the literal's length (5 chars 791ms,
+    40 chars 2151ms over 5M). Every `CaseEqual(x, 'literal')` in the compiler
+    pays it -- ParseFactorCore alone issues ~1.58M -- and so does every pxx
+    program passing a literal to a string parameter.
+
+    DELIBERATELY NOT touching the hidden-owning-temp decision
+    (ParamWantsManagedStrTemp and its five call sites). Handing those a value
+    that is already managed turns their store from a frozen->managed CONVERSION
+    (malloc + memcpy) into a managed->managed retain, which on a saturated
+    refcount is a no-op. The temp, its release-of-old on loop reuse and its
+    scope-exit drop all keep working unchanged on an immortal object. Removing
+    the temp as well would be a second, riskier change for no measured gain.
+
+    NARROW PARAMETERS ONLY, and this restriction is load-bearing rather than
+    cautious. A wide parameter goes through IRStrWidthConv immediately below,
+    which transcodes -- it would receive a pointer 8 bytes from where it expects
+    one, and it ALLOCATES, so the result genuinely needs the owning temp this
+    arm's reasoning assumes it does not. frankwasm pinned that exact boundary in
+    test/test_widestring_lowering (`argLW := TakesWide('abcdef')` must stay 6);
+    both hunks merge clean and that test is the only thing that says so.
+    perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call }
+  if (cpi >= 0) and (cpi < ProcCount) and (not isRefArg) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (pathIdx < MAX_PROC_PARAMS) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+     (not Procs[cpi].Params[pathIdx].IsArray) and
+     (ASTKind[argAST] = AN_STR_LIT) and
+     (IntToTypeKind(ASTTk[argAST]) = tyString) and
+     (ProcParamStrElemTk[cpi * MAX_PROC_PARAMS + pathIdx] <> Ord(tyWideChar)) and
+     (ASTStrElemTkOf(argAST) <> Ord(tyWideChar)) and
+     (IRKind[value] = IR_CONST_STR) then
+    { tyPOINTER, not tyAnsiString: `+` on a managed string is CONCATENATION, so
+      tagging this tyAnsiString made the backend emit a concat of the literal
+      with the integer 8 instead of address arithmetic. The self-host round-1
+      compiler then mis-compiled member lookups (`"Kind": no such member`) — a
+      name comparison against a mangled string. This is the same spelling the
+      C-mode literal decay above uses, for the same reason. }
+    value := IRAppend(IR_BINOP, value,
+               IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+               Ord(tkPlus), 0, Ord(tyPointer));
+
   { 7c: ELEMENT-WIDTH conversion on an ARGUMENT. The parameter's width lives in
     ProcParamStrElemTk -- a parallel array rather than a Params[] field, because
     param syms are reused across procs and a CALLER cannot read the width back

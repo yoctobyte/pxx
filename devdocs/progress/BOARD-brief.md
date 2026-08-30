@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:34 blocked:9 backlog:386 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2855 rejected:60`
+`working:1 unfinished:34 blocked:9 backlog:386 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2856 rejected:60`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-unicodestring-model` [A] — owner: frankwasm
-- `perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call` [A] — owner: frankB
 
 ## unfinished (34) — parked mid-flight; re-claim, do not duplicate
 

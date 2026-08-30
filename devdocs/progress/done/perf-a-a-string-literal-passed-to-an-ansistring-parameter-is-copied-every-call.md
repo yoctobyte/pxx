@@ -4,7 +4,7 @@ track: A
 prio: 70
 type: perf
 blocked-by: []
-status: working
+status: done
 created: 2026-08-30
 owner: frankB
 summary: "Passing a string LITERAL to an AnsiString parameter allocates and copies it on every call — 28x slower than passing a typed constant, and the cost scales with the literal's length. `const` does not help, though by definition it needs no copy. Comparing against a literal INLINE is free, so this is parameter marshalling specifically. Compiler-wide: every CaseEqual(x,'lit') pays it, and so does every pxx program. Found while diagnosing perf-p-parsefactorcore, whose 9.4% is this defect rather than the 92-arm walk the ticket describes."
@@ -241,3 +241,6 @@ same defect, different loads:
 
 Different absolutes, same ~19x. A candidate fix has worked when row 1 approaches
 row 3 **and rows 2 and 3 are unchanged**.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
