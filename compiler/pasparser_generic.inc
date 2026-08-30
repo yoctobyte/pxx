@@ -756,9 +756,91 @@ var
 
   Not shared with GenericMethodBodyEnd: that one matches begin/case/end over a
   STATEMENT body, which is a different grammar with a different opener set. }
+{ A `class` token met while COUNTING BODY DEPTH: does it open a body that an
+  `end` will close?
+
+  Three answers, and the two hand-rolled copies of this decision each got a
+  DIFFERENT two of them right, which is why it is one function now
+  (devdocs/dev/normalise-dont-special-case.md):
+
+    Result = True                   -- a real body; the caller counts it.
+    Result = False, bodilessEnd < 0 -- a MEMBER PREFIX: `class function`,
+                                       `class procedure`, `class var`,
+                                       `class const`, `class property`,
+                                       `class of`, and the soft-keyword
+                                       `class constructor/destructor/operator`.
+                                       Nothing to skip.
+    Result = False, bodilessEnd >= 0 -- a BODILESS DECLARATION that closes on
+                                       its own semicolon, whose index this is.
+                                       All four spellings: `class;`,
+                                       `class(TBase);`, `class abstract(TBase);`,
+                                       `class sealed(TBase);`.
+
+  A THIRD copy of the question sits just above the template capture's depth loop
+  and is deliberately NOT routed here: it asks whether the WHOLE declaration is
+  bodyless starting from the `=`, and it answers for `interface` and for
+  `class of T;` as well, which are not this function's subject.
+
+  Getting the bodiless arm wrong at a NESTED level is what walled the
+  rtl-generics corpus. `TEnumerator = class(TCustomListEnumerator<T>);` inside
+  TList's own `type` section left depth one too high, so TList's `end` closed
+  the wrong level and the capture ran on for 10,914 tokens (every other template
+  in that corpus captures at most 1,677). It swallowed TCustomDictionary, whose
+  `FEqualityComparer: IEqualityComparer<TKey>` was then registered as a nested
+  prerequisite OF TList, under TList's substitution set -- where `TKey` is not a
+  parameter, so it stayed literal and was minted as the alias
+  `IEqualityComparer$TKey`, and `unknown type: TKey` was raised inside the
+  specialized body in generics.defaults.pas.
+  bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body }
+function ClassTokOpensBody(at: Integer; var bodilessEnd: Integer): Boolean;
+var k, pdepth: Integer;
+begin
+  bodilessEnd := -1;
+  ClassTokOpensBody := True;
+  if at + 1 >= TokCount then Exit;
+  if (Tokens[at + 1].Kind = tkFunction) or (Tokens[at + 1].Kind = tkProcedure) or
+     (Tokens[at + 1].Kind = tkVar) or (Tokens[at + 1].Kind = tkConst) or
+     (Tokens[at + 1].Kind = tkProperty) or (Tokens[at + 1].Kind = tkOf) then
+  begin
+    ClassTokOpensBody := False;
+    Exit;
+  end;
+  if (Tokens[at + 1].Kind = tkIdent) and
+     (CaseEqual(GetTokenStr(at + 1), 'operator') or
+      CaseEqual(GetTokenStr(at + 1), 'constructor') or
+      CaseEqual(GetTokenStr(at + 1), 'destructor')) then
+  begin
+    ClassTokOpensBody := False;
+    Exit;
+  end;
+  k := at + 1;
+  while (k < TokCount) and (Tokens[k].Kind = tkIdent) and
+        (CaseEqual(GetTokenStr(k), 'abstract') or
+         CaseEqual(GetTokenStr(k), 'sealed')) do Inc(k);
+  if (k < TokCount) and (Tokens[k].Kind = tkLParen) then
+  begin
+    pdepth := 0;
+    while k < TokCount do
+    begin
+      if Tokens[k].Kind = tkLParen then Inc(pdepth)
+      else if Tokens[k].Kind = tkRParen then
+      begin
+        Dec(pdepth);
+        if pdepth <= 0 then begin Inc(k); Break; end;
+      end;
+      Inc(k);
+    end;
+  end;
+  if (k < TokCount) and (Tokens[k].Kind = tkSemicolon) then
+  begin
+    bodilessEnd := k;
+    ClassTokOpensBody := False;
+  end;
+end;
+
 procedure CollectNestedTypeNames(afterEq: Integer; var resumeAt: Integer);
-var j, depth, k, pdepth: Integer;
-    inTypeSec, isModifier: Boolean;
+var j, depth, bEnd: Integer;
+    inTypeSec: Boolean;
 begin
   j := afterEq;
   { `packed record`, `bitpacked record` }
@@ -787,61 +869,20 @@ begin
         Inc(depth)
       else if Tokens[j].Kind = tkClass then
       begin
-        isModifier := (j + 1 < TokCount) and
-                      ((Tokens[j + 1].Kind = tkFunction) or (Tokens[j + 1].Kind = tkProcedure) or
-                       (Tokens[j + 1].Kind = tkVar) or (Tokens[j + 1].Kind = tkConst) or
-                       (Tokens[j + 1].Kind = tkOf) or
-                       ((Tokens[j + 1].Kind = tkIdent) and
-                        (CaseEqual(GetTokenStr(j + 1), 'operator') or
-                         CaseEqual(GetTokenStr(j + 1), 'constructor') or
-                         CaseEqual(GetTokenStr(j + 1), 'destructor'))));
-        if not isModifier then
+        { `= class;` / `= class(TBase);` / `= class abstract(TBase);` opens NO
+          body, so it must not touch depth -- at ANY nesting level. Handling
+          only the outermost one was one arm of this bug: rtl-generics nests
+          `TEnumerator = class(TCustomListEnumerator<T>);` inside TList's own
+          `type` section, which inflated depth by one and made TList's `end`
+          close the wrong level. The decision itself now lives in exactly one
+          place; see ClassTokOpensBody, and the bug it cost:
+          bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section }
+        if ClassTokOpensBody(j, bEnd) then
+          Inc(depth)
+        else if bEnd >= 0 then
         begin
-          { A BODILESS class closes immediately. All four spellings count:
-            `= class;`, `= class(TBase);`, `= class abstract(TBase);`,
-            `= class sealed(TBase);`. Only the FIRST was detected -- the test
-            read the single token after `class` and asked if it was `;`, while
-            the comment above it claimed the parent form worked too. So
-            rtl-generics' `TCustomPointersEnumerator<T, PT> = class
-            abstract(TEnumerator<PT>);` left depth at 1, and the scan ran on
-            until some LATER declaration's `end`: one jump swallowed 11,312
-            tokens of generics.collections, and with them every type parameter
-            those declarations bind. Nothing reported it -- the names simply
-            were not there, and a specialization naming one then took the alias
-            path and minted an alias into the TEMPLATE's unit, where the
-            parameter does not exist.
-            bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section }
-          k := j + 1;
-          while (k < TokCount) and (Tokens[k].Kind = tkIdent) and
-                (CaseEqual(GetTokenStr(k), 'abstract') or
-                 CaseEqual(GetTokenStr(k), 'sealed')) do Inc(k);
-          if (k < TokCount) and (Tokens[k].Kind = tkLParen) then
-          begin
-            pdepth := 0;
-            while k < TokCount do
-            begin
-              if Tokens[k].Kind = tkLParen then Inc(pdepth)
-              else if Tokens[k].Kind = tkRParen then
-              begin
-                Dec(pdepth);
-                if pdepth <= 0 then begin Inc(k); Break; end;
-              end;
-              Inc(k);
-            end;
-          end;
-          if (k < TokCount) and (Tokens[k].Kind = tkSemicolon) then
-          begin
-            { Bodiless: it opens NO body, so it must not touch depth -- at ANY
-              nesting level. Handling only the outermost one was the second arm
-              of this same bug: rtl-generics nests
-              `TEnumerator = class(TCustomListEnumerator<T>);` inside TList's
-              `type` section, which inflated depth by one and made TList's own
-              `end` close the wrong level. }
-            if depth = 0 then begin resumeAt := k; Exit; end;
-            j := k;
-          end
-          else
-            Inc(depth);
+          if depth = 0 then begin resumeAt := bEnd; Exit; end;
+          j := bEnd;
         end;
       end
       else if Tokens[j].Kind = tkType then inTypeSec := True
@@ -1042,6 +1083,7 @@ var
   seenArg: array[0..MAX_DGEN_TUPLES*MAX_TEMPLATE_PARAMS-1] of TRawToken;
   ins: array[0..MAX_TEMPLATE_PARAMS*2+8] of TRawToken;
   ok, isParamForm, specB, dgDbg: Boolean;
+  mintFlt: AnsiString;   { PXXDBG p.mint filter, see DbgMintTrace }
   si: Integer;
   { qualified arguments minted by THIS rewrite, emitted at insertAt below.
     Local, not the QNeed* set ParseSpecialization uses: this runs at rewrite
@@ -1064,6 +1106,7 @@ begin
     concrete: an alias minted with a name that is really a parameter. Printing
     the sweep window is the only way to tell the two apart, so print it. }
   dgDbg := CaseEqual(PxxDbgArg('p.dgen'), tname);
+  mintFlt := PxxDbgArg('p.mint');
   if dgDbg then
     writeln('PXXDBG p.dgen sweep ', tname, ' ti=', ti, ' from=', insertAt,
             ' tokcount=', TokCount, ' delphiPattern=', Ord(delphiPattern),
@@ -1322,6 +1365,17 @@ begin
   { one alias declaration per distinct tuple, inserted in first-seen order }
   for si := 0 to seenCnt - 1 do
   begin
+    if dgDbg or (mintFlt = '*') or CaseEqual(mintFlt, tname) or
+       ((mintFlt <> '') and
+        (Pos(mintFlt, GetTokenStrFromRaw(seenOff[si], seenLen[si])) > 0)) then
+    begin
+      write('PXXDBG p.mint dgen alias=',
+            GetTokenStrFromRaw(seenOff[si], seenLen[si]), ' tmpl=', tname, ' args=');
+      for k := 0 to np - 1 do
+        write(GetTokenStrFromRaw(seenArg[si * MAX_TEMPLATE_PARAMS + k].SOffset,
+                                 seenArg[si * MAX_TEMPLATE_PARAMS + k].SLen), ' ');
+      writeln;
+    end;
     sOff := TokCharsAppend('specialize');
     tOff := TokCharsAppend(tname);
     insCnt := 0;
@@ -1694,11 +1748,11 @@ end;
 
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean);
 var
-  templateName, nextStr: AnsiString;
-  depth, startTok, cur, finalCur, np, gi, scan: Integer;
+  templateName: AnsiString;
+  depth, startTok, cur, finalCur, np, gi, scan, bEnd: Integer;
   dgenAt, dgenRounds, dgenBefore, dgenAtBefore, dgenT: Integer;   { the nested-specialize fixed point }
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
-  isOpener, doneParams, bodyless: Boolean;
+  doneParams, bodyless: Boolean;
   { per-parameter constraints, flushed into TPCon* with the names below }
   pconFlags   : array[0..MAX_TEMPLATE_PARAMS-1] of Integer;
   pconNTypes  : array[0..MAX_TEMPLATE_PARAMS-1] of Integer;
@@ -1910,24 +1964,20 @@ begin
   begin
     if Tokens[cur].Kind = tkClass then
     begin
-      { `class function/procedure/var/property/of` (and soft
-        constructor/destructor/operator) is a member prefix, not a nested
-        class body — counting it as an opener swallowed the rest of the
-        unit into the template. }
-      isOpener := True;
-      if cur + 1 < TokCount then
-      begin
-        if Tokens[cur+1].Kind in [tkFunction, tkProcedure, tkVar, tkProperty, tkOf] then
-          isOpener := False
-        else if Tokens[cur+1].Kind = tkIdent then
-        begin
-          nextStr := GetTokenStr(cur+1);
-          if CaseEqual(nextStr, 'constructor') or CaseEqual(nextStr, 'destructor') or
-             CaseEqual(nextStr, 'operator') then
-            isOpener := False;
-        end;
-      end;
-      if isOpener then Inc(depth);
+      { Three cases, one decision, one implementation -- ClassTokOpensBody.
+        A member prefix (`class function/var/property/of`, soft
+        `class constructor`) opens no body; so does a BODILESS declaration
+        (`TEnumerator = class(TCustomListEnumerator<T>);`, nested inside
+        TList's own `type` section in rtl-generics), and counting either as an
+        opener leaves depth one too high, so this template's `end` closes the
+        wrong level and the capture swallows every declaration up to the next
+        stray `end`. Measured: TList captured 10,914 tokens against a corpus
+        maximum of 1,677 everywhere else.
+        bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body }
+      if ClassTokOpensBody(cur, bEnd) then
+        Inc(depth)
+      else if bEnd >= 0 then
+        cur := bEnd;   { the Inc(cur) below steps past the ';' }
     end
     else if Tokens[cur].Kind = tkRecord then
       Inc(depth)
@@ -2215,6 +2265,26 @@ begin
   end;
 end;
 
+{ PROBE (p.mint): every nested-specialization alias declaration this compiler
+  mints, tagged with the SITE that minted it and printed with the ARGUMENT
+  TOKENS exactly as they will be emitted. The defect shape it exists to catch is
+  an argument that is still a template PARAMETER name -- `IEqualityComparer$TKey`
+  -- which means the mapping through SpecSub* in NestedSpecArg did not happen or
+  ran under the wrong substitution set. PXXDBG=p.mint:* prints all;
+  p.mint:<text> prints only aliases containing <text> or minted from that
+  template. bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body }
+procedure DbgMintTrace(const site, aliasNm, tmplNm: AnsiString; base, nArgs: Integer);
+var k: Integer; flt: AnsiString;
+begin
+  flt := PxxDbgArg('p.mint');
+  if flt = '' then Exit;
+  if (flt <> '*') and (Pos(flt, aliasNm) = 0) and (not CaseEqual(flt, tmplNm)) then Exit;
+  write('PXXDBG p.mint ', site, ' alias=', aliasNm, ' tmpl=', tmplNm, ' args=');
+  for k := 0 to nArgs - 1 do
+    write(GetTokenStrFromRaw(NSpecArg[base + k].SOffset, NSpecArg[base + k].SLen), ' ');
+  writeln;
+end;
+
 { Emit one `alias = specialize NAME<args>;` declaration into NSpecIns, reading
   the argument tokens from NSpecArg[base..base+nArgs-1]. }
 procedure EmitSpecDecl(const aliasNm, tmplNm: AnsiString; base, nArgs: Integer);
@@ -2363,7 +2433,10 @@ begin
     NSpecIns[NSpecInsCnt].SOffset := 0; NSpecIns[NSpecInsCnt].SLen := 0;
     Inc(NSpecInsCnt);
     for k := 0 to NSpecCount - 1 do
+    begin
+      DbgMintTrace('late', NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
+    end;
     InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
   end;
   NSpecCount := 0;
@@ -2521,7 +2594,7 @@ end;
   and each not-yet-buffered mode-Delphi method impl) -- a second copy per source
   is how the method-body arm came to be missing in the first place. }
 procedure ScanRangeForNestedSpecs(ts, tc: Integer; const specName: AnsiString);
-var i, j, k, na, gEnd: Integer; aliasNm: AnsiString; dup: Boolean;
+var i, j, k, na, gEnd: Integer; aliasNm, nsDbg: AnsiString; dup: Boolean;
 begin
   i := 0;
   while i < tc do
@@ -2554,6 +2627,35 @@ begin
             Inc(j);
           end;
           NSpecNArg[NSpecCount] := na;
+          { PROBE (p.nspec): the SUBSTITUTION SET in force at the moment a
+            prerequisite is registered, printed beside the alias it minted. An
+            argument that comes out as a template PARAMETER name means the name
+            was not in SpecSubNames here -- and this line says which names were.
+            bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body }
+          nsDbg := PxxDbgArg('p.nspec');
+          if (nsDbg = '*') or ((nsDbg <> '') and (Pos(nsDbg, aliasNm) > 0)) then
+          begin
+            write('PXXDBG p.nspec reg alias=', aliasNm,
+                  ' under=', specName, ' tmplName=', SpecializeTemplateName,
+                  ' nsub=', SpecSubCount, ' subs=');
+            for k := 0 to SpecSubCount - 1 do
+              write(SpecSubNames[k], '->', SpecSubValues[k], ' ');
+            { WHICH RANGE the group was found in -- the caller passes ts/tc and
+              nothing else identifies it, so print the range and its first
+              tokens. A range whose head is a different template's declaration
+              is the defect. }
+            write(' ts=', ts, ' tc=', tc, ' head=');
+            for k := 0 to 7 do
+              if k < tc then
+                write(GetTokenStrFromRaw(TemplateTokens[ts + k].SOffset,
+                                         TemplateTokens[ts + k].SLen), ' ');
+            write(' at=');
+            for k := -2 to 4 do
+              if (i + k >= 0) and (i + k < tc) then
+                write(GetTokenStrFromRaw(TemplateTokens[ts + i + k].SOffset,
+                                         TemplateTokens[ts + i + k].SLen), ' ');
+            writeln;
+          end;
           Inc(NSpecCount);
         end;
       end;
@@ -2803,7 +2905,10 @@ begin
   begin
     NSpecInsCnt := 0;
     for k := 0 to NSpecCount - 1 do
+    begin
+      DbgMintTrace('immediate', NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
+    end;
     InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
     NSpecCount := 0;
   end;
@@ -2857,7 +2962,10 @@ begin
       EmitQualAliasDecl(QNeedName[k], QNeedPath[k]);
     QNeedCount := 0;
     for k := 0 to NSpecCount - 1 do
+    begin
+      DbgMintTrace('deferred', NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
+    end;
     EmitSpecDecl(specName, templateName, (MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS, nc);
     InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
     NSpecCount := 0;

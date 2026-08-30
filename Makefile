@@ -6034,6 +6034,17 @@ test-core: $(COMPILER)
 	@# FPC divergence on the fourth form are in the file header. Oracle: FPC.
 	./$(COMPILER) test/test_generic_bodiless_class_modifier.pas $(TESTTMP)/test_genbodiless26
 	test "$$($(TESTTMP)/test_genbodiless26)" = "bodiless 7 3 1"
+	@# THE NESTED ARM of the same bug. The up-front `bodyless` test above fixed the
+	@# outer form; the depth loop that runs for templates that DO have a body kept
+	@# its own copy of "is this `class` token an opener?" and knew only about member
+	@# prefixes. So `TIter = class(TBase<T>);` inside a template's own `type` section
+	@# left depth one too high and the capture swallowed the FOLLOWING declarations --
+	@# whose type parameters then leaked into this template's nested-specialization
+	@# scan and were minted as literal aliases (`unknown type: TKey`). Both arms now
+	@# go through ClassTokOpensBody. rtl-generics' TList captured 10,914 tokens
+	@# before and 515 after. First family in the file is the bodied control.
+	./$(COMPILER) test/test_generic_bodiless_nested_class_in_type_section.pas $(TESTTMP)/test_gennestbodiless26
+	test "$$($(TESTTMP)/test_gennestbodiless26)" = "bodiless-nested 3 ctl 7 sub"
 	@# GetPropInfo(AnObject, 'Caption') -- the spelling every FPC consumer uses --
 	@# bound typinfo's PClassRTTI arm and segfaulted, because the narrowing guard
 	@# read the parameter's pointee from Syms[Params[j].SymIdx] and that symbol is

@@ -352,3 +352,143 @@ time.
 that was classified concrete produce the **identical** symptom: an alias minted
 under a name that is really a parameter. Nothing printed the window before, so
 the two were indistinguishable from outside.
+
+---
+
+# FIXED. The sixth candidate was right, but one level further out than stated.
+
+Binary `aa572136dc9c`. `unknown type: TKey` is gone from the corpus entirely
+(`grep -c` = 0, was 2 + "too many errors"). The wall moved to a different
+symptom, recorded at the bottom.
+
+## The mechanism, in one sentence
+
+`TList<T>`'s **template capture overran by 10,914 tokens**, swallowing
+`TCustomDictionary` whole, so the dictionary's `IEqualityComparer<TKey>` was
+registered as a nested prerequisite **of `TList`** — under `TList`'s
+substitution set, where `TKey` is not a parameter, so it stayed literal and was
+minted as the alias `IEqualityComparer$TKey`.
+
+The title was right the first time and the DIAGNOSED section above was right the
+second time; both were describing one end of the same overrun. `TKey` really was
+being handled "inside a `TList<T>` body" — because `TList`'s captured body
+really did contain the dictionary. And the diagnostic really was correct about
+`generics.defaults.pas:78` — that is where the bogus alias was finally
+specialized.
+
+## The defect
+
+`ParseGenericTemplateNamed`'s depth loop asked "does this `class` token open a
+body?" with a hand-rolled test that knew about MEMBER PREFIXES (`class
+function`, `class var`, `class of`) and not about BODILESS DECLARATIONS. So
+
+```pascal
+  TList<T> = class(TCustomListWithPointers<T>)
+  public
+    type
+      TEnumerator = class(TCustomListEnumerator<T>);   { no body, no `end` }
+```
+
+incremented depth with nothing to decrement it, `TList`'s own `end` closed the
+wrong level, and the capture ran on to the next unbalanced `end` — 1,100 lines
+away.
+
+**This is the nested arm of a bug whose outer arm was already fixed.**
+`bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section`
+fixed the up-front `bodyless` test (the whole declaration is bodyless) and
+`CollectNestedTypeNames`' copy. The depth loop that runs for templates that DO
+have a body kept a third copy of the same question and was never touched.
+`devdocs/dev/normalise-dont-special-case.md` is explicit about this shape, and
+the code comment at the outer site even said *"one decision, two hand-rolled
+copies"* — there were four.
+
+## The fix
+
+`ClassTokOpensBody(at, var bodilessEnd): Boolean` in `pasparser_generic.inc` —
+one function, three answers (real body / member prefix / bodiless-ending-at-`;`).
+The template capture's depth loop and `CollectNestedTypeNames` both go through
+it; the two remaining copies are deliberately not routed there and say so in the
+comment (the up-front test also answers for `interface` and `class of T;`;
+`CollectHoistCandidates` reads `TemplateTokens[]`, a different array).
+
+## Measurement, before and after
+
+`--debug` prints `TEMPLATE <name> startTok= endTok=`, so the capture span is
+directly observable. Corpus = `packages/rtl-generics/src`, probe = `program
+gcprobe; uses Generics.Collections; begin end.`, no `-dVER3_0_0`:
+
+| template | before | after |
+| --- | --- | --- |
+| **TList** | **10,914** | **515** |
+| TExtendedHashService | 1,677 | 1,677 |
+| THashService | 1,495 | 1,495 |
+| TCustomArrayHelper | 325 | 325 |
+
+Every other template is unchanged; only the one with a bodiless nested class
+moved. That is the control.
+
+## How it was found — the instrument, not the argument
+
+The sixth candidate above said "the deferred path mishandles a correctly-
+classified group". It was reached in three steps, each a probe extended before
+being re-run rather than a hypothesis:
+
+1. **`p.mint`** — print every alias declaration the compiler mints, with the
+   SITE that minted it and the argument tokens as emitted. One line answered it:
+   `deferred alias=IEqualityComparer$TKey tmpl=IEqualityComparer args=TKey`.
+   The argument is a literal parameter name, and the site is `ParseSpecialization`'s
+   deferred emission — which is what the tally predicted.
+2. **`p.nspec`** — at REGISTRATION time, print the substitution set in force:
+   `alias=IEqualityComparer$TKey under=TList$UInt32 nsub=1 subs=T->UInt32`.
+   The group is registered under **TList**, whose only parameter is `T`. So
+   `TKey` maps to nothing and survives. This is the first line that names the
+   wrong template.
+3. **`p.nspec` extended with the RANGE** — `ts=10517 tc=10914 head=class
+   specialize TCustomListWithPointers T`. The head is `TList`'s own declaration
+   and the span is 10,914 tokens. Nothing about the substitution set was wrong;
+   the RANGE was.
+
+Step 3 is the payoff of the rule this campaign produced: **when a probe cannot
+distinguish your candidates, extend the probe before running it again.** After
+step 2, "TList's substitution set is wrong" and "TList's range is too big"
+produce byte-identical output. Printing `ts`/`tc` cost four lines and settled it
+in one run.
+
+### Final tally
+
+| candidate | verdict |
+| --- | --- |
+| the `{$DEFINE}` macro parameter list defeats the enclosing-parameter check | dead |
+| `MAX_SPEC_BOUND_NAMES` overflow silently drops the name | dead |
+| `TKey` is never collected as a spec-bound name | dead |
+| the use is outside the rewrite's forward sweep window | dead |
+| the group is misclassified as concrete | dead |
+| the deferred path mishandles a correctly-classified group | **half right** — the path is fine, the token range it was given was not |
+| **the template capture swallowed the next 1,100 lines** | **the bug** |
+
+## Regression test
+
+`test/test_generic_bodiless_nested_class_in_type_section.pas`, wired into
+`test-core`. Fails on `pinned` with the identical `unknown type: TKey`, passes
+after, and FPC prints the same line. Its first family is a bodied nested class —
+the control that isolates bodilessness rather than nesting as the variable.
+
+## The corpus wall MOVED — new ticket, not this one
+
+`Generics.Collections` now reaches a different, single failure:
+
+```
+pascal26:259: error: unknown type: IEnumerable
+pascal26:259: error: expected ')' before '>'
+```
+
+Two errors and nothing else; `unknown type: TKey` is absent. `:259` is
+`procedure AddRange(const AEnumerable: IEnumerable<T>); overload;`. NOTE the
+`near:` text on that error points somewhere else entirely — it is stale after a
+splice, which is [[bug-a-the-near-context-window-is-stale-after-a-token-splice]]
+and is a Track A ticket. Do not reduce from the `near:` line.
+Filed as [[bug-b-rtl-provides-no-ienumerable-generic-interface]] — **Track B, not
+P**: `IEnumerable<T>` is declared in neither the corpus nor our RTL, while FPC
+supplies it from the implicit ObjPas unit (`rtl/objpas/objpas.pp:86`). Control:
+a generic interface declared locally and used as a parameter type of a generic
+class compiles and runs, so the compiler handles the shape.
