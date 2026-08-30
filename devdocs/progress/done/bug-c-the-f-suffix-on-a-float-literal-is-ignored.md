@@ -118,4 +118,4 @@ the same reason this ticket's own repro reads a float VARIABLE in row 11 of
 `c_float_to_double_cast_variadic.c`.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit fc0055bff.
