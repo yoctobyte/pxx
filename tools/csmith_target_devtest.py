@@ -157,13 +157,41 @@ print("the probe answers honestly, and says so either way")
 # data-model). The honest-negative case moved to arm32, where the only ILP32
 # candidate is `gcc -m32` and this box cannot link it. Both halves are still
 # tested; which target sits on which side is what changed.
+# HOST-CONDITIONAL, and the condition is a real difference between our boxes
+# rather than a tolerance. This asserted the NEGATIVE unconditionally -- "no
+# ILP32 oracle on this box (gcc -m32 compiles, does not link)" -- which was true
+# where it was written and is false on plexus, where `gcc -m32` links and arm32
+# gets `gcc -m32` as a DATAMODEL oracle. So a fuzz run on one host compares
+# ILP32 checksums against an oracle and on the other silently does not, and
+# until now the only thing that noticed was this guard, which called the
+# better-equipped box a defect.
+#
+# That is the same shape as plexus's watcher tree having 20 library_candidates
+# where seven had 25 (bug-t-nothing-checks-that-two-hosts-run-the-same-suite):
+# two hosts running different suites, with the difference invisible from either
+# side. Here it is a toolchain capability rather than a corpus, and it lands
+# INSIDE a guard, which is why it read as a failure instead of as coverage.
+#
+# The property that holds on ANY box is not which answer the probe gives -- it
+# is that it gives one and says what it means. Both arms are asserted so neither
+# can go silent, and the arm taken is printed so a reader of THIS host's run
+# knows what it actually covered.
 cc, kind, note = C.probe_oracle("arm32", tmp)
-check(cc is None and kind is None,
-      "no ILP32 oracle on this box (gcc -m32 compiles, does not link), so none is claimed")
-check("NO ORACLE" in note and "ILP32" in note and "NOT CHECKED" in note,
-      "...and the note names the target's data model and what went unchecked")
-check("not installed" in note or "does not build" in note,
-      "...and why, per candidate")
+if cc is None:
+    print("  (this box has no ILP32 oracle: gcc -m32 does not link here)")
+    check(kind is None, "no ILP32 oracle here, so none is claimed")
+    check("NO ORACLE" in note and "ILP32" in note and "NOT CHECKED" in note,
+          "...and the note names the target's data model and what went unchecked")
+    check("not installed" in note or "does not build" in note,
+          "...and why, per candidate")
+else:
+    print("  (this box HAS an ILP32 oracle: %s)" % " ".join(cc))
+    check(kind in ("datamodel", "isa"),
+          "an ILP32 oracle is claimed, and it says which KIND it is")
+    check("ILP32" in note,
+          "...and the note names the target's data model")
+    check("matches the" in note,
+          "...and which question it can answer, not just that it exists")
 cc, kind, note = C.probe_oracle("aarch64", tmp)
 check(cc == ["gcc"] and kind == "datamodel",
       "aarch64 DOES get an oracle now: the host gcc, matched on the data model")
