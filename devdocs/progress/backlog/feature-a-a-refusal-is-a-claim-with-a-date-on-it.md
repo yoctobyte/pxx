@@ -12351,8 +12351,8 @@ tidiness and buy back an entire class of conflict on the repo's most-appended fi
 
 ## 232 — THE PREDICATE WAS RIGHT EVERY TIME; NOBODY HAD STATED THE POPULATION
 
-Three corrections in one night, across **two** different checks in `tools/progress.py`. Not one
-of them was a logic error, and that is the entire content of this face.
+Four corrections in one day, across **three** different checks in `tools/progress.py`. Not one of
+them was a logic error, and that is the entire content of this face.
 
 | commit | check | what changed |
 | --- | --- | --- |
@@ -12361,6 +12361,20 @@ of them was a logic error, and that is the entire content of this face.
 | `0f9947cf6` | DUP-FACE-NUMBER | a separator character class — **one `.` added**, 90 faces |
 
 A tuple, a set, and a single character. Every predicate around them was correct before and after.
+
+**A fourth arrived the same day and took the other repair**, which is why it is worth listing
+separately. `7386ef261` — frankC measured a `STALE-PARK` false positive where a blocker had been
+closed by settling the **opposite** question, and the hit read identically to a real one. The
+population could not be narrowed: nothing in the ticket tells the check which question a slug
+match refers to. So the fix changed the **output**, not the predicate — it now says `THE SLUG
+MATCHED, NOT THE QUESTION`.
+
+> When the aperture cannot be narrowed, **state it in the output**. A check that says what it
+> matched on lets the reader do the disambiguation the check cannot; a check that stays silent
+> hands them a verdict with a hidden qualifier.
+
+That is 232b applied where 232b does not fit — the population statement belongs in the commit when
+the population is fixable, and in the *result line* when it is not.
 
 ### Why this class never surfaces as a decision
 
