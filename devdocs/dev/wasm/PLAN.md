@@ -2581,3 +2581,48 @@ Remaining non-anchor gap in the same arm, reported and not skipped: **write of
 a variant** — *"needs the slot ADDRESS, not its value"*. Same shape of problem
 and a different answer, since a variant already lives in a slot and wants
 `WasmLValueAddr` rather than a spill.
+
+### Phase 9m — `IR_CLASSREF` (op 39): the metaclass value — **DONE, 2026-08-30.**
+
+The largest non-anchor gap by count: 8 bodies in `lib_classes.pas` and 8 more
+in `lib_variants_surface.pas`. `TFoo` used as a VALUE — which is what `is`,
+`as`, a `class of` variable and `ClassType` all evaluate to — is the address of
+the class's RTTI blob.
+
+The register backends emit it as a code->data relocation against a sentinel,
+`-(CLASSREF_DATAREF_BASE + ci)`, patched to `UClsRTTIOff[ci]` in
+`compiler.pas:2078` after `EmitRTTI`. **This target has no code->data fixups at
+all** — it emits every address inline as a constant — and the blob's offset does
+not exist while bodies are being emitted.
+
+**It reuses the record-descriptor cell table rather than growing a second one.**
+Both customers want the identical thing (`UClsRTTIOff[ci]`, unknown at codegen
+time) and the cell table already solves exactly that: an 8-byte cell in `Data[]`
+loaded at the use site, filled through `AddDataPtrFix` in the one window where
+`UClsRTTIOff` is populated and `WasmFillData` has not yet run. A parallel
+class-cell table would have been a second mechanism serving one concept —
+`normalise-dont-special-case`, and the smell test that file names is *two
+mechanisms for one concept*. The memo also means a class used as a metaclass in
+forty places and ARC-copied in forty more reserves ONE cell, not eighty.
+
+The whole emitter is one line: `WasmRecDescAddr(IRA[node] + REC_UCLASS_BASE)`,
+the same record-id conversion `WasmResolveRecDescCells` already applies in
+reverse.
+
+**The shared resolver's failure text had to change with it.** It said *"a record
+copied with ARC has no RTTI blob"*, which is now actively misleading for half
+its callers. The DEFECT is the same either way — the class published no members,
+so `EmitRTTI` emitted no blob — so it is named as the defect rather than as one
+customer's symptom, matching what `compiler.pas:2084` says for the register
+targets. A misleading diagnostic in a file whose whole discipline is *report the
+builtin, not an inferred cause* would have been the wrong thing to leave.
+
+Test: `test/wasm/check_classref.sh`. The failure mode worth designing against is
+a cell resolved to the WRONG class: every `is` still answers, just wrongly, and
+two all-TRUE outputs diff clean against each other. So the slice runs a
+three-deep chain plus a sibling, and the script asserts a known-FALSE row exists
+in the oracle before it believes the diff.
+
+**This is where the lane parks** (see the ticket's park banner). Four of the five
+measured next items need no decision; only `IR_SYSCALL` (op 54) is in the U
+family.

@@ -601,6 +601,9 @@ function WasmHostImport(const modName, fldName: AnsiString;
   build, and check_forwards.sh is what says so. }
 function WasmStrScratchPush(slot: Integer): Integer; forward;
 procedure WasmStrScratchPop(scr: Integer); forward;
+{ The metaclass-value emitter, defined beside the descriptor-cell table it
+  reuses and dispatched from the value switch well above it. }
+procedure WasmEmitClassRef(node: Integer); forward;
 procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
@@ -1398,6 +1401,8 @@ begin
                        else
                          WasmNodeResultType := IntToTypeKind(IRTk[node]);
     IR_PROCADDR      : WasmNodeResultType := tyPointer;
+    { A metaclass value is the ADDRESS of the class's RTTI blob. }
+    IR_CLASSREF      : WasmNodeResultType := tyPointer;
     IR_BINOP :
       if WasmIsCompare(WasmBinopOp(node)) then
         WasmNodeResultType := tyBoolean
@@ -1657,6 +1662,7 @@ begin
     IR_NEG       : WasmEmitUnary(node, True);
     IR_NOT       : WasmEmitUnary(node, False);
     IR_PROCADDR  : WasmEmitProcAddr(node);
+    IR_CLASSREF  : WasmEmitClassRef(node);
     IR_CALL_IND  : WasmEmitCallInd(node, False);
     IR_VIRTUAL_CALL : WasmEmitVirtualCall(node, False);
     IR_ATOMIC    : WasmEmitAtomic(node);
@@ -3918,6 +3924,29 @@ begin
   WasmMemOp($28, 'i32.load', 2, 0);
 end;
 
+{ A metaclass value — `TFoo` used as a value, which is what `is`/`as`, a
+  class-reference variable and `ClassType` all evaluate to. It is the address
+  of the class's RTTI blob, the same thing the register backends emit as a
+  code->data relocation against a sentinel (`-(CLASSREF_DATAREF_BASE + ci)`,
+  patched to `UClsRTTIOff[ci]` in compiler.pas:2078 after EmitRTTI).
+
+  REUSES THE RECORD-DESCRIPTOR CELL TABLE rather than growing a second one.
+  Both customers want the identical thing — `UClsRTTIOff[ci]`, an offset that
+  does not exist while bodies are emitted — and the cell table already solves
+  exactly that, resolving through AddDataPtrFix in the one window where
+  UClsRTTIOff is populated and WasmFillData has not yet run. A parallel
+  class-cell table would be a second mechanism serving one concept, which is
+  the shape this repo treats as a design smell; the memo also means a class
+  used as a metaclass in forty places and ARC-copied in forty more reserves
+  ONE cell, not eighty.
+
+  The table keys on a record id, and a class's is `ci + REC_UCLASS_BASE` —
+  the same conversion WasmResolveRecDescCells applies in reverse. }
+procedure WasmEmitClassRef(node: Integer);
+begin
+  WasmRecDescAddr(IRA[node] + REC_UCLASS_BASE);
+end;
+
 { Whole-record copy: PXXMemMove(dest, src, count) — the same RTL routine every
   other backend calls, and here without any of the register juggling, because
   wasm evaluates arguments straight onto the operand stack in order.
@@ -5468,9 +5497,17 @@ begin
     else
       { The cell stays zero, and PXXRecordRetain/Release take a nil desc as
         "nothing to walk" — so this would be a SILENT missed retain rather than
-        a fault, which is this repo's expensive failure shape. Loud instead. }
-      WasmFail('wasm32: a record copied with ARC has no RTTI blob (record id '
-               + WasmIntStr(WasmRecDescRec[i]) + ')');
+        a fault, which is this repo's expensive failure shape. Loud instead.
+
+        Two customers reach this table now — an ARC record copy and a metaclass
+        value (WasmEmitClassRef) — and the DEFECT is the same for both: the
+        class published no members, so EmitRTTI emitted no blob for it. Named
+        as the defect rather than as one customer's symptom, because the
+        message would otherwise be actively misleading for the other half.
+        compiler.pas:2084 says the same thing for the register targets. }
+      WasmFail('wasm32: a class used as a metaclass or copied with ARC has no'
+               + ' RTTI blob (record id ' + WasmIntStr(WasmRecDescRec[i])
+               + ') — the class publishes no members');
   end;
 end;
 
