@@ -227,6 +227,38 @@ begin
   Result := node;
 end;
 
+{ Force a value to SINGLE precision by round-tripping it through an anonymous
+  tySingle temp: the assignment store narrows and the reload widens, on every
+  backend, reusing the slot-narrowing paths the `(float)` cast has been proven on
+  since bug-c-a-float-to-double-cast-is-a-retag-not-a-conversion.
+
+  EXTRACTED, not written: the `(float)someDouble` cast built this inline, and the
+  binop arm needs the identical thing. C 6.3.1.8 says two `float` operands give a
+  `float` RESULT, computed at float width -- we computed in double and rounded
+  once at the end, which is a different answer whenever the two roundings differ.
+  `(double)(0.1f + 0.2f)` was 0.300000004 where gcc says 0.300000012, and
+  `(a + b) == 0.3f` was FALSE where C says true: a wrong value that looks right,
+  and a branch that goes the other way.
+
+  The node's static TYPE was already single -- `sizeof(1.0f+1.0f)` has been 4
+  since the `f`-suffix fix -- so nothing here is about typing. Only the
+  evaluation width was wrong, which is why one call at the one site that tags a
+  binop tySingle is the whole fix and no new lowering was needed.
+  bug-c-float-plus-float-is-computed-at-double-width }
+function CNarrowSingle(e: Integer): Integer;
+var frTmp, frIdn, frAsn, frSeq, node: Integer;
+begin
+  frTmp := AllocVar('', tySingle);
+  frIdn := AllocNode(AN_IDENT); ASTIVal[frIdn] := frTmp; ASTTk[frIdn] := Ord(tySingle);
+  frAsn := AllocNode(AN_ASSIGN); ASTLeft[frAsn] := frIdn; ASTRight[frAsn] := e;
+  ASTTk[frAsn] := Ord(tySingle);
+  frSeq := AllocNode(AN_SEQ); ASTLeft[frSeq] := frAsn; ASTRight[frSeq] := -1;
+  node := AllocNode(AN_COMPOUND_LITERAL);
+  ASTIVal[node] := frTmp; ASTLeft[node] := frSeq; ASTTk[node] := Ord(tySingle);
+  Result := AllocNode(AN_DEREF);   { COMPOUND_LITERAL yields the ADDRESS }
+  ASTLeft[Result] := node; ASTTk[Result] := Ord(tySingle);
+end;
+
 { True when a comparison of these two operand nodes resolves to the C unsigned
   32-bit domain: both operands are <= 32-bit ordinals and at least one is
   unsigned int (tyUInt32). C usual-arithmetic-conversions then convert the signed
@@ -889,6 +921,16 @@ begin
     pointer arith -> tyPointer above), so mask it back to 32 bits. }
   if IntToTypeKind(ASTTk[node]) = tyUInt32 then
     node := CTrunc32(node);
+  { ...and the FLOAT mirror of exactly that line. C 6.3.1.8: two `float`
+    operands give a `float`, computed at float width. We evaluate in double and
+    would round once at the end, which differs whenever the two roundings do:
+    `(double)(0.1f+0.2f)` gave 0.300000004 against gcc's 0.300000012, and
+    `(a+b) == 0.3f` came out FALSE. Comparisons are tyBoolean and pointer
+    arithmetic is tyPointer by the arms above, so this reaches only genuine
+    single-width arithmetic.
+    bug-c-float-plus-float-is-computed-at-double-width }
+  if IntToTypeKind(ASTTk[node]) = tySingle then
+    node := CNarrowSingle(node);
   { Wide C bitfield (width 33..63): gcc gives it an integer type of EXACT
     bit-precision = width, and `+ - * <<` can push bits past the width, so wrap
     the result mod 2^width (sign-extend if the field is signed). Value-observing
@@ -3432,17 +3474,7 @@ begin
       EVERY backend, reusing the proven slot-narrowing paths. }
     if (castDepth = 0) and (castTk = tySingle) and (opTk = tyDouble) then
     begin
-      frTmp := AllocVar('', tySingle);
-      frIdn := AllocNode(AN_IDENT); ASTIVal[frIdn] := frTmp; ASTTk[frIdn] := Ord(tySingle);
-      frAsn := AllocNode(AN_ASSIGN); ASTLeft[frAsn] := frIdn; ASTRight[frAsn] := operand;
-      ASTTk[frAsn] := Ord(tySingle);
-      frSeq := AllocNode(AN_SEQ); ASTLeft[frSeq] := frAsn; ASTRight[frSeq] := -1;
-      node := AllocNode(AN_COMPOUND_LITERAL);
-      ASTIVal[node] := frTmp; ASTLeft[node] := frSeq; ASTTk[node] := Ord(tySingle);
-      operand := node;
-      node := AllocNode(AN_DEREF);   { COMPOUND_LITERAL yields the ADDRESS }
-      ASTLeft[node] := operand; ASTTk[node] := Ord(tySingle);
-      Result := node;
+      Result := CNarrowSingle(operand);   { the helper this was extracted into }
       Exit;
     end;
     { THE MIRROR, and a real conversion for the same reason. `(double)someSingle`

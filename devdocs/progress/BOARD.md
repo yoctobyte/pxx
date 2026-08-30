@@ -69,7 +69,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (391)
+## backlog (392)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -203,6 +203,7 @@ _none_
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-result-is-not-a-method-pointer-lvalue | P | 40 | bug | `Result := s.Pick` inside a function returning a method pointer is refused with `\"TSvc.Pick\" is a procedure and has no result to use in an expression`, for EVERY receiver spelling, while `t := s.Pick; Result := t` on a local of the same type compiles and runs. FPC accepts the direct form. Cause: the implicit `Result` symbol is allocated by `AllocVar('Result', retType)` (pasparser_proc.inc:2310) as a plain var, so it carries no `SymProcSig` and its `TypeKind`/`RecName` never look like a method-pointer lvalue — and the assignment arm that recognises the method-pointer context keys on exactly `SymProcSig[idx] >= 0` and `Syms[idx].TypeKind = tyRecord`. A THIRD axis, orthogonal to receiver spellings: the LHS spelling. | — |
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
+| bug-p-single-plus-single-is-typed-and-computed-at-double-width | P | 40 | bug | Pascal `Single + Single` is TYPED Double and computed at double width. `SizeOf(a + b)` answers 8 where FPC answers 4, and `d := a + b` for a=0.1, b=0.2 gives 0.300000004 where FPC gives 0.300000012. This is a strictly LARGER defect than the C one fixed in the same construct: C's binop node was already tagged tySingle and only its evaluation width was wrong, so one CNarrowSingle call at the tagging site fixed it. Pascal's node carries the wrong TYPE, so the same fix cannot be copied -- the type rule has to be settled first, and it decides whether SizeOf changing from 8 to 4 is acceptable. NOT Track F: the mechanism is which width an operator evaluates at, which is a type rule. Rank the mechanism, never the datatype. | — |
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does | A+S | 35 | bug | `ir_codegen_xtensa.inc` has no IR_SET_SIGNAL case, so any program installing a signal handler dies with `unsupported node in IR codegen: unknown`. riscv32 has the arm; xtensa is the only hosted backend without it. The op is also one of the seven IROpName does not name, which is why the message says `unknown` instead of naming it. | — |
@@ -465,7 +466,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (26)
+## backlog_new (25)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -473,7 +474,6 @@ _none_
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 25 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-a-pxxhighbits-recomputes-a-compile-time-constant-in-a-loop | A | 50 | bug | PXXHighBits builds the constant $8080808080808080 with an eight-iteration shift/or loop, and is called once per machine word of every string ASCII scan. A gdb-sampled profile of uforth put 5.1% of the program's ENTIRE runtime inside it — the fifth-hottest routine in a 134-routine profile, spent recomputing a value the compiler could fold. | — |
 | bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings | A | 25 | bug | RE-SCOPED 2026-08-30 after an attempt: this is NOT eleven mechanical lexer edits. SOffset/SLen is an OVERLOADED channel, not a text field -- for tkInteger, SLen>0 MEANS 'wider than Int64', so giving ordinary tokens their text makes every integer literal promotable and `writeln(42)` fails to compile. A correct fix needs a SEPARATE span channel, i.e. new parallel arrays in defs.inc, before any lexer is touched. Original finding stands: every lexer stores token text for tkIdent and tkString only; keywords, punctuation, operators and numbers get SOffset := 0. That if/else is hand-copied across eleven lexers. So the `near:` window under EVERY diagnostic in the compiler prints the identifiers and silently discards the syntax -- `near: begin x >>> end` for `x := (1 ;` -- and no diagnostic can name an offending keyword. Sized: 3.24 MiB of token text against a fixed 8 MiB STRING_CAP, 40.5%, so this is a mechanical change to eleven files, not a pool redesign. | — |
-| bug-c-float-plus-float-is-computed-at-double-width | C | 40 | bug | `(double)(a+b)` for two floats prints 0.300000004 where gcc prints 0.300000012 — the addition is done at DOUBLE width and rounded once, instead of at float width. All five targets. The narrowing machinery exists; the binary operator is the arm that does not use it. | — |
 | bug-n-a-frozenset-returned-from-a-def-arrives-empty | N | 60 | bug | A frozenset returned from a def arrives at the caller EMPTY -- len 0, repr 'frozenset()', membership False -- no matter how it was built. set, list, dict and tuple returned from the same shape are all correct, and a frozenset that never crosses a return is correct too. Silent data loss, no crash, no error. | — |
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
 | bug-n-double-star-unpacking-is-rejected-at-a-method-call | N | 45 | bug | `obj.m(**d)` is a parse error — `expected expression` — while the identical `f(**d)` on a plain function WORKS. Dict-unpacking into any METHOD call is rejected, pure-Python classes included, so it is not a shim or binding issue but the call parser. CPython runs all of these, so it is an upward-compatibility break by Track N's own rule. | — |
@@ -739,9 +739,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2893)
+## done (2894)
 
-2893 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2894 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -1022,7 +1022,6 @@ _none_
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
 - [p 40] [A] bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage
 - [p 40] [A+S] bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build
-- [p 40] [C] bug-c-float-plus-float-is-computed-at-double-width
 - [p 40] [C] bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
 - [p 40] [N] bug-n-from-package-import-submodule-binds-the-parent-package
@@ -1034,6 +1033,7 @@ _none_
 - [p 40] [P] bug-p-a-generic-function-cannot-be-declared-in-a-unit
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [P] bug-p-result-is-not-a-method-pointer-lvalue
+- [p 40] [P] bug-p-single-plus-single-is-typed-and-computed-at-double-width
 - [p 40] [T] bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable
 - [p 40] [T] chore-t-board-html-render-is-13s-of-every-ticket-move
 - [p 40] [T] chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion

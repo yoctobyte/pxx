@@ -511,6 +511,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-field-on-pointer-arithmetic | C | 50 | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
 | bug-c-float-int-cast-and-spill | C | 50 | bug | C: int<->float numeric cast + computed-double spill across branches | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
+| bug-c-float-plus-float-is-computed-at-double-width | C | 40 | bug | `(double)(a+b)` for two floats prints 0.300000004 where gcc prints 0.300000012 — the addition is done at DOUBLE width and rounded once, instead of at float width. All five targets. The narrowing machinery exists; the binary operator is the arm that does not use it. | — |
 | bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
 | bug-c-float-single-return-zero | C | 60 | bug | C: a function returning `float` (single) returns 0 on x86-64 | — |
 | bug-c-float-vararg-promotion-32bit | A | 55 | bug | C: float (single) vararg prints 0.000000 on i386/arm32/riscv32 — default argument promotion missing | — |

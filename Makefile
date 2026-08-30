@@ -11372,6 +11372,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_dlbe26 "$$($(TESTTMP)/test_dlbe26)" "$$(printf '42 42 42 42 42\n42 5 113 114 1 2')"
 	# The riscv32 arm of this only fails cross-target; see test-c-float-const-cross.
 	# bug-c-the-f-suffix-on-a-float-literal-is-ignored
+	@echo "=== float arithmetic evaluates at FLOAT width ==="
+	# C 6.3.1.8: two `float` operands give a float, computed at float width. We
+	# evaluated in double and rounded once at the end -- 0.300000004 against
+	# gcc's 0.300000012 -- so row 11, `(a+b) == 0.3f`, branched the WRONG WAY.
+	# Rows 06 and 15 are the controls a fix applied one level too widely breaks
+	# (float+double stays double; a double-only expression is not narrowed), and
+	# row 17 says the static type was already 4, i.e. this was an evaluation-width
+	# bug and not a typing one. Non-vacuous: rows 01, 03 and 07 differ on pinned.
+	# bug-c-float-plus-float-is-computed-at-double-width
+	./$(COMPILER) test/c_float_arith_at_single_width.c $(TESTTMP)/c_fsingle26
+	tools/expect_same.sh c_fsingle26 "$$($(TESTTMP)/c_fsingle26)" "$$(printf '01 0.300000012\n02 0.020000001\n03 0.333333343\n04 -0.100000001\n05 0.400000006\n06 0.200000001\n07 7.099999905\n08 0.300000012\n09 0.333333343\n10 4.000000000\n11 1\n12 0\n13 1.000000119\n14 0.300000012\n15 0.30000000000000004\n16 -0.100000001\n17 4')"
 	./$(COMPILER) test/c_float_literal_f_suffix.c $(TESTTMP)/c_flit_fsuf26
 	tools/expect_same.sh c_flit_fsuf26 "$$($(TESTTMP)/c_flit_fsuf26)" "$$(printf 'A 0.100000001\nB 0.100000001\nC 0.100000001\nD 16777216.0\nE 16777216.0\nF 0\nG 4\nH 8\nI 0.100000001\nJ 0.100000001')"
 	# ... and the Pascal defect UNDERNEATH it, which had nothing to do with C: a

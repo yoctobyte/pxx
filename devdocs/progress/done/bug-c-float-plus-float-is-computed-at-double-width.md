@@ -2,7 +2,7 @@
 track: C
 prio: 40
 type: bug
-status: open
+status: done
 found: 2026-08-30
 found-by: frankC
 summary: "`(double)(a+b)` for two floats prints 0.300000004 where gcc prints 0.300000012 — the addition is done at DOUBLE width and rounded once, instead of at float width. All five targets. The narrowing machinery exists; the binary operator is the arm that does not use it."
@@ -54,3 +54,6 @@ not a regression from that work: the pinned binary predating it prints
 separated the two, and a reader of the f-suffix ticket will otherwise wonder why
 this row is not in its test — it is out of scope there on purpose, so that one
 red does not stand for two mechanisms.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
