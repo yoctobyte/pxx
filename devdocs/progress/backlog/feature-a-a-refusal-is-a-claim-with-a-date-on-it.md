@@ -11461,3 +11461,81 @@ cross-backend and were not separated out.)*
 
 Three near-misses from one mechanism in one evening, and the tell every time was that **the result
 was too good and nothing errored** — 221's magnitude check, arriving from the favourable side.
+
+---
+
+## 223 — ONE MISSING SLOT, TWO OPPOSITE WRONG VERDICTS
+
+*(pxx-a5, 2026-08-30, finding the defect in its own `pasmith_run --recheck` after nearly filing a
+second `-O3` bug that does not exist.)*
+
+The same missing distinction — **"I could not measure"** — collapsed into whichever neighbouring
+verdict the control flow happened to reach:
+
+| input | what happened | verdict printed | direction |
+| --- | --- | --- | --- |
+| a **multi-unit** finding | regeneration failed (`--units N -o FILE` → rc=2, *"--units needs --outdir"*) | **"still reproduces"** — the failure arm printed the same string as a genuine reproduction | manufactures **work** |
+| an entry with **zero examples** | fell through the empty loop | **`FIXED (0 example seed(s) now agree)`** | manufactures **green** |
+
+> **This is not a bias toward alarm or toward comfort. It is an ABSENCE with no slot, taking the
+> shape of its surroundings.**
+
+Which makes it the cleanest demonstration of 212 in the index: *a harness needs as many outcome
+slots as the subject has outcomes*. **A boolean does not merely lose information — it
+distributes the lost case arbitrarily**, so the same defect reads as a false positive in one loop
+and a false negative in the other, and finding one gives you no reason to look for the other.
+
+Repair: a third outcome, `CANNOT JUDGE`, naming the seed and carrying the generator's own message.
+11 pure guards, negative control 9/11 red. Direct measurement had disagreed all along — seed 92001
+gives an identical checksum at `-O2` and `-O3`.
+
+### 223a — a STUCK verdict is worse than a wrong one
+
+The false *"still reproduces"* was not one wrong verdict. It was a wrong verdict that **could
+never become right**, because **the arm that would flip it is the arm that is broken.** It gated
+work, it gated itself, and nothing in it decayed.
+
+> **The tell for a stuck verdict: no amount of upstream fixing changes it.**
+
+pxx-a5 held a cross-target fuzz all session waiting for a clean tree, behind a throttle
+(`open_actionable_count`) that its own tool was holding shut. That is 200a — *false in the
+direction that manufactures work* — **with a latch**. An ordinary false alarm is re-tested by the
+next person who touches the code; a latched one re-asserts itself on every tick and reads as
+persistence.
+
+Both `-O3` tickets rechecked **FIXED** once the tool was repaired (binary `1ff8acbe123b`,
+fixedpoint converged, at `5944ee686`, with `10c869750` an ancestor — both ancestry claims verified
+independently). `open_actionable_count` is 0; the seven remaining findings are `fpc-self_*`, FPC's
+own bugs.
+
+**And the retraction's value was in the direction nobody prices.** Both tickets were already in
+`done/`, so the correction did not close anything — **it prevented a REOPENING.** A false "still
+broken" against work already correctly closed costs a session spent re-searching a solved problem,
+which is worse than a missed bug because it consumes the attention that would have found one.
+
+### 223b — three instances in one week is a pattern in the codebase, not three bugs
+
+pxx-a5 named the family itself: *the reporting half of a mechanism drifting from the deciding
+half* (face 200) — the `localize()` sentinel fix earlier the same week, the trace-diff sentinel
+fix (210a), and now `recheck()`.
+
+> **Three instances in one week in one codebase is not three bugs. It is a pattern in how that
+> codebase separates deciding from reporting**, and it wants a ticket rather than a third
+> individual fix.
+
+Same rule as `root-cause-over-microfix`, applied to a *tool* rather than to the compiler: count
+how many mechanisms serve the one concept, and when the answer keeps growing, stop fixing
+instances.
+
+### 223c — the exclusion-first rule converted the lane that got it wrong
+
+Unprompted, from the session whose ranking b4 refuted:
+
+> *I had ranked three `-O3` sites by source-text pattern-match and all three were wrong. Run the
+> exclusion first; a ranking is a guess with an ordering.*
+
+Face 217 has now been arrived at independently three times in one night, from three directions —
+b4 dumping IR at both `-O` levels before building; frankD's byte-identical `PXXDBG=all` at 8 s and
+20 s proving the NilPy hang emits nothing; frankB deleting a reimplemented comparison rather than
+patching it (221a). **Delete the copy, check against the authority, run the exclusion before the
+ranking** keeps turning out to be one instruction wearing three hats.
