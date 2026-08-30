@@ -7,7 +7,7 @@ status: unfinished
 owner: frank-optimize
 found: 2026-08-30
 found-by: frank-optimize, profiling bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
-summary: "Container subscript is NilPy's worst primitive against CPython by a wide margin: b[2] costs 234 ns against CPython's 12 (19x) and d['k'] 495 against 30 (16x), while pxx BEATS CPython at isinstance (0.39x), len (0.14x), exec (0.92x) and a zero-argument call (0.10x). Subscript is the largest single gap and the one with an obvious mechanism; it is also on the per-token path of every interpreter-shaped NilPy program."
+summary: "Container subscript is NilPy's worst primitive against CPython: b[2] 234 ns vs 12 (19x), d['k'] 495 vs 30 (16x), while pxx BEATS CPython at isinstance, len, exec and a zero-arg call. One allocation removed (PyVarSlotSet's unconditional s := ''), giving b[2] -41%. RESOLVED SINCE (2026-08-30): all three remaining candidates are now measured and NONE is worth chasing here -- per-call managed-temp init was a codegen bug, fixed by frankA in d27b4a28a; the dict half is the static-literal pass, now named in decide-the-o3-tier-*; the 16-byte rep-stosb clears are ~4%, under the noise floor. What is left of this ticket is a re-measurement, not an investigation."
 ---
 
 # NilPy container subscript is 15-19x slower than CPython
@@ -162,7 +162,27 @@ that pass promotes to `-O2`, and nothing should be done about it here.
 I rediscovered it from a disassembly before finding it in the parent ticket.
 Recorded so the next reader does not spend the same hour.
 
-### Still open — this is why the ticket is not resolved
+## The three open candidates are now all measured — 2026-08-30, later the same day
+
+The section below listed three unmeasured candidates "in no order". All three
+have since been measured, and **none of them is work for this ticket**:
+
+| candidate | verdict |
+| --- | --- |
+| per-call managed-slot init/finalize (`o.m(1)` at ~390 ns, zero allocations) | **Was a codegen bug, and it is fixed** — frankA's `d27b4a28a`. The cause was neither the zeroing nor the branch: `AN_SEQ` called `IRFlushPostCallIntf` once per statement, so a temp created inside an `if` had its finalize emitted into the **merge block** and ran on every call. The isolated repro went 47x -> ~1.8x. |
+| RTL accessors not inlined / the `-O3` tier recovering 30-40% | **Named:** `EmitStaticLitHandle` (`ir_codegen.inc:3480`), the static string-literal pass. Promoting that one gate to `-O2` is 20% of `-O3`'s 28% on the compiler's own workload. It is a tier/promotion decision, not subscript work — `decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it` [U]. **This is also the dict half of this very ticket**: `d['k']`'s remaining allocation is the literal key, which that pass removes. |
+| 16-byte `rep stosb` clears for variant slots | **~4%, under the noise floor.** Every NilPy Variant local is zeroed 3-4x in one prologue by three passes that do not know about each other, invariant across `-O0..-O3`; removing one is unmeasurable at box load 6.5. Recorded under the managed-temps ticket, deliberately not filed separately. `991fa5c15` fixed the managed-record half. |
+
+**So the honest state of this ticket is: it is waiting on a re-measurement, not
+an investigation.** `b[2]` was 149 ns after my fix, against CPython's 3 ns
+marginal. Two of the three drivers above have since been fixed or named, and
+neither has been re-measured against subscript because the box has been at load
+6-14 all evening and a 41%-scale A/B needs better than that. **Whoever picks it
+up should re-measure first and re-scope second** — the remaining gap may be
+much smaller than the 149 ns this ticket records, and re-deriving a plan against
+a stale number is the failure this ticket's own notes warn about.
+
+### Originally still open — superseded by the table above
 
 `b[2]` is 149 ns against CPython's 3 ns marginal. Removing the allocation took
 41%; the rest is not allocation. What is left, unmeasured and in no order:
