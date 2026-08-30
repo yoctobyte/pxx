@@ -11353,3 +11353,111 @@ It did surface one real gap, and it was **frankB's own**: the minidom differenti
 morning, deliberately unwired because the shim hangs the compiler. Registered in
 `test/UNWIRED.txt` with its reason and the condition for wiring it — the 220a instruction applied
 one level down, by its author, to their own file.
+
+---
+
+## 221 — CHECK THE MAGNITUDE BEFORE THE CONTENT
+
+*(frankB, 2026-08-30, on two audit harnesses of its own that were confidently wrong.)*
+
+Its first C-corpus harness **reimplemented the comparison** and reported **321 of 362 expectations
+disagreeing**. The rows look like
+
+```
+$(TESTTMP)/prog; tools/expect_same.sh prog-rc "$?" "89"
+```
+
+— the assertion is the **exit code of a binary the reimplementation never ran**, so it compared 0
+against 89 every single time.
+
+> *Had I trusted it, I would have filed 321 poisoned expectations, with a plausible mechanism and
+> a confident number.*
+
+Earlier the same session, a second one: tying expectations to sources **by proximity** gave one
+file **105 unrelated rows**. Keying on the binary the expectation actually names fixed it.
+
+**Neither harness errored. Both produced clean, confident output.** The tell both times was
+magnitude:
+
+> **An audit instrument that is wrong produces confident FINDINGS rather than obvious failures,
+> and the only cheap check is whether the magnitude of the finding is plausible before the content
+> of it is interesting.**
+
+A tool reporting that most of the corpus is broken is far more likely to be broken itself. That
+judgement costs nothing, needs no domain knowledge, and precedes reading a single row.
+
+Note this is the **complement** of the detector the rest of the fleet used tonight — pxx-a5's
+*too convenient*, frankB's own 64×64 grid, pxx-a5's empty-output-at-rc-0. Those are **too clean to
+be true**; these are **too large to be true**. Same check, opposite tail: *before asking whether a
+result is right, ask whether a result of that size is possible.*
+
+### 221a — delete the second implementation; do not sync it
+
+The fix was **not** to patch the reimplementation. It was to run **the Makefile's own recipe
+line**, with `expect_same.sh` doing the comparing, against a TESTTMP holding gcc-built binaries.
+**There is no second implementation of the semantics left to get wrong.**
+
+That is b4's `-O3` repair (217b) one level up, arrived at independently the same night. b4 did not
+add the missing arm to `IRFirstEvaluated`, a hand-maintained mirror of the emitter's operand-order
+chain — it made the pass check its premise against what the emitter **did**. Two models of one
+decision, synced by hand; **both cures were *delete the copy*, not *sync it better*.**
+
+Which upgrades the standing rule *grep for the incumbent before building* from an efficiency
+argument to a correctness one:
+
+> **Reusing the incumbent removed the failure mode; reimplementing it created one.**
+
+Result once the incumbent was doing the comparing: **333 of 333 evaluable C rows derived, zero
+disagreements.** Two of three populations now proven to contain no captured-and-wrong expectation
+(NilPy 342/353 + 11 labelled and enforced; C 333/333). The third, Pascal, is left **visibly open
+in `unfinished/`** rather than closed on two of three.
+
+---
+
+## 222 — A TEST THAT EXISTS, PASSES ELSEWHERE, AND IS UNWIRED TO THIS TARGET
+
+*(frankS, 2026-08-30, landing xtensa's proc exception-cleanup frame. 213c's nastier sibling.)*
+
+The ticket argued *"an unwind leak prints nothing"*. True of a refcount; **false here**:
+
+| test | x86-64 | xtensa before |
+| --- | --- | --- |
+| `test_managed_exception_cleanup` | `1` | **SEGFAULT** |
+| `test_interface_arc_exc` | `unwind freed=3` | `unwind freed=2` |
+
+The first raises 9000 times through a frame holding a 64 KiB string and a dyn array — **~590 MB
+never released**, so it is a crash, not a quiet leak. The second prints the shortfall **as a
+number**.
+
+Both were observable the entire time. **Neither is in the 129-source differential, which has no
+exception-unwind coverage at all** — so every xtensa sweep run this month was green on a target
+that released nothing on an unwind.
+
+> In 213c the repro set **could not** gate the fix. Here a perfectly good repro set existed,
+> **passed on five backends, and was simply never wired to this target.**
+
+**A missing test leaves a gap someone can eventually notice. An unwired one leaves a GREEN
+SWEEP** — which is not the absence of evidence, it is evidence pointing the wrong way. And the
+ticket's own reachability argument (p25: *needs a raise crossing a frame that owns a managed
+local*) was **correct**, and still left the two programs that reach it unconnected. Being right
+about reachability is not the same as being wired.
+
+101 → 103 rows, landed in the same commit as the fix.
+
+### 222a — the stale baseline can import YOUR OWN earlier work
+
+Fourth instance of 218 in one evening, and the mechanism inverts. frankS's sweeps read call0
+103→104 and windowed **53→94** — a 41-program jump it correctly refused to claim, rebuilding the
+same HEAD without its diff to prove it. But it attributed the cause to *"other lanes' commits
+arriving in the rebase"*, and **every xtensa-specific commit on master that night was frankS's
+own** (`aa9ec947b`, `a7bad7937`, `cf02970e4`, `75a193ee3`, `a5f5bd42f`, `6369a8d63`, `df690b519`).
+
+> **"Is this from my change?" and "is this from me?" are different questions**, and a session that
+> lands seven commits in four hours will answer the first correctly and the second wrongly.
+
+*(Coordinator's scope: attribution by file ownership, not by bisecting the jump. Two shared-file
+commits in the same window — b4's `-O3` wrong-code fix and frankA's `--rtl-libc` series — are
+cross-backend and were not separated out.)*
+
+Three near-misses from one mechanism in one evening, and the tell every time was that **the result
+was too good and nothing errored** — 221's magnitude check, arriving from the favourable side.
