@@ -98,3 +98,40 @@ obtainable today without building anything.
 Doing that measurement is small and is worth doing whichever way this goes. What
 should **not** happen is 176 arrays of serialiser being written on the assumption
 that A is the only option, which is what the parent ticket's wording invites.
+
+## MEASURED, same session — B's ceiling is real, not marginal
+
+`--dce-report` is **off for the NilPy frontend** (*"only the Pascal frontend is
+wired up so far"*), so this went through the Pascal path, which pays the same tax
+via an explicit `uses`:
+
+| program | bodies | live | dead | dead by count | dead by emitted size |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `uses pylib` | 1261 | 382 | 878 | **69.6%** | 66.2% |
+| `uses pylib, pyeval` (what a `.npy` injects) | 1654 | 653 | 998 | **60.3%** | 40.4% |
+
+**About 60% of the injected runtime's routine bodies are never reached** in the
+full configuration. That is B's ceiling and it is substantial.
+
+**Three honest qualifications, because the number is more attractive than it is
+precise:**
+
+1. **Count is not time.** Live bodies are *larger* on average — 653 live bodies
+   carry 749,377 B against 998 dead ones at 509,775 B — so dead is 60% by count
+   but only 40% by emitted size. Parse cost tracks *source* size, which I did not
+   measure per body, so 60% is an upper bound on bodies skipped, **not** a
+   predicted 60% time saving.
+2. **This is a program that does nothing.** A real `.npy` reaches more. The
+   figure is the ceiling for the best case, not the typical case.
+3. **It does not touch interface parsing**, which is part of the 24,460 lines and
+   which B cannot avoid.
+
+**So the recommendation firms up to B-first**: a route with no staleness class
+and a ~60%-of-bodies ceiling is worth prototyping before committing to a
+176-array serialiser that must be maintained forever. If a prototype shows the
+real saving is small — because interfaces dominate, or because typical programs
+reach most bodies — that is a cheap negative, and A is still there.
+
+Still a **decision**, not a conclusion: A is unconditional and B is not, and
+choosing to bank a permanent maintenance hazard for an unconditional win is
+exactly the sort of trade that should be made deliberately by the owner.
