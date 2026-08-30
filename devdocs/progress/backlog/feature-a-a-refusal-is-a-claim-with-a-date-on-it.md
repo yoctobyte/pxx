@@ -11539,3 +11539,60 @@ b4 dumping IR at both `-O` levels before building; frankD's byte-identical `PXXD
 20 s proving the NilPy hang emits nothing; frankB deleting a reimplemented comparison rather than
 patching it (221a). **Delete the copy, check against the authority, run the exclusion before the
 ranking** keeps turning out to be one instruction wearing three hats.
+
+### 218f — a saved binary brackets your commits, but not what they were rebased ONTO
+
+Face 218 is *a saved binary stops being a baseline the moment you rebase*, and it fails by looking
+like a dramatic positive result. This is a distinct shape, and it is nastier because **the
+reasoning about the binary is sound and the conclusion is still wrong.**
+
+frankS bisected a 41-program jump in the xtensa windowed differential and, before bisecting,
+denied it twice on evidence that held up:
+
+> *"None of it is mine — `cc-veneer` contains all seven of my xtensa commits and measures 53
+> against today's sources; HEAD measures 94, so the jump is after my work."*
+
+Every clause of that is true. The binary WAS a faithful record of those seven commits, re-running
+it today still gave 53, and the control (same HEAD, with and without the diff under test) was the
+right control. The error is one level down: `cc-veneer` was built at the LOCAL sha `3f203a20b`,
+which landed as `aa9ec947b` after rebase. **The binary bracketed the commits and not their new
+parents** — the rebase moved what was underneath, and the ~20 commits it landed on were never in
+that binary at all.
+
+The coordinator was wrong from the other side, by a different mechanism: it attributed the jump
+to frankS's commits from **file ownership** — *these are the xtensa-touching commits, therefore
+this is the xtensa-behaviour change*. The actual cause touched `elfwriter.inc` and never went near
+the backend. **File ownership predicts collisions. It predicts nothing about causation**, and this
+was its second week running as a mis-attribution (the ParamStr call was the same shape: reasoning
+from the shape of the change to the shape of the defect).
+
+> Two routes, two people, both careful, both wrong, and **neither recoverable by more careful
+> reasoning** — only the bisect settled it. Two throwaway worktrees, seeded from `pinned` with a
+> backdated seed so `make compiler/pascal26` could not be the no-op that exits 0, and it took
+> twenty minutes.
+
+The operational rule: *"is this from my change?"* and *"is this from me?"* are different
+questions, and a session landing several commits in a few hours answers the first correctly and
+the second wrongly. When the answer matters, **bisect — do not attribute.**
+
+### 218g — the disconfirmation you run is the one that costs you the simple story
+
+The positive form of 215c (*a wrong answer that confirms your hypothesis is the one you do not
+check*). Same bisect, one step later.
+
+Having found the cause, frankS predicted that `code mod 4` would separate the 41 newly-passing
+programs from the 53 that already passed — the data section starting misaligned, the 41 being the
+unlucky ones. Checked it. **Refuted: every sampled program in BOTH groups was ≡3 (mod 4).**
+
+Confirmed, that hypothesis would have given a bounded problem with a bounded fix: 41 unlucky
+programs, now green. Refuted, it gives a much larger and much worse claim —
+
+> **the misalignment is universal and always was; which program faults depends only on whether it
+> dereferences a word that lands misaligned. The other 53 were never safe, only untested.**
+
+— which is measured rather than reasoned, and which nobody would have gone looking for once the
+pleasing version was in hand. It also changed the repair: "keep the padding" is adequate for 41
+unlucky programs and useless for an invariant that has never existed.
+
+> **The prediction worth running is the one whose confirmation would let you stop.** That is
+> exactly the prediction there is least reason to run and most reason to assume.
