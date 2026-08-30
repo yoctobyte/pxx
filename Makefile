@@ -3824,7 +3824,44 @@ test: test-core test-threads test-asm test-debug-g lib-fpc-clean
 # for the per-target assemblers (built with FPC). Was a transitive dep of
 # `test`/`stabilize`, forcing FPC for every pin; now explicit so the daily loop
 # (and `apt remove fpc`) is unaffected. Run by the release workflow / CI.
-test-fpc: fpc-check test-asm-emit
+test-fpc: fpc-check test-asm-emit test-fpc-seed-checked
+
+# The range-checked FPC seed, EXERCISED -- not merely built. `fpc -Cr` produces
+# the only build in this repo that names an array, a line and the offending
+# index when something writes past the end, and it is worth nothing if it aborts
+# on the compiler's own deliberate wraparound before it ever reaches your bug.
+#
+# It is a gate row because rot is exactly how it broke: nothing ran the seed
+# between the constant-folding fixes landing and the next session finding it
+# trapped on its first invocation, twice in a row
+# (chore-a-the-range-checked-fpc-seed-cannot-be-built, then
+# bug-a-the-range-checked-seed-traps-on-deliberate-wraparound-arithmetic). So
+# this RUNS it, on a probe written to reach every site that trapped, and demands
+# byte-identical output to the self-hosted compiler -- which makes the seed a
+# differential oracle rather than a smoke test.
+#
+# Demonstrated to fire, 2026-08-30, before being trusted: reverting the Low32 at
+# each of the three const-load sites aborts the arm32 / riscv32 / xtensa arm
+# respectively, reverting the riscv lui carry aborts the riscv32 arm alone, and
+# the FNV site in symtab.inc aborts every arm including native.
+#
+# Not in the daily gate: it needs FPC and costs an FPC build of compiler.pas --
+# the same reason fpc-check and test-asm-emit live here rather than in `test`.
+test-fpc-seed-checked: fpc-seed-checked $(COMPILER)
+	./build/pxx-checked test/test_range_checked_seed.pas $(TESTTMP)/rcs_ck
+	./$(COMPILER) test/test_range_checked_seed.pas $(TESTTMP)/rcs_px
+	cmp $(TESTTMP)/rcs_ck $(TESTTMP)/rcs_px
+	tools/expect_same.sh rcs_values "$$($(TESTTMP)/rcs_ck | tr '\n' ' ')" "4294967295 2147483647 2147483648 2147481600 2147483648 "
+	@for a in arm32 riscv32; do \
+	  ./build/pxx-checked --target=$$a test/test_range_checked_seed.pas $(TESTTMP)/rcs_ck_$$a >/dev/null || exit 1; \
+	  ./$(COMPILER) --target=$$a test/test_range_checked_seed.pas $(TESTTMP)/rcs_px_$$a >/dev/null || exit 1; \
+	  cmp $(TESTTMP)/rcs_ck_$$a $(TESTTMP)/rcs_px_$$a || exit 1; \
+	  echo "$$a: checked seed ran and emitted byte-identical code"; \
+	done
+	@./build/pxx-checked --esp-profile=bare --target=xtensa test/test_range_checked_seed.pas $(TESTTMP)/rcs_ck_xt >/dev/null
+	@./$(COMPILER) --esp-profile=bare --target=xtensa test/test_range_checked_seed.pas $(TESTTMP)/rcs_px_xt >/dev/null
+	cmp $(TESTTMP)/rcs_ck_xt $(TESTTMP)/rcs_px_xt
+	@echo "test-fpc-seed-checked: OK (seed runs; native+arm32+riscv32+xtensa byte-identical)"
 
 # Cold-start seed WITHOUT FPC: copy the committed pinned stable binary into the
 # working slot so `make test` / `make stabilize` can self-host. Use this on a

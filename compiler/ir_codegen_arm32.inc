@@ -1291,7 +1291,7 @@ begin
           EmitLoadImmArm32(1, Integer(IRIVal[node] shr 32));
           Exit;
         end;
-        EmitLoadImmArm32(0, IRIVal[node]);
+        EmitLoadImmArm32(0, Low32(IRIVal[node]));
       end;
 
     IR_CONST_STR:

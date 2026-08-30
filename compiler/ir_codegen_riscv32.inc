@@ -14,7 +14,11 @@ begin
     lo := v and $FFF;
     hi := v - lo;
     if (v and $800) <> 0 then
-      hi := hi + $1000;
+      { addi sign-extends its 12-bit field, so lui must carry the borrow back.
+        For v near INT32_MAX that carry lands ON $80000000, which is not an
+        Int32 -- but it IS the bit pattern lui wants, since lui takes the upper
+        20 bits of a 32-bit word and has no notion of sign. Low32 says so. }
+      hi := Low32(Int64(hi) + $1000);
     rv32_lui(rd, hi);
     if lo <> 0 then
       rv32_addi(rd, rd, lo);
@@ -1289,7 +1293,7 @@ begin
       if Is64BitRISCV32(IntToTypeKind(IRTk[node])) then
         EmitLoadConst64RISCV32(IRIVal[node])
       else
-        EmitLoadImmRISCV32(reg_a0, IRIVal[node]);
+        EmitLoadImmRISCV32(reg_a0, Low32(IRIVal[node]));
 
     IR_CONST_STR:
       begin

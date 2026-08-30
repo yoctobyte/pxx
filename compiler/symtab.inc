@@ -3727,7 +3727,13 @@ begin
   begin
     b := Ord(s[i]);
     if (b >= 65) and (b <= 90) then b := b + 32;
-    h := (h xor LongWord(b)) * LongWord($01000193);
+    { The FNV multiply overflows 32 bits BY DESIGN -- that is the hash. `-Cr`
+      range-checks the assignment back into LongWord and refuses it, so the
+      bounds-checked seed cannot run without this mask. It is a no-op for the
+      VALUE (LongWord arithmetic already wraps): both fpc and pxx return
+      3959789884 for 'SymNameFoldHash' with and without it, so no bucket moves.
+      bug-a-the-range-checked-seed-traps-on-deliberate-wraparound-arithmetic }
+    h := ((h xor LongWord(b)) * LongWord($01000193)) and LongWord($FFFFFFFF);
   end;
   Result := Integer(h and LongWord(SYM_HASH_SIZE - 1));
 end;
@@ -7132,7 +7138,13 @@ begin
   begin
     b := Ord(s[i]);
     if (b >= 65) and (b <= 90) then b := b + 32;   { fold A..Z }
-    h := (h xor LongWord(b)) * LongWord($01000193);
+    { The FNV multiply overflows 32 bits BY DESIGN -- that is the hash. `-Cr`
+      range-checks the assignment back into LongWord and refuses it, so the
+      bounds-checked seed cannot run without this mask. It is a no-op for the
+      VALUE (LongWord arithmetic already wraps): both fpc and pxx return
+      3959789884 for 'SymNameFoldHash' with and without it, so no bucket moves.
+      bug-a-the-range-checked-seed-traps-on-deliberate-wraparound-arithmetic }
+    h := ((h xor LongWord(b)) * LongWord($01000193)) and LongWord($FFFFFFFF);
   end;
   Result := Integer(h and LongWord(PROC_HASH_SIZE - 1));
 end;

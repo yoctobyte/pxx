@@ -1420,7 +1420,7 @@ begin
       if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
         EmitLoadConst64Xtensa(IRIVal[node])
       else
-        EmitLoadConstXtensa(reg_xtensa_a2, IRIVal[node]);
+        EmitLoadConstXtensa(reg_xtensa_a2, Low32(IRIVal[node]));
 
     IR_CONST_STR:
       begin

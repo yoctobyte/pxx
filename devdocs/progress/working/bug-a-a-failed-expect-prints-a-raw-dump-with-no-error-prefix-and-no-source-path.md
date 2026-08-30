@@ -2,9 +2,9 @@
 track: A
 prio: 30
 type: bug
-status: backlog
+status: working
 blocked-by: []
-owner: ""
+owner: frank-optimize
 summary: "A failed Expect() writeln's `Expected: X, but got:  (Kind: 57, Line: 2)` -- a token ORDINAL, no source path, and no `error:` prefix, so anything keying on `error:` does not see it as an error at all. lexer.inc:2838, shared by every frontend. Reached from C by an unclosed initializer followed by a real declaration."
 ---
 

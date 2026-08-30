@@ -161,3 +161,25 @@ begin
   Result := 'this target has no FPU and the soft-float kernel ' + nm +
             ' is not linked; add `uses softfloat` to the program';
 end;
+
+function Low32(v: Int64): Int32;
+{ The low 32 bits of v, as a signed 32-bit value -- the 32-bit immediate a
+  32-bit target actually loads.
+  The truncation is DELIBERATE and value-preserving: IR integer constants are
+  always stored Int64, so a Cardinal `$FFFFFFFF` arrives as 4294967295, which
+  is outside Int32's range but whose low 32 bits are exactly the bit pattern
+  the target must load. Verified three ways -- arm32 under qemu, native pxx,
+  and fpc all print 4294967295 for `c: Cardinal; c := $FFFFFFFF` -- so this is
+  a reinterpretation, not a loss.
+
+  It exists because that narrowing was IMPLICIT at every site, which builds
+  fine and runs fine and makes the range-checked seed unrunnable: `-Cr` checks
+  the assignment into an `Int32` parameter and aborts. Writing the cast out
+  says "yes, on purpose" in the one place where someone can also read WHY, and
+  it makes the class greppable -- the four 32-bit backends hold ~130 `IRIVal`
+  references between them and the chain of trapping ones is only discoverable
+  one abort at a time.
+  bug-a-the-range-checked-seed-traps-on-deliberate-wraparound-arithmetic }
+begin
+  Result := Int32(v and $FFFFFFFF);
+end;
