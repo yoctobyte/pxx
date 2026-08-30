@@ -201,6 +201,22 @@ into the work. Ones that have actually gone wrong:
   independently declined to use it on the grounds that it is the user's to grant,
   and they were right: a coordinator cannot grant it either. If a worker asks,
   the answer is to escalate to the owner, not to authorise it.
+- **A pin ledger row carries THREE identifiers and only the third is a commit.**
+  `stable_linux_amd64/default/pin.log` rows read
+  `<timestamp>  pinned vN  <binary sha256>  (was <previous binary sha256>)  <git sha>`.
+  The alignment ticket recorded its measurement as "at pin v393 (1d69760deabe)",
+  and `1d69760deabe` is the BINARY hash — v393's git sha is `1fb9774b7417`. Every
+  attempt to re-verify "at that sha" was checking out something unrelated, which
+  is why the ticket's grid read as irreproducible rather than as fixed. **Write a
+  binary hash as ``sha256 `…` `` so it cannot be read as a commit** (`progress.sh
+  check` says the same thing under DANGLING-SHA). Found by frankA, 2026-08-30.
+- **A gate RED that names a STALE BINARY is not a miscompile.** `gate.sh quick`
+  went red on `self-host fixedpoint` before the v395 pin with two distinct
+  fixedpoints — and printed its own diagnosis: `compiler/pascal26 is OLDER than
+  the last commit touching compiler/`. A sibling had landed a compiler change and
+  this checkout had not rebuilt. `make compiler/pascal26` (~80s here) then
+  re-gate; it came back GREEN with every step passing. Read the NOTE block before
+  believing the FAIL line above it.
 - **RUN `tools/progress.sh check` BEFORE DISPATCHING. It already knew.** On
   2026-08-30 the coordinator dispatched
   `bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64` **twice** —
@@ -1055,7 +1071,7 @@ because idle is not a failure state and the token budget is shared.
 | --- | --- | --- |
 | frankA | ~~`regression-test-asm-test-asm-emit-rv32`~~ **LANDED 4cec00985**; now on `refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed` (p60) | `compiler/ir.inc` + the new C-lowering include |
 | frank-optimize | `regression-test-core-test-opt-store-reload` (p70, live red) | `compiler/ir_codegen.inc`, `compiler/defs.inc` |
-| frankwasm | `bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver` (p60) | wasm backend, `lib/rtl/platform/wasi/**`, `test/wasm/**` |
+| frankwasm | ~~`bug-wasm-hosted-compiler-faults-...`~~ **LANDED 0a5411a2b**; next unassigned | `ir_codegen_wasm32.inc`, `lib/rtl/platform/wasi/**`, `test/wasm/**` |
 | frankT | **stood down** — seven owns Track T | none |
 | frankB, frankC, frankS, frank-rust, frank-user | idle by choice | none |
 
