@@ -4457,7 +4457,31 @@ begin
   else
   begin
     elemSize := TypeSize(elemType);
+    { An ARRAY slot is pointer-aligned, whatever its element is. The four
+      branches above already say so outright (dyn-element, string, frozen
+      string, record all set TARGET_PTR_SIZE); this one asked TypeAlign about
+      the ELEMENT and got 1 for a byte, so an `array of Byte` local landed at
+      whatever offset the frame had reached.
+
+      That is not a theoretical looseness. `ir.inc` reserves the caller-side
+      storage for a fixed-array-returning call as AllocArray('', tyUInt8, 0,
+      bytes-1) — a byte array standing in for an aggregate — and every backend
+      then nil-inits that slot with a FOUR-BYTE store. On x86-64 and i386
+      unaligned word access is free and on qemu-riscv32/arm it is emulated
+      silently, so five backends never complained; xtensa traps, and
+      `WriteLn` of any real died with SIGBUS at an odd frame offset the moment
+      that target could run code at all. Measured by frankS as eight named
+      slots in the three float writers, at identical offsets on xtensa and
+      riscv32 — shared layout, not one backend's codegen.
+
+      Flooring here rather than at the two ir.inc call sites is deliberate:
+      it is one rule instead of two copies of one rule, and it covers every
+      other byte-array local at the same time. Over-aligning a frame slot
+      costs at most TARGET_PTR_SIZE-1 bytes of frame and is never wrong.
+      An alignment rule enforced only by hardware is not enforced.
+      bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot }
     align := TypeAlign(elemType);
+    if align < TARGET_PTR_SIZE then align := TARGET_PTR_SIZE;
   end;
 
   totalSize := (hi - lo + 1) * elemSize;

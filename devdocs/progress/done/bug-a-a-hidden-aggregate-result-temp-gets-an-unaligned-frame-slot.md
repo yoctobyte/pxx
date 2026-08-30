@@ -2,9 +2,10 @@
 track: A
 type: bug
 prio: 55
-status: open
+status: working
 found: 2026-08-30
 found-by: frankS
+owner: frankC
 ---
 
 # A hidden aggregate-result temp gets a frame slot with NO alignment, and the prologue word-stores into it
@@ -115,3 +116,86 @@ profile, Call0, `--xtensa-soft-mulhigh`, at `de8cd038b`; riscv32 comparison
 built from the same source by the same compiler. The offsets were read from the
 compiler's own symbol table, not inferred from the disassembly. Not checked on
 real or emulated ESP silicon, and not checked under the windowed ABI.
+
+## RESOLVED — 2026-08-30 (frankC)
+
+**Fixed in the allocator, as you recommended, but one level more general than
+the ticket asked** — and the generality is the argument, not a flourish.
+
+`AllocArray` has five branches. **Four of them already say
+`align := TARGET_PTR_SIZE` outright**: dynamic-element, string, frozen string,
+and record. Only the scalar branch asks `TypeAlign(elemType)` — the ELEMENT's
+alignment — and gets 1 for a byte. So this was never a missing rule; it was one
+branch not following a rule the file states four times beside it. The fix is
+that branch floored to `TARGET_PTR_SIZE`:
+
+```pascal
+align := TypeAlign(elemType);
+if align < TARGET_PTR_SIZE then align := TARGET_PTR_SIZE;
+```
+
+That covers **both** `ir.inc` sites for free (both reach here through
+`AllocArray`), so there is no pair to keep in step — `normalise-dont-special-case`
+satisfied by construction rather than by discipline. It also covers every other
+byte-array local, which matters because `memcpy` of such a buffer would
+word-copy it on the same target that traps.
+
+**`AllocVar` needed nothing**, contrary to the ticket's second candidate:
+`TypeSize(tyRecord)` is 8, so `TypeAlign(tyRecord)` is already 8. Checked
+rather than assumed, and it is why the fix is one site instead of two.
+
+Cost: **+344 bytes of bss, +52 bytes of code** on the self-hosted compiler.
+
+### Verified by running it, not by inspection
+
+`qemu-xtensa` is present, so the ticket's own repro was run both ways —
+the instrument shown capable of failing before its agreement was used:
+
+| | pre-fix | post-fix |
+| --- | --- | --- |
+| `WriteLn('B ', d)` on xtensa | `A`, `B `, **SIGBUS (signal 7)** | `A`, `B  7.0000000000000000E+000` |
+| vs the x86-64 build | — | identical |
+
+- `test/test_write_real_frame_align.pas` added and wired into `test-xtensa`:
+  Double, negative Double, Single, and a `:0:3` fixed form. **x86-64 == FPC ==
+  xtensa**; the pre-fix compiler SIGBUSes on it.
+- Of the three divergences predicted downstream: **`test_cross_float_return`
+  and `test_single_in_aggregate` now PASS.** `test_cross_float` no longer
+  crashes (it printed nothing at all before) but still differs — see below.
+- `make compiler/pascal26` fixedpoint `9ee63ea78bf1`; `tools/gate.sh quick`
+  **GREEN**, all six steps.
+
+### What it unmasked — and my first reading of it was wrong
+
+`test_cross_float` runs to completion and still diverges, so I started to
+write it up as "xtensa disagrees with the x86-64 oracle". **Then I put FPC
+beside both, and the direction reversed:** on those lines x86-64 is the one
+that is wrong, and xtensa matches FPC.
+
+| expression | FPC | x86-64 | xtensa |
+| --- | --- | --- | --- |
+| `s1+s2` (Single op Single) | Single | **Double** | Single |
+| `i * s1` | Single | **Double** | Single |
+| `i / 2` | Double | Double | **Single** |
+
+Both targets pick float widths for `Write` that FPC does not, in **opposite
+directions on different lines**. Filed as
+[[bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc]]
+— explicitly **not** Track F, because a rendering policy cannot be
+target-dependent when the frontend is shared: this is width dispatch below the
+frontend, and F excludes codegen bugs that merely live in float code.
+
+Two things worth keeping from that:
+
+1. **The x86-64 half has been reachable on every run of the suite since the
+   test was written.** `test-xtensa` compares xtensa against the *x86-64
+   build*, so the reference cannot be wrong by construction. A
+   self-differential's reference is not an oracle.
+2. `WriteLn(s)` for a plain `s: Single` agrees across all three. The
+   divergence needs the **expression**, not the type — which is why the
+   isolated probe I reached for first said everything was fine.
+
+## Log
+- 2026-08-30 — filed by frankS with the eight measured slots and the
+  two-backend disassembly proving shared layout.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -12692,6 +12692,13 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/hello.pas $(TESTTMP)/test_xtensa_hello
 	./$(COMPILER) test/hello.pas $(TESTTMP)/test_xtensa_hello_x64
 	tools/expect_same.sh xtensa/hello "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_hello)" "$$($(TESTTMP)/test_xtensa_hello_x64)"
+	# WriteLn of a real: the shape that exposed an unaligned hidden aggregate
+	# temp. SIGBUS on xtensa, silently fine on the five backends whose hardware
+	# or emulator permits an unaligned word store.
+	# bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_write_real_frame_align.pas $(TESTTMP)/test_xtensa_write_real_align
+	./$(COMPILER) test/test_write_real_frame_align.pas $(TESTTMP)/test_xtensa_write_real_align_x64
+	tools/expect_same.sh xtensa/write_real_align "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_write_real_align)" "$$($(TESTTMP)/test_xtensa_write_real_align_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_virtual_wide.pas $(TESTTMP)/test_xtensa_test_arm32_virtual_wide
 	./$(COMPILER) test/test_arm32_virtual_wide.pas $(TESTTMP)/test_xtensa_test_arm32_virtual_wide_x64
 	tools/expect_same.sh xtensa/test_arm32_virtual_wide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_arm32_virtual_wide)" "$$($(TESTTMP)/test_xtensa_test_arm32_virtual_wide_x64)"
