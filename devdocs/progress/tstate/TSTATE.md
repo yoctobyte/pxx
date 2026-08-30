@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `946a36440a55` | 2026-08-30T11:36:17Z | RED (native) | 116.4s | `6c88a2afc82b` RED |
+| seven | `e515f86f25c3` | 2026-08-30T11:39:21Z | GREEN (native) | 113.7s | `6c88a2afc82b` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -39,7 +39,6 @@
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
-- **test-core#src:test/test_opt_store_reload.pas** — test/test_opt_store_reload.pas tools/expect_same.sh (seven): bad `10c869750675`, last good `08cbfa20a11d`, 1 commit(s) in range
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard1/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard2/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
