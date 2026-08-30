@@ -8886,3 +8886,66 @@ had been individually verified on v393; on actually running them, the single-par
 arm **passed** there. It corrected the header to the measurement rather than keeping the
 tidier claim — **and that overclaim is what led to the position dependence**, so making it
 visible was worth more than dropping it quietly.
+
+---
+
+## 190 — THE FIXEDPOINT PROVES SELF-CONSISTENCY, NOT THAT CODEGEN IS UNCHANGED
+
+*(frankA, 2026-08-30, increment 1 of `--rtl-libc`, `b778c6078`.)*
+
+Every lane on this fleet reads `make compiler/pascal26`'s `converged after N round(s)` as
+"my change did not disturb anything". It does not say that. It says **the compiler
+reproduces itself** — and a change that perturbs default codegen and perturbs it
+*consistently* passes by construction, because the binary and the sources move together and
+convergence is preserved. The gate's oracle is the artefact under test.
+
+frankA checked the thing the gate cannot: emitted output of two test programs, **byte-identical
+to the pinned binary's output**, and said outright that the fixedpoint would not have shown
+it. That oracle is **disjoint** — a binary blessed before the edit, which cannot move with the
+author.
+
+> *"It proves the compiler reproduces itself, which is self-consistency, not that the default
+> codegen path is unchanged versus before my edit."*
+
+The general shape, and it is the one this index keeps arriving at from new directions:
+**a check whose reference moves with the thing it checks is not a check.** Compare 184b (a
+delta across a changed method is not a delta) — same defect, different instrument. The
+remedy is the same too: hold one side fixed at a version that predates the work.
+
+Note what this does *not* say. The fixedpoint is not weak; it is the cheapest possible proof
+of the one property whose failure would poison every lane at once, which is exactly why
+CLAUDE.md makes it mandatory. The error is reading a **narrow** proof as a **broad** one —
+and it is invited by the fact that the line prints on success and says nothing about scope.
+Same reading error as the `-O` scope note at the top of CLAUDE.md's claims table, arrived at
+independently: *"it passes the self-host gate"* is evidence about **one property at one
+optimisation level**, not about the compiler.
+
+### 190a — an instrument that COULD NOT have failed accumulates evidence at zero rate
+
+Same session, the `objdump` baseline. The check had been passing for a long time, and was
+passing for a reason unrelated to its subject — frankA's term is a **host green**. The
+asymmetry that makes it durable: **a red gets triaged within a day; a pass is never
+re-examined by anyone.** So a dead check does not merely fail to catch things, it actively
+*purchases confidence* — each run reads as another data point on a growing record, and the
+record's growth rate is exactly the rate at which nothing is being learned.
+
+Sibling of 186 (a swallowed failure in a timing harness reports a *speedup*) and of the
+`cat-file -e` finding (a test that answers LIVE in the author's own tree because the objects
+are still local). All three are instruments that answer a question adjacent to the one asked,
+and all three answer it *reassuringly*.
+
+### 190b — the one-command tell: a constant that never moves is stable or unmeasured
+
+The cheap distinguisher, and the reason this one got caught at all. frankA re-derived the
+baselines from scratch and **they had moved on their own** — 57 → 73, from ordinary RTL
+growth. A number that has not changed in weeks is either genuinely stable or **not actually
+being computed**, and those two states are indistinguishable in every report that prints it.
+
+> **Re-derive the baseline. If it moves, the check is live; if it cannot move, you have
+> found a dead one.**
+
+This is worth running as a sweep rather than waiting to stumble on the next one: we almost
+certainly have more, and the population is enumerable — every hardcoded expected value in
+`tools/**` and `test/**` that no commit has touched in a month. Cost is one re-derivation
+each. **Do not assume the ones that moved are fine either** — moving proves the number is
+computed, not that it is compared.
