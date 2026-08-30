@@ -18859,3 +18859,92 @@ cycle.
 `pyparser.inc` is free — measured, nobody has touched it in the recent range and
 no tree holds it. frankA told frankD it was free and said so rather than
 retracting it silently.
+
+## Tick 2026-08-30 ~10:1x — the sweep closed clean, and a green test that could not fail
+
+**ALIGNMENT: CLOSED, MEASURED.** b4 landed `df98fea47` (`AlignCodeForData` +
+`ELF_DATA_ALIGN = 8` + `CheckDataBaseAligned` as an `Error` at all three
+`dataBase :=` sites), and **tested the invariant by DELETING the page pad** —
+data at 195724 vs frankS's 195723, canary still green, so the 4096 is no longer
+load-bearing. frankS then swept binary `62cfb924053f`:
+
+```
+xtensa call0     104 -> 104   lost 0  gained 0
+xtensa windowed   94 ->  94   lost 0  gained 0
+riscv32          111 -> 111   lost 0  gained 0
+```
+
+**Set difference both directions, not a count comparison** — load-bearing here
+and nowhere else in that table: at `75d2ba662` those 94 passed by accident, so
+if the deliberate fix had traded part of that set for a different one,
+`94 == 94` would have said nothing. A lucky reason was replaced by a stated one
+without moving the boundary. Scope: 129 hosted programs under qemu; nothing
+about ESP bare-metal or the other four targets.
+
+**PT_LOAD split implemented (not yet pushed at time of writing), and it carries a
+decided trade.** Splitting introduces a page-size dependency the single RWX
+segment never had: the loader maps each `PT_LOAD` from `PAGE_START(p_vaddr)` at
+the **hardware** page size, so an unaligned code/data boundary re-maps the
+overlap R+W and real code in it dies on first call. 4096 is right for x86-64,
+i386, arm32, riscv32 and hosted xtensa; **aarch64 kernels ship 4, 16 or 64 KiB
+pages**, which is why GNU ld defaults `max-page-size` to `0x10000` there.
+b4 set `ELF_AARCH64_PAGE = 65536`. Cost: aarch64 hello 154240 → 199296
+(**+29%**), bounded not proportional (<1% on `compiler/pascal26`); x86-64
+unchanged; ESP bare image untouched at one RWX segment, `code=44940`, same as
+`pinned`.
+
+**Coordinator call: 65536 stands, and it was correctly NOT filed as a `decide-*`.**
+Choosing 4096 would introduce a break on kernels where nothing is broken today,
+in exchange for file size — sizing a boundary to the page granularity we happen
+to test on, which is the mistake that cost 41 xtensa programs six hours earlier,
+with SIGSEGV rather than one unlucky load as the failure. Knob surfaced to the
+owner as one line (`ELF_AARCH64_PAGE`, consequence: "aarch64 images correct on
+4 KiB-page kernels only"), NOT as a block. b4 also closed the
+`codeOffset`/`phCount` drift with an `Error` rather than with care — one fact
+spelled twice, and a silent 56-byte drift there yields an image that loads,
+runs, and lies about every address it reports.
+
+**frankA: the urgent hang is fixed (`0425a62c8`), and the probe KILLED the
+suspected root cause.** The cycle is one element long — `SymHashPrev[476] = 476`
+with `SymCount = 476`, a head past the live table, and a slot named
+`$byref.prefix` in a bucket its current name does not hash to. The suspected
+cause was **sound code**: `SymRollbackTo`'s "highest live idx is always its
+bucket's head" is correct. The defect was never the order it pops in, it is the
+**bucket it pops from** — rollback recomputed the bucket from the name as it
+reads NOW while insert filed it under the name it had THEN. Fixed by recording
+the bucket at insert, so a rename is safe by construction rather than forbidden
+by convention. All three ingredients accounted for, not merely consistent.
+
+**THE FACE FROM IT — a green test that ships.** frankA's first regression test
+for the hang **compiled clean on the pre-fix binary**: it had `return prefix` in
+the third scope, and reading the local silences the bug. A test written by the
+person who just fixed it, which could not have failed, and which would have been
+trusted *more* than an ordinary test because it is a regression test with a
+ticket behind it. **A regression test must be run against the broken binary
+before it is trusted; "it passes now" is not that check.** Repair: build it only
+from shapes measured to hang, and state the non-obvious constraints in the header
+so they are not tidied away.
+
+**Second defect found inside the first's source shape:**
+`bug-nilpy-calling-a-duplicated-ordinary-method-segfaults` [N p55] — compiles
+clean, then segfaults, identically before and after, so neither caused nor cured.
+It **produces a binary**, which is what survives a suite asserting only on
+compiler exit status. The hang was the loud defect standing in front of it.
+
+**Unblocked for Track B:** `mimic_xml_dom_minidom.py.parked` — 494 lines that
+could not compile at all — builds in 4.01s and matches CPython on 36/36 at
+`0425a62c8`. frankA left it parked deliberately; the unpark is B's call.
+
+**TSTATE, and the reason not to act on it yet.** plexus v393 pin-verify: 4 new
+reds, **single uncorroborated run** on a timing-sensitive matrix, **at the pinned
+tree 112 testable commits behind origin/master** — twatch says so itself. One is
+`test_nilpy_relative_import_in_package.npy: undefined variable (RENAMED)`, which
+is *adjacent* to frankA's rename fix and is explicitly **not** asserted to be
+related; flagged to frankA as a thirty-second dismissal, not a bisect. seven's
+v394 verify: 6 red / **0 new**, three of them the `min_max`/`max_min` NilPy rows
+frankA resolved in `6530abdeb` — older than the fix, not live. Do not re-file.
+**Breadth is 8h stale on plexus, 112 commits behind: no cross-target verdict
+exists for any of tonight's work.**
+
+**Box: load 18.2 on 12 cores.** Pin unchanged, v394 `53800fbeb0b66e11`. U queue
+**33**. `urgent/` is empty — frankA took the one item and closed it.
