@@ -12480,3 +12480,73 @@ Related: **face nine** (an inert flag, and it lived in a comment) is the same
 substrate — a comment carrying state nothing enforces. Nine is about a comment
 standing in for a *mechanism*; this is about a comment standing in for a
 *boundary*.
+
+## 234 — A VERDICT AND ITS EVIDENCE THAT TRAVEL SEPARATELY CAN DISAGREE INDEFINITELY (frankB, 2026-08-30)
+
+`test_unitpath_posix26` sat in an audit's candidate list for a whole sweep,
+reported as **fpc differs**, with an **empty diff**. Built on its own, fpc prints
+`posix` — exactly our expectation. The row agreed; the harness said otherwise.
+
+The cause was contamination: the sweep compiled all 1215 Pascal sources into one
+shared `-FU` unit-output directory, and `test/unitpath/posix/platgreet.pas` and
+`test/unitpath/esp/platgreet.pas` are **different units with the same basename**
+(as are two `mymod.pas`). Whichever compiled first left its `.ppu` there and bound
+for every later row using that name.
+
+Two lessons, and the second is the one that generalises past sweeps.
+
+### The contamination half
+
+**Contamination between rows of a sweep is indistinguishable from a finding, and
+it points whichever way the sweep ORDER happened to go.** A re-run in a different
+order moves the result and nothing says why — both runs look like measurements,
+which is the failure mode where you cannot tell you have been fooled. Only two
+basenames collided here, so the count barely moved; the count was never the risk.
+
+The fix is a per-binary unit directory. The re-run moved **exactly one row**
+(797 derived +1, 58 candidates −1) — the whole predicted effect and no more,
+which is the strongest available confirmation that a fix did what it claimed and
+nothing else.
+
+### The half that is a new face
+
+**What exposed it was the empty diff, not the verdict.**
+
+The classifier reported the *verdict* from a counter inside the sweep, and the
+*evidence* from a separate re-run that regenerated the diff. Two paths, never
+compared — so a row could be labelled a difference while carrying no difference,
+and remain that way indefinitely. Nothing in the pipeline was in a position to
+notice, because noticing requires holding both at once and nothing did.
+
+This sits beside 212/223 and inverts them. Those say a tool must be **incapable
+of expressing the reassuring answer** when it cannot tell. This one says a tool
+can express a **specific, unreassuring, fully determinate answer with no evidence
+behind it** — and a specific answer is *less* suspicious than a reassuring one,
+so it draws even less scrutiny. "fpc differs on row N" reads as a finding. It
+reads as work someone did.
+
+**Operational form: make the verdict carry its evidence, and check the carriage.**
+Not "log the diff too" — that is what was already happening, on the other path.
+The check has to be that *this* verdict has *this* evidence:
+
+> A row called a difference must be able to show at least one diff line.
+
+Landed with the entry (`d45cd43e7`): a row that cannot produce a single `+`/`-`
+line is now counted as `SUSPECT: called a difference but has no diff lines` and
+listed as `[NO DIFF -- suspect the harness]`, so the next occurrence **accuses the
+instrument rather than the corpus** — which is the direction the evidence
+actually pointed, and the direction nobody looks.
+
+It lands silent on the current corpus, and a silent check is indistinguishable
+from a broken one, so it was proved to fire: the branch was forced, confirmed to
+count 4 of 4 with the correct label and line numbers, and restored byte-identical.
+
+### Why this keeps happening in audits specifically
+
+An audit's output is *verdicts about other things*, so its own defects wear the
+costume of results. This was the fifth instrument defect in one audit, and every
+one of them produced a confident, plausible, specific claim rather than an error.
+**The magnitude check (221) and the direction check both work here; this adds a
+third that is cheaper than either — does the verdict have anything attached to
+it at all.** No domain knowledge required, and it is the only one of the three
+that catches a defect whose number happens to look right.
