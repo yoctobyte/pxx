@@ -282,3 +282,177 @@ void __pxx_run_initializers(long *sp)
   long argc = sp[0];
   environ = (char **)(sp + argc + 2);
 }
+
+/* ---------------------------------------------------------------------------
+   getopt — option scanning, matching glibc rather than bare POSIX.
+
+   Written because busybox's getopt32 is the first thing every applet calls and
+   crtl had no getopt at all: `optind` came out as "undeclared identifier used
+   as value (treated as 0)" and `getopt` as a call to an undeclared function.
+
+   GNU PERMUTATION IS IMPLEMENTED, and that was a deliberate second pass. POSIX
+   stops at the first non-option, so `cat file -n` would treat `-n` as a
+   filename -- while every oracle we diff against is glibc-built, and glibc
+   permutes. Matching the standard rather than the oracle would have produced a
+   difference in exactly the shape this corpus exists to detect, and called it
+   conformance. Differential-tested against glibc over the argv shapes at the
+   bottom of this comment.
+
+   Reset: glibc reinitialises when optind is set to 0, BSD when optreset is set
+   to 1. Both work, because busybox chooses between the two spellings at compile
+   time (GETOPT_RESET) and other real code does too.
+
+   NOT implemented: getopt_long, and the leading `+` / `-` optstring modes. A
+   leading ':' IS honoured -- it costs one branch and callers use it to tell a
+   missing argument from an unknown option.
+
+   Verified identical to glibc, stdout and stderr and exit status, for:
+     -a -b -o X f1 f2 | -abo Y f | -a -- -b | f -a | -z | -o
+     f1 -a f2 -o X f3 | -- -a | f -- -a | (no args)                          */
+char *optarg = 0;
+int optind = 1;
+int opterr = 1;
+int optopt = 0;
+int optreset = 0;
+
+static int pxx_optpos = 1;   /* index of the next char INSIDE argv[optind] */
+
+static void pxx_getopt_err(const char *prog, const char *msg, char c)
+{
+    /* glibc's exact format: "<argv[0]>: invalid option -- 'z'". Written from
+       the pieces we have rather than with fprintf, so option parsing does not
+       drag stdio into a program that did not ask for it. */
+    char buf[4];
+    const char *p;
+    for (p = prog; p && *p; p++) __pxx_write(2, (void *)p, 1);
+    __pxx_write(2, (void *)": ", 2);
+    for (p = msg; *p; p++) __pxx_write(2, (void *)p, 1);
+    buf[0] = '\''; buf[1] = c; buf[2] = '\''; buf[3] = '\n';
+    __pxx_write(2, buf, 4);
+}
+
+static int pxx_is_opt(const char *s)
+{
+    return s != 0 && s[0] == '-' && s[1] != 0;
+}
+
+/* glibc's own bookkeeping, and the reason for it is case
+   `f1 -a f2 -o X f3`: a naive "rotate the option to optind as you find it"
+   takes the option's separate ARGUMENT from the permuted vector and comes back
+   with optarg = "f1" instead of "X". glibc avoids that by DEFERRING the
+   exchange to the next option boundary, so an option and its argument are
+   always consumed from their original positions. [first_nonopt, last_nonopt)
+   is the run of non-options skipped so far. */
+static int pxx_first_nonopt = 1;
+static int pxx_last_nonopt = 1;
+
+static void pxx_exchange(char **av)
+{
+    /* Move the skipped non-options [first_nonopt, last_nonopt) to sit AFTER
+       the options that followed them, [last_nonopt, optind). A left-rotation
+       of [first_nonopt, optind) by (last_nonopt - first_nonopt) does it, and
+       keeps both groups in their original relative order. */
+    int lo = pxx_first_nonopt, mid = pxx_last_nonopt, hi = optind;
+    int n = mid - lo, i, j;
+    char *tmp;
+    if (n <= 0 || hi <= mid) return;
+    for (i = 0; i < n; i++) {
+        tmp = av[lo];
+        for (j = lo; j + 1 < hi; j++) av[j] = av[j + 1];
+        av[hi - 1] = tmp;
+    }
+    pxx_first_nonopt += hi - mid;
+    pxx_last_nonopt = hi;
+}
+
+int getopt(int argc, char *const argv[], const char *optstring)
+{
+    const char *spec;
+    char **av = (char **)argv;     /* glibc permutes in place too */
+    const char *prog;
+    char c;
+    int silent;
+
+    if (optind == 0 || optreset) {   /* glibc-style / BSD-style reset */
+        optind = 1;
+        optreset = 0;
+        pxx_optpos = 1;
+        pxx_first_nonopt = 1;
+        pxx_last_nonopt = 1;
+    }
+    if (optstring == 0) return -1;
+    silent = (optstring[0] == ':');
+    if (silent) optstring++;
+    prog = (argc > 0 && av[0]) ? av[0] : "";
+
+    if (pxx_optpos == 1) {
+        /* At an argument boundary. Settle any deferred permutation, then skip
+           over the non-options to the next option. */
+        if (pxx_last_nonopt > optind) pxx_last_nonopt = optind;
+        if (pxx_first_nonopt > optind) pxx_first_nonopt = optind;
+        if (pxx_first_nonopt != pxx_last_nonopt && pxx_last_nonopt != optind)
+            pxx_exchange(av);
+        else if (pxx_last_nonopt != optind)
+            pxx_first_nonopt = optind;
+        while (optind < argc && av[optind] != 0 && !pxx_is_opt(av[optind])) optind++;
+        pxx_last_nonopt = optind;
+
+        if (optind < argc && av[optind] != 0
+            && av[optind][1] == '-' && av[optind][2] == 0) {
+            /* "--": the options end here. Consume the marker, flush the
+               permutation, and leave optind on the first operand. */
+            optind++;
+            if (pxx_first_nonopt != pxx_last_nonopt && pxx_last_nonopt != optind)
+                pxx_exchange(av);
+            else if (pxx_first_nonopt == pxx_last_nonopt)
+                pxx_first_nonopt = optind;
+            pxx_last_nonopt = argc;
+            optind = pxx_first_nonopt;
+            return -1;
+        }
+        if (optind >= argc || av[optind] == 0) {
+            /* Out of arguments: leave optind on the first non-option, which is
+               where the caller's own operand loop starts. */
+            optind = pxx_first_nonopt;
+            return -1;
+        }
+    }
+
+    c = av[optind][pxx_optpos];
+    optopt = (int)(unsigned char)c;
+
+    spec = optstring;
+    while (*spec && *spec != c) spec++;
+    if (*spec == 0 || c == ':') {
+        /* Unknown option. Advance past it exactly as a known one would, or the
+           next call re-reads the same character forever. */
+        pxx_optpos++;
+        if (av[optind][pxx_optpos] == 0) { optind++; pxx_optpos = 1; }
+        if (opterr && !silent) pxx_getopt_err(prog, "invalid option -- ", c);
+        return '?';
+    }
+
+    if (spec[1] == ':') {           /* the option takes an argument */
+        if (av[optind][pxx_optpos + 1] != 0) {
+            optarg = &av[optind][pxx_optpos + 1];         /* -ovalue */
+            optind++;
+        } else {
+            optind++;
+            if (optind >= argc || av[optind] == 0) {      /* -o with nothing after it */
+                pxx_optpos = 1;
+                if (opterr && !silent) pxx_getopt_err(prog, "option requires an argument -- ", c);
+                return silent ? ':' : '?';
+            }
+            optarg = av[optind];                          /* -o value */
+            optind++;
+        }
+        pxx_optpos = 1;
+        return (int)(unsigned char)c;
+    }
+
+    /* A flag. Walk to the next character in the same cluster (-abc), and move
+       to the next argv only when the cluster is exhausted. */
+    pxx_optpos++;
+    if (av[optind][pxx_optpos] == 0) { optind++; pxx_optpos = 1; }
+    return (int)(unsigned char)c;
+}

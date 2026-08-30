@@ -11227,6 +11227,17 @@ test-core: $(COMPILER)
 	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
 	# overload. 42 is Twice(21); 7 is the Integer Max, 9.25 the Double one, and
 	# the two come from ONE Pascal name.
+	# crtl's getopt, against the shapes that separate POSIX from glibc. Every
+	# expected line was taken from a glibc-built binary of the same file.
+	# Row 4 and row 7 are why PERMUTATION is implemented rather than skipped:
+	# every oracle this project diffs against is glibc-built, so a
+	# POSIX-conformant getopt would differ from it in exactly the shape the C
+	# corpora exist to detect. Row 7 is the one a naive permuter fails while
+	# rows 1-6 pass -- an option's separate argument taken from the PERMUTED
+	# vector reads "f1" where glibc reads "X".
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_getopt_glibc_parity.c $(TESTTMP)/c_getopt_parity26
+	tools/expect_same.sh c_getopt_parity26 "$$($(TESTTMP)/c_getopt_parity26)" "$$(printf '1: -a -b o=X | optind=5 rest: f1 f2\n2: -a -b o=Y | optind=3 rest: f\n3: o=X -a | optind=3 rest: f\n4: -a | optind=2 rest: f\n5: ?z | optind=2 rest:\n6: ?o | optind=2 rest:\n7: -a o=X | optind=4 rest: f1 f2 f3\n8: | optind=1 rest: f1 f2 f3\n9: -a | optind=3 rest: -b\n10: | optind=2 rest: -a\n11: | optind=2 rest: f -a\n12: :o | optind=2 rest:\n13: | optind=1 rest: -\n14: -a ?- -b | optind=2 rest:')"
 	./$(COMPILER) test/c_pasunit.c $(TESTTMP)/c_pasunit26
 	tools/expect_same.sh c_pasunit26 "$$($(TESTTMP)/c_pasunit26)" "$$(printf '42\n7')"
 	./$(COMPILER) test/c_pasunit_ovl.c $(TESTTMP)/c_pasunit_ovl26
