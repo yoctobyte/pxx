@@ -6437,3 +6437,83 @@ Two more shapes worth the grep: **a heading is an assertion no ticket state can
 contradict** (`eliah-m4-m5-prompt.md`'s `TODO` heading over five discharged items), and
 **a directory embedded in a citation is a claim about state** — that file's citations were
 stale in *both directions at once*, `(backlog)` and `unfinished/` for work that was done.
+
+### 151 — A GUARD SUITE THAT AGREES WITH ITSELF PROVES THE MECHANISM IT SAMPLES, NOT THE BEHAVIOUR
+
+*pxx-a5, 2026-08-30, fixing the shared-`TESTTMP` default.*
+
+Its first cut passed **seven guards**, and it had verified each one **fails on the
+condition it names** — the exact discipline this file has been pushing all night (*a
+control is not a control until it has failed once*). **It was still wrong.**
+
+Every one of those seven exercised `job_env()`. **None exercised `make_dry_run()`** — a
+second `make` that passes no `env=` at all. `gate.sh quick` caught it in **30 seconds**,
+RED, with a compile succeeding under the scratch path and the exec then failing to find
+the binary.
+
+> **Verified-to-fail is necessary and is not sufficient.**
+
+This is 130 (*a guard built from the union of your cases is blind to their intersection*)
+with the missing dimension named: **a suite can be adversarial on every axis it samples
+and still sample one mechanism.** Each guard's negative control tests *that guard*; nothing
+tests *the sampling*. And the sampling is invisible from inside the suite, because a suite
+has no way to represent a call site it does not know about.
+
+The cheap independent run is what closes it — a different instrument, not a better guard
+(140a's second-support rule, arriving in test design). The repair generalises the same
+way: setting `TESTTMP` on testmgr's own **process environment** covers all four `make`
+call sites **and the next one nobody has written**, where an allowlist entry covers only
+the ones enumerated today.
+
+### 151a — the guard-comment was satisfied by the half that is EASY TO SEE
+
+The prerequisite, marked done, was half landed — and the missing half was the failure it
+was written to prevent. `chore-t-teach-testmgr-the-testtmp-value` taught the **matchers**
+(`TMP_RE`, three `make_dry_run` expressions, `_REASON_TMP_RE`, `RUN_TMP` all derive from
+`TESTTMP`). It did not teach the **producer**: `job_env()` is an allowlist and `TESTTMP`
+was not on it, so setting the variable moved the matchers and was then stripped from the
+environment of the `make` those matchers read.
+
+```
+parent TESTTMP=None       matchers=/tmp       make says=/tmp       AGREE
+parent TESTTMP=<scratch>  matchers=<scratch>  make says=/tmp       NO
+```
+
+Precisely the state testmgr's own comment forbids — *"all four go blind AT ONCE and fail
+silently."*
+
+> **Reading a value shows up in a diff. Passing it on is a one-line absence in a list
+> somewhere else.**
+
+So the visible half gets done, the comment reads as satisfied, and **nothing fails while
+both defaults are `/tmp` and agree by coincidence. The coincidence was load-bearing** —
+the system was correct only because two independent things happened to hold the same
+wrong value, and the first change to either exposed it. Same family as 33 and 130: absence
+in a list is the quietest defect shape there is, because a list looks complete from any
+angle except the one that enumerates what should be in it.
+
+### 151b — an instrument error that produced a FALSE RED, and why that is the dangerous direction here
+
+Recorded in the devtest's docstring rather than quietly fixed: the harness restored the
+parent environment in a `finally`, **deleting the pin it was measuring**, so both new
+guards went red **against a correct tree**.
+
+> *Trusting that red would have meant "fixing" working code.*
+
+Most instrument errors banked here produce false **greens** — quiet, and they wait. This is
+the inverse and it is *actively* expensive: a false red recruits someone to change correct
+code, and the change will be justified by a measurement. Writing it into the docstring
+instead of silently repairing it is what stops the next person re-deriving the same red and
+believing it.
+
+### 151c — and the leftover was declined as a BATCH, correctly
+
+Four recipe lines still name a literal `/tmp`. *"Convert the rest to `$(TESTTMP)`"* was
+refused as a blanket follow-up because **at least two are pinned to a literal baked into a
+compiled test SOURCE** — `rm -f /tmp/test_nilpy_sqlite_crud.db` must keep matching what the
+`.npy` writes — so a sweep would **silently stop a cleanup rather than move it.**
+
+Same shape as the 531-row refusal (132b): the blanket edit is wrong on exactly the members
+whose correctness is load-bearing, and its failure is silent. **Dispatch it as per-line
+work, not a batch** — which is now recorded on the ticket rather than left as a tempting
+one-liner for whoever reads it next.
