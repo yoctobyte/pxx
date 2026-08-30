@@ -230,6 +230,48 @@ def strip_quotes(value: str) -> str:
 # two spellings, both of which an author writes on purpose.
 _NODISPATCH_RE = re.compile(r"NOT DISPATCHABLE|do not claim", re.I)
 
+# ...but a board that documents itself eventually QUOTES its own markers, and a
+# text match cannot tell an assertion from a description. Measured 2026-08-30:
+# the marker matched 13 ranked tickets, SIX of which never meant it -- they were
+# writing ABOUT the mechanism, or quoting a commit subject that mentioned it.
+# `next --track T` skipped its top THREE, all false, to reach the fourth; the
+# highest was a p70 regression cascade suppressed because its history list
+# quotes `fix(board): a dead "do not claim" was sitting on top of the Track A
+# queue`. A suppressed ticket reds nothing and warns nobody -- it is simply
+# never offered -- so this decayed silently while the docstring below still said
+# "matches 4 tickets, all of which mean it".
+#
+# The discriminator, and it separated all 13 cleanly: **a marker being talked
+# ABOUT is written in code font or inside quotes; a marker being asserted is
+# not.** Every false positive sat in a backtick span, a fenced block, or a
+# double-quoted phrase; every genuine one sat in none of them (they are bold,
+# headings, or blockquoted directives). So strip those spans before matching.
+#
+# Same shape as the no-full-suite hook refusing a commit message that explains
+# why a suite is full-tier only (decide-t-the-full-suite-hook-refuses-prose-
+# about-the-suite): a text matcher aimed at a mechanism will eventually fire on
+# the writing that explains the mechanism, and that writing is exactly what you
+# least want to punish.
+_CODE_FENCE_RE = re.compile(r"```.*?```", re.S)
+_CODE_SPAN_RE = re.compile(r"`[^`\n]*`")
+# At most ONE newline inside a quoted phrase, and bounded: markdown wraps a
+# quotation across a line (often with a `> ` continuation), and a strictly
+# single-line pattern missed exactly that shape -- `the edge said *"not
+# dispatchable until the question is\n> answered"*` stayed matched and kept a
+# p15 ticket suppressed after its blocker had been cleared. Bounded rather than
+# greedy-DOTALL so an unpaired quote cannot swallow half a ticket.
+_QUOTED_RE = re.compile(
+    r"[\"\u201c][^\"\u201c\u201d\n]{0,400}(?:\n[^\"\u201c\u201d\n]{0,400})?[\"\u201d]")
+
+
+def strip_mentions(text: str) -> str:
+    """Remove code spans/blocks and quoted phrases -- where a marker is being
+    DESCRIBED rather than asserted. Order matters: fences before spans, or a
+    fence's inner backticks pair up across its content."""
+    text = _CODE_FENCE_RE.sub(" ", text)
+    text = _CODE_SPAN_RE.sub(" ", text)
+    return _QUOTED_RE.sub(" ", text)
+
 # twatch auto-files a regression stub with a `track:` GUESSED from the test
 # source path, and says so -- in the BODY. The ranker, `next`, and the sole-A
 # guard all read FRONTMATTER, where a guess is indistinguishable from a
@@ -374,8 +416,12 @@ class Ticket:
         2026-08-29: 16 of 332 ranked tickets carry an owner and most are RETIRED
         session names (`claude-A`, `agent-AN`, `fable-a-n`) on perfectly
         dispatchable backlog items. Suppressing on `owner` would have hidden ~14
-        real tickets to catch one bad dispatch. The marker matches 4 tickets, all
-        of which mean it.
+        real tickets to catch one bad dispatch.
+
+        Matched in text with code spans and quoted phrases REMOVED -- see
+        `strip_mentions`. When this was written the marker matched 4 tickets,
+        all of which meant it; by 2026-08-30 it matched 13 and six were the
+        board describing its own mechanism.
 
         Why it is needed at all: `unfinished/` conflates two states -- "parked,
         re-claim it" and "held right now by another agent's live checkout" --
@@ -383,7 +429,7 @@ class Ticket:
         with "NOT DISPATCHABLE ... Do not claim" and `next` was printing a
         paste-ready claim command for it (found by frankB, 2026-08-29).
         """
-        return bool(_NODISPATCH_RE.search(self.text))
+        return bool(_NODISPATCH_RE.search(strip_mentions(self.text)))
 
     @property
     def is_idea(self) -> bool:
