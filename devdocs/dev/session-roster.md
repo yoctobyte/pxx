@@ -21444,3 +21444,70 @@ moment. Plan that step expecting to debug its predecessors through it, and do no
 read its first failure as its own bug. Corollary: **do not stack more unverified
 carriers before the first reader** — each one adds to what that first failure
 could be.
+
+## A perfectly confounded cause cannot be ranked by reading — deletion is the cheap instrument
+
+frankA, 2026-08-30, one step before I dispatched the wrong fix.
+
+frankC's ABI ticket pointed at seven `not CProgramMode` guards across three Track
+A backends, and the correlation was as clean as evidence gets: **the three
+backends carrying the guard were precisely the three failing targets, and the
+three without it were x86-64, riscv32 and xtensa — two of them clean.** Five
+targets, two groups, perfect separation. I was mid-message granting those exact
+seven sites.
+
+frankA deleted all seven, rebuilt to a fixedpoint (`b9ead8dda12b`, a genuinely
+different binary), reran the probe, and got **byte-for-byte identical failures**.
+They are inert: `CProgramMode` is False when the program is Pascal, so
+`ProcCdecl and (not CProgramMode)` already reduces to `ProcCdecl` in exactly the
+configuration under test.
+
+**The generalisation.** No amount of reading could have separated the guard from
+the failure, because *both are properties of which backend this is*. When a
+candidate cause is perfectly confounded with the container it lives in,
+inspection cannot rank it at all — the correlation is guaranteed by the
+partition, not by the mechanism. Only removing one while keeping the other
+distinguishes them. frankA's own line is the rule: *"I would have reported it as
+the mechanism if deleting it had not been cheaper than reasoning about it."*
+
+**For dispatch specifically:** a mechanism named in a ticket is a hypothesis with
+a plausible story attached, and a coordinator forwarding it converts it into an
+instruction. Ask what one deletion would falsify it before granting files on its
+account. Cost here would have been a fix in seven places that changes nothing,
+landed by an agent who then reports the bug as still open.
+
+**A second-order gain worth noting:** the disproof *dissolved a constraint*.
+frankC had argued the ticket could never be split, because an AAPCS prologue
+against still-positional call sites regresses every C-to-C call, so cparser and
+the guards had to move in one commit. Correct given the premise — and once the
+guards were shown inert, the premise was gone and the ticket split cleanly into
+codegen (frankA) and probe-as-test (frankC), with neither re-deriving the other's
+work. Disproving a mechanism can *widen* the dispatch options, not just narrow
+the fix.
+
+## An earlier error hides a later one — absence of a diagnostic is evidence only once you show the check could run
+
+frank-rust, 2026-08-30, on frankB's array-alias ticket. Second instance in
+adjacent tickets, which makes it a pattern rather than a coincidence.
+
+The ticket's sharpest claim was that `SetLength` is *accepted* on a broken alias
+while indexing is refused — an "array enough to resize, not array enough to read"
+split, and the whole inference rested on it. There is no such split. `SetLength`'s
+check lives in **IR codegen**; the four indexing errors are raised during
+**parsing**; the compile dies before reaching the check. Strip the indexing out
+and `SetLength` reports on its own. The most interesting claim in the ticket was
+an artifact of error ordering.
+
+Same shape one ticket over: `ugenconstraints.pas:65` masking 35 conformance
+tests.
+
+**The rule this yields for filing and for me:** *"X is accepted"* is a claim about
+a check that ran and passed. Before recording it, name the phase the missing
+diagnostic would have come from and show the compile got there. A construct that
+appears accepted may simply never have been reached — and a ticket built on that
+observation sends its worker looking for a permissiveness bug that does not
+exist.
+
+Corollary for the regression test: gate on the **silent** assertion, not the loud
+one. Here that is `SizeOf(y)` expecting 8. The indexing errors vanish on any
+partial fix, so a test watching only them passes while the alias is still wrong.
