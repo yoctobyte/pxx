@@ -72,4 +72,4 @@ against the same source as this one, not as a second finding.
 
 ## Log
 - 2026-08-30 — auto-closed by the plexus watcher: `test-threads#src:test/test_static_string_literals.pas@2` passes at 0f0a5619a413 (tier native); it was red at 5bb3e120d3f7. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
-- 2026-08-30 — triaged by the test's author, cause filed as a separate Track A bug, test fixed; commit PENDING-COMMIT.
+- 2026-08-30 — triaged by the test's author, cause filed as a separate Track A bug, test fixed; commit a640b1233.
