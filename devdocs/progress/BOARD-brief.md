@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:31 blocked:8 backlog:368 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:117 done:2775 rejected:57`
+`working:2 unfinished:31 blocked:8 backlog:367 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2775 rejected:57`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
+- `bug-p-object-value-types-standard-meaning` [P] — owner: frank-user
 
 ## unfinished (31) — parked mid-flight; re-claim, do not duplicate
 
@@ -56,14 +57,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-test-nilpy-test-nilpy-min-max-key-none` [N] — blocked-by: regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload
 
-## Ready — top 30 of 392, ranked
+## Ready — top 30 of 391, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [N]` regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload (unblocks 1)
-- `[p 70] [U]` decide-revisit-object-types-rtl-generics-fired-the-trigger
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [P]` regression-test-asm-test-asm-emit-rv32
@@ -88,5 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 
-_362 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

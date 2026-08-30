@@ -489,21 +489,17 @@ begin
         LastTypePointerBaseRec := REC_NONE;
         Result := tyPointer;
       end
-      else if (not tnHasAlias) and (CaseEqual(lo, 'object')) then
-      begin
-        { `object`: a rooted object reference — holds ANY class instance
-          (pointer-sized, VMT at offset 0), no specific class bound. Modelled
-          like the metaclass aliases: a tyPointer whose element is tyClass with
-          no class id (PtrElemRec stays REC_NONE — "some object"). Assignable
-          from any class reference; member access needs an explicit cast to a
-          concrete class (`TFoo(o).M`), which errors naturally on the bare
-          pointer. The tyClass element tag is what RTTI/tools key off to tell
-          it from a raw Pointer. NOT legacy Object Pascal's value-`object`
-          (record-with-methods); that syntax was never supported here.
-          See feature-object-reference-type. }
-        LastTypePointerElemTk := tyClass;
-        Result := tyPointer;
-      end
+      { `object` in type-REFERENCE position (`var o: object`) used to resolve
+        here to a rooted object reference — tyPointer with a tyClass element and
+        no class id. It was a stopgap for "a lightweight root, like TObject
+        without a unit" (feature-object-reference-type, 2026-07-03) and builtin
+        TObject superseded it nine days later (RegisterBuiltinTObject,
+        2026-07-12): the `tobject` arm below mints the IDENTICAL representation,
+        so the two were the same type wearing different spellings. Retired so the
+        keyword can carry its one settled Object Pascal meaning — a value type,
+        record-with-methods — which real FPC source uses and we could not parse.
+        Write `TObject` for the reference. See
+        decided/decide-revisit-object-types-rtl-generics-fired-the-trigger. }
       else if (not tnHasAlias) and (CaseEqual(lo, 'pchar') or CaseEqual(lo, 'pansichar')) then
       begin
         LastTypePointerElemTk := tyChar;

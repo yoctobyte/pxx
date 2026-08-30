@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
+| bug-p-object-value-types-standard-meaning | P | 70 | bug | pxx spends the `object` keyword on a rooted class reference — a stopgap from before builtin TObject existed, now redundant with it and used in 4 lines of its own two tests. Real FPC source that declares `= object` (generics.collections.pas, rung 6 of the corpus expansion at p75) therefore fails to compile. Retire the rooted reference (its tests convert to TObject with byte-identical output), and give `object` its standard meaning: a value type lowered as a record with methods, hard-erroring on inheritance/virtual/constructor/destructor. | — |
 
 ## unfinished (31)
 
@@ -63,7 +64,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload |
 
-## backlog (368)
+## backlog (367)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -241,7 +242,6 @@ _none_
 | decide-nilpy-what-version-does-sys-version-info-claim | U | 62 | decide | sys.version_info is absent, and providing it is a product claim, not an implementation detail: real code branches on it to select code paths, so any number we answer silently steers third-party libraries. Decide what version a NilPy build reports — and whether it reports a CPython version at all. | — |
 | decide-posix-master-vs-fpc-named-master-for-the-socket-facades | U | 25 | decide | `Posix.*` is master, or the FPC-named units are? The tree has already answered, the other way | — |
 | decide-release-signing-key-custody | U | 25 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
-| decide-revisit-object-types-rtl-generics-fired-the-trigger | U | 70 | decide | decide-old-style-object-types chose option A (do not implement) with an explicit revisit trigger: 'the moment actual source someone wants to build needs it. Not an FPC test — a program.' generics.collections.pas needs it, which blocks rung 6 of feature-pascal-corpus-expansion (prio 75). But the measurement changes the cost case: the corpus contains exactly ONE `= object`, it has no fields, no inheritance, no virtual methods and no constructor, and the equivalent generic record-with-methods compiles and runs on HEAD today. The decision's cost analysis — a second object model with different storage, lifetime, assignment and VMT — does not apply to the thing actually blocking us. | — |
 | decide-settextbuf-needs-buffered-text-io-or-stays-missing | U | 55 | decide | SetTextBuf's contract is 'use this caller-supplied buffer for this handle', and lib/rtl/textfile.pas has no buffering at all — it reads one byte per PalRead syscall. So the fork is: build buffered Text I/O (a real win beyond this routine) and make SetTextBuf mean something, or leave it missing so the compile error stays honest. Stubbing it is already ruled out. | — |
 | decide-should-forwardlint-join-the-mandatory-per-fix-loop | U | 55 | decide | Collapses the two tickets that both asked what may join the three-line per-fix loop. make compiler/pascal26 compiles compiler.pas WITH pxx, so the loop and the self-host fixedpoint are blind BY CONSTRUCTION to a construct pxx accepts and FPC rejects -- and FPC is the bootstrap seed. tools/forwardlint.py models FPC's resolution, runs in 4.1s, and as of 7aba316be is silent on a clean tree, which removes the one argument that kept it out. Five measured instances of the seed breaking while the loop stayed green. Recommendation: option 1, narrowly. The edit is to CLAUDE.md's gating section, so only the owner makes it. | — |
 | decide-should-forwardlint-run-in-the-build-not-only-the-gate | U | 55 | decide | Should `forwardlint` run in `make compiler/pascal26`, not only in `gate.sh`? | — |
@@ -562,7 +562,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (117)
+## decided (118)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -648,6 +648,7 @@ _none_
 | decide-re-pin-after-the-dynarray-aliasing-flip | U | 70 | decide | The dyn-array aliasing flip (937c51dc2) is a codegen change, so gate.sh quick reads RED on its pinned-seeded fixedpoint step for EVERY lane until `pinned` is refreshed. Re-pin now, or wait for T's full matrix? | — |
 | decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
 | decide-reprice-nilpy-ast-typing-module-scope | U | 55 | decide | feature-n-nilpy-ast-typing-module-scope sits at prio 55 — top of the ranked Track N queue after the META — but its own 2026-08-09 note concludes it is now an OPTIMISATION, not a correctness item, and asks to be re-priced. prio is the user's field, so: re-price, or leave it steering the queue? | — |
+| decide-revisit-object-types-rtl-generics-fired-the-trigger | U | 70 | decide | decide-old-style-object-types chose option A (do not implement) with an explicit revisit trigger: 'the moment actual source someone wants to build needs it. Not an FPC test — a program.' generics.collections.pas needs it, which blocks rung 6 of feature-pascal-corpus-expansion (prio 75). But the measurement changes the cost case: the corpus contains exactly ONE `= object`, it has no fields, no inheritance, no virtual methods and no constructor, and the equivalent generic record-with-methods compiles and runs on HEAD today. The decision's cost analysis — a second object model with different storage, lifetime, assignment and VMT — does not apply to the thing actually blocking us. | — |
 | decide-riscv64-vs-the-bug-queue-for-autonomous-nights | U | 50 | decide | feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud. | — |
 | decide-rtl-math-correctly-rounded-vs-fast-tier | U | 35 | decide | lib/rtl/math.pas's transcendentals are correctly rounded and ~1000x slower than libm — MEASURED: Ln+Exp 16,480 ms per 1M pairs against glibc's 13 ms, and the new dd Sin/Cos 29,383 ms against a plain-double 673 ms. That is the SHIPPED standard today, not a proposal. Question: is one correctly-rounded tier the intended answer for a language whose demos draw graphics, or does the RTL want a fast tier alongside it? Three options, recommendation inside. | — |
 | decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
@@ -757,7 +758,6 @@ _none_
 - [p 70] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [N] regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload (unblocks 1) [parked — re-claim, do not duplicate]
-- [p 70] [U] decide-revisit-object-types-rtl-generics-fired-the-trigger
 - [p 70] [A+O] feature-opt-o3-register-pressure [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-asm-test-asm-emit-rv32 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
