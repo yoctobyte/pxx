@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: A
+status: working
+owner: frankA
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.

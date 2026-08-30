@@ -16274,12 +16274,42 @@ pxx-stable-check:
 # overwrites `stable_latest`). Records the move in pin.log for audit.
 # (No per-version vN files / VERSION=N selection -- mid-dev we only keep the
 # latest; old stables live in git history, see STABLES.md.)
+#
+# WHY THE BINARY IS cp-TO-TEMP-THEN-mv AND NOT A PLAIN cp. Do not simplify
+# it back. `pinned` is a symlink to `stable_pinned`, and $(PXX_STABLE) --
+# 255 references in this Makefile -- executes it. A plain
+# `cp ... stable_pinned` truncates and rewrites THAT INODE, the one a
+# concurrent reader is already executing, and it has two outcomes and both
+# are bad: cp fails ETXTBSY and the pin dies part-way with the move possibly
+# already made, or cp succeeds and the reader execs a PARTIALLY WRITTEN
+# binary. The second is the expensive one -- it surfaces as ordinary test
+# failures in the other session, belonging to neither, with nothing in the
+# output saying so.
+#
+# `mv` within one directory is rename(2): atomic, and it does not touch the
+# old inode. A reader that started before the swap keeps executing the
+# binary it opened and finishes on it; a reader that starts after gets the
+# new one. There is no instant at which either sees a half-written file.
+#
+# The repo-wide pin lock is a convention enforced by asking, and it only
+# reaches the sessions the asker knows about -- so this is the half the
+# filesystem can guarantee and the convention cannot. Found by frank-rust
+# 2026-08-30, with a lib-test five minutes into a run against `pinned`.
+#
+# `stable_latest` is written the same way by stabilize-record and was left
+# alone DELIBERATELY, after checking rather than assuming: nothing execs
+# `latest` or `stable_latest`. $(PXX_STABLE) is `pinned`, and the only
+# other reference is this target reading stable_latest as a copy SOURCE.
+# Re-check that before copying this pattern there.
 pin:
 	@test -e $(STABLE_DEFAULT_DIR)/stable_latest || \
 	  (echo "No stable yet. Run: make stabilize"; exit 1)
 	@NV=$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?'); \
 	 OLDSHA=$$(test -e $(STABLE_DEFAULT_DIR)/pinned && sha256sum $(STABLE_DEFAULT_DIR)/pinned | awk '{print substr($$1,1,12)}' || echo 'none'); \
-	 cp $(STABLE_DEFAULT_DIR)/stable_latest $(STABLE_DEFAULT_DIR)/stable_pinned; \
+	 cp $(STABLE_DEFAULT_DIR)/stable_latest $(STABLE_DEFAULT_DIR)/stable_pinned.new || \
+	   { rm -f $(STABLE_DEFAULT_DIR)/stable_pinned.new; \
+	     echo "pin: could not stage the new binary -- nothing moved"; exit 1; }; \
+	 mv -f $(STABLE_DEFAULT_DIR)/stable_pinned.new $(STABLE_DEFAULT_DIR)/stable_pinned; \
 	 ln -sfn stable_pinned $(STABLE_DEFAULT_DIR)/pinned; \
 	 SHA=$$(sha256sum $(STABLE_DEFAULT_DIR)/pinned | awk '{print $$1}'); \
 	 printf '%s  pinned v%s  %s  (was %s)  %s\n' \
