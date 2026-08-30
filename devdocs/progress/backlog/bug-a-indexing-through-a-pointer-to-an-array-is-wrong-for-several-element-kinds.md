@@ -6,7 +6,7 @@ type: bug
 status: backlog
 owner:
 blocked-by: []
-summary: "`p^[i]` where p points to an ARRAY segfaults for some element types, on read AND write, in a plain default build; it compiles clean and dies at run time, so a build-only check reports success. DIAGNOSED at the IR by frank-rust (2eb6f76b4): it is a BAD BASE, not a bad index -- the arm emits an extra load_mem and size=1, so `ppa^[1]` computes [[ppa]] + 1*1, taking element 0s CONTENTS as the base address. Root cause is an AMBIGUOUS TAG: tk=tyPointer on a deref node means both \"the pointee is a pointer\" and \"the pointee is an array of pointers\", and the p^[i] arm in pasparser_lval.inc resolves the element from pointer DEPTH. CORRECTION: my original element-type table was misleading -- this is NOT about pointer-kind elements. AnsiString SEGFAULTS and TObject WORKS, which inverts that reading; Integer/Double/Boolean escape only because their tag cannot collide with the test. A second, SEPARABLE Track P defect (a pointer alias to a named fixed array loses AliasPtrBaseTk) is measured NOT to cause the crash on its own."
+summary: "`p^[i]` where p points to an ARRAY is broken for several element kinds, and the WORST arm is SILENT: `array[0..3] of string[7]` (also string[31], ShortString) yields an EMPTY string where FPC yields `hi`, exit 0, no crash and no diagnostic -- a plausible wrong VALUE, which is the expensive class. Other element kinds (Pointer, PChar, PInteger, AnsiString) segfault; Integer, Int64, Double, Boolean, Char, TObject and a record element are correct. It compiles clean in every case, so a build-only check reports success. DIAGNOSED: the crash is a bad BASE, not a bad index -- `ppa^[1]` emits an extra load_mem with size=1, computing [[ppa]] + 1*1. THE MODEL IS NOT ABOUT POINTERS: the `[` arm chain dispatches on `tk`, and for a pointer-to-array `tk` holds the ARRAY ELEMENT KIND while every arm reads it as the type of the thing being indexed -- collide with an arm above the array fall-through and you break, collide with nothing and you are fine. The crash site is IRLowerAddress AN_INDEX (~40 lines: baseAddr choice and elemSize), NOT the parser -- proven by routing past all five element-kind arms and getting a byte-identical segfault. A second real parser defect makes the string[7] row silently wrong and is separable."
 ---
 
 # `p^[i]` segfaults when the array's element type is a pointer
@@ -312,3 +312,62 @@ a shared-predicate change that fixes nothing, next to a still-broken IR, would
 read as a fix to the next person. It is recorded here instead, with the exact
 edit, so whoever takes the IR half can re-apply it in one minute and get the
 parser half for free.
+
+
+## 2026-08-30, later (frank-rust; independently confirmed by frankB) — a SILENT arm, and the model finishes
+
+**This row belongs at the top of the ticket.** Everything above is a segfault,
+which is the cheap case — it has a location and it stops. This does not:
+
+```pascal
+type TSA = array[0..3] of string[7]; PSA = ^TSA;
+a[1] := 'hi';  p := @a;
+                          pxx            FPC
+  direct   a[1]           [hi]           [hi]
+  through  p^[1]          [ ]            [hi]        exit 0, no diagnostic
+```
+
+Confirmed in my own checkout against the FPC oracle, and it is not specific to a
+width: `string[7]`, `string[31]` and `ShortString` all produce the empty string
+through the pointer while `Char` is correct. **A frozen string is neither
+pointer-kind nor a managed handle**, so this is a third independent arm — and it
+had been sitting inside the same defect the whole time, invisible because every
+probe either of us wrote asked "did it crash?".
+
+### The model, finished — and it is not about pointers
+
+frank-rust's statement, which supersedes every element-type reading including my
+corrected one:
+
+> **The `[` arm chain dispatches on `tk`, and for a pointer-to-array `tk` holds
+> the ARRAY'S ELEMENT KIND while every arm reads it as the type of the thing
+> being indexed.** Collide with an arm above the array fall-through and you
+> break; collide with nothing and you are fine.
+
+That is why the symptom set looks arbitrary: it is a list of which element kinds
+happen to have an arm above the fall-through, and **the symptom differs by which
+arm catches it** — a pointer arm gives a wrong base and a segfault, the frozen
+string arm gives a wrong value and silence. `TObject`/`AnsiString` killed
+"pointer-kind"; `string[7]` kills "representational" entirely.
+
+### The crash site is the IR, not the parser — measured
+
+frank-rust taught `IsNodeArray` that a deref of a pointer-to-fixed-array is an
+array, routing `p^[i]` past all five broken element-kind arms, and instrumented
+every `AllocNode(AN_INDEX)` site to confirm it **fired** rather than assuming
+(`basekind=36 isarr=TRUE`; the index's element tag moved `tk=0` -> `tk=17`).
+**The program segfaulted byte-identically.**
+
+So: the crash lives entirely in `IRLowerAddress`'s `AN_INDEX` arm — the baseAddr
+choice and elemSize, ~40 lines. `TypeSize(tyPointer)` is 8 and the emitted stride
+is 1, so that arm never reaches its own `TypeSize` tail; something above claims
+the node first. The parser defect is real, is what makes the `string[7]` row
+silently wrong, and is **separable**.
+
+### That parser change was deliberately NOT landed
+
+It fixes no observable row — every row behaves identically, only an IR tag moves —
+and it changes a predicate shared across the compiler. **A shared-predicate change
+that fixes nothing, sitting next to a still-broken IR, reads as a fix to the next
+person.** The exact edit is banked in the ticket so whoever takes the IR half gets
+the parser half in a minute.
