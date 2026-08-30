@@ -883,6 +883,49 @@ prints every routine but the one you care about. **Wrap the repro in a
 `procedure` first** — if the bug survives that (check, do not assume), you can
 ask for it by name.
 
+**Before you believe a PXXDBG count, check that the tag has a site and that the
+site is in the backend you are building.** Measured 2026-08-30 by
+frank-optimize: seven readings taken while chasing a residual, of which **four
+were not measurements.** The separator is one grep and a filename, and it is
+cheap enough to run over every tag you use:
+
+```sh
+grep -rc "PxxDbgEnabled('<tag>')" compiler/     # does it exist?
+grep -rl "PxxDbgEnabled('<tag>')" compiler/     # and in WHICH backend?
+```
+
+| tag | sites | file | what a `0` meant |
+| --- | ---: | --- | --- |
+| `a.reload` | **0** | *none* | **the tag has no implementation** — it can only ever print 0 |
+| `a.w1left` | 1 | `ir_codegen.inc` | x86-64 only: on an aarch64 build, the expected answer to a question never asked |
+| `a.w1cmp32` | 1 | `ir_codegen.inc` | same |
+| `a.a64binop` | 1 | `ir_codegen_aarch64.inc` | a real site, but its own comment says **`REPORT ONLY`** — it prints a *population*, not a firing count |
+| `a.w2` | 1 | `ir_codegen_aarch64.inc` | a real measurement (105) |
+| `a.resid` | 6 | both | a real measurement (2280) |
+
+**Four distinct failure modes, and not one of them is a bug** — a population read
+as a count, a real probe in the wrong backend, a tag with no implementation, and
+the two genuine readings that look identical to the other four from the caller's
+side. Every one is a correct artifact read at a scope it never claimed.
+
+**`a.reload` is the purest specimen in this file of *a guard that cannot fail is
+not a guard, and it prints PASS*** — and it is worse than the saturation guard
+that named the rule, because that one at least ran and scored something. This is
+an **empty question returning a believable answer**: `0` is exactly what a real
+negative result looks like, and nothing distinguishes them.
+
+That it lands on `PXXDBG` specifically is the sting. **This is the instrument we
+reach for after reasoning has already failed us** — it exists because editing a
+probe into the compiler and self-compiling was so expensive that reasoning won
+and was wrong. The measuring instrument needs the same discipline as the thing it
+replaced.
+
+**And the consequence worth more than the taxonomy: two aarch64 slices from that
+session have no probe at all, so whether the fuzzer reaches them is not
+*unmeasured*, it is *unmeasurable with what is in the tree*.** "We did not look"
+and "there is nothing to look with" want different responses, and only the second
+tells you what to build.
+
 The next two answer a question this repo keeps asking in different words: *was
 the metadata never populated, or never read?* `a.symptr:<name>` (or `:*`) prints
 a pointer variable's recorded depth, pointee and ultimate base — the exact
