@@ -456,4 +456,4 @@ scope and nothing checked. It is now checked every gate run, and the number it
 checks is one nobody has to re-derive.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit a3cb9f8fb.
