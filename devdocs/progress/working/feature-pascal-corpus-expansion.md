@@ -3,7 +3,7 @@ prio: 75
 track: P
 status: working
 owner:
-summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge. Re-measured 2026-08-30 late (frankwasm) at fixedpoint 414252435fb1, corpus content-hashed identical to frankB's: 6a Generics.Defaults ok (procs=1661); 6b BOTH known walls are DOWN -- bug-b-rtl-provides-no-ienumerable-generic-interface and bug-a-max-template-params-is-4-but-rtl-generics-declares-6 are both landed -- and the INTERFACE SECTION NOW COMPILES CLEAN on its own (all 948 lines, both dictionary includes, procs=1783, non-vacuous). 6b full stops on EXACTLY ONE error at generics.collections.pas:4165, which is the file's LAST LINE, the bare `end.`: 'unexpected token in a unit implementation section'. So the remaining defect is in the implementation section (949-4165) and the parser has a scope it thinks is still open at EOF -- same family as 28b2851cd. Truncation bisect over the 316 declaration boundaries is the localisation. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy: near: is now stale across a UNIT boundary (it points into our lib/rtl/classes.pas while the error is in the corpus file), and file/line has been mispaired before. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
+summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge. Re-measured 2026-08-30 late (frankwasm) at fixedpoint 414252435fb1, corpus content-hashed identical to frankB's: 6a Generics.Defaults ok (procs=1661); 6b BOTH known walls are DOWN -- bug-b-rtl-provides-no-ienumerable-generic-interface and bug-a-max-template-params-is-4-but-rtl-generics-declares-6 are both landed -- and the INTERFACE SECTION NOW COMPILES CLEAN on its own (all 948 lines, both dictionary includes, procs=1783, non-vacuous). 6b full stops on EXACTLY ONE error, and the MECHANISM is read out of pasparser_proc.inc:5247: the implementation loop ends the unit only on `end` IMMEDIATELY followed by `.`, so a routine body consuming one `end` too many leaves the loop on a bare `.` and errors AT EOF. The reported line is therefore ALWAYS the file's last line -- measured 4165->4165, 4161->4161, 2489->2489 -- so that coordinate is a CONSTANT, not a stale value, and carries zero information about the defect. The mirror case is worse: one `end` too FEW is swallowed silently by the `else Next` in the same branch, so half this class of parser bug is invisible in any unit. Defect is in the implementation section (949-4165); truncation bisect running, 2488 RED. Two suspects cleared by construction: the `case ... end else` at :1788, plain and inside a generic class, both compile and match FPC. So the remaining defect is in the implementation section (949-4165) and the parser has a scope it thinks is still open at EOF -- same family as 28b2851cd. Truncation bisect over the 316 declaration boundaries is the localisation. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy: near: is now stale across a UNIT boundary (it points into our lib/rtl/classes.pas while the error is in the corpus file), and file/line has been mispaired before. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -321,6 +321,49 @@ and `(to file / relay to frankB)` in another while it was actually **done**.
 > boundaries in the implementation section is in progress; the invariant is that
 > truncating ABOVE the opener compiles and truncating at-or-below it errors.
 >
+> **THE MECHANISM, read out of the compiler rather than guessed (frankwasm).**
+> `compiler/pasparser_proc.inc:5247`, the implementation-section loop:
+>
+> ```pascal
+> if CurTok.Kind = tkEnd then
+>   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
+>     doneImp := True
+>   else
+>     Next;            { a stray `end` is silently skipped }
+> ```
+>
+> The unit terminates only on `end` **immediately followed by** `.`. So a
+> routine body that consumes **one `end` too many** returns to this loop sitting
+> on a bare `.`, which starts no declaration, and `UnitSectionStrayToken` fires.
+> **That is why the error is always at the file's last line, and it is a
+> property of the mechanism, not of the defect** — every truncation ends in the
+> appended `end.`, so the reported position is the same for a defect anywhere
+> above it. Measured: 4165 lines -> error at 4165; 4161 -> 4161; 2489 -> 2489.
+>
+> **The position field is not stale here, it is CONSTANT.** A coordinate 100%
+> correlated with the file's length carries zero information about the defect
+> while looking entirely credible — a plausible number, the right file, a
+> `near:` beside it. This is *sharper* than this ticket's standing rule:
+> corroboration is not the fix, because there is nothing behind the field to
+> corroborate. Three sessions have now reduced from a coordinate on this unit
+> and been sent somewhere else.
+>
+> **The asymmetry is the part that generalises past this corpus.** Consuming one
+> `end` too MANY errors, at EOF. Consuming one too FEW leaves a spare `end` that
+> the `else Next` above swallows **without a word** — so half of this class of
+> parser bug is invisible in one direction, in any unit, forever. That is the
+> same silent-skip shape [[bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped]]
+> instrumented at 1949 events and removed from this very loop; it replaced the
+> arm next door and left this one untouched. No ticket has looked at it since.
+>
+> **Two suspects cleared by construction, cheaply, before the bisect landed:**
+> the only `case` in the live range is `case FDuplicates of ... end else begin`
+> at `:1788` — a `case` as an `if`'s THEN branch, its `end` unterminated because
+> `else` follows, which is the classic off-by-one-`end` shape. Reduced to a
+> 20-line unit: compiles and matches the FPC oracle. Same shape inside a
+> `generic` class, so that the body goes through the token-buffering machinery
+> that overran in `28b2851cd`: also clean. Neither is it.
+
 > **Two instrument facts, both new and both expensive to rediscover:**
 >
 > 1. **`near:` is now stale across a UNIT boundary, not merely a line.** It
