@@ -1045,6 +1045,17 @@ def main():
                          "not fixed yet -- but says triage is done and who has it.")
     ap.add_argument("--sha", default="", help="commit under test (stamped into findings)")
     add_gen_flags(ap)
+    # Line-buffer stdout. Python block-buffers when it is not a tty, so a
+    # --minutes 40 run redirected to a log printed NOTHING for an hour: the
+    # header, every divergence and every progress line sat in a 8 KB buffer
+    # until exit. That makes the one artifact that could distinguish "slow" from
+    # "stuck" empty for exactly as long as the question is live — and the
+    # fallback, reading the process table, self-matches (CLAUDE.md's pgrep -f
+    # trap). Ask the subject to emit; do not ask the system whether it is alive.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass                      # older Python, or a stdout that cannot be reconfigured
     a = apply_wide(ap.parse_args())
 
     if not os.path.exists(PXX):

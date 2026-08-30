@@ -468,6 +468,26 @@ def t_daemon_rechecks_with_cross_oracles():
     return "the daemon rechecks with cross oracles"
 
 
+def t_stdout_is_line_buffered():
+    """A long run must be observable WHILE it runs, not only at exit.
+
+    Python block-buffers stdout when it is not a tty, so a --minutes 40 run
+    redirected to a log emitted nothing for an hour — the one artifact that
+    could distinguish "slow" from "stuck" was empty for exactly as long as the
+    question was live. Measured: 4 lines in 6s after the fix, 0 in an hour
+    before it.
+
+    Guarded because it is a single line with no local effect: it is invisible
+    in interactive use, which is where anyone would notice it missing.
+    """
+    src = io.open(SRC, encoding="utf-8").read()
+    i = src.index("a = apply_wide(ap.parse_args())")
+    blk = src[max(0, i - 1200):i]
+    assert "line_buffering=True" in blk, "stdout is not line-buffered before the run starts"
+    assert "try:" in blk, "the reconfigure is not guarded for a stdout that cannot take it"
+    return "stdout is line-buffered before the run starts"
+
+
 TESTS = [t_pasmith_still_rejects_units_with_dash_o,
          t_recheck_regenerates_through_emit,
          t_recheck_walks_more_than_the_throttle_set,
@@ -481,6 +501,7 @@ TESTS = [t_pasmith_still_rejects_units_with_dash_o,
          t_missing_emulator_drops_the_oracle_rather_than_latching,
          t_every_cross_arch_has_a_declared_emulator,
          t_daemon_rechecks_with_cross_oracles,
+         t_stdout_is_line_buffered,
          t_emit_uses_outdir_for_units,
          t_the_generator_command_line_exists_once,
          t_check_mode_goes_through_emit,
