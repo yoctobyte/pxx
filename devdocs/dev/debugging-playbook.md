@@ -235,9 +235,13 @@ and the honest reading was not "we diverge" but "that build of the oracle cannot
 answer this question". Add `cwstring` before recording an AnsiString↔WideString
 divergence.
 
-## Two traps that produced confident wrong readings`
+## Sections in here that record a confident WRONG reading
 - `## A bisect can name the RIGHT commit and still be wrong` -- the tell is that
   the named commit looks like an improvement
+- `## A/B the hunk, bisect the window` -- with a named suspect, one build
+  beats eight; the bisect answers a coarser question
+- `## Ancestry is not existence` -- `--is-ancestor` returns false for a
+  behind checkout too; only `cat-file -t` proves a ghost sha
 - `## A number moving in the direction you hoped is not a check` -- the
   confirmation may be the symptom
 - ``## "The compiler couldn't compile X" and "the language can't do X" look
@@ -590,6 +594,97 @@ said that.
   kill the pid you started.
 - **Lost stdout.** SIGTERM discards buffered stdout, so "the marker never fired"
   and "it fired and the output died" look identical. Give tests a clean exit.
+
+## A/B the hunk, bisect the window — they answer different questions
+
+Measured 2026-08-30. `"a" * 3` returned length 285 instead of 3 under NilPy —
+correct under CPython, correct under the **pinned** binary, wrong at HEAD, and
+the wrongness was a plausible value read from a wrong base (it emitted bytes
+from the RTTI type-name table) rather than a crash. The window was 140 commits.
+A bisect was the obvious move and was the wrong FIRST move.
+
+**When you already have a named suspect, disable its hunk and rebuild once.**
+frankwasm put `if False and` in front of one guard in `IRLowerCallArg`, rebuilt,
+and got the whole answer in a single build:
+
+| repro | arm ON | arm OFF | CPython |
+| --- | --- | --- | --- |
+| `"a" * n` | 288 | 3 | 3 |
+| `"ab" * 2` | 49982 | 4 | 4 |
+| `a * 3` (variable operand) | 3 | 3 | 3 |
+
+A bisect over that window would have named the same commit and **told you
+less**: it answers *which commit*, and where a commit touches several files you
+must then open the diff to find *which hunk* — a second search. The A/B answers
+both at once. It also fails safe: if the repro stays red your lead was wrong,
+you learned it in one build instead of eight, and the bisect is still there.
+
+So: **named suspect → A/B the hunk. No suspect → bisect the window.** Reach for
+bisection when you cannot name a candidate, not as the reflex for "something in
+this range broke it".
+
+And narrow the *construct* while you are there, because that is what localises
+the fix. Repeat with a **literal** left operand was wrong; the same value in a
+variable was right; `f("abc")`, `len("abc")`, `"abc"+"de"`, `"abc".upper()`,
+`"abc"[1:]` and the Pascal `const AnsiString` cases were all right. That shape
+is one callee consuming the frozen form at the wrong offset — which is a hunk,
+not a commit.
+
+### Anchoring: two windows, both defensible, one correct per question
+
+The same investigation produced a 55-commit window and a 140-commit window, and
+neither was a mistake:
+
+- `<last clean pin shadow>..<sha>` answers **"what could have flipped the pin
+  shadow?"**
+- `<pin tree>..HEAD` answers **"what could have broken something that is green
+  under `pinned`?"**
+
+For a regression whose known-good is the pinned *binary*, the second is the
+right anchor. State which question your range answers; a range that silently
+answers the other one converges confidently on the wrong side.
+
+### The build line must be READ, not assumed — and not only when bisecting
+
+`make compiler/pascal26` is a **no-op that exits 0** in any tree seeded with a
+copied-in binary: `cp` stamps the seed newer than the sources, so make prints
+`'compiler/pascal26' is up to date` where `converged after N round(s)` belongs.
+CLAUDE.md documents this for seeded trees, which makes it easy to file mentally
+as a bisect hazard. It is not. **Any build whose result is load-bearing needs
+that line read** — a bisect that hits it tests the seed at every step and
+converges confidently on the wrong sha, and a one-off verification that hits it
+reports on a tree that no longer exists. There is no error to wait for.
+
+Read `converged after N round(s)`; confirm the binary's sha256 differs from
+`pinned`. Absence of the line is the whole tell.
+
+## Ancestry is not existence: `--is-ancestor` cannot tell you a commit is a ghost
+
+Measured 2026-08-30, twice in one session, by two different agents.
+
+This repo rebases constantly, so a cited sha that resolves to nothing is a real
+and common failure (`bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`). The
+test for it is `git cat-file -t <sha>` — **"not a valid object" is the only
+answer that proves a ghost.**
+
+`git merge-base --is-ancestor <sha> origin/master` answers a different question,
+and it returns false for at least three unrelated reasons: the commit does not
+exist; the commit exists but is not on that branch; or **your checkout is behind
+and you are reading a ref you have not fetched.** A `git fetch` updates refs and
+does not touch your working tree, so "I fetched" does not make your tree current
+either.
+
+Both directions cost:
+
+- calling a **real** commit a ghost dismisses the mechanism you needed — it
+  happened here to `fe297522b`, the commit that explained why a suite had
+  started running;
+- calling a **ghost** real sends the next reader after a citation that resolves
+  to nothing.
+
+**A "not found" is only evidence once you have proved your own tree is
+current.** `git rev-list --count HEAD..origin/master` is that proof and costs
+nothing.
 
 ## A bisect can name the RIGHT commit and still be wrong
 
