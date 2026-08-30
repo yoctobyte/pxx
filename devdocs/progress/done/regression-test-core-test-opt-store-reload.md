@@ -202,4 +202,4 @@ stood between the ratchet and catching it before the push. The ticket carries th
 measurement showing why the naive widening is wrong (144 false findings) and the
 137-source / 15-exception key that works. Track T owns that file, so it is filed,
 not edited.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6922255a6.
