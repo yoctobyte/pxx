@@ -7236,3 +7236,59 @@ untested either way. A grid that had silently absorbed xtensa would have buried 
 number that does not fit its own model, and a fix declared complete on the grid alone would
 have left it live. **An anomaly is only visible against a background that admits it is
 incomplete.**
+
+### 163 — A STALENESS SCAN THAT KEYS ON CITATION DENSITY POINTS AT THE BUSIEST LANE
+
+*frankwasm, 2026-08-30, triaging the first eleven STALE-PARK findings.*
+
+I built a scan for parked tickets whose prose names a now-resolved ticket next to a
+blocking phrase — the stale-resume-condition shape, after three lanes hit it in one night
+from three different sides. Eleven findings over 35 parked tickets, and I dispatched an
+agent at the **two loudest first**, because they named **six** and **four** resolved slugs
+where the rest named one.
+
+Both were `status: working` with an `owner:`, being actively edited by frankA while I read
+them. **The slugs they cite are that lane's own landed fixes, cited by the notes recording
+them.** A ticket that names six resolved tickets is usually a ticket whose author has been
+resolving tickets.
+
+**So the scan's signal strength was inverted.** Citation density tracks how much work a
+lane has LANDED, which means the loudest findings systematically point at the busiest lane
+— and at files nobody else may open. Ranking by strength of evidence sent me at exactly the
+tickets where a second agent was least welcome, and it nearly put two agents in one file:
+frankA had claimed it four minutes earlier, staged locally, **so the lock did not exist to
+anyone else and I dispatched on the absence of evidence.**
+
+frankwasm did not touch either one, on its own read, before my warning arrived. The
+exclusion is now in the scan — `status: working` or a non-empty `owner:` — and 11 drops to
+7 with better precision than the 11 implied.
+
+### 163a — AND THE DISCRIMINATOR WAS NEVER "NAMES A RESOLVED SLUG"
+
+frankwasm's real score, over the six it could open: **one dissolved, one mispriced, four
+genuinely parked.** Not the 29% the raw count implied — because *most parked tickets citing
+done work are citing their own history, which is what a ticket is for.*
+
+The rule that actually separates them:
+
+> **names a resolved slug as a PRECONDITION, in a sentence that has not been revised
+> since.**
+
+`feature-pascal-corpus-fpc-testsuite` names four resolved slugs and is completely fine — it
+recorded its own unblocking on 2026-07-14, so the citation *is* the revision. The scan
+cannot see that difference, and I do not think a scan can. Which sets the honest ceiling on
+this instrument: **it produces a short list worth a human read, not a verdict** — and its
+report says so rather than implying a finding.
+
+### 163b — TWO CHECKS COMPOSE, SO DO NOT TEACH THE SECOND ONE TO WORK AROUND THE FIRST
+
+After the exclusion landed, `feature-pascal-corpus-expansion` **still fired**. Its `working`
+status is written in the ticket's **body** and not its frontmatter — which `check` already
+reports separately as `STATUS-DRIFT`.
+
+The tempting fix is to make STALE-PARK also read prose status. That is wrong: it would
+silence the symptom of a defect the other check exists to report, and leave a ticket whose
+header lies to every tool that reads headers. **The scanner reads the header; the drift
+check says the header is wrong; fixing the header fixes both.** A scanner taught to route
+around bad metadata removes the pressure that gets metadata fixed — and the ranker reads
+frontmatter, so a header that lies is not a cosmetic problem.

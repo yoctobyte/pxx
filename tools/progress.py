@@ -1665,6 +1665,21 @@ pre code{background:none;padding:0}
         for t in self.tickets:
             if t.status not in ("unfinished", "blocked"):
                 continue
+            # EXCLUDE TICKETS THAT ARE ACTUALLY BEING WORKED. Measured by
+            # frankwasm 2026-08-30, triaging the scan's first eleven: the two
+            # loudest hits -- naming SIX and FOUR resolved slugs -- were both
+            # `status: working` with an `owner:`, sitting in unfinished/ while
+            # a lane actively edited them. The slugs they cite are that lane's
+            # OWN landed fixes, cited by the notes recording them.
+            #
+            # So the scan's signal strength was inverted: citation density
+            # tracks how much work a lane has LANDED, which means the loudest
+            # findings systematically point at the busiest lane and at files
+            # nobody else may open. Two of eleven, and they were the two I told
+            # an agent to take first -- which nearly put two agents in one file.
+            if (t.fm.get("status", "").strip() == "working"
+                    or t.fm.get("owner", "").strip()):
+                continue
             rows = t.text.splitlines()
             hits: set[str] = set()
             for i, line in enumerate(rows):
