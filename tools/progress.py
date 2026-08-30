@@ -2089,11 +2089,49 @@ pre code{background:none;padding:0}
                 for (_slug, tok), (t, lineno) in sha_hits.items():
                     if tok in reach[len(tok)]:
                         continue
+                    # NOT on master is not the same as NOWHERE. This repo has
+                    # long-lived side branches (origin/wasm), and a ticket that
+                    # says "measured at branch `wasm` sha 954b56b53" in the very
+                    # line being scanned was reported as a pre-rebase reflog
+                    # artefact -- a message that was confidently wrong about a
+                    # case the ticket itself explained. The deciding half
+                    # (reachable from master?) and the reporting half (what that
+                    # means) had drifted apart, which is the defect this file's
+                    # own check family exists to catch. So ask git which ref
+                    # carries it before saying it is dead. One subprocess per
+                    # MISS only -- misses are a handful, and the answer is the
+                    # branch name, which is the part a reader actually needs.
+                    on_branch = ""
+                    try:
+                        b = subprocess.run(
+                            ["git", "branch", "-r", "--contains", tok],
+                            capture_output=True, text=True, cwd=ROOT, timeout=20)
+                        if b.returncode == 0 and b.stdout.strip():
+                            names = [x.strip() for x in b.stdout.splitlines() if x.strip()]
+                            names = [x for x in names if "->" not in x]
+                            if names:
+                                on_branch = ", ".join(names[:3])
+                    except Exception:
+                        on_branch = ""
+                    if on_branch:
+                        warning_count += 1
+                        lines.append(
+                            f"SIDE-BRANCH-SHA: {t.slug} [{t.track} p{t.prio}] cites "
+                            f"`{tok}` at line {lineno}, which is NOT on {ref} but IS "
+                            f"on {on_branch}. Usually fine and often deliberate — a "
+                            f"measurement taken on a side branch. It is flagged, not "
+                            f"failed, because the reader of a ticket cannot tell a "
+                            f"side-branch sha from a dead one, and BRANCH PERMISSION "
+                            f"IS NOT MERGE PERMISSION: nothing on a side branch is "
+                            f"pre-approved for master. Say which branch in the ticket "
+                            f"line, or add 'DANGLING SHAS BY DESIGN' to its body"
+                        )
+                        continue
                     warning_count += 1
                     lines.append(
                         f"DANGLING-SHA: {t.slug} [{t.track} p{t.prio}] cites "
-                        f"`{tok}` at line {lineno}, which is NOT reachable from "
-                        f"{ref}. Almost always a PRE-REBASE sha copied from a "
+                        f"`{tok}` at line {lineno}, which is on NO remote ref at all, so not "
+                        f"reachable from {ref} either. Almost always a PRE-REBASE sha copied from a "
                         f"local reflog after a verified push. Do NOT check it "
                         f"with `git cat-file -e` — that answers LIVE in the "
                         f"author's own tree, because the pre-rebase object is "
