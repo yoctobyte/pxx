@@ -1748,7 +1748,9 @@ it in place, and grep for its copies.** That one had two.
 
 Measured 2026-08-30, when a count of `-O3` gate sites was about to be adopted as
 a checksum for "how much code sits behind the self-host blind spot". **Six counts
-existed. Every one was correct about what it measured. They range from 13 to 45.**
+of the same population existed, spanning 13 to 45. Five were correct about what
+they measured; the sixth was reached twice, by two people, from two different
+wrong sets.**
 
 | count | predicate | scope | |
 | ---: | --- | --- | --- |
@@ -1756,22 +1758,45 @@ existed. Every one was correct about what it measured. They range from 13 to 45.
 | **14** | literal `OptLevel < 3`, raw grep | `compiler/**` | the extra is *prose*: `inline_expand.inc:138` is a sentence **about** the gates |
 | **32** | any spelling, comments stripped, **backend emitter files only** | 2 files | correct — this is `tools/check_o3_backend_parity.py`, and it is GREEN |
 | **41** | any spelling, comments stripped | `compiler/**` | correct |
-| **44** | any spelling, "comment-leading lines dropped" | `compiler/**` | **wrong by 3** — see below |
+| **44** | any spelling, "comment-leading lines dropped" | `compiler/**` | **wrong — and produced TWICE, by two filters, from two different sets**; see below |
 | **45** | any spelling, raw grep | `compiler/**` | correct |
 
 The thing being counted never changed. What changed was **the spelling admitted**
-(`if OptLevel < 3 then Exit` is the minority form; the inline `(OptLevel >= 3)
-and …` clause is far more common), **whether prose counts as code**, and **which
-files are in scope**. Three axes, and a bare number carries none of them.
+(`if OptLevel < 3 then Exit` is the minority form — 14 of 45; the inline
+`(OptLevel >= 3) and …` clause is far more common at 31), **whether prose counts
+as code**, and **which files are in scope**.
 
-**The 44 is mine and it is the instructive one, because the bug is the section's
-own subject.** My filter dropped "comment-leading" lines by matching a leading
-`{`, `//` or **`(`** — and `(` is not a comment in Pascal, it is a continuation
-of a multi-clause condition. So the filter deleted one **real gate**
-(`ir.inc:11086`) and kept three prose lines, landing on 44 by two errors pointing
-opposite ways. A number that looks plausible and is wrong in both directions at
-once is the exact failure this file keeps recording: *it was correct about
-something else.*
+**A fourth axis is WHITESPACE, and it produced a triple whose parts do not sum to
+its own total.** `OptLevel >= 3` with single spaces occurs 29 times;
+`OptLevel>=3` unspaced occurs 2 more. A verification run independently — by
+someone who was *disagreeing carefully and checking before agreeing* — reported
+`< 3` = 14, `>= 3` = 29, any form = 45. Those are three correct measurements and
+**14 + 29 = 43**. The missing 2 are the unspaced spelling, and the inconsistency
+sat in the middle of a message whose whole purpose was to verify. Nobody noticed,
+including the person who produced all three numbers, because each was right.
+
+So: four axes, and a bare number carries none of them.
+
+**There are TWO different 44s, and that is the instructive part.**
+
+Two agents produced 44 from two different filters, over the same tree, and the
+sets do not overlap:
+
+| | dropped | kept | 44 = |
+| --- | --- | --- | --- |
+| theirs — drop lines starting `{`, `//`, or a **backtick** | 1 prose line (`inline_expand.inc:138`) | every gate, and **3** prose lines beginning with an ordinary word — `ir_codegen.inc:5030` *"only. Guarded by OptLevel>=3…"*, `ir_codegen_aarch64.inc:1324` *"is unaffected: at OptLevel >= 3…"*, `inline_expand.inc:364` | 41 + 3 |
+| mine — drop lines starting `{`, `//`, or **`(`** | one **real gate** (`ir.inc:11086`) — `(` is not a comment in Pascal, it is the continuation of a multi-clause condition | all **4** prose lines | 41 − 1 + 4 |
+
+Theirs is wrong by +3 in one direction. Mine is wrong in **both** directions and
+lands on the same total by cancellation. Neither errored.
+
+**And the part that belongs in this file more than the counting does: I
+reproduced their 44, found a filter that produces 44, and concluded it was their
+filter.** It was not. Same number, different set, different bug. A reproduction
+that *agrees* is the most convincing shape a wrong diagnosis can take — there is
+no discrepancy left to investigate, so the inference feels closed. It is the
+section's own thesis landing on the section: **correct about something else.**
+They caught it and sent the actual filter; I would not have looked again.
 
 **The positive control that settled it, and it was free:** an independent
 comment-stripper, run over the two backend files, must reproduce
@@ -1796,10 +1821,15 @@ nobody still has. `check_o3_backend_parity.py` is the right shape for exactly
 this reason: it does not relay a number, it **re-derives** it and fails when it
 moves.
 
-**The rule:** never relay a census as a number. Relay the **predicate and the
-command**, or relay a check that re-derives it. If you are given one, ask what
-was counted before asking whether it is right — and expect the answer to change
-the number by a factor of three.
+**The rule, and the coordinator sharpened it in retracting the version built on
+the bad count: the unit is the COMMAND, not the predicate.** A predicate stated
+in words does not pin the number — the two 44s above share a predicate ("any
+spelling, comments stripped") word for word and differ by an entire gate, because
+they differ in *implementation*. So: never relay a census as a number, and do not
+settle for relaying the predicate either. **Relay the command, or relay a check
+that re-derives it.** If you are given a number, ask what command produced it
+before asking whether it is right — and expect the answer to change it by a
+factor of three.
 
 ## A STANDING-RULES block is skipped by whoever has landed the most slices
 
