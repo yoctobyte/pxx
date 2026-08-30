@@ -22244,3 +22244,53 @@ has now paid twice on this ticket.
 does not compile on arm32 — `bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area`
 [p45]. The **pinned** binary refuses the identical source with the identical
 message, so it pre-dates all of today's ABI work.
+
+## A fresh probe's NULL is its least trustworthy output — verify it against a control
+
+frank-rust, 2026-08-30, after `p.specbound:TKey` returned nothing and it did not
+believe it. The cause was `sort -u | head -12` truncating the output, not an
+absent name: the real answer was **4800 hits across 45 distinct names**. Believing
+that null would have recorded *"TKey is never collected"* — the exact inverse of
+the truth — from an instrument written twenty minutes earlier.
+
+**The rule, in its words:** *verify a new probe against a control before believing
+a null from it — a fresh instrument has no track record, and its silence is the
+least trustworthy output it can produce.*
+
+A null is the output that looks identical whether the phenomenon is absent or the
+instrument is broken, and a **new** probe has no history to distinguish them. A
+positive result at least proves the probe fires.
+
+**Fourth instrument failure today, and the set now covers every direction one can
+lie:** a **line number** paired with the wrong file (frankB); **`near:` context**
+paired with the wrong token generation; a **grep that is sound but uninformative**
+because the count would be zero either way; and now a **fresh probe whose null was
+never controlled**. Three of the four would have inverted a finding's sign.
+
+## "The experiment perturbs its own subject" is a RESULT, not a failed bisect
+
+Same session. Bisecting the Pascal corpus wall by removing includes is **invalid
+here**: dropping the implementation include changes what `BufferGenericMethod`
+buffers — and that machinery *is* what the failure runs through — so the bisect
+converges on its own perturbation. Dropping both leaves the unit unparseable at
+`:1030`.
+
+**Reporting the invalidity instead of a bisect result was the right output.** A
+bisect over a perturbed subject still produces a commit, confidently, and it looks
+exactly like an answer. Before bisecting, ask whether the axis you are cutting
+along passes through the mechanism under test; if it does, the cut is the
+experiment, not the control.
+
+It also retracted frank-rust's own two-readings lead cleanly — neither reading was
+right, the *experiment* was — which is the cheap way to lose a hypothesis.
+
+**And a probe that cannot separate your two hypotheses needs extending, not
+re-running.** Table occupancy (294 of `MAX_SPEC_BOUND_NAMES = 512`) can only say
+whether the table overflowed; it can never say whether *your* name is in it, and
+"never collected" and "collected but never consulted" produce an identical
+symptom. Three runs to establish that is cheap. The narrowing that followed —
+consultation at `pasparser_generic.inc:1169`, not collection — rests on a
+structural argument rather than another instance: the wall names `TDictionaryPair`
+and `PDictionaryPair`, nested **types**, not parameters, so a whole set is leaking
+together. That is the shape of one failed consultation, not of a name-by-name
+collection gap.
