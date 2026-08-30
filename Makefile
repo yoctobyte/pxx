@@ -4241,6 +4241,9 @@ test-threads: $(COMPILER)
 	# evidence about anything behind `if OptLevel < 3 then Exit` -- it is no
 	# evidence, because that code was never compiled. These rows are the only
 	# coverage this pass has.
+	# This is rule 1 of the campaign ticket, which said it first and demonstrated
+	# it the same way (slice 5's ModRM field, -O3 printing acc=0, fixedpoint green
+	# throughout): feature-opt-o3-register-pressure, READ FIRST block.
 	# feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64
 	./$(COMPILER) -O3 test/test_shr_resident_zeroext.pas $(TESTTMP)/test_shrzext326
 	tools/expect_same.sh test_shrzext326 "$$($(TESTTMP)/test_shrzext326)" "$$(printf 'acc=1299819431187\none=433273143729\ndone')"
