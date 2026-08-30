@@ -140,3 +140,72 @@ exist to serve.
 `make test` + self-host byte-identical, plus a cross build of a program using
 `lib/rtl/random.pas` for xtensa and riscv32 under `--esp-profile=bare`. The
 five-line repro above is the regression test.
+
+## FALSIFIER RUN 2026-08-30 (frankS) — the 22 arms encode a REAL constraint, so option (2) is wrong and (3) is right
+
+The coordinator's read was that **(2) drop the guard on this one arm** is right,
+and asked to be overturned if the code says otherwise. **It does.** Measured, not
+reasoned: compiler `cf30672a934e`, HEAD `252e9539d`.
+
+### The one experiment that settles it
+
+`needsBuiltin` does exactly one thing — `ParseUsesUnitAmbient('builtin')`
+(`pasparser_prog.inc:1340`). So the question "is the guard structural or a copied
+habit?" reduces to **can the `builtin` unit be pulled on bare ESP at all?**
+
+| target / profile | empty program | `uses builtin;` |
+| --- | --- | --- |
+| bare xtensa | **ok** | **FAILS** — `undefined variable (PxxSciDigits17)` *in `./compiler/builtin/builtin.pas`* |
+| bare riscv32 | **ok** | **FAILS** — same error, same file |
+| hosted xtensa | ok | **ok** |
+
+**`builtin.pas` does not compile on bare ESP.** The empty-program control rules
+out a general bare-profile breakage — the failure is specifically pulling this
+unit.
+
+So the guard on those 22 arms is **a real structural constraint, not a copied
+habit**: it exists because the builtin unit is uncompilable on a bare-metal
+target, which is exactly what `TargetIsEspClass`'s own header in `util.inc` says
+it is for (*"guarding 'may I pull this RTL unit'"*, and being wrong *"silently
+drags an uncompilable unit into a bare-metal build"*).
+
+### Consequence for the three options
+
+- **(2) drop the guard — WRONG.** It converts a clean `undefined variable` in
+  *user* code into a compile failure *inside `builtin.pas`*, which is strictly
+  worse: the error now names a compiler-shipped file and a symbol
+  (`PxxSciDigits17`) that has nothing to do with entropy.
+- **(3) a False stub that does NOT pull the builtin unit — CORRECT**, and it is
+  not "(2) with extra machinery": the machinery is the whole point, because the
+  pull is the thing that cannot happen here. The body's *"False everywhere else"*
+  answer is still what we want; it just cannot arrive via `builtin.pas` on bare.
+- **(1) real ESP intrinsics** — unchanged, its own S ticket, not a prerequisite.
+
+### SCOPE CORRECTION — this is bare-ESP-only, not "xtensa and riscv32 at all"
+
+`program ur; uses random; begin end.` with `-Fulib/rtl`:
+
+| config | result |
+| --- | --- |
+| **hosted xtensa** | **ok — compiles fine** |
+| bare xtensa | FAILS at `__pxxHwRandom64` (this bug) |
+| bare riscv32 | FAILS at `__pxxHwRandom64` (this bug) |
+| hosted riscv32 | FAILS — but **elsewhere**, the separate atomics/CSR defect |
+| host x86-64 | ok |
+
+`TargetIsEspClass` is `(xtensa or riscv32) and EspBareBoot`, so on **hosted**
+xtensa the guard never fires and `random.pas` builds. The ticket's framing —
+*"random.pas does not compile on xtensa or riscv32 at all"* — is too broad, and
+the "xtensa is the primary target" urgency argument does not apply to the hosted
+profile that the S campaign's oracle work actually runs on.
+
+Two distinct defects are in these rows and they should not be conflated: the
+hw-entropy guard (bare only, this ticket) and hosted riscv32's atomics failure
+(a different point in the file, not this ticket).
+
+### Not done here
+
+The fix itself is not written — this is the falsifier the dispatch asked for, and
+it changed the answer. Whoever implements (3) should confirm how a False stub
+reaches a bare target without the builtin pull, since that mechanism is precisely
+what the measurement above shows is unavailable.
