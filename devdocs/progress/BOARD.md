@@ -8,13 +8,14 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
+| perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 
 ## unfinished (28)
 
@@ -367,7 +368,6 @@ _none_
 | meta-constant-normalisation | A | 20 | meta | Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed. | — |
 | meta-dialect-extensions-and-fpc-strict | A | 5 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-t-dev-throughput-and-track-a-t-integration | T | 30 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
-| perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 25 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 40 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | perf-o-promote-constant-divisor-strength-reduction-to-o2 | A+O | 55 | perf | `x div 2^k` / `x mod 2^k` are strength-reduced only at OptLevel >= 3, but -O2 is the default that the compiler and every program it emits are actually built at, so the idiv ships everywhere. Three such sites in the heap allocator were 11.4% of the compiler's own in-.text samples; they were fixed at the SOURCE, which leaves every other site in the RTL, the libraries and all user code still paying it. | — |
@@ -394,6 +394,7 @@ _none_
 | refactor-p-the-overload-probe-cannot-see-the-argument-match-channels | P | 45 | refactor | The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
+| regression-test-core-expect-same | T | 70 | regression | regression: test-core#src:tools/expect_same.sh@276 red at 9ced9bbc3e2d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-max-min-iterables | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_max_min_iterables.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-in-a-variable | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | — |
@@ -722,6 +723,7 @@ _none_
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [A+S] bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable
 - [p 70] [U] decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
+- [p 70] [T] regression-test-core-expect-same
 - [p 70] [N] regression-test-nilpy-test-nilpy-max-min-iterables [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-in-a-variable [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-none [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -755,7 +757,6 @@ _none_
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [A+O] feature-opt-emitasmx64-reparses-fixed-strings
 - [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
-- [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image
 - [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor
 - [p 60] [A] refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed
 - [p 60] [N] regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native

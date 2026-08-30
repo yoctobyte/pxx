@@ -4,6 +4,8 @@ prio: 60
 type: perf
 blocked-by: []
 summary: "The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it."
+status: working
+owner: frankA
 ---
 
 # Cache the compiled NilPy runtime unit image

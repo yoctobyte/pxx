@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:28 blocked:7 backlog:337 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2726 rejected:56`
+`working:4 unfinished:28 blocked:7 backlog:337 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2726 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
+- `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A] — owner: frankA
 
 ## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
@@ -61,6 +62,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [A+S]` bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable
 - `[p 70] [U]` decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
+- `[p 70] [T]` regression-test-core-expect-same
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-max-min-iterables
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-in-a-variable
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none
@@ -85,6 +87,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
-- `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 
 _327 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
