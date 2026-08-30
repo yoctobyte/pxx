@@ -3176,6 +3176,47 @@ begin
   EmitPublishManagedString(dstIdx);
 end;
 
+{ LoadFile into a destination that is an ARRAY ELEMENT or a RECORD FIELD rather
+  than a plain variable — `LoadFile(path, CPrepInclude[depth])`.
+
+  EmitPublishManagedString above takes a SYMBOL index, so it can reach a global,
+  a local or an IsRef param and nothing else. That was the whole of the
+  restriction behind `LoadFile expects string variables in IR codegen`: an
+  ordinary `procedure F(var s: AnsiString)` accepts `arr[1]` and always has, so
+  the language was never the limit — only this intrinsic's destination shapes
+  were. IR_INDEX and IR_FIELD both yield the ADDRESS of the handle slot (the
+  same property the Length arm at ~8424 already relies on), so publishing to an
+  address is all that is missing.
+
+  Left as its own procedure rather than folded into EmitPublishManagedString:
+  that routine is on the shared managed-string publish path, and this is one
+  intrinsic's lowering.
+
+  NOTE the evaluation order — the destination's address is computed BEFORE the
+  path is loaded, because the address has to survive the call to AnsiStrLoadFile
+  and the stack is the only place it can wait. Both existing arms load the path
+  first. No caller today has a destination whose index expression has side
+  effects; a future one that does would see them in the other order.
+  bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array }
+procedure EmitLoadFileManagedAt(pathIdx, dstNode: Integer);
+begin
+  IREmitNode(dstNode);                { rax = address of the handle slot }
+  EmitAsmX64(['push rax']);           { it must outlive the call below }
+  EmitLoadManagedHandleRdi(pathIdx);
+  IREmitCodeCall(AnsiStrLoadFileAddr);              { rax = new managed string }
+  EmitAsmX64([
+    'pop rcx',                        { rcx = the slot address, again }
+    'push rax',                       { new }
+    'mov rax, [rcx]',                 { old }
+    'push rax',
+    'mov rax, [rsp+8]',               { new }
+    'mov [rcx], rax',
+    'pop rax'                         { old }
+  ]);
+  IREmitCodeCall(AnsiStrReleaseAddr);
+  EmitAsmX64(['pop rax']);            { new (discard) }
+end;
+
 procedure EmitArgvToStringManaged(dstIdx: Integer);
 { On entry rax = argv index. Build a managed string from argv[index] (a C
   string) and publish it into dst (releasing dst's old handle). Managed
@@ -8618,8 +8659,20 @@ begin
             else if (IRKind[val2Node] = IR_LOAD_SYM) and
                     (Syms[IRA[val2Node]].TypeKind = tyAnsiString) then
               EmitLoadFileManaged(IRA[val1Node], IRA[val2Node])
+            else if (IRKind[val2Node] = IR_LOAD_MEM) and
+                    ((IRKind[IRA[val2Node]] = IR_INDEX) or
+                     (IRKind[IRA[val2Node]] = IR_FIELD)) then
+              { An array element or a record field. The destination arrives
+                wrapped in an IR_LOAD_MEM because the frontend lowers this
+                argument as a VALUE expression — a plain variable arrives as
+                IR_LOAD_SYM for the same reason, which is why the arm above
+                tests that rather than IR_LEA. Reach through the load to the
+                IR_INDEX/IR_FIELD underneath, which is the slot ADDRESS, and
+                publish to it. }
+              EmitLoadFileManagedAt(IRA[val1Node], IRA[val2Node])
             else
-              Error('LoadFile expects string variables in IR codegen');
+              Error('LoadFile expects a string variable, array element or field '
+                    + 'in IR codegen');
           end
           else if specialId = 101 then
           begin

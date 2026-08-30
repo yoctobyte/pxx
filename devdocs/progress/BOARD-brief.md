@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:34 blocked:8 backlog:391 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2845 rejected:59`
+`working:4 unfinished:34 blocked:8 backlog:390 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2845 rejected:59`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array` [A] — owner: frankS
 - `bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given` [A] — owner: frankA
 - `feature-unicodestring-model` [A] — owner: frankwasm
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — owner: frankB
@@ -61,7 +62,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 432, ranked
+## Ready — top 30 of 431, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -94,4 +95,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 
-_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

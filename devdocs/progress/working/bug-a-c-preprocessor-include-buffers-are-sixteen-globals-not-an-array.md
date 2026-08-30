@@ -4,8 +4,8 @@ track: A
 type: refactor
 blocked-by: []
 summary: "The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A."
-status: new
-owner: ""
+status: working
+owner: frankS
 ---
 
 # `CPrepInclude0..15` should be an array
