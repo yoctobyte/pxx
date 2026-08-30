@@ -11239,7 +11239,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3 >/dev/null
 	tools/expect_same.sh test_opt_sr_O0.3 "$$($(TESTTMP)/test_opt_sr_O0)" "$$($(TESTTMP)/test_opt_sr_O3)"
-	tools/expect_same.sh test_opt_sr_O0.4 "$$($(TESTTMP)/test_opt_sr_O0)" "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12\nbr shortint neg\nbr word small\nbr ulong small\nbr bool true\nbr constl GT\nbr between\nbr after neg\nmem   -112 -112 -110')"
+	tools/expect_same.sh test_opt_sr_O0.4 "$$($(TESTTMP)/test_opt_sr_O0)" "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12\nbr shortint neg\nbr word small\nbr ulong small\nbr bool true\nbr constl GT\nbr between\nbr after neg\nmem   -112 -112 -110\nreord 635218\nreord2 635317')"
+	# The last two rows are the case IRFirstEvaluated MIS-predicts: -O3's W1
+	# slice 9 evaluates the RIGHT subtree first, so the marked reload of qh must
+	# be REFUSED at emit time. Non-vacuous by construction -- deleting the
+	# `CodeLen = ReloadRaxCodeLen` half of the guard makes both rows print 222.
+	# Assert on the VALUE (635218 / 635317, FPC 3.2.2's answers), never on
+	# "the two -O levels agree": they agreed at 222 too, in a build where the
+	# reload was elided at every level.
+	# bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements
 	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep 'a.reload marked' > $(TESTTMP)/test_opt_sr_marks.log
 	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6
 	# ...and the two WIDENED statement kinds each fired: `bo` is only ever
@@ -11247,6 +11255,11 @@ test-core: $(COMPILER)
 	# plus the three IR_STORE_MEM destinations (array elem / field / deref).
 	test "$$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 1
 	test "$$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 5
+	# ...and the emit-time refusal fired: a guard that never declines is a guard
+	# that cannot be shown to work, and this pass's whole failure mode is a
+	# prediction nobody checked.
+	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3c 2>&1 | grep 'a.reload DECLINED' > $(TESTTMP)/test_opt_sr_declined.log
+	test "$$(grep -c 'a.reload DECLINED' $(TESTTMP)/test_opt_sr_declined.log)" -ge 1
 	# A NilPy class may be NAMED after the imported class it derives from. The
 	# unit's declaration used to fill the forward row the shell pre-pass had
 	# registered for the program's own class -- one row for two classes, so the
