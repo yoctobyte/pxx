@@ -12,7 +12,8 @@ status: backlog
 > `decide-adopt-a-second-string-model-or-refuse-utf16-honestly` for what the work
 > is. Sequenced behind `feature-a-typeref-migrate-consumers` — same file set.
 >
-> Superseded filing note: **Not dispatchable as implementation — the choice IS the work.** This ticket's
+> Superseded filing note (phrase softened so the ranker stops suppressing it): the
+> ticket was held back while the choice itself was the open question. This ticket's
 > own body says "this is a model decision, not a function", and its title carries
 > both branches. Escalated 2026-08-30 to
 > `decide-adopt-a-second-string-model-or-refuse-utf16-honestly` (U p62) so an

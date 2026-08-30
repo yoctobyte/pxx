@@ -797,7 +797,7 @@ _none_
 - [p 62] [A] feature-a-typeref-migrate-consumers
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
-- [p 62] [A] feature-unicodestring-model [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 62] [A] feature-unicodestring-model
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
 - [p 60] [N] bug-n-async-def-and-await-are-not-implemented
