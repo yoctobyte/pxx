@@ -463,10 +463,50 @@ the same variable is correct — wrong on `pinned` too, so not this work. Filed 
 
 ### What step 4 needs from the coordinator
 
-Six files, one line each, no logic: add `and (elemSize = 1)` beside the existing
-`IRTk[left] = Ord(tyAnsiString)` COW test in `ir_codegen.inc:5969`,
-`ir_codegen_wasm32.inc:1133`, `ir_codegen_arm32.inc:3295`,
-`ir_codegen386.inc:3902`, `ir_codegen_riscv32.inc:1673`,
-`ir_codegen_xtensa.inc:1677`. It wants one short window across all six rather
-than six negotiations, because a partial application is the one state the
-ordering constraint above exists to prevent.
+**SEVEN files, and the edit WIDENS an existing clause rather than adding one.**
+Both halves of that sentence correct what this section said when first written
+(and what I had told the coordinator); the wrong version is quoted below so the
+next reader can tell which claim changed.
+
+> ~~Six files, one line each, no logic: add `and (elemSize = 1)` beside the
+> existing `IRTk[left] = Ord(tyAnsiString)` COW test in `ir_codegen.inc:5969`,
+> ... It wants one short window across all six.~~
+
+`and (elemSize = 1)` is **already there** at every site. It is the current text,
+and it is exactly what excludes a wide string from the copy-on-write path — the
+x86-64 site says so in its own comment (*"uses a 1-byte stride and needs
+copy-on-write"*). So the edit is:
+
+    (elemSize = 1)  ->  ((elemSize = 1) or (elemSize = 2))
+
+Stride 8 must stay excluded: that is the case the clause was written for — an
+`array of AnsiString`, whose `IRTk` is `tyAnsiString` because the ELEMENT is a
+string, not because the base is one.
+
+**And there are seven sites, not six.** `ir_codegen_aarch64.inc:3420` spells the
+identical rule as `(Integer(IRIVal[node]) = 1)` — same condition, same position
+in the same if-chain — because aarch64 never hoists the value into an `elemSize`
+local. **A grep for `elemSize = 1` returns six files and silently omits it.** It
+surfaced only by listing `compiler/ir_codegen*.inc` and noticing seven backends
+against six hits, and aarch64 is one of the two backends CLAUDE.md names as
+perf-relevant, so it is not a fringe target.
+
+Current lines (drifted; `ir_codegen.inc` is 6053, not the 5969 first recorded):
+
+    ir_codegen.inc:6053           (elemSize = 1)                baseAddr, not left
+    ir_codegen_aarch64.inc:3420   (Integer(IRIVal[node]) = 1)   the ungreppable one
+    ir_codegen_arm32.inc:3295     (elemSize = 1)
+    ir_codegen386.inc:3902        (elemSize = 1)
+    ir_codegen_riscv32.inc:1673   (elemSize = 1)
+    ir_codegen_wasm32.inc:1133    (elemSize = 1)
+    ir_codegen_xtensa.inc:1677    (elemSize = 1)
+
+It wants one short window across all seven rather than seven negotiations,
+because a partial application is the one state the ordering constraint above
+exists to prevent — and here the partial state is undetectable, since nothing
+constructs a wide string until step 6.
+
+**Seven spellings of one rule, one of them invisible to the obvious grep, is a
+refactor ticket of its own** — the sibling of
+[[refactor-p-the-char-array-is-not-a-string-rule-is-spelled-five-times]]. To be
+filed AFTER step 4 lands, so the window is not held up by paperwork.
