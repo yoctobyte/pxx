@@ -3666,7 +3666,7 @@ dyn-array arm banked), and T's 37-source `/tmp` chore (belongs to C/N/B, not T).
 
 ### Open for the user
 - Spelling question above (dotted vs quoted) — a heads-up, not a blocker.
-- `bug-t-sync-fills-one-spelling-of-pending-commit` may become a `decide-*`; plexus-T is
+- `bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two` may become a `decide-*`; plexus-T is
   making the call itself and will escalate only if it is a genuine fork. **~24 resolved
   tickets still await landed shas** and must NOT be auto-filled by pattern-matching
   `git log` — that is `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` at scale.
@@ -14331,7 +14331,7 @@ they took:
 | frank-optimize — record the `{$Q+}` divergence | **landed**, and deeper than asked — it names `bug-a-qplus-misses-32bit-overflow` (we had FPC's own gap and closed it) and adds a warning against using `{$Q+}` on a 32-bit type in an FPC-oracled differential probe |
 | frank-optimize — file the `-O3` observability gap as a T ticket | **not filed** — two greps on different wording, plus an mtime sweep showing only two tickets touched since 20:00 |
 
-**So I filed it myself:** `bug-t-nothing-exercises-o3-so-its-clean-record-is-empty` [T p50]
+**So I filed it myself:** bug-t-nothing-exercises-o3-so-its-clean-record-is-empty (WITHDRAWN — duplicate of `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`; named plain, not in backticks, so it does not read as a live pointer) [T p50]
 (`0fb7d82ff`), evidence credited to frank-optimize-b4. Not a reprimand — it is mid-build on the
 hardest item in its umbrella and the directive was one paragraph inside a long message about
 something else. **That is exactly the trigger-with-no-observer shape**, and the observer was
@@ -14525,7 +14525,7 @@ deliverable; the owner answers what the owner wants to answer.
 
 ### I filed a duplicate ticket, defeated by a directory I did not type
 
-`bug-t-nothing-exercises-o3-so-its-clean-record-is-empty` [p50] duplicated Track O's
+bug-t-nothing-exercises-o3-so-its-clean-record-is-empty (WITHDRAWN — duplicate of `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`; named plain, not in backticks, so it does not read as a live pointer) [p50] duplicated Track O's
 `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable` [p60], filed an hour
 earlier in **`backlog_new/`**. My two greps and mtime sweep covered `backlog/` and `unfinished/`
 only. `ready`/`next` scan four directories; I typed two.
@@ -15336,7 +15336,7 @@ change was 1.9-2.1× on x86-64 *hardware*. 1.07-1.13× says the pass fires and h
 it is **not** a prediction for real aarch64 silicon, and no measurement on this box
 can be.
 
-`task-o-hand-w2stress-to-the-corpus` closed as already done (`9e9e84ab5`) — the
+`task-o-hand-w2stress-to-the-corpus-so-optdiff-sweeps-it` closed as already done (`9e9e84ab5`) — the
 program had landed with item 3 as `test/test_o3_resident_inplace.pas`, renamed and
 extended past the ticket's description. Checked against the ticket's own three
 requirements rather than assumed. My correction is recorded in the umbrella with
@@ -16014,7 +16014,7 @@ count is **somewhere in 21..33 and the checker cannot yet say where.**
 
 ### The reservation is now blocking another lane
 
-`chore-a-wire-the-nine-passing-orphan-tests` [A p40] is **blocked on an N ticket**,
+`chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring` [A p40] is **blocked on an N ticket**,
 and N is unstaffed by the owner's reserved call. That is the first time the N
 reservation has held up work in a *different* lane rather than only N's own queue.
 **Surfaced to the owner as a fact, alongside the standing question; not re-asked.**
@@ -17962,11 +17962,11 @@ cannot grant that escape.
 
 - **Prio must be LOWERED as readily as raised.** Two ranking defects, opposite
   directions, same root: the board can tell whether a ticket is *unblocked* and
-  cannot tell whether it *should be worked*. `refactor-a-c-exclusive-lowering`
+  cannot tell whether it *should be worked*. `refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed`
   sat at p45 blocking a whole lane with **zero in-edges**, because a ticket that
   blocks a *lane* rather than a *ticket* never gets a `blocked-by:` edge — and
   adding one would have been a false claim, since those tickets could proceed,
-  just not by that agent. Raised to 60. Conversely `feature-a-error-does-not-halt`
+  just not by that agent. Raised to 60. Conversely `feature-a-error-does-not-halt-so-a-parse-can-be-speculative`
   sat at **p70, the queue head**, while its own author had just said no consumer
   needs the remaining scope; lowered to 35 with a **trigger**, not a date.
 - **A Track U question whose author is awake is an UNROUTED question, not a

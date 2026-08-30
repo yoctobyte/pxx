@@ -5205,3 +5205,57 @@ Worth recording for where it happened: **inside the very test proving a silent
 failure had been fixed.** A guard nobody has seen fail is not a guard (108), and
 `grep -v` in a negative assertion is the canonical way to write one — it reads as
 "check it's not there" and means "check some line isn't it".
+
+### 129 — the SMALLER number is the one nobody questions
+
+*frankD, 2026-08-30, catching its own new check over-suppressing — and it is the
+mirror of the over-fitting rule, not a repeat of it.*
+
+Writing `docaudit slugs`, frankD added a suppression list for slugs named **in
+order to say they are dead** ("absorbed into X", a correction note quoting the
+wrong text it replaced). That class is real: **a slug named to declare it dead is
+indistinguishable from a live dead pointer by name-matching alone.**
+
+But the marker list included `not`, `read` and `instead of` — words that appear
+constantly in prose. **Findings went 11 → 1, and five real abbreviated citations
+vanished with the noise.** A near-clean run, from a brand-new check, on a corpus
+already known to contain defects.
+
+It was caught by the author's own calibration rule **running backwards**. The rule
+was *a check that confirms everything is over-fitted*. The mirror: **a suppression
+list wide enough to guarantee a clean run is a check tuned to agree with its
+author.** Same fault, opposite sign, and only one of the two directions has a name.
+
+**The asymmetry is why this needs its own entry.** Twice in one night frankD's
+tooling failed in the *reassuring* direction — the suppression list, and earlier a
+markdown filter that would have handed a lane a tidy sweep over files carrying six
+known-false claims. **Both times the failure produced a SMALLER number, and a
+smaller number is the one nobody questions.** An over-reporting check gets triaged
+into correctness within an hour because every false positive is annoying and
+visible; an under-reporting check is *pleasant*, and its silence is
+indistinguishable from success. Exactly the docs' own asymmetry (125), now in the
+instruments built to audit them.
+
+**Corollary, measured immediately afterwards on the coordinator's side:** verifying
+the same file with a deliberately loose pattern — treat every backticked hyphenated
+string as a ticket slug — gave **7 findings of which 4 were false** (three were
+`devdocs/dev/` doc names, one a test-case name). But it also found a **sixth real
+abbreviation frankD's tighter check had missed**
+(`task-o-hand-w2stress-to-the-corpus` → `…-so-optdiff-sweeps-it`). So the loose and
+tight instruments each found what the other could not, and **neither was
+trustworthy alone**. When the cost of a false positive is one `ls`, run loose and
+triage; save tightness for checks whose findings are expensive.
+
+### 129a — a dead slug in backticks is a live citation, whatever the sentence says
+
+Same session, and it is the self-referential case. frankD's own correction note
+quoted a dead slug **in backticks** — so *the note announcing a dead pointer read
+as a live citation* to the very checker written to find dead pointers.
+
+**Quoting the wrong text is right; quoting it in the same markup as a live
+reference is not.** Convention adopted: a slug named in order to say it is dead is
+written **plain**. Applied the same day to the roster's
+`bug-t-nothing-exercises-o3-so-its-clean-record-is-empty`, a ticket that genuinely
+existed and was withdrawn as a duplicate — annotated in plain text rather than
+repointed, because the citation is *historically correct* and only its markup was
+making a claim about the present.
