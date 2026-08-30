@@ -758,3 +758,47 @@ shape as `Length(ps^)`, which already has its own history in `ir.inc:11150`.
 Whether to build the sixth carrier or reject `^WideString` until someone needs
 it is a real question; it is NOT a blocker for 6a-6c, which are all
 value-typed. Decide it when 6a-6c are done, with the code in front of you.
+
+## 2026-08-30 (frankwasm) — 6a and 6b landed; the carrier count is 4 of 5
+
+    step 1  Syms[].ElemType     symbol          100d68f51
+    step 3  UFldStrElemTk       record field    f4587a2e4
+    step 6a AliasStrElemTk      type alias      6f9ecd43d
+    step 6b SymStrElemTk /      array element   this commit
+            ArrTypeStrElemTk
+    step 6c param / return      -- remaining --
+
+### 6b's design question, and why it is NOT a sixth mechanism
+
+`Syms[].ElemType` is **already occupied** for an array: it holds the array's own
+element kind (`tyAnsiString`), so it cannot also hold the level below it — the
+element string's `tyChar`/`tyWideChar`. That looked like it forced a new
+mechanism, which would have been the first one this campaign invented rather
+than mirrored.
+
+It does not, because **`SymStrCap` already serves exactly this double duty**:
+the capacity of a scalar `string[N]` variable AND the element capacity of an
+`array of string[N]`, disambiguated by `IsArray`, read both ways in `ir.inc`
+(`:1418` store clamp, `:1933` element stride). `SymStrElemTk` mirrors that shape.
+A scalar wide string keeps its width in `Syms[].ElemType`, which for a string
+genuinely IS its element; only the nested level needs the new slot.
+
+So the rule that held for the channel holds for the slot: **the mechanism
+existed, one type over.**
+
+### One hazard worth naming: sym slots are RECYCLED
+
+`SymStrElemTk` is zeroed in the SCALAR allocator too, not merely grown by
+`SetLength`. A symbol slot can be reused, so an unzeroed parallel array hands
+the new occupant the previous one's width. This is not hypothetical — it is the
+same recycling that made an `a.symptr` probe earlier in this campaign print a
+stale symbol's type and produce a **wrong recorded diagnosis** that took a
+second probe to overturn. Any future `Sym*` parallel array needs the same zero.
+
+### Found while measuring, filed not fixed
+
+[[bug-a-indexing-a-function-result-that-is-an-array-of-managed-strings-yields-garbage]]
+— `FS[0]` where `FS: array[0..2] of AnsiString` returns the empty string with
+`Length` 1. Wrong on `pinned` too. Bounded by four controls: an Integer element
+and a frozen `string[8]` element are both fine through the identical shape, and
+assigning the result to a variable first is fine.

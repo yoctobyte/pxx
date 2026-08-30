@@ -63,7 +63,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (387)
+## backlog (388)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -87,6 +87,7 @@ _none_
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
 | bug-a-help-does-not-advertise-flags-the-compiler-accepts | A | 35 | bug | `--strict-fpc` is accepted, documented at defs.inc:2189-2191, and demonstrably changes behaviour -- and does not appear in `--help`. 67 markdown files name flags `--help` does not advertise. The failure mode is not a missing line of text: an agent reasoning from `--help` concludes the flag DOES NOT EXIST and that whatever cites it named a fiction, which is a wrong conclusion reached by consulting the tool's own self-description. | — |
 | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs | A+S | 40 | bug | Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs | — |
+| bug-a-indexing-a-function-result-that-is-an-array-of-managed-strings-yields-garbage | A | 58 | bug | `FS[0]` where `function FS: array[0..2] of AnsiString` yields the empty string with Length 1, and `FS[1]` yields a single garbage character, where FPC yields the strings that were assigned. Indexing the same function's result after assigning it to a variable is correct, and the identical shape with an Integer element or a `string[8]` element is correct. Only a MANAGED string element, only when the call result is indexed directly. | — |
 | bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown | A | 45 | bug | `IROpName` names 68 of 75 IR ops, so a missing backend arm for the other seven reports `unknown` | — |
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
@@ -844,6 +845,7 @@ _none_
 - [p 60] [A] refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 60] [A] refactor-a-collapse-the-c-frontend-sysv-prologue-copy
 - [p 60] [N] regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native
+- [p 58] [A] bug-a-indexing-a-function-result-that-is-an-array-of-managed-strings-yields-garbage
 - [p 58] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 58] [P] feature-p-packrecords-c-directive
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
