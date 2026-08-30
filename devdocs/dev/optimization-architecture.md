@@ -433,11 +433,36 @@ hyperfine, identical output):**
 | **-O2-built** (regcall + inline v1/2a/2b/3) | **5.00 s** | **1.34× faster** | **1.77× slower** |
 
 The FPC gap narrowed across the arc: -O0 = 2.37× → -O1 peepholes → regcall +
-inline v1 = 1.88× → + slices 2a/3/2b = **1.77×**. The residual is mostly
-whole-body register allocation (all params/locals in regs, not just 2), caller-
-side arg passing without push/pop (regcall phase 3), and non-leaf inlining
-(slice 4) — the remaining tickets. `-O0` output stays byte-identical across all
-tiers (the sacred gate); pins are -O2-built and transparent.
+inline v1 = 1.88× → + slices 2a/3/2b = **1.77×**. `-O0` output stays
+byte-identical across all tiers (the sacred gate); pins are -O2-built and
+transparent.
+
+> **The table above is a HISTORICAL RECORD, not the current standing, and the
+> sentence that used to follow it has been deleted rather than updated.** It
+> read: *"the residual is mostly whole-body register allocation … the remaining
+> tickets."* **There is no residual against FPC. We passed it.** Measured
+> 2026-08-31 on an idle box, min-of-N three-way interleaved, all binaries
+> emitting byte-identical output so the work is provably identical:
+>
+> | compiler binary | self-compile | vs ours -O3 |
+> | --- | ---: | --- |
+> | FPC 3.2.2 `-O2`-built | 15268 ms | ours **14.4%** faster (7/7) |
+> | FPC 3.2.2 `-O3`-built | 15509 ms | ours **15.0%** faster (6/6) |
+> | ours `-O2`-built | 14215 ms | ours -O3 **8.05%** faster (7/7) |
+> | **ours `-O3`-built** | **13071 ms** | — |
+>
+> **Do not quote the 2.82 s / 5.00 s row as a current gap.** Both baselines are
+> eight weeks gone and the self-compile has grown from ~5 s to ~14 s; what
+> inverted is the *ratio*, which is the only part that ever travelled.
+>
+> **What this does and does not license.** It kills any headroom argument that
+> rests on the FPC gap — that comparator is behind us at both its levels. It
+> does **not** prove the absolute headroom is gone: a comparator falling behind
+> bounds nothing about the optimum. And it compares **whole toolchains**,
+> codegen *and* RTL (4.1 MB of FPC runtime against 10.0 MB of ours), on **one
+> program of one shape**. A pass can still be worth building on evidence from a
+> workload where the thing it targets actually binds — it just cannot be
+> justified by this gap any more.
 
 ### Differential coverage for `-O3`, and what it does and does not cover
 

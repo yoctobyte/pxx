@@ -1,5 +1,5 @@
 ---
-prio: 70
+prio: 20
 track: A
 status: backlog
 owner: ""
@@ -3425,3 +3425,70 @@ resolves. The cheap slices already landed; what remains is the expensive one.
 **Not claiming this ticket** — this is a measurement filed into it, not a
 resumption of the campaign.
 
+
+## 2026-08-31 — W2's linear-scan allocator: DECLINED. The justification inverted, measured on an idle box
+
+Dispatched to **decide**, not to start. Box at load ~4.5, the first quiet window
+since this campaign parked. Result: **the headroom argument this item rests on
+is void, and it cannot be repaired by re-measuring.**
+
+### The measurement
+
+Three compilers, **all emitting byte-identical output** (checked, both ways), so
+the work is provably identical and only the code generator differs. Min-of-N,
+**three-way interleaved** — the non-interleaved sanity run disagreed with the
+interleaved one by 7%, which is the size of the effect, so interleaving is not a
+stylistic preference here.
+
+| compiler binary | self-compile | |
+| --- | ---: | --- |
+| FPC 3.2.2 `-O2`-built | 15268 ms | ours `-O3` **14.4%** faster, **7/7** |
+| FPC 3.2.2 `-O3`-built | 15509 ms | ours `-O3` **15.0%** faster, **6/6** |
+| ours `-O2`-built | 14215 ms | ours `-O3` **8.05%** faster, **7/7** |
+| **ours `-O3`-built** | **13071 ms** | |
+
+FPC `-O3` is marginally *slower* than its own `-O2`, so "you only beat it at
+`-O2`" is closed rather than left as an objection.
+
+### Why that decides it
+
+This ticket prices its remaining opportunity two ways and **both are now
+retired**:
+
+1. **The FPC gap** — *"the residual is mostly whole-body register allocation."*
+   **There is no residual. We are ahead at both of FPC's levels.** A headroom
+   argument whose comparator has since fallen behind is not off by a factor, it
+   is inverted.
+2. **The instruction census** — 37% frame traffic, "killing the 37%". Retired by
+   this ticket's own end-to-end re-pricing above, under its own rule 2: the
+   campaign eliminated **24.1% of the entire push population** and delivered
+   ~7-8%. Population is not firings and firings are not time.
+
+Under the owner's ruling, **promise is delivered value, measured**. Nothing here
+shows promise for the expensive item, and the two things that used to stand in
+for promise are gone.
+
+### What is NOT being claimed
+
+- **Not "there is no headroom."** A comparator falling behind bounds nothing
+  about the absolute optimum. What died is the *justification*, not the
+  possibility.
+- **Not a codegen-only comparison.** This is whole toolchains — codegen *and*
+  RTL, 4.1 MB of FPC runtime against 10.0 MB of ours. It does not isolate
+  register allocation.
+- **Not a claim about all workloads.** One program, one shape. This ticket's own
+  record shows W1 slices worth **1.9-2.1x on tight scalar loops** while costing
+  2-6% on this very self-compile. The self-compile cannot see a workload where
+  register pressure binds.
+
+### The revival condition, so this is a decision and not a veto
+
+Anyone may take the linear-scan allocator up again. What it needs is a
+**benchmark on a workload where register pressure actually binds** — tight
+scalar loops, not `compiler.pas` — plus the promise+proof gates. What will
+**not** do is the FPC gap (gone) or an instruction census (retired by rule 2).
+
+**The campaign closes here.** Its delivered value is real and now precisely
+measured on a quiet box: **`-O3` is 8.05% faster than `-O2` on the self-compile,
+7 of 7**, on top of everything the `-O2` promotions already banked. The cheap
+slices landed; the expensive one is declined on evidence.

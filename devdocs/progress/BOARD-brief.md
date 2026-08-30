@@ -68,7 +68,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [P]` bug-p-generic-constraints-are-checked-before-the-type-section-closes
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
-- `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
@@ -94,5 +93,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
+- `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 
 _399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

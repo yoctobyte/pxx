@@ -364,7 +364,7 @@ _none_
 | feature-opt-dynarray-grows-in-place | A+O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | A+O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
-| feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-o3-register-pressure | A+O | 20 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | A+O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-p-assertions-directive-and-position | P | 55 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
@@ -820,7 +820,6 @@ _none_
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [P] bug-p-generic-constraints-are-checked-before-the-type-section-closes [parked — re-claim, do not duplicate]
 - [p 70] [P] bug-p-generic-type-param-unresolved-in-class-abstract-template [parked — re-claim, do not duplicate]
-- [p 70] [A+O] feature-opt-o3-register-pressure
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
@@ -1210,6 +1209,7 @@ _none_
 - [p 20] [A] feature-cross-frontend-interop-contract
 - [p 20] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 20] [A] feature-nilpy-idf-import
+- [p 20] [A+O] feature-opt-o3-register-pressure
 - [p 20] [T] feature-t-record-host-cpu-features-in-tstate
 - [p 20] [M] feature-t-windows-wine-harness
 - [p 20] [A] feature-typeinfo-last-categories
