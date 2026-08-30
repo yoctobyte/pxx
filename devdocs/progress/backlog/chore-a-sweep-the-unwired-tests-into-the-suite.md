@@ -4,7 +4,7 @@ prio: 20
 type: chore
 owner: —
 blocked-by: []
-summary: "PAUSED 2026-08-21 after batch 4 with 15 of the original 98 files left, and all 15 are in lanes the user has DEFERRED (13 Track N pyeval/pyexec, 2 Track F softfloat) — resume when either is un-deferred; nothing is half-applied. DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation."
+summary: "RESUMABLE 2026-08-30 and the PAUSE REASON IS GONE: the 15 files it parked on (13 Track N pyeval/pyexec, 2 Track F softfloat) are all WIRED now, and 45 NEW unwired files have accumulated behind them — 37 under test/wasm/, 8 at top level, and every one of those 8 was created TODAY. This is a LEAK, not a backlog: `tools-devtest#00` (which runs check_test_wiring) is STILL-RED in the full tier. DECIDED 2026-08-19: SWEEP them into the suite — one job, not 45 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation."
 status: backlog
 ---
 
@@ -375,3 +375,69 @@ Exactly the two deferred categories and nothing else: the 13
 `test_softfloat_*` (Track F, parked by definition). Every other test file in
 the repo is now either run by a rule or exempted with a reason naming what runs
 it instead.
+
+
+## 2026-08-30 (frankwasm) — the pause reason is gone, and the shape of the problem changed
+
+**Not a resume. A re-measurement, because the summary had become false in both
+halves.** It said 15 files remained and all 15 were in deferred lanes. Today:
+
+| | then (2026-08-21) | now |
+| --- | --- | --- |
+| unwired total | 15 | **45** |
+| the 13 Track N pyeval/pyexec | unwired, deferred | **wired** (108 Makefile references) |
+| the 2 Track F softfloat | unwired, deferred | **wired** |
+| `test/wasm/**` | — | **37** |
+| top level | — | **8** |
+
+Neither number in the old summary survived. The parked-on files got wired by
+somebody who did not update this ticket; the ticket went on telling every reader
+that the remaining work was blocked on a deferral that had already lifted.
+
+### The 8 top-level files were ALL created today
+
+    test/cabi_bridge.c                            3226a45ff
+    test/cabi_intra.c                             53f148b61
+    test/test_array_type_alias_chain.pas          78ec5b907
+    test/test_frozen_str_array_elem_cap.pas       6e25bdcde
+    test/test_generic_constraint_tobject_root.pas cce53aada
+    test/test_length_of_a_dynamic_array_of_char.pas d79ee7c95
+    test/test_loadfile_into_element_and_field.pas 4f73f88fa
+    test/test_ptr_depth2_bases.pas                df0661eff
+
+All eight added 2026-08-30, by `--diff-filter=A`. One of them (`78ec5b907`) is
+mine. Nine more of mine — the whole `feature-unicodestring-model` test family,
+including that campaign's ACCEPTANCE test — were unwired until `d24df3f09`
+tonight and are not in the count above only because I wired them first.
+
+**So this is a leak, not a backlog**, and the ticket's own batch-1 note said so
+in 2026-08-19: *"the orphan population grows faster than it drains, so
+twenty-one was a snapshot and never a census."* That sentence has now been true
+for eleven days and the ticket is still framed as a drain.
+
+### The gate exists, is red, and is invisible where it matters
+
+`tools/test_wiring_gate_devtest.py` runs the checker and exits 1 today.
+`tools-devtest` collects it — into **limited and full only**, deliberately not
+`native`, because native is the tier dev boxes gate their pushes on and harness
+guards must not inflate that number. That reasoning is sound and I would not
+change it. The consequence is that a lane agent adding an unwired test gets no
+signal at all until the next full sweep, which is where `tools-devtest#00` has
+been STILL-RED since at least `49bd043` (2026-08-29).
+
+**The interesting question this raises is not for this ticket.** Draining 45
+files does nothing about the eight-per-day inflow. What would is a cheap
+per-push signal — the checker is instant, so a lane agent's own `gate.sh quick`
+could name a test it just added and never wired, without putting the whole guard
+family into `native`. That is Track T's tool and Track T's call; noted here
+rather than filed, because the sweep is worth doing either way and this is one
+sentence, not a design.
+
+### Method unchanged, and the hard rule matters more than usual here
+
+Every expectation must be an ORACLE (FPC 3.2.2 for Pascal, gcc for C), never a
+recording of today's output. Two files in an earlier batch shipped AS THE
+REGRESSION TEST FOR THEIR OWN FIX, so transcribing what the compiler prints
+would have pinned whatever the fix happened to leave behind — including a bug.
+That risk is higher for these eight than for any earlier batch, because they are
+hours old and came from fix commits landed today.
