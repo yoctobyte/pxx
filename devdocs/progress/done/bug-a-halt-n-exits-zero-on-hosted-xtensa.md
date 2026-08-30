@@ -86,4 +86,4 @@ silicon. The claim that this is a copy of the riscv32 arm is from the identical
 comment text, not from history.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit a4df019a0.
