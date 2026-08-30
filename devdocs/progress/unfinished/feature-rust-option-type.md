@@ -6,7 +6,7 @@ track: R
 
 - **Type:** feature — Track R (X-tagged: experimental, unranked; picked up on
   the user's 2026-08-29 request to run Track R for a ~48h window)
-- **Status:** working
+- **Status:** unfinished (parked 2026-08-30 — see the banner at the bottom)
 - **Owner:** Claude (~/frank-rust)
 - **Opened:** 2026-08-29
 - **Umbrella:** [[feature-rust-frontend]] · ladder: [[feature-rust-corpus-chess]]
@@ -546,3 +546,32 @@ worth a rung each and neither is on this ladder:
 
 Also parked, found in the same session and noted in rung 16: `ml.get(0).from` —
 a field access on a *call* result — is a parse error.
+
+---
+
+## 2026-08-30 — PARKED in `unfinished/` (frank-rust)
+
+**Status: not blocked, not dead — the session moved to Track P and this lock was
+stale.** `working/` means an agent is actively in it, and for the last several
+hours that was untrue: the work in this checkout has been the Pascal generics
+parser (`pasparser_generic.inc`), filed and landed as Track P tickets. The
+coordinator was reading this lock as a Track R activity report and routing Rust
+questions here on the strength of it, which is exactly the cost a stale lock has.
+A lock records a claim, not an activity.
+
+**Where it got to:** the ladder is walked through **rung 16** and **stage 4 (the
+corpus rewrite) is DONE** — see the Log. Nothing here is half-applied: every rung
+landed as its own pushed unit, so there is no partial state in the tree and
+nothing to revert. What remains is further rungs of
+[[feature-rust-corpus-chess]], not the completion of a change already started.
+
+**What unparks it:** a user or coordinator request to resume Track R. Track R is
+X-tagged, so it is never ranked by `next`/`ready` and nothing will dispatch it on
+its own — that is by design, not neglect.
+
+**Three findings from this ticket are already filed separately and are NOT parked
+with it** (all under `devdocs/progress/experimental/`):
+`bug-rust-slice-param-fn-erases-mains-record-array-element-type`,
+`bug-rust-whole-array-borrow-as-a-slice-argument-segfaults`, and the parked
+`ml.get(0).from` parse error noted in rung 16. Each is worth a rung and none is
+on this ladder.
