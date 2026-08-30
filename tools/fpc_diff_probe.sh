@@ -99,8 +99,9 @@ threeway=0     # all three implementations differ
 # $1 may carry flags, so it is deliberately unquoted.
 run_fpc() {
   local out="$2"
+  local src="${3:-$WORK/fdp.pas}"
   # shellcheck disable=SC2086
-  if $1 -Mobjfpc -vw -o"$out" "$WORK/fdp.pas" >/dev/null 2>&1; then
+  if $1 -Mobjfpc -vw -o"$out" "$src" >/dev/null 2>&1; then
     "$out" 2>&1
   else
     echo "<fpc-compile-fail>"
@@ -114,18 +115,105 @@ run_fpc() {
 # byte that is not being compared.
 vis() { sed -e 's/\r/<CR>/g' -e 's/\t/<TAB>/g' | awk 'NR>1{printf "<LF>"}{printf "%s", $0}'; }
 
+# ---------------------------------------------------------------------------
+# The oracle's WIDESTRING/CODEPAGE STATE -- a PRECONDITION, not a result.
+#
+# FPC has two knobs that change a non-ASCII answer, on different axes, and $FPC
+# may carry either as a flag without this script knowing:
+#
+#   source codepage    -- how a literal becomes an AnsiString  ({$codepage utf8}, -Fcutf8)
+#   widestring manager -- how an AnsiString widens to a WideString (uses cwstring)
+#
+# Measured 2026-08-30 on `s := 'cafe'` with a real UTF-8 e-acute, printing every
+# code unit (devdocs/dev/debugging-playbook.md, "Building an FPC oracle"):
+#
+#   build                   AnsiString      WideString after `w := s`
+#   pxx (pinned and HEAD)   5: 99 97 102 195 169   5: 99 97 102 195 169
+#   fpc stock               5: 99 97 102 195 169   5: 99 97 102 195 169
+#   fpc + uses cwstring     5: unchanged           4: 99 97 102 233
+#   fpc + {$codepage utf8}  4: 99 97 102 233       4: 99 97 102 233
+#
+# **pxx matches the UN-KNOBBED oracle on both axes.** So a knobbed oracle does
+# not give a better answer here -- it MANUFACTURES a divergence, and every
+# non-ASCII crossing would print DIFF for a reason that is about the oracle's
+# build. That is the opposite of the intuition ("3.2.2 is old, give it the
+# modern setting"), which is precisely why it needs detecting rather than
+# documenting: the wrong values sat in the playbook for a day and the advice
+# derived from them was backwards.
+#
+# The canary MUST be non-ASCII. A UTF-8 byte count and a UTF-16 unit count are
+# the same number on ASCII, so an ASCII canary answers "5 5" under every knob
+# and proves nothing -- the same blindness that let UTF8Encode/UTF8Decode
+# survive as the identity function.
+#
+# It is LAZY: the corpus is overwhelmingly ASCII, and a run with no crossing
+# probe should not pay an extra fpc compile to characterise a knob it will
+# never consult.
+#
+# Answers: plain (comparable) | knobbed (not comparable) | unknown (oracle
+# could not be characterised -- treated exactly like knobbed, because an oracle
+# we cannot describe and an oracle we know is wrong must not print the same).
+#
+# It sets the two globals rather than ECHOING the state, and callers must not
+# wrap it in $( ). Command substitution runs in a subshell, so an echoing
+# version cached nothing and left ORACLE_WIDE_RAW empty in the parent -- the
+# SKIP line then read `canary said []` and the summary suppressed itself
+# entirely, because the guard that keeps a silent run honest could not tell
+# "never asked" from "asked in a subshell". Caught by
+# tools/fpc_oracle_wide_devtest.py, which is what it is for.
+ORACLE_WIDE=""
+oracle_wide_state() {
+  [ -n "$ORACLE_WIDE" ] && return
+  {
+    printf "program fdpcap;\nvar w: WideString; s: string;\nbegin\n  s := 'caf"
+    printf '\303\251'      # U+00E9 as raw UTF-8, so the SOURCE codepage axis is live
+    printf "';\n  w := s;\n  writeln(Length(s), ' ', Length(w));\nend.\n"
+  } > "$WORK/fdpcap.pas"
+  local r
+  r="$(run_fpc "$FPC" "$WORK/fcap" "$WORK/fdpcap.pas")"
+  case "$r" in
+    "5 5") ORACLE_WIDE="plain" ;;
+    "5 4"|"4 4"|"4 5") ORACLE_WIDE="knobbed" ;;
+    *)     ORACLE_WIDE="unknown" ;;
+  esac
+  ORACLE_WIDE_RAW="$r"
+}
+ORACLE_WIDE_RAW=""
+
+# probe NAME [needswide] [known | bydesign "<why>"] -- full program on stdin
+#
+# `needswide` marks a case whose answer depends on the oracle's widestring
+# manager and source codepage -- i.e. any AnsiString<->WideString crossing with
+# a non-ASCII value. It is checked BEFORE anything is compiled, and a knobbed or
+# uncharacterisable oracle SKIPs the case rather than reporting the resulting
+# mismatch as a divergence.
+#
 # probe NAME [known | bydesign "<why>"] -- full program on stdin
 #
 # `bydesign` REQUIRES a reason and refuses without one. The reason is the whole
 # point: a permanent deviation has to carry the decision that made it permanent,
 # or the next reader has no way to tell it from a bug someone forgot to file.
 probe() {
-  local name="$1"; local tag="" why=""
-  case "${2:-}" in
+  local name="$1"; shift
+  local needwide=""
+  if [ "${1:-}" = "needswide" ]; then needwide=1; shift; fi
+  local tag="" why=""
+  case "${1:-}" in
     known)    tag="known" ;;
-    bydesign) tag="bydesign"; why="${3:-}"
+    bydesign) tag="bydesign"; why="${2:-}"
               [ -n "$why" ] || { echo "probe $name: bydesign needs a reason" >&2; exit 2; } ;;
   esac
+  # The oracle-state check comes before the heredoc is even consumed: an oracle
+  # that cannot answer this question must cost nothing to discover.
+  if [ -n "$needwide" ]; then
+    oracle_wide_state          # sets $ORACLE_WIDE; NOT $( ), see above
+    if [ "$ORACLE_WIDE" != "plain" ]; then
+      cat > /dev/null
+      printf 'SKIP        %-22s oracle is %s (canary said [%s], plain is [5 5]): this case crosses\n            %-22s AnsiString<->WideString, where a knob changes the ORACLE and not us\n' \
+             "$name" "$ORACLE_WIDE" "$ORACLE_WIDE_RAW" ""
+      skipped=$((skipped+1)); return
+    fi
+  fi
   { echo 'program fdp;'; cat; } > "$WORK/fdp.pas"  # pxx requires a program header; FPC tolerates either
   local fr pr
   fr="$(run_fpc "$FPC" "$WORK/f")"
@@ -1843,6 +1931,45 @@ begin
 end.
 P
 
+# The crossings that are NOT ASCII. Everything above this line is ASCII, where a
+# UTF-8 byte count and a UTF-16 unit count are the same number -- so the three
+# probes above pass identically under every oracle knob and cover none of this
+# axis. That is not an oversight to fix by making them non-ASCII: they are valid
+# comparisons as they stand. The coverage that was missing is here, behind
+# `needswide` so a knobbed oracle SKIPs it instead of reporting the knob as our
+# divergence. Raw UTF-8 in the heredoc is deliberate -- the source-codepage axis
+# is only live if the literal really is multi-byte in the file.
+probe widestring-nonascii needswide <<'P'
+var w: WideString; s: string; i: Integer;
+begin
+  s := 'café';
+  write(Length(s), ':');
+  for i := 1 to Length(s) do write(Ord(s[i]), ' ');
+  w := s;
+  write('|', Length(w), ':');
+  for i := 1 to Length(w) do write(Ord(w[i]), ' ');
+  writeln;
+end.
+P
+probe widestring-nonascii-narrow needswide <<'P'
+var w: WideString; s, t: string; i: Integer;
+begin
+  s := 'café';
+  w := s;
+  t := w;
+  write(Length(t), ':');
+  for i := 1 to Length(t) do write(Ord(t[i]), ' ');
+  writeln;
+end.
+P
+probe widechar-nonascii-index needswide <<'P'
+var w: WideString;
+begin
+  w := 'café';
+  writeln(Length(w), '|', Ord(w[Length(w)]));
+end.
+P
+
 # ---- dynamic arrays: SetLength, Copy, Insert/Delete, aliasing ----
 probe dynarray-setlength-grow <<'P'
 var a: array of Integer; i: Integer;
@@ -2240,6 +2367,22 @@ echo "new divergences: $new   known/filed: $known   by design: $bydesign   no-or
 # A skip is not a pass. It is a case that silently compared nothing, so it is
 # worth the same attention as a divergence until it is either fixed or removed.
 [ "$skipped" -gt 0 ] && echo "(a SKIP is not a pass -- fix the case or drop it)"
+
+# Only speak about the widestring/codepage axis if a probe actually asked. A run
+# that never consulted the canary has no business asserting anything about it --
+# saying "oracle: plain" without having looked is the same class of claim as a
+# SKIP that reads as a pass.
+if [ -n "$ORACLE_WIDE" ]; then
+  if [ "$ORACLE_WIDE" = "plain" ]; then
+    echo "oracle wide-state: plain (canary [$ORACLE_WIDE_RAW]) -- non-ASCII crossings compared"
+  else
+    echo "oracle wide-state: $ORACLE_WIDE (canary [$ORACLE_WIDE_RAW], plain is [5 5])"
+    echo "        ^ non-ASCII AnsiString<->WideString cases were SKIPPED, not compared."
+    echo "          A codepage or widestring-manager flag on \$FPC changes the ORACLE's"
+    echo "          answer, not ours; comparing against it reports the knob as a"
+    echo "          divergence. Unset the flag to restore that coverage."
+  fi
+fi
 
 # State the oracle's REACH, always. A two-way run and a three-way run that found
 # nothing are different facts, and the summary is where a triager decides what a

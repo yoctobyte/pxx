@@ -285,25 +285,51 @@ the type against `pstr` the variable, `PI`/`pi`, `PC`/`pc`. The symptom is "my
 canary compiles under pxx and FPC refuses it", which reads like a divergence
 finding. It is a name clash in your test, and it cost three rebuild rounds.
 
-**FPC's default source codepage is not ours**, so a non-ASCII literal is not a
-clean oracle: `'caf' + #$C3 + #$A9` gives Length 5 under FPC's default and 4
-under `{$codepage utf8}`, which is our answer. And **an ASCII oracle cannot see a
-width bug at all**, because a UTF-8 byte count and a UTF-16 unit count are the
-same number on ASCII — which is how `UTF8Encode`/`UTF8Decode` survived as the
-identity function.
+**FPC has TWO knobs that change a non-ASCII answer, on different axes, and
+either one silently changes what your oracle is answering.** The **source
+codepage** decides how a literal becomes an AnsiString; the **widestring
+manager** decides how an AnsiString converts to a WideString. Plain FPC ships
+the dumb manager, which widens byte-for-byte. Measured 2026-08-30 on `'café'`
+written as UTF-8 source bytes, printing every code unit:
 
-**And there is a SECOND FPC knob, on a different axis, that looks like the
-first.** The source codepage decides how a literal becomes an AnsiString; the
-**widestring manager** decides how an AnsiString *converts* to a WideString, and
-plain FPC ships the dumb one that widens byte-for-byte. So `w := s` on
-`'caf'+#$C3+#$A9` gives 5 units ending in 195 under stock FPC and 4 units ending
-in 233 with `uses cwstring` — and **no source-codepage setting changes it**,
-because it is not the source that is being read. Both directions are affected;
-`s := w` narrows the same way. Measured 2026-08-30 while checking whether pxx
-applied a width conversion at all: pxx answered 4/233, stock FPC answered 5/195,
-and the honest reading was not "we diverge" but "that build of the oracle cannot
-answer this question". Add `cwstring` before recording an AnsiString↔WideString
-divergence.
+| build | AnsiString `s` | WideString after `w := s` |
+| --- | --- | --- |
+| pxx (HEAD and `pinned`) | 5: `99 97 102 195 169` | 5: `99 97 102 195 169` |
+| `fpc` stock | 5: `99 97 102 195 169` | 5: `99 97 102 195 169` |
+| `fpc` + `uses cwstring` | 5: unchanged | **4: `99 97 102 233`** |
+| `fpc` + `{$codepage utf8}` | **4: `99 97 102 233`** | 4: `99 97 102 233` |
+
+**pxx matches the UN-KNOBBED oracle on both axes**, so for these constructs the
+probe's default `FPC=fpc` is the correct oracle and **turning either knob on
+MANUFACTURES a divergence rather than revealing one.** That is the opposite of
+the intuition ("the oracle is stale, give it the modern setting"), and it is why
+`tools/fpc_diff_probe.sh` now detects both knobs at startup and refuses the
+non-ASCII crossings against a knobbed oracle instead of reporting them as DIFF.
+
+Whether pxx *should* decode UTF-8 source or ship a widestring manager is a real
+open question and a Track P/A one — but it is a question about pxx's dialect,
+not something this oracle can settle, and the two must not be confused.
+
+And **an ASCII oracle cannot see a width bug at all**, because a UTF-8 byte
+count and a UTF-16 unit count are the same number on ASCII — which is how
+`UTF8Encode`/`UTF8Decode` survived as the identity function. A canary for this
+axis must be non-ASCII or it proves nothing.
+
+**The two knobs are independent, and neither is reachable from the other.** No
+source-codepage setting changes the widening (it is not the source being read),
+and no manager changes the literal. Both directions cross: `s := w` narrows the
+same way, and under `cwstring` a round-trip returns to 5 UTF-8 bytes through a
+4-unit intermediate.
+
+**A CORRECTION, recorded because the wrong numbers sat here for a day.** An
+earlier note on this page reported "pxx answered 4/233, stock FPC answered
+5/195" and advised adding `cwstring` before recording a crossing divergence.
+Neither number reproduces: re-measured at both `pinned` and HEAD with every code
+unit printed, pxx answers 5/169 and so does stock FPC — 195 is the *fourth* unit
+of five, not the last. The advice that followed from it was backwards. The
+mechanism the note identified is real and worth keeping; the values were read
+off a summary rather than a run, which is the same failure this page exists to
+name.
 
 ## Sections in here that record a confident WRONG reading
 - `## A bisect can name the RIGHT commit and still be wrong` -- the tell is that
@@ -727,6 +753,33 @@ reports on a tree that no longer exists. There is no error to wait for.
 
 Read `converged after N round(s)`; confirm the binary's sha256 differs from
 `pinned`. Absence of the line is the whole tell.
+
+**And the trap has a MIRROR that is louder and more dangerous.** A seed too
+*new* makes the build a silent no-op. A seed too *old* makes it FAIL — with a
+compiler-internal error naming a file in somebody else's lane. Measured
+2026-08-30: `make compiler/pascal26` died with
+
+```
+pascal26:2084: error: LoadFile expects string variables in IR codegen
+  in: compiler/cpreproc.inc
+```
+
+which reads exactly like "Track C just broke master's self-host gate", and was
+one command away from being reported as that. It was a thirteen-hour-old local
+`compiler/pascal26`. The source at HEAD uses `LoadFile(CPrepInclude[depth])`,
+the codegen that makes an array-element destination legal
+(`EmitLoadFileManagedAt`) landed after that seed was built, and **the error
+string it printed does not exist anywhere in the tree** — which is the tell, and
+a free one: `grep` for the exact message, and if the source does not contain it,
+the compiler that printed it is not the compiler you think you are running.
+`pinned` built HEAD without complaint; reseeding gave `converged after 2
+round(s)`.
+
+The silent direction costs you a verdict. This direction costs you a **false
+accusation against another lane**, complete with a file name, a line number and
+a plausible mechanism. Before reporting that master's gate is red, reseed from
+`pinned` and rebuild — three commands, and the alternative is a peer bisecting
+a bug that is not there.
 
 ## Ancestry is not existence: `--is-ancestor` cannot tell you a commit is a ghost
 
