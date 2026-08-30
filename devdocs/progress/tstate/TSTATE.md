@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `c407e19fe308` | 2026-08-30T18:55:19Z | RED (native) | 106.2s | `d24df3f09efb` RED |
+| seven | `e2d1d1e047df` | 2026-08-30T18:58:38Z | RED (native) | 102.7s | `d24df3f09efb` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -44,10 +44,6 @@
 - **test-core#src:test/test_warn_ignored_directives.pas** — test/test_warn_ignored_directives.pas tools/expect_same.sh (seven): bad `83fb0ef72419`, last good `42fde2a7e025`, 4 commit(s) in range
 - **test-core#src:test/test_methodptr_nil_assign.pas** — test/test_methodptr_nil_assign.pas tools/expect_same.sh (seven): bad `dc798834ba33`, last good `fc9e258e1b71`, 6 commit(s) in range
 - **test-core#src:test/test_nil_argument_positions.pas** — test/test_nil_argument_positions.pas tools/expect_same.sh (seven): bad `dc798834ba33`, last good `fc9e258e1b71`, 6 commit(s) in range
-- **test-core#src:test/test_nilpy_infer_return.npy** — test/test_nilpy_infer_return.npy tools/expect_same.sh (seven): bad `dc798834ba33`, last good `fc9e258e1b71`, 6 commit(s) in range
-- **test-core#src:test/test_nilpy_pathlib.npy** — test/test_nilpy_pathlib.npy tools/expect_same.sh (seven): bad `dc798834ba33`, last good `fc9e258e1b71`, 6 commit(s) in range
-- **test-core#src:test/test_nilpy_str_ascii_cache.npy** — test/test_nilpy_str_ascii_cache.npy tools/expect_same.sh +1 (seven): bad `dc798834ba33`, last good `fc9e258e1b71`, 6 commit(s) in range
-- **test-core#src:test/test_nilpy_zero_argument_builtin_constructors.npy** — test/test_nilpy_zero_argument_builtin_constructors.npy test/test_nilpy_zero_argument_builtin_constructors.expected (seven): bad `dc798834ba33`, last good `fc9e258e1b71`, 6 commit(s) in range
 - **CASCADE 24 jobs** (seven): bad `d24df3f09efb`, last good `fc9e258e1b71`, 22 commit(s) in range
   <details><summary>jobs</summary>
 
