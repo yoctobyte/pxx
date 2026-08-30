@@ -1751,13 +1751,24 @@ begin
     UFldSetEnumId[fi] := -1;
     UFldSetElemTk[fi] := 0;
   end;
-  { A managed string field's ELEMENT. tyChar is the only thing reachable today --
-    `widestring` is still an alias, so no field can be wide -- but stamping it
-    here rather than leaving 0 means the field arm reads the same shape the
-    symbol arm does, instead of a sentinel that happens to mean the same thing.
+  { A managed string field's ELEMENT WIDTH, from the channel the ParseTypeKind
+    that just parsed this field's type left behind.
+    THIS WAS HARDWIRED TO Ord(tyChar) until step 7b, and the comment that stood
+    here justified it: "tyChar is the only thing reachable today -- widestring
+    is still an alias, so no field can be wide". True when written, and false
+    the moment 7b broke the alias -- at which point a `record w: WideString`
+    field was the ONE carrier of six still reporting narrow, so Length(r.w)
+    disagreed with Length(w) for the same value. A comment recording why a
+    constant is safe today does not stop the constant being wrong tomorrow;
+    reading the channel costs the same and cannot go stale.
     feature-unicodestring-model }
   if tk = Ord(tyAnsiString) then
-    UFldStrElemTk[fi] := Ord(tyChar)
+  begin
+    if LastTypeStrElemTk = tyWideChar then
+      UFldStrElemTk[fi] := Ord(tyWideChar)
+    else
+      UFldStrElemTk[fi] := Ord(tyChar);
+  end
   else
     UFldStrElemTk[fi] := 0;
   UFldIsArray[fi] := False;

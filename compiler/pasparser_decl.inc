@@ -463,7 +463,41 @@ begin
         than name a kind (LastTypeStrCap, LastTypePointerElemTk, an Error).
         bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree }
       else if (not tnHasAlias) and (BuiltinScalarTypeKind(lo) <> tyUnknown) then
-        Result := BuiltinScalarTypeKind(lo)
+      begin
+        Result := BuiltinScalarTypeKind(lo);
+        { THE ALIAS BREAK. WideString/UnicodeString keep the same KIND as
+          AnsiString -- that is Option B: one managed-string kind carrying an
+          element WIDTH, rather than a second kind -- and differ from it only
+          here, by handing tyWideChar to the width channel the five carriers
+          read.
+          It has to be a side effect ON this arm rather than a dedicated arm
+          BELOW it, unlike pwidechar and the builtin pointer names: those names
+          return tyUnknown from BuiltinScalarTypeKind and so fall THROUGH to
+          their own arms, while `widestring` returns tyAnsiString and is caught
+          right here. An arm below this one would never fire.
+          BuiltinScalarTypeKind itself stays pure. It has speculative callers --
+          pasparser_expr.inc:3638 and :3670 ask `<> tyUnknown` merely to test
+          whether a token names a type -- and a lookup that set a parser-wide
+          channel would poison the window for whatever type is parsed next.
+          GATED, and the gate is the finding. Breaking the alias makes the
+          COMPILER believe UTF-16 while the RUNTIME still stores UTF-8: the four
+          wide functions in builtin/builtinwide.pas are called from NOWHERE --
+          pasparser_prog.inc only decides whether to `uses` the unit -- so
+          nothing converts a literal on assignment, concatenates in wide, or
+          converts back for Write. Measured ungated: `w := 'abcd'` gave
+          Length(w) = 2 and w[2] = 'c', because Length halved a byte count that
+          was never doubled and indexing stepped two bytes through UTF-8. That
+          is worse than the alias, not better.
+          So the type change waits behind PXX_WIDE_PAYLOAD, alongside the
+          PXX_MANAGED_STRING gate this same arm already consults, until the
+          lowering exists. Default builds are byte-for-byte unaffected: without
+          the define `widestring` stays exactly the alias it has always been.
+          feature-unicodestring-model step 7b }
+        if (Result = tyAnsiString) and
+           PasDefineExists('PXX_WIDE_PAYLOAD') and
+           (CaseEqual(lo, 'widestring') or CaseEqual(lo, 'unicodestring')) then
+          LastTypeStrElemTk := tyWideChar;
+      end
       else if (not tnHasAlias) and (CaseEqual(lo, 'pwidechar')) then
       begin
         { tyWideChar, not tyUInt16 — the element of a PWideChar IS a WideChar,
