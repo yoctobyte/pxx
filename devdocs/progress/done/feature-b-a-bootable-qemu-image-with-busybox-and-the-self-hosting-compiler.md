@@ -64,8 +64,31 @@ stage1, stage1 compiled it to stage2, and `cmp` says they are byte-identical
 under KVM, i.e. the *native* architecture on a different kernel and userland. It
 is **not** the cross-CPU self-host that
 [[bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one]]
-is about. Running it under `qemu-system-aarch64` without KVM is the next step and
-is a strictly stronger claim; the script is x86-64 only today.
+is about. Running it under `qemu-system-aarch64` without KVM is the next step and is a
+strictly stronger claim.
+
+**DONE for the app, BLOCKED for the compiler (2026-08-30).**
+`tools/mkkiosk.sh --arch=aarch64` builds and boots a 13 MB aarch64 image in
+**6 s**, emulated with no KVM, `uname -m` = `aarch64`, running the kiosk app
+cross-compiled by pxx and answering identically (`5050`, `168`). So a
+pxx-generated binary for a genuinely different CPU runs under a real kernel.
+
+**The compiler is not in that image, and the reason is measured:**
+`pascal26 --target=<t> compiler/compiler.pas` fails for **every** cross target —
+i386, aarch64 and arm32 all at `cpreproc.inc:2105`
+(`LoadFile expects a managed-string destination`), riscv32 separately on a `jal`
+displacement out of range. Filed as
+[[bug-a-no-cross-target-can-build-the-compiler-itself]]. Ordinary programs
+cross-build and run fine; it is specifically the compiler that cannot be built
+for a cross target. So the cross-CPU **self-host** stays open and is blocked on
+that ticket, not on this rung.
+
+One userland difference worth recording: the host's own busybox is static
+x86-64, so the x86_64 image needs no rootfs at all. Alpine's aarch64 busybox is
+musl-**dynamic**, so that image carries the 3.8 MB minirootfs for its loader and
+libc. **Our binaries stay static and need none of it** — the rootfs is there for
+busybox, not for us, which keeps the "no rootfs needed" finding intact rather
+than contradicting it.
 
 ## Three facts worth not re-deriving
 
