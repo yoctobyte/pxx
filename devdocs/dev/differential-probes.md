@@ -12,11 +12,28 @@ record traps that cost real sessions.
 
 ## The parity probes — ours against somebody else's
 
-**This index is not self-maintaining; enumerate before you trust it.**
-`ls tools/ | grep -iE 'diff|probe|oracle|sweep'` is the population, minus the
-`*_devtest.py` files (those test the tools, not the compiler). Note the
-population is wider than that grep: `docsnip.py` and `doclinks.py` match none of
-those words and are indexed below. Run it before
+**This index is not self-maintaining; enumerate before you trust it — and the fast
+enumeration is a whitelist, so it under-reports by construction.**
+
+*Fast path, for "is there a probe for X":*
+`ls tools/ | grep -iE 'diff|probe|oracle|sweep'`, minus `*_devtest.py` (those test the
+tools, not the compiler). **It is a whitelist of words someone already thought of.**
+`docsnip.py`, `doclinks.py`, `pasmith_run.py` and `optfuzz.sh` match none of them and are
+all real probes — so a negative from this grep is not an answer.
+
+*Audit path, for "what is missing from this page" — run this, not the grep:*
+
+```sh
+LC_ALL=C comm -13 \
+  <(grep -oE 'tools/[A-Za-z0-9_]+\.(py|sh)' devdocs/dev/differential-probes.md | sort -u) \
+  <(ls tools/*.py tools/*.sh | sort -u) | grep -v devtest
+```
+
+**Measured 2026-08-30: 15 indexed, 210 tools, 195 unindexed, 71 after dropping
+`devtest`** — mostly installers, generators and `gate.sh`, which is why this is the audit
+path and not the daily one. **That noise found three real omissions the whitelist grep
+could not**, including a script whose own docstring says *"differential driver"*. Read the
+71, do not filter it cleverly; the filter is what created the blind spot. Run it before
 concluding no probe exists for your question — see the audit note at the bottom
 of this page for what happened the last time nobody did.
 
@@ -252,6 +269,25 @@ the blocker is an audit with no completion criterion rather than a wrong value.
 It poisons the storage so a surviving reader returns garbage instead of a
 plausible value. Full note, including the rule that the probe must call the same
 predicate as the change it is testing, in `devdocs/dev/debugging-playbook.md`.
+
+## Fuzzers — differentials whose CASES are generated, not written
+
+Named in CLAUDE.md's Track T section and **absent from this index until 2026-08-30**, which
+is how they were found (see the audit-method note below).
+
+| tool | oracle | answers | lane that owns the TOOL |
+| --- | --- | --- | --- |
+| `tools/pasmith.py` | — (generator) | random Object Pascal programs, the case source for the driver below | T |
+| `tools/pasmith_run.py` | **FPC** | *"differential driver for `tools/pasmith.py`"* — does our Pascal agree with FPC on generated programs? | T |
+| `tools/optfuzz.sh` | **pxx at another `-O`** | *"O-level SELF-differential fuzzer"* — belongs to the self-differential family above | T |
+| `tools/fuzz.sh` | mutation + cross-target | already indexed above | T |
+
+**A fuzzer is a differential whose cases are generated rather than written**, so everything
+on this page applies to them — the agreement-is-not-evidence blind spot most of all, since
+a generator can produce a whole population the compiler happens to get right.
+
+**Ownership rule, from CLAUDE.md: T owns the TOOL, never the bug.** A divergence goes to
+the lane that owns the file — IR/codegen → A, dialect/frontend → P, RTL → B.
 
 ## Docs-verification probes — the published claim against the thing it claims
 

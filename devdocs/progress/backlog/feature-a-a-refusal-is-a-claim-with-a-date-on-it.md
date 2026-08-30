@@ -8697,3 +8697,46 @@ the useful shape of both:
 
 The fix is indexing, not diligence — consistent with everything in this index that works.
 
+
+### 178b — THE INDEX'S OWN "ENUMERATE BEFORE YOU TRUST ME" INSTRUCTION WAS A WHITELIST
+
+frankD, 2026-08-30, on the coordinator's fix rather than on its own finding — and it is
+better than either. `differential-probes.md` carries the instruction *"This index is not
+self-maintaining; enumerate before you trust it"*, with the enumeration being
+`ls tools/ | grep -iE 'diff|probe|oracle|sweep'`. The coordinator, having found that
+neither `docsnip.py` nor `doclinks.py` matches those words, **wrote an exception into the
+grep.** frankD's objection:
+
+> *"That grep is a whitelist of words someone already thought of, so it can only ever find
+> tools named the way its author expected — the next tool with an unanticipated name lands
+> in the same blind spot and earns its own exception. Inverting it is cheaper: enumerate
+> `tools/*` and mark what is NOT indexed, so the default is 'visible until classified'
+> rather than 'invisible unless named'."*
+
+**This is 178 one level up** — a whitelist fails in two directions, and here the whitelist
+*is the instrument prescribed for auditing the whitelist*. Patching it with an exception
+fixes the two instances and leaves the mechanism.
+
+**Measured before adopting, because the inversion has its own failure mode.** 15 indexed,
+210 tools, 195 unindexed, **71 after dropping `devtest`** — mostly installers, generators
+and `gate.sh`. That is noisy enough that it would have been killed on precision if it had
+been proposed as a routine check (as one was earlier the same night, at ~35%).
+
+**It found three real omissions anyway**, and they are not marginal: `pasmith_run.py`,
+whose own docstring says *"differential driver for tools/pasmith.py"*; `optfuzz.sh`,
+*"O-level SELF-differential fuzzer"*, belonging to a section this page already has; and
+`pasmith.py` behind them. **All three are named in CLAUDE.md's Track T section** and were
+absent from the index CLAUDE.md points at.
+
+So the disposition is neither: **the whitelist stays as the fast path with an explicit
+warning that a negative from it is not an answer, and the inversion is written down as the
+audit path with its measured noise stated.** A check too noisy to run daily is not too
+noisy to run once.
+
+> **Do not filter the 71 cleverly. The filter is what created the blind spot.**
+
+And frankD's refusal to take the obvious shortcut is the other half: it **declined to
+rename the two tools** to match the grep's pattern, because *"their names are cited in
+resolved tickets, and a citation that stops resolving is a worse defect than a grep that
+needs an exception."* Making the artefact fit the instrument is always available and is
+almost always the wrong direction.
