@@ -20184,3 +20184,87 @@ duplicate closed before anyone worked it.
 
 **Pre-merge tally now: five of six lanes clean and pushed. Outstanding: frankwasm
 (3 dirty) and frank-user (8 dirty), both live by the owner's decision.**
+
+## THE CHANGE THE OWNER WAS WAITING FOR HAS LANDED — and my pre-merge report had a hole
+
+**frank-user resolved `bug-p-object-value-types-standard-meaning`**, landed
+`d23f52948` (board `50d341cd9`). `object` in type-declaration position is now the
+standard Pascal value type with methods, lowered as an advanced record; the rooted
+class-reference meaning is retired. Its tree is **clean, 0 unpushed**. That is the
+change the owner named when they called for the pause and the full re-pin.
+
+It quoted `95e3d0a97`, which is **not an ancestor of origin/master** — the
+pre-rebase sha, exactly the failure mode `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`
+names. Its ticket's resolve line already cited the right one; only the message was
+stale, and the message is what gets quoted.
+
+### MY OWN APERTURE: "pre-merge state clean" MEASURED TREES, NOT MASTER
+
+Two hours ago I reported the pre-merge state as clean and listed what I had
+measured: trees, unpushed counts, `working/` locks, forwardlint, load. **Every
+figure was true. I did not look at tstate once, and master's native tier has been
+RED since 02:04Z** — last GREEN report `0200df7`, then red on every one of the
+25 newest.
+
+This is the exact shape I have been flagging in other lanes all week, arriving in
+my own output: **a correct answer to a question nobody asked.** "All lanes are
+clean and pushed" and "master is green" are different sentences, and a pre-merge
+report that answers the first while a pin is being planned *reads* as the second.
+The instrument measured working trees; the decision it was feeding is about what a
+pin would bless. **Nothing in my report named its own scope**, which is face 219's
+complaint about ticket evidence and face 229b's about counts, now with my name on
+it.
+
+Standing form: **a state report that precedes a pin must name the matrix, or say
+in the same sentence that it did not look.**
+
+### THE TWO REDS WERE FILED INTO THE WRONG LANE, AT p70, AND WOULD HAVE STAYED THERE
+
+Both auto-filed by the watcher this morning with **`track:` GUESSED from the test
+path** — and each ticket's own banner says the frontmatter is what the ranker
+reads. Both guesses are wrong:
+
+| job | guessed | actual evidence | lane |
+| --- | --- | --- | --- |
+| `test_asm_emit_rv32` | P | `undefined variable (AIntToStr)` **in `compiler/rv32enc.inc`**; `AIntToStr` is in `util.inc`, included at `compiler.pas:64` — an include-order fault in a reduced compiler build | **A** (S-flavoured) |
+| `test_opt_store_reload` | P | whole diff is `+reord` / `+reord2`, emitted by the test's own `WriteLn`s at `:153`/`:161` — store/reload reordering | **A** (O tag) |
+
+At `track: P`, `prio: 70` these sat near the head of a queue whose agents own
+`pasparser_*.inc`; the best case was a P agent opening one, finding
+`compiler/rv32enc.inc`, and handing it back. **A guessed track does not read as a
+guess in `ready` output — it reads as a priced decision**, which is the
+default-priority failure one axis over. Retracked to A with the evidence that
+would overturn each, and both now warn that the attributing sha is a docs-only
+`tstate-ticket` commit in one case and a `diag(N)` commit in the other, so
+**neither can be the cause** — a tstate red attributes to the sha it swept.
+
+**Not yet triaged: which of the two `store_reload` causes it is.** Either the
+optimizer changed, or the test grew two `WriteLn`s and its expectation was never
+regenerated. **The second is the quiet one** — a permanent red that looks like a
+codegen bug. One `git log -- test/test_opt_store_reload.pas` decides it, and I
+have put that in the ticket rather than doing it, because it is A's file.
+
+### AN EARLIER LINE NUMBER IS NOT AN EARLIER FAILURE
+
+The corpus wall moved **backwards**, 146 → 120, and that is the expected shape
+after a syntax fix: :146 aborts the parse, :120/:123/:135 are semantic and
+reachable only once a specialization streams. So **frank-rust's withdrawn :120
+figure was masked, not wrong** — the honest form of its finding was *"not
+reachable yet"*, not *"not real"*. Its wider conclusion (long-standing, not a
+session regression) was right throughout.
+
+**A withdrawn finding is stickier than a wrong one.** It retracted publicly, in
+its own ticket, in the most creditable way available — which is precisely what
+makes the retraction durable and stops the next reader re-checking. Told it
+directly; the general rule is now in `feature-pascal-corpus-expansion`, whose
+rung 6 I also retargeted from the settled object-types ticket to
+`bug-p-generic-type-param-unresolved-in-class-abstract-template` [P p70].
+
+frank-user also retracted its own commit message: *"`object` and `TObject` are the
+same internal type"* was proved by a test using only casts and assignment, **where
+both are a pointer move** — an instrument that would print the same thing either
+way. Track T closed `regression-test-core-test-object-reference` within minutes of
+the push, and that only worked because the gap had already been named.
+
+**Pre-merge tally: frank-user is now CLEAN. Outstanding: frankwasm alone (3
+dirty). `working/` holds one lock (`bug-o-uforth-blocktest`, pre-dating tonight).**
