@@ -330,4 +330,4 @@ one is not: had I trusted the grep's number instead of opening the line, the
 closure check would have read "1 site remaining" forever.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 86dbf184f.
