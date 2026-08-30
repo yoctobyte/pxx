@@ -85,15 +85,36 @@ sentence:
 The project has two different "byte-identical" claims and the essay is exactly
 where they get blurred (`CLAUDE.md`, *Claims discipline*):
 
-| claim | what is identical | to what |
-| --- | --- | --- |
-| self-host fixedpoint | the **binary** | our own previous output |
-| zlib / C corpora vs the gcc oracle | the program's **output** | the output of a gcc-**built** zlib |
+| claim | what is identical | to what | scope |
+| --- | --- | --- | --- |
+| self-host fixedpoint | the **binary** | our own previous output | **at the default `-O` level only** |
+| zlib / C corpora vs the gcc oracle | the program's **output** | the output of a gcc-**built** zlib | behavioural, not machine code |
 
 We do not emit gcc's machine code and must never imply it. In a post that will
 be read adversarially, write these uncompressed — the qualifying words
-("output", "built with", "our own") carry the whole distinction and terse
-editing drops them first.
+("output", "built with", "our own", "at the default `-O` level") carry the whole
+distinction and terse editing drops them first.
+
+**The fourth column was missing from this table until 2026-08-30, and its absence
+is the thing this section warns about.** CLAUDE.md's original has it; the copy
+here had been compressed to three columns, and the column that went was the
+qualifier. The section advising against terse editing had itself been tersely
+edited.
+
+That scope is not pedantry, and the cost of dropping it is on the record.
+`make compiler/pascal26` builds `compiler.pas` at the **default** level —
+`PXXFLAGS` is empty in the Makefile, so both rounds of the fixedpoint recipe pass
+no `-O` flag at all. Nothing in the loop compiles the compiler at any other
+level. A `-O0`-only self-compile failure therefore **passed the entire gate** on
+2026-08-19 and was found by a benchmark.
+
+And the public docs had it backwards, which is how adversarial reading finds
+things: `docs/dive/index.md` stated that `-O0` *"is the byte-identity reference
+used by the self-host gate"* — the inverse — until 2026-08-30. A reader doing the
+responsible thing and checking whether the gate covers `-O0` would have come away
+believing it was the **only** level covered, when it is the one level nothing
+compiles the compiler at. **Say "it reproduces itself at one optimisation level,
+and here is which", not "it reproduces itself."**
 
 ---
 
@@ -212,15 +233,40 @@ at all. A compiler that cannot reproduce itself cannot leave a tree.
 
 ## Part 3 — Open questions for the user
 
+Each carries a recommendation, so an answer can be a word rather than an essay.
+They are recommendations, not defaults — none of these is settled by taking
+silence for assent.
+
 1. **Voice and length.** Long-form essay, or a shorter public page linking to
    the record? The material supports either.
+   *Recommendation: the long form.* The falsifiability argument (§2) is what
+   makes this account different from every other "I built X with AI" post, and it
+   does not survive compression — it needs the receipts beside it.
 2. **Does the fact sheet ship?** Part 1 as a table is unusually strong evidence
    and unusually easy to check. Publish it, or keep the numbers inline in prose?
+   *Recommendation: ship it, with the re-measure command beside it.* A table a
+   reader can re-run is the whole claim; the same numbers in prose read as
+   assertions and cannot be checked. The risk is staleness, and it is now
+   handled — `tools/factsheet.sh` regenerates the table and stamps the sha.
 3. **Section 5's verdict.** Which failures carry it, and how blunt?
+   *Recommendation: blunt, and led by how a bug was FOUND rather than what it
+   was.* The strongest item in §5 is the `PXXStrCmp3` comment counting four cross
+   backends when there are five — not because the bug was large, but because it
+   was found by an audit sweeping comments against code, which tells the reader
+   something about the process. A post that only reports triumph reads as
+   marketing; one that reports its own detection methods reads as engineering.
 4. **`devdocs/developer/developer-notes.md`'s "This is totally vibe-coded"
-   aside** — the ticket asks to promote it into a stated goal with a method.
-   Rewrite that line in place once the public page exists, or leave the
-   internal note as the historical record it is?
+   aside** (line 107, checked 2026-08-30) — the ticket asks to promote it into a
+   stated goal with a method. Rewrite that line in place once the public page
+   exists, or leave the internal note as the historical record it is?
+   *Recommendation: leave the line, add a pointer.* Half of this derives from a
+   standing rule and half does not, and the split is worth naming. The
+   **mechanical** half derives: an internal note is a record of what someone
+   thought at the time, and this repo does not rewrite those — the public page is
+   the "stated goal with a method", so promoting does not require demoting. The
+   **voice** half does not derive and is yours alone: how you characterise your
+   own project is not a documentation question, and no rule settles whether you
+   still want that sentence standing.
 
 ## Where it lands
 

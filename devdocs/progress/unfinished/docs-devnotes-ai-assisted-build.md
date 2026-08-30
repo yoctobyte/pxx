@@ -7,9 +7,9 @@ prio: 50
 
 - **Type:** docs
 - **Track:** D (docs) — the user writes the substance; the agent's job is scaffolding + accuracy
-- **Status:** unfinished — agent half (scaffold + fact-check) done 2026-08-14;
+- **Status:** working
   parked awaiting the user's substance. See the Log.
-- **Owner:** claude-D
+- **Owner:** frankD
 - **Related:** [[feature-promo-launch-plan]]
 
 ## Position: LEAD with it, never hide it
@@ -42,9 +42,12 @@ a self-hosting multi-frontend compiler, and I have the receipts."** Write it tha
 ## Why this project is unusually good evidence (and most such posts are not)
 Nearly every "I built X with AI" account is reconstructed from memory afterwards and is
 **unfalsifiable**. This one is not:
-- **Self-host fixed point** — the compiler compiles its own source to a byte-identical binary.
-  A verifiable, mechanical gate. (Claims discipline: this is *binary* identity of our own
-  output; the gcc-oracle corpus claims are *behavioral* parity — see CLAUDE.md. Never blur.)
+- **Self-host fixed point** — the compiler compiles its own source to a byte-identical
+  binary, **at the default `-O` level**. A verifiable, mechanical gate. (Claims discipline:
+  this is *binary* identity of our own output; the gcc-oracle corpus claims are *behavioral*
+  parity — see CLAUDE.md. Never blur. And do not drop the `-O` scope: `PXXFLAGS` is empty in
+  the Makefile, so the fixedpoint proves self-compilation at ONE level, and a `-O0`-only
+  self-compile failure passed the whole gate on 2026-08-19.)
 - **Every pinned stable version** — the whole trajectory, not a snapshot. Do not
   write the count here: it was "200+" when this ticket was filed and the ledger
   said 393 by 2026-08-30. `tools/factsheet.sh` prints it with the sha it measured
@@ -112,3 +115,31 @@ the project already runs.
   was.
   **Still parked**: the four questions in Part 3 and every user-voice section
   remain untouched. Nothing here moves the ticket off the user.
+- 2026-08-30, second pass (frankD) — **the claims-discipline section had lost the
+  qualifier it exists to protect. Still parked on the user.**
+  The draft's two-"byte-identical" table had been compressed from CLAUDE.md's
+  four columns to three, and the column that went was the **scope**: *at the
+  default `-O` level only*. **The section warning against terse editing had
+  itself been tersely edited** — which is the argument for the warning, arriving
+  as evidence rather than as advice.
+  Not pedantry, and the cost is on the record: `PXXFLAGS` is empty in the
+  Makefile, so both rounds of the fixedpoint recipe pass no `-O` flag and the
+  gate proves self-compilation at **one** level. A `-O0`-only self-compile
+  failure passed the entire gate on 2026-08-19 and was found by a benchmark.
+  Worse, the public docs had it **backwards** until today — `docs/dive/index.md`
+  said `-O0` *"is the byte-identity reference used by the self-host gate"*, so a
+  reader checking the responsible thing would have concluded `-O0` was the only
+  level covered, when it is the one level nothing compiles the compiler at.
+  Both fixed; the draft now carries the scope, the incident, and the inversion,
+  because a launch post is exactly where an adversarial reader looks first.
+  Also: the four open questions each carry a **recommendation** now, so the
+  user's answer can be a word rather than an essay — explicitly recommendations
+  and not defaults, since silence must not read as assent on any of them.
+  Question 4 is split rather than answered: the *mechanical* half derives from
+  the standing rule that this repo does not rewrite internal records, and the
+  *voice* half — whether the user still wants "this is totally vibe-coded"
+  standing — is not a documentation question and no rule settles it.
+  `devdocs/developer/developer-notes.md:107` re-checked; the citation is exact.
+  **Nothing here moves the ticket off the user either.** Back to `unfinished/`:
+  `working/` is a live lock and what remains is substance only the user can
+  write.

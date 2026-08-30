@@ -30,6 +30,12 @@ WHAT IT WILL NOT TELL YOU, and these are the interesting half:
    member was dated. Comparing recorded output needs a runner and an expected
    block convention; not built.
 
+   Worth stating for whoever builds it: **a recorded output block is not
+   decoration, it is a timestamp.** A PARTIAL match localises drift far better
+   than pass/fail ever could -- nine identical lines and one changed one says
+   the snippet was really run, and says which library change invalidated it. A
+   runner that only reported "output differs" would throw that away.
+
 Fragments (a `procedure` on its own, a type block) are counted and skipped.
 Compiling a fragment means inventing the program around it, and then you have
 tested the invention.
