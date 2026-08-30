@@ -1035,6 +1035,54 @@ begin
   nWords := nWords + Arg32Words(cls);
 end;
 
+procedure EmitStackTailToPsABIOrderRISCV32(nArgs: Integer);
+{ Put the overflow argument words into RISC-V psABI order: the FIRST stack word
+  (index 8) at [sp+0], counting UP.
+
+  Arguments are pushed in index order, each push moving sp down 4, so word k
+  lands at [sp + (nArgs-1-k)*4] -- the block is ordered with the LAST word
+  lowest. For the eight register words that is invisible (they are loaded into
+  a0..a7 by offset and the order never reaches the callee). For words 8+ it is
+  the ABI, and descending is not what the psABI says.
+
+  Measured against riscv32-esp-elf-gcc 15.2.0 (-mabi=ilp32), ten int params,
+  read from both sides:
+
+    gcc caller places      word8 -> 0(sp)   word9 -> 4(sp)
+    gcc callee reads       word8 -> 0(sp)   word9 -> 4(sp)
+    pxx before this fix    word8 -> +4      word9 -> +0
+
+  Reversing the low (nArgs-8) words in place puts word 8+j at [sp + j*4]: the
+  slot at j*4 held word (nArgs-1-j), and after the swap it holds what sat at
+  (elemSize-1-j)*4, which is word 8+j. The eight register words keep their high
+  offsets and any hidden-dest/callee word (pushed deepest, above the block) is
+  untouched, so nothing else shifts.
+
+  THIS CODE IS NOT NEW -- it was the VARIADIC tail reversal, applied only when
+  ProcVariadic was set, because a va_arg walk reads forward from overflow and
+  therefore needed the psABI order. That path was right and the ordinary path
+  was wrong; the gate is gone rather than a second case added, and variadic
+  calls emit exactly what they emitted before.
+
+  NINE WORDS IS A NO-OP AND PROVES NOTHING: with one overflow word elemSize=1,
+  there is nothing to swap, and (9-1-8)*4 = 0 means the old descending formula
+  already agreed with the psABI. Any check of this must use TEN or more words.
+  bug-a-riscv32-passes-stack-arguments-in-reverse-psabi-order }
+var i, lo, hi, elemSize: Integer;
+begin
+  if nArgs <= 9 then Exit;
+  elemSize := nArgs - 8;
+  for i := 0 to (elemSize div 2) - 1 do
+  begin
+    lo := i * 4;
+    hi := (elemSize - 1 - i) * 4;
+    rv32_lw(reg_t1, reg_sp, lo);
+    rv32_lw(reg_t2, reg_sp, hi);
+    rv32_sw(reg_t2, reg_sp, lo);
+    rv32_sw(reg_t1, reg_sp, hi);
+  end;
+end;
+
 procedure EmitFloatBinopRISCV32(node: Integer);
 { Float arithmetic + comparison via the soft-float kernels. Result of an
   arithmetic op lands in a0 (single) / a0:a1 (double); a comparison lands as a
@@ -2753,7 +2801,9 @@ begin
         { Word-based argument passing (matches the callee spill in pasparser_*.inc):
           each scalar arg is one word, a by-value Int64/UInt64 is two (lo then
           hi). nArgs counts WORDS here; word k is pushed in index order so it
-          lands at [sp + (nWords-1-k)*4], then loads into a[k] (<=8 words). }
+          lands at [sp + (nWords-1-k)*4], then loads into a[k] (<=8 words).
+          Past eight words EmitStackTailToPsABIOrderRISCV32 puts the tail into
+          psABI order before the call. }
         { Aggregate (record) result: push the caller's hidden destination first
           (deepest), so it survives arg evaluation; loaded into t1 just before the
           call. riscv has no dedicated indirect-result register, so t1 (a
@@ -2893,32 +2943,16 @@ begin
           argNode := IRB[argNode];
         end;
 
-        { Variadic stack tail (words 8..nArgs-1) was pushed in index order, so it
-          lands REVERSED in memory (word nArgs-1 at [sp+0], word 8 highest). The
-          callee reads variadic args with a FORWARD va_arg walk from overflow =
-          s0+16, so reverse the (nArgs-8) low words in place. The eight register
-          words (high offsets) and any hidden-dest word (deepest) are untouched.
-          Mirrors the arm32 variadic-tail reversal (ir_codegen_arm32.inc). }
-        if (procIdx >= 0) and ProcVariadic[procIdx] and (nArgs > 9) then
-        begin
-          elemSize := nArgs - 8;
-          for i := 0 to (elemSize div 2) - 1 do
-          begin
-            j := i * 4;
-            sz := (elemSize - 1 - i) * 4;
-            rv32_lw(reg_t1, reg_sp, j);
-            rv32_lw(reg_t2, reg_sp, sz);
-            rv32_sw(reg_t2, reg_sp, j);
-            rv32_sw(reg_t1, reg_sp, sz);
-          end;
-        end;
-
         if nArgs > 8 then
         begin
-          { Words 8+ pass on the stack: keep the WHOLE pushed word block live
-            across the call (the callee reads word k >= 8 at
-            [entry_sp + (nArgs-1-k)*4], see the pasparser_*.inc rv32 param spill),
-            load a0..a7 from their slots, and free everything after return. }
+          { Words 8+ pass on the stack in psABI order -- word 8 at the call's
+            [sp+0], counting up (EmitStackTailToPsABIOrderRISCV32). The WHOLE
+            pushed block stays live across the call; a0..a7 load from their
+            (high) slots and everything is freed after return. The eight
+            register words sitting above the overflow tail are the caller's
+            business and are not read by the callee, so leaving them there
+            costs stack, not correctness. }
+          EmitStackTailToPsABIOrderRISCV32(nArgs);
           for i := 0 to 7 do
             rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
           if (procIdx >= 0) and (not ProcExternal[procIdx]) and
@@ -3394,11 +3428,16 @@ begin
         begin
           { Words 8+ pass on the stack, exactly as the direct and virtual paths
             do: keep the pushed block live across the call (the callee reads word
-            k >= 8 at [entry_sp + (nArgs-1-k)*4]), load a0..a7, free after the
+            k >= 8 at [entry_sp + (k-8)*4]), load a0..a7, free after the
             return. The old code refused outright, which a by-value `set`
             parameter reaches routinely — one scalar plus a set is nine words.
             The callee word sits ABOVE the argument block, so it does not
-            disturb the offsets the callee computes from its entry sp. }
+            disturb the offsets the callee computes from its entry sp.
+
+            The tail goes into psABI order first, exactly as the direct path
+            does -- an indirect call is the shape a C function pointer takes,
+            so it is the LAST place that should keep a private layout. }
+          EmitStackTailToPsABIOrderRISCV32(nArgs);
           for i := 0 to 7 do
             rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
           rv32_lw(reg_t0, reg_sp, nArgs * 4);            { callee (deepest) }
@@ -3591,9 +3630,10 @@ begin
         begin
           { Words 8+ pass on the stack, exactly as the direct call above does:
             keep the whole pushed block live across the call (the callee reads
-            word k >= 8 at [entry_sp + (nArgs-1-k)*4]), load a0..a7, free after
+            word k >= 8 at [entry_sp + (k-8)*4]), load a0..a7, free after
             the return. The old code refused outright, which a by-value `set`
             parameter now reaches routinely — Self plus a set is nine words. }
+          EmitStackTailToPsABIOrderRISCV32(nArgs);
           for i := 0 to 7 do
             rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
           rv32_lw(reg_t1, reg_a0, 0);                   { VMT pointer }

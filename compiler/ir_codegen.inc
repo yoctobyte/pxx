@@ -1437,10 +1437,17 @@ begin
     { RV32 word-based convention: args arrive in a0..a7 (word k in a[k]); each
       scalar param is one word, a by-value Int64/UInt64 is two (lo then hi).
       Words 8+ stay on the CALLER's stack (it keeps the whole pushed word
-      block live across the call when the total exceeds 8): word k sits at
-      [entry_sp + (pnWords-1-k)*4] = [s0 + 16 + (pnWords-1-k)*4] after the
-      ra/s0 prologue. The call side (ir_codegen_riscv32.inc IR_CALL) pushes
-      the matching layout. }
+      block live across the call when the total exceeds 8) in RISC-V psABI
+      order: word k>=8 sits at [entry_sp + (k-8)*4] = [s0 + 16 + (k-8)*4]
+      after the ra/s0 prologue, counting UP from the first stack word. The
+      call side (ir_codegen_riscv32.inc, all three of IR_CALL, IR_CALL_IND
+      and IR_VIRTUAL_CALL) puts the tail into that order via
+      EmitStackTailToPsABIOrderRISCV32.
+
+      This USED to read [entry_sp + (pnWords-1-k)*4] -- descending -- on both
+      sides, so pxx->pxx agreed and every internal probe passed while a real C
+      toolchain disagreed at ten or more words.
+      bug-a-riscv32-passes-stack-arguments-in-reverse-psabi-order }
     pnWords := 0;
     for i := 0 to nparams-1 do
       if ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
@@ -1483,7 +1490,7 @@ begin
             rv32_sw(reg_a0 + pw + sz, reg_t0, sz * 4)
           else
           begin
-            rv32_lw(reg_t1, reg_s0, 16 + (pnWords - 1 - (pw + sz)) * 4);
+            rv32_lw(reg_t1, reg_s0, 16 + ((pw + sz) - 8) * 4);
             rv32_sw(reg_t1, reg_t0, sz * 4);
           end;
         end;
@@ -1503,14 +1510,14 @@ begin
           rv32_sw(reg_a0 + pw, reg_t0, 0)                       { lo (word pw) }
         else
         begin
-          rv32_lw(reg_t1, reg_s0, 16 + (pnWords - 1 - pw) * 4);
+          rv32_lw(reg_t1, reg_s0, 16 + (pw - 8) * 4);
           rv32_sw(reg_t1, reg_t0, 0);
         end;
         if pw + 1 < 8 then
           rv32_sw(reg_a0 + pw + 1, reg_t0, 4)                   { hi (word pw+1) }
         else
         begin
-          rv32_lw(reg_t1, reg_s0, 16 + (pnWords - 1 - (pw + 1)) * 4);
+          rv32_lw(reg_t1, reg_s0, 16 + ((pw + 1) - 8) * 4);
           rv32_sw(reg_t1, reg_t0, 4);
         end;
         Inc(pw, 2);
@@ -1525,7 +1532,7 @@ begin
         end
         else
         begin
-          rv32_lw(reg_t1, reg_s0, 16 + (pnWords - 1 - pw) * 4);
+          rv32_lw(reg_t1, reg_s0, 16 + (pw - 8) * 4);
           if sz = 1 then rv32_sb(reg_t1, reg_t0, 0)
           else if sz = 2 then rv32_sh(reg_t1, reg_t0, 0)
           else rv32_sw(reg_t1, reg_t0, 0);

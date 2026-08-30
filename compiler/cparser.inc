@@ -11015,9 +11015,11 @@ begin
       rv32_sw(reg_a0 + 7, reg_t0, 28);
       { Overflow (stack args past a7) starts at entry_sp = s0+16 — the callee's
         incoming-stack-word base after the ra/s0 prologue (see pasparser_*.inc rv32
-        param spill: word k>=8 at [s0+16+(pnWords-1-k)*4]). The call site reverses
-        the variadic stack tail (ir_codegen_riscv32.inc) so word 8 lands at s0+16
-        and va_arg's forward walk reads args in order. Was s0+8 — off by 8, so the
+        param spill: word k>=8 at [s0+16+(k-8)*4]). The call site puts EVERY
+        stack tail into that psABI order (ir_codegen_riscv32.inc), so word 8
+        lands at s0+16 and va_arg's forward walk reads args in order. The
+        reversal used to be variadic-only, which is why va_arg was right here
+        while ordinary calls were not. Was s0+8 — off by 8, so the
         first stack-passed variadic arg read a saved-frame word (garbage). }
       EmitLoadImmRISCV32(reg_t1, 16);
       rv32_add(reg_t1, reg_s0, reg_t1);                  { t1 = s0+16 (first stack word) }
@@ -11220,8 +11222,10 @@ begin
       arrive in a0..a7 (word k in a[k]); scalar = 1 word, by-value
       Int64/UInt64/Double = 2 (lo then hi). Words 8+ stay on the CALLER's stack
       (the IR_CALL site keeps the whole pushed block live when the total exceeds
-      8): word k>=8 sits at [entry_sp + (pnWords-1-k)*4] = [s0 + 16 +
-      (pnWords-1-k)*4] after the ra/s0 prologue. }
+      8): word k>=8 sits at [entry_sp + (k-8)*4] = [s0 + 16 + (k-8)*4] after the
+      ra/s0 prologue, counting UP -- RISC-V psABI order. Was (pnWords-1-k),
+      descending, matching a caller that was wrong the same way.
+      bug-a-riscv32-passes-stack-arguments-in-reverse-psabi-order }
     pnWordsA := 0;
     for i := 0 to nparams - 1 do
       if ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
@@ -11247,14 +11251,14 @@ begin
           rv32_sw(reg_a0 + pwA, reg_t0, 0)                 { lo (word pw) }
         else
         begin
-          rv32_lw(reg_t1, reg_s0, 16 + (pnWordsA - 1 - pwA) * 4);
+          rv32_lw(reg_t1, reg_s0, 16 + (pwA - 8) * 4);
           rv32_sw(reg_t1, reg_t0, 0);
         end;
         if pwA + 1 < 8 then
           rv32_sw(reg_a0 + pwA + 1, reg_t0, 4)             { hi (word pw+1) }
         else
         begin
-          rv32_lw(reg_t1, reg_s0, 16 + (pnWordsA - 1 - (pwA + 1)) * 4);
+          rv32_lw(reg_t1, reg_s0, 16 + ((pwA + 1) - 8) * 4);
           rv32_sw(reg_t1, reg_t0, 4);
         end;
         Inc(pwA, 2);
@@ -11269,7 +11273,7 @@ begin
         end
         else
         begin
-          rv32_lw(reg_t1, reg_s0, 16 + (pnWordsA - 1 - pwA) * 4);
+          rv32_lw(reg_t1, reg_s0, 16 + (pwA - 8) * 4);
           if sz = 1 then rv32_sb(reg_t1, reg_t0, 0)
           else if sz = 2 then rv32_sh(reg_t1, reg_t0, 0)
           else rv32_sw(reg_t1, reg_t0, 0);
