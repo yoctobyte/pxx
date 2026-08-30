@@ -17276,6 +17276,35 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_codecs.npy $(TESTTMP)/lib_mimic_codecs
 	tools/expect_same.sh lib_mimic_codecs.1 "$$($(TESTTMP)/lib_mimic_codecs | grep -c '=ok')" "83"
 	tools/expect_same.sh lib_mimic_codecs.2 "$$($(TESTTMP)/lib_mimic_codecs | tail -1)" "MIMIC-CODECS OK"
+	# urllib.error -- phase 1 of feature-b-sweep-mimic-shims-against-cpython.
+	# 192 lines whose only coverage was INDIRECT, through the urllib_request
+	# suite: that pins the paths request happens to take and nothing else, and
+	# what it did not take was .filename (URLError left it '' where CPython
+	# leaves it None -- a filename that IS the empty string, a difference `if
+	# e.filename:` cannot see) and the shim header's own claim that its __str__
+	# methods "make the common arm right", which is false in both directions
+	# that matter.
+	#
+	# WHAT THIS FILE DELIBERATELY DOES NOT ASSERT, so a future reader does not
+	# "complete" it: str(e) inside an `except` clause naming a BASE class.
+	# except URLError catching an HTTPError prints '<urlopen error Not Found>'
+	# where CPython prints 'HTTP Error 404: Not Found' -- the status code, the
+	# useful part, is gone -- because __str__ dispatches by the STATIC type of
+	# the clause (bug-n-str-of-a-pascal-declared-exception-ignores-str-when-
+	# caught-as-a-base, a FRONTEND bug, not this shim's). Asserting it would
+	# make the file fail under one interpreter, which is the property that makes
+	# a differential worth having. WHICH clause catches which object IS
+	# asserted; only what str() prints inside it is not. So a green line here
+	# means "the classes agree", NOT "logging a caught urllib error prints the
+	# right thing" -- it does not.
+	#
+	# Also unasserted: HTTPError.read(). CPython's fifth constructor argument is
+	# an open FILE OBJECT it reads the body from; ours is the body as a string.
+	# Different kinds of thing, unspellable in one file; covered on our side by
+	# the urllib_request suite above.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_urllib_error.npy $(TESTTMP)/lib_mimic_urllib_error
+	tools/expect_same.sh lib_mimic_urllib_error.1 "$$($(TESTTMP)/lib_mimic_urllib_error | grep -c '=ok')" "42"
+	tools/expect_same.sh lib_mimic_urllib_error.2 "$$($(TESTTMP)/lib_mimic_urllib_error | tail -1)" "MIMIC-URLLIB-ERROR OK"
 	# A real minidom DOM -- Document/Element/Attr/Text/Comment/DocumentFragment/
 	# DocumentType/NamedNodeMap/DOMImplementation, namespace-aware create+set,
 	# deep and shallow cloneNode, normalize (feature-b-a-real-minidom-is-an-

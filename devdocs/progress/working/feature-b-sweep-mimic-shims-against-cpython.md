@@ -4,8 +4,8 @@ prio: 40
 type: feature
 blocked-by: []
 summary: "Campaign: differential-test the mimic_ shims against CPython, after a two-shim pilot returned five findings including a SIGSEGV. Phase 1 is the codecs differential — the only shim with real surface and NO differential — whose encode half is blocked by bug-b-codecs-encode-segfaults-for-every-encoding-except-utf-8. Phase 2 is edge-coverage spot-checks on the already-covered shims, not re-testing their happy paths."
-status: backlog
-owner: unassigned
+status: working
+owner: frankB
 ---
 
 # Sweep the `mimic_` shims against CPython
@@ -146,3 +146,75 @@ into `lib-test` with its check count pinned. The campaign closes when phase 1
 lands and phase 2's candidates have each been either extended or explicitly
 recorded as already sufficient — with the reason, so the next sweep does not
 redo the judgement.
+
+
+---
+
+## Phase 1 progress log (frankB)
+
+### `codecs` — DONE, 2026-08-30
+
+`test/lib_mimic_codecs.npy`, **83 checks, byte-identical**, wired into
+`lib-test`. Both directions covered in one pass, which is why the segfault had
+to be fixed first.
+
+Three defects, all in `lib/rtl/mimic_codecs.pas`:
+
+1. [[bug-b-codecs-encode-segfaults-for-every-encoding-except-utf-8]] —
+   **SIGSEGV** on ascii and latin-1 for every input including `b''`. A Variant
+   hard-cast to a class; grep found exactly two sites, both local.
+2. [[bug-b-codecs-strict-decode-does-not-raise-on-invalid-utf-8]] — the
+   "validity walk" the header described did not exist. `Utf8Decode_` was a pure
+   byte copy that was not even PASSED `errors`, so all three policies behaved
+   as `replace` and `strict` — CPython's default — never raised. Replaced with
+   a real validator including the **maximal-subpart** replacement counts, which
+   is the half that would have shipped wrong: right verdict + wrong count
+   passes a naive test and corrupts every `replace` decode.
+3. **BOM constants had the wrong TYPE** — `AnsiString` where CPython has
+   `bytes`, so `data.startswith(codecs.BOM_UTF8)` answered False for data that
+   begins with a BOM. `BOM_UTF8` doubly so: `#$EF#$BB#$BF` is a well-formed
+   encoding of U+FEFF, so as a string it held ONE character and `len()` said 1
+   where CPython says 3. No ticket of its own — found and fixed inside (2).
+
+Routed out of the lane: [[bug-n-a-lambda-returning-a-captured-heap-value-yields-none]],
+[[bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point]],
+[[compat-n-repr-does-not-escape-non-printables-above-u007f]].
+
+### `urllib.error` — DONE, 2026-08-30
+
+`test/lib_mimic_urllib_error.npy`, **42 checks, byte-identical**, wired into
+`lib-test`. This shim's only prior coverage was **indirect**, through the
+urllib_request suite — which pins the paths request happens to take and
+nothing else. Both findings were outside those paths, which is the argument
+for the gate rather than an accident of it.
+
+1. **`URLError.filename` was `''` where CPython leaves it `None`** — a
+   filename that IS the empty string rather than no filename at all. Invisible
+   to `if e.filename:`, visible to `e.filename is None`. Fixed: the field is a
+   `Variant` holding `pynone`.
+2. **The shim's header claimed something false about its own `__str__`
+   methods** — that they "are what makes the common arm right today". Measured:
+   the common arm is exactly what they do not cover. Corrected in place.
+
+Both findings are the same shape as the pilot's finding 1: **prose asserting
+coverage that was never measured**. That is now three of three shims where the
+header's own claims were the productive thing to test first — the sentences a
+past session thought worth writing down mark where it was least sure.
+
+**No new ticket for the string-model rows** found on the way (a str-typed
+`None` renders as `''` through `str`/`repr`/format/containers, and only `is`
+sees it). That is the decided-but-partly-unbuilt NilPy string model; a fourth
+re-ask is explicitly warned against on
+`decided/decide-nilpy-none-str-sentinel-vs-textstr-kind`, so the measurement
+is **recorded on that page's residual list** instead. Read it before reaching
+for `pystr_none` in a shim — a `Variant` holding `pynone` is exact where
+`pystr_none` gets eight of nine rows wrong.
+
+**One divergence is left unasserted and named**:
+[[bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base]]
+— `except URLError as e: str(e)` on an HTTPError drops the status code. The
+existing ticket recorded the `except Exception` case; this pass added the
+**intermediate-class** case, which shows the dispatch is genuinely static
+rather than a fallback, and recommended p60 without touching Track N's number.
+
+**Phase 1 is complete.** Both shims that had no differential now have one.

@@ -1,0 +1,192 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_urllib_error.pas against CPython's real urllib.error.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where
+`from urllib.error import ...` finds the stdlib module, and every line below
+produces identical output both ways. Run it as
+`python3 test/lib_mimic_urllib_error.npy` to see that.
+
+WHY THIS SHIM GOT A GATE. It is 192 lines with no differential of its own,
+exercised only INDIRECTLY through the urllib_request suite — which means the
+suite pins the paths request happens to take and nothing pins the rest.
+Writing this found two defects the indirect coverage could not
+(feature-b-sweep-mimic-shims-against-cpython, phase 1).
+
+WHAT IS ASSERTED. The shim's header names its own hazards, and a hazard
+someone thought worth writing down is a hazard someone can regress:
+
+  * URLError descends from OSError, not from a bare Exception. Real code
+    writes `except OSError` around urlopen, so `isinstance(e, OSError)` is
+    part of the interface and not trivia.
+  * HTTPError is BOTH an exception and a response — `.code`/`.status`/`.msg`
+    and `geturl()`/`getcode()` — because callers read the status and then the
+    error body.
+  * the __str__ WORDING on both classes, because code logs `str(e)`:
+    `<urlopen error ...>` with its angle brackets, and `HTTP Error 404: Not
+    Found`.
+  * ContentTooShortError has NO __str__ of its own and inherits URLError's, so
+    it stringifies as `<urlopen error short read>` and not as the bare
+    message. The shim's first draft gave it the bare message — which is what
+    it looks like it should do, and is wrong.
+  * `.reason` is the MSG on an HTTPError, not a transport reason, and
+    `.filename` is the url. On a bare URLError `.filename` is **None** — not
+    '', which is a filename that is the empty string. That was a real defect,
+    invisible to `if e.filename:` and fixed with this file.
+
+NOT ASSERTED, and each for a stated reason:
+
+  * **`str(e)` inside an `except` clause naming a BASE class.** pxx dispatches
+    __str__ by the static type of the clause, so `except URLError` catching an
+    HTTPError prints `<urlopen error Not Found>` where CPython prints
+    `HTTP Error 404: Not Found`, and `except OSError` catching a URLError
+    prints the bare reason. That is
+    bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
+    — a FRONTEND bug, not this shim's — and asserting it would make this file
+    fail under one interpreter, which is the property that makes it worth
+    having. It is the one divergence between these two modules today, so read
+    the green line below as "the classes agree", NOT as "logging a caught
+    urllib error prints the right thing". It does not.
+  * **`HTTPError.read()`.** CPython's HTTPError takes an open file object as
+    its `fp` and reads the body from it; ours takes the body as a string. The
+    constructor's fifth argument is therefore a different KIND of thing in the
+    two modules and cannot be spelled once. `read()` is covered on our side by
+    the urllib_request suite.
+  * `.headers`/`.info()` beyond the None case, for the same reason: a real
+    HTTPMessage is built by the opener, not by this module.
+"""
+
+from urllib.error import URLError, HTTPError, ContentTooShortError
+
+fails = [0]
+
+
+def check(label, got, want):
+    if got == want:
+        print(label + '=ok')
+    else:
+        fails[0] = fails[0] + 1
+        print(label + '=FAIL got=' + repr(got) + ' want=' + repr(want))
+
+
+# --------------------------------------------------------------- URLError
+u = URLError('name resolution failed')
+check('u_str', str(u), '<urlopen error name resolution failed>')
+check('u_reason', u.reason, 'name resolution failed')
+# .filename is None on a bare URLError -- NOT '', which `if e.filename:`
+# cannot tell apart and which claims a filename that is the empty string
+check('u_filename_is_none', u.filename is None, True)
+check('u_filename_repr', repr(u.filename), 'None')
+# the ancestry, which the shim's header calls load-bearing
+check('u_isinstance_oserror', isinstance(u, OSError), True)
+check('u_isinstance_exception', isinstance(u, Exception), True)
+check('u_isinstance_httperror', isinstance(u, HTTPError), False)
+# the angle brackets are part of the wording and appear in real logs
+check('u_str_empty_reason', str(URLError('')), '<urlopen error >')
+check('u_str_punct', str(URLError('[Errno -2] Name or service not known')),
+      '<urlopen error [Errno -2] Name or service not known>')
+
+# -------------------------------------------------------------- HTTPError
+h = HTTPError('http://example.invalid/p', 404, 'Not Found', None, None)
+check('h_str', str(h), 'HTTP Error 404: Not Found')
+check('h_code', h.code, 404)
+# CPython 3.9+ spells the same number .status too, and new code uses it
+check('h_status', h.status, 404)
+check('h_code_is_status', h.code == h.status, True)
+check('h_msg', h.msg, 'Not Found')
+check('h_url', h.url, 'http://example.invalid/p')
+# .reason is the MSG, not a transport reason -- the one field most likely to
+# be filled in by analogy with URLError and be wrong
+check('h_reason', h.reason, 'Not Found')
+# ...and .filename is the url here, where URLError leaves it None
+check('h_filename', h.filename, 'http://example.invalid/p')
+# the response face
+check('h_geturl', h.geturl(), 'http://example.invalid/p')
+check('h_getcode', h.getcode(), 404)
+check('h_headers_none', h.headers is None, True)
+check('h_info_none', h.info() is None, True)
+# the ancestry: an HTTPError is a URLError is an OSError
+check('h_isinstance_urlerror', isinstance(h, URLError), True)
+check('h_isinstance_oserror', isinstance(h, OSError), True)
+check('h_isinstance_exception', isinstance(h, Exception), True)
+# the status is interpolated as a number, so a 3-digit assumption would show
+check('h_str_500', str(HTTPError('http://x/', 500, 'Internal Server Error',
+                                 None, None)),
+      'HTTP Error 500: Internal Server Error')
+check('h_str_empty_msg', str(HTTPError('http://x/', 418, '', None, None)),
+      'HTTP Error 418: ')
+check('h_str_gone', str(HTTPError('http://x/', 410, 'Gone', None, None)),
+      'HTTP Error 410: Gone')
+
+# ---------------------------------------------------- ContentTooShortError
+c = ContentTooShortError('short read', '')
+# NO __str__ of its own: it inherits URLError's, brackets and all
+check('c_str', str(c), '<urlopen error short read>')
+check('c_reason', c.reason, 'short read')
+check('c_content', c.content, '')
+check('c_isinstance_urlerror', isinstance(c, URLError), True)
+check('c_isinstance_oserror', isinstance(c, OSError), True)
+check('c_isinstance_httperror', isinstance(c, HTTPError), False)
+c2 = ContentTooShortError('got 5 of 10 bytes', 'hello')
+check('c2_str', str(c2), '<urlopen error got 5 of 10 bytes>')
+check('c2_content', c2.content, 'hello')
+
+# ------------------------------------------------------------- catching
+# WHICH clause catches WHICH object is asserted; what str() PRINTS inside a
+# base-class clause is not -- see the header. These two are different
+# questions and only the second one diverges.
+try:
+    raise HTTPError('http://x/', 503, 'Unavailable', None, None)
+except URLError as e:
+    check('httperror_caught_by_urlerror', e.code, 503)
+except Exception:
+    check('httperror_caught_by_urlerror', 'fell through', 503)
+
+try:
+    raise HTTPError('http://x/', 503, 'Unavailable', None, None)
+except OSError as e:
+    check('httperror_caught_by_oserror', e.code, 503)
+except Exception:
+    check('httperror_caught_by_oserror', 'fell through', 503)
+
+try:
+    raise URLError('refused')
+except OSError as e:
+    check('urlerror_caught_by_oserror', e.reason, 'refused')
+except Exception:
+    check('urlerror_caught_by_oserror', 'fell through', 'refused')
+
+try:
+    raise ContentTooShortError('truncated', 'abc')
+except URLError as e:
+    check('ctse_caught_by_urlerror', e.content, 'abc')
+except Exception:
+    check('ctse_caught_by_urlerror', 'fell through', 'abc')
+
+# a URLError is NOT caught by an `except HTTPError` arm -- the direction that
+# would make `except HTTPError` swallow transport failures
+caught = 'no'
+try:
+    try:
+        raise URLError('refused')
+    except HTTPError:
+        caught = 'httperror'
+except URLError:
+    caught = 'urlerror'
+check('urlerror_not_caught_by_httperror', caught, 'urlerror')
+
+# str(e) on the object's OWN class is right, and that is what the __str__
+# methods are for; it is only the base-class clause that loses them
+try:
+    raise HTTPError('http://x/', 404, 'Not Found', None, None)
+except HTTPError as e:
+    check('httperror_own_clause_str', str(e), 'HTTP Error 404: Not Found')
+
+try:
+    raise URLError('boom')
+except URLError as e:
+    check('urlerror_own_clause_str', str(e), '<urlopen error boom>')
+
+if fails[0] == 0:
+    print('MIMIC-URLLIB-ERROR OK')
+else:
+    print('MIMIC-URLLIB-ERROR FAILED ' + str(fails[0]))

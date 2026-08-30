@@ -168,3 +168,49 @@ Closed as already-decided. [[bug-nilpy-empty-str-and-none-are-the-same-value]]
 is unblocked and is ordinary Track N work implementing the decided design; it
 carries Track A's `stabilize-fast` + `make pin` obligation because it touches
 `compiler/builtin/**`.
+
+---
+
+## 2026-08-30 (frankB) — RECORDED, not reopened: the rendering rows
+
+Per this ticket's own standing instruction — *"further string-model questions
+get parked in U, not settled in passing"* — these are added to the residual
+list and nothing here asks for a decision. Measured at pin v395, on a
+`pystr_none` stored into a published `AnsiString` field of a Pascal class and
+read back through NilPy attribute access.
+
+**The field read preserves it. Only `is` can see it.**
+
+| operation | pxx | CPython |
+| --- | --- | --- |
+| `x is None` | True | True |
+| `x == None` | **False** | True |
+| `x == ''` | **True** | False |
+| `bool(x)` | False | False |
+| `str(x)` | **`''`** | `'None'` |
+| `repr(x)` | **`"''"`** | `'None'` |
+| `'{}'.format(x)` | **`''`** | `'None'` |
+| `repr({'k': x})` | **`{'k': ''}`** | `{'k': None}` |
+| `repr([x])` | **`['']`** | `[None]` |
+
+The `== ''` row is already on this page. The new ones are the **rendering**
+side: a str-typed None prints as the empty string everywhere a value is
+rendered, and it does so inside containers too, so `print(d)` on a dict with a
+None-valued str field shows `''` where CPython shows `None`.
+
+Same conflation as the `==` row and it survives the decided fix for the same
+reason — under the decided representation a None-str stays nil, so the
+renderer still sees a zero-length handle and cannot distinguish it. The likely
+shape of the answer is the same one this page already guesses for `==`: the
+renderer consults the meta word for a nil operand.
+
+**Why it was measured here:** `mimic_urllib_error.pas` needed a `.filename`
+that is None-or-str, matching CPython. `pystr_none` in an `AnsiString` field
+gets `is None` right and `repr` wrong, so a differential could not pin it; the
+field is now a **Variant holding `pynone`**, which is exact on every row above.
+That is the workaround available today to any shim with a nullable str field,
+and it is worth knowing before someone reaches for `pystr_none` and gets eight
+of these nine rows.
+
+No ticket filed: this is the decided-but-unbuilt string model, and a new one
+would be the fifth re-ask.

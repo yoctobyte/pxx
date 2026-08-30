@@ -32,12 +32,27 @@ unit mimic_urllib_error;
      `class(Exception)` here would land in the wrong tree and NilPy would not
      stringify it as a Python exception at all. `OSError` is declared only by
      pylib, so naming it cannot pick the wrong tree.
-  2. `str(e)` currently dispatches `__str__` by the STATIC type of the except
-     clause, so `except URLError` sees these methods and `except Exception`
-     does not — see
+  2. `str(e)` dispatches `__str__` by the STATIC type of the except clause
+     rather than the object's runtime type — see
      bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base.
-     That bug is NOT why these methods exist; they would be here for CPython
-     parity regardless, and they are what makes the common arm right today. }
+     **This note used to end "they are what makes the common arm right today",
+     and that claim is false**; it was measured on 2026-08-30 while writing
+     test/lib_mimic_urllib_error.npy and is wrong in both directions that
+     matter:
+
+       * `except URLError as e` catching an **HTTPError** prints
+         `<urlopen error Not Found>` instead of `HTTP Error 404: Not Found`.
+         The status code — the single most useful thing in the message — is
+         gone, and `except URLError` is the commonest idiom in the wild.
+       * `except OSError as e`, which this unit's own ancestry note says code
+         in the wild writes around urlopen, prints the bare reason with no
+         `<urlopen error ...>` wrapper at all.
+
+     So the intermediate class is not a special case that happens to work: the
+     dispatch is genuinely static, and only an `except` clause naming the
+     object's exact class sees these methods. They are still here for CPython
+     parity, which is reason enough — but do not read them as covering the
+     common arm, because they do not. }
 
 interface
 
@@ -51,9 +66,22 @@ type
   URLError = class(OSError)
   public
     reason: AnsiString;
-    { CPython sets .filename only when the opener knows one; it is here so an
-      `e.filename` read does not fail on a class that CPython gives one. }
-    filename: AnsiString;
+    { CPython sets .filename only when the opener knows one and leaves it
+      **None** otherwise. This field used to be an AnsiString initialised to
+      '', which is a filename that IS the empty string rather than no filename
+      at all -- a difference `if e.filename:` cannot see and `e.filename is
+      None` can.
+
+      It is a Variant rather than an AnsiString-holding-`pystr_none` because of
+      what the str-typed None can and cannot do, measured rather than assumed:
+      `pystr_none` DOES survive the field read (`e.filename is None` answers
+      True), but only `is` sees it -- `== None` answers False, `== ''` answers
+      True, and `str()`/`repr()`/interpolation/containment all render it as ''.
+      Those are the known residuals of the decided-but-partly-unbuilt NilPy
+      string model (decide-nilpy-none-str-representation); a Variant holding
+      `pynone` sidesteps every one of them and is the honest type for a field
+      CPython documents as None-or-str. }
+    filename: Variant;
     constructor Create(const reason: AnsiString);
     function __str__: AnsiString;
   end;
@@ -112,7 +140,7 @@ begin
   { the base carries `msg`, which is what a bare `except Exception as e` reads }
   inherited Create(reason);
   Self.reason := reason;
-  Self.filename := '';
+  Self.filename := pynone;   { CPython: no filename unless the opener knows one }
 end;
 
 function URLError.__str__: AnsiString;
