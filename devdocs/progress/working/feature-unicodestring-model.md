@@ -932,7 +932,7 @@ the programs that ask for it.
 Remaining: **6c** (param/return carriers), then **6d** (`^WideString`, blocks
 7b), then **7b/7c** (the alias break + sysutils, one commit).
 
-## 6c-params — landed (`1557a2d47`)
+## 6c-params — landed (`d3989b7a3`)
 
 `ProcParamStrElemTk`, the param half of the fifth carrier. Inert: nothing reads
 the column yet, every width written today is `Ord(tyChar)`, and a string-param
@@ -1191,7 +1191,7 @@ correctly will not show up until then. The near-miss above is exactly that
 failure mode caught early; assume there are others and treat 7b's first wide
 program as a test of 6a–6d rather than of 7b alone.
 
-## 7b — landed behind `PXX_WIDE_PAYLOAD` (`e031655e3`)
+## 7b — landed behind `PXX_WIDE_PAYLOAD` (`49f1cc801`)
 
 `WideString`/`UnicodeString` become the wide **element width** of the one
 managed-string kind instead of a bare alias — but only under the define. Default

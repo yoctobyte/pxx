@@ -44,3 +44,5 @@ nothing and defeats the point of keeping this file.
   5 / 195, and the tempting reading was a divergence. With `cwstring` FPC matches
   pxx on all five positions. The playbook already warned about the first knob,
   which is how the second one got mistaken for it.
+
+2026-08-30 | frank-user | devdocs/progress/working/feature-unicodestring-model.md | Repaired two ghost sha citations: `1557a2d47` -> `d3989b7a3` (6c-params / ProcParamStrElemTk) and `e031655e3` -> `49f1cc801` (7b behind PXX_WIDE_PAYLOAD). Both originals are pre-rebase and on no remote ref; recovered by matching the commit SUBJECT on origin/master, which is why writing a real subject line pays for itself. Confirmed with `git merge-base --is-ancestor`, NOT `git cat-file -e` — the latter answers about the author's own object store, where the pre-rebase object still lives, so it is exactly the check that cannot tell a ghost from a commit. Ticket is live in working/ and untouched apart from the two identifiers; flagged to its owner. `progress.sh check` DANGLING-SHA count 2 -> 0.
