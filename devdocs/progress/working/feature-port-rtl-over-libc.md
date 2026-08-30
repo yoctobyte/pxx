@@ -401,3 +401,46 @@ This is strictly better than what was reverted, and it does not depend on the
 rel8 bug being fixed first. It still writes no call site: `EmitSyscall`'s body
 and one new thunk emitter, exactly the disjointness the `ir_codegen.inc` grant
 rests on.
+
+### The one open question in the thunk design: WHERE to emit it
+
+The thunk itself is settled — the reverted sequence's body, ending in `ret`,
+emitted once, with `EmitSyscall` reduced to a 5-byte `call rel32`. What is not
+settled is placement, and it is the only reason increment 2 is not landed:
+
+**`EmitSyscall` fires mid-emission**, in the middle of a routine's code, so the
+thunk cannot simply be emitted where it is first needed — execution would fall
+straight into it. The repo's existing lazy-stub pattern
+(`EnableCoroutineRuntime` → `EmitCoroutineRuntime`, `coroutine_emit.inc:23`)
+works because it is triggered from a **parse** point, which is always a boundary
+between routines. There is no equivalent boundary available inside
+`EmitSyscall`.
+
+Three candidate placements, none yet validated:
+
+1. **Lazy, with a `jmp` over the body at first use.** Self-contained, but the
+   first site still emits ~140 bytes inline — and if that first site happens to
+   be one of the ~30 that a `rel8` patch spans, it trips
+   [[bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows]] exactly as
+   the reverted attempt did. It trades a certain failure for a positional one,
+   which is worse, not better, because it would pass on some programs.
+2. **Eager, at the earliest code-emission point when the flag is set.** Correct
+   by construction, but it needs the program-entry convention to be understood
+   first: if the ELF entry is code offset 0, the thunk must be jumped over and
+   the entry stays put. Worth confirming against `elfwriter.inc` rather than
+   assumed.
+3. **Alongside the other runtime stubs**, via a new `EnableLibcSyscallRuntime`
+   invoked once from the same parse-time place the coroutine/exception runtimes
+   are enabled. Most idiomatic; needs a call site that is guaranteed to run
+   before any `EmitSyscall`, which is the part to verify.
+
+**(3) is the most likely answer and (2) is the fallback.** Whoever continues
+should settle the placement question FIRST, on its own, before writing the
+thunk body — the body is already written and measured in the reverted attempt
+and can be lifted from this ticket's history.
+
+Related caution for whoever does it: b4 reports `InternStr` now writes a 24-byte
+header at **negative offsets** from `Strs[].Offset` and the entry is 8-aligned
+before that write, so anything that reorders or re-bases **data** emission near
+`_start` must preserve both. The thunk is code, not data, so this should not
+apply — but placement work near program entry is exactly where it would.
