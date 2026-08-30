@@ -10223,3 +10223,111 @@ that crashes) and are one cause.
 **A doc entry written as a symptom protects against exactly the instance it names.** Written as
 a mechanism, it protects against the family. The distance between those two is one sentence, and
 the entry had been sitting one sentence short for long enough to catch a reader of itself.
+
+---
+
+## 209 — A BOUNDS CHECK AGAINST THE WRONG BOUND IS NOT A BOUNDS CHECK
+
+*(frank-optimize-b4, 2026-08-30, its own page-align patch going red — and the richest single
+debugging report of the night.)*
+
+One line of the padding loop:
+
+```pascal
+Code[CodeLen] := 0; Inc(CodeLen);     { wrong }
+```
+
+`Code` is `array of Byte` — **dynamic**, grown by `GrowCode` when `CodeLen >= CodeCapacity`,
+capacity starting at 64 KiB. b4 bounds-checked against **`MAX_CODE` (32 MiB)**.
+
+> **I bounds-checked against `MAX_CODE`, which is not the bound that exists.**
+
+Two bounds, one *logical* (the largest program we will accept) and one *physical* (what is
+allocated right now), and only the second can be overrun. The check was present, deliberate, and
+against the wrong number — so it read as diligence in review and in the diff. The fix is
+`EmitB(0)`, the growth-aware primitive that already existed: **the safe path was a call away and
+the unsafe one was one character shorter.**
+
+### 209a — the symptom, which is the canonical shape this repo is built to fear
+
+The overrun landed in **`GlobFix`**, the ELF writer's table of 4-byte global-reference patch
+sites. Every entry came back **zeroed**. So the writer performed 185 iterations of
+`Patch32(0, bssBase + 0)`: it patched **every** global reference to the same wrong value at code
+offset **0** — on top of the entry instruction's opcode — and left all 185 real sites holding
+zero.
+
+`test/test_ansistring.pas` then died **`SIGILL` at its first instruction**.
+
+A table correct 200 lines earlier, an output binary whose *first byte* is corrupt, and a fault
+site with **no relationship to the cause** — all from a one-line array write. This is
+`debugging-playbook.md`'s thesis in a single incident: *the expensive bugs here do not crash,
+they produce a plausible wrong value far from the cause*, and when they do crash, the crash site
+is noise.
+
+### 209b — two readings, each locally true, jointly incoherent: neither is the cause
+
+b4 spent **two rounds inferring from the byte diff** — *"the patch is off by one"*, then *"the
+patch is missing"* — before measuring:
+
+> *Both readings were locally true and jointly incoherent, which should have been my tell
+> sooner.*
+
+That is a **general, cheap trigger**, and it is the same instrument frankS used to catch a
+swapped baseline file (13 lost + 6 gained cannot make +1). When two explanations each fit their
+own evidence and contradict each other, the resolution is almost never that one is right — it is
+that **both are downstream of something neither describes.** The incoherence is the signal, and
+it arrives *before* any further analysis, for free.
+
+What settled it was two `writeln(StdErr)` lines around the pad loop:
+
+```
+DBG pre-pad  CodeLen=65379 globfix=185 gf0.pos=1 gf0.bss=0
+DBG post-pad CodeLen=69456 globfix=185 gf0.pos=0 gf0.bss=0
+```
+
+`gf0.pos` **1 → 0 across the loop.** One number, and the whole story collapses to it. Two rounds
+of reasoning against two print statements.
+
+### 209c — in a self-hosting compiler, one change moves the tool AND the product
+
+**The control b4 nearly skipped, and the one most specific to this codebase.** Rebuilding with
+the fix changes *two* things at once: the writer pads, **and the compiler binary is itself
+padded**. So "it works now" cannot say which.
+
+b4 separated them: it had the **known-good unpadded compiler build a padded-logic compiler**
+(`r1`), and `r1`'s output was broken too. That pinned the fault to the writer logic and cleared
+the self-host binary **before touching anything**.
+
+Generalise it: **in a self-hosting compiler every codegen change is applied twice — once to the
+artefact under test and once to the instrument producing it — and "the new build works" conflates
+them.** The separation is one extra build and it is the difference between a diagnosis and a
+coincidence. Compare 199, where the act of bisecting *was* the fix; here the act of rebuilding
+*is* half the change.
+
+### 209d — the honest null on the arm that could only have embarrassed it
+
+Verification with **both arms built at the same HEAD** — b4 rebuilt the *before* arm with only
+the three call sites commented out, rather than comparing against an older binary, so nothing but
+the padding differs.
+
+| subject (`-O3`, `test_static_string_literals`) | before `a2701c58b005` | after `f50ff77ecd42` |
+| --- | ---: | ---: |
+| qemu-aarch64 | 91.69 s | **0.32 s** (287×) |
+| qemu-x86_64 | 13.83 s | **0.09 s** (154×) |
+| native x86-64 (200 runs, interleaved) | 6.50 / 5.10 ms | 5.85 / 5.30 ms |
+
+All six runs exit 0 and print the same nine lines ending `done` — **output checked before
+timing**, after the −83.9 % segfault taught that lesson (191a).
+
+And the native row, read honestly by the person who would have benefited from reading it
+otherwise:
+
+> *No measurable cost, and the spread is larger than the difference. I ran it interleaved
+> before/after/before/after precisely so that would be visible rather than hidden in a single
+> pair; **5.10 ms and 6.50 ms are both the before arm.** Anything claiming a native win or loss
+> from these numbers would be reading noise.*
+
+Two 287× rows and a null in the same table, with the null stated as a null. **Interleaving is
+what made the noise floor visible at all** — a single before/after pair would have offered a
+9 % "regression" or a 20 % "win" depending on which sample landed where, and either would have
+been defensible in isolation.
