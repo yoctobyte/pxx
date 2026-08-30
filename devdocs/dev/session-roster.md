@@ -20316,3 +20316,84 @@ the "PARKED and that is correct" line that once kept six sessions idle while p75
 sat ready.
 
 **Outstanding for the owner's wait: frankwasm alone.**
+
+## Tick 2026-08-30 ~11:5x — SIX conformance shards went red today, and I had been reporting TWO
+
+frankwasm landed **`f3469644a` `feat(wasm): compiler.pas lowers COMPLETELY, and
+runs`** at 11:33 — the compiler itself lowers to wasm end to end. Branch `wasm`,
+0 unpushed, 1 file dirty; still working. `working/` holds only `.gitkeep` —
+**zero locks**, b4's park landed as `780ec9f7c`. Seed green (219552 lines). Pin
+unchanged, v394. Five of six lanes clean and stopped.
+
+### THE FINDING, AND IT IS A CORRECTION OF MY OWN REPORTS
+
+I have twice told the owner master carries **two** standing native reds. As of the
+**09:10Z full tier** it carries **ten**, and six of those are new today:
+`test-pascal-conformance#shard0..5` — every shard of the conformance suite.
+
+**How I missed them: I grepped the STILL-RED section.** They arrived in
+**NEW-RED**, in the same report I had already read, and the watcher auto-filed six
+tickets for them (`b5fe07ed0`) which I did not look at either. Face 240's first
+link, mine this time — **the case was not in the population I searched.** The full
+tier's red count went 4 → 10 in nineteen minutes and I read the newest report
+without diffing it against the previous one.
+
+### THE MECHANISM POINTS AT TODAY'S `object` CHANGE — but I have NOT verified it
+
+All six report the same family: `tgenconstraint{6,10,16,21,27,32}.pp
+(accepted-invalid)` — `{ %FAIL }` tests we have stopped rejecting.
+`ugenconstraints.pas:65` declares **`TTestObject1 = object`**, and three of the six
+specialize a template with it:
+
+| test | specialization | constraint |
+| --- | --- | --- |
+| `tgenconstraint6` | `TTest1<TTestObject1>` | `TTest1<T: class>` |
+| `tgenconstraint10` | `TTest3<TTestObject1>` | `TTest3<T: TTestClass>` |
+| `tgenconstraint16` | `TTest5<TTestObject1>` | `TTest5<T: IInterface>` |
+
+`object` is exactly what changed today — `d23f52948`, ~08:50Z, `object` stops being
+a rooted class reference and becomes the standard value type. **The shards went
+NEW-RED twenty minutes later**, and no compiler file changed between that tier and
+the next.
+
+**Mechanism read from the test sources, not inferred from ownership or timing
+alone — and still NOT a verified cause.** I have not bisected and have not run one
+of these tests. The disconfirming measurement is one command: `tgenconstraint6.pp`
+against `pinned` and against HEAD. Written into all six tickets so whoever takes it
+starts there.
+
+**The shape, if it is the object change:** a *value* type should fail a `class`
+constraint **more** obviously than a rooted class reference did. So "we stopped
+rejecting it" suggests the checker **lost the information it decides on** rather
+than deciding differently — and a checker that falls through to *accept* may be
+accepting other invalid specializations silently. That is why this outranks the
+compat table's *"we accept a form FPC rejects → not a defect"* row: **these were
+green this morning**, and that row is about deliberate dialect laxness, not about a
+check that stopped firing.
+
+`tgenconstraint21` (`TTest8<ITest1>`) and `27` (`TTest15<TTestClass4>`) involve no
+`object` at all, so either the cause is broader or there are two. **Do not close
+the shards on the object link alone** — written into the tickets.
+
+### RETRACKED T → P, and this time the fallback SAID it was a fallback
+
+All six were auto-filed `track: T`, with the banner *"Track T by default: no lane
+could be inferred from `tools/run_pascal_conformance.sh`. This is a FALLBACK, not a
+finding… Re-lane it before working it."* **That banner is the difference between
+this and the two reds I retracked an hour ago**, which were filed `track: P` by a
+guess from the test path and said so only in the same small print. A fallback that
+announces itself is a fallback you can act on; a guess that prints like a decision
+is one you have to catch. Same tool, two behaviours — worth making uniform when
+the pause lifts.
+
+Re-laned to **P** (generic constraint checking is frontend semantics), with the
+mechanism and the falsifier in each.
+
+### CONSEQUENCE FOR THE PIN — the owner's call, stated plainly
+
+A pin would bless a master whose full tier is RED on ten jobs, six of them a
+same-day regression in the conformance suite with an unverified but specific link
+to a change that landed this morning. None of it is in the pin gate's path
+(`gate.sh quick` + `stabilize-fast`), so a pin CAN proceed. **It should not proceed
+without the owner being told this**, which is the correction my last two state
+reports needed.

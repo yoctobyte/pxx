@@ -65,12 +65,12 @@ _none — no lane is locked._
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [A]` regression-test-asm-test-asm-emit-rv32
 - `[p 70] [A]` regression-test-core-test-opt-store-reload
-- `[p 70] [T]` regression-test-pascal-conformance-shard0-6-3
-- `[p 70] [T]` regression-test-pascal-conformance-shard1-6
-- `[p 70] [T]` regression-test-pascal-conformance-shard2-6
-- `[p 70] [T]` regression-test-pascal-conformance-shard3-6
-- `[p 70] [T]` regression-test-pascal-conformance-shard4-6-3
-- `[p 70] [T]` regression-test-pascal-conformance-shard5-6-3
+- `[p 70] [P]` regression-test-pascal-conformance-shard0-6-3
+- `[p 70] [P]` regression-test-pascal-conformance-shard1-6
+- `[p 70] [P]` regression-test-pascal-conformance-shard2-6
+- `[p 70] [P]` regression-test-pascal-conformance-shard3-6
+- `[p 70] [P]` regression-test-pascal-conformance-shard4-6-3
+- `[p 70] [P]` regression-test-pascal-conformance-shard5-6-3
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators

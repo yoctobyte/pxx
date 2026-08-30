@@ -427,12 +427,12 @@ _none_
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-rv32 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_rv32.pas red at 108ac182bed6 (auto-filed by twatch) | — |
 | regression-test-core-test-opt-store-reload | A | 70 | regression | regression: test-core#src:test/test_opt_store_reload.pas red at c951ec710b33 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard0-6-3 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 red at f6303d410d78 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard1-6 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at f6303d410d78 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard2-6 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at f6303d410d78 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard3-6 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at f6303d410d78 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard4-6-3 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at f6303d410d78 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard5-6-3 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard0-6-3 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard1-6 | P | 70 | regression | regression: test-pascal-conformance#shard1/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard2-6 | P | 70 | regression | regression: test-pascal-conformance#shard2/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard3-6 | P | 70 | regression | regression: test-pascal-conformance#shard3/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard4-6-3 | P | 70 | regression | regression: test-pascal-conformance#shard4/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard5-6-3 | P | 70 | regression | regression: test-pascal-conformance#shard5/6 red at f6303d410d78 (auto-filed by twatch) | — |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-a-fix-on-one-backend-should-name-what-it-checked-on-the-others | A | 40 | task | Three fixed-on-one-target-left-on-the-others defects surfaced in one night, all by the same mechanism: a fix is written where the bug was observed, and the sibling backends have no observer. normalise-dont-special-case.md already says to grep for the sibling before closing; it is not being followed, and one of the three shows why -- the unfixed sibling's own comment ADMITTED the gap and nothing routed a reader to it. | — |
@@ -772,12 +772,12 @@ _none_
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [A] regression-test-asm-test-asm-emit-rv32
 - [p 70] [A] regression-test-core-test-opt-store-reload
-- [p 70] [T] regression-test-pascal-conformance-shard0-6-3
-- [p 70] [T] regression-test-pascal-conformance-shard1-6
-- [p 70] [T] regression-test-pascal-conformance-shard2-6
-- [p 70] [T] regression-test-pascal-conformance-shard3-6
-- [p 70] [T] regression-test-pascal-conformance-shard4-6-3
-- [p 70] [T] regression-test-pascal-conformance-shard5-6-3
+- [p 70] [P] regression-test-pascal-conformance-shard0-6-3
+- [p 70] [P] regression-test-pascal-conformance-shard1-6
+- [p 70] [P] regression-test-pascal-conformance-shard2-6
+- [p 70] [P] regression-test-pascal-conformance-shard3-6
+- [p 70] [P] regression-test-pascal-conformance-shard4-6-3
+- [p 70] [P] regression-test-pascal-conformance-shard5-6-3
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
