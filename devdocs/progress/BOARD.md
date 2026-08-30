@@ -62,7 +62,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (343)
+## backlog (344)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -91,6 +91,7 @@ _none_
 | bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout | A | 25 | bug | ir.inc:9399 says a promotable-int store's two paths 'both go through promocore.pas, the only place that knows the layout'. x86-64's hand-emitted variant-release blob in ir_codegen.inc reads the payload as a literal [rax+8] at three sites, so it knows the layout too. The values agree today so nothing is broken — but this is the same arm, the same shape and the same file as instance #4 of the audit, where an x86-64 hand-emitted twin of a 'single choke point' silently diverged for two months. | — |
 | bug-a-pxx-home-is-advertised-but-not-honoured | A | 35 | bug | `--where` advertises PXX_HOME as tier 2, overriding the exe-dir defaults, but setting it changes nothing: units still resolve from compiler/../lib/rtl, and even REMOVING a unit from the PXX_HOME tree does not produce 'unit not found'. Found while trying to test a compiler hypothesis against a modified copy of the RTL instead of editing Track B's files. | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
+| bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards | A+S | 50 | bug | riscv32's PC-relative encoders silently truncate; xtensa already guards | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-rtti-reg-and-resources-are-missing-on-riscv32 | A | 50 | bug | `IR_RTTI_REG` and `IR_RESOURCES` have no riscv32 arm — anything that USES typinfo fails to compile | — |
 | bug-a-set-membership-truncates-the-test-value-on-32-bit-backends | A | 25 | bug |  | — |
@@ -823,6 +824,7 @@ _none_
 - [p 55] [A+S] ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
+- [p 50] [A+S] bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
