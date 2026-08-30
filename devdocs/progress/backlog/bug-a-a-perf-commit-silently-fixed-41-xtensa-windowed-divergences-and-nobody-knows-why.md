@@ -1,7 +1,7 @@
 ---
 slug: bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 track: A+S
-prio: 45
+prio: 60
 type: bug
 blocked-by: []
 status: backlog
@@ -101,3 +101,95 @@ answer look settled.
 Whatever the mechanism turns out to be, the windowed differential must stay at
 94 or better, and the property that keeps the 41 green must be asserted by
 something other than the page padding.
+
+## DIAGNOSED 2026-08-30 (frankS) — masked defect confirmed. THE DATA SECTION IS NOT ALIGNED.
+
+The ticket asked for the emitted code to be diffed before theorising. Done, and
+the answer is the branch that wants a test.
+
+### 1. Codegen is identical BY CONSTRUCTION
+
+`75d2ba662` touches exactly one compiler file: `elfwriter.inc`. No backend, no
+IR, no codegen. So the instruction stream this commit produces cannot differ —
+and the 217 bytes that do differ in the first 195,723 are shifted **address
+immediates** plus the header, exactly the signature of data moving underneath
+unchanged code.
+
+### 2. The failure is not a wrong value. It is SIGBUS.
+
+`test_cross_record`, windowed, same source, same libs:
+
+| build | result |
+| --- | --- |
+| `75d2ba662^` | `qemu: uncaught target signal 7 (Bus error) - core dumped` |
+| `75d2ba662` | `Alice 30 / Bob 30 / Bob` — matches the x86-64 oracle |
+
+Signal 7 on xtensa is an **alignment fault**. Sampled further: `test_cross_dynarray`,
+`test_interfaces` and `test_cross_sets` all SIGBUS on the parent build;
+`test_cross_variant` gets partway (`42`) and then diverges.
+
+### 3. The alignment that changed
+
+The reported code length, which is where the data section begins:
+
+| build | `code=` | mod 4 |
+| --- | --- | --- |
+| `75d2ba662^` | 195723 | **3** |
+| `75d2ba662` | 196492 | **0** |
+
+The data section began three bytes past a word boundary. Every 32-bit datum in
+it whose in-section offset is not ≡1 (mod 4) is therefore misaligned, and xtensa
+faults on an unaligned word load where x86-64 and riscv32 do not. The page
+padding 4-aligned the section as a side effect, and that is the whole of the fix.
+
+**So the ELF writer never aligned the data section at all**, on any target. It
+began wherever code happened to end.
+
+### 4. A sub-hypothesis I checked and it was WRONG — recorded because it shapes the fix
+
+I predicted `code mod 4` would separate the 41 gained programs from the 53 that
+already passed. It does not: **every** sampled program in BOTH groups is ≡3
+(mod 4) on the parent build.
+
+That refutes "the 41 are the unlucky ones" and replaces it with something worse:
+**the misalignment is universal and always was.** Which program faults depends
+only on whether it dereferences a data word that lands misaligned — so the
+aggregate/RTTI-heavy family (records, dynamic arrays, interfaces, variants,
+sets) faults because it reads multi-word descriptors, and the other 53 pass by
+touching nothing misaligned. The 53 were never safe; they were untested.
+
+### 5. What this means for the repair — and it is NOT "keep the padding"
+
+The 41 are green on a **side effect**. The data section still has no alignment
+guarantee; it currently gets one from a padding step introduced for a qemu
+translation-cache reason, sized by `ELF_DATA_PAGE = 4096`. Anything that changes
+that arithmetic can take all 41 back with no diagnostic:
+
+- a second PT_LOAD so data is not executable — **already an open ticket, cited
+  in `75d2ba662`'s own body**
+- a 16 KiB-page host, which `75d2ba662`'s comment says leaves a residual shared page
+- `--emit-obj`, where the hosted layout does not apply
+- any ESP image, which is not laid out like a hosted ELF at all
+
+**The fix is to align the data section explicitly, as a stated invariant with a
+test that asserts it** — not to rely on the padding continuing to imply it. The
+alignment should be the target's word size at minimum; 8 is safer given
+`Int64`/`Double` data.
+
+Prio raised 45 → 60: not because it is failing today, but because it is a
+correctness property held up by an unrelated perf change while that same file is
+under active edit.
+
+### 6. LIVE COORDINATION HAZARD
+
+frank-optimize-b4 owns `75d2ba662` and is in `elfwriter.inc` **now**, on further
+page-align work. The 41 programs are the canary for this property and nothing
+currently watches them: **they are not in any gated suite** — the 129-source
+differential is my scratch harness, and `test-xtensa` does not run the windowed
+ABI at all. Wiring a windowed alignment assertion is the cheap protection.
+
+### Not fixed here, deliberately
+
+Diagnosis only. The mechanism is the ELF writer's, not the xtensa backend's, and
+whoever repairs it should own that file rather than inherit it from the lane
+that noticed.
