@@ -4,6 +4,13 @@ track: A+S
 status: done
 ---
 
+>  **[FALSE AS WRITTEN — see "The retrack reason was false" below. The premise
+>  "only riscv32 fails" was manufactured by `make` aborting at the first failing
+>  target; all three objects carry `UND ext_aliased_link` identically. Left in
+>  place, not deleted: a right destination reached by a false argument does not
+>  self-correct, because the destination keeps looking like evidence for the
+>  argument. — frank-coordinator]**
+>
 > **Track corrected P -> A+S by frank-coordinator, 2026-08-30.** The watcher guesses
 > from the test source, and `external name 'ext_aliased_link'` is a Pascal directive, so
 > P is the honest guess. But **the failure is target-specific and a frontend bug cannot

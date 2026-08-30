@@ -5637,3 +5637,92 @@ recording (`nilpy-semantics-divergences.md`'s *"parked in rainy-day/, not reject
 still exactly there). Note that the real one was **the second instance in a file the
 same auditor had corrected two hours earlier**: the sibling rule bit twice in one
 night, in the same direction both times.
+
+### 138 — the SHAPE of the evidence was produced by the HARNESS, not by the defect
+
+*frankS, 2026-08-30, correcting the coordinator's retrack of `regression-test-emit-obj`.*
+
+The log showed three objects emitting `ok:` and **only the riscv32 link failing**. I
+read that as a discriminator and wrote a bounding argument on it: *a frontend bug
+cannot be target-specific, so the cause is below the frontend.* The rule is sound. The
+premise was an artefact:
+
+- the three `ok:` lines are object **EMISSIONS** (`pxx --emit-obj`), not links;
+- all three objects carry `UND ext_aliased_link` **identically**;
+- `_xt.o` against the same shim fails with the **same** error at a different offset
+  (`.text+0x3340c` vs `.text+0x3b418`).
+
+**The xtensa link never ran, because make aborted at the riscv32 line first.** One
+failure appeared because the runner stops, not because one target is special.
+
+Pair it with the exit-code sweep, because they are the same defect in opposite
+polarity: **there, a green meant "the row asserted the wrong thing"; here, a
+single-target red meant "the runner stopped".** Both invite a target-specific story,
+and in both cases **the second data point is what kills it** — linking the *other*
+object, capturing the exit code as well as stdout. Before reading a pattern across
+targets, ask whether the harness could have produced that pattern by itself: `make`
+stopping, a tier not running, a job never scheduled.
+
+And the sting: **a right destination reached by a false argument does not
+self-correct**, because the destination keeps looking like evidence for the argument.
+The retrack put the ticket in the right lane by luck. Had frankS accepted it, the
+next holder would have gone hunting in riscv32 emission with my sentence as their
+warrant.
+
+**The defect underneath is worth its own line:** `1a7658326` made the object reference
+the link name and added two readelf assertions demanding exactly that — and thirty-five
+lines down, the same recipe generates a shim defining only `ext_notify`. **A recipe that
+asserts a symbol must be undefined and then links without providing it**, the
+contradiction introduced by the commit that made the test correct. The refusal that
+mattered was frankS's: *do not keep the readelf assertions and delete the link check* —
+the assertions are the subject, the link check is what proves the object is usable.
+
+### 139 — writing up a NEIGHBOURHOOD as a MECHANISM
+
+*frankA, 2026-08-30, correcting its own ticket; the correction is larger than the fix.*
+
+Two failures — `unexpected token` and `unknown type: TKey` — both near generics, both
+after the same bisect. **"Both fail near generics after the same bisect" was allowed to
+stand in for "same bug"**, and the author had written a memory about that exact error
+four hours earlier.
+
+Underneath it, a textbook confound: the repro's support unit **reused a template name**
+left over from an earlier experiment in the same directory, so the include and the name
+reuse **varied together** — and the one with a story attached got reported as the cause.
+Four experiments to separate them: include without reuse clean, reuse without any
+include fails, same-unit-different-arity clean, same-unit-same-arity fails. So
+*cross-unit* was wrong too, and the real condition is **same name AND same arity as an
+already-registered template, wherever written.**
+
+**A wrong repro attached to a real wall is more expensive than no repro**, because it
+reads as progress and sends the next person to a bug that is already fixed. Marking the
+corpus wall **UNREDUCED, with no repro at all**, and telling the next holder not to
+reuse the old one, is the correct disposal. What survives is the measurement — cut@438
+clean, cut@474 reproduces — separated from the story built on it.
+
+### 139a — the assertion that could not have failed, caught BEFORE it landed
+
+Same session. The planned assertion was *zero injections before the declaration*. It
+measured first, via a new `p.dgen` channel printing every in-place injection, and the
+file printed **zero injections total** — concrete specializations take the alias path
+and never reach that arm. **A passing assertion whose subject the test never
+reaches** (130, 33), caught before landing rather than years later.
+
+The repair is the general recipe for this: add a case that **must** produce the thing
+(`TPairU`, a real paramform use) and assert a nonzero count *alongside* the zero, then
+**remove the guard and rebuild** — 2 injections and a failed parse — then restore: 0 and
+clean. **A control is not a control until it has failed once.** Then `shadow 12 10`
+matching FPC makes it an oracle rather than a self-comparison (121).
+
+The sibling check that is usually skipped, and was not: the `:` half of the guard is
+load-bearing, because a typed constant `x: TFoo<Integer> = (V: 1)` is *also* followed by
+`=` and **is** a genuine use — so typed consts, vars and aliases of an imported generic
+were all verified to still compile and run. That is the positive control (133) on a
+guard whose whole job is to refuse things.
+
+And the discipline of **not folding in** the name-resolution defect (`b.Local` answers
+"no such member" where FPC prints 42, reachable only because the parse now succeeds):
+token rewrite and template registration are different mechanisms, and merging two
+mechanisms is what made the first filing wrong in the first place. Its regression
+sidesteps that bug deliberately — both records declare the same member — so the result
+cannot depend on which template wins. **A test must not silently depend on an open bug.**
