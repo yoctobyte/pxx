@@ -8,16 +8,15 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45 | A+S | 50 | feature | Xtensa implements 31 IR ops; riscv32 implements 45 and aarch64 53 | — |
-| feature-nilpy-enum-class | N | 62 | feature | `from enum import Enum` — enum classes are not supported | — |
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
-## unfinished (27)
+## unfinished (28)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -35,6 +34,7 @@ _none_
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-lib-tkinter-grid-pad-accepts-a-two-tuple | B | 45 | feature | CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence. | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
+| feature-nilpy-enum-class | N | 62 | feature | `from enum import Enum` — enum classes are not supported | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-user-defined-decorators | N | 68 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
@@ -735,6 +735,7 @@ _none_
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
 - [p 62] [U] decide-nilpy-what-version-does-sys-version-info-claim
 - [p 62] [A] feature-a-typeref-migrate-consumers
+- [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)

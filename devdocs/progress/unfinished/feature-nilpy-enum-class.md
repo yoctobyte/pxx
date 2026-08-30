@@ -2,8 +2,8 @@
 track: N
 prio: 62
 type: feature
-status: working
-owner: frankwasm
+status: unfinished
+owner: ""
 ---
 
 # `from enum import Enum` — enum classes are not supported
@@ -138,3 +138,32 @@ next door was reverted rather than shipped
 `from enum import Enum` must also stop erroring — but only once the class
 semantics are real, since an import that resolves and a base that does nothing
 is the same silent failure one step earlier.
+
+## The implementation map — every hook named
+
+Traced end to end before stopping, so the build starts at the edits. Each piece
+has an existing analogue in the `@dataclass` path; none of it is novel
+machinery, and that is the point.
+
+| # | piece | where | analogue |
+| --- | --- | --- | --- |
+| 1 | detect `class X(Enum)` | `PyHoistClassMembers` ~`:35200`, where `isDC` is decided by looking BACK for `@dataclass`. Enum's marker is a BASE — `Tokens[i+2]='('`, `Tokens[i+3]='Enum'` — so it is a cheaper test at the same spot | `isDC` |
+| 2 | register the synthetic ctor + the `name`/`value` fields | `PyRegisterClassMembers`, the `if isDC and not fieldsOnly` branch at `:33985` | same branch |
+| 3 | emit the ctor body `__init__(self, n, v)` | new `PyEmitEnumCtor`, mirroring `PyEmitDataclassCtor` (`:34717`, 55 lines). Note it *requires* piece 2 first — it opens with `FindProc(fullName)` and errors `internal: dataclass ctor not registered` | `PyEmitDataclassCtor` |
+| 4 | emit `__str__` returning `X.NAME` | new, mirroring `PyEmitDataclassRepr` (`:35075`) | `PyEmitDataclassRepr` |
+| 5 | **wrap each member's initialiser** — `RED = 1` must store `X("RED", 1)` | `PyEmitClassAttrExpr` (`:6681`). It currently does `PyParseBoolExpr; valNode := CurASTNode`; for an enum, build `AN_CALL(ctorPi, AN_ARG("NAME"), AN_ARG(valNode))` instead. This is the same node shape the decorator attempt built by hand, so it is known-buildable | — |
+| 6 | make the slot carry the class identity | `PyRegisterClassMembers` `:33178` already types `NAME = Cls(...)` as `tyClass` + `REC_UCLASS_BASE+j`; an enum takes the same arm with `j = ci` | the `NAME = Cls(...)` arm |
+| 7 | call both synthesis sites | `:35868` (one-line body) **and** `:36071` (normal body) — `isDC` is invoked at both, and an enum must be too or the two class-parse paths diverge | `isDC` |
+| 8 | `from enum import Enum` resolves | the import path that currently answers `no unit named enum and no shim mimic_enum` | — |
+| 9 | **refuse** class iteration and `X(1)` / `X["RED"]` | must be a loud error, NOT a plausible compile — see the constraint above | — |
+
+### Why this is being handed over rather than started
+
+It is a genuine multi-session build: nine pieces, each needing a ~60-90s
+self-host cycle to verify, and pieces 3 and 4 are 50+ lines of emitter each. The
+value already banked is the part that would otherwise be re-derived — the
+measurement that `Color.RED` can BE a `Color`, which decides the whole design,
+and this hook list. Starting the build now and abandoning it midway would leave
+the worst of both: a half-synthesised class and no map.
+
+Nothing is applied. `git status` is clean; this ticket is the only artifact.

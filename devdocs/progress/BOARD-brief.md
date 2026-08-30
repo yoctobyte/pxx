@@ -5,16 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:27 blocked:7 backlog:329 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2699 rejected:56`
+`working:3 unfinished:28 blocked:7 backlog:329 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2699 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45` [A+S] — owner: frankS
-- `feature-nilpy-enum-class` [N] — owner: frankwasm
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -30,6 +29,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-dynamic-compiler-tables` [A]
 - `feature-lib-tkinter-grid-pad-accepts-a-two-tuple` [B]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
+- `feature-nilpy-enum-class` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-nilpy-user-defined-decorators` [N]
@@ -54,7 +54,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 351, ranked
+## Ready — top 30 of 352, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -81,10 +81,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
+- `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
-- `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 
-_321 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_322 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
