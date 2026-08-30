@@ -4748,7 +4748,71 @@ work *away* from whoever actually knows the file's current state, and it manufac
 a phantom collision that blocks a real one. Both failures are silent — the lane you
 named will usually just accept.
 
-Corollary for anyone reading a history on this fleet: **authorship questions are
-unanswerable from git here.** Ask the lane, or read the lock. If a per-commit
-session-id trailer is ever made universal, that changes; today it is not, and
-assuming it is present is its own version of this mistake.
+### 119a — the amendment, filed within the hour, and it is the same failure again
+
+The paragraph that stood here said: *"authorship questions are unanswerable from
+git here."* **That was false, and it was a false limit — the quiet kind.** frankA
+supplied the discriminator immediately: the **`Claude-Session` trailer**. It named
+the orphan ticket's owning session (`session_01GxBTsUxqQoxjTF7Hafn9nG`) and proved
+it was not frankA's (`session_01WHtwEmBLfifGPtMtHgErvU`) in one command.
+
+So the corrected claim, measured over the last 200 commits on origin/master rather
+than asserted:
+
+- `%an` / `%ae` are **constant fleet-wide** — every agent commits as the owner.
+  That half stands.
+- `%(trailers:key=Claude-Session)` **does** discriminate, across 5 distinct
+  sessions in that window.
+- It is carried by **42 of 200 commits — 21%.** Present, it is authoritative.
+  Absent, you have nothing. `f74535b12`, the commit that started this, carries none.
+
+Note what the original error and its correction have in common: **both were
+non-existence claims made without stating the search.** I searched `%an`, found it
+constant, and generalised to *git cannot answer this* — the exact move face 8 and
+face 117 both name, committed inside a face about committing it. Writing *"if a
+session-id trailer is ever made universal, that changes"* made it worse, because a
+hedge about a hypothetical future is what a reader takes as confirmation that the
+present was checked.
+
+**The operational rule, corrected:** read the `Claude-Session` trailer first — it is
+free and decisive when present. `working/` remains the authority, because it is the
+only source that covers the 79%. And **put the trailer on your commits**: it is the
+one field that makes ownership answerable after the fact, and four lanes in five
+are currently not carrying it.
+
+### 120 — an equivalence oracle over thousands of real decisions beats reading the arms
+
+*frankA, 2026-08-30 — the constructive counterpart to 118, and the answer to
+"how do you safely restructure an arm chain nobody can see is wrong".*
+
+Face 118 says a per-target arm chain with no oracle is a snapshot, not a maintained
+construct. This is what to do about it, and it is not "read more carefully".
+
+Restructuring the managed-local zero-init table, frankA added a `PXXDBG=a.mlzero`
+channel that prints the table's answer **for every local it sees**, flagging `MISS`
+— a local of a handled kind that still came out 0. Two properties make it work:
+
+1. **It is an equivalence oracle for the refactor.** 8,919 decisions byte-identical
+   before and after the restructure, plus 34/34 examples byte-identical. *Diffing
+   ~9,000 real decisions beats reading ten arms*, and it is the only way to make a
+   merge-the-arms change safe when the arms differ in ways no test covers.
+2. **It converts the next instance from an autopsy into a grep.** Both prior bugs in
+   this family were found from the *outside*, as a use-after-free several layers
+   from the cause. A fourth is now one command away.
+
+The judgement it enabled is the point. Two `not IsArray` guards looked identical;
+they had **opposite** answers. The promo-int one was an omission and reachable — a
+static array of `promoint64` zero-inits **nothing**, and the cleanup arm then calls
+`PXXPromoClear` on element 0, whose own header says it cannot run on uninitialised
+memory, so the pre-fix compiler **segfaults**. The NilPy `tyClass` one was a real
+decision: NilPy has no static-array syntax, its lists are dyn arrays claimed by an
+earlier arm — measured as 19 dyn-array locals all answering 8 and zero static
+`tyClass` arrays. **A guard is not self-describing; only its inputs are**, and the
+instrument is what makes the inputs visible.
+
+It also told frankA where *not* to merge: the record arms keep their own `IsArray`
+because they read different rec ids and fall **through** to the COM arms when
+`RecordNeedsZeroInit` says no. A merged record arm would have swallowed that
+fall-through and answered 0 for a COM interface. The oracle found the hazard the
+tidy-up would have created — which is the same save frankC got by *reading* the
+seventh reader it did not touch.
