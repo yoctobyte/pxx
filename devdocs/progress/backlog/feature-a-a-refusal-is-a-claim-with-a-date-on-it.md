@@ -12624,3 +12624,49 @@ a standalone unswept branch** — the second being genuinely dangerous, because 
 other instrument would ever catch it. Judged right. A stop order that is read as
 *abandon in place* produces exactly the half-applied state parking exists to
 prevent.
+
+### 235b — a linked ticket is not a carried ticket, if both are separately dispatchable
+
+frankB, 2026-08-30, verifying its own handoff against `origin/master` rather than
+its worktree — and the check found a gap it would otherwise have asserted away.
+
+The receiver table, the prior art, the candidate sha and **the instruction not to
+record that sha as the cause without building `<sha>~1` and `<sha>` first** were
+written into one of two sibling regression tickets, with a `[[link]]` from the
+other. **Both are ranked p70 and dispatch independently.** So the sibling can be
+picked up by someone who never follows the link — and **the person who needs the
+don't-attribute-without-diffing instruction is exactly the one who did not read
+the other ticket.**
+
+**Repeat, do not reference, whatever prevents a wrong conclusion.** A `[[link]]`
+is a reading aid for a human browsing the board; it is not part of the ticket for
+a dispatcher, and the ranker cannot see it at all. Duplication across two tickets
+is the cheap side of this trade — the expensive side is a plausible attribution
+recorded because the guard lived one hop away.
+
+Note the shape: this is not *the ticket was thin*. Both tickets were complete
+descriptions of their own symptom. What was missing was the part that protects a
+conclusion, and **that part always looks like context rather than content.**
+
+### 235c — the pre-rebase sha keeps getting quoted BY HAND, by people who know
+
+Three instances on 2026-08-30, from three agents, all of whom could recite
+`bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`:
+
+| quoted | landed as |
+| --- | --- |
+| `112561195` (frank-rust) | `3ee9a672f` |
+| `a1a8ba4` (frankB) | `b879fad42` |
+| `6530abdeb` (frank-coordinator) | `f11128eaf` |
+
+In every case the **tooling** did the right thing — `progress.sh resolve` with no
+argument plus `sync.sh` wrote the landed sha into the ticket correctly. What was
+wrong was the sentence a human-facing message carried, composed from memory of
+the commit rather than read back out of the log.
+
+**`grep -cF "<subject>"` answers *did it land* and does NOT give you the sha —
+and the sha is the part that gets quoted.** Use
+`git log --format='%h %s' origin/master --grep=... -F`, which answers both, and
+**read the sha out of that output**. The habit that actually works is the one
+frankS and frankB converged on independently: **verify the landing by SUBJECT,
+and quote the sha only by copying it from the log.**
