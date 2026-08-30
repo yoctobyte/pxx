@@ -145,7 +145,7 @@ observable.
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** working
+- **Status:** backlog (folder is the lock; line corrected by the coordinator 2026-08-30)
   umbrella sat in `backlog/` between slices)
   section at the bottom for what landed, what is left and what to read first).
   Nothing is half-applied. Worked from a

@@ -10953,3 +10953,11 @@ captured-vs-derived expectations.* A false limit is quieter than a false fix and
 but that hazard is about limits asserted **beyond** what was measured. A limit stating exactly
 what a narrow negative does *not* cover is the same care pointed the other way, and it is what
 stops a clean negative being cited later as the general one.
+
+---
+
+DANGLING SHAS BY DESIGN — this index quotes shas that are deliberately unreachable from
+`origin/master`, because several faces are *about* unreachable shas. Face 215c names
+`75d66c356` precisely to record that it was a pre-rebase sha which nearly became a premise;
+replacing it with the sha it landed as (`ae26693a3`) would delete the finding. Read a bare sha
+here as evidence in a case, not as a pointer to code.

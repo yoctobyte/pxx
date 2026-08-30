@@ -7,7 +7,7 @@ prio: 50
 
 - **Type:** docs
 - **Track:** D (docs) — the user writes the substance; the agent's job is scaffolding + accuracy
-- **Status:** working
+- **Status:** unfinished (folder is the lock; line corrected by the coordinator 2026-08-30)
   parked awaiting the user's substance. See the Log.
 - **Owner:** frankD
 - **Related:** [[feature-promo-launch-plan]]
