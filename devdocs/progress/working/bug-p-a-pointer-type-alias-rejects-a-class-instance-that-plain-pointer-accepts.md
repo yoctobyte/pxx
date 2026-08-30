@@ -4,9 +4,10 @@ track: P
 prio: 75
 type: bug
 blocked-by: []
-status: urgent
+status: working
 found: 2026-08-30
 summary: "v394 breaks Track B's gate: make lib-test is RED at lib_synapse_ssl, because a parameter typed as a Pointer ALIAS (SslPtr = Pointer) no longer accepts a class instance, while a parameter typed as plain Pointer still does. Cross-unit worked on v393 and fails on v394; the SAME-unit case fails on BOTH pins, so v394 did not introduce the defect -- it made the cross-unit path consistent with an already-broken same-unit path. Real vendored Pascal (Synapse) stopped compiling."
+owner: frankA
 ---
 
 # A `Pointer` type alias rejects a class instance that plain `Pointer` accepts
