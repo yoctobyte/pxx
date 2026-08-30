@@ -176,13 +176,29 @@ not, and the open design fork are in **`name-resolution.md`**.
 | Pascal maths | `lib/rtl/math.pas` |
 | how a C program finds crtl | `c-linking-and-crtl-autopull.md` |
 
-Two stale docs to fix when someone is in there (both Track C/B files, not touched
-from here): `lib/crtl/README.md` and `lib/crtl/src/README.md` still describe
-`src/` as *"reserved for small C runtime implementations once a candidate needs
-them"*. It holds a 114-function correctly-rounded libm. And
-`c-linking-and-crtl-autopull.md` still calls math.c's `sqrt`/`sin`/`pow` *"a thin
-bridge to the Pascal RTL"* — they have had real double-double C bodies since the
-2026-08-10 split.
+> **All three items this section used to list as stale are fixed. Checked
+> 2026-08-30 (frankD); nothing left to do here.**
+>
+> It read: `lib/crtl/README.md` and `lib/crtl/src/README.md` *"still describe
+> `src/` as reserved for small C runtime implementations once a candidate needs
+> them"*, and `c-linking-and-crtl-autopull.md` *"still calls math.c's
+> `sqrt`/`sin`/`pow` a thin bridge to the Pascal RTL"*. None of that survives:
+> both READMEs describe the real runtime (`src/README.md` enumerates the
+> seventeen files; `README.md` says *"Real code, not stubs"*), and the c-linking
+> page carries a dated correction retracting the bridge sentence.
+>
+> The third one was **already** discharged when this paragraph was last edited —
+> the c-linking correction is dated 2026-08-14 and this file was touched on the
+> 16th. The list was never re-read, only appended to.
+>
+> **A to-do list inside a reference doc is the thing here worth noticing.** It
+> had no owner (*"both Track C/B files, not touched from here"*), no ticket, and
+> no command that would tell a reader whether it was still true — so the only
+> way to discharge it was for someone to remember. Nobody did, and the cost is
+> not zero: it tells every reader that three correct documents are lying to
+> them, and sends whoever believes it off to fix files that are fine.
+> Obligations that cannot be checked belong in a ticket, where the ranker can
+> see them, not in prose that ages silently.
 
 ## The general shape
 
