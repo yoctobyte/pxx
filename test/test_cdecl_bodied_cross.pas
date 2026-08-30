@@ -10,11 +10,12 @@ program test_cdecl_bodied_cross;
   test file that cannot COMPILE for a target cannot assert anything about it, so
   the cross-target cases live here and stay inside 8 arguments per bank.
 
-  EVERY CASE USES THE ARGUMENT SHAPE, `Take(@Cb)`, never `p := @Cb`. The
-  assignment shape is still refused on the targets that have no C-convention
-  prologue yet, and that refusal is correct -- it is the wall that keeps them
-  sound. Cases move to the assignment shape per target, as each target gets its
-  arm and leaves the reject.
+  BOTH SHAPES ARE ASSERTED, and a target is wired into this file only once it
+  has BOTH its prologue arm AND has left the ir.inc reject -- in that order. The
+  assignment shape (`p := @Cb`) is still refused on i386/arm32/riscv32, and that
+  refusal is correct: it is the wall that keeps them sound while they have no
+  arm. The argument shape is the one that always escaped the reject, which is
+  why it was the silently-wrong one.
 
   THE DISCRIMINATING CASE IS Mixed. AAPCS64 and SysV both count the integer and
   floating banks INDEPENDENTLY: f(i1,d1,i2,d2,i3,d3) puts i1,i2,i3 in the first
@@ -78,6 +79,16 @@ begin
   Expect(fn(d, 7), 9, 'by-ref float arg via fnptr');
 end;
 
+{ The ASSIGNMENT shape. Refused outright on a target that has not left the
+  reject, so this half does not COMPILE there -- which is the point: it is what
+  stops this file being wired for a target before that target is ready. }
+procedure ViaVariable;
+var f: TFnMix;
+begin
+  f := @CbMix;
+  Expect(f(1, 4.0, 2, 5.0, 3, 6.0), 654321, 'mixed via assigned variable');
+end;
+
 var dref: Double;
 begin
   TakeFloat(@CbFloat);
@@ -91,6 +102,7 @@ begin
   Expect(CbSingle(1.5, 4), 7, 'single direct');
   dref := 2.5;
   Expect(CbByRef(dref, 7), 9, 'by-ref float direct');
+  ViaVariable;
 
   if failures = 0 then
     writeln('CDECL-CROSS OK checks=', checks)

@@ -4866,10 +4866,10 @@ test-core: $(COMPILER)
 	# Targets join this list as they get their arm: x86-64, aarch64.
 	# bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
 	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_cross.pas $(TESTTMP)/test_cdecl_cross26
-	tools/expect_same.sh test_cdecl_cross26 "$$($(TESTTMP)/test_cdecl_cross26)" "CDECL-CROSS OK checks=8"
+	tools/expect_same.sh test_cdecl_cross26 "$$($(TESTTMP)/test_cdecl_cross26)" "CDECL-CROSS OK checks=9"
 	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=aarch64 test/test_cdecl_bodied_cross.pas $(TESTTMP)/test_cdecl_cross_a64 && \
-	  tools/expect_same.sh aarch64/test_cdecl_cross "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cdecl_cross_a64)" "CDECL-CROSS OK checks=8"; \
+	  tools/expect_same.sh aarch64/test_cdecl_cross "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cdecl_cross_a64)" "CDECL-CROSS OK checks=9"; \
 	else \
 	  echo "=== test_cdecl_bodied_cross: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
