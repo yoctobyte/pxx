@@ -711,3 +711,36 @@ frontend)"). **At session start, infer your track from the request:**
   (`meta-track-w-collision-windows-vs-website`). Declare a track in
   **frontmatter** — that is what the ranker reads.
 
+
+## Parking a held change — an EDIT you can re-apply, never a copy of a shared file
+
+Measured 2026-08-30 (frankS), and it is the one failure mode from that day's
+ten-agent run that would have **destroyed another lane's work with no conflict and
+no diagnostic**.
+
+When you must hold a change — waiting for a pin, waiting for a sibling to land —
+park it as something you **re-apply**: a patch (`git diff > x.patch`), a stash, or
+a scripted set of anchored edits. **Never as a whole-file copy of a shared file.**
+
+A file copy is a snapshot of the *entire file*, including every other lane's work
+that was in it at copy time. Restoring it over a tree that has moved reverts all
+of that — and git shows a **clean, well-formed commit**, because from git's point
+of view nothing conflicted. frankS's copies of `defs.inc` and `cpreproc.inc` would
+have reverted `CUnitOfPascalProgram` and 124 changed lines of `cpreproc.inc`.
+
+**Do not rely on the build to catch it.** frankS's case surfaced as `undefined
+variable (CUnitOfPascalProgram)` — but *only because the reverted code had a live
+caller*. Clobber something self-contained — a new function not yet called, a test,
+a helper — and it compiles clean, reaches a valid fixedpoint, and lands. The gate
+caught this one by luck, not by coverage.
+
+**When something does surface, separate "my copy is stale" from "master is
+broken" in one command:** build with the **pinned** compiler against a **clean**
+tree. If that works, the fault is yours. frankS nearly reported a broken master.
+
+Sibling hazard, opposite blast radius: a **stale binary** (see CLAUDE.md's per-fix
+loop, and `session-roster.md`). A stale binary corrupts *your own verdict*; a
+stale file copy destroys *other people's work*.
+
+Re-apply against current HEAD with **every anchor asserted**, so a moved anchor
+fails loudly instead of applying somewhere plausible.
