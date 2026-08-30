@@ -57,4 +57,4 @@ lines, but a C test's runtime behaviour is the owning lane's to verify — and
 the guard is red on master until it lands, so this is not a background item.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 9526c5728.
