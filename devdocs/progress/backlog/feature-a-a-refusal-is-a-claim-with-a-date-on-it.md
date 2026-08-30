@@ -6890,3 +6890,74 @@ should stop is not made safe by easier work; a standing prio ruling is not re-li
 finding another category the ticket also fits.* And the unverifiable-action-claim class was
 **declined on principle**: it lives entirely in the tick records, and verifying it would
 mean re-deriving events only the participants observed. **That is what records are for.**
+
+### 158 — DISSOLVE THE FORK: BOUND THE OFFER AND THE DISTINCTION STOPS MATTERING
+
+*pxx-a5, 2026-08-30, on a ticket that had escalated as an open question.*
+
+The ticket escalated because **nothing in the stored data distinguishes a slow box from a
+hung job on a first encounter.** That is true, and it reads as a decision someone must
+make. The answer was to stop needing it:
+
+> **One grant, then the class figure forever.**
+
+The slow job passes at the raised budget and starts earning real metrics; the hung job is
+killed at the second budget, the grant is spent, nothing grows. **Being wrong costs one
+class-length run, once, named in the report both times.** The unanswerable question is
+still unanswerable — it has simply been made not to matter.
+
+**That is why it landed as work rather than a `decide-*`**, and it is a test worth applying
+before every escalation: *is this a fork the human must choose between, or a fork I can
+bound so both branches are affordable?* A bounded wrong answer is often cheaper than a
+correct decision procedure — and far cheaper than the ticket sitting in Track U while the
+queue behind it waits. Same family as 136: **change what the mechanism is allowed to cost,
+rather than making it cleverer.**
+
+Four leak points, each closed deliberately, and the third is the one that generalises:
+only the **budget** comes from an unproven metric (so an unproven metric cannot reserve
+memory); the **grant** is counted, not the timeout that prompted it (counting timeouts
+spends the offer on the run that merely *discovered* the job was slow, so a job would go
+from "no data" to "exhausted" without ever receiving one); **a timeout at a granted budget
+records NO duration** — that number is the budget *we* chose, not something the job
+revealed, *and recording it is exactly how 90s became 3522s*; and a pass clears the counter.
+
+### 158a — the ticket's TITLE named the wrong set
+
+*"a job that never passed"* is `n == 0`. The set that matters is **`n < METRICS_MIN_RUNS`** —
+the set the main gate actually excludes. A job rescued by the grant passes once, reaches
+`n = 1`, **is still below the gate, and falls into the identical trap one step later.**
+
+**Scope to the set the mechanism excludes, not to the set the symptom named.** The title is
+written from the first observed instance; the boundary is a property of the code. Sized
+before writing rather than after: 2818 local metrics, 1 at `n=0` and **79 at `n=1`**, at
+most 17 ever seeing a raised budget, and the raise is a ceiling only — it cannot turn a
+passing job into a failing one. **The 79 is the whole argument**, and it was invisible from
+the title.
+
+### 158b — THE APPARATUS'S STATE IS A MEASUREMENT TOO
+
+Third instrument error of one session, and now a pattern with a name. A chained shell ran a
+negative control against a file **the previous control's restore had not replaced**, so it
+reported the *previous* control's two failures while the guard actually under test stayed
+green. Re-run with the file state asserted before and after the edit: exactly one red, the
+right one.
+
+The session's three instrument errors: **a `\t` in a BRE, a harness tidying away the thing
+it measured (151b), and a stale file under a negative control.**
+
+> **None were in the code under test. All three were caught only by re-measuring, never by
+> reading.**
+
+So the apparatus needs its own preconditions asserted — *state the file's contents before
+and after the edit you are testing* — because a control suite silently inherits whatever
+the previous control left behind, and a chained shell makes that invisible.
+
+**And 151 was applied rather than merely recorded**, which is the part I most wanted to
+see: 9 guards each verified against its own broken condition, then the observation that
+they exercise `unproven_budget()` and the learn methods and **not the wiring in
+`Manager.__init__`** — the same sampling gap as last time. So a **second instrument**:
+inject a metric, run a real `testmgr --tier quick`, and watch it print the grant with live
+numbers, pass the job, and leave the metric at `n=1` with the counter back to full.
+**Success path observed, not modelled.** Restoring only the injected key — because the
+run's other learning was real and discarding it would have been worse than the injection —
+is the same care one level down.
