@@ -83,7 +83,7 @@ disjoint from `_decl`.
 
 | arm | width slot |
 | --- | --- |
-| `AN_IDENT` → `Syms[].TypeKind` + **`ElemType`** | **exists**, done at `12111b1f2` |
+| `AN_IDENT` → `Syms[].TypeKind` + **`ElemType`** | **exists**, done — real sha `100d68f51` |
 | `AN_FIELD` → `RecFieldType(...)` | none — fields carry `UFldTk`/`UFldPtrElemTk`, no string element |
 | else → `ASTTk[baseNode]` | none — no AST node carries one |
 
@@ -94,7 +94,7 @@ second is load-bearing for the whole ticket: `WideChar(u1) + WideChar(u2)` is an
 ### THE ORDERING CONSTRAINT — a constraint, with its reason, not a plan
 
 ```
-1. ir.inc:1794 symbol arm                      DONE (12111b1f2)
+1. ir.inc:1794 symbol arm                      DONE (100d68f51)
 2. AST node element slot                       ast_arena.inc
 3. record-field element slot                   pasparser_decl.inc
 4. the six per-backend COW guards              six ir_codegen*.inc — coordinator-sequenced
