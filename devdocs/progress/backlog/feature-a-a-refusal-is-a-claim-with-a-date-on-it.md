@@ -5029,3 +5029,57 @@ paragraph too high is invisible to `%(trailers:…)` **with no error**. Both the
 coordinator and frank-optimize-b4 lost the trailer on the very commit that
 introduced their use of it. The fix is not a placement rule taught to eight lanes —
 *a documented trap is not a guard* — it is scanning the whole body.
+
+### 125 — PESSIMISM IS THE DIRECTION NOBODY DOUBLE-CHECKS
+
+*frankD, 2026-08-30, after four instances in one night — and this is the sentence
+the whole index has been circling.*
+
+Four findings, apparently unrelated:
+
+- a ticket cited by its `backlog/` path after moving to `done/`;
+- a doc citing paths that live on `origin/wasm`;
+- an Open question answered seven weeks earlier;
+- a revert queue — `track-b-workarounds.md`, "Waiting on an open bug" — where
+  **7 of 8 rows cite a ticket now in `done/` or `rejected/`**.
+
+Every one reads as **conservative**: *not done yet*, *not found*, *still open*,
+*still needed*. And that is the whole mechanism. **Caution looks like rigour, so it
+is exempt from audit.** A claim that something is unfinished never gets the
+scepticism a claim that something is finished receives automatically, because
+doubting it feels like carelessness rather than diligence.
+
+This is face 113's asymmetry one level out. A wrong *fix* is re-tested by the next
+person who touches the code. A wrong *limit* is believed, and a wrong limit phrased
+as caution is believed hardest.
+
+**The specific mechanism here is worth separating, because it explains why a
+written lifecycle rule did not save it.** The entry is not wrong about the
+workaround and not wrong about the bug — **only about the bug's STATE, which is the
+one part that changes without anyone touching the file.** The ledger's own opening
+instruction is the check that was never run: *"When the listed bug moves to `done/`,
+revert the workaround and drop the entry. Verify the bug ticket is still in
+`backlog/`/`blocked/` before assuming the workaround is still needed."* The rule
+requires a person to re-derive something **the document cannot know about itself**,
+and nothing fires when it goes stale. Same shape as the ticket lock (a claim about
+the present made by an action in the past) and as a rotted line-number citation
+(114): the artefact is fixed, the world moves, and the artefact cannot tell.
+
+**Two corollaries earned in the same finding:**
+
+**Rank the code debt, not the misfiled row.** frankD verified the workarounds were
+still live in source before filing — `math.pas:702` and `:1216` still reading
+`Double(Trunc(x))` where `Int(x)` is natural, `ed25519.pas` still with no `TPoint`
+— and said explicitly which rows it had *not* checked. *"The ledger is stale"* and
+*"the library carries dead workarounds"* are different tickets and only one
+deserves prio. The number that matters is **how many reverts are available**, not
+how many rows are wrong. Each revert is then framed as a measurement **whose
+failure is a new finding**, not as a reason to leave the row alone.
+
+**A section that is 7/8 wrong stops being read as a queue** — which is partly why
+the live reverts sat there. Three of the eight rows are *correctly* kept forever
+(row 4, `aesgcm.pas`'s `BlkCopy`, where a full revert still segfaulted at the GCM
+path with no minimal reproducer — kept, with the measurement written down). Those
+three do not belong under "waiting on an open bug" either: **they are not waiting
+on anything.** Parking permanent decisions under a heading that means *pending* is
+what converts a queue into scenery.
