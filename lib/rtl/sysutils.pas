@@ -358,6 +358,13 @@ function ExceptObject: TObject;
   than a bare halt would say. }
 procedure Error(RuntimeError: TRuntimeError);
 
+{ FPC's SysUtils declares this (sysutilh.inc:243) and real code calls it as a
+  bare statement rather than raising the class itself -- rtl-generics does, five
+  times, in the grow paths of TCustomList and the dictionaries, which is where
+  the rung-6b corpus probe met `undefined variable (OutOfMemoryError)`.
+  EOutOfMemory already existed here; only the procedure was missing. }
+procedure OutOfMemoryError;
+
 { The default BackTraceStrFunc: '  $00000000004012AB'. A nil address renders as
   $0, which is what the callers' "no address known" path already expects. }
 function SysBackTraceStr(Addr: Pointer): string;
@@ -1220,6 +1227,11 @@ end;
 
 { The TRuntimeError -> our-exception mapping. See the declaration: raising is
   faithful in effect, the numbers are deliberately ours. }
+procedure OutOfMemoryError;
+begin
+  raise EOutOfMemory.Create('Out of memory');
+end;
+
 procedure Error(RuntimeError: TRuntimeError);
 begin
   case RuntimeError of

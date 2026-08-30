@@ -7826,6 +7826,12 @@ test-core: $(COMPILER)
 	# broken binary, which is how the first draft of this test passed pre-fix.
 	./$(COMPILER) -Futest/generic_bodyend_units test/test_generic_body_end_counting.pas $(TESTTMP)/test_generic_bodyend26
 	tools/expect_same.sh test_generic_bodyend26 "$$($(TESTTMP)/test_generic_bodyend26)" "9 9 7 5 9 100"
+	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and
+	# real code calls it bare in grow paths -- rtl-generics does, five times. We had
+	# EOutOfMemory and not the routine. Asserts it raises the right class, not just
+	# that the name resolves.
+	./$(COMPILER) -Fulib/rtl test/test_rtl_outofmemoryerror.pas $(TESTTMP)/test_rtl_oom26
+	tools/expect_same.sh test_rtl_oom26 "$$($(TESTTMP)/test_rtl_oom26)" "$$(printf 'EOutOfMemory\nok')"
 	# a mode-Delphi generic declared in a USED UNIT, specialized with the angle-bracket
 	# surface from the program and from a third unit (the desugar used to sweep only
 	# forward from the template, and the program is lexed BEFORE the unit)

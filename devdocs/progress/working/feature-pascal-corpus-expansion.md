@@ -3,7 +3,7 @@ prio: 75
 track: P
 status: working
 owner:
-summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge. Re-measured 2026-08-30 late (frankwasm) at fixedpoint 414252435fb1, corpus content-hashed identical to frankB's: 6a Generics.Defaults ok (procs=1661); 6b BOTH known walls are DOWN -- bug-b-rtl-provides-no-ienumerable-generic-interface and bug-a-max-template-params-is-4-but-rtl-generics-declares-6 are both landed -- and the INTERFACE SECTION NOW COMPILES CLEAN on its own (all 948 lines, both dictionary includes, procs=1783, non-vacuous). 6b full stops on EXACTLY ONE error, and the MECHANISM is read out of pasparser_proc.inc:5247: the implementation loop ends the unit only on `end` IMMEDIATELY followed by `.`, so a routine body consuming one `end` too many leaves the loop on a bare `.` and errors AT EOF. The reported line is therefore ALWAYS the file's last line -- measured 4165->4165, 4161->4161, 2489->2489 -- so that coordinate is a CONSTANT, not a stale value, and carries zero information about the defect. The mirror case is worse: one `end` too FEW is swallowed silently by the `else Next` in the same branch, so half this class of parser bug is invisible in any unit. Defect is in the implementation section (949-4165); truncation bisect running, 2488 RED. Two suspects cleared by construction: the `case ... end else` at :1788, plain and inside a generic class, both compile and match FPC. So the remaining defect is in the implementation section (949-4165) and the parser has a scope it thinks is still open at EOF -- same family as 28b2851cd. Truncation bisect over the 316 declaration boundaries is the localisation. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy: near: is now stale across a UNIT boundary (it points into our lib/rtl/classes.pas while the error is in the corpus file), and file/line has been mispaired before. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
+summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current` near TOpenAddressing<TKey,TValue,THashFactory>, which is the LIVE EDGE and is not yet reduced. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -346,7 +346,34 @@ and `(to file / relay to frankB)` in another while it was actually **done**.
 > | --- | --- |
 > | `414252435fb1` (pre-fix) | parse failure reported at EOF, cause unknown |
 > | `cdf538199122` (fix) | **`too many generic methods` at `:3983` of 4165** |
-> | `759c1ba764bb` (+ `MAX_GENERIC_METHODS` 512→2048) | *measuring* |
+> | `759c1ba764bb` (+ `MAX_GENERIC_METHODS` 512→2048) | **THREE named errors, all deep in the file** |
+>
+> At `759c1ba764bb`, two independent runs (472 s, 473 s):
+>
+> ```
+> :1252  undefined variable (OutOfMemoryError)
+> :1269  undefined variable (OutOfMemoryError)
+> :1481  for-in: enumerator has no readable Current
+> ```
+>
+> **Read that list from a FILE, not through `tail`.** The first run of this probe
+> was piped through `tail -8` and showed only the last two; it was reported as
+> "two errors" until the second run, redirected to a file, showed three. The pipe
+> did not error and nothing looked wrong — the same shape as every other
+> instrument that misled on this ticket, one layer further out.
+>
+> **Walls 1 and 2 are one LIBRARY gap and are closed.** FPC's SysUtils declares
+> `procedure OutOfMemoryError` (`sysutilh.inc:243`) and real code calls it bare
+> in grow paths; rtl-generics does so five times. `EOutOfMemory` already existed
+> in `lib/rtl/sysutils.pas`, only the routine was missing. Added, with
+> `test/test_rtl_outofmemoryerror.pas` wired and FPC-oracled. Same shape as
+> [[bug-b-rtl-provides-no-ienumerable-generic-interface]], and built with the
+> STABLE compiler per Track B's rule.
+>
+> **Wall 3 is the live edge and is NOT yet reduced:** `for-in: enumerator has no
+> readable Current`, `near:` at `TOpenAddressing<TKey, TValue, THashFactory>`.
+> Do not trust either coordinate without reducing from the SHAPE — that is the
+> standing rule on this unit and it has now been earned three separate ways.
 >
 > `MAX_GENERIC_METHODS` is a plain slot, not a stride: measured linear at **12 B
 > of bss per slot** (512 → 101076508, 1024 → 101082652, 2048 → 101094940), so
