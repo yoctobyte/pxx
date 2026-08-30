@@ -453,14 +453,13 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (20)
+## backlog_new (19)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data | A | 35 | bug | The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros. | — |
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 25 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings | A | 60 | bug | RE-SCOPED 2026-08-30 after an attempt: this is NOT eleven mechanical lexer edits. SOffset/SLen is an OVERLOADED channel, not a text field -- for tkInteger, SLen>0 MEANS 'wider than Int64', so giving ordinary tokens their text makes every integer literal promotable and `writeln(42)` fails to compile. A correct fix needs a SEPARATE span channel, i.e. new parallel arrays in defs.inc, before any lexer is touched. Original finding stands: every lexer stores token text for tkIdent and tkString only; keywords, punctuation, operators and numbers get SOffset := 0. That if/else is hand-copied across eleven lexers. So the `near:` window under EVERY diagnostic in the compiler prints the identifiers and silently discards the syntax -- `near: begin x >>> end` for `x := (1 ;` -- and no diagnostic can name an offending keyword. Sized: 3.24 MiB of token text against a fixed 8 MiB STRING_CAP, 40.5%, so this is a mechanical change to eleven files, not a pool redesign. | — |
-| bug-b-codecs-encode-segfaults-for-every-encoding-except-utf-8 | B | 65 | bug | `codecs.encode(s, 'ascii')` and `codecs.encode(s, 'latin-1')` SEGFAULT (exit 139, core dumped) for every input including the empty string. Only 'utf-8' works. Both encodings are in the shim's own seeded registry and `lookup` finds them, so the crash is in the charmap encode path, not in resolution. | — |
 | bug-b-codecs-strict-decode-does-not-raise-on-invalid-utf-8 | B | 55 | bug | `codecs.decode(b'\\xff\\xfe', 'utf-8')` returns U+FFFD replacements instead of raising UnicodeDecodeError. `strict` is the DEFAULT, so invalid UTF-8 is silently repaired everywhere rather than reported, and `errors='ignore'` is ignored too — all three policies behave as `replace`. | — |
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
 | bug-n-double-star-unpacking-is-rejected-at-a-method-call | N | 45 | bug | `obj.m(**d)` is a parse error — `expected expression` — while the identical `f(**d)` on a plain function WORKS. Dict-unpacking into any METHOD call is rejected, pure-Python classes included, so it is not a shim or binding issue but the call parser. CPython runs all of these, so it is an upward-compatibility break by Track N's own rule. | — |
@@ -719,9 +718,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2813)
+## done (2814)
 
-2813 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2814 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -811,7 +810,6 @@ _none_
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
-- [p 65] [B] bug-b-codecs-encode-segfaults-for-every-encoding-except-utf-8
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface

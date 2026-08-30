@@ -4,8 +4,8 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "`codecs.encode(s, 'ascii')` and `codecs.encode(s, 'latin-1')` SEGFAULT (exit 139, core dumped) for every input including the empty string. Only 'utf-8' works. Both encodings are in the shim's own seeded registry and `lookup` finds them, so the crash is in the charmap encode path, not in resolution."
-status: backlog
-owner: unassigned
+status: done
+owner: frankB
 ---
 
 # `codecs.encode` segfaults for every encoding except utf-8
@@ -85,3 +85,69 @@ header came to claim a gate it did not have. Fix this first, or land the decode
 half with the encode half named as absent in both the test docstring and the
 Makefile comment. A green `MIMIC-CODECS OK` must not stand for "codecs works"
 while `encode` is untested.
+
+## 2026-08-30 (frankB) — FIXED. A hard cast of a Variant to a class reference.
+
+### Root cause
+
+`charmap_encode` answers a **tuple**, so `r.at(0)` arrives as a **Variant that
+box-tags** the `TPyBytes` — not as the object. `encode` unwrapped it with
+
+```pascal
+encode := TPyBytes(r.at(0));      { both charmap arms }
+```
+
+which is a hard cast reinterpreting the **variant record's own bytes** as an
+object pointer. The result is a garbage reference that faults on first use.
+
+**That explains the one detail that made the ticket look like a table bug: the
+empty string crashed too.** The bad pointer is produced *after* the encode loop,
+so having nothing to encode never protected it. It also explains why utf-8 was
+fine — `Utf8Encode_` returns its `TPyBytes` directly and never goes through a
+tuple.
+
+### Why decode never had it, which is what hid it
+
+`decode` does `decode := r.at(0)` into an **AnsiString** result — an ordinary
+variant conversion the compiler performs correctly. Only the object-typed arm
+needed an explicit unwrap, and only the object-typed arm got a cast instead. The
+two functions sit adjacent and look symmetric; the asymmetry is invisible at a
+glance, which is why a reader comparing them would not have spotted it.
+
+### Grepped for siblings before closing, per normalise-dont-special-case
+
+Exactly **two** sites in the whole tree, both here (the ascii and latin-1 arms).
+Every other unwrap in `lib/rtl` uses the correct `pyvarobj` form —
+`base64.pas:39` is the same idiom for the same type. So this is a local slip,
+not a pattern, and no other module needs auditing.
+
+Fixed with a **named** `BytesOfVar` helper rather than two inlined `pyvarobj`
+calls: two call sites that must agree is exactly how this drifted.
+
+### The crash was hiding a CORRECT implementation
+
+With the unwrap fixed, nothing else in the encode path needed changing. Every
+arm matches CPython 3.12:
+
+| | `''` | `'a'` | `'abc'` |
+| --- | --- | --- | --- |
+| utf-8 / ascii / latin-1 | `b''` | `b'a'` | `b'abc'` |
+
+and every error policy is already right — `ascii`+`'\xe9'` raises
+`UnicodeEncodeError` under `strict`, gives `b'?'` under `replace` and `b''`
+under `ignore`; `latin-1` encodes `'\xe9'`→`b'\xe9'` and `'Ā'` raises;
+mixed input gives `b'a?b'` / `b'ab'`. **9/9 encode cases and 9/9 policy cases
+match.** The charmap logic was never wrong; one bad unwrap made all of it
+unreachable.
+
+### Gate
+
+Per-case differential against CPython above, byte-for-byte, at pin v395. The
+full `.npy` differential is phase 1 of
+[[feature-b-sweep-mimic-shims-against-cpython]] and is now writable **in one
+pass**, which was the reason for taking this ticket first. Note that the decode
+side still diverges — [[bug-b-codecs-strict-decode-does-not-raise-on-invalid-utf-8]]
+— so the differential cannot land green until that one closes too.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

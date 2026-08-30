@@ -527,6 +527,29 @@ begin
   Inc(SearchCount);
 end;
 
+{ `charmap_encode` answers a TUPLE, so element 0 arrives as a VARIANT that
+  box-tags the TPyBytes -- not as the object. Unwrapping it needs `pyvarobj`;
+  a hard cast `TPyBytes(v)` reinterprets the variant RECORD's own bytes as an
+  object pointer and the result segfaults on first use.
+
+  That cast was here, on both charmap arms, and it crashed `codecs.encode` for
+  ascii and latin-1 on every input INCLUDING the empty string -- because the
+  bad pointer is produced after the encode loop, not inside it, so having
+  nothing to encode did not save it. utf-8 was unaffected: it returns
+  `Utf8Encode_`'s TPyBytes directly and never goes through a tuple.
+
+  The sibling `decode` never had the bug, and the asymmetry is what hid it: it
+  assigns `r.at(0)` to an AnsiString RESULT, which is an ordinary variant
+  conversion the compiler performs correctly. Only the object-typed arm needed
+  an explicit unwrap, and only the object-typed arm got a cast instead.
+
+  Named rather than inlined twice: two call sites that must agree is exactly
+  how this drifted in the first place. `base64.pas:39` uses the same idiom. }
+function BytesOfVar(const v: Variant): TPyBytes;
+begin
+  BytesOfVar := TPyBytes(pyvarobj(v));
+end;
+
 function encode(const input: AnsiString; const encoding: AnsiString;
                 const errors: AnsiString): TPyBytes;
 var norm: AnsiString; r: TPyList; ci: CodecInfo;
@@ -538,12 +561,12 @@ begin
   else if norm = 'ascii' then
   begin
     r := charmap_encode(input, errors, charmap_build(AsciiTable));
-    encode := TPyBytes(r.at(0));
+    encode := BytesOfVar(r.at(0));
   end
   else
   begin
     r := charmap_encode(input, errors, charmap_build(Latin1Table));
-    encode := TPyBytes(r.at(0));
+    encode := BytesOfVar(r.at(0));
   end;
 end;
 
