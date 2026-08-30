@@ -21770,3 +21770,54 @@ form — because every other consumer converts on the way past. The implicit
 `tySingle` node, and **the explicit cast hid the single from that promotion.**
 A cast that makes a value *more* correct-looking removed the mechanism that was
 saving it.
+
+## AMENDMENT: `near:` is not sound either — only the SYMBOL survives
+
+frank-rust, 2026-08-30, within the hour, invalidating half the rule two sections
+above. **Read this with that section; do not act on it alone.**
+
+I rostered *"identify a wall by symbol and `near:` context, never by line
+number."* **The `near:` half is wrong.** `near:` rides on token indices too:
+`InsertTokens` shifts `Tokens[]` but not the parallel `TokSrcOff[]`/`TokSrcLen[]`
+that `WriteTokenContext` prefers, so after any token splice the window prints
+spellings from **before** the shift. frank-rust's own reduction prints an
+un-substituted `T` in its window — which cannot exist in a substituted body, and
+is the tell that the field is stale rather than merely surprising. Filed as
+`bug-a-the-near-context-window-is-stale-after-a-token-splice` [A p45].
+
+**What survives: the symbol, and only the symbol.** frankB's retraction argument
+— *`PT` occurs zero times in this run, therefore this is not that defect* — is the
+one method that depends on **no coordinate at all**. Line numbers are paired with
+the wrong file; `near:` is paired with the wrong token generation; a symbol is
+either in the text or it is not.
+
+**The shape of my error is worth more than the correction.** I rostered a rule
+built out of *two* instruments, one of which I had just been told was broken, and
+did not ask whether the second shared the first's substrate. **Both ride on token
+indices.** A rule that pairs a known-bad instrument with a second one drawn from
+the same well is not a redundancy — it is the same reading twice. When
+discarding an instrument, ask what the replacement is *made of*.
+
+**Live consequence, not hypothetical:** frankB was working around `in:` on my
+advice while that advice was half wrong. frank-rust told it directly rather than
+waiting for me, which is the correct routing.
+
+## A merge made on signature similarity, and it may not hold
+
+Same message, and it is my call that is in doubt. I merged frankB's corpus
+instance into frank-rust's ticket on the strength of a matching signature. The fix
+landed (`dc7757a11`, gate GREEN, self-host `a9a4818ab6c8`) — the arena held three
+region kinds and provenance knew one, so buffered generic **method** bodies
+(`GenericMethods[i]`) and generic **function** bodies (`GenericFuncs[i]`) both
+answered −1 and inherited the destination file's name while keeping the template's
+lines. Confirmed with `PXXDBG=a.srcmap:*`: one SPLICE planted before, two after.
+
+**And the corpus instance is unchanged.** Same `unknown type: TKey`, same
+`generics.defaults.pas`, `TKey` still occurring zero times there. So either the
+corpus goes through a path the fix does not cover, or there is a second mechanism
+— **and the reduction reproduces the signature but evidently not the corpus's
+mechanism.** A reduction that matches the symptom is not proof it matches the
+cause; it is a hypothesis that the symptom has one cause.
+
+**Do not read the resolve as covering the corpus instance.** frank-rust flagged
+this before anyone could, which is the reason it costs nothing.

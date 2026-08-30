@@ -274,3 +274,48 @@ corpus because it was; it is not trustworthy in general.
 
 ## Log
 - 2026-08-30 — resolved, commit ec9cc3307.
+
+## The reduced instance is FIXED; the CORPUS instance is NOT — and the merge is in doubt
+
+`dc7757a11`, gate GREEN, self-host `a9a4818ab6c8`. Cause: the template arena holds
+three region kinds and the provenance lookup knew one — `Templates[i]` scanned,
+buffered generic **method** bodies (`GenericMethods[i]`) and generic **function**
+bodies (`GenericFuncs[i]`) not. `Templates[].TokCount` stops growing when the
+template's own capture ends and never takes the appended bodies in, so every method
+body answered −1, `PasSpliceTokFile` took its `srcKeyId < 0` early exit, and the
+pasted region inherited the destination file's name while keeping the template's
+line numbers. Fixed with a second scan mapping a body to its template through
+`TemplateIdx`. Confirmed with `PXXDBG=a.srcmap:*` — one SPLICE planted before, two
+after — not by inference.
+
+Why one arm was accidentally right: `ParseSpecialization` splices bodies
+immediately after the class declaration, still inside the region that splice had
+just attributed to the template, so inheriting the destination *was* inheriting the
+right answer. A different landing spot, not a different code path.
+
+**The corpus instance is unchanged against the fixed binary**: same
+`pascal26:78: error: unknown type: TKey`, same `generics.defaults.pas`, `TKey`
+still occurring zero times there. So the corpus goes through a path this fix does
+not cover, or there is a second mechanism.
+
+**Which puts the coordinator's merge in doubt.** I merged frankB's corpus instance
+into this ticket on **signature similarity**. The reduction reproduces the
+signature and evidently not the corpus's mechanism — *a reduction matching the
+symptom is not proof it matches the cause, only a hypothesis that the symptom has
+one cause.* **Do not read this resolve as covering the corpus instance.** If the
+probe finds a second mechanism, split the corpus instance back out rather than
+widening this ticket.
+
+## The `near:` field is not sound either — this ticket's own evidence is weakened
+
+`InsertTokens` shifts `Tokens[]` but not the parallel `TokSrcOff[]`/`TokSrcLen[]`
+that `WriteTokenContext` prefers, so after any token splice the window prints
+spellings from **before** the shift. Filed as
+[[bug-a-the-near-context-window-is-stale-after-a-token-splice]] [A p45].
+
+Consequence for everything filed today: the inference *"the corpus tokens are
+really at `collections.pas:1631`"* rested on `near:`. **Line numbers are paired
+with the wrong file; `near:` is paired with the wrong token generation.** The only
+coordinate-free evidence is the **symbol** — `PT` occurs zero times in this run,
+therefore it is not that defect. Identify a wall by symbol alone until
+`bug-a-the-near-context-window-is-stale-after-a-token-splice` lands.
