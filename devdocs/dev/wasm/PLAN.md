@@ -2336,3 +2336,99 @@ never once changed a byte. If a flag is supposed to change the output, the check
 that passes it should be able to fail without it; here that took one line and
 one rebuild, and it is the only thing separating "compiled with the define" from
 "compiled".
+
+### Phase 9j — `ParamCount` / `ParamStr` — **MEASURED AND PARKED, 2026-08-30. Nothing applied.**
+
+argv is **4 of the anchor's 36 refusals**: one `ParamCount` (builtin `-55`, in
+`main$142`) and three `ParamStr` (builtin `-56`, in `PrintWhere`,
+`PrintLibraries`, `PrintDoctor`). It matters out of proportion to the count,
+because the anchor milestone is `pascal26` running under wasmtime and a compiler
+that cannot read its command line cannot compile anything.
+
+**It does NOT fail open.** Checked first, because the backend has no `tkArgStr`
+arm and the shared lowering at `ir_codegen.inc:8092` is x86-64 machine bytes —
+a chain with no final `else` is this target's known hazard
+(`refactor-a-target-dispatch-chains-fail-open`). It refuses loudly:
+`builtin unrecognised (IR_CALL with proc index -55)`. Good news, and worth the
+five minutes it cost to establish rather than assume.
+
+#### The decide ticket's unverified note is half right, and the wrong half
+
+`decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal` [U p40]
+records, as a possible way past it:
+
+> `tkArgStr` (3 lines) may also be independent: WASI `args_get` /
+> `args_sizes_get` need no preopen and no rights. **Not verified.**
+
+**The capability half is true and is now verified.** `args_sizes_get` and
+`args_get` take no descriptor and need no grant, so they are reachable while the
+whole path-opening surface is still waiting on that decision. An implementation
+was written against them and compiled.
+
+**The linkage half is false, and it was always the binding constraint.** Two
+measurements, both surprising:
+
+1. **`compiler.pas` links no PAL at all.** `uses SysUtils, Math, BaseUnix,
+   asmcore_base, asmcore_x64` — and nothing in that chain reaches
+   `lib/rtl/platform.pas`, which is the only unit that says
+   `uses platform_backend`. The units that pull the PAL in are the networking
+   and `classes` family. So a PAL-side implementation is invisible to the one
+   program this phase exists to compile. That is the same sentence as the
+   decide ticket's own title, reached from a different direction.
+
+2. **Even WITH the PAL linked, a PAL routine nothing calls is gone.** A probe
+   with an explicit `uses platform` still reported
+   `the builtin unit has no PalBackendArgCount`, while `strings` on the same
+   module shows `PalBackendPlatform`, `PalBackendHasFiles`, `PalBackendHasSockets`
+   present — they survive because `platform.pas` calls them. A routine whose
+   only caller is a *synthesised* call the backend emits later has no Pascal
+   caller at the point emission-size DCE runs, so it is dropped before the
+   backend can ask for it.
+
+Together those close the PAL route: argv on this target must be **emitted by the
+backend** (`WasmHostImport('wasi_snapshot_preview1', 'args_sizes_get', …)`, the
+mechanism the unhandled-exception `fd_write` path already uses), not written in
+Pascal in `lib/rtl/platform/wasi/`. Which is itself **evidence for the blocked
+decision**: it is a worked demonstration that a WASI capability needing no
+preopen can be reached with no PAL linked at all.
+
+#### What the implementation costs, now that the shape is known
+
+The string half needs no new mechanism — the same two RTL routines every other
+target calls do it, and both are in the builtin unit, so they are always present:
+`PXXStrFromLit(len, src)` then `PXXStrPublish(slotAddr, handle)` for a managed
+destination, `PXXCStrToFrozen(dst, src)` for a frozen one. Compare
+`ir_codegen_riscv32.inc:2505`, which differs only in where `argv[i]` comes from.
+
+| piece | needs | state |
+| --- | --- | --- |
+| `ParamCount` | `args_sizes_get` into 8 bytes of scratch, minus 1 | **no new mechanism** |
+| `ParamStr` into a FROZEN dest | `args_get`, then `PXXCStrToFrozen` — takes no length | **no new mechanism** |
+| `ParamStr` into a MANAGED dest | `PXXStrFromLit` needs a LENGTH, i.e. a strlen | **the one gap** |
+
+All three of the anchor's `ParamStr` sites are frozen, so the anchor's four
+refusals need no strlen. But `s := ParamStr(i)` with `s: string` is the common
+Pascal spelling and takes the managed path, so shipping only the frozen half
+would be a feature that works in the program we measure and refuses in the
+program a user writes.
+
+**Why it stopped here rather than hand-rolling the loop.** This backend has **no
+hand-emitted `loop`/`block` anywhere** — every loop it produces comes from the
+IR's structured dispatch, and the branch-depth bookkeeping (`WasmDepthToLoop`)
+is tied to IR blocks. A hand-rolled strlen is therefore a genuinely new
+mechanism in this file, and a wrong branch depth is the quiet kind of wrong.
+
+**The shortcut that exists and was rejected.** `args_get` writes the strings
+contiguously into one buffer, so `argv[i+1] - argv[i] - 1` is the length with no
+loop at all, and `bufSize` closes the last one. Every host does this. WASI
+preview1 does **not** specify it, so the arithmetic would be correct on the
+hosts we test and silently wrong on one that packs differently — the exact
+failure direction this lane refuses. Recorded so the next reader does not
+rediscover it and take it.
+
+**Next session starts** at a backend-emitted `WasmHostImport` pair plus one
+synthesised strlen, and should do the managed and frozen destinations in the
+same slice.
+
+Nothing applied. Measured at self-host fixedpoint `fb83a9c891b9`; the tree is
+back at that binary.
