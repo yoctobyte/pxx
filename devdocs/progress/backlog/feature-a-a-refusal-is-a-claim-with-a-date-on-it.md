@@ -8551,3 +8551,86 @@ references", so it checked that FPC is actually run as an output oracle
 one it had just written itself**, which arrives already believed. Same asymmetry as 184.
 
 Nothing was weakened: every edit adds a qualifier or a distinction, none hedges.
+
+### 187 — TWO IDENTICAL LITERALS INTERN TO ONE ADDRESS, SO THE BROKEN TEST PASSES
+
+frankS, 2026-08-30, fixing shortstring equality on xtensa. The equality guard was gated
+on `tyAnsiString` only, so **both-sides-frozen fell through to the INTEGER compare and
+compared buffer addresses.** `b = 'BBBB'` for `b: string[4]` answered FALSE.
+
+The comment above the broken guard said *"frozen equality already works"* — and that was
+**a measurement that passed for the wrong reason**, not carelessness:
+
+> `'BBBB' = 'BBBB'` really does answer true, because **two identical literals intern to
+> one address**, so address equality and string equality agree. Check frozen equality
+> with two literals and a broken compiler is correct. Check it with a variable and it
+> never worked.
+
+Direct sibling of 162 (nineteen of fifty cells passing by arithmetic): **a pass by
+coincidence is indistinguishable from a pass by correctness**, and here the coincidence
+is structural rather than numeric — interning makes the two relations agree on exactly
+the inputs a careless test uses. It hid for the life of the backend.
+
+The Makefile row frankS wired uses the **variable** form with a comment saying why,
+*because the obvious simplification of that row reintroduces the blind spot.* A test
+whose natural tidying restores the bug needs the reason attached to it, not near it.
+
+### 187a — A REPRO BUILT FROM A TEST'S FAILURE MESSAGE INHERITS THAT MESSAGE'S ERROR
+
+Same session, an hour later, same blind spot, and this one is the transferable half.
+
+`test_shortstring_trunc` printed `b-CLOBBERED`. **Nothing was clobbered** — `b` prints
+`BBBB`, `Length(b)` is 4, the neighbour is intact, the write truncates correctly. The
+message named a *cause* it had inferred, and the cause was wrong.
+
+The message propagated **four hops**: frankS repeated it in a handback table, a commit
+message, and a message to the coordinator; the coordinator **filed and ranked a ticket on
+that framing**, titled it `…corrupts-a-neighbouring-variable`, and ruled the ESP park
+inapplicable *on the strength of it being memory corruption.*
+
+Then it got frankS again: the first minimal repro assigned an oversized literal, printed
+`a`, printed `b` — and **passed.** *"I had reproduced the write and dropped the
+comparison, removing the actual defect from my own repro while believing I had bounded
+it."*
+
+> **A test's failure message is a hypothesis with a date on it.** Reproduce the
+> OBSERVABLE, never the message's account of it — a repro derived from the message
+> inherits its error and, worse, *confirms* it by being bounded the same wrong way.
+
+Coordinator's note on its own hop: **the ruling survives on a different premise** — the
+escape rule is *silent wrong behaviour*, which a comparison answering FALSE is — but it
+was **stated** as memory corruption, and per 138, *a right destination reached by a false
+argument does not self-correct.*
+
+### 187b — THE TWO-GUARD SPLIT WAS THE SAME DEFECT COMMITTED AGAIN INSIDE ITS OWN FIX
+
+Same fix. riscv32 **already carried** this repair with the identical root cause spelled
+out in its comment — *"Was gated on tyAnsiString only, so frozen = frozen compared
+ADDRESSES"* — and the sixth backend was skipped again anyway.
+
+frankS merged the two guards into one covering all six operators **rather than adding the
+missing terms beside the existing guard**, noting that the two-guard split *was itself the
+same defect committed a second time inside its own fix*, three lines under `PXXStrCmp3`'s
+note about being miscounted.
+
+That is `normalise-dont-special-case.md` applied to the *shape of the fix* rather than to
+the code being fixed: **adding a second arm beside the first is how the double case is
+created, including when you are creating it in order to close a double-case bug.**
+
+### 187c — A BYTE-IDENTICAL RESULT READS AS "MY CHANGE DID NOTHING"
+
+Same session, bug 2 (a by-value wide record on xtensa). After landing two of the three
+spots, the repro was **byte-identical to before** — which reads exactly like a no-op and
+would have sent frankS hunting a wrong predicate in the two arms it had just written.
+
+A **one-line `Error` probe** in the call-arg arm answered it in one build: the arm fires.
+The caller was already correct; **the callee was the half nobody had visited.** Probe cost
+two minutes; re-reading a correct guard would have cost an afternoon *and produced a wrong
+root cause in a ticket* — which is the exact outcome `PXXDBG` exists to prevent.
+
+And the disposition was right: **reverted rather than left half-applied.** arm32's ticket
+for the identical bug says a subset fix *"turned the data loss into active corruption"*,
+and frankS measured exactly that — with two of three spots in, rows change value rather
+than become correct, because every parameter after the record shifts by a word. Patch
+banked in a scratchpad, diagnosis banked in the ticket, tree clean. **Park rather than
+microfix, in the one lane where a half-applied change can poison every other.**
