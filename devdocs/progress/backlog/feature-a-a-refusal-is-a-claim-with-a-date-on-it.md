@@ -9713,3 +9713,61 @@ night.
 Same defect as the stale `platform_backend.pas` comment filed hours earlier (198). The rule
 being enforced is the one you will not apply to yourself — so: **retract out loud, name the
 premise that failed, and say which constraints are lifted.**
+
+---
+
+## 202 — A PROCESS-PATTERN SEARCH RUNS INSIDE A PROCESS WHOSE COMMAND LINE CONTAINS THE PATTERN
+
+*(pxx-a5, 2026-08-30, killing its own reducer — and walking into the trap while doing the
+thing a doc already warns about.)*
+
+`pkill -f "reduce.py"` **matched its own shell's command line and killed the shell.** Exit 144.
+
+CLAUDE.md already records one symptom of this: `until ! pgrep -f "make test"` never exits,
+because the watcher's own command line matches the pattern. That entry documents **one command
+and one symptom**, which is why it did not transfer. The general form is structural:
+
+> **A `-f` pattern match is self-referential by construction** — the search runs inside a
+> process whose command line contains the pattern you are searching for.
+
+And the reason it keeps costing something is that **the failure mode differs by tool, and
+neither presentation looks like the cause**:
+
+| tool | what happens | what it reads as |
+| --- | --- | --- |
+| `pgrep -f X` in a wait loop | the loop never exits | a **hang** in the thing being waited on |
+| `pkill -f X` | kills the asker | a **crashed tool**, or an unexplained exit 144 |
+
+Neither says "your pattern matched you". Fix, in both cases: **bracket a character so the
+literal pattern is not present in the matching process's own argv** — `[r]educe\.py`,
+`[m]ake test`. pxx-a5 used exactly that to confirm the kill afterwards.
+
+Worth noting *how* it was found: the shell died and the exit code was 144, i.e. the diagnosis
+came from an odd exit status rather than from any message. It is the same family as 198a — **a
+tool reporting something adjacent to the truth** — and this index's recurring lesson about
+symptoms recorded without their mechanism: a doc that records *"`pgrep -f "make test"` never
+exits"* protects the next person who runs that exact command, and nobody else. **Record the
+mechanism, not the instance** — otherwise the entry is a landmine map with one mine on it.
+
+### 202a — relaying a tool's confident claim is making the claim
+
+Same message, and pxx-a5 volunteered it about itself rather than being told:
+
+> *"I reported both DANGLING-SHA lines as findings for other lanes without checking them, on
+> the strength of a confident message from a tool… Relaying a tool's confident claim is making
+> the claim."*
+
+The check's text said *"almost always a PRE-REBASE sha copied from a local reflog"* and named
+an exact remedy, so it read as a finding rather than as an inference — and **three of those
+tickets explained the true case in their own prose, one line from the citation.** Reading
+either would have caught it.
+
+This is the standing relay rule (*verify a peer's report before relaying it*) with the source
+being **a tool rather than a peer**, and the tool is the harder case: a peer's claim carries
+visible authorship and invites a check, while a tool's output reads as measurement. **The
+confidence of a generated message is a property of its author's prose, not of its evidence.**
+
+Note where the check landed, because it is the standing lesson about where verification flows:
+pxx-a5 spent care on the *fuzz* findings — five oracles, two refuted hypotheses, a deferred
+revalidation labelled NOT VALIDATED — and passed the tool's output along unread. The scrutiny
+went to the thing it had doubts about.
