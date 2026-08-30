@@ -3,7 +3,7 @@ slug: feature-dns-esp-wire-nameservers-from-lwip
 track: B
 prio: 15
 type: feature
-blocked-by: []
+blocked-by: [decide-is-the-2026-07-12-esp-park-still-in-force]
 summary: "Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets."
 status: backlog
 ---
@@ -70,3 +70,23 @@ Low (15), and lower than the parent was. Nothing is blocked on it, the default
 route works without it, and ESP remains parked behind Pascal by the user's
 standing call ("ESP parked (user 2026-07-12): Pascal has prio"). It is filed so
 the design is not lost, not to schedule work.
+
+## 2026-08-30 — blocked on the ESP-park decision, by the agent who filed it
+
+Filed earlier today, ranked, and dispatchable within the hour — which is the
+problem. The 2026-07-12 user ruling *"ESP parked: Pascal has prio"* exists as a
+comment on a `prio:` field in one `done/` ticket plus prose in one backlog
+ticket. It is enforced nowhere, so this row was about to be handed to the next
+agent as ordinary p15 work while the question of whether ESP should be worked at
+all is open as [[decide-is-the-2026-07-12-esp-park-still-in-force]].
+
+`blocked-by:` that decision. **This does not presume its outcome** — it says
+only "not dispatchable until the question is answered", which is true whichever
+way it goes: if the park is lifted the edge clears and this ranks normally; if
+it holds, it should never have ranked. The parent ticket already noted the park
+in prose, and prose is exactly what the ranker cannot see — the same gap the
+decision is about.
+
+Narrow on purpose: this is the one ESP row I filed myself. The other 22 ranked
+ESP/xtensa rows are not mine to gate, and gating them is part of what the
+decision has to settle.
