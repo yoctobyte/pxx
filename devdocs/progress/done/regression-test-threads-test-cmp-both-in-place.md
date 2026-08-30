@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: A+O
+status: done
+owner: frank-optimize-b4
 ---
 
 > **RETRACKED P → A+O by the coordinator, 2026-08-30.** The guess was P; the argument for
@@ -74,3 +76,52 @@ must never contain an absolute `/tmp` path, because testmgr rewrites it
 
 **This is exactly the shape face 132b names** — `run_target.sh` standing where a program's
 output belongs. Third instance of the harness-artefact-read-as-a-result family.
+
+
+## Resolved 2026-08-30 — the defect was in the expectation, and the row was ZERO coverage
+
+Fixed in `df8731b1f` (the Makefile half; the rows were added in `d1535b899`).
+
+**Cause.** The `for`-loop rows used `$$$$(...)` where a make recipe needs
+`$$(...)`. Make collapses `$$` to `$`, so the shell received `$$` — **its own
+PID** — followed by a literal `(printf ...)`. Both sides of the comparison were
+therefore command *strings*, never program output:
+
+```
+-3896084(printf 'acc=49149\none=16383\ndone')
++3896084(tools/run_target.sh aarch64 /tmp/testmgr-scratch-.../test_cbip_a64_0)
+```
+
+They could never have matched, and the absolute `/tmp/testmgr-scratch-…` path on
+the actual side is a second, independent reason (testmgr rewrites those;
+`devdocs/dev/gating-and-waiting.md`) — but only a symptom of the same bug, since
+that path was part of the *command text*, not of any output.
+
+**Not a regression, and the stub said so before anyone read it:** this was the
+job's first-ever run, so no interval contains a cause and every commit a range
+could name is equally innocent. Nothing in the row is evidence about
+`d1535b899` in either direction; that commit's own measurements (baseline
+`a60f92ba830a` vs `0d4f0b2a4ceb`, output identical, `-O0/-O1/-O2`
+byte-identical, x86-64 byte-identical) are unaffected.
+
+**The part worth keeping.** The aarch64 arm of a pass that deletes 901
+instructions in lispdemo had, at that moment, **no working regression test, and
+it looked like it had one**. Had the two command strings happened to agree, the
+row would have been green and would have proved nothing. That is the same shape
+as a deliberate break that passes — *a comparison that never reaches the program
+is not weak coverage, it is zero coverage wearing a row.*
+
+**Repaired and then proven, which is the step that was missing the first time.**
+The recipe block was extracted into a scratch makefile so real `make` performed
+the `$$` expansion; run green; then run again with **only the aarch64
+expectation** perturbed by one digit. It fails there, against `acc=49149`
+produced by the qemu run — which is what demonstrates the comparison now reaches
+the program. The `test_shr_resident_widen` aarch64 rows added in `df8731b1f`
+were given the same treatment before being trusted. Both row sets re-verified
+green at HEAD (`deda1f9c0026`).
+
+**Filing note, not mine to fix but worth recording:** twatch guessed the track
+from the test's source path and filed this **P**, where it would have sat in the
+Pascal frontend's queue with no connection to the lane that wrote it. The
+coordinator retracked it by hand. The ranker reads frontmatter, so a path-based
+guess decides who ever sees a ticket.

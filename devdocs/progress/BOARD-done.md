@@ -2675,6 +2675,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-sqlite-threads-i386-00 | T | 70 | regression | regression: test-sqlite-threads-i386#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-i386-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh red at 940b261f8678 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-x86-64-00 | T | 70 | regression | regression: test-sqlite-threads-x86_64#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-threads-test-cmp-both-in-place | A+O | 70 | regression | regression: test-threads#src:test/test_cmp_both_in_place.pas@2 red at 0aa01425dbdc (auto-filed by twatch) | — |
 | regression-test-threads-test-parallel-for-capture-aggr-2 | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at 70f6a360f475 (auto-filed by twatch) | — |
 | regression-test-threads-test-parallel-for-capture-aggr | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at b936d125601e (auto-filed by twatch) | — |
 | regression-test-threads-test-sched-reactor-exhaustion-2 | B | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at dd9450b0ce75 (auto-filed by twatch) | — |
