@@ -193,3 +193,45 @@ ABI at all. Wiring a windowed alignment assertion is the cheap protection.
 Diagnosis only. The mechanism is the ELF writer's, not the xtensa backend's, and
 whoever repairs it should own that file rather than inherit it from the lane
 that noticed.
+
+## CONFIRMED at `df98fea47` (frankS, 2026-08-30) — the same 94 programs, not merely the same number
+
+Three sweeps of the 129 cross sources against the x86-64 oracle, at the **pushed**
+tree, compiler binary `62cfb924053f` (`make compiler/pascal26`, converged after 1
+round; the binary sha differs from every saved baseline, which is the check
+[[218f]] exists to force).
+
+| target / ABI | before | at `df98fea47` | lost | gained |
+| --- | --- | --- | --- | --- |
+| xtensa call0 | 104 (`2d2bc2fb0e15`) | **104** | 0 | 0 |
+| xtensa **windowed** | 94 (`a3f0f9e3325f` = `75d2ba662`) | **94** | 0 | 0 |
+| riscv32 | 111 (`bba42787923d`) | **111** | 0 | 0 |
+
+Set difference both directions, totals cross-checked (`matches_before - lost +
+gained == matches_after`) on every row.
+
+**The windowed row is the one that carries the finding, and the count is the
+weaker half of it.** At `75d2ba662` those 94 passed *by accident*: the page pad
+inserted for an unrelated performance reason happened to push the data section
+onto a 4-byte boundary. b4 deleted the pad and the canary still passes at
+`code=195724`, so the 4096 was never load-bearing — the alignment was. **The same
+94 sources pass now for a stated reason instead of a lucky one**, and that is
+what `lost=0 gained=0` says and a bare `94 == 94` does not: an equal count can
+hide an equal swap, which is why the comparison is a set difference.
+
+**call0 and riscv32 measure the cost, and it is zero.** Both tolerate unaligned
+word loads, so neither could gain from the fix; the only thing they could show is
+damage from moving every data address, and they show none across 215 program
+runs.
+
+**Scope, stated so the number is not over-read.** These 129 are hosted programs
+under qemu. They say nothing about ESP bare-metal (`--esp-profile=bare`), nothing
+about the other four targets, and — because the compiler binary is the same
+`62cfb924053f` b4 re-verified at — they are not an independent check of *which
+tree* was measured, only of what that tree does. `gate.sh quick` was green at
+b4's pre-rebase `0f609eb67c7a` and has not been re-run on the merged tree; this
+sweep is the merged tree's first breadth measurement, and it is clean.
+
+**Not resolving this ticket** — the fix is b4's and so is the close. Recording
+the confirmation it asked for by name, in the ticket rather than in a message,
+because a finding that lives in a message is not recorded.
