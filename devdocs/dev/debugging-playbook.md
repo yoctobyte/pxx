@@ -70,6 +70,14 @@ order to read them in. Route by what you are holding:
   gdb-attach are both refused
 
 **A measurement or a verdict is telling you something and you are about to believe it**
+- `## A guard can fail in the FALSE DIRECTION` -- a red that means "this box
+  checks MORE"; the reflex it invites is to delete the extra coverage
+- `## A job name is a promise, not a description of what ran` -- two hosts can
+  report the same job list, count and verdict and check different things
+- `## A/B the hunk, bisect the window` -- with a named suspect, one build beats
+  eight, and it answers *which hunk* rather than *which commit*
+- `## Ancestry is not existence` -- a behind checkout makes a real commit look
+  like a ghost; only `cat-file -t` proves one
 - ``## Profile the SHIPPING binary`` -- `-g` alone silently means `-O0`, so
   `make pxx-debug` profiles a different program and says nothing about it
 - `## Reading a NEGATIVE result` -- a change that measures as NO CHANGE is
@@ -836,6 +844,61 @@ accusation against another lane**, complete with a file name, a line number and
 a plausible mechanism. Before reporting that master's gate is red, reseed from
 `pinned` and rebuild — three commands, and the alternative is a peer bisecting
 a bug that is not there.
+
+## A guard can fail in the FALSE DIRECTION, and that costs more than a silent one
+
+Measured 2026-08-30. `tools/csmith_target_devtest.py` asserted, unconditionally:
+
+    no ILP32 oracle on this box (gcc -m32 compiles, does not link),
+    so none is claimed
+
+True on the box it was written on. **False on plexus**, where `gcc -m32` links
+and `probe_oracle("arm32")` returns an ILP32 datamodel oracle. So a csmith run
+on one host compares ILP32 checksums against an oracle and on the other silently
+does not — and the only thing that noticed was a guard, **which reported the
+host with MORE coverage as the defect.**
+
+**That is worse than a silent failure, and for a specific reason: nobody chasing
+a red reads it as "this box checks more".** The reflex is to make the red go
+away, and the cheapest way to do that is to *remove the extra coverage*. A
+silent guard costs you a verdict; a false-direction guard costs you the
+capability, and it recruits you into destroying it.
+
+Same family as the loud stale seed two sections up, which read as another lane
+breaking master's self-host gate. Both hand you a specific, plausible, wrong
+culprit; neither errors; both are *correct about something else*.
+
+**The fix is never to pick the other host's answer.** Assert the property that
+holds on any box — here, that the probe gives an answer and says what it means —
+with **both arms asserted** so neither can go silent, and print which arm ran so
+a reader of this host's output knows what it actually covered.
+
+### A job name is a promise, not a description of what ran
+
+frank-user's form, and it is why a job-set diff cannot see the above:
+**`csmith-fuzz#arm32` names the INPUT.** It says nothing about whether an oracle
+was claimed, and both hosts keep the promise. Two hosts can run the same suite,
+report the same job list, the same count and the same verdict, and check
+different things.
+
+So a host-parity check keyed on job names is necessary and not sufficient: the
+artifact everyone compares is the one place the difference is guaranteed to be
+absent. The unit is **capability × job**, and the capability half is what no
+census of corpora or job names will ever show you.
+
+### And the recurring shape underneath all three: the instrument already had the answer and threw it away
+
+Three instances in one day, and in every one the fix was **persistence, not a
+new instrument**:
+
+- `probe_oracle` computes the full oracle vector and drops it after printing;
+- `sync.sh` proved each commit was on origin and discarded the sha it had just
+  resolved — which is why the ghost-sha rate was ~100% by construction;
+- `skip_summary` counted coverage holes without naming them.
+
+Before building a prober, check whether something already probed. The question
+to ask of a tool that nearly answered you is not *"what else could measure
+this?"* but ***"what did this already compute and then not write down?"***
 
 ## Ancestry is not existence: `--is-ancestor` cannot tell you a commit is a ghost
 
