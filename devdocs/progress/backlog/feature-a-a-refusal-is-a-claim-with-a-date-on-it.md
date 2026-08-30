@@ -5907,3 +5907,50 @@ the code stood.
 **"The workaround is no longer necessary" and "the workaround should be removed" are
 different claims.** A revert-when-fixed lifecycle that cannot record *"kept on merit"*
 turns into a ratchet that degrades code every time a bug closes.
+
+### 143 — a lane told to TAKE THE QUEUE HEAD will always be MAPPING, and that is the dispatcher's doing
+
+*frank-coordinator, 2026-08-30, after frankwasm parked three N tickets in a row and
+asked, unprompted, whether it was mapping when it should be building.*
+
+Its three parks were individually defensible — one was my own call, one disproved a
+ticket's central premise and reverted working code that printed a silent wrong answer
+(135a), one banked a nine-hook implementation map before spending on emitters. But three
+in a row is a pattern, and the pattern is mine:
+
+> **I told it to take the top of `ready --track N`. The top of a mature lane's queue is,
+> by construction, where the big undone features are — high prio *and still open* means
+> hard.** So a lane that always takes the head will always be mapping, and its dispatcher
+> will keep reading the result as a disposition problem.
+
+The failure is invisible from the worker's seat: every individual choice looks right,
+because every individual ticket really was too big to finish. It is only visible from
+the queue, which is the coordinator's view — the same asymmetry as *an idle worker is
+the coordinator's only output going to zero* (rule 6), arriving from the opposite side.
+Rule 6 says do not let a worker idle; **this says do not mistake a dispatch policy for a
+worker's temperament.**
+
+**The remedy is a dispatch change, not an instruction to build:** deliberately take a
+*completable* item down the queue, land it, then return to the head with the map already
+banked. Mapping and landing alternate; they do not compete. A lane that never lands
+capability stops being able to tell a hard ticket from a hollow one, because it has no
+recent calibration of what finishing costs.
+
+And the worker's own pushback was the load-bearing half, so it goes in verbatim: **do
+not do the easy half.** Enum member access without iteration or lookup would compile
+`for c in Color` into something plausible — *"the decorator failure with a different
+name"* (135a). **A partial feature that answers is worse than one that refuses**, and
+"land something" is exactly the pressure that produces one.
+
+### 143a — it reported what it had SAID it would do, then did something better, and flagged the gap
+
+Same session: it told me it would *"carry on down `ready --track N`"*, then finished a
+ticket it already held instead — the right order, since abandoning a just-claimed ticket
+to take another is the churn it had itself flagged. It corrected the record anyway:
+*"that isn't what I said I'd do, and you were reading my message not my queue."*
+
+That last clause is the whole point. **The coordinator's model of a lane is built from
+messages, not from the tree**, so a divergence between what a worker said and what it did
+is a defect in *my* state even when the worker's action was better. Worth naming because
+the instinct is to wave it off as harmless — and it is harmless to the work and not to
+the coordination.
