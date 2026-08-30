@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: P
+status: done
+owner: frankwasm
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -35,3 +37,31 @@ expect_same: MISMATCH [test_val_radix26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Diagnosis and fix (frankwasm, at HEAD): NOT a regression — collateral from a replace keyed on the COUNT
+
+All three tests are correct and unchanged. `89e58402a` added canary checks 24-27
+and bumped `test-quick`'s `qc_nilpy26` expectation from `total ok 23 / 23` to
+`27 / 27` — correctly. The same replace also hit three `test-core` recipes that
+legitimately score 23/23, because **`total ok N / N` is not a unique string in
+the Makefile**: seven recipes across four tiers share these totals, so a replace
+keyed on the count matched by VALUE where the author meant to match by IDENTITY.
+
+Measured at fixedpoint `bb3a768b89a2`, unmodified sources:
+
+```
+test/test_str_of_unsigned.pas                  total ok 23 / 23
+test/test_val_radix_and_optional_code.pas      total ok 23 / 23
+test/test_rtl_fpc_compat_helpers.pas           total ok 23 / 23
+test/quick_canary_nilpy.npy                    total ok 27 / 27
+```
+
+`gate.sh quick` was run on `89e58402a` and was GREEN — correctly, and it could
+not have been otherwise: **quick runs `test-quick` and not `test-core`, so the
+one tier that validated the edit is the one tier containing none of the
+collateral.** A `sed` spans the whole 16k-line file; a gate spans one recipe.
+
+Fixed by reverting the three `test-core` lines to `23 / 23` and leaving
+`qc_nilpy26` at `27 / 27`, plus a comment at the canary line naming the hazard
+for the next person who adds checks there. No compiler change.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

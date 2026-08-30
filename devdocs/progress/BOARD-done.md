@@ -2713,6 +2713,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-ptr-deref-vararg | P | 70 | regression | regression: test-core#src:test/test_ptr_deref_vararg.pas red at b936d125601e (auto-filed by twatch) | — |
 | regression-test-core-test-record-helper-for-string-b331 | P | 70 | regression | regression: test-core#src:test/test_record_helper_for_string_b331.pas red at 2e7286e499d1 (auto-filed by twatch) | — |
 | regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-core-test-rtl-fpc-compat-helpers | P | 70 | regression | regression: test-core#src:test/test_rtl_fpc_compat_helpers.pas red at 6d68643f9799 (auto-filed by twatch) | — |
 | regression-test-core-test-rtti | P | 70 | regression | regression: test-core#src:test/test_rtti.pas red at 392ea5d94545 (auto-filed by twatch) | — |
 | regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
@@ -2723,6 +2724,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-static-array-length | T | 70 | regression | regression: test-core#src:test/test_static_array_length.pas red at fb9346bd4bce (auto-filed by twatch) | — |
 | regression-test-core-test-stmt-call-result-selector-b318-2 | P | 70 | regression | regression: test-core#src:test/test_stmt_call_result_selector_b318.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-stmt-call-result-selector-b318 | T | 70 | regression | regression: test-core#src:test/test_stmt_call_result_selector_b318.pas red at 33cd0117f9f9 (auto-filed by twatch) | — |
+| regression-test-core-test-str-of-unsigned | P | 70 | regression | regression: test-core#src:test/test_str_of_unsigned.pas red at 6d68643f9799 (auto-filed by twatch) | — |
 | regression-test-core-test-strict-overload-width-2 | P | 70 | regression | regression: test-core#src:test/test_strict_overload_width.pas@1 red at 943c706936b3 (auto-filed by twatch) | — |
 | regression-test-core-test-strict-overload-width | P | 70 | regression | RESOLVED — not a defect. An intended EXPECTATION change: Integer and LongInt are one 4-byte signed type, so the LongInt overload is an exact match and the exact phase now sees it. Fixed forward in 58f5ef974; auto-closed by the watcher and independently verified GREEN at HEAD by Track T. | — |
 | regression-test-core-test-string-to-pchar-auto | A | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
@@ -2732,6 +2734,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-uses-order-pylib-exception-a | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_a.pas red at 1df75aad5458 (auto-filed by twatch) | — |
 | regression-test-core-test-uses-order-pylib-exception-b | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_b.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-val-builtin | T | 70 | regression | regression: test-core#src:test/test_val_builtin.pas red at 7462448a21bd (auto-filed by twatch) | — |
+| regression-test-core-test-val-radix-and-optional-code | P | 70 | regression | regression: test-core#src:test/test_val_radix_and_optional_code.pas red at 6d68643f9799 (auto-filed by twatch) | — |
 | regression-test-core-test-variant-string-ops | A | 70 | regression | regression: test-core#src:test/test_variant_string_ops.pas red at df21e490d798 (auto-filed by twatch) | — |
 | regression-test-core-test-warn-ignored-directives | A | 70 | regression | regression: test-core#src:test/test_warn_ignored_directives.pas red at 83fb0ef72419 (auto-filed by twatch) | — |
 | regression-test-core-test-widechar-to-utf8-b319 | T | 70 | regression | regression: test-core#src:test/test_widechar_to_utf8_b319.pas red at d94db8d6b0cc (auto-filed by twatch) | — |
