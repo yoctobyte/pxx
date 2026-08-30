@@ -14,7 +14,7 @@ order: 93
 | `pxx` | The wrapper created by `install.sh`; it calls the pinned compiler with library roots. |
 | Pinned compiler | The stable compiler selected by `stable_linux_amd64/default/pinned`. |
 | Self-hosting | The compiler is written in its own Pascal dialect and can compile itself. |
-| Fixedpoint | A self-build reaches byte-identical output across rebuild stages. |
+| Fixedpoint | The compiler compiles itself, that result compiles it again, and the two binaries are byte-identical — **at the default optimisation level**. Expanded under [Build terms a newcomer meets first](#build-terms-a-newcomer-meets-first). |
 | Direct ELF | PXX writes ELF output itself instead of invoking an external assembler or linker. |
 | RTL | Runtime library units under `lib/rtl`. |
 | PCL | Component/UI library units under `lib/pcl`. |
@@ -67,7 +67,10 @@ and the mapping is usually more useful than a definition.
 | `nil` | `None` | |
 | overload | — | Python resolves one name to one function; Pascal picks by argument types |
 
-### Build terms a newcomer meets first
+## Build terms a newcomer meets first
+
+Plain-language versions of three terms defined tersely above; the definitions
+agree, and this is the one to read first if either is new.
 
 | Term | Meaning |
 | --- | --- |

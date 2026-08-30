@@ -42,9 +42,12 @@ assembler, linker, or C compiler invoked during the build.
 
 ## Design points
 
-- **Self-hosting.** The compiler is written in its own dialect. The
-  development gate requires it to compile itself to a byte-identical fixed
-  point — build 2 must equal build 3, exactly, on every self-hosting target.
+- **Self-hosting.** The compiler is written in its own dialect, and every
+  change is gated on it compiling itself to a byte-identical fixed point:
+  the compiler builds the compiler, that result builds the compiler again, and
+  the two must be equal to the byte. This runs natively, at the default
+  optimisation level; the other self-hosting targets are covered by the
+  cross-target suites in the test matrix rather than by the per-change gate.
 - **Two string ABIs.** The default build uses managed, reference-counted
   strings; a `hello world` executable is approximately 31 KB. Compiling with
   `-uPXX_MANAGED_STRING` selects an older frozen-string ABI with no dynamic
@@ -79,8 +82,10 @@ Compilation proceeds through five stages, with no external tools invoked:
    is imported.
 
 Optimization runs at `-O2` by default (peephole passes, procedure inlining,
-and dead-code elimination, tiered by `-O` level); `-O0` disables it and is the
-byte-identity reference used by the self-host gate. There is no whole-program or
+and dead-code elimination, tiered by `-O` level); `-O0` disables it. The
+self-host fixedpoint is proved at the **default** level, not at `-O0` — the
+compiler rebuilds itself with no `-O` flag at all, so "it reproduces itself" is a
+statement about one optimisation level. There is no whole-program or
 SSA-based optimizer — the passes are local and the emitted code stays close to
 the source. See the [command-line reference](../reference/cli.md#runtime-and-codegen)
 for the `-O` levels.

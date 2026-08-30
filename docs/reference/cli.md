@@ -90,8 +90,13 @@ Tier order: -Fu/-I  >  PXX_HOME/PXX_LIBPATH  >  pxx.cfg  >  exe-dir defaults.
 `--config` is an exact alias — same output, same exit — for when the question is
 phrased as "which `pxx.cfg` is in effect?" rather than "where is the RTL?".
 (Deliberately not called "byte-identical": in these docs that phrase is reserved
-for the self-host fixedpoint and the gcc-oracle corpora, and reusing it for two
-flags that print the same thing would blur a distinction worth keeping.)
+for two specific technical claims, and reusing it for two flags that print the
+same thing would blur a distinction worth keeping. The two claims are **not the
+same claim** — in the self-host fixedpoint it is the *binary* that is identical,
+to our own previous output; in the gcc-oracle corpora it is a compiled program's
+*output* that is identical, to the output of the same program built with gcc.
+PXX does not emit gcc's machine code. See
+[Status](status.md#what-works-means-here).)
 
 One subtlety worth knowing: `-Fu` and `-I` given **before** `--where` on the
 command line appear in its output, and ones given after it do not — `--where`
