@@ -348,3 +348,56 @@ fix is to push/pop the six raw-convention registers around the call inside
 syscall — acceptable for a portability mode. **Whether any of the 42 callers
 actually depends on that is unmeasured**, and it should be measured rather than
 assumed in either direction before increment 2 lands.
+
+## Increment 2 attempted, reverted, and it found a latent compiler bug
+
+The plan was right and the implementation worked: convert at `EmitSyscall`'s
+single choke point so all 43 sites lower at once with no caller change, with the
+six raw-convention registers pushed/popped around the C call so the raw contract
+is preserved exactly and no caller audit is needed.
+
+It measured beautifully and was still wrong:
+
+| program | raw | increment 1 | increment 2 |
+| --- | ---: | ---: | ---: |
+| hello-world | 73 | 67 | **9** |
+| file I/O + heap + string + exceptions | 195 | 105 | **9** |
+
+...and the second program **segfaulted**. Reverted; increment 1 (`b778c6078`)
+stands and is unaffected.
+
+### The cause is not in this ticket's work
+
+Growing `EmitSyscall` from **2 bytes to ~140** overflowed unrelated `rel8` jump
+patches that span a syscall. Filed separately as
+[[bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows]] [A p55],
+measured to the byte: a `jns` at `0x41115e` with displacement **-75** against an
+intended forward span of **181** (`181 - 256 = -75`), landing mid-instruction at
+`0x411115`.
+
+**Two wrong guesses are recorded here on purpose**, because both were plausible
+and both cost a rebuild:
+
+1. *"The pushes clobber the 128-byte red zone."* Adding `sub rsp,128` /
+   `add rsp,128` around the sequence changed nothing. Wrong.
+2. *"The C call destroyed `rbp`."* A breakpoint at the sequence entry showed
+   **`rbp` was already nil on arrival** — the sequence never touched it. Wrong,
+   and it was the measurement that killed it rather than more reading.
+
+What actually identified it was noticing that `rip` was **mid-instruction**,
+which no linear execution can produce, and then *scanning the executable segment
+for any rel8 jump targeting that address* — one hit, and its displacement
+matched the truncation arithmetic exactly.
+
+### What increment 2 must do instead
+
+**Emit a `call` to one shared out-of-line thunk.** `EmitSyscall` then emits ~5
+bytes instead of ~140, so every rel8 span is essentially unchanged and the
+landmine is not tripped. The thunk holds the register shift, the aligned call,
+the errno mapping and the save/restore, emitted **once** — which also removes the
+code-size cost of inlining ~140 bytes at 43 sites.
+
+This is strictly better than what was reverted, and it does not depend on the
+rel8 bug being fixed first. It still writes no call site: `EmitSyscall`'s body
+and one new thunk emitter, exactly the disjointness the `ir_codegen.inc` grant
+rests on.
