@@ -206,6 +206,49 @@ finishing it is worth without changing anything about how it should be done: its
 ticket's warning stands, and *do not weaken the prerequisite scan to make the
 corpus advance*.
 
+## 2026-08-30 (frank-rust, verified by frankB) — a wall leaves the rung with no code written
+
+**`bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered` is off rung
+6's count.** It does not reproduce on HEAD *or* on `pinned faf762981c3c`, so it
+was closed by other work between `e82c2f63a242` (the binary it was filed
+against) and the pin. frank-rust verified by **calling through** the taken
+address for a base and an overriding descendant, rather than checking the
+pointer is non-nil — an absence is not a verdict, and a non-nil pointer proves
+nothing about dispatch. pxx and FPC agree on all five observables.
+
+**Checked against the corpus rather than in the abstract, which is what makes it
+a rung fact.** Counted here independently: **24 of 24** `TMethod(...)`
+initialisers in `rtl-generics` use the class-name receiver spelling
+(`THashService<T>.SelectX`), and **zero** use either broken spelling. So the
+wall is gone for this rung specifically, not merely fixed somewhere.
+
+**Do NOT let the siblings back into this count.** Two receiver spellings are
+still broken — a bare name inside the class's own method, and a metaclass
+variable — filed as
+[[bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings]]
+[P p45]. Neither is a regression (both fail on the pin too) and **the corpus
+uses neither**. A future reader who greps "parenless method reference" and finds
+an open P ticket will be tempted to re-add it to rung 6; the 24/24 count above
+is the answer to that.
+
+### A bisection lead that is INVALID — do not spend a pass on it
+
+Removing `{$I inc\generics.dictionaries.inc}` to bisect the `TKey` wall is not a
+valid step, and the earlier note suggesting two open readings of its result is
+withdrawn. That include holds the method **bodies** for classes declared in
+`dictionariesh.inc`, so removing it changes what `BufferGenericMethod` buffers —
+which is the very machinery the failure runs through. **The experiment perturbs
+its own subject, and any bisection along that axis converges on the
+perturbation.** A valid cut takes whole declarations, header and body together,
+never one include at a time.
+
+The error that was being used to justify the lead had a bad coordinate too:
+"line 1313" of `generics.collections.pas` is `Notify(Result,
+ACollectionNotification);`, inside an implementation body, which cannot produce
+"unexpected token in a unit interface section" — the `near:` text matches `:207`,
+an interface constructor declaration, ~1100 lines away. Consistent with the two
+coordinate defects recorded above; **use the symbol, not the position.**
+
 ## LIVE STATUS — rung 6 (`rtl-generics`). THE ONE CANONICAL TABLE.
 
 **Every other wall table in this file is a dated snapshot of what was true when it
