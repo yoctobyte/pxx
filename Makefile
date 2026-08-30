@@ -11252,6 +11252,22 @@ test-core: $(COMPILER)
 	# bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
 	./$(COMPILER) test/c_const_branch_dead_arm.c $(TESTTMP)/c_constbranch26
 	tools/expect_same.sh c_constbranch26 "$$($(TESTTMP)/c_constbranch26)" "$$(printf '42 42 42 42 42\n100 200 400 300 500 600')"
+	# An UNSIGNED constant guard must be decidable at compile time, like every
+	# other constant one. The portable-C idiom `UINT_MAX == 0xffffffff` is how
+	# real code asks how wide a type is -- busybox's include/xatonum.h is
+	# exactly this, and it declares BUG_xatou32_unimplemented() without ever
+	# defining it, assuming the guard folds. So the assertion is THAT IT RUNS:
+	# a surviving dead arm is a real undefined import and a binary that will
+	# not START.
+	# It needed its own fix on top of the constant-`if` fold: CTrunc32 models
+	# C's usual arithmetic conversions by masking BOTH operands of an unsigned
+	# 32-bit compare to 32 bits, which on a literal produced a const-const
+	# `k & $FFFFFFFF` that no fold sees through -- so `4 == 4` folded and
+	# `4u == 4u` did not. Rows 100/200 are the CONTROL: the same operators on a
+	# RUNTIME value, both arms reachable and both taken.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_unsigned_const_guard_folds.c $(TESTTMP)/c_uguard26
+	tools/expect_same.sh c_uguard26 "$$($(TESTTMP)/c_uguard26)" "$$(printf '11\n12\n13\n14\n15\n16\n100\n200')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300')"
 	# The riscv32 arm of this only fails cross-target; see test-c-float-const-cross.

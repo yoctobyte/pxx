@@ -13942,17 +13942,29 @@ begin
 end;
 
 { NOTE — IR-level constant folding + algebraic identities were implemented and
-  MEASURED (2026-07-03), then REJECTED: zero fires on the whole compiler
-  self-compile AND on synthetic tests. Reason: PXX already eliminates these
-  upstream, so no const-const IR_BINOP (nor an x*1 / x+0 identity operand) ever
-  reaches the IR for ANY frontend — Pascal folds source constants in ConstEval
-  / AST, the C and Nil-Python frontends share the same AN_BINOP lowering, and
-  that lowering guards pointer/index stride with `if elemSize > 1` (ir.inc
-  ~3345/3359) so `index * 1` is never emitted. The passes were correct but pure
-  dead weight (extra procs + self-host surface, no win), so they are not
-  shipped — measured-not-speculative, same call as the rejected allocator bins.
-  If a future IR pass (e.g. loop strength-reduction) starts PRODUCING
-  const-const binops, revive const-fold then, gated the same way. }
+  MEASURED (2026-07-03), then REJECTED as zero-fire on the compiler's own
+  self-compile and on synthetic tests. The MEASUREMENT stands. Its written-up
+  SCOPE does not, and the difference is the whole point of this note.
+
+  It was recorded as *"no const-const IR_BINOP ... ever reaches the IR for ANY
+  frontend"*. The self-compile is **Pascal**, where ConstEval really does fold
+  at AST time; "any frontend" was never measured, and it is false. Measured
+  2026-08-30 on C: `4 == 4`, `2 + 2` and `sizeof(unsigned) == 4` all arrive as
+  const-const IR_BINOPs. The trigger this note names — "if a future IR pass
+  starts PRODUCING const-const binops, revive const-fold" — had therefore
+  already fired, from a direction it did not anticipate: not a future pass, but
+  a frontend that was always there and was never sampled.
+
+  What is shipped now is NOT that general pass. IROptConstBranch folds only a
+  comparison of two integer literals, because that is the one question a branch
+  asks, and an unfolded branch is a CORRECTNESS bug rather than a slow path: its
+  dead arm reaches codegen, so a call inside it is a real external reference and
+  a declared-but-never-defined symbol makes the binary fail at LOAD. `2 + 2` is
+  still unfolded and IROptWarnMissedFold below still reports it.
+
+  So the open question is unchanged in substance and corrected in scope: a
+  general const-fold / identity pass is still unshipped and still wants its own
+  measurement — this time on C and Nil-Python input, not on the self-compile. }
 
 procedure IROptWarnMissedFoldFire(const what: AnsiString);
 { Shared one-shot emit for the missed-optimization tripwire. `what` names the

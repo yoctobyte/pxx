@@ -196,6 +196,26 @@ end;
 function CTrunc32(e: Integer): Integer;
 var node, mask: Integer;
 begin
+  { A LITERAL truncates here rather than growing a runtime AND. The node keeps
+    tyUInt32 and a non-negative value, which is the whole contract this helper
+    has with its callers — nothing downstream can tell the two apart.
+
+    Worth more than the instruction it saves: EVERY unsigned 32-bit comparison
+    in C runs both operands through here, so `if (UINT_MAX == 0xffffffff)`
+    reached the IR as `(k & $FFFFFFFF) == (k & $FFFFFFFF)` — two const-const
+    BINOPs that no fold in the pipeline sees through. The comparison could not
+    be decided at compile time, its dead arm reached codegen, and a call inside
+    that arm became a real external reference. busybox's
+    BUG_xatou32_unimplemented is declared and never defined exactly because gcc
+    folds this guard away, so the residue here was a binary that will not START.
+    bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start }
+  if (e >= 0) and (ASTKind[e] = AN_INT_LIT) then
+  begin
+    Result := AllocNode(AN_INT_LIT);
+    ASTIVal[Result] := ASTIVal[e] and $FFFFFFFF;
+    ASTTk[Result] := Ord(tyUInt32);
+    Exit;
+  end;
   mask := AllocNode(AN_INT_LIT);
   ASTIVal[mask] := $FFFFFFFF;
   ASTTk[mask] := Ord(tyInt64);
@@ -280,6 +300,7 @@ begin
   isSgn := (castTk in [tyInt8, tyInt16, tyInt32]) or
            ((castTk = tyChar) and CPlainCharSigned);
   m := (Int64(1) shl bits) - 1;
+
   lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := m; ASTTk[lit] := Ord(tyInt64);
   n1 := AllocNode(AN_BINOP); ASTIVal[n1] := Ord(tkAnd);
   ASTLeft[n1] := operand; ASTRight[n1] := lit; ASTTk[n1] := Ord(tyInt64);
