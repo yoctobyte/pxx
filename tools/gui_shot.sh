@@ -114,15 +114,57 @@ run_app() {
 
 kill_app() { kill -9 "$APP_PID" 2>/dev/null; }
 
-# A real PCL window compresses to well over this; a blank frame is ~1-3 KB.
-BLANK_MAX=4000
+# Blank detection: measure the PICTURE, not the file size.
+#
+# This used to compare the PNG's byte size against BLANK_MAX=4000, on the note
+# "a blank frame is ~1-3 KB". That number was true when written and had rotted
+# by 2026-08-30 -- but re-deriving it is NOT possible, which is why this is a
+# rewrite rather than a new constant. Measured at the default 1100x700 on
+# ffmpeg 8.0.1, Xvfb 1920x1080x24:
+#
+#     empty display          4013 bytes   (five samples, no variance)
+#     real xterm window      4068 bytes
+#
+# Fifty-five bytes apart. The size proxy has no discriminating power left at
+# any threshold, because a mostly-empty frame compresses to almost the same
+# size whether or not something is drawn in one corner of it. It is also
+# resolution- and encoder-dependent by construction, so any replacement number
+# would start rotting immediately.
+#
+# What is measured instead: the share of pixels differing from the frame's most
+# common luma, in units of 1/10000. This is a ratio, so it does not move with
+# resolution, and it reads decoded pixels, so it does not move with the encoder.
+# Same two frames as above:
+#
+#     empty display             1  /10000   (0.012% -- the mouse cursor, ~60px)
+#     real xterm window      1983  /10000   (19.8%)
+#
+# Three orders of magnitude apart. BLANK_BP sits at 50 (0.5%): 40x above the
+# cursor noise floor, and still well under a small dialog (a 200x100 window on
+# this canvas is ~260/10000).
+#
+# If you change this, re-measure both numbers and record them here -- the old
+# comment asserted a measurement once, in prose, with nothing that re-checked
+# it, and that is precisely how it rotted.
+BLANK_BP=50
+
+# Share of non-dominant pixels in $OUT, in 1/10000. Prints 0 when the frame
+# cannot be read at all, which is correctly treated as blank below.
+blank_bp() {
+  ffmpeg -v error -i "$OUT" -vf "scale=256:256:flags=neighbor,format=gray" \
+         -f rawvideo - 2>/dev/null \
+    | od -An -tu1 -v | tr -s ' ' '\n' | sed '/^$/d' \
+    | sort -n | uniq -c | sort -rn \
+    | awk 'NR==1 {d=$1} {t+=$1} END {if (t==0) print 0; else printf "%d", (t-d)*10000/t}'
+}
 
 ensure_xvfb
 run_app
 sleep "$SETTLE"
 SZ="$(grab)"
+BP="$(blank_bp)"
 
-if [ "${SZ:-0}" -le "$BLANK_MAX" ]; then
+if [ "${BP:-0}" -le "$BLANK_BP" ]; then
   # blank — the display is likely wedged; restart it and try once more, giving
   # the freshly-started server + app extra time to map.
   kill_app
@@ -131,12 +173,13 @@ if [ "${SZ:-0}" -le "$BLANK_MAX" ]; then
   run_app
   sleep "$(( ${SETTLE%.*} * 2 + 3 ))"
   SZ="$(grab)"
+  BP="$(blank_bp)"
 fi
 
 kill_app
 
-if [ "${SZ:-0}" -le "$BLANK_MAX" ]; then
-  echo "gui_shot: capture looks blank (${SZ}B) -> $OUT" >&2
+if [ "${BP:-0}" -le "$BLANK_BP" ]; then
+  echo "gui_shot: capture looks blank (${BP}/10000 non-uniform, ${SZ}B) -> $OUT" >&2
   exit 1
 fi
-echo "gui_shot: $OUT (${SZ}B) on $DISP"
+echo "gui_shot: $OUT (${SZ}B, ${BP}/10000 non-uniform) on $DISP"

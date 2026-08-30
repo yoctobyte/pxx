@@ -10,11 +10,10 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever | N | 65 | bug | 9-line repro: a class defining the same method twice, whose body assigns a parameter to a SAME-NAMED attribute (`self.prefix = prefix`), plus any later scope holding a local of that name, makes the compiler spin at 100% CPU forever. RSS is flat, so it never OOMs and never self-terminates — it hangs until killed. CPython accepts the source (last definition wins). Any lane running a lib gate over such a file hangs with no output. | — |
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-b-gui-shot-blank-frame-detector-no-longer-detects-a-blank-frame | B | 30 | bug | tools/gui_shot.sh rejects a capture as blank when it is <= BLANK_MAX=4000 bytes, on a comment claiming 'a blank frame is ~1-3 KB'. Measured 2026-08-30 at the script's own default 1100x700 under ffmpeg 8.0.1: a fully blank frame is 4013 bytes, five samples, no variance. 4013 > 4000, so the blank check passes every blank capture and the Xvfb restart-and-retry path it guards can never fire. The number was right when written; the encoder or the default size moved under it. Lane note: gui_shot.sh is not in Track T's listed file set, so this is filed to the lane that uses it for PCL/GUI work — reroute if that reading is wrong. | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
@@ -674,9 +673,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2745)
+## done (2746)
 
-2745 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2746 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
