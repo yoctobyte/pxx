@@ -7567,3 +7567,63 @@ exact-string removal, syntax re-validated, sha checked on restore.
 Companion fix, same instinct: `twatch` does not import `testmgr`, so `RETRY_CLASSES` is
 duplicated — the copy is now **checked against the original** rather than left to a comment,
 because *"keep these in sync"* is the shape this fleet has been finding all night.
+
+### 169 — A MIS-SCOPED GRANT IS UNDETECTABLE FROM THE GRANTEE'S SIDE, AND AUDIT-ONLY IS WHAT MADE IT A NULLITY
+
+*frankD, 2026-08-30, after I corrected a grant of mine that named the wrong tree.*
+
+I granted `devdocs/dev/*.md`. The work was in `devdocs/developer/` — **two different trees**,
+53 and 58 top-level pages. frankD swept the second, edited nothing, and filed a ticket.
+
+**Neither of us could have caught it from inside the task**, and frankD's diagnosis of why is
+the part worth keeping:
+
+> the error was invisible from my side precisely because the instruction and my reading
+> agreed on **intent** and differed only on **extension**. The words *"internal reference
+> docs"* fit both trees, and nothing in the task would have felt wrong if I'd swept either.
+
+That is the failure mode a scope check cannot cover, because there is nothing to check
+*against*: the grantee is not verifying a path, they are executing an intent they share with
+the grantor. A wrong extension of a right intent produces no friction anywhere.
+
+**And the consequence is the finding:**
+
+> it was harmless only because the sweep was audit-only. Had the grant carried edit rights, a
+> scope that names the wrong tree is **a licence to edit files nobody authorised**, and I'd
+> have had no way to detect it.
+
+**So audit-only earned its keep for a reason neither of us picked it for.** It was chosen to
+keep a docs lane out of code; what it actually did was **convert a mis-scoped grant from an
+incident into a nullity.** Generalises: the default posture of a grant should be read-only
+not because the grantee is untrusted, but because *the grantor's scope is the thing most
+likely to be wrong and the least likely to be checked.* Edit rights should be named per file,
+which is how the amended grant ended up listing four paths in a table.
+
+### 169a — A SILENTLY CORRECTED PAGE IS INDISTINGUISHABLE FROM A PAGE THAT WAS ALWAYS RIGHT
+
+Each of the four repaired pages carries a dated `Superseded 2026-08-30` note saying **what the
+instruction used to be**, not merely the corrected text.
+
+> in a tree where ~40 others are unclassified, that difference is the only signal available.
+
+A tree of unknown freshness has no way to distinguish *checked and fixed* from *never looked
+at* — both render as plausible current text. The dated note is the cheapest possible
+classification, applied to the pages that happened to get attention, and it is the same
+one-line move `plan-rtti-streaming-lfm.md` already demonstrates (*"Status (2026-05-31):
+delivered. This document is retained as the design record."*).
+
+**Two boundary calls in the same commit worth copying.** `threads-todo.md` was **annotated,
+not cut**: items 2-4 stand and only item 1 moved, and *deleting item 1 would have destroyed
+the information that the rest still stands.* Then, from writing it: item 1's substitute
+—`make compiler/pascal26`— **is item 2**. The ladder did not need a new item, it needed to
+notice it already contained one.
+
+And `esp32-support.md` **kept** its `make test-esp-bare` sentence as a *description* of what
+the target runs, dropping only the *prescription*. The 24-vs-4 scoping applied at line
+granularity rather than page granularity: **the same command is a fact in one sentence and an
+instruction in the next, and only the second kind is harmful.**
+
+Premise verified before acting, not assumed from the report: the hook's rule 1 is
+`make[[:space:]]+(...)*(test|check)([[:space:]]|$|-[a-z0-9-]+)`, so `test-esp-bare` matches on
+the **trailing-hyphen branch**. Without that branch the fourth site would have been a
+near-miss and the fix a report on a non-problem.
