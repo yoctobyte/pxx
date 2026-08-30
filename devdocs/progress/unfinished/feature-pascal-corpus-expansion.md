@@ -240,10 +240,20 @@ re-run, so the *line numbers* below are still the 08-28 measurement.
 >
 > **6b's wall is none of walls 1-7, has nothing to do with the object decision,
 > and is ALREADY FILED** —
-> [[bug-p-generic-type-param-unresolved-in-class-abstract-template]] [P p70,
-> `unfinished/`]. My stop set overlaps that ticket's exactly (`:120`, `:123`)
-> while naming different missing types, and my measurement is appended there.
-> **Do not open a new ticket for this wall.** Four identifiers come back unbound — `TKey`, `TValue`,
+> [[bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body]] [P p55,
+> frank-rust]. My first two errors are byte-identical to that ticket's,
+> `near:` context included. **Do not open a new ticket for this wall.**
+>
+> **Corrected 2026-08-30, same day:** I first attached this to
+> [[bug-p-generic-type-param-unresolved-in-class-abstract-template]] [P p70] on
+> the strength of a `:120`/`:123` line-number overlap — while simultaneously
+> arguing those coordinates are garbage. The symbol is the discriminator and it
+> is decisive: p70's headline is `unknown type: PT`, and **`PT` appears zero
+> times in my run** (mine: `TKey` 6, `TValue` 4, `TDictionaryPair` 3,
+> `PDictionaryPair` 1). Retraction recorded on p70. **Match a wall by `near:`
+> context and by SYMBOL, never by line number** — the line is paired with the
+> wrong file by [[bug-p-a-specialized-body-reports-errors-in-the-wrong-file]],
+> so it identifies nothing. Four identifiers come back unbound — `TKey`, `TValue`,
 > `TDictionaryPair`, `PDictionaryPair` — all of them `TCustomDictionary`'s
 > parameters and nested types. `TDictionaryPair` is declared **only** in
 > `inc/generics.dictionariesh.inc`, so the parser IS reaching the include; the

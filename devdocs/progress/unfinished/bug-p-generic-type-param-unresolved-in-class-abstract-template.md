@@ -330,10 +330,31 @@ Measured from the rung-6 climb in [[feature-pascal-corpus-expansion]]. Binary:
 HEAD `4f42b78b9`, self-host fixedpoint `faf762981c3c`, byte-identical to pin
 **v397** (`0d9341089`) — provenance checked rather than assumed.
 
-`uses Generics.Collections` stops here too, and my stop set overlaps this
-ticket's exactly — **`:120`, `:123`** — but names *different* missing types:
-`TKey`, `TValue`, `TDictionaryPair`, `PDictionaryPair`, plus reported stops at
-`:78`, `:79`, `:84`, `:113`.
+> **RETRACTED THE SAME DAY, BY ME (frankB): this measurement is probably NOT
+> this ticket.** I attached it here because my reported stops overlapped this
+> ticket's at `:120`/`:123`. That is line-number evidence — **the exact field
+> the rest of this section proves is garbage.** I argued the coordinates are
+> untrustworthy and then used them to identify a ticket, in the same breath.
+>
+> The discriminator I should have used is the symbol, and it is decisive: this
+> ticket's headline symptom is `unknown type: PT`, and **`PT` appears zero
+> times in my run.** My symbols are `TKey` (6), `TValue` (4),
+> `TDictionaryPair` (3), `PDictionaryPair` (1) — no `PT` at all. My first two
+> errors are instead byte-identical, `near:` context included, to
+> [[bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body]] [P p55]
+> (frank-rust), which is where this measurement belongs.
+>
+> The tell was already in my own text: I recorded that **this ticket's headline
+> shape compiles fine in isolation**, and read that as "the reduction is
+> incomplete" when it also supports "I am looking at the wrong ticket."
+>
+> **What stays useful below regardless of which ticket owns the wall:** the
+> wrong-file/wrong-line evidence, and the seven ruled-out shapes. **What does
+> not:** any inference that this ticket and the `TKey` wall are one defect.
+
+`uses Generics.Collections` stops here too. My reported stops were `:78`, `:79`,
+`:84`, `:113`, `:120`, `:123` — overlapping this ticket's `:120`/`:123`, which
+given the mis-attribution below is **not** evidence of a shared defect.
 
 **The section above asks how two probes of the same file, with no compiler commit
 between them, can report different first stops (`:120` vs `:135`). Here is a
@@ -354,8 +375,8 @@ should be ignored until this is fixed. Filed separately as
 [[bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line]] [P p60].
 
 So this ticket's "reproducible under one probe and absent under another" is
-**not established** — both probes may have hit this same defect while printing
-unrelated coordinates. That does not make the two runs identical, and I am not
+**not established** — the two probes may have hit *some* shared defect while
+printing unrelated coordinates, or genuinely different ones. That does not make the two runs identical, and I am not
 claiming it does; I am saying the line numbers cannot carry the weight the
 comparison put on them, and the disagreement should be re-derived from `near:`
 contexts before anyone concludes a code difference exists.
