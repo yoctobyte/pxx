@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: P
+status: done
+owner: frankA
 ---
 
 > **Re-laned T → P on 2026-08-30** by the Track T agent (face 2). The `track: T`
@@ -261,3 +263,105 @@ itself wants explaining, because a mechanism that harvests by token shape has no
 business caring whether the token is `Integer` or `Int64`.
 
 No files touched outside this note; the worktree was removed.
+
+---
+
+## RESOLVED, 2026-08-30 (frankA, Track P)
+
+Fixed in `CollectSpecializationBoundNamesFromTokens`
+(`compiler/pasparser_generic.inc` ~line 673). The header test keeps the `=` and
+gains a **whitelist** on what may precede the group's name:
+
+```pascal
+if ok and (j + 1 < TokCount) and (Tokens[j].Kind = tkGt) and
+   (Tokens[j + 1].Kind = tkEq) and
+   ((i = 0) or (Tokens[i-1].Kind = tkType) or
+    (Tokens[i-1].Kind = tkSemicolon)) then
+```
+
+A declaration's left-hand side can only follow the `type` keyword or the `;`
+that ended the previous declaration. That is a closed list of two. The
+alternative — enumerating how a *use* can be spelled — is not closed, and this
+session already shipped and reverted the blacklist version of exactly that
+mistake (`97b45aabe`, live on origin for about an hour, caught by frankB's
+boundary table; the repair added `test_generic_ptr_specialize_const.pas` as the
+control the blacklist lacked).
+
+### The `Integer`-vs-`LongInt` split, which the ticket asked to have explained
+
+frankB's unexplained rows have a mechanism, and it is not about types at all.
+**The harvest only ever records a token of kind `tkIdent`.** `lexer.inc` gives a
+dedicated type-name kind to exactly ten spellings —
+
+```
+boolean  byte  char  double  extended  integer  longword  real  single  string
+```
+
+— ten spellings over nine kinds (`byte` shares `tkInteger_T` with `integer`).
+Those ten are *structurally unable* to enter the bound-name set. Every other
+type name — `longint cardinal int64 qword smallint word shortint`, and any user
+alias whatever it aliases — stays `tkIdent` and is harvested. The failing set
+and the passing set are two disjoint lists of **names**, which is why a harvest
+that works by token shape appeared to care which type it was.
+
+This was stated as a prediction before it was measured: it says `Word` and
+`ShortInt` must fail and `Char`, `Double` and `Single` must pass. **Measured 8
+of 8**, including four rows the ticket had recorded only as `ok`.
+
+It also accounts for the backwards-reaching row (poison at line 7 reported at
+line 6): the harvest is a whole-file pre-pass into one flat unscoped array, so
+there is no "later" — offered as consistent with the data, not separately proven.
+
+### `d_poison` is un-accepted
+
+frankB's note flagged that the `LongInt`-named-parameter case was a behaviour
+change `f12a62815` introduced rather than a pre-existing limitation, and that
+"accepted-and-new can be un-accepted by whoever fixes the typed const."
+Measured at the fix: **`d_poison` now compiles** (`ok:`). So does the
+backwards-reaching two-template file. Both are un-accepted, as hoped.
+
+### Regression test — gated on the failing set
+
+`test/test_generic_bound_name_harvest.pas`, wired into `test-core`, asserts
+`boundharvest 45 A 1111111111`. It carries all eight `tkIdent` names plus
+`Integer` and `Char` as controls, per the ticket's closing instruction that a
+test spelled with the idiomatic `Integer` is green against the live defect.
+
+**One honest limit, recorded in the file header too.** Run against the pre-fix
+compiler this file stops at the *first* typed const (line 41, `LongInt`), so by
+itself it demonstrates one row and merely asserts the other seven. The per-name
+split was therefore measured separately, one name per program, baseline
+`a60f92ba830a` (HEAD with the fix reverted) vs fixed `22c67e5ea61e`:
+
+| set | names | before | after |
+| --- | --- | --- | --- |
+| harvestable (`tkIdent`) | LongInt Cardinal Int64 QWord SmallInt Word ShortInt TMyAlias | **8 fail** | 8 ok |
+| dedicated kind | Integer Char Byte LongWord Boolean Double Single | 7 ok | 7 ok |
+
+Forward protection is still per-name — any one of the eight regressing alone
+makes the file fail.
+
+Oracle: FPC prints `boundharvest 45 A 1111111111` for the same source, and
+agrees on the 7-line `a_const` repro (`trap 42 111` on a runnable variant).
+
+### Verified
+
+- `make compiler/pascal26` — `converged after 1 round(s)`, self-host fixedpoint
+  verified, `22c67e5ea61e` (≠ pinned).
+- The 14-row trap table (frankB's ten names + LongInt/Int64/QWord/TMyAlias):
+  all ok.
+- frankB's two boundary files: backwards-reaching poison `ok:`, `d_poison` `ok:`.
+- This session's own earlier regressions intact: `shadow 12 10`,
+  `ptrspec 7 1`.
+- Corpus bound-name harvest unchanged at `names=293 cap=512 overflow=0` — the
+  whitelist removed spurious entries only, it did not shrink the real set.
+
+### Successor
+
+`bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument`
+is the same unscoped harvest seen from the other side and is **not** closed by
+this change: the whitelist fixes *what may enter* the set, not the fact that the
+set is file-scoped and unscoped. Left open deliberately.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

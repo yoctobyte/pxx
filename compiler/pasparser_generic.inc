@@ -670,10 +670,31 @@ begin
         end
         else ok := False;
       end;
-      { a HEADER is followed by `=`; a use never is. Roll the collection back
-        when this turned out to be a use or a malformed group. }
+      { A HEADER is followed by `=` -- but so are several USES, so the `=` alone
+        is not enough and treating it as enough is
+        regression-test-pascal-conformance-shard0-6-2:
+
+            const P: ^specialize TTest<LongInt> = Nil;
+
+        is `Ident < Ident > =`, so `LongInt` was harvested as though it were a
+        template PARAMETER name. Every later specialization spelled with that
+        name then looked like a param form and was left un-rewritten. It bit
+        only the type names that lex as tkIdent -- longint, cardinal, int64,
+        qword, smallint, word, shortint and every user alias -- because the walk
+        below only records tkIdent. Exactly ten spellings get a dedicated kind
+        in lexer.inc (boolean byte char double extended integer longword real
+        single string -- ten spellings over nine kinds, `byte` shares
+        tkInteger_T), and those can never be harvested. That is why the failure
+        looked like it cared which type it was: the failing set and the passing
+        set are two disjoint lists of NAMES.
+
+        A declaration's left-hand side can only follow the `type` keyword or the
+        `;` that ended the previous declaration. Test for those: a whitelist of
+        two, rather than trying to enumerate the ways a use can be spelled. }
       if ok and (j + 1 < TokCount) and (Tokens[j].Kind = tkGt) and
-         (Tokens[j + 1].Kind = tkEq) then
+         (Tokens[j + 1].Kind = tkEq) and
+         ((i = 0) or (Tokens[i-1].Kind = tkType) or
+          (Tokens[i-1].Kind = tkSemicolon)) then
       begin
         { a header -- keep the parameter names, then harvest the names its BODY
           declares, and resume past the whole declaration }

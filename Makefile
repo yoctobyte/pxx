@@ -5504,6 +5504,15 @@ test-core: $(COMPILER)
 	@# typed const of this shape. Oracle: FPC prints the same line.
 	./$(COMPILER) test/test_generic_ptr_specialize_const.pas $(TESTTMP)/test_genptrspec26
 	test "$$($(TESTTMP)/test_genptrspec26)" = "ptrspec 7 1"
+	@# regression-test-pascal-conformance-shard0-6-2: the bound-name harvest took
+	@# a typed const's ARGUMENTS for a declaration's parameters. It only ever
+	@# records tkIdent, and the lexer gives ten spellings a dedicated kind, so
+	@# the failing set and the passing set are disjoint lists of names -- a test
+	@# written with the idiomatic `Integer` passes over the live defect. Hence
+	@# the width-specific integers and a user alias here. Per-name split (8 fail
+	@# / 7 pass before the fix) is recorded in the file header. Oracle: FPC.
+	./$(COMPILER) test/test_generic_bound_name_harvest.pas $(TESTTMP)/test_genboundharvest26
+	test "$$($(TESTTMP)/test_genboundharvest26)" = "boundharvest 45 A 1111111111"
 	@out=$$(PXXDBG=p.dgen ./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26 2>&1); \
 	 decl=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TBox'); \
 	 real=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TPairU'); \
