@@ -242,3 +242,73 @@ never calls `ParseTypeKind`. Real smell, plausible story: setting it to 0 produc
 There is no measurement saying whether the parser arm or `IRLowerAddress` is the
 right site, and guessing between two plausible sites is how a fix moves a crash
 instead of removing it.
+
+---
+
+## Two more rows, and one of them is worse than a crash (frank-rust)
+
+Binary `18ceb4588586`, self-host fixedpoint at HEAD. Testing the corrected model
+— *"the working rows escape only because their tag cannot collide"* — predicts
+which untried element types break, so here are four that had not been tried:
+
+| element | result | why |
+| --- | --- | --- |
+| `Char`, `Boolean` | correct | no arm matches the tag |
+| a record type | correct | the record arm wants a record BASE, not a record element |
+| **`string[7]` (frozen)** | **`short ` — SILENTLY WRONG, no crash** | the frozen-string arm matches |
+
+FPC prints `short hi`; we print an empty string. The same array indexed WITHOUT
+the pointer prints `hi`, so it is the `p^[i]` path and not the declaration.
+
+**That row matters more than the crashes.** A frozen string is neither
+pointer-kind nor a managed handle, so it is a third independent arm — and it
+fails by producing a plausible wrong VALUE rather than a signal. Everything
+found so far was a segfault, which is the cheap case; this is the expensive one
+and it was sitting in the same defect the whole time.
+
+The predicate is therefore not about pointers at all: **the `[` arm chain
+dispatches on `tk`, and for a pointer-to-array `tk` holds the ARRAY'S ELEMENT
+kind while every arm reads it as the type of the thing being indexed.** Any
+element kind that collides with an arm above the array fall-through breaks —
+`tyPointer` (three pointer arms), `tyAnsiString` and frozen strings (two string
+arms) — and any kind that collides with nothing is fine.
+
+## The parser is NOT the crash site — measured, so the two candidates are now one
+
+Earlier I said I would not start a fix because there were two plausible sites and
+no measurement to choose between them. There is one now.
+
+I taught `IsNodeArray` (`symtab.inc`) that an `AN_DEREF` over a pointer with
+`SymPtrElemArrLen > 0` is an array, which routes `p^[i]` down the ARRAY arm of
+the index chain and past all five broken element-kind arms. Instrumented at
+every `AllocNode(AN_INDEX)` site to confirm it actually fires:
+
+```
+PXXDBG p.idxarm site=pasparser_lval.inc:1406
+PXXDBG p.idxarm chain=A basekind=36 tk=17 isarr=TRUE      <- AN_DEREF, now an array
+```
+
+**Result: the index's element tag is fixed (`AN_INDEX` goes from `tk=0` to
+`tk=17`) and the program still segfaults, byte-identically.** The IR keeps both
+of its real defects:
+
+```
+4: load_mem a=3                          <- still takes element 0's CONTENTS as the base
+5: index a=4 b=2 [lo=0 size=1] tk=17     <- still strides ONE byte
+```
+
+So: the parser arm chain is a genuine second bug (it is what makes `string[7]`
+silently wrong, and `tk=0` is its fingerprint), but **it is not what crashes.**
+The crash lives entirely in `IRLowerAddress`'s `AN_INDEX` arm — the `baseAddr`
+choice and the `elemSize` computation for an `AN_DEREF` base. `TypeSize(tyPointer)`
+is 8 and the emitted stride is 1, so that arm is not reaching its own
+`else elemSize := TypeSize(tk)` tail; something above it is claiming the node
+first. That is where to look, and it is ~40 lines.
+
+**I reverted the `IsNodeArray` change rather than landing it.** On its own it
+fixes no observable row — every row behaves identically before and after, only
+an IR tag moves — and it changes a predicate shared across the compiler. Landing
+a shared-predicate change that fixes nothing, next to a still-broken IR, would
+read as a fix to the next person. It is recorded here instead, with the exact
+edit, so whoever takes the IR half can re-apply it in one minute and get the
+parser half for free.
