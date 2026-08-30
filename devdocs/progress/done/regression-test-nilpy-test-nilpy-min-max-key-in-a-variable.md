@@ -176,6 +176,6 @@ error and no changed answer.
 row 4 is `min("cab", key=None)`, a **literal** str receiver, which is a separate
 frontend defect — see
 `regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload`.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f5f361d74.
 
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f5f361d74.
