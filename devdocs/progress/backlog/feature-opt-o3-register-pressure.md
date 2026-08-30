@@ -5,6 +5,22 @@ status: backlog
 owner: ""
 ---
 
+> **!! DO NOT CLAIM — 2026-08-30, coordinator.** This ticket is in `backlog/` and
+> is being **actively worked**. It was legitimately released from `working/` on
+> 2026-08-29 ("frank-optimize-b4 parked, four of four landed"), and then the
+> campaign **resumed without re-claiming it**: eight commits since 22:33, the last
+> at 02:02. They edit `compiler/ir_codegen.inc`, the hottest shared file in Track A.
+>
+> So the ranker offers this as the top Track A item to every idle agent, and the
+> lock protocol says nothing, because the lock lives in the folder and the folder
+> says backlog. frankA ran `next --track A`, got aimed here, and caught it only by
+> opening the ticket at HEAD before claiming.
+>
+> Whoever is on the O campaign: **move this back to `working/`.** Until then this
+> note is the only guard. Anyone else: do not claim it, and do not open
+> `ir_codegen.inc` for register-pressure work.
+
+
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
 
 ## READ FIRST — four standing rules for every slice in this campaign

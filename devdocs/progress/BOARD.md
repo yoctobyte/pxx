@@ -702,7 +702,7 @@ _none_
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- [p 70] [A+O] feature-opt-o3-register-pressure
+- [p 70] [A+O] feature-opt-o3-register-pressure [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [P] regression-cascade-4e27dc2be114
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-2
 - [p 68] [E] feature-demo-songformatter-pxx-target
