@@ -210,3 +210,83 @@ failing arm does not make every difference between them the cause.
 
 Not yet established: which site, and why `Copy` reaches it while `Pos` and concat
 do not.
+
+## Round 3 (frankS) — the differential names a real ABI violation, and a prediction test then FALSIFIED the easy mechanism
+
+Coordinator's steer, and it was the right one: `Pos`/concat pass while `Copy`
+faults, so the discriminator is computable and beats reading ~20 `sp` sites.
+
+### The `sp`-movement survey did NOT discriminate
+
+`qemu-xtensa -d in_asm` on both paths, counting executed `addi a1, a1, …`:
+
+| program | executed sp-adjusts |
+| --- | --- |
+| `Copy` (**faults**) | 5 |
+| `Pos` (passes) | 8 |
+
+**The passing path moves `sp` more often than the failing one.** Raw sp movement
+is not the discriminator, which is evidence against the easy reading of the
+"stray sp move" hypothesis rather than for it.
+
+### What the trace DID find: every windowed frame violates the ABI the same way
+
+Every executed prologue, without exception:
+
+```
+0x080576d8:  entry  a1, 32          <- allocates 32 bytes, establishes the window frame
+0x080560e6:  addi   a1, a1, -112    <- then moves sp another 112 bytes with plain arithmetic
+```
+
+Ten `entry` sites executed, **all with immediate 32**, each followed by an
+`addi`/`addmi` of -96 or -112. Confirmed in source: `symtab.inc:10779/10784`, the
+**windowed** arm, patches `EncodeXtensaAddi`/`EncodeXtensaAddmi` on
+`reg_xtensa_sp` for `size + XtSpillMax`.
+
+**Under the windowed ABI `a1` may only be moved by `MOVSP` (or by `entry`'s own
+immediate).** The caller's 16-byte register save area sits at `[a1-16]`, and
+`MOVSP` exists precisely because a plain add relocates the stack pointer while
+leaving that area behind. This is the same invariant the file documents three
+times — *"windowed keeps sp fixed, moving it desyncs the window spill area at
+[sp-16]"* — except the violation is in the **prologue**, not in the
+expression-stack helpers, which honour it correctly.
+
+### The fault, restated from round 2
+
+`EPC1=08057bdc` is a `retw.n`; `EXCCAUSE=1`; `WINDOWSTART=4`. A window underflow
+whose reload dies. That is exactly the failure a desynced save area produces.
+
+### PREDICTION TEST — and it FAILED, which is why this is not yet the root cause
+
+If the mechanism were "the plain `sp` move desyncs the save area, and a deep
+enough chain wraps the register file and reads it", then **any** sufficiently deep
+call chain must fault, with `Copy` incidental. Tested with no strings, no helpers,
+no `Copy` — plain recursion 24 deep, which comfortably wraps an 8-window file:
+
+```
+depth-24  call0     rc=0  24
+depth-24  windowed  rc=0  24
+```
+
+**Both pass.** So the plain-`addi` violation is real and is present in every
+frame, but it is **not sufficient on its own** to produce the fault. Something
+about `Copy`'s path supplies the missing ingredient.
+
+The most likely remaining shape, stated as the next hypothesis and **not** as a
+finding: the desync only bites when `a1` changes *between* an overflow spill and
+its matching underflow reload, which depends on where the `addi` sits relative to
+the calls — an ordering property, not a depth property. That is testable and has
+not been tested.
+
+### Status
+
+- **Measured:** the fault is an underflow at `retw`; every windowed prologue moves
+  `sp` with a plain `addi` after `entry`, which violates the windowed ABI; the
+  source site is `symtab.inc:10779/10784`.
+- **Falsified:** misaligned word copy (round 2); "sp moves more on the failing
+  path" (this round); "plain sp move + call depth is sufficient" (this round).
+- **Not established:** what `Copy` supplies that `Pos`, concat and deep recursion
+  do not. That remains the discriminator and it is still the cheaper question.
+
+Nothing has been changed in the compiler. The `symtab.inc` finding is a Track A
+shared-file matter and this lane holds `ir_codegen_xtensa.inc` only.
