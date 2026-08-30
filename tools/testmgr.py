@@ -1649,6 +1649,49 @@ _REASON_NOISE_RE = re.compile(
     r"^(?:make(?:\[\d+\])?: (?:\*\*\*|Leaving directory|Entering directory)"
     r"|Makefile:\d+: recipe for target\b)")
 
+# --- the error the tail cannot reach -------------------------------------
+#
+# job_reason() takes the log's tail, for the reason its docstring gives: a
+# signature list goes stale silently, a tail is true for every shape. That
+# argument survives here untouched -- what follows only ADDS a line, and only
+# when the tail carries no error text of its own.
+#
+# The case that forced it (2026-08-30, fpc-bootstrap on plexus AND seven):
+# `fpc compiler/compiler.pas` emits 960 warnings and 238 notes. The six lines
+# the tail kept were three warnings that PASSING builds emit too, FPC's
+# "There were 1 errors compiling module" summary, "Compilation aborted", and
+# the driver's exit code. The reason named an error and did not contain it,
+# and the log lives on the watcher's clone where no reader of tstate can go.
+#
+# For any compile job that warns in volume, the tail IS warnings and the error
+# is out of frame by construction. That is not a shape the tail covers badly;
+# it is one it cannot cover at all.
+REASON_ERROR_SCAN_BYTES = 1 << 20   # read this much of the end looking for it
+REASON_ERROR_MAX = 200              # ...and never let one line eat the budget
+
+_REASON_ERROR_RE = re.compile(
+    r"(?:^|[\s:])(?:Error|error|ERROR|Fatal|FAILED|Assertion|"
+    r"Segmentation fault|undefined reference|panic:)\b")
+
+# Lines that MATCH the signature above and say nothing. Without this the
+# fpc-bootstrap case still fails: its tail contains
+# `Error: /usr/bin/ppcx64 returned an error exitcode`, so "the tail already
+# shows an error" would be true and the scan would never run. A driver
+# reporting that its child failed is not a diagnosis -- it is the exit code
+# with a prefix.
+_REASON_ERRORLESS_RE = re.compile(
+    r"(?:returned an error exitcode"
+    r"|There were \d+ errors? compiling"
+    r"|^Fatal: Compilation aborted"
+    r"|^make(?:\[\d+\])?: \*\*\*.*Error \d+"
+    r"|^Error \d+$)")
+
+
+def substantive_error(line):
+    """Does this line say WHAT went wrong, rather than THAT something did?"""
+    return bool(_REASON_ERROR_RE.search(line)
+                and not _REASON_ERRORLESS_RE.search(line))
+
 
 # A run's jobs, minus the ones that produced no verdict. Extracted for the
 # same reason report_job() was: the report OUTLIVES the run, so what it omits
@@ -1740,26 +1783,57 @@ def job_reason(job):
 
     An empty return means the log is gone or unreadable, and reads that way --
     it is never a claim that the job failed for no reason.
+
+    That argument still holds, and the tail is still what this returns. What it
+    did not cover: a log whose tail is WARNINGS. `fpc compiler/compiler.pas`
+    emits 960 of them, so when it failed on two hosts on 2026-08-30 the six
+    lines kept were three warnings a passing build emits too plus three lines
+    saying an error had happened, without saying which. Not a shape the tail
+    covers badly -- one it cannot cover at all, since the error is out of frame
+    whenever more than REASON_LINES lines follow it.
+
+    So: keep the tail exactly, and when it contains no substantive error line,
+    prepend the last one found above it. A signature list that goes stale can
+    then only fail to ADD something -- never to report nothing, which is what
+    the paragraph above actually objects to.
     """
     if not job.logpath:
         return ""
     try:
         with open(job.logpath, "rb") as f:
             try:
-                f.seek(-REASON_TAIL_BYTES, os.SEEK_END)
-            except OSError:               # log shorter than the tail window
+                f.seek(-REASON_ERROR_SCAN_BYTES, os.SEEK_END)
+            except OSError:               # log shorter than the scan window
                 f.seek(0)
-            tail = f.read().decode(errors="replace")
+            window = f.read().decode(errors="replace")
     except OSError:
         return ""
-    lines = [ln.rstrip() for ln in tail.splitlines()]
+    scanned = [ln.rstrip() for ln in window.splitlines()]
+    # The kept lines still come from the last REASON_TAIL_BYTES and nowhere
+    # else -- `floor` is that window expressed as a line index, so everything
+    # below is the same selection this function has always made. The wider read
+    # buys only the SEARCH SPACE below it.
+    floor = len(scanned) - len(window[-REASON_TAIL_BYTES:].splitlines())
     # Drop noise from the END only. The same text mid-log can be a sub-make that
     # failed and recovered, and dropping it there would rewrite the story.
-    while lines and (not lines[-1].strip() or _REASON_NOISE_RE.match(lines[-1])):
-        lines.pop()
-    lines = [ln for ln in lines[-REASON_LINES:] if ln.strip()]
+    end = len(scanned)
+    while end > floor and (not scanned[end - 1].strip()
+                           or _REASON_NOISE_RE.match(scanned[end - 1])):
+        end -= 1
+    start = max(floor, end - REASON_LINES)
+    lines = [ln for ln in scanned[start:end] if ln.strip()]
     if not lines:
         return ""
+    # If the tail already diagnoses the failure, it is the whole answer and is
+    # left exactly as it was -- this branch is why the change can only ever ADD.
+    # Only when it does NOT do we go looking, and then for one line: the last
+    # thing above the tail that says what went wrong. Prepended, because it
+    # happened BEFORE everything in the tail, so the result stays in log order.
+    if not any(substantive_error(ln) for ln in lines):
+        for ln in reversed(scanned[:start]):
+            if substantive_error(ln):
+                lines.insert(0, ln.strip()[:REASON_ERROR_MAX])
+                break
     out = _REASON_TMP_RE.sub("$TMP", " | ".join(ln.strip() for ln in lines))
     return out[:REASON_MAX - 1] + "\u2026" if len(out) > REASON_MAX else out
 
