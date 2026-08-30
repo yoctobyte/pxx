@@ -129,7 +129,7 @@ end;
   it ignores it.
   bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file }
 procedure WriteDiagSourceFile;
-var path: AnsiString; t, dbgI: Integer;
+var path, cpath: AnsiString; t, dbgI, cmod: Integer;
 begin
   if Lexing then t := TokCount
   else if TokPos > 0 then t := TokPos - 1
@@ -155,7 +155,51 @@ begin
               GetTokenStr(PasSrcRangeStart[dbgI] + 2),
               '  ', KeyStrs[PasSrcRangeId[dbgI]]);
   end;
-  if (path <> '') and (path <> DbgSrcName) then writeln('  in: ', path);
+  { PXXDBG=c.srcmap — the C twin of the probe above. The C answer is reached only
+    where the Pascal one is EMPTY, so it is invisible to every Pascal diagnostic
+    and to every C diagnostic the Pascal table happens to answer; there is no
+    output to be suspicious of when it is wrong. Print what it saw. }
+  if PxxDbgWants('c.srcmap', '*') then
+  begin
+    writeln('PXXDBG c.srcmap tok=', t, ' paspath="', path, '" cmod=', CModuleOfTok(t),
+            ' dbgsrc=', DbgSrcName);
+    for dbgI := 0 to CModRangeCount - 1 do
+      writeln('PXXDBG c.srcmap   [', dbgI, '] start=', CModRangeStart[dbgI],
+              '  ', KeyStrs[CModRangeId[dbgI]]);
+  end;
+  if (path <> '') and (path <> DbgSrcName) then writeln('  in: ', path)
+  { The C fallback, and it is an APPENDED arm on purpose: it fires only where
+    `path` is EMPTY, i.e. where the Pascal range table has no answer at all, so
+    every state that printed something before still prints exactly that, and
+    every state that deliberately stayed silent BECAUSE the path was the main
+    source still does. Restructuring the condition instead would be invisible to
+    every Pascal test, because a test with an answer never reaches this arm.
+
+    CModRange* is populated in every build, not just under -g, so this works
+    without debug info. What it names is the C MODULE: a file-scope static in a
+    header is attributed to the `.c` that included it (see CMarkTokModule), so an
+    error inside an INCLUDED HEADER still prints nothing here when that header
+    came from the main source. Naming the header needs an ungated per-token
+    source table for C -- PasMarkTokFile's twin -- which is Track A ground:
+    bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it. }
+  else if path = '' then
+  begin
+    cmod := CModuleOfTok(t);
+    if cmod >= 0 then
+    begin
+      cpath := KeyStrs[cmod];
+      { the main `.c` stays silent, exactly as the main `.pas` does above -- the
+        user typed that name. `<crtl-prototype-pull>` is a synthetic marker, not
+        a file, and must never be printed as one -- that arm is DEFENSIVE and
+        unreached by anything I could construct: the real `.c` markers inside the
+        pulled block refine the synthetic one immediately, so an error there
+        reports cmod = -1 (measured, PXXDBG=c.srcmap). It stays because the
+        window between the block's start and its first real marker is the crtl
+        headers' own prototypes, which is reachable in principle. }
+      if (cpath <> '') and (cpath <> DbgSrcName) and (cpath[1] <> '<') then
+        writeln('  in: ', cpath);
+    end;
+  end;
 end;
 
 procedure EnsureTokCapacity(need: Integer);

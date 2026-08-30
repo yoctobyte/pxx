@@ -46,8 +46,15 @@ end;
   (an include spliced lines in, a continuation join swallowed some), which keeps
   the output close to what it was and costs nothing on the common path.
 
-  Only under -g: without it the preprocessed text is byte-for-byte what it
-  always was, so nothing that reads --dump-cpp changes. }
+  NO LONGER only under -g, and this header said so for longer than it was true:
+  CPSyncLine emits the markers in every build, because the marker is the only
+  record of which source the following text came from and the C lexer needs that
+  ungated to attribute a file-scope `static` to its own MODULE
+  (bug-c-static-functions-in-different-crtl-modules-collide). See CPSyncLine's
+  own note. What stays gated on DebugInfo is everything DWARF does with them at
+  the CONSUMING end -- DbgMarkTokFile / DbgFileId return early without -g, which
+  is why a C diagnostic can name the `.c` module it is in but not the HEADER:
+  the header-accurate table is the one that is still -g-only. }
 var
   CPOutLine    : Integer;   { line number the NEXT emitted content lands on }
   { path of the file being processed at each recursion depth (0 = the main

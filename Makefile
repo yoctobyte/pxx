@@ -6448,6 +6448,29 @@ test-core: $(COMPILER)
 	@if readelf -d $(TESTTMP)/hdrstatic_h26 2>/dev/null | grep -q 'libhdrstatic\.so'; then \
 	  echo "FAIL: hdrstatic_h26 links a DT_NEEDED on libhdrstatic.so, which cannot exist"; exit 1; \
 	else echo "ok: hdrstatic_h26 has no invented libhdrstatic.so"; fi
+	# A C diagnostic names the MODULE it is in, and stays silent about the main
+	# source -- the Pascal `in:` line's C half. The pair is the invariant, and the
+	# SILENT half is the one that needs the test: the C answer is consulted only
+	# where the Pascal table is empty, so a fallback that fires one state too early
+	# is invisible to every Pascal row (they never reach it) and shows up only as a
+	# wrong path under an unrelated C error. Assert the module row by SHAPE
+	# (lib/crtl/src/*.c) rather than by which crtl module happens to define memchr.
+	@printf '#define memchr(a,b,c) = ;\n#include <string.h>\nint main(void) { char b[4]; return (int)strlen(b); }\n' > $(TESTTMP)/cdiag_mod.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cdiag_mod.c $(TESTTMP)/cdiag_mod26 2>&1); \
+	 echo "$$out" | grep -q '^  in: .*lib/crtl/src/.*\.c$$' \
+	  || { echo 'cdiag_module: FAIL - an error inside a pulled crtl module must name that module'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cdiag_module names the crtl module'
+	# ...and the main .c stays silent, INCLUDING after a crtl pull has marked a
+	# module range: the ranges return to the main source, and if they ever stop
+	# doing so this row goes red instead of the user being told their own file is
+	# somewhere else. Errors print on stdout, hence 2>&1 with no separate stderr.
+	@printf '#include <string.h>\nint main(void)\n{\n  char b[4];\n  int x = ;\n  strlen(b);\n  return x;\n}\n' > $(TESTTMP)/cdiag_main.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cdiag_main.c $(TESTTMP)/cdiag_main26 2>&1); \
+	 echo "$$out" | grep -q 'error: expected C expression' \
+	  || { echo 'cdiag_main: FAIL - expected the deliberate syntax error to be reported'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -q '^  in: ' \
+	  && { echo 'cdiag_main: FAIL - the MAIN .c must not be named; the user typed it'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cdiag_main leaves the main source unnamed'
 	# Include nesting: the depth limit must be REPORTED, never silently applied.
 	# The preprocessor has sixteen include buffers, dispatched by a hand-written
 	# `case depth of 0..15`; MAX_CPREP_INCLUDES said 128, so 16..127 fell through
