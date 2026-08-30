@@ -166,12 +166,16 @@ flag or lands incrementally, never on a long-lived branch.
 - **O — the tiers, ruled by the owner 2026-08-30:** `-O0` debugging, `-O1` **in
   limbo**, `-O2` the de-facto stable default, `-O3` **experimental by design**.
   New passes land behind `-O3`, and **anything proven stable and sensible as a
-  default is ALLOWED to move to `-O2` — proof is the only ceremony.** The catch,
-  measured the same day: no *individual* pass reproduces `-O3`'s 23-34% win, so
-  per-pass promotion alone would never deliver it. The unit of proof is therefore
-  the tier, gated by Track T's full + cross matrices against an `-O3` build.
-  **Do NOT build the dev loop's compiler at `-O3`** — that makes the artifact
-  under test a product of an untested tier.
+  default is ALLOWED to move to `-O2` — proof is the only ceremony.** And it is
+  cheap: **one pass is ~71% of the tier** — `EmitStaticLitHandle`
+  (`ir_codegen.inc:3480`, `if OptLevel < 3 then Exit;`) alone is **20%** of the
+  28% gap, min-of-5. So per-pass promotion is the whole job, exactly as the
+  ruling says.
+  **Promote and measure ONE AT A TIME — the batch is not the sum.** Promoting
+  every `-O3` gate at once measured *worse* than promoting that one pass alone
+  (18.06 s vs 16.23 s): the passes interfere. **Do NOT build the dev loop's
+  compiler at `-O3`** — that makes the artifact under test a product of an
+  untested tier.
   `decided/decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`.
 - **D — verify snippets by compiling them.** Don't invent behaviour, don't touch
   `compiler/**` or `lib/**`.

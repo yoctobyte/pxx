@@ -7,7 +7,7 @@ status: new
 owner: ""
 found: 2026-08-30
 found-by: frank-optimize, probing the per-call cost driver behind feature-opt-nilpy-container-subscript
-summary: "The compiler built at -O3 compiles compiler.pas 28-34% faster than built at -O2, self-hosts in zero rounds, and is 3.3% smaller. FOUND (2026-08-30): ~71% of that win is ONE named pass -- EmitStaticLitHandle / PXX_FLAG_STATIC at ir_codegen.inc:3480, which gives string literals a static .data handle plus `inc qword [rax-16]` instead of a heap allocate+copy+free per evaluation. Promoting that single gate to -O2 gives 20% of -O3's 28%, 5/5 reps, and the build self-hosts and passes six programs. So per-pass promotion IS viable and is one pass, not a campaign. Decision needed on promoting it; the rest of the tier is a separate, smaller question."
+summary: "RULED + CORRECTED 2026-08-30, and the ACTION IS AUTHORIZED — no further decision is needed. Owner's ruling: prove-then-promote, proof is the only ceremony; -O0 debug, -O1 limbo, -O2 de-facto stable, -O3 experimental by design. The compiler built at -O3 compiles compiler.pas 28-34% faster, self-hosts in zero rounds, is 3.3% smaller. ~71% of that win is ONE named pass: EmitStaticLitHandle / PXX_FLAG_STATIC at ir_codegen.inc:3480, which gives string literals a static .data handle plus `inc qword [rax-16]` instead of a heap allocate+copy+free per evaluation. Promoting that single gate to -O2 gives 20% of the 28%, 5/5 reps, self-hosts, six programs pass. So per-pass promotion is one pass, not a campaign — and the earlier no-single-pass-reproduces-it claim (which I used to argue the unit of proof was the TIER) was a null from a min-of-3 sweep under load 6-13 that could not resolve the effect; that inference is WITHDRAWN. ACTION: promote EmitStaticLitHandle behind a normal full gate under the owner's standing rule, then re-open the remaining ~29% separately. Promote ONE AT A TIME — all gates at once measured WORSE (18.06s) than that pass alone (16.23s); passes interfere. Building the dev-loop compiler at -O3 stays rejected."
 ---
 
 # The `-O3` tier is 34% faster than `-O2`, and nothing gates it
@@ -369,3 +369,73 @@ compiler. Green means the tier promotes; red names the pass that must not.
 `-O1`'s limbo is a real finding and not this ticket's: nothing targets it,
 nothing defends it, and no one has priced deleting it or filling it. If it ever
 matters it needs its own ticket.
+
+---
+
+# CORRECTION, 2026-08-30, same evening — the premise under the ruling's inference was false
+
+**Do not ask Track T for tier matrices. That ask came from me and it is withdrawn.**
+
+The ruling above stands unchanged — *prove-then-promote, proof is the only
+ceremony* — but the inference I hung on it (**"the unit of proof is the tier"**)
+rested on one sentence that has since been measured false:
+
+> ~~No individual pass reproduces the 23-34% win.~~
+
+**It does.** frank-optimize found it; I verified the site independently before
+correcting this file — `EmitStaticLitHandle`, `compiler/ir_codegen.inc:3480`,
+`if OptLevel < 3 then Exit;`. The comment directly above that line already
+anticipates this promotion: *"only its USE is gated, so `-O2` keeps calling the
+runtime and stays the proven default until this has been through a full gate."*
+
+| compiler | min of 5 | vs `-O2` |
+| --- | ---: | ---: |
+| `-O2` baseline | 20.23 s | — |
+| **only `EmitStaticLitHandle` promoted** | **16.23 s** | **20%** |
+| every `-O3` gate promoted | 18.06 s | 11% |
+| `-O3` | 14.54 s | 28% |
+
+**One pass is ~71% of the tier.** Per-pass promotion is not merely capable of
+delivering the win — it is cheap, well-scoped, and *precisely what the owner's
+ruling already prescribes*. The literal reading was right and my correction to it
+was wrong.
+
+## The revised action, and it is SMALLER than what it replaces
+
+**Promote `EmitStaticLitHandle` to `-O2` behind a normal full gate.** Then
+re-open the tier question for the remaining ~29%, with the same discipline.
+Option 3 (building the dev loop's compiler at `-O3`) stays rejected for
+frank-optimize's original reason, which nothing here touches.
+
+## Two things that survive regardless of which way this went
+
+**1. The batch is not the sum.** Promoting every `-O3` gate at once measured
+*worse* (18.06 s) than promoting the one pass alone (16.23 s). The passes
+interfere. A promotion campaign must promote and measure **one at a time**; "all
+of them" is a different experiment, not a shortcut through "each of them".
+
+**2. The original sweep's zeros were not results.** min-of-3 under load 6-13
+cannot resolve a 20% effect. It returned nulls for every pass and they were
+written up in the grammar of findings. **The one row that survived is DCE — and
+it survived because it was settled by a FLAG, not by a margin**, decided by
+construction rather than by a difference of means. That is the transferable part:
+when you can arrange for the answer to be a flag, box load stops mattering. Both
+are now in `debugging-playbook.md`.
+
+## How it got into a ruling, since that is the part worth not repeating
+
+The false sentence was **checked, and checked against the wrong thing** — it was
+verified as *stated in the ticket*, not as *supported by its instrument*. Nobody
+asked what load the sweep ran under or what effect size min-of-3 could resolve.
+It was then amplified: called the sharpest claim in the ticket, passed to me as
+settled, and used by me as the reason a literal reading of the owner's words
+needed correcting. Three hands, no new evidence at any of them.
+
+That is [[the-name-is-not-the-thing]] with a number in place of an identifier,
+and it is the same shape as the evening's ghost shas: **the claim was real, the
+support was never looked at.** The guard is the one CLAUDE.md already states —
+ask what this would be if it were false, and go look at *that*.
+
+**It got better twice by being wrong in public.** The question is no longer
+"adopt an untested tier for 34%" but "promote one well-scoped pass for 20%, gated
+normally."

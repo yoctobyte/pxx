@@ -1999,6 +1999,30 @@ Four more from a single day, all different mechanisms, all the same shape:
   refutation is scoped to the shape that was tested**, and the negative result
   cannot tell you which of the two it earned.
 
+- **An under-powered instrument reports a null, and a null reads as a finding.**
+  Measured 2026-08-30, and it reached a *decision* before it was caught. A
+  per-pass `-O3` sweep run at **min-of-3 under load 6-13** cannot resolve a 20%
+  effect; it returned zeros for every pass, and those zeros were written up as
+  *"no individual pass reproduces the tier's win, so per-pass promotion may never
+  deliver it."* Re-measured at **min-of-5**, one pass — `EmitStaticLitHandle`,
+  `ir_codegen.inc:3480` — is **20% of the 28% gap, ~71% of the tier on its own.**
+  The original claim was not a wrong number. It was **no number**, wearing the
+  grammar of one.
+  **Ask what effect size your instrument can resolve BEFORE you report a null**,
+  and record the load beside it. A null from an instrument that could not have
+  seen the effect is not evidence of absence; it is absence of evidence, and the
+  two are written identically.
+  **The row that survived that sweep survived for a structural reason worth
+  copying:** the DCE result held up because it was settled **by a flag, not by a
+  margin** — decided by construction rather than by a difference of means. When
+  you can arrange for the answer to be a flag, the load on the box stops
+  mattering.
+- **The batch is not the sum.** From the same measurement: promoting *every*
+  `-O3` gate at once measured **worse** (18.06 s) than promoting the single best
+  pass alone (16.23 s). Optimisation passes interfere, so a campaign must promote
+  and measure one at a time. "All of them" is not a shortcut through "each of
+  them" — it is a different experiment with a different answer.
+
 And the cheapest one, which cost a full probe cycle the same evening: a compile
 whose output flag was wrong (`pascal26 x.pas -o out` — there is no `-o`; the
 second positional IS the output) wrote a file literally named `-o`, exited 0,
