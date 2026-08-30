@@ -3,7 +3,7 @@ track: A
 owner: frankwasm
 prio: 62
 type: feature
-status: working
+status: done
 ---
 
 # TypeRef: migrate consumers lane by lane
@@ -374,11 +374,13 @@ divergences out of 88.
 
 1. ~~The other 20 post-creation sites.~~ **DONE**
 2. ~~Lane 4 (proc returns).~~ **DONE**, plus fields, which were not on the list.
-3. `TTypeRef` gains `PtrDepth` and `PtrBaseTk`/`Rec` are re-pointed at the
-   ultimate base, with `ir.inc:2506` guarding on `PtrDepth = 1`. **Blocked on a
-   Track U call now that seven tables spell the depth separately** --
-   [[decide-typeref-gains-a-pointer-depth-field]] lays out the fork. Do not
-   start the fold before it is answered.
+3. ~~`TTypeRef` gains `PtrDepth` and `PtrBaseTk`/`Rec` are re-pointed at the
+   ultimate base, with `ir.inc` guarding on `PtrDepth = 1`.~~ **DONE**
+   (`972b8be8e`, plus `a296024e9` for ir.inc's remaining readers). The Track U
+   fork [[decide-typeref-gains-a-pointer-depth-field]] was answered in
+   `28c19f214`; `PtrDepth` landed readers-free in the 2026-08-30 frankA pass,
+   and the fold is the 2026-08-30 frankwasm section at the bottom. The recorded
+   Pascal-parameter prerequisite measured STALE and cost nothing.
 4. The remaining reader duplication: four copies of the pointer walk, none of
    which can be deleted without the other three agreeing on the node tags. That
    is a bigger, better-value refactor than the table fold and it is not filed
@@ -464,3 +466,137 @@ the outstanding caveat recorded 2026-08-24: Pascal's *parameter* table still has
 no depth sibling, so a Pascal `^PChar` parameter arrives at depth 1 rather than
 2 — check whether that makes the `PtrDepth = 1` guard wrong for parameters
 before relying on it.
+
+## 2026-08-30 (frankwasm) — step 2 landed: the fold, with the guard it needed
+
+`TTypeRef.PtrBaseTk`/`PtrBaseRec` now hold the **ultimate base** (they were
+holding the immediate pointee under a name that said base), and `ir.inc`'s
+char-pointer predicate gained the `PtrDepth = 1` guard in the same commit. Two
+edits, exactly as step 3 of the "Still open" list specified.
+
+### The recorded prerequisite was stale — measured, not assumed
+
+The caveat carried since 2026-08-24 — *"Pascal's parameter table still has no
+depth sibling, so a `^PChar` parameter arrives at depth 1 rather than 2; check
+before relying on the `PtrDepth = 1` guard"* — is **false at HEAD**, and the
+earlier note that extending the param table was "a prerequisite for step 2 …
+do it as the first half of step 2" is therefore discharged with no work.
+`ptypesPtrDepth` / `ptypesPtrBaseTk` / `ptypesPtrBaseRec` exist in
+`pasparser_proc.inc`, are assigned per parameter group, and reach the symbol
+through `SetSymPointerType`. Measured:
+
+    Mixed(aInt: Integer; bPc: PChar; cPtr: Pointer; dPpc: ^PChar; ePb: ^Byte)
+      bPc  depth=1 basetk=3 (tyChar)     dPpc depth=2 basetk=3 (tyChar)
+      cPtr depth=0 basetk=0              ePb  depth=1 basetk=8 (tyUInt8)
+
+Order-independent — `PcThenPpc` and `PpcThenPc` both record correctly.
+
+**The probe that would have answered this in August could not see parameters
+at all.** `PXXDBG=a.symptr` fires from the `Alloc*` chokepoints, i.e. BEFORE
+`SetSymPointerType`, so for a parameter it prints the recycled sym slot's
+previous occupant. Read at face value that output says "every parameter in a
+proc gets the last pointer parameter's shape" — a dramatic bug that is not
+there. This is the second hole in that probe, and the same one its own header
+comment already warns about for arrays: *"a probe with a hole in it is worse
+than no probe, because the silence reads as an answer."* Fixed forward instead
+of worked around: `PXXDBG=p.ptrparam`, which fires at the right moment, now
+prints depth and ultimate base too (`53f9b82e0`). It printed only the immediate
+pointee before, which is precisely the field that cannot tell `PChar` from
+`^PChar`.
+
+### The guard is load-bearing, and the first measurement that said so was wrong
+
+Removing the guard and rebuilding appeared to change the compiler's own output.
+It did not: the working tree still had the guard removed, so `compiler.pas`
+`{$I}`-included a different `ir.inc`. That compared two SOURCES, not two
+behaviours — the contamination this ticket already warns about under "Do not
+edit sources while a gate runs", reached by a different route. Re-measured on
+one fixed tree, the three compilers agree on `compiler.pas` byte for byte, and
+an instrumented build shows the guard rejects **nothing** while compiling it.
+
+The honest discriminator is a bare depth-2 identifier in a PChar context:
+
+    var p: PChar; q: ^PChar;  p := @s[0];  q := @p;  WriteLn('A=', q);
+
+      pre-fold compiler   A=4352408      (the address)
+      folded + guard      A=4352408      byte-identical binary
+      folded, no guard    A=<raw bytes>  q read as a PChar
+
+So the guard is exactly what keeps the fold behaviour-neutral, which is this
+ticket's own standard — not an extra.
+
+### What is NOT pinned, deliberately
+
+The guard's only reachable observable is that bare-identifier arm, and **fpc
+3.2.2 rejects every shape that reaches it** (`WriteLn(q)`, `'x' + q` over a
+typed pointer). There is no oracle, and by CLAUDE.md's compat table "we accept
+a form FPC rejects" is not a defect — so the answer is a pxx dialect call, not
+a conformance fact, and no test asserts it. The guard is held to A/B
+behaviour-neutrality instead. `test/test_ptr_depth2_bases.pas` is new coverage
+of the adjacent real gap (depth 2 over `^Byte` and `^ShortInt`, which nothing
+tested — `^PChar` had two tests and its two siblings had none) and its header
+says in as many words that it does not pin the guard.
+
+### Verification
+
+A/B, compiler built before and after the fold, same sources, binaries diffed —
+**all identical**: `compiler.pas` (and it equals the fixedpoint sha),
+`test_pchar_pointer_to_pchar.pas`, `test_inferred_pointer_keeps_its_depth.pas`,
+`test_not_operand_type_matrix.pas`, `test_basic_comprehensive.bas`,
+`c_builtin_bits.c`, `test_nilpy_configparser.npy`,
+`test_nilpy_float_methods.npy`, `test_cross_write_pchar.pas`. Self-host
+fixedpoint verified (`80f0bf81b554`); `gate.sh quick` green.
+`test_ptr_depth2_bases.pas` agrees with fpc 3.2.2 line for line.
+
+### Still open after this — nothing on the list
+
+Step 3 is DONE, and so is step 4: frankA had already split it out earlier the
+same day as
+[[refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend]],
+correcting the count to six on the way, and that ticket is in `done/`. I nearly
+filed a duplicate of it before checking — the "still open" list reads as open
+because nobody struck item 4 through when it moved.
+
+`ir.inc`'s own two remaining raw readers (the depth-2 stride case and arm 4's
+`q[i]`) were migrated in `a296024e9` rather than left: both want the ultimate
+base, so they were *unmigratable* until the fold above, which is why they were
+still there and why they belong to this change and not to a later sweep. See
+the scope section below for what is left elsewhere and why it is not a ticket.
+
+### Scope, since two sessions have now asked whether this ticket is still legible
+
+It is, but only its **"Still open" list** is live. The survey sections above
+(the site counts, and every mention of `parser.inc`) are a RECORD of a survey
+run before the `pasparser_*.inc` split, and `parser.inc` has not existed since.
+Per CLAUDE.md's precedence rule those are history and are deliberately left
+unrewritten rather than "fixed" — but they should not be read as instructions,
+and their counts are superseded by the measured ones below.
+
+Re-measured at HEAD, raw `SymPtrDepth`/`SymPtrBaseTk`/`SymPtrBaseRec` readers
+left outside `symtab.inc`/`defs.inc`:
+
+    pasparser_lval.inc 9   cparser.inc 6   pyparser.inc 4
+    pasparser_decl.inc 3   ast_syminfer.inc 2          ir.inc 0
+
+24 sites, all mechanical now that `SymTR` carries the ultimate base. `ir.inc`
+is at zero, which is the file that mattered — it held the only reader whose
+migration had semantic content.
+
+So the ticket does not need re-scoping so much as **closing**: items 1-3 of its
+own list are done, and item 4 was already split out by frankA earlier the same
+day as
+[[refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend]]
+(which also corrected the count from four to six, by listing rather than
+counting) and is itself in `done/`. Nothing on the list is left, so this ticket
+resolves rather than carries forward.
+
+The 24 remaining raw-array readers above are NOT a residue of this ticket's
+list — they are the mechanical tail of lane 1, safe to sweep whenever the file
+that holds them is free, and worth nothing on their own. A follow-up ticket for
+them would be make-work at prio 10 that the ranker scans forever, which is the
+exact leak CLAUDE.md's compat table warns about; whoever next edits
+`pasparser_lval.inc` or `cparser.inc` for a real reason should convert the
+readers in front of them and no more.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
