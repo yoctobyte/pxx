@@ -1642,6 +1642,7 @@ begin
   SetLength(UFldNOff, n);       SetLength(UFldNLen, n);         SetLength(UFldOff_, n);
   SetLength(UFldTk, n);         SetLength(UFldRec_, n);         SetLength(UFldAnonRec, n);
   SetLength(UFldPtrElemTk, n);  SetLength(UFldPtrElemRec, n);   SetLength(UFldPtrAlias, n);
+  SetLength(UFldPtrElemStrTk, n);
   SetLength(UFldPtrDepth, n);   SetLength(UFldPtrBaseTk, n);    SetLength(UFldPtrBaseRec, n);
   SetLength(UFldProcSig, n);    SetLength(UFldElemProcSig, n);  SetLength(UFldIsArray, n);
   SetLength(UFldArrLen, n);     SetLength(UFldDynDepth, n);     SetLength(UFldPub, n);
@@ -1692,6 +1693,11 @@ begin
       UFldElemProcSig[dst+k] := UFldElemProcSig[src];
       UFldAnonRec[dst+k] := UFldAnonRec[src];
       UFldPtrElemTk[dst+k] := UFldPtrElemTk[src];
+      { INHERITANCE copies the pointee width too. Without this line a descendant
+        class's inherited `p: ^WideString` field read narrow while the base's
+        read wide -- the same row, two answers, depending on which class you
+        asked. feature-unicodestring-model }
+      UFldPtrElemStrTk[dst+k] := UFldPtrElemStrTk[src];
       UFldPtrElemRec[dst+k] := UFldPtrElemRec[src];
       UFldPtrDepth[dst+k] := UFldPtrDepth[src];
       UFldPtrBaseTk[dst+k] := UFldPtrBaseTk[src];
@@ -1735,6 +1741,7 @@ begin
   if tk = Ord(tyPointer) then
   begin
     UFldPtrElemTk[fi] := Ord(LastTypePointerElemTk);
+    UFldPtrElemStrTk[fi] := LastTypePointerStrElemTk;
     UFldPtrElemRec[fi] := LastTypePointerElemRec;
     UFldPtrAlias[fi] := LastTypePointerAlias;
     UFldPtrDepth[fi] := LastTypePointerDepth;
@@ -1744,6 +1751,7 @@ begin
   else
   begin
     UFldPtrElemTk[fi] := Ord(tyUnknown);
+    UFldPtrElemStrTk[fi] := 0;
     UFldPtrElemRec[fi] := REC_NONE;
     UFldPtrAlias[fi] := -1;
     UFldPtrDepth[fi] := 0;
@@ -2667,6 +2675,28 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := IntToTypeKind(UFldPtrElemTk[fi]);
+  end;
+end;
+
+function RecFieldPtrElemStrTk(rec: Integer; const field: AnsiString): Integer;
+{ Element TTypeKind ordinal of what a POINTER field points at, when that is a
+  managed string -- Ord(tyWideChar) for `p: ^WideString`, 0 otherwise. The
+  pointee twin of RecFieldStrElemTk below: that one answers how wide the
+  field's own string is, this one how wide the string it POINTS AT is. A
+  pointer is not a string, so the two cannot share a slot -- the same argument
+  SymPtrElemStrTk makes for a symbol.
+
+  No UFldIsArray guard, unlike its twin. That guard exists because UFldTk holds
+  the ELEMENT kind for an array field and would otherwise be misread as the
+  field's own kind; a pointer field's pointee width is not overloaded that way.
+  feature-unicodestring-model }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldPtrElemStrTk[fi];
   end;
 end;
 
@@ -13447,6 +13477,9 @@ begin
        (a >= 0) and (a < AliasCount) and (AliasElemRec[a] <> REC_NONE) then
     begin
       UFldPtrElemTk[i] := AliasElemTk[a];
+      { the width travels with the kind through the backfill: a forward
+        `PW = ^WideString` field resolves both here or neither }
+      UFldPtrElemStrTk[i] := AliasPtrStrElemTk[a];
       UFldPtrElemRec[i] := AliasElemRec[a];
       { the alias knows its own depth and base; a forward `PNode = ^TNode` field
         that had to wait for this pass gets the whole triple, not two fifths. }

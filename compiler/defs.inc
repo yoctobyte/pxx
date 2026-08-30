@@ -4506,6 +4506,23 @@ var
   UFldRec_   : array of Integer;
   UFldAnonRec : array of Integer; { C anonymous-member promotion: for a field flattened in from an anonymous struct/union member (C11 6.7.2.1), the source sub-record id (REC_UCLASS_BASE+subci) shared by all fields of that one anon member; REC_NONE otherwise. Lets the aggregate-init walker re-group a promoted anon member for a nested inner brace initializer. }
   UFldPtrElemTk : array of Integer;
+  { The pointee's ELEMENT WIDTH when a field points at a managed string:
+    `type PW = ^WideString; TR = record p: PW; end` -- Ord(tyWideChar) for a
+    UTF-16 pointee, Ord(tyChar) or 0 otherwise. The field member of the
+    POINTEE-side carrier set, and the twin of UFldStrElemTk one level down:
+    that one says how wide the field's OWN string is, this one how wide the
+    string it POINTS AT is, and a pointer is not a string so neither can stand
+    in for the other.
+
+    Read by ASTStrElemTkOf's AN_DEREF arm for an AN_FIELD base, which is what
+    makes `Length(r.p^)` answer 4 for 'abcd' instead of 8. Written at FOUR
+    sites, and the third and fourth are the ones a fresh reading would miss:
+    the declaration capture, the non-pointer reset beside it, the forward-alias
+    BACKFILL pass (a `PNode = ^TNode` field declared before TNode exists), and
+    the class-INHERITANCE copy, where a descendant duplicates its base's field
+    rows. Miss the copy and an inherited wide-pointee field reads narrow.
+    feature-unicodestring-model }
+  UFldPtrElemStrTk : array of Integer;
   UFldPtrElemRec : array of Integer;
   { ...and the rest of a pointer FIELD's identity. The pointee alone cannot tell
     a `PChar` field from a `^PChar` field -- both point at something whose

@@ -1488,6 +1488,18 @@ begin
   else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
           (ASTKind[ASTLeft[node]] = AN_IDENT) then
     Result := SymPtrElemStrTk[ASTIVal[ASTLeft[node]]]
+  { `r.p^` -- the pointer is a record FIELD. Same fact one entity over, and it
+    needs the field's own pointee-width carrier for the reason the symbol arm
+    above needs the symbol's: a pointer is not a string, so UFldStrElemTk (how
+    wide the FIELD's string is) cannot answer how wide the string it POINTS AT
+    is. Measured before it was written: Length(r.p^) answered 8 for 'abcd'
+    where FPC says 4, while the identical `q^` through a plain variable was
+    already correct -- one carrier present, its sibling absent.
+    feature-unicodestring-model }
+  else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_FIELD) then
+    Result := RecFieldPtrElemStrTk(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
+                                   GetASTIdentName(ASTLeft[node]))
   { The RESULT of a call. A call node has no symbol and no field to ask, so the
     callee's row is the only place the width can live -- the same argument
     ProcRetEnumId makes for an enum-typed result. All three call shapes carry
