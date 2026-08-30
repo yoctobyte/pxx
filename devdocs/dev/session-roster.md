@@ -21334,3 +21334,39 @@ contained `{$ifndef PXX_ESP}` with braces — a `{ }` comment ends at the FIRST
 Write it `$ifndef PXX_ESP`, no braces. Same hazard as frankS's, pointed the other
 way: there it made a scanner see directives that were prose; here it would have
 made the compiler see code that was prose.
+
+## Removal tells you which line; the guarded re-add tells you which mechanism
+
+frankwasm, 2026-08-30, after breaking the self-host fixedpoint during 6c-params.
+
+It had stamped a string param's element width into `Syms[].ElemType` for every
+`tyAnsiString` param. No fixedpoint after 4 rounds. The diagnosis:
+
+`ptypes[i]` for an array param is the **element** kind, so `array of AnsiString`
+reaches that line with `ptypes[i] = tyAnsiString` **exactly as a scalar string
+does** — and for an array, `Syms[].ElemType` legitimately *is* `tyAnsiString`,
+which every backend's dyn-array arm reads to pick an 8-byte managed stride. The
+stamp retyped those elements to a 1-byte char. The backends say so in their own
+words — *"for `array of string` the symbol's TypeKind IS tyAnsiString (it names
+the ELEMENT)"* — in a comment that had not been read.
+
+**The method, and it is the transferable part:**
+
+> I first pulled the hunk and got a fixedpoint, which only proves that hunk was
+> involved. Then I re-added it guarded with `(not parr[i]) and (pDynDepth[i] = 0)`
+> and got convergence in 1 round.
+
+**Removal proves involvement. Only the guarded re-add proves the mechanism** —
+and a mechanism is what goes in a ticket. A removal-only diagnosis is compatible
+with several stories, and the one a session writes down is the one it already
+believed. Same family as the two-state canary above: make the suspected cause the
+*only* thing that varies, in both directions.
+
+### The type-side sibling of `normalise-dont-special-case`
+
+**Every `= tyAnsiString` guard in a param-or-element context is ambiguous between
+"a string" and "an array whose elements are strings."** 6b resolved it for symbols
+via `IsArray`; that split has to be made deliberately at each new site rather than
+inherited. The syntax-side rule says a construct reachable through two shapes
+grows a second path that stays broken; this is the same hazard arriving through
+the type system, where the two shapes are spelled identically.
