@@ -103,3 +103,35 @@ AddF(o, p[0], p[1]);      { SEGFAULT }
 - a regression test covering the whole four-cell matrix, not one arm of it;
   the parent ticket's acceptance named the matrix and three quarters of it is
   what landed
+
+## Independently confirmed by frank-coordinator, 2026-08-30, native x86-64
+
+Reproduced with a probe written from the description rather than from frankB's
+source — a second arm that does not share an upstream with the first (operating
+rule 2's corollary: verify against a source the claimant did not choose).
+
+```pascal
+type TGf = array[0..15] of Int64;  TRows = array[0..1] of TGf;
+procedure TakeVar  (var   a: TGf); begin Writeln('var   a[0]=', a[0], ' a[15]=', a[15]); end;
+procedure TakeConst(const a: TGf); begin Writeln('const a[0]=', a[0], ' a[15]=', a[15]); end;
+```
+
+Built with the pinned binary:
+
+```
+SizeOf(TGf)=128 SizeOf(TRows)=256
+var   a[0]=100 a[15]=115        <- the var cell WORKS
+const a[0]=                     <- SIGSEGV, exit 139
+```
+
+Two details to add to the routing note:
+
+- **`SizeOf` is correct (128 / 256)**, which corroborates that the element
+  mis-sizing the original ticket diagnosed as root cause genuinely *is* fixed. This
+  is a different defect that happened to live behind the same acceptance test.
+- **The fault is on the FIRST element access inside the const procedure**, not on a
+  later one — the literal `const a[0]=` is written, then it dies evaluating `a[0]`.
+  So the parameter itself is bad on entry rather than the extent being wrong, which
+  narrows it toward what the *caller* passes for a const aggregate member versus what
+  it passes for a var one. `var` on the same row, same type, same call site shape,
+  is fine.

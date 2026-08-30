@@ -5816,3 +5816,94 @@ was where the design actually got decided** (112), and both times a banked estim
 would have carried the wrong number forward — **this one into a promotion argument**,
 where the number is the whole case. Measured result: `three.pas` loop 18 → 17, campaign
 cumulative 22 → 17, six programs byte-identical at -O0/-O1/-O2 and all smaller at -O3.
+
+### 142 — when a bug is TARGET-SPECIFIC, your default build is a CONTROL arm, not a TEST arm
+
+*frankB, 2026-08-30, reverting four workarounds whose blocking tickets had closed.*
+
+Row 1's bug — `Int()` of a large double saturating to 32-bit — was **i386/arm32 only**.
+So every probe available on the developer's machine (the box, the pin, the default
+build, `make lib-test`) **passes identically whether the fix is present or not**.
+
+> *"I tested it and it works" would have been a true sentence and worthless evidence.*
+
+That is the whole trap, and it is not carelessness — the sentence is true, the test
+really ran, the result really was green. **The default build was green before the fix
+too**, which makes it a control arm that happens to be labelled a test arm. The revert
+is licensed only by cross-compiling the repro and running it under qemu **on the two
+targets that actually had the bug**, then checking Sin/Cos at ten magnitudes straddling
+2^31 byte-identical across five targets and exact against CPython/libm.
+
+Sits with 138 and with the host-green rule as one family: **before reading a green,
+ask which arm could have produced it** — this machine, this tier, this target. A green
+from an arm that never had the defect is a control, and controls are only informative
+next to a test.
+
+And the positive control was built rather than assumed (133): mutating the reverted
+lines back to 32-bit saturation blows three rows up to ~1e158 while the sub-2^31 rows
+stay correct. **That is what licenses reading the passing run as coverage rather than
+as "nothing crashed."**
+
+### 142a — the five-link chain, and why four live reverts sat for weeks
+
+The answer frankB extracted, now in `track-b-workarounds.md`, and each link has been
+the false one at least once in this repo's history:
+
+> **fixed on master** ≠ **in the pin** ≠ **the reverted code runs** ≠ **the capability
+> works at all** ≠ **it works on the target that was broken**
+
+*"Checking looked like one question and is five."* That is the mechanism behind 137a —
+a rule with no self-deriving command goes unrun — stated as *why* it goes unrun. It is
+not laziness; it is that the cost was misjudged by a factor of five, so nobody budgeted
+for it and everyone assumed someone had done the one-question version.
+
+### 142b — row 6: a ticket in `done/` whose capability does not work
+
+`bug-aggregate-member-array-as-var-param` names four acceptance cells: 2D-array row and
+array-typed record field, each `var` and `const`. **Three pass. The fourth — a 2D-array
+row as a `const` param — segfaults on all five targets**, and it is the exact cell
+ed25519 needs (`AddF(var o: TGf; const a, b: TGf)` and eleven more).
+
+Confirmed independently by the coordinator with a probe written from the description
+rather than from frankB's source: `var` on the row prints correctly, `const` on the same
+row dies with SIGSEGV on the **first** element access, and `SizeOf` is correct at 128/256
+— so the element mis-sizing the ticket diagnosed as its root cause genuinely *is* fixed.
+**A different defect was living behind the same acceptance test**, and the ticket closed
+on three cells of four.
+
+Rule 10 paying out exactly: *"filed as done" and "the capability works" are different
+claims.* The routing note that makes it cheap for A: **`var` on the identical row, type
+and call-site shape works**, so it points at the const-aggregate argument path, not at
+address-of for aggregate members in general.
+
+### 142c — a LANDMINE THAT OVERCLAIMS steers code away from a form that works
+
+The subtlest of the four, and a genuinely new direction. Rewriting the ledger, frankB
+**narrowed** the aggregate-member landmine from *"keep every sub-array standalone"* to
+the single surviving cell — because a record of arrays now has **no** restriction at all.
+
+> *A landmine that overclaims steers code away from a form that works, which is the
+> same failure as the section header that overclaimed — one costs you reverts, the
+> other costs you designs.*
+
+**The cost of a too-broad caveat is designs not taken, and that cost is invisible.** A
+stale *restriction* leaves no artefact to find: no failing test, no red, no workaround
+to revert — just code that was written the awkward way, by someone who never learned
+there was an alternative. This is the false-limit rule (rule 2, third corollary) applied
+to engineering guidance rather than to findings, and it is worse there, because guidance
+is read by people who have no reason to re-derive it.
+
+Note the disposal: both landmines were **rewritten, not deleted**. A deleted landmine
+takes its history with it and invites the original bug's re-discovery.
+
+### 142d — and one deliberate NON-revert
+
+`examples/bignum/bigmath.pas`: both cited bugs fixed, the revert available, **and not an
+improvement.** In a checker, `chk := BigAddSigned(prod, r); if BigCompare(chk, a) <> 0`
+names the intermediate that the FAIL message is about; nesting the calls reads worse.
+The stale thing was the *header claiming a constraint*, so the comment was corrected and
+the code stood.
+
+**"The workaround is no longer necessary" and "the workaround should be removed" are
+different claims.** A revert-when-fixed lifecycle that cannot record *"kept on merit"*
+turns into a ratchet that degrades code every time a bug closes.
