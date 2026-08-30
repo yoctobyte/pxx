@@ -2258,6 +2258,7 @@ begin
     writeln('ok: ', outFile + '.s', '  [-S disassembly]');
   end;
 
+  AsmMemoReport;
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
           'B  bss=',BSSSize,'B  procs=',ProcCount,']');
 end.

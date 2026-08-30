@@ -920,6 +920,164 @@ var
   AsmFwPatch: array[0..ASM_MAX_LABELS - 1] of Integer;
   AsmFwCount: Integer;
 
+{ ---- fixed-line encode memo -------------------------------------------------
+
+  The runtime blobs are written as EmitAsmX64(['mov rdi, rax', 'push rcx', ...])
+  because that reads far better than a wall of EmitB($48); EmitB($89); ..., and
+  standing policy protects that readability. What it costs is that the SAME
+  fixed strings are re-lexed by AsmTextLine on every emission, of every program:
+  the source text cannot change, yet 'push rax' is tokenised character by
+  character at each of its call sites, every compile.
+
+  So the ENCODED BYTES are memoised per line. A hit appends them and never
+  enters the assembler at all. This changes WHEN bytes are computed, never
+  WHICH bytes -- the acceptance condition of feature-opt-emitasmx64-reparses-
+  fixed-strings, and what the self-host fixedpoint checks for free.
+
+  WHICH LINES MAY BE CACHED IS DECIDED BY OBSERVATION, NOT BY A LIST.
+  A hand-written "these mnemonics are safe" table would be the same construction
+  as IRFirstEvaluated: a mirror of another routine's control flow, correct on the
+  day it is written and silently wrong the day the authority changes. That cost
+  us bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements, and
+  the fix there was to check the prediction WHERE IT IS USED. Same here: the
+  first encode of a line is watched, and the line earns its cache entry only if
+  encoding it moved nothing but CodeLen.
+
+  Exactly two things can move, and both are counters we can read:
+
+    FixCount             a relocation was recorded; Fixups[] stores CodeLen, so
+                         the bytes are tied to where they were emitted.
+    LibcSyscallCallCount --rtl-libc lowered `syscall` to a patched call and
+                         recorded the site in LibcSyscallCallPos[]. Replaying
+                         cached bytes would emit the call and register nothing,
+                         so the thunk would never be patched in.
+
+  Either means "not a pure byte-producing line". Such a line is POISONED and
+  takes the slow path forever after. Nothing needs to know in advance which
+  lines those are, which is the whole point.
+
+  nHoles = 0 is required for the obvious reason -- a `%` line's bytes vary with
+  its argument -- and it covers `@data` / `@glob` too, since EmitAsmX64 counts
+  those as holes. The remaining guarantee, that a hole-free line's bytes do not
+  depend on CodeLen, holds because AsmTextLine never reads CodeLen; the counter
+  watch above is what catches it if that ever stops being true.
+
+  Staging mode (EncToAsmBuffer) is excluded outright: there EncB writes to the
+  AsmB buffer rather than Code[], so there is no byte range at Code[CodeLen] to
+  capture in the first place. }
+
+const
+  ASM_MEMO_SLOTS = 512;        { power of two; ~185 distinct fixed lines today }
+  ASM_MEMO_POOL_CAP = 8192;    { bytes of encoded output retained }
+
+var
+  AsmMemoKey: array[0..ASM_MEMO_SLOTS - 1] of AnsiString;
+  AsmMemoOff: array[0..ASM_MEMO_SLOTS - 1] of Integer;
+  AsmMemoLen: array[0..ASM_MEMO_SLOTS - 1] of Integer;   { -1 = poisoned }
+  AsmMemoPool: array[0..ASM_MEMO_POOL_CAP - 1] of Byte;
+  AsmMemoPoolLen: Integer = 0;
+  AsmMemoHits: Int64 = 0;
+  AsmMemoMisses: Int64 = 0;
+  AsmMemoPoison: Int64 = 0;
+  AsmMemoNoRoom: Int64 = 0;
+
+{ Masked at every step so the multiply cannot overflow a 32-bit Integer. }
+function AsmMemoHash(const line: AnsiString): Integer;
+var h, i: Integer;
+begin
+  h := 0;
+  for i := 1 to Length(line) do
+    h := ((h * 33) + Ord(line[i])) and $03FFFFFF;
+  AsmMemoHash := h and (ASM_MEMO_SLOTS - 1);
+end;
+
+{ Result=True: slot holds this line (a cached entry or a poison marker).
+  Result=False with slot >= 0: slot is free, fill it. slot < 0: table full. }
+function AsmMemoFind(const line: AnsiString; var slot: Integer): Boolean;
+var probes: Integer;
+begin
+  slot := AsmMemoHash(line);
+  probes := 0;
+  while probes < ASM_MEMO_SLOTS do
+  begin
+    if Length(AsmMemoKey[slot]) = 0 then begin AsmMemoFind := False; Exit; end;
+    if AsmMemoKey[slot] = line then begin AsmMemoFind := True; Exit; end;
+    slot := (slot + 1) and (ASM_MEMO_SLOTS - 1);
+    Inc(probes);
+  end;
+  slot := -1;
+  AsmMemoFind := False;
+end;
+
+{ The memoising front door to AsmTextLine. Every ordinary instruction line in
+  EmitAsmX64 goes through here. }
+procedure AsmTextLineMemo(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
+var
+  slot, i, startLen, f0, s0, n: Integer;
+begin
+  if EncToAsmBuffer or (nHoles > 0) then
+  begin
+    AsmTextLine(line, holes, nHoles);
+    Exit;
+  end;
+
+  if AsmMemoFind(line, slot) then
+  begin
+    if AsmMemoLen[slot] >= 0 then
+    begin
+      for i := 0 to AsmMemoLen[slot] - 1 do
+        EmitB(AsmMemoPool[AsmMemoOff[slot] + i]);
+      AsmMemoHits := AsmMemoHits + 1;
+      Exit;
+    end;
+    AsmTextLine(line, holes, nHoles);       { poisoned — always the slow path }
+    Exit;
+  end;
+
+  { First sighting: encode it for real, watching what else moves. }
+  startLen := CodeLen;
+  f0 := FixCount;
+  s0 := LibcSyscallCallCount;
+  AsmTextLine(line, holes, nHoles);
+  AsmMemoMisses := AsmMemoMisses + 1;
+
+  if slot < 0 then begin AsmMemoNoRoom := AsmMemoNoRoom + 1; Exit; end;
+
+  if (FixCount <> f0) or (LibcSyscallCallCount <> s0) then
+  begin
+    AsmMemoKey[slot] := line;
+    AsmMemoLen[slot] := -1;
+    AsmMemoOff[slot] := 0;
+    AsmMemoPoison := AsmMemoPoison + 1;
+    if PxxDbgWants('a.asmmemo', '*') then
+      WriteLn('PXXDBG a.asmmemo POISON (emitting it moved a counter): ', line);
+    Exit;
+  end;
+
+  n := CodeLen - startLen;
+  if (n < 0) or (AsmMemoPoolLen + n > ASM_MEMO_POOL_CAP) then
+  begin
+    AsmMemoNoRoom := AsmMemoNoRoom + 1;
+    Exit;
+  end;
+  for i := 0 to n - 1 do
+    AsmMemoPool[AsmMemoPoolLen + i] := Code[startLen + i];
+  AsmMemoKey[slot] := line;
+  AsmMemoOff[slot] := AsmMemoPoolLen;
+  AsmMemoLen[slot] := n;
+  AsmMemoPoolLen := AsmMemoPoolLen + n;
+end;
+
+{ One line under PXXDBG a.asmmemo, at end of compile. The hit:miss ratio is the
+  whole measurement this feature is judged on. }
+procedure AsmMemoReport;
+begin
+  if not PxxDbgWants('a.asmmemo', '*') then Exit;
+  WriteLn('PXXDBG a.asmmemo hits=', AsmMemoHits, ' misses=', AsmMemoMisses,
+          ' poisoned=', AsmMemoPoison, ' no-room=', AsmMemoNoRoom,
+          ' pool=', AsmMemoPoolLen, '/', ASM_MEMO_POOL_CAP);
+end;
+
 procedure EmitAsmX64(const items: array of const); overload;
 var
   i, n, h, nHoles, j: Integer;
@@ -1040,7 +1198,7 @@ begin
           Error('EmitAsmX64: missing integer hole value');
         if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
       end;
-      AsmTextLine(line, holes, nHoles);
+      AsmTextLineMemo(line, holes, nHoles);
       i := i + 1 + nHoles;
     end;
   end;
