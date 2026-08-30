@@ -202,3 +202,81 @@ that a conscientious sweep was specifically designed not to leave behind.
 Xtensa now runs, and the differential
 ([[bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs]]) is what
 found this one.
+
+
+---
+
+# HANDBACK — the state of hosted xtensa, 2026-08-30 (frankS)
+
+Measured at HEAD `fa01f7111`, compiler `a6b4e6e1816c` (a verified self-host
+fixedpoint, sha confirmed different from `pinned`). 129 sources — the union of
+what `test-riscv32` and `test-xtensa` compile. **The `142` in this ticket's
+title is wrong and cannot be reproduced from the Makefile at any target
+combination; treat the partition as N/matching, never as a fixed denominator.**
+
+```
+Call0      MATCH 99   DIFF  8   CFAIL 21   (oracle can't build 1)
+windowed   MATCH 50   DIFF 55   CFAIL 23
+```
+
+Call0 over the night: **69 → 99 matching, 21 → 8 diverging**, across nine
+changes, **no sweep regressed a program**. Windowed is a different target in
+practice and is NOT the subject of any of this — see the windowed ticket.
+
+## The 8 that still diverge, each with an owner
+
+| program | what it is | where it goes |
+| --- | --- | --- |
+| `test_cross_float_const` | SIGBUS indexing a const array | [[bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section]] — **read that ticket's correction block first**, its per-target table is invalid |
+| `test_cross_float` | ` 3.500000000E+00` vs ` 3.5000000000000000E+000` — exponent digit count and mantissa width | **Track F** (float FORMATTING is F by the 2026-08-19 ruling) — needs a ticket in `float/` |
+| `test_cross_trunc_round_saturate` | `Trunc(1e30)` gives `2147483647`, not `9223372036854775807` | **NOT F — needs a bug ticket.** xtensa's `-203/-204` arm calls the **32-bit** `__pxx_d2i` kernel and sign-extends, so Trunc/Round→Int64 is structurally 32-bit. The subject is the conversion mechanism, not float accuracy; rank the mechanism, never the datatype |
+| `test_shortstring_trunc` | prints `b-CLOBBERED` — a shortstring write corrupts a NEIGHBOURING variable | **needs a bug ticket, and it is the one I would take first.** Memory corruption, and the only reason it is visible is that this test plants guard variables |
+| `test_arm32_record_byval_wide` | `1 7 222 2` and `134730463` where the oracle says `1 7 8 2` and `8` | **needs a bug ticket.** A live address rendered as a decimal number — the exact signature of the `var string` param bug fixed earlier tonight, now on **by-value wide records** |
+| `test_cross_syscall` | `0 0 -1` vs `1 1 12345` | needs a ticket; pre-dates the syscall-table work (it was already DIFF in every earlier sweep) |
+| `test_rtti` | `InstanceSize: 80` vs `64` | `test-xtensa`'s row filters `InstanceSize:`/pointer lines, as i386/arm32/aarch64 do, so this is excluded there by the same convention — but 80-vs-64 is a real layout difference and deserves its own look |
+| `test_asm_ifdef_multiarch` | `0` vs `42` | inline asm under `{$ifdef}` per arch; needs a ticket |
+
+**Three of those eight have no ticket yet and two of them are wrong-VALUE bugs**
+(`shortstring_trunc`'s clobber, `record_byval_wide`'s address-as-number). I am
+naming them here rather than filing them because I am handing the corpus back
+and a ticket I do not work is worth less than a row in the table someone reads.
+Whoever picks this up: those two first.
+
+## The 21 that do not compile — seven categories, all named
+
+| n | category | ticket |
+| --- | --- | --- |
+| 5 | `call0` displacement > ±512 KiB, no veneer | [[bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer]] |
+| 6 | the scheduler — no `CoSwitch` for xtensa. **Deliberately still red** | [[feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there]] |
+| 4 | signal: 1 × `IR_SET_SIGNAL` + 3 × SA_SIGINFO, all one missing runtime | [[feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile]] |
+| 3 | builtins `-55` (needs the entry stub to save the initial sp), `-100`, `-50` | [[feature-a-xtensa-the-last-five-builtins-and-the-entry-stub-that-blocks-one]] — now three, not five |
+| 2 | external (dynamic) symbols | **by design** on this target |
+| 1 | non-scalar function result (`test_hidden_dynarray_temp_zeroinit`) | needs a ticket |
+
+**Nothing in the tail is unclassified.** That was the point of partitioning it
+rather than sampling it: a bucket you have counted is a bucket whose members you
+have looked at, and it is what turned "23 assorted failures" into five distinct
+filed defects nobody could have named that morning.
+
+## What a green here does and does not mean
+
+Unchanged and still load-bearing: `--xtensa-soft-mulhigh` **labels** the
+multiply divergence rather than removing it (no qemu-xtensa core implements
+MUL32HIGH), so any arithmetic verdict from this target must name the flag. This
+is **Call0 only**. And one row — `test_signal_default_revert_b336` — sits in the
+signal family but **installs no handler**: it raises SIGTERM with the default
+disposition and dies 143, which needs `kill`, not the signal runtime. It is
+coverage-shaped and proves nothing about the family it sits in. I wired it, so
+I am flagging it.
+
+## The one methodological thing worth carrying forward
+
+Every fix tonight was a **missing row of a rule the other backends already
+carried** — not a novel xtensa problem. `ABIParamSlotHoldsValueAddr`,
+`IR_STORE_MEM`'s typed stores, `IR_INDEX`'s managed-string bases, the dyn-array
+ops, the set family, `SPECIAL_IN`. The reason they survived is that **a search
+for duplicated logic cannot find the place where the logic is missing**: xtensa
+passed the "no `IsRef or` chain outside the helper" grep by having no copy at
+all. When a sweep converts N call sites onto a shared helper, **enumerate the
+backends that should call it and check each one does** — the first list is
+closed and countable, the second is defined by what already exists.

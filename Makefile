@@ -12849,6 +12849,19 @@ test-riscv32: $(COMPILER)
 # reproduced from this Makefile — treat the partition as N/matching, not as a
 # fixed denominator.
 #
+# HANDBACK STATE (frankS, 2026-08-30, HEAD fa01f7111, compiler a6b4e6e1816c):
+# Call0 99 match / 8 differ / 21 do not compile, of 129. Over the night 69 -> 99
+# matching and 21 -> 8 diverging across nine changes, no sweep regressing a
+# program. Windowed is 50/55/23 and is a different target in practice. The full
+# partition — all 8 divergences and all 21 compile failures, each with a ticket
+# or marked as needing one — is the HANDBACK section at the bottom of
+# bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs. Two of the
+# eight are wrong-VALUE bugs with no ticket yet and are where to start:
+# test_shortstring_trunc prints `b-CLOBBERED` (a shortstring write corrupting a
+# neighbouring variable) and test_arm32_record_byval_wide renders a live address
+# as a decimal number, the same signature as the var-string-param bug fixed
+# earlier that night, now on by-value wide records.
+#
 # THE SYSCALL-TABLE SWEEP BOUGHT ONE ROW, and that is the honest number.
 # lib/rtl had per-arch syscall blocks for five arches and no xtensa row, so 14
 # sources died at `undefined variable (SYS_openat)`. Supplying the row moved
