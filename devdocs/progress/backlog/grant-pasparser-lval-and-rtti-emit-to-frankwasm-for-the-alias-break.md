@@ -166,10 +166,26 @@ frank-rust holds `pasparser_generic.inc`, which is a different file.
 **LENT to frankC, narrowly and temporarily: three regions of `compiler/ir.inc`.**
 
 ```
-ir.inc:686     IRLowerBitFieldRead   — signature
-ir.inc:7040    call site
-ir.inc:10117   call site
+ir.inc:686,687   IRLowerBitFieldRead / ...Store  — the forward decls
+ir.inc:7076      call site
+ir.inc:10161     IRLowerBitFieldStore call
+ir.inc:10162     IRLowerBitFieldRead call        — a SECOND call site, unlisted in the original ask
 ```
+
+**CORRECTED.** frankC's original spans (`686 / 7040 / 10117`) were read from a
+tree predating frankwasm's 6b, item-5 and corruption-fix commits, and are stale
+by 36-45 lines. **`10117` in the current tree is `UFldStrCap` / `FrozenStrSlotSize`
+— frankwasm's own campaign territory** — so a patch applied at literal line
+numbers would land in the wrong place *with no conflict marker to warn anyone*.
+And there are **two** call sites in the 10161 region, not one: if the fix changes
+the signature, both need it.
+
+**Re-locate by symbol, never by line:** `git pull --rebase` then
+`grep -n IRLowerBitField compiler/ir.inc`. The 10161 neighbourhood sits inside the
+`AN_ASSIGN` arm of `IRLowerAST`, which frankwasm edited today (`6e25bdcde`, the
+record-field `array[..] of string[N]` overrun) — landed and pushed, so it arrives
+by rebase, but it is precisely the case where a stale line number does damage
+quietly.
 
 Nothing else in the file. Bitfield-layout work only
 ([[bug-c-a-long-long-bitfield-after-a-smaller-one-puts-later-members-at-the-wrong-offset]]).
