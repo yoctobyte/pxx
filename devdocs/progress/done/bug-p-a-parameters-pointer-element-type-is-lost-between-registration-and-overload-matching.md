@@ -218,4 +218,4 @@ referent no longer exists" — the distinction this ticket could not make by
 reasoning, having offered those first two as the only options.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit cab9fc619.
