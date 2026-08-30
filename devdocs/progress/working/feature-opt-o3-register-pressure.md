@@ -194,13 +194,13 @@ far from exhausted. Killing the 37% is where the next multiplier lives.
 >
 > | file | `>= 3` | `< 3` | total |
 > | --- | --- | --- | --- |
-> | `ir_codegen.inc` (x86-64) | 17 | 6 | **23** |
-> | `ir_codegen_aarch64.inc` | 5 | 2 | **7** |
+> | `ir_codegen.inc` (x86-64) | 17 | 6 | 23 |
+> | `ir_codegen_aarch64.inc` | 5 | 2 | 7 |
 > | the other four backends | 0 | 0 | 0 |
 >
-> So the ratio is **23 : 7**, not 15 : 4 — the same story (aarch64 has the W2
-> keystone and none of the W1 slice 5-10 family), told by a number that is
-> actually the number. The sibling ticket's slug says "four-of-fifteen"; slugs
+> **And 23 : 7 was wrong too — by one on each row. See the correction below;
+> the number is 22 : 6.** The story never changed (aarch64 has the W2 keystone
+> and none of the W1 slice 5-10 family); the count needed three tries. The sibling ticket's slug says "four-of-fifteen"; slugs
 > are cited by resolved commits and are not renamed, so the corrected count is
 > recorded inside it instead.
 >
@@ -209,8 +209,31 @@ far from exhausted. Killing the 37% is where the next multiplier lives.
 > nothing if the parse matches one of the two ways the arm is written. Slice 10
 > added a gate and the `>= 3` count did not move — 17 before, 17 after — which
 > is the tell, and it is only visible because the count is taken every slice.
-> Command:
-> `grep -cE 'OptLevel *(>=|<) *3' compiler/ir_codegen*.inc`
+> **SECOND CORRECTION, same day, same shape: 23 : 7 counted prose as code.**
+> Each of those two files carries exactly one CONTINUATION line inside a
+> `{ ... }` block that mentions a gate in passing — `ir_codegen.inc:4434` and
+> `ir_codegen_aarch64.inc:1280` — and neither is caught by "does this line start
+> with a comment marker?", because neither does. Properly comment-stripped, the
+> counts are **x86-64 22, aarch64 6**. The aarch64 file's original figure even
+> carried the footnote "*(a 5th match is prose)*", which is the tell: a number
+> that needs an asterisk is a number nobody can re-derive.
+>
+> **Three counts, three wrong answers, and every one of them was the instrument
+> rather than the thing measured.** 15 : 4 missed a spelling; 23 : 7 counted
+> comments; only the third, from stripped source, needs no footnote. The
+> conclusion survived all three unchanged — which is the point, and also the
+> danger: a finding whose supporting number keeps moving while its direction
+> holds is one nobody re-checks.
+>
+> So the count is no longer a command anyone has to remember to run correctly.
+> It is **`tools/check_o3_backend_parity.py`**, wired as a step in
+> `gate.sh quick`: it comment-strips, matches every spelling of an `-O3` gate
+> (`>= 3`, `> 2`, `< 3`, `<= 2`, `= 3`), derives the backend list from a glob so
+> a seventh emitter cannot escape it, and freezes 22 : 6. It does **not** forbid
+> a one-armed slice — most legitimately are. It forbids one nobody *noticed* was
+> one-armed: widening the delta becomes an edit to that file, in the same
+> commit, visible in the diff. `--census` prints every match with file and line
+> so a reader can check the number instead of trusting it.
 Optimization splits by home (see `optimization-architecture.md` §3): **shared-IR
 passes (§3a) help all six targets for free** — one implementation, keep those
 target-agnostic. **Per-backend work (§3b: emitter peepholes, the operand
@@ -3212,10 +3235,26 @@ order), and a guard needs a decline log to be known selective.
 
 ## W1 slice 10 — the resident read and the widen are one instruction
 
-`feature-opt-o3-fuse-resident-read-and-widen-into-movsxd`, landed 2026-08-30.
-Baseline compiler `1055347eb44a`, new compiler `c8303ca1f5b2` — **both built at
-the same HEAD, the baseline being HEAD with only this hunk reverted**, so the
-delta is immune to a sibling's commit rebasing in.
+`feature-opt-o3-fuse-resident-read-and-widen-into-movsxd`, landed 2026-08-30 as
+`2365dafa2`. Baseline compiler `1bca19929e04`, new compiler `46ff97f32ed7` —
+**both built at the LANDED HEAD, the baseline being HEAD with only this hunk
+reverted**, so the delta is immune to a sibling's commit rebasing in.
+
+> Those are the SECOND pair of shas. The first — `1055347eb44a` / `c8303ca1f5b2`
+> — were measured before `tools/sync.sh` rebased, and `de276c8f5` (xtensa) and
+> `d2a61a524` (`lib/rtl/math.pas`, `bignum.pas`) landed underneath. `compiler/`
+> was untouched by both, and the binary still moved, because **the compiler
+> links the RTL: `lib/**` is a build input.** The pre-rebase shas do not
+> reproduce at HEAD and are no longer quotable.
+>
+> This is the second time this campaign has quoted a sha the rebase then
+> invalidated, so it is worth stating as a rule rather than an incident: **a
+> sha measured before the push names a tree that may not survive it.** The
+> re-measurement produced byte-for-byte the same deltas (-2 / -10 / -6, all
+> lower levels identical), which is exactly the property the
+> "HEAD-minus-only-this-hunk" baseline was chosen for — the DELTA survived a
+> changed tree, the absolute shas did not. Same shape as `three.pas` below:
+> deltas travel, absolutes do not. **Re-measure after the push, not before.**
 
 A shift's LEADING sign-extend on a 4-byte signed operand was `mov rax, rN` +
 `cdqe`; it is now `movsxd rax, rNd`. Five bytes and two instructions become
@@ -3275,6 +3314,8 @@ simultaneously a CONTROL, because strict mode tags the result 4 bytes, so
 `W1LeadingCdqe` is false and the fold cannot fire. The test therefore carries
 two expectations, both asserted at `-O0` and `-O3`.
 
-**Per-backend gate count (both spellings, per the correction above): x86-64 23,
-aarch64 7.** This slice is one-armed — x86-64 only — so it widens the delta the
-sibling ticket tracks by one, as every one-armed slice does.
+**Per-backend gate count: x86-64 22, aarch64 6** (comment-stripped, all
+spellings — see both corrections above; the 23 : 7 first published with this
+slice was itself one-per-row too high). This slice is one-armed — x86-64 only —
+so it widens the delta by one, as every one-armed slice does. That delta is now
+asserted by `tools/check_o3_backend_parity.py` rather than recounted by hand.

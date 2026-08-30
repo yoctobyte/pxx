@@ -39,25 +39,62 @@ invisible to it. Parsing **both** spellings:
 
 | backend | `>= 3` | `< 3` | total |
 | --- | --- | --- | --- |
-| `ir_codegen.inc` (x86-64) | 17 | 6 | **23** |
-| `ir_codegen_aarch64.inc` | 5 | 2 | **7** |
+| `ir_codegen.inc` (x86-64) | 17 | 6 | 23 |
+| `ir_codegen_aarch64.inc` | 5 | 2 | 7 |
 | the other four | 0 | 0 | 0 |
 
-So the real ratio is **23 : 7**, not 15 : 4. The ticket's conclusion is
-unchanged and if anything sharper — the gap is wider, not narrower — but the
-slug now names a number that was never right. Slugs are cited by resolved
-commits and by the board, so it is **not** renamed; this section is the
-correction of record. Command:
-
-```
-grep -cE 'OptLevel *(>=|<) *3' compiler/ir_codegen*.inc
-```
-
 How it surfaced: slice 10 added a gate and the `>= 3` count did not move — 17
-before, 17 after. That only shows up because the umbrella now takes the count
-every slice. **"Count arms by parsing, not by reading" buys nothing when the
-parse matches one of the two ways the arm is written**; the instrument needs the
-same adversarial pass as the finding.
+before, 17 after. That only shows up because the umbrella takes the count every
+slice. **"Count arms by parsing, not by reading" buys nothing when the parse
+matches one of the two ways the arm is written**; the instrument needs the same
+adversarial pass as the finding.
+
+### …and 23 : 7 was wrong too. The number of record is 22 : 6
+
+A raw grep counts prose. Each of those two files carries exactly one
+CONTINUATION line inside a `{ ... }` comment block that mentions a gate in
+passing — `ir_codegen.inc:4434` and `ir_codegen_aarch64.inc:1280` — and neither
+starts with a comment marker, so no per-line test removes them. This ticket's
+ORIGINAL count already carried the footnote *"4 (a 5th match is prose)"*, which
+was the tell and was read as a footnote rather than as a defect in the method.
+Comment-stripped, the counts are **x86-64 22, aarch64 6**.
+
+Three counts, three wrong answers, and every one was the instrument rather than
+the thing measured: 15 : 4 missed a spelling, 23 : 7 counted comments, and only
+the third needs no asterisk. The ticket's conclusion never moved through any of
+it — the gap is real and if anything wider than first reported. That is exactly
+what makes it dangerous: **a finding whose supporting number keeps changing
+while its direction holds is one nobody re-checks.**
+
+### The count is now an assertion, not a command
+
+`tools/check_o3_backend_parity.py`, wired as a step in `gate.sh quick` (under a
+second, same placement and same rationale as `check_no_vendor_tracked.sh` — an
+invariant only a nightly notices cannot stop a push). It:
+
+- comment-strips the source (`{ }`, `(* *)`, `//`, string literals) before
+  matching, so prose cannot inflate the count;
+- matches **every** spelling of an `-O3` gate — `>= 3`, `> 2`, `< 3`, `<= 2`,
+  `= 3`, with or without spaces — which is the first correction made permanent;
+- derives the backend list from `compiler/ir_codegen*.inc` by glob, so a seventh
+  emitter added later inherits the check (expected 0) instead of escaping it;
+- freezes **22 : 6**, and prints every match with file and line under
+  `--census`, so a reviewer can check the number rather than trust it.
+
+It does **not** forbid a one-armed slice — most legitimately are, since an
+x86-64 encoding often has no one-to-one aarch64 spelling. It forbids a one-armed
+slice **nobody noticed was one-armed**: widening the delta is now an edit to
+that file, in the same commit, visible in the diff, with the two honest
+resolutions spelled out in the failure message.
+
+Verified by breaking it three ways: adding one `-O3` gate to the x86-64 emitter
+fires it; adding a *prose mention* of a gate does not; and a new
+`ir_codegen_*.inc` file carrying a gate is reported as unfrozen rather than
+ignored.
+
+The slug still says "four-of-fifteen". Slugs are cited by resolved commits and
+by the board, so it is **not** renamed; this section is the correction of
+record, and the assertion is the thing to trust.
 
 **A gate count is not a pass count**, and this ticket does not claim eleven
 missing passes — several x86-64 sites gate arms of one pass, and some are

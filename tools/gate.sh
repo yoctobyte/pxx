@@ -317,6 +317,18 @@ case "$MODE" in
     step "no vendor tracked" "$LOGDIR/no-vendor.log" \
          tools/check_no_vendor_tracked.sh                                || RC=1
 
+    # Under a second, same reason as the vendor check above: a stated invariant
+    # that only a nightly notices cannot stop a push. CLAUDE.md scopes
+    # per-backend optimisation to x86-64 + aarch64, and for most of the -O3
+    # campaign nothing checked whether that scope was being MET -- it drifted to
+    # 22 : 6 while the prose said both were in scope, because "aarch64 is in
+    # scope" and "aarch64 got 6 of 22" are consistent statements. This does not
+    # forbid a one-armed slice; it forbids one nobody noticed was one-armed, by
+    # making the widened delta an edit in the same commit.
+    # feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen
+    step "-O3 backend parity" "$LOGDIR/o3-parity.log" \
+         tools/check_o3_backend_parity.py                                || RC=1
+
     step "self-host fixedpoint" "$LOGDIR/fixedpoint.log" fixedpoint      || RC=1
     step "testmgr --tier quick" "$LOGDIR/quick.log" \
          tools/testmgr.py --tier quick                                   || RC=1
