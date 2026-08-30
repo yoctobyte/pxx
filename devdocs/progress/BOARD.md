@@ -68,7 +68,7 @@ lives in git, not in a timestamp._
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (387)
+## backlog (388)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -247,6 +247,7 @@ lives in git, not in a timestamp._
 | compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees | P | 25→70 | compat | set (32 vs 4), subrange (4 vs 1) and string[N] (8 vs 21) all store wider or narrower than FPC; every VALUE agrees, only SizeOf and record layout differ -- one layout family, four filed measurements | — |
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
+| decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable | U | 55 | decide | f4fb9d31b made generic constraints load-bearing while bug-p-generic-constraints-are-checked-before-the-type-section-closes sat open at p40 describing exactly why the placement was wrong. The regression was predicted in writing before it happened, and nothing in the board could express the dependency. Same shape hit three times on 2026-08-30. Options: a new edge type, a convention on blocked-by, a check in tools/progress.sh, or accept it. | — |
 | decide-adopt-a-second-string-model-or-refuse-utf16-honestly | U | 62 | decide | feature-unicodestring-model [A p62] says in its own body that this is a MODEL DECISION, not a function to write -- and its title offers the alternative outright: a real UTF-16 model, or an honest refusal. pxx has one string model (bytes, CP_UTF8 passthrough) and the RTL is already candid about it at the declaration: UTF8Decode/UTF8Encode are the identity, WideChar casts to a 2-byte ordinal. Adopting UTF-16 is a second model in a compiler whose whole design pushes generality DOWN into one substrate. Refusing means fcl-json's \\uXXXX surrogate path stays uncompilable. Neither is derivable from the code or from a sensible default, so it is Track U. | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
 | decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused | U | 60 | decide | make revert DELETES the row from history.log and pin.log, and the next pin REUSES the counter -- so v394 names two different binaries and the withdrawn one appears nowhere in the ledger. Two forks: erase vs annotate, and reuse vs burn. It touches a public claim: the launch fact sheet says pins are in git with their sha256 and landing commit 'so the trajectory is reconstructible', which is true of git and false of the ledger a reader would actually check. | — |
@@ -888,6 +889,7 @@ lives in git, not in a timestamp._
 - [p 55] [P] bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body
 - [p 55] [T] bug-t-a-grant-is-a-lock-the-ranker-cannot-see [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 55] [T] bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test
+- [p 55] [U] decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable
 - [p 55] [U] decide-may-a-lane-be-given-the-full-suite-escape-for-four-corpus-builds
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
 - [p 55] [U] decide-settextbuf-needs-buffered-text-io-or-stays-missing
