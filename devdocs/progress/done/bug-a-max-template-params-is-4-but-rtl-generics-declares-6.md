@@ -154,7 +154,23 @@ across all three — the constant is a stride into bss and nothing else.
 Cross-checked at a second HEAD after a pull: 6 still reads `bss=101027356`, so
 the delta is attributable to the constant rather than to whatever else landed.
 
-## Why 6 and not 8
+## Why 6 and not 8 — and 8 was RUN, not just costed
+
+**Addendum, after the ticket landed as `0fc18aad6`.** The confirming probe at 8
+finished and reaches **exactly the same wall**:
+
+```
+  6   generics.collections.pas:4165   unexpected token   476.41 s   maxRSS 69208 KB
+  8   generics.collections.pas:4165   unexpected token   462.64 s   maxRSS 69460 KB
+```
+
+Same file, same line, same message; the 14 s difference is box noise on a host
+running three other self-host builds, and it goes the *wrong* way for a
+"bigger is slower" story. **So the two extra slots buy nothing today** — not a
+line of extra compilation — and the decision below is now a measurement rather
+than a judgement call. Had 8 gone further than 6, this ticket would have landed
+8 instead, and that is the whole reason the probe was run rather than reasoned
+about.
 
 8 was built and costed (above) precisely so the choice is not a preference. It
 is not taken: **6 is measured, 8 is two slots bought on a guess** — and the guess
