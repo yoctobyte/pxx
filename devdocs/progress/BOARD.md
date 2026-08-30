@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (385)
+## backlog (386)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -367,6 +367,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall, feature-a-rdrand-cpuid-compiler-builtins |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-libc-frontend-sites-and-thread-errno | A | 40 | feature | Finish --rtl-libc: convert the C/Rust/Zig frontend syscall sites, and test the thread errno hazard the raw clone stub creates | — |
+| feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets | T | 40 | feature | The csmith oracle is a checksum of the globals, so it is complete for VALUES and structurally blind to LAYOUT: a struct whose members sit at the wrong offsets stores and loads consistently and produces an identical checksum. Predicted 2026-07-13, unacted on, and a real offset bug then survived every batch since -- 443 on 2026-08-30 alone. Proposes a layout dimension: emit offsetof for every member of every generated struct and diff against gcc. | — |
 | feature-t-a-second-oracle-dimension-section-alignment | T | 25 | feature | An external alignment oracle: what is left after `df98fea47`, measured | — |
 | feature-t-a-user-hold-must-survive-a-bulk-re-price | T | 55 | feature | One commit (ab584382e, `apply the approved re-triage`) erased two user rulings in the same sweep -- the ESP park and the NilPy except-tuple hold -- because each was enforced only by a `prio:` number with the reason in a `#` comment, and a bulk re-price rewrites numbers and drops comments. Both instances are now closed on their merits, so this is not urgent; it is filed because the next hold will be recorded the same way unless the recording form changes. | — |
 | feature-t-audit-tests-that-pass-with-the-implementation-removed | T | 40 | feature | frankB wrote a regression test for bug-b-resolver-sends-localhost-to-the-wire, got eight green rows, then reverted the fix to control it — and the test still passed, every row. This box's systemd-resolved is itself RFC 6761 compliant and synthesises the localhost subtree, so the broken code returned the right ANSWER and merely emitted 20 DNS queries to get it. A value assertion was testing systemd-resolved. Three instances of this shape landed in one night. This ticket is the sweep for others. | — |
@@ -1012,6 +1013,7 @@ _none_
 - [p 40] [A+O] feature-opt-o3-now-has-differential-coverage-and-it-should-be-standing
 - [p 40] [A+O] feature-opt-static-literal-blocks-should-never-be-written-to
 - [p 40] [A] feature-rtl-libc-frontend-sites-and-thread-errno
+- [p 40] [T] feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets
 - [p 40] [T] feature-t-audit-tests-that-pass-with-the-implementation-removed
 - [p 40] [T] feature-t-check-flags-a-lane-blocker-that-has-no-in-edges
 - [p 40] [W] feature-web-machine-readable-project-metadata
