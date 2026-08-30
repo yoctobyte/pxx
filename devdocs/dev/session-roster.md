@@ -281,7 +281,7 @@ working there; the lane letters cannot see a subagent you created.
 | — | the watcher DAEMON (face 1) | T, writes only `tstate/` | `/home/neo/trackt-watch` |
 | neo-4a | host/sysadmin, no lane | none | none (cwd `/home/neo`) |
 | cA | **out-of-band** — driven directly by the human, not a pxx dev session | none | none |
-| frank2-99 | idle, stale clone, unresponsive to roster pings | unknown | `/home/neo/frank2` |
+| frank2-99 | ~~idle, stale clone, unresponsive to roster pings~~ **CONTRADICTED BY THE OWNER, 2026-08-27 — see below: `/home/neo/frank2` is a LIVE ad-hoc tree the owner works in at random. Never move, rename or tidy it. Row kept as the record of what a past session believed.** | owner's | `/home/neo/frank2` |
 
 **That last row is contradicted by the owner, later in this same file.** See
 *STANDING — `frank1` / `frank2` are LIVE ad-hoc trees* (owner, 2026-08-27):

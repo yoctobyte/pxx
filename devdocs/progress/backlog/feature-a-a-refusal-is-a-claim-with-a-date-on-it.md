@@ -6812,3 +6812,81 @@ and after, **sha256 matching on every one.** And the split was named rather than
 the xtensa half necessarily used the HEAD compiler, because `pinned` predates two days of
 xtensa work and cannot produce a working xtensa binary at all. **Stating which half could
 not use the pin, and why, is what makes the other half's byte-identity meaningful.**
+
+### 157 — A DEFERENCE CLAIM LOOKS LIKE A CHECK SOMEBODY ALREADY PERFORMED
+
+*frankD, 2026-08-30, auditing `session-roster.md` — the 42nd file, and the one it had
+declined on the grounds that auditing it would be auditing the coordinator (152b).*
+
+The worst-placed stale rule in the tree was not in `parallel-tracks.md` after all. The
+roster's Branches section said *"Since 2026-08-25 work happens on **`dev`**"*, with `master`
+advanced by `git merge --no-ff dev` and a never-rebase rule. The owner retired `dev` on
+2026-08-26 (`8b2a6bae6`). Two things make it worse than a wrong date:
+
+**It sits under a heading reading "Branches — read CLAUDE.md, not this file."** A pointer
+elsewhere reads as *vetted* — someone thought about the relationship between these two
+documents and told you which wins. **It is the same costume as a cited line number**: an
+artefact of diligence standing in for the diligence.
+
+**And the rule did not merely go stale — it INVERTED, and its stated rationale inverted
+with it.** Its own closing sentence: *"this line exists only so a coordinator reading the
+roster first does not land work on master out of habit."* **A line written to stop a
+coordinator reaching for `master` by habit now stops them reaching for the only branch
+there is.** A rule that states its purpose is usually *more* trustworthy; here the purpose
+statement is what makes the inversion convincing.
+
+### 157a — A DISPATCH RECORD IS MEMORY; A SESSION LIST IS OBSERVATION
+
+The finding with a live safety consequence, and it was aimed squarely at how this
+coordinator works. The worktree paragraph tells you the sole-A question is answered **only**
+by your dispatch record — *"not by the table above and not by `ListAgents`."*
+
+That was correct when lane holders were invisible worktree agents. `.claude/worktrees/`
+does not exist; `git worktree list` shows one entry; **every lane holder today is an
+ordinary session in its own clone, named and visible to `ListAgents`.** So a correct rule
+became **advice to ignore the one instrument that works.**
+
+> **Prefer the list when they disagree.** A dispatch record is what I believed; a session
+> list is what is true.
+
+Which is 152b's argument arriving with teeth: the coordinator's memory does not survive its
+own context, so a rule privileging that memory over live observation is precisely backwards
+for this seat.
+
+### 157b — "LIVE" IN A HEADING IS A WORD NO DATA CAN CONTRADICT
+
+**Roles — LIVE, 2026-08-25: none of its five sessions exists.** `frank1-72`, `pxx-aa`,
+`neo-4a`, `cA`, `frank2-99` — all gone. The **13** that do exist appear nowhere, and two of
+them staff lanes the table never mentions.
+
+**The heading is the defect, not the rows.** A who-holds-what table is stale between ticks
+*by construction*, and that is fine, because `ListAgents` is authoritative and free. It is
+`LIVE` that makes it a lie — the same shape as a `TODO` heading over five discharged
+tickets (150a). **A word in a heading asserts a property the body can never update**, so
+the body decays and the heading keeps vouching for it.
+
+### 157c — the near-crisis CHECKED rather than relayed
+
+`origin/dev` is **7 commits ahead of `master`** — the exact shape that gets relayed as an
+emergency at 4 a.m. **Four minutes disproved it:** all five tickets those commits filed are
+present on `master` by another path (three `backlog/`, one `done/`, one `unfinished/`, plus
+one in `urgent/`), so only duplicates are stranded; the other two are watcher `tstate`
+publishes.
+
+*Verify a peer's report before relaying it* is a rule this file already carries. This is the
+same rule applied to **your own alarming discovery**, which is harder, because the discovery
+arrives with urgency attached and urgency is what suppresses the check.
+
+### 157d — and the audit's DISCIPLINE is the reusable part
+
+**135 of 142 changed lines are additive.** The 7 deletions are the retired-branch
+instruction, **whose full text is quoted inside the correction that replaced it.** Nothing
+about what a past session observed was altered.
+
+Two judgements inside that are worth copying. The stale *Current assignments* section was
+**bannered, not trimmed**, because the coordinator-error retrospectives inside it are the
+durable part of the file — *never tell a stopping session to revert; a session that says it
+should stop is not made safe by easier work; a standing prio ruling is not re-litigated by
+finding another category the ticket also fits.* And the unverifiable-action-claim class was
+**declined on principle**: it lives entirely in the tick records, and verifying it would
+mean re-deriving events only the participants observed. **That is what records are for.**
