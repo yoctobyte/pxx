@@ -1637,4 +1637,4 @@ never asked, on the same day I wrote three times that the fix is to measure
 rather than reason.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 0d438d80a.
