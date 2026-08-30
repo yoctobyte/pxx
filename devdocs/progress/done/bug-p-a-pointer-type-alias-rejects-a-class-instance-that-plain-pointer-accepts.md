@@ -4,7 +4,7 @@ track: P
 prio: 75
 type: bug
 blocked-by: []
-status: working
+status: done
 found: 2026-08-30
 summary: "v394 breaks Track B's gate: make lib-test is RED at lib_synapse_ssl, because a parameter typed as a Pointer ALIAS (SslPtr = Pointer) no longer accepts a class instance, while a parameter typed as plain Pointer still does. Cross-unit worked on v393 and fails on v394; the SAME-unit case fails on BOTH pins, so v394 did not introduce the defect -- it made the cross-unit path consistent with an already-broken same-unit path. Real vendored Pascal (Synapse) stopped compiling."
 owner: frankA
@@ -154,3 +154,102 @@ Collateral, recorded so it is not discovered later:
 [[feature-lib-tkinter-grid-pad-accepts-a-two-tuple]] was closed against v394 and
 has been **reopened**, verified failing again on the reverted pin. It closes on
 the next pin that carries `51b0753e7`.
+
+---
+
+## Resolved 2026-08-30 (frankA) — one cause, three symptoms, two eras
+
+**Root cause: `RegisterGeneralAlias` (`compiler/symtab.inc`) recorded
+`AliasElemTk := tk`** — conflating *"what kind is T?"* with *"what does T point
+AT?"*. Invisible for non-pointer aliases, where nothing reads the element. For
+pointer aliases every general alias recorded a `tyPointer` element regardless of
+target:
+
+| alias | recorded elem | correct |
+| --- | ---: | ---: |
+| `= Pointer` | 17 | 0 (untyped sentinel) |
+| `= PChar` | 17 | 3 |
+| `= PRec` | 17 | 5 |
+| `^Pointer` | 17 | 17 — right, by coincidence |
+
+**Fix:** `ParseTypeKind` has just run for the right-hand side — the same reason
+`LastTypeStrCap` is readable four lines below — so the target's own pointer facts
+are live in the `LastTypePointer*` globals. Record those. Non-pointer aliases keep
+prior behaviour exactly; the subrange call site can never reach the new branch
+(it passes only `tyChar`/`tyInteger`). Landed `ce3560ecd`.
+
+### The ticket's framing was right to distrust itself, and the correction matters
+
+The ticket says v394 *"made the cross-unit path agree with an already-broken
+same-unit path"*, and a two-cause reading was circulated on top of it. **Both are
+wrong, and the premise was checkable:** the `MatchParamCompatible` narrowing
+(`8b75fcabd`, 08-28 00:46) **is** an ancestor of the v393 pin (`d3f9dee6c`), and
+the pinned v393 binary reproduces the same-unit repro with the identical error.
+There was never a second cause.
+
+**What actually differed between the pins is DETERMINISM, and this is the finding
+worth carrying off this ticket.** Measured on v393, the overload symptom is
+**position-dependent**:
+
+| shape | v393 | v394 | fixed |
+| --- | --- | --- | --- |
+| same-unit, alias formal at param index 0 | ok | ok | ok |
+| same-unit, alias formal at index 1 or 2 | **FAIL** | FAIL | ok |
+| cross-unit (Synapse's shape) | ok | **FAIL** | ok |
+
+That is the fingerprint of the recycled-symbol read fixed by
+`bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching`:
+the matcher read a slot `SymRollbackTo` had handed back, which on some paths
+happened to hold `tyUnknown` — the untyped-pointer sentinel — and so **failed
+open**. That fix did not introduce this defect; **it made a garbage channel
+deterministic**, turning a shape-dependent wrong answer into a consistent one.
+Synapse went from *accidentally passing* to *reliably failing*. A bisect lands on
+that commit every time, correctly, and is wrong about what it means.
+
+### The third symptom, which had no ticket and is the serious one
+
+The two loud symptoms pulled the whole investigation into a compile-time story
+about overload resolution. The same wrong element also produced **wrong runtime
+values**:
+
+- **deref** — `p^.field` through an alias of a pointer-to-record did not compile
+  (*"a pointer has no members"*). Loud.
+- **overload** — a `Pointer` alias refused a class instance. Loud; took B's gate red.
+- **pchar** — `c[i]` through an alias of `PChar` printed **`378951523` instead of
+  `pxx`** on v393. **Silent wrong output, present for the life of the defect.**
+
+Found only by varying the *spelling* of the alias rather than re-running the
+reported shape.
+
+### Verification
+
+- Both arms the ticket required: same-unit **and** cross-unit, green.
+- `lib_synapse_ssl` **compiles and runs** on the fixed build: 3 `=ok` lines and
+  `SYNAPSE-SSL OK` (the assertions the Makefile makes), not merely "it compiled".
+- Self-host fixedpoint converged (`fb2ce9b87b09`).
+- `gate.sh quick`: self-host **PASS**, `testmgr --tier quick` **PASS**, FPC seed
+  canary **PASS**. The run is RED solely on `-O3 backend parity`, which is
+  **unrelated and pre-existing**: `823f1c85b` took `ir_codegen.inc`'s -O3 gate-site
+  count 22 → 23 without bumping `EXPECTED`. This commit does not touch that file.
+
+### Regression test
+
+`test/test_pointer_alias_identity.pas` + `test/units/uptralias.pas`, wired into
+`test-core`. Two of its arms are controls that could genuinely have failed:
+
+- **`ctrl ok`** — `^Pointer` must **stay** element 17. An over-propagating fix
+  turns it into the untyped sentinel; nothing else in the test would notice.
+- **`atpos`** — the alias formal at parameter index 1 and 2. A fix verified only
+  at index 0 would have been tested **exclusively on the shape that was already
+  green on the broken binary**.
+
+### What is still NOT bounded
+
+The ticket's own warning stands: `lib-test` **aborted** at `lib_synapse_ssl` on
+v394, so every job after that line is still unrun and the blast radius was never
+measured. `lib_synapse_ssl` passing is necessary, not sufficient — a full
+`lib-test` on a build carrying this fix (Track B's gate, frankB) is what closes
+that, and it is a prerequisite for the pin, not for this ticket.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

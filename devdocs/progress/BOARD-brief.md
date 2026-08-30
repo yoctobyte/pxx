@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:6 unfinished:28 blocked:7 backlog:339 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2730 rejected:56`
+`working:5 unfinished:28 blocked:7 backlog:339 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2731 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
-- `bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts` [P] — owner: frankA
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — owner: frankB
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
