@@ -100,3 +100,55 @@ wait for this decision.
 
 `tkArgStr` (3 lines) may also be independent: WASI `args_get` /
 `args_sizes_get` need no preopen and no rights. Not verified.
+
+## 2026-08-30 (frankwasm) — the `tkArgStr` escape hatch is CLOSED. Measured, nothing applied.
+
+This ticket's "What does NOT depend on this" section offers `tkArgStr` as
+possibly independent:
+
+> `tkArgStr` (3 lines) may also be independent: WASI `args_get` /
+> `args_sizes_get` need no preopen and no rights. Not verified.
+
+Verified now, and it splits: **the capability half is true, the linkage half is
+false, and the linkage half was always the binding constraint.**
+
+**True:** `args_sizes_get` / `args_get` take no descriptor and need no grant, so
+they really are reachable while the whole path-opening surface waits on this
+decision. An implementation was written against them and compiled.
+
+**False:** "3 lines" assumed the code could live in the WASI PAL. It cannot, for
+two independently sufficient reasons, both measured:
+
+1. **`compiler.pas` links no PAL at all** — `uses SysUtils, Math, BaseUnix,
+   asmcore_base, asmcore_x64`, and nothing in that chain reaches
+   `lib/rtl/platform.pas`, the only unit that says `uses platform_backend`. The
+   units that pull the PAL in are the networking and `classes` family. This is
+   this ticket's own title, arrived at from a different direction.
+2. **Even with the PAL linked, a PAL routine nothing calls is eliminated.** A
+   probe with an explicit `uses platform` still reported `no PalBackendArgCount`,
+   while `strings` on the same module shows `PalBackendPlatform` /
+   `PalBackendHasFiles` present — they survive because `platform.pas` calls
+   them. A routine whose only caller is a call the BACKEND synthesises later has
+   no Pascal caller when emission-size DCE runs.
+
+**Why this is evidence for the decision rather than just a note on it.** The
+route those two close is the PAL route; what remains is for the backend to emit
+the import itself (`WasmHostImport('wasi_snapshot_preview1', …)`, the mechanism
+the unhandled-exception `fd_write` path already uses). That is a worked
+demonstration of a WASI capability being reached **with no PAL linked at all** —
+which is close to this ticket's option (b), on the one capability where it can
+be tried in isolation because it needs no preopen and no rights. If (b) is
+where this lands, argv is the cheapest place to prove it; if (c) is chosen, argv
+is the case that shows a shared leaf helper is not always enough, because the
+problem here is reachability, not duplication.
+
+**Also worth having on the record for whoever answers this:** the decision is
+`prio: 40` while it is the sole blocker on **36 of 36** remaining refusals in
+`feature-target-wasm` [p60], whose anchor milestone is `pascal26` running under
+wasmtime. Prio propagates down `blocked-by:` edges, but that edge does not
+exist — the dependency is stated in PROSE, in `devdocs/dev/wasm/PLAN.md` on a
+side branch, which is the least visible place in the repo. Flagged rather than
+changed: the edge and the number are the U lane's call, not this lane's.
+
+Full measurement and the costing: `devdocs/dev/wasm/PLAN.md`, Phase 9j, on
+branch `wasm` (`b564c8f39`). Nothing applied there either.
