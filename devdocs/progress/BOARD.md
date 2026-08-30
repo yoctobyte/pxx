@@ -64,7 +64,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (388)
+## backlog (387)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -125,7 +125,6 @@ _none_
 | bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 40 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. | — |
 | bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp | A+S | 45 | bug | Every windowed xtensa prologue emits `entry a1, 32` then moves sp again with a plain addi/addmi. The windowed ABI requires MOVSP for that, because the caller's 16-byte register save area sits at [a1-16] and a plain add relocates sp while leaving the area behind. Ten executed entry sites, all immediate 32. NOT known to cause a fault -- the obvious mechanism was tested and falsified. | — |
 | bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled | A+S | 45 | bug | Under the xtensa windowed ABI, IR_RAISE and the unwind path refuse. The cause is a RUNTIME gap, not a prologue gap: a longjmp-style unwind must spill the register windows first and bare-metal has no handler for that. Filed to keep it OUT of the four-target cdecl prologue change, which would appear to fix it and would not. | — |
-| bug-b-rtl-provides-no-tarray-generic-but-pxx-claims-ver3-2-2 | B | 65 | bug | pxx defines VER3_2_2 but its RTL declares no `TArray<T>`. FPC provides System.TArray<T> from 3.0.2 on, so real code guards its own fallback with `{$ifdef VER3_0_0}` and relies on the RTL otherwise -- rtl-generics does exactly that and dies at generics.collections.pas:135 `unknown type: TArray`. Proved by defining VER3_0_0: the error vanishes and the parse advances 79 lines. | — |
 | bug-c-a-c-function-s-calling-convention-depends-on-the-target | C | 55 | bug | On x86-64 a C function uses the C ABI (SysV); on aarch64 and arm32 it uses pxx's INTERNAL positional convention, because cparser.inc's per-target prologue spills disagree. So `is this proc reached by the C ABI?` has a different answer per target, nothing names that in one place, and the `and (not CProgramMode)` guards on the aarch64/arm32 call arms exist to compensate. Split out of refactor-a-collapse-the-c-frontend-sysv-prologue-copy, whose x86-64 half landed byte-identical; this half is an ABI CHANGE and needs a behavioural gate, not byte-identity. | — |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 | bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
@@ -457,7 +456,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (26)
+## backlog_new (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -476,6 +475,7 @@ _none_
 | bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file | P | 30 | bug | `{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
+| bug-p-an-alias-to-a-named-dynamic-array-type-cannot-be-indexed | P | 50 | bug | `type TA = array of Integer; TB = TA;` — indexing a TB is `error: this value cannot be indexed`, while indexing a TA is fine. One extra level of naming loses the array-ness. Six-line repro, same file, no generics and no units involved; it is not about TArray, which is only how it was found. SetLength on the alias is accepted, so the type is array enough to resize and not array enough to read. | — |
 | bug-t-concurrent-sync-runs-can-squash-two-commits-into-one | T | 45 | bug | With several checkouts syncing at once, tools/sync.sh's rebase-and-retry loop squashed two separate commits into one: the second commit's content survived, its message and its `resolves:` line did not. Silent — the tree is clean, the push succeeds, and the only tell is a `git log` one shorter than expected. | — |
 | bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test | T | 55 | bug | npy_cross_target_expectation_devtest.py ratchets duplicated expectations for .npy sources only, though its own COMPILE_RE already matches .pas and .c. The very next divergence was a .pas test duplicated into the SAME two targets the guard was written about, and it cost a p70 regression ticket and a live red on master. Widening the filter naively does not work — the natural population is full of legitimate cross-target asymmetry — but a keyed sub-population of 137 native identical-invocation sources has 15 deliberate exceptions and would have caught this one. | — |
 | chore-t-board-html-render-is-13s-of-every-ticket-move | T | 40 | chore | tools/progress.sh board-md takes 18.7s, of which ~87% is BOARD.html — a 26MB render every lane pays on every ticket move. Hoisting six re.sub pattern literals out of the inline() hot loop is measured at 18.66s -> 12.99s with byte-identical output. Not landed: progress.py is shared tooling, not Track T's. | — |
@@ -729,9 +729,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2836)
+## done (2837)
 
-2836 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2837 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -816,7 +816,6 @@ _none_
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
-- [p 65] [B] bug-b-rtl-provides-no-tarray-generic-but-pxx-claims-ver3-2-2
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
@@ -920,6 +919,7 @@ _none_
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
 - [p 50] [P] bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected
+- [p 50] [P] bug-p-an-alias-to-a-named-dynamic-array-type-cannot-be-indexed
 - [p 50] [T] bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets
 - [p 50] [T] bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure
 - [p 50] [U] decide-does-the-legacy-gtk-alias-still-point-at-gtk-2

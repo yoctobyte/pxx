@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:33 blocked:7 backlog:388 backlog_new:26 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2836 rejected:58`
+`working:1 unfinished:33 blocked:7 backlog:387 backlog_new:27 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2837 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -77,7 +77,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [B]` bug-b-rtl-provides-no-tarray-generic-but-pxx-claims-ver3-2-2
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
@@ -89,5 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [A]` bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array (unblocks 1)
+- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
 _399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

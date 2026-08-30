@@ -57,6 +57,32 @@ type
   TStringArray = array of AnsiString;
   TStringDynArray = array of AnsiString;
 
+  { FPC's generic dynamic-array alias. Real code NEVER declares this itself
+    unless it is guarding for a version that lacked it:
+
+      {$ifdef VER3_0_0}
+      TArray<T> = array of T;
+      {$endif}
+
+    which is the correct idiom, because FPC has supplied it from 3.0.2 on. pxx
+    answers VER3 / VER3_2 / VER3_2_2 (compiler/lexer.inc), so that guard is
+    correctly SKIPPED — and before this line there was nothing to skip to, which
+    is the whole of bug-b-rtl-provides-no-tarray-generic-but-pxx-claims-ver3-2-2:
+    we claimed the version whose RTL provides the type and did not provide it.
+    Generics.Collections died at `unknown type: TArray` on
+    `function ToArrayImpl(ACount: SizeInt): TArray<T>`.
+
+    HERE IS NOT WHERE FPC PUTS IT — FPC declares it in the SYSTEM unit, so it is
+    ambient and visible with no `uses` at all. pxx has no lib/rtl/system.pas;
+    its ambient types are compiler-side, which would make that a Track A change.
+    SysUtils is the closest reachable equivalent and it covers every real
+    consumer, because in FPC everything sees TArray through System anyway and
+    code using generic collections uses SysUtils regardless — all seven files in
+    the rtl-generics corpus that name TArray<> also use SysUtils, checked rather
+    than assumed. The residual gap is exact and worth knowing: a unit that names
+    TArray<T> WITHOUT `uses SysUtils` compiles under FPC and not here. }
+  TArray<T> = array of T;
+
   { `type TProc0 = procedure;` is a one-line workaround, but every FPC example
     that takes a callback writes TProcedure, so the workaround is one the caller
     has to know to apply. }
