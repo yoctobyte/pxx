@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `17f1737f2fdf` | 2026-08-30T02:35:09Z | RED (native) | 388.7s | `e46dbffaa80d` RED |
+| plexus | `30f0cfa86bbf` | 2026-08-30T02:43:18Z | RED (native) | 377.9s | `e46dbffaa80d` RED |
 | seven | `b94f5190181b` | 2026-08-30T02:39:27Z | RED (native) | 111.0s | `0200df7eabcd` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
@@ -12,6 +12,7 @@
 - **demos#00** (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 135 commit(s) in range
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 217 commit(s) in range
 - **test-core#src:test/test_generic_arg_is_enclosing_template_param_objfpc.pas** — test/test_generic_arg_is_enclosing_template_param_objfpc.pas tools/expect_same.sh (plexus): bad `1d8b44e59042`, last good `0bcef8f3f2ab`, 3 commit(s) in range
+- **test-threads#src:test/test_cmp_both_in_place.pas@2** — test/test_cmp_both_in_place.pas tools/expect_same.sh +1 (plexus): bad `30f0cfa86bbf`, last good `unknown`, 0 commit(s) in range
 - **CASCADE 18 jobs** (seven): bad `154d1aa3fba6`, last good `e417731e9007`, 12 commit(s) in range
   <details><summary>jobs</summary>
 
