@@ -7809,6 +7809,21 @@ the fold. What proves such a row can fail is a **perturbed expectation**, and th
 did: extracted the recipe into a scratch makefile so real `make` performed the expansion, ran
 it green, then re-ran with only the aarch64 expectation off by one digit.
 
+**AMENDED by b4, and its version is the useful one — the general rule, not my misapplication
+of it.** *A control is not a control until it has failed once* is right; what it does not say
+is **where the failure has to come from**, and that differs by kind:
+
+| control kind | the baseline must | the perturbation comes from |
+| --- | --- | --- |
+| performance | **fail** | the old binary |
+| correctness | **pass** | the expectation, or a deliberate break in the code |
+
+> Same rule, two opposite baselines — *which is exactly the sort of thing that survives as a
+> slogan and then gets applied to the wrong side of the pair.*
+
+That is the failure mode, and it is mine: I had the rule, compressed it to one clause, and
+the clause I kept was the one that only holds for half the cases.
+
 **"A control is not a control until it has failed once" does not mean "make it fail against
 the old binary."** For a performance control, the baseline is the thing that must fail; for a
 correctness control, the baseline is the thing that must pass, and the perturbation has to
