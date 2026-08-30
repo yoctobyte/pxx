@@ -400,11 +400,12 @@ end;
   to end of line — a stray `#` cannot be a C token anyway, and guessing would
   be worse than dropping it. }
 procedure CLexLineMarker;
-var n: Integer; path: AnsiString; ok: Boolean;
+var n: Integer; path, encl: AnsiString; ok: Boolean;
 begin
   ok := False;
   n := 0;
   path := '';
+  encl := '';
   Inc(SrcPos);                                   { the '#' }
   while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9]) do Inc(SrcPos);
   if (SrcPos <= Length(Source)) and (Source[SrcPos] >= '0') and (Source[SrcPos] <= '9') then
@@ -428,6 +429,23 @@ begin
       begin
         Inc(SrcPos);
         ok := True;
+        { OPTIONAL second quoted field: the innermost enclosing `.c`, which only
+          the preprocessor can know (see CPEnclosingCModule). Absent means the
+          include stack is inside no module -- a real answer, not a missing one.
+          bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull }
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9]) do Inc(SrcPos);
+        if (SrcPos <= Length(Source)) and (Source[SrcPos] = '"') then
+        begin
+          Inc(SrcPos);
+          while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '"') and
+                (Source[SrcPos] <> #10) do
+          begin
+            encl := encl + Source[SrcPos];
+            Inc(SrcPos);
+          end;
+          if (SrcPos <= Length(Source)) and (Source[SrcPos] = '"') then Inc(SrcPos)
+          else encl := '';        { unterminated -- do not trust a partial path }
+        end;
       end;
     end;
   end;
@@ -443,7 +461,9 @@ begin
     the duplicate-definition check tell crtl's fcntl.c and unistd.c apart
     instead of reading two legal statics as a redefinition.
     bug-c-static-functions-in-different-crtl-modules-collide }
-  if CPathIsCModule(path) then CMarkTokModule(TokCount, path);
+  if CPathIsCModule(path) then CMarkTokModule(TokCount, path)
+  else if encl <> '' then CMarkTokModule(TokCount, encl)
+  else CMarkTokNoModule(TokCount);
   { tokens from here belong to `path`. The main translation unit keeps file 1;
     a header interns its own id, so its code lands in the line table as itself
     rather than as a wrong line of the .c file. }

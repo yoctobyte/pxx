@@ -67,6 +67,24 @@ procedure CMarkTokModule(startTok: Integer; const path: AnsiString);
   bug-c-static-functions-in-different-crtl-modules-collide }
 var modId: Integer;
 begin
+  { InternKey is never called for the "no module" case, so CMarkTokNoModule
+    cannot intern the empty string as a path. }
+  modId := InternKey(path);
+  CMarkTokModuleId(startTok, modId);
+end;
+
+procedure CMarkTokModuleId(startTok, modId: Integer);
+{ The collapse, shared by the two entry points. `modId` is a KeyStrs[] index, or
+  -1 for NO enclosing module -- which is a real answer, not an absence: it means
+  "this text belongs to the translation unit itself, not to any pulled-in .c",
+  and it is the same -1 CModuleOfTok already returns when no range covers a
+  token, so every existing consumer reads it correctly with no change.
+
+  A sentinel was needed because every interned path is a valid id and there was
+  previously no way to MARK absence -- only to never mark at all, which is what
+  made the attribution sticky
+  (bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull). }
+begin
   if CModRangeCount >= MAX_DBG_RANGES then Exit;
   { interned HERE, not at the call site: clexer.inc is included before emit.inc,
     where InternKey lives, and the FPC seed build has no declare-anywhere
@@ -78,7 +96,6 @@ begin
     outside the repo came out 218207 vs 218095 bytes, the difference being
     './compiler/../lib/crtl/src/*.c' spelled into the output.
     bug-a-the-compilers-output-depends-on-argv0 }
-  modId := InternKey(path);
   if (CModRangeCount > 0) and (CModRangeId[CModRangeCount - 1] = modId) then Exit;
   if (CModRangeCount > 0) and (CModRangeStart[CModRangeCount - 1] = startTok) then
   begin
@@ -88,6 +105,16 @@ begin
   CModRangeStart[CModRangeCount] := startTok;
   CModRangeId[CModRangeCount] := modId;
   Inc(CModRangeCount);
+end;
+
+procedure CMarkTokNoModule(startTok: Integer);
+{ Tokens from `startTok` on belong to NO C module -- the include stack has
+  returned above the last `.c` it entered. Without this the attribution only
+  ever moved forward into a module and never back out, so a `static` after
+  `#include <stdio.h>` in a user header read as though it sat inside crtl's
+  stdio.c. bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull }
+begin
+  CMarkTokModuleId(startTok, -1);
 end;
 
 function CModuleOfTok(t: Integer): Integer;

@@ -4,8 +4,8 @@ track: A
 type: bug
 blocked-by: []
 summary: "CModuleOfTok is STICKY: CMarkTokModule is only called for a path ending in `.c`, so returning from a crtl `.c` pull back into the enclosing `.h` never resets the attribution and every following token still reports that `.c` as its module. Blocks the remaining half of bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead: a bodied static after `#include <stdio.h>` cannot be told apart from one inside crtl's stdio.c. Filed by Track C -- the table lives in dbg_filetable.inc, which is Track A."
-status: new
-owner: ""
+status: done
+owner: frankA
 ---
 
 # `CModuleOfTok` never resets when an include returns to its parent
@@ -97,3 +97,81 @@ Either `CModuleOfTok` gains a reserved id, or the range table gains an explicit
 - 2026-08-30 — filed by frankC while fixing the header-static bug. The partial
   fix that landed uses `CModuleOfTok(TokPos - 1) < 0` as its scope term and is
   correct exactly where the attribution is; this ticket is the rest of it.
+
+## RESOLVED
+
+Baseline `d7d17e1bd553` reproduces the table exactly; `8035e124b67d` (the same
+tree plus the fix) gets all five rows right.
+
+| the header includes | before | after |
+| --- | --- | --- |
+| nothing | none | none |
+| `"user.h"` | none | none |
+| `<stddef.h>` `<stdint.h>` `<limits.h>` `<errno.h>` | none | none |
+| **`<stdio.h>`, `<string.h>`** | **`crtl/src/stdio.c`** | **none** |
+| `<stdio.h>` below the static | none | none |
+
+### The lexer cannot do this alone — measured, not assumed
+
+The tempting fix is to reconstruct the include stack in the lexer from the
+marker paths, which needs no preprocessor change. **It does not work, and a
+probe on the marker handler says why**: the path sequence is not a well-formed
+stack trace. An include-guarded header that was already pulled emits an enter
+marker with no matching return, so a real run produces
+
+```
+src/stdio.c -> stdarg.h -> stddef.h -> errno.h
+```
+
+with no returns between them, and
+
+```
+tok=44436 stdarg.h
+tok=44436 src/stdarg.c      <- enter
+tok=44436 stdarg.h          <- return
+tok=44436 src/stdarg.c      <- enter again, same token
+```
+
+Only the preprocessor knows the real stack, which is what the filed shape said.
+
+### The fix
+
+- `cpreproc.inc`: `CPEnclosingCModule` scans `CPPathAtDepth[CPCurDepth..0]` for
+  the innermost `.c`; `CPSyncLine` emits it as an optional **second** quoted
+  field, `# <line> "<path>" "<enclosing.c>"`, omitted when there is none or when
+  it is the primary path. (`CPPathAtDepth` is one spelled bound as of frankS's
+  `85114f34f`, so this is a three-line loop against one constant.)
+- `clexer.inc`: parse the optional second field; mark with `path` if it is a
+  `.c`, else with the enclosing module, else **mark none**.
+- `dbg_filetable.inc`: `CMarkTokNoModule`, on a shared `CMarkTokModuleId`. The
+  sentinel is `-1` — no new value needed, because `CModuleOfTok` already returns
+  `-1` for "no range covers this token" and every consumer already reads that as
+  "the main source, not a C module". What was missing was the ability to *mark*
+  absence rather than only to never mark.
+
+### The regression properties the ticket asked for
+
+- `sysret` attributes to **`fcntl.c`** and **`unistd.c`** — two distinct modules,
+  measured with a probe on `ProcCModule`, so
+  `bug-c-static-functions-in-different-crtl-modules-collide` still holds. Two
+  same-named statics in one real `.c` still warn (checked: it fires).
+- The six `__pxx_va_*` statics still attribute to `stdarg.c`.
+- Self-host fixedpoint, 1 round; `gate.sh quick` GREEN.
+- **gtk set**: all five compile in both invocations (bare, and with `GTK3_INC`),
+  identically to the pinned binary, and run under `xvfb` with byte-identical
+  output apart from pids and timestamps. `test_c_gtk_types`' two
+  `GLib-GObject-CRITICAL` lines are **pre-existing** — the pinned binary emits
+  them too.
+
+### One consequence worth stating: gtk binaries grow ~16 KB
+
+`test_c_gtk_window` goes 143016 → 155304 bytes of code with **`procs=14066` on
+both**. Same procs, more of them with bodies: a header `static` whose
+attribution used to read as "inside a crtl `.c`" was imported instead of
+compiled, and now compiles. That is the correct direction and is the half of
+[[bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead]]
+this ticket exists to unblock, arriving as a side effect rather than as that
+ticket's own change. It is deliberate, it is measured, and the gtk set — the
+population that reaches this hardest, and the one whose five tests broke the
+last time this area moved — is unchanged in behaviour.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

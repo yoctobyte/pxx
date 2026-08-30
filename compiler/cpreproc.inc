@@ -392,7 +392,28 @@ end;
 { Emit a marker iff the consumer would otherwise infer the wrong origin.
   It infers  line = CPMarkLine + (outLine - CPMarkOutLine), so a marker is
   needed exactly when that disagrees with where we really are. }
+function CPEnclosingCModule: AnsiString;
+{ The innermost `.c` the include stack is currently inside, or '' when it is
+  inside none. The LEXER cannot work this out: it sees only the marker paths,
+  and those are not a well-formed stack trace -- an include-guarded header that
+  was already pulled produces an enter marker with no matching return, so
+  `stdio.c -> stdarg.h -> stddef.h -> errno.h` appears with no returns between
+  them (measured with a probe on the marker handler). Only the preprocessor
+  knows the real stack, so only the preprocessor can say this.
+  bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull }
+var d: Integer;
+begin
+  Result := '';
+  for d := CPCurDepth downto 0 do
+    if CPathIsCModule(CPPathAtDepth[d]) then
+    begin
+      Result := CPPathAtDepth[d];
+      Exit;
+    end;
+end;
+
 procedure CPSyncLine;
+var encl: AnsiString;
 begin
   { Emitted even WITHOUT -g now. The marker is the only record of which source
     file the following text came from, and the C lexer needs that to attribute a
@@ -403,7 +424,19 @@ begin
     does with them stays gated on DebugInfo at the consuming end. }
   if (CPCurFileId = CPMarkFile) and
      (CPStmtLine = CPMarkLine + (CPOutLine - CPMarkOutLine)) then Exit;
-  CPrepOutAppendStr('# ' + CPSmallIntStr(CPStmtLine) + ' "' + CPCurPath + '"');
+  { A SECOND quoted field: the innermost enclosing `.c`, or absent when there is
+    none. The first field alone only ever moved the attribution FORWARD into a
+    module -- a `.h` deliberately left it alone -- so returning from crtl's
+    stdio.c into the header that pulled it never reset it and every following
+    token still reported stdio.c. This field is what lets the lexer mark the
+    RETURN edge as well as the entry.
+    bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull }
+  encl := CPEnclosingCModule;
+  if (encl <> '') and (encl <> CPCurPath) then
+    CPrepOutAppendStr('# ' + CPSmallIntStr(CPStmtLine) + ' "' + CPCurPath +
+                      '" "' + encl + '"')
+  else
+    CPrepOutAppendStr('# ' + CPSmallIntStr(CPStmtLine) + ' "' + CPCurPath + '"');
   CPrepOutAppendCh(#10);
   CPMarkFile := CPCurFileId;
   CPMarkLine := CPStmtLine;
