@@ -12876,6 +12876,16 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_loadfile.pas $(TESTTMP)/test_i386_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_i386_loadfile_x64
 	tools/expect_same.sh i386/test_i386_loadfile "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_loadfile)" "$$($(TESTTMP)/test_i386_loadfile_x64)"
+	# The ELEMENT/FIELD destination, which is the shape cpreproc.inc uses and the
+	# one the cross batteries never had: test_cross_loadfile.pas above loads into
+	# a plain VARIABLE, which every backend always accepted. An array element
+	# arrives as IR_INDEX, and until 2026-08-30 five backends rejected it -- so
+	# `pascal26 --target=<t> compiler/compiler.pas` died on one line of
+	# cpreproc.inc on EVERY cross target while this battery stayed green.
+	# A cross row that tests the shape that already worked is the hole, not the
+	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
+	./$(COMPILER) --target=i386 test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_i386_lfef
+	tools/expect_same.sh i386/test_i386_lfef "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_sysopen_family.pas $(TESTTMP)/test_i386_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_i386_sysopen_family_x64
 	tools/expect_same.sh i386/test_i386_sysopen_family "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sysopen_family)" "$$($(TESTTMP)/test_i386_sysopen_family_x64)"
@@ -13318,6 +13328,16 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_loadfile.pas $(TESTTMP)/test_aarch64_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_aarch64_loadfile_x64
 	tools/expect_same.sh aarch64/test_aarch64_loadfile "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_loadfile)" "$$($(TESTTMP)/test_aarch64_loadfile_x64)"
+	# The ELEMENT/FIELD destination, which is the shape cpreproc.inc uses and the
+	# one the cross batteries never had: test_cross_loadfile.pas above loads into
+	# a plain VARIABLE, which every backend always accepted. An array element
+	# arrives as IR_INDEX, and until 2026-08-30 five backends rejected it -- so
+	# `pascal26 --target=<t> compiler/compiler.pas` died on one line of
+	# cpreproc.inc on EVERY cross target while this battery stayed green.
+	# A cross row that tests the shape that already worked is the hole, not the
+	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
+	./$(COMPILER) --target=aarch64 test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_aarch64_lfef
+	tools/expect_same.sh aarch64/test_aarch64_lfef "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_sysopen_family.pas $(TESTTMP)/test_aarch64_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_aarch64_sysopen_family_x64
 	tools/expect_same.sh aarch64/test_aarch64_sysopen_family "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sysopen_family)" "$$($(TESTTMP)/test_aarch64_sysopen_family_x64)"
@@ -13911,6 +13931,16 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile_x64
 	tools/expect_same.sh riscv32/test_rv32_loadfile "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_loadfile; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_loadfile_x64; echo "exit=$$?")"
+	# The ELEMENT/FIELD destination, which is the shape cpreproc.inc uses and the
+	# one the cross batteries never had: test_cross_loadfile.pas above loads into
+	# a plain VARIABLE, which every backend always accepted. An array element
+	# arrives as IR_INDEX, and until 2026-08-30 five backends rejected it -- so
+	# `pascal26 --target=<t> compiler/compiler.pas` died on one line of
+	# cpreproc.inc on EVERY cross target while this battery stayed green.
+	# A cross row that tests the shape that already worked is the hole, not the
+	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
+	./$(COMPILER) --target=riscv32 test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_rv32_lfef
+	tools/expect_same.sh riscv32/test_rv32_lfef "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_lfef; echo "exit=$$?")" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\nexit=0')"
 	# by-value SysOpen/SysRead/SysWrite/SysClose/SysFchmod: the family had no arm
 	# on either 32-bit generic backend. rv32 is asm-generic and has NO plain
 	# open, so SysOpen lowers to openat(AT_FDCWD, path, flags, 0).
@@ -14551,6 +14581,16 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile_x64
 	tools/expect_same.sh xtensa/test_xtensa_loadfile "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_loadfile; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_loadfile_x64; echo "exit=$$?")"
+	# The ELEMENT/FIELD destination, which is the shape cpreproc.inc uses and the
+	# one the cross batteries never had: test_cross_loadfile.pas above loads into
+	# a plain VARIABLE, which every backend always accepted. An array element
+	# arrives as IR_INDEX, and until 2026-08-30 five backends rejected it -- so
+	# `pascal26 --target=<t> compiler/compiler.pas` died on one line of
+	# cpreproc.inc on EVERY cross target while this battery stayed green.
+	# A cross row that tests the shape that already worked is the hole, not the
+	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_xtensa_lfef
+	tools/expect_same.sh xtensa/test_xtensa_lfef "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_lfef; echo "exit=$$?")" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\nexit=0')"
 	# ParamCount / ParamStr / ArgStr. xtensa was the only hosted target whose
 	# entry stub never saved the kernel-provided initial sp to BSS_INITIAL_RSP,
 	# so builtin -55 had no honest arm available -- the stub save and both arms
@@ -14859,6 +14899,16 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_loadfile.pas $(TESTTMP)/test_arm32_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_arm32_loadfile_x64
 	tools/expect_same.sh arm32/test_arm32_loadfile "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_loadfile)" "$$($(TESTTMP)/test_arm32_loadfile_x64)"
+	# The ELEMENT/FIELD destination, which is the shape cpreproc.inc uses and the
+	# one the cross batteries never had: test_cross_loadfile.pas above loads into
+	# a plain VARIABLE, which every backend always accepted. An array element
+	# arrives as IR_INDEX, and until 2026-08-30 five backends rejected it -- so
+	# `pascal26 --target=<t> compiler/compiler.pas` died on one line of
+	# cpreproc.inc on EVERY cross target while this battery stayed green.
+	# A cross row that tests the shape that already worked is the hole, not the
+	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
+	./$(COMPILER) --target=arm32 test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_arm32_lfef
+	tools/expect_same.sh arm32/test_arm32_lfef "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_sysopen_family.pas $(TESTTMP)/test_arm32_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_arm32_sysopen_family_x64
 	tools/expect_same.sh arm32/test_arm32_sysopen_family "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sysopen_family)" "$$($(TESTTMP)/test_arm32_sysopen_family_x64)"

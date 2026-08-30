@@ -4573,6 +4573,7 @@ var
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
   castElemTk: Integer; pcharCast: Boolean;   { PChar(p)^ := c as a statement target }
   castElemRec, castDerefRem, castDerefBaseTk, castDerefBaseRec: Integer;   { the alias's own row, kept for the adapter fallback }
+  lfTmp, lfCall, lfAsn: Integer;   { LoadFile into a non-identifier destination — see its parse arm }
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
   miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
@@ -5076,13 +5077,54 @@ begin
         stepsNode := ParseLValueAST(si, identTokIdx);
         Expect(tkRParen, ')');
 
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-        ASTRight[argSeq] := AllocNode(AN_ARG);
-        ASTLeft[ASTRight[argSeq]] := stepsNode;
+        { A DESTINATION THAT IS NOT A PLAIN IDENTIFIER IS NORMALISED HERE, not
+          taught to six backends. `LoadFile(p, Arr[i])` and `LoadFile(p, r.f)`
+          become
 
-        node := AllocNode(AN_CALL);
-        ASTIVal[node] := -100;
-        ASTLeft[node] := argSeq;
+              tmp := <loaded>;  Arr[i] := tmp;
+
+          which is an ordinary managed-string assignment every backend already
+          implements. Same desugar, same guard and the same AN_SEQ return as
+          `for x in <non-identifier>` a few hundred lines up, deliberately.
+
+          WITHOUT IT, THE COMPILER DOES NOT CROSS-COMPILE. cpreproc.inc's
+          `LoadFile(CPrepPath, CPrepInclude[depth])` is an array element, and
+          i386, aarch64, arm32, riscv32 and xtensa all accept only the
+          IR_LOAD_SYM shape -- so `pascal26 --target=<t> compiler/compiler.pas`
+          died at that one line on every cross target. Measured: with the
+          destination normalised, i386, aarch64 and arm32 build the whole
+          compiler, so this was their ONLY blocker
+          (bug-a-no-cross-target-can-build-the-compiler-itself).
+
+          Five hand-encoded slot-address arms would have been the alternative,
+          in five instruction sets, to reach a shape the assignment path already
+          reaches on all of them -- the fifth copy of a dispatch that is a defect
+          for exactly as long as the copies agree
+          (normalise-dont-special-case.md). x86-64's EmitLoadFileManagedAt is
+          left in place and is now unreachable from this frontend; it is correct
+          code and deleting what you merely BELIEVE is dead is its own ticket. }
+        if ASTKind[stepsNode] <> AN_IDENT then
+        begin
+          lfTmp := AllocVar('', tyAnsiString);
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+          ASTRight[argSeq] := AllocNode(AN_ARG);
+          ASTLeft[ASTRight[argSeq]] := GenMakeIdent(lfTmp, tyAnsiString);
+          lfCall := AllocNode(AN_CALL);
+          ASTIVal[lfCall] := -100;
+          ASTLeft[lfCall] := argSeq;
+          lfAsn := GenMakeAssign(stepsNode, GenMakeIdent(lfTmp, tyAnsiString));
+          node := GenMakeSeq(lfCall, GenMakeSeq(lfAsn, -1));
+        end
+        else
+        begin
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+          ASTRight[argSeq] := AllocNode(AN_ARG);
+          ASTLeft[ASTRight[argSeq]] := stepsNode;
+
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := -100;
+          ASTLeft[node] := argSeq;
+        end;
       end
       else if (CaseEqual(name, 'Include') or CaseEqual(name, 'Exclude')) and
               ((qUnit = -2) or (FindProc(name) < 0)) and (Tokens[TokPos].Kind = tkLParen) then
