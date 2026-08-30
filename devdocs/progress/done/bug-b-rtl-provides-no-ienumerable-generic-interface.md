@@ -160,4 +160,4 @@ did not disturb the existing surface. Compile time for the corpus probe rose
 75s -> 118s, which is consistent with getting further rather than with a hang.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6e1515c4a.
