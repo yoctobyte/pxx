@@ -17,7 +17,7 @@ _none_
 | feature-b-sweep-mimic-shims-against-cpython | B | 40 | feature | Campaign: differential-test the mimic_ shims against CPython, after a two-shim pilot returned five findings including a SIGSEGV. Phase 1 is the codecs differential — the only shim with real surface and NO differential — whose encode half is blocked by bug-b-codecs-encode-segfaults-for-every-encoding-except-utf-8. Phase 2 is edge-coverage spot-checks on the already-covered shims, not re-testing their happy paths. | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
-## unfinished (29)
+## unfinished (30)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -30,6 +30,7 @@ _none_
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
+| feature-c-corpus-busybox-applet | C | 60 | feature | Spun out of idea-c-realworld-test-targets (its own top pick, #1 in the suggested order). Build ONE busybox applet -- cat -- from upstream source with cfront, standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, run under tools/run_target.sh on x86-64 + aarch64. busybox is syscall-heavy, which points it straight at crtl, the layer that is actually thin. | bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array |
 | feature-c-diagnostics-name-the-module-they-are-in | C | 40 | feature | A Pascal diagnostic now prints `in: <path>` when the error is in an include or a `uses`d unit. The C frontend has the same information already — CModRange* is populated in every build, not just under -g — and prints nothing, so an error in a crtl module or an included header still reports a bare line number. | bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it |
 | feature-c-gtk3-header-final-wiring | C | 55 | feature | Stock GTK3 headers import, link to libgtk-3.so.0 and run a real window — done and gated by test_c_gtk3_stock. The 2026-06-29 probe failure was a wrong include root, not an importer limit. Parked: dropping the explicit -I needs decide-which-gtk-a-bare-gtk-gtk-h-means, and the PCL migration is a Track B ticket. | decide-which-gtk-a-bare-gtk-gtk-h-means |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
@@ -81,7 +82,7 @@ _none_
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it | A | 40 | bug | A C diagnostic can now print `in: <the .c module>` (CModRange*, ungated), but an error inside an INCLUDED HEADER prints nothing: the header-accurate per-token file table is DbgRange*, which returns early without -g. Pascal has an ungated twin for exactly this reason (PasMarkTokFile); C does not. | — |
 | bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull | A | 50→55 | bug | CModuleOfTok is STICKY: CMarkTokModule is only called for a path ending in `.c`, so returning from a crtl `.c` pull back into the enclosing `.h` never resets the attribution and every following token still reports that `.c` as its module. Blocks the remaining half of bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead: a bodied static after `#include <stdio.h>` cannot be told apart from one inside crtl's stdio.c. Filed by Track C -- the table lives in dbg_filetable.inc, which is Track A. | — |
-| bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array | A | 40 | bug | The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A. | — |
+| bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array | A | 40→60 | bug | The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A. | — |
 | bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only | A | 35 | bug | Storing a `char` into a `string[N]` through a pointer compiles on x86-64 only | — |
 | bug-a-defs-inc-vt-promo-comment-describes-the-slot-not-the-variant | A | 20 | bug | compiler/defs.inc:1150-1151 annotates the VT_PROMO_INT32/INT64 VARIANT tags with `payload = inline Int64, or a bignum ref` — which is the SLOT storage discriminator's semantics, the very thing the paragraph four lines above says the variant tags are distinct from. In a variant the payload is a managed STRING holding the exact decimal, per pylib.pas, which defs.inc itself names as the authority. No compiled behaviour is wrong; the cost is that a reader trusting the comment concludes a correct tool is broken. Measured: it sent the Track T agent to suspect pxx-gdb.py:109 of silently decoding a number as an address. tools/pxx-gdb.py is CORRECT and must not be 'fixed'. | — |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
@@ -823,6 +824,7 @@ _none_
 - [p 62] [U] decide-adopt-a-second-string-model-or-refuse-utf16-honestly
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
+- [p 60] [A] bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array (unblocks 1)
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
@@ -983,7 +985,6 @@ _none_
 - [p 45] [T] task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it (unblocks 1)
-- [p 40] [A] bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
 - [p 40] [A] bug-a-function-result-assignment-does-not-narrow-to-the-result-type
 - [p 40] [A+S] bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
@@ -1217,6 +1218,7 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
+- **1** — bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees

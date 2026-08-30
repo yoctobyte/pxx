@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:29 blocked:7 backlog:388 backlog_new:19 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2817 rejected:58`
+`working:4 unfinished:30 blocked:7 backlog:388 backlog_new:19 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2817 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -14,7 +14,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-sweep-mimic-shims-against-cpython` [B] — owner: frankB
 - `feature-unicodestring-model` [A] — owner: frankwasm
 
-## unfinished (29) — parked mid-flight; re-claim, do not duplicate
+## unfinished (30) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -25,6 +25,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
+- `feature-c-corpus-busybox-applet` [C] — blocked-by: bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
 - `feature-c-diagnostics-name-the-module-they-are-in` [C] — blocked-by: bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-dynamic-compiler-tables` [A]

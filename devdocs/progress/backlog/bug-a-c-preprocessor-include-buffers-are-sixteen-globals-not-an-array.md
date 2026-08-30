@@ -93,3 +93,63 @@ freed. If that matters, size the array to a real limit rather than to 128.
 ## Log
 - 2026-08-30 — filed by frankC. The C-lane half (undefined read, honest guard,
   both tests) landed first; this is the storage change, which is Track A's.
+
+## THIS NOW BLOCKS REAL-WORLD C — measured, frankC, 2026-08-30
+
+The ticket reads as a tidiness refactor ("one datum wearing sixteen names").
+It is not. **The 16-deep cap is a hard wall against real C code**, and it is the
+FIRST thing hit — before a single line of a program is parsed.
+
+Minimal repro, four lines, against upstream busybox 1.36.1 (`1a64f6a20`):
+
+```c
+#define _GNU_SOURCE 1
+#include "autoconf.h"
+#include "libbb.h"
+int main(void){ return 0; }
+```
+
+```
+pascal26:1: error: C include nesting too deep
+              (the preprocessor has 16 include buffers; this include is at level 17)
+```
+
+`libbb.h` is busybox's aggregation header — every applet includes it, so this
+blocks **all 145 translation units** of even a cat-only busybox build, not one
+file. gcc compiles the same tree clean.
+
+**It is cumulative depth, not one pathological header.** I checked the obvious
+suspects individually and none of them reaches the cap on its own:
+
+```
+stdio.h  dirent.h  endian.h  byteswap.h  paths.h  libgen.h  sys/stat.h
+   -- all compile fine, depth-limit-hit=0 for each
+```
+
+So there is no header to blame and no include to restructure. Real aggregation
+headers simply nest deeper than 16 once glibc's own chains stack under them,
+and busybox is not unusual in this.
+
+### Why the obvious workaround is the wrong move
+
+The depth could be shaved by giving `lib/crtl` its own `dirent.h`, `paths.h`,
+`libgen.h`, `byteswap.h` etc. so the host glibc chain is never entered (the
+compile emits a host-fallback warning for exactly those). **That is the
+microfix**: it buys one corpus target, leaves the cap in place, and the next
+real program hits it again a little deeper in. The cap is the root cause and the
+array is the fix — as this ticket already says, and as `cpreproc.inc`'s own
+comment predicted ("if the buffers ever become an array this line is the only
+one to delete").
+
+### Track C is standing on this and cannot fix it
+
+`CPrepInclude0..15` are declared in **`compiler/defs.inc:3765`** — Track A's
+shared file. Under Track C's rules ("anything in `lexer.inc`, `ir*.inc`,
+`symtab.inc`, `defs.inc`, the backends → file a Track A ticket, do not edit it
+under Track C") this is A's to make, so I am reporting rather than taking it.
+The two `case` ladders in `cpreproc.inc` are mine and I will convert them the
+moment the storage is an array; that half is mechanical.
+
+Priority is not hand-edited here — [[feature-c-corpus-busybox-applet]] (p60) is
+now marked `blocked-by` this ticket, so the ranker propagates 60 down the edge
+on its own, which is the mechanism CLAUDE.md describes for exactly this.
