@@ -387,7 +387,7 @@ Then the part that matters: **of those 21, only 2 are in the class that can rot.
 | --- | --- | --- |
 | policy tunables — `MEM_FLOOR`, `PSI_ADMIT`, `HEARTBEAT_STALE`, `CASCADE_THRESHOLD`, `HISTORY_CAP` … | 15 | **no** — a chosen operating point. Stability is the intent; "unchanged for a month" is health, not staleness. |
 | exit codes and protocol constants — `rc == 130`, `rc == 124`, `VT_PROMO_INT64 = 8193` | 4 | **only against their source.** Checked: 8193 still matches `compiler/defs.inc:1151`. |
-| **asserted observations** — `ADDLINE=10` (`dwarf_smoke.sh`), `BLANK_MAX=4000` (`gui_shot.sh`) | **2** | **yes** — a number someone measured once and wrote down. |
+| **asserted observations** — `ADDLINE=10` (`dwarf_smoke.sh`), `BLANK_MAX=4000` (`gui_shot.sh`, since deleted — see below) | **2** | **yes** — a number someone measured once and wrote down. |
 
 **So sort by what a number IS, not by how long it has sat still.** A tunable and a
 recorded measurement look identical in a diff and age identically in `git blame`,
@@ -409,7 +409,36 @@ partition exists to find.**
   unreachable. Filed as `bug-b-gui-shot-blank-frame-detector-no-longer-detects-
   a-blank-frame`.
 
-The rotted one is the shape worth remembering: **the number was right when it was
+**Outcome, and it moved the lesson.** Track B did not re-derive `BLANK_MAX` — it
+**deleted the measurement**. `a13e52b21` replaced the compressed-size proxy with
+a decoded-pixel ratio, because the re-derivation could not be done:
+
+```
+empty display     4013 bytes   (five samples, no variance)
+real xterm window 4068 bytes
+```
+
+**Fifty-five bytes apart.** A mostly-empty frame compresses to nearly the same
+size whether or not something is drawn in one corner, so there is no threshold
+that separates the two cases — the proxy had lost its discriminating power, not
+merely its calibration. The constant named in the table above no longer exists.
+
+That is a third outcome the partition did not anticipate, and it changes what to
+do with a rotted observation:
+
+> **Before re-deriving a measured constant, check that the measurement still
+> separates the cases it was chosen to separate.** A number can be stale; a
+> *proxy* can be dead. Re-measuring a dead proxy produces a fresh number with a
+> confident derivation note and no discriminating power — which is strictly
+> worse than the stale one, because it now looks maintained.
+
+The tell is available before any fix: measure BOTH sides, not just the one that
+looks wrong. I measured the blank frame five times and reasoned about the other
+side from the comment ("a real PCL window compresses to well over this"). One
+measurement of a real window would have shown 4068 and turned "the threshold is
+13 bytes off" into "the threshold cannot work", which is a different ticket.
+
+The rotted one is still the shape worth remembering: **the number was right when it was
 written.** Nobody edited it and nobody was careless — ffmpeg's encoder or the
 default size moved underneath it, and a prose comment ("a blank frame is ~1-3
 KB") is not something that re-checks itself. **A measured constant needs its
