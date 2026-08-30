@@ -144,7 +144,11 @@ begin
   else
   begin
     EmitLoadDataRefA64(0, Strs[si].Offset + 8); { x0 = the handle }
-    EmitStrIncRefA64;                           { and take the reference }
+    { No EmitStrIncRefA64 here since 2026-08-30, and on this arch that deletes a
+      whole CALL rather than four bytes — the one place the aarch64 port was
+      measurably worse than x86-64. PXXStrDecRef now refuses to write a
+      saturated block, so there is no decrement left for a retain to balance.
+      One change or nothing: this and the builtinheap.pas guards move together. }
   end;
   EmitStaticLitHandleA64 := True;
 end;
