@@ -83,3 +83,35 @@ helper — which is also the most common way real code writes it, since an optio
 comment names.
 
 One fix closes both. Gate them together.
+
+### Carried here so this ticket stands alone
+
+The two tickets are ranked separately at p70, so this one can be dispatched on
+its own. The pointer above is not enough if you never follow it — these three
+items are the ones that change what you do, repeated rather than referenced:
+
+**The receiver table** (`min(xs, key=K)`; CPython gives 9 for the callable keys,
+2 for `None`):
+
+| receiver | `key=lambda x: -x` | `key=pk` (def name) | `key=f` (variable) | `key=None` |
+| --- | --- | --- | --- | --- |
+| module-level `xs = [5,2,9]` | 9 | 9 | 9 | 2 |
+| **function parameter `xs`** | 9 | **TypeError** | **TypeError** | **TypeError** |
+
+**Prior art:** [[bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload]]
+(done, `256b21957`) fixed this family for the **static-list** receiver; every row
+of its own table still passes. The **variant-container** arm is the half that is
+red, and that ticket's fix note names both shapes as the two `PyMinMaxByKey` was
+made the single meeting point for — so one arm breaking is the expected shape of
+a break here, not a new mystery.
+
+**Candidate cause — do not record it as the cause without building it.**
+`7b73a385d feat(N): list.sort(key=)` is the only commit in the watcher's
+6-commit range touching `compiler/builtin/pylib.pas` or `compiler/pyparser.inc`,
+and it refactors the callable→Pointer coercion the earlier fix rests on, adding
+`pyvar_callable_ptr_opt` for the `key=None` spelling. **That is circumstantial.**
+Build `7b73a385d~1` and `7b73a385d` and run the table above on both before
+writing a cause into either ticket. The named sha `0200df7eabcd` remains
+impossible (it touches no buildable file). A plausible attribution nobody diffed
+is the failure this repo has recorded most often, and this ticket is reachable
+without ever reading the sibling that says so.
