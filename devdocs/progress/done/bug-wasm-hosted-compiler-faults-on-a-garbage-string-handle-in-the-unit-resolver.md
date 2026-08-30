@@ -217,4 +217,4 @@ measurements and the stack-depth hypothesis. It is a different bug with a
 different shape, not a remainder of this one.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 0a5411a2b.
