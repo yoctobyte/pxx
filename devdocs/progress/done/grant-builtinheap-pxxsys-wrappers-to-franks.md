@@ -69,4 +69,4 @@ asked what it had done rather than whether it objected.
 When the ticket resolves. Not a standing widening of Track S into `compiler/builtin/**`.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6b81c1924.
