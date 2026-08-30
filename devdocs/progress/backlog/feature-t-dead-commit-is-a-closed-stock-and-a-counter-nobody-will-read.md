@@ -95,3 +95,31 @@ write-ups.
 Gate: `tools/progress.sh check` still reports the same underlying set; the
 frozen line and the live line must sum to it, and a deliberately-planted recent
 dead sha must appear in the live line and not be absorbed by the frozen one.
+
+## Why "clean these up later" was never an available option (2026-08-30)
+
+Added after frankB and the coordinator measured the locality of the checks
+(faces 235d / 235d-control / 235e).
+
+A dead citation has two possible histories — **a real sha a rebase superseded**,
+or **a sha that never existed** — and they are distinguishable **only in the
+checkout that wrote it, while its reflog still holds the object**. Measured:
+frankB's five own rebased-away shas all resolve in its tree; the invented one
+does not. Measured from `~/frank-coordinator`, **all** of them answer
+`NO SUCH OBJECT`, including the two that were real.
+
+So the classification is not merely expensive later — **it is impossible later**,
+and impossible for every reader other than the author. `patch-id --stable` cannot
+substitute, because computing a patch-id requires having the object, and 264 of
+the 269 distinct shas are absent entirely.
+
+**Consequence for this ticket, and it is the operational one:** the value of the
+counter is not in eventually resolving the 350. Nothing will ever resolve them.
+It is in catching the **351st on the day it appears**, while the tree that
+produced it still exists — which is exactly what a number that never moves stops
+doing. Split at the date the leak closed (`68be6bd59`) so the live count starts
+at zero and any increment is visible.
+
+**And it is an argument about writing, not about cleanup:** draw the distinction
+in the ticket *at the moment of citing*, because the reader will have strictly
+less information than the writer did, permanently.
