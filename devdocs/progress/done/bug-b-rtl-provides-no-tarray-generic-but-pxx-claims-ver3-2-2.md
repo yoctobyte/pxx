@@ -149,4 +149,4 @@ narrow check would not have been enough.
    block anything here.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 72d3d69eb.
