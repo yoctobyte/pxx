@@ -399,4 +399,4 @@ mechanisms smell rather than a `partition` bug.
 `test/**`); `pasparser_lval.inc` untouched.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 90f2b646f.
