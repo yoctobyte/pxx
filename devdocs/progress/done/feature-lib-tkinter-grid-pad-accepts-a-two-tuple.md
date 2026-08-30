@@ -4,7 +4,7 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence."
-status: unfinished
+status: done
 owner: frank-b
 ---
 
@@ -333,3 +333,46 @@ ticket to file.
 the eleven rows against `$(PXX_STABLE)` and close this — the answer is already
 known, but the ticket's gate is the *stable* compiler, and a pre-answer at HEAD
 is not that. Until then it stays in `unfinished/`.
+
+## 2026-08-30 — CLOSED against the pin. v394 carries the fix.
+
+The pin moved to **v394 `e2ea9034a65ea8b6`** (`cc5e02d6c`), which contains
+`51b0753e7`. That is the gate this ticket was written against — Track B ships
+against `$(PXX_STABLE)`, and the HEAD pre-answer above was explicitly not that.
+Re-run against the pinned binary, all eleven rows:
+
+```
+grid(row=0, column=0, sticky="", columnspan=1, rowspan=1, padx=(8,6), pady=2)  COMPILES
+grid(padx=(8, 6))                                                              COMPILES
+grid(row=0, column=0, padx=8)                                                  COMPILES
+grid(row=0, column=0, padx=(8, 6))                                             COMPILES
+pack(padx=(8, 6))                                                              COMPILES
+pack(side="left", fill="x", expand=0, padx=(8, 6))                             COMPILES
+configure(scrollregion=(0, 0, 100, 100))                                       COMPILES
+configure(state="normal", scrollregion=(0,0,1,1))                              COMPILES
+create_text(1.0, 2.0, "hi", font=("Arial", 12))                                COMPILES
+create_text(..., anchor="w", fill="red", font=("Arial", 12))                    COMPILES
+askopenfilename(filetypes=[("a", "*.b")])                                      COMPILES
+```
+
+Controls re-run on the same binary, because eleven-of-eleven green is the shape
+that should be distrusted and the pre-answer's controls were a different
+compiler's:
+
+```
+grid(nosuchkeyword=(8, 6))   REJECTED: Widget.grid has no parameter named 'nosuchkeyword'
+lbl.no_such_method(...)      REJECTED: Label has no method no_such_method
+all four facades in one program -> builds, links, RUNS, prints "all four facades ok"
+```
+
+**Closing per this ticket's own retirement text**: every FAILS row flipped, both
+COMPILES controls stayed green, so it closes and **`lib/pcl` needs no change** —
+which was this ticket's finding all along. No sibling residue, so there is no new
+N ticket: `51b0753e7` reached all four façade methods, not only `grid`.
+
+The HEAD pre-answer of earlier today predicted exactly this and was right; it is
+left above as the record of what was known before the pin, not restated as if it
+were the close. The close is this section, and its evidence is the pinned binary.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
