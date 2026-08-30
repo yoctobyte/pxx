@@ -189,4 +189,4 @@ met the second host. Monotonicity is promised; magnitude is not.
 which are what prove the PAL edit changed no behaviour.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit e17b3d83f.
