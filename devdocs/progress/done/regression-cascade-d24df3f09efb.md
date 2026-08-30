@@ -1,5 +1,7 @@
 ---
 prio: 70
+status: done
+owner: frankwasm
 ---
 
 > **origin/master has advanced 16 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -67,3 +69,48 @@ and blaming are different questions and this line answers the first.)
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+## Triage (frankwasm, at HEAD 8983444a8): already fixed before this was filed — 9588c8535, reverted in 72b4c47a7
+
+**All 24 jobs are `test-nilpy` and the cause is inside the range.** It is
+`9588c8535` (*"a string literal is already a managed handle — stop rebuilding
+one per call"*), which made a string literal reaching a callee hand back a
+shared `.data` handle without the `IR_ARG` tag that describes it moving with it.
+The observable was `len("a" * 3)` → 285 instead of 3.
+
+Two commands localise it without a build, and they are the whole triage:
+
+```
+git merge-base --is-ancestor 9588c8535 d24df3f09efb   # 0 -> in the history
+git merge-base --is-ancestor 9588c8535 fc9e258e1b71   # 1 -> NOT below last-good
+```
+
+In the history of `bad` and not in the history of `last good` **is** inside the
+range — the two-command form, rather than reading 22 subject lines.
+
+`72b4c47a7` reverted it, and that revert is an ancestor of HEAD. So this cascade
+was already discharged when twatch filed it: the watcher was testing
+`d24df3f09efb` at 18:39Z while master had advanced 16 commits past it, and the
+ticket's own header says so. This is the documented sampler lag (~18 commits
+behind tip), working as designed — the finding was true of the sha it named.
+
+**Verified rather than inferred.** All 24 sources compiled at HEAD with
+fixedpoint `bb3a768b89a2` and their output diffed against the CPython oracle:
+23 match exactly, and the 24th (`test_nilpy_callable_to_str_param_fails`) is a
+NEGATIVE test whose recipe greps the compiler's refusal — it emits
+`expects text for parameter "s"` as required. Zero divergences.
+
+**A guard now exists that did not when this landed.** `89e58402a` put checks
+24-27 — this exact repro, plus the variable form, a literal reaching a
+parameter, and a literal re-evaluated 200x — into `quick_canary_nilpy`, which
+runs in `gate.sh quick`. The class previously had no check between "it built"
+and the full tier, which is why it reached the pin shadow. It also comes with a
+comment at `compiler/ir.inc`'s `pystr_repeat` arm recording that the `IR_ARG`
+tag there looks wrong, is not, and segfaults if changed alone (`bcd4e68a4`).
+
+Nothing to fix. Resolved as already-fixed, with the localisation written down
+because a 24-job cascade with "no idle bisect will happen" reads as expensive
+and was two commands.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

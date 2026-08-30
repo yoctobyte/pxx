@@ -2521,6 +2521,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-cascade-8654c4d55b61 | T | 70 | regression | regression CASCADE: 11 jobs newly red in 4f526e338..8654c4d55 (241 commits) — auto-filed by twatch | — |
 | regression-cascade-aba953cae031 | T | 70 | regression | regression CASCADE: 15 jobs newly red at aba953cae031 (auto-filed by twatch) | — |
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
+| regression-cascade-d24df3f09efb | T | 70 | regression | regression CASCADE: 24 jobs newly red in fc9e258e1..d24df3f09 (22 commits) — auto-filed by twatch | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
 | regression-demos-00-2 | T | 40 | regression | advisory: demos#00 red at b26e7ed366f3 (auto-filed by twatch) | — |
 | regression-demos-00 | T | 40 | regression | advisory: demos#00 red at 98ed38202254 (auto-filed by twatch) | — |
