@@ -3,7 +3,7 @@ summary: "songformatter as a pxx compile target (nilpy) — GUI editor + live pr
 type: feature
 track: E
 prio: 68
-blocked-by: [feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade]
+blocked-by: [bug-nilpy-render-backend-py-compile-does-not-terminate]
 ---
 
 # songformatter as a pxx compile target (GUI editor + live preview)
@@ -617,6 +617,14 @@ case; a three-line probe reproduces it.
 ---
 
 ## Status 2026-08-30 (frankwasm): the key_analysis wall is CLEARED; the wall moved
+
+**`blocked-by` corrected in the same pass.** It listed
+`feature-lib-pxxpdf-reportlab-compat`, `feature-nilpy-re-module` and
+`feature-nilpy-tkinter-facade` — **all three are `done/`**, so this ticket read
+as unblocked while its real blocker sat unlinked at prio 55 and never inherited
+this ticket's 68. That is why `ready --track N` pointed elsewhere: the ranker
+propagates prio down dependency edges, and the edge was missing, not the
+ranking wrong. Replaced with the blocker measured today.
 
 `05eff4cc9` fixed the str/helper collision that stopped every module importing
 `key_analysis`. Measured now, same binary:

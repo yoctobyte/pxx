@@ -4,8 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "songformatter's render_backend.py (413 lines) does not finish compiling: killed at 25:00.06 wall clock, 95% CPU, RSS FLAT at 102 MB, state R — spinning, not allocating. The 2026-07-31 record says it compiled. Bounded rather than diagnosed: lines 1..296 compile in 7s, the whole file spins. Filed with no proposed cause because every cause tried so far has been wrong, and each wrong one is recorded so nobody re-walks it."
-status: new
-owner: ""
+status: working
+owner: frankwasm
 ---
 
 # `render_backend.py` does not finish compiling
