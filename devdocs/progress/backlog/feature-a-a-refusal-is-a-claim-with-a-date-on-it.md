@@ -5259,3 +5259,49 @@ written **plain**. Applied the same day to the roster's
 existed and was withdrawn as a duplicate — annotated in plain text rather than
 repointed, because the citation is *historically correct* and only its markup was
 making a claim about the present.
+
+### 130 — a guard built from the UNION of the cases you thought of is blind to their INTERSECTION
+
+*pxx-a5, 2026-08-30, after its new guard failed on the very push that introduced
+it — and the guard is what reported it.*
+
+The guard checks that a resolve citation actually got filled. Condition (a) was
+written as: *`pending` named this file **before** the fill, and the literal is
+present **now**.* Both halves individually correct, both individually tested.
+
+A ticket that carried a real placeholder **and quotes the placeholder in its
+write-up** satisfies both while being entirely healthy — the citation filled, the
+prose stayed. The ticket in question quotes it five times. It was **the first file
+the guard ever looked at and the first thing it got wrong.**
+
+**19 guards, 0 FAIL, on a broken condition.** Not one fixture had both properties,
+because the natural way to write fixtures is **one property each** — a file with a
+placeholder, a file with prose. The defect lives only in their *intersection*, which
+no single-property fixture can express, and nothing short of running it on real
+data could have caught it.
+
+**So: when a condition is a conjunction, the fixture set must include a case
+satisfying every clause at once**, not one case per clause. A suite that covers
+each condition separately reports full coverage of a predicate it has never
+actually exercised.
+
+**The narrower sibling, and it is the cause:** *before-state plus present-state is
+not the same question as after-state.* `pending`'s answer was already in hand from
+the fill, so it got reused — **the wrong reading of the right variable**, cheaper
+to reuse than to re-ask, and the difference is invisible until one file satisfies
+both halves. The honest form is to re-ask `pending` **after** the fill, which is
+the only thing that means "still owed".
+
+**And it lands one turn past 128, which is what makes it worth its own number.**
+128 says unifying two implementations deletes an accidental oracle, so build an
+*independent* one. pxx-a5 did exactly that — then wrote the new oracle's first
+condition **against state it already had** rather than against the state it was
+asking about. Independence at the level of the instrument, re-coupled at the level
+of the variable. The guard was right to exist, wrong on its first input, and the
+thing that caught it was the guard.
+
+**Trap footnote, and it is the same shape:** the failing run's exit code read as 0,
+which briefly looked like the `exit 1` had not fired. It had — `sync.sh` was piped
+to `tail`, so `$?` was `tail`'s. That is the trailing-command trap `push_or_die`'s
+own comment documents, walked into **while testing the tool that documents it**. A
+documented trap is not a guard, one more time.
