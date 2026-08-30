@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:29 blocked:7 backlog:379 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2800 rejected:58`
+`unfinished:29 blocked:7 backlog:378 backlog_new:13 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2800 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -53,7 +53,7 @@ _none — no lane is locked._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 406, ranked
+## Ready — top 30 of 404, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -75,7 +75,6 @@ _none — no lane is locked._
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
-- `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -85,5 +84,6 @@ _none — no lane is locked._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [A]` feature-unicodestring-model
+- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_376 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_374 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

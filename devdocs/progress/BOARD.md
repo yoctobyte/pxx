@@ -58,7 +58,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (379)
+## backlog (378)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -234,7 +234,6 @@ _none_
 | decide-does-track-r-work-on-master-like-every-other-lane | U | 60 | decide | Collapses two tickets that asked one question, both priced off a divergence that has moved. origin/rust is 136 ahead of master and master is 418 ahead -- but git cherry reports 122 of the 136 already have patch-equivalents on master, and 14 is an upper bound (two spot-checks of the 14 are demonstrably present). So the fork is not 'what do we do with 136 stranded commits'; it is 'does Track R work on master, and do we merge or drop at most 14 mostly-paperwork commits'. Prior recommendation, unchanged: retire the branch. | — |
 | decide-install-qemu-system-and-a-freebsd-image-on-plexus | U | 55 | decide | The FreeBSD port needs a bootable FreeBSD kernel and plexus has none — qemu-user is installed, qemu-system is not, and no VM image exists anywhere on the box. Installing a system emulator and fetching a multi-GB OS image is a change to the owner's workstation, so it is the owner's call. One-line answer unblocks feature-t-freebsd-image-and-runner and, behind it, feature-port-freebsd-native. | — |
 | decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check | U | 30 | decide | decide-nilpy-import-rule-vs-a-cpyext-extension-module ratified `PyInit_<name>` as the extension-module criterion; the implementation substituted 'the unit binds the cpyext runtime' after measuring that PyInit_<name> holds for only 3 of the 6 real units, and flagged the deviation for the owner to overrule. Nobody overruled it either way, and it is now shipped, pinned in v391, and — as of this ticket — documented on the public website. Ratify the substitution or order it changed. | — |
-| decide-is-real-a-double-or-fpcs-80-bit-extended | U | 30 | decide | `writeln(3.14159)` prints ` 3.1415899999999999E+000` in pxx and ` 3.14158999999999999993E+0000` in FPC, because pxx's Real is a 64-bit Double and FPC's is the x87 80-bit Extended. Making them agree means implementing an 80-bit float type; keeping them apart means declaring the difference permanent. Both are defensible and neither is a bug. | — |
 | decide-may-a-lane-be-given-the-full-suite-escape-for-four-corpus-builds | U | 55 | decide | DECIDE: one yes/no — may a lane run four corpus builds under `PXX_ALLOW_FULL_SUITE=1`? | — |
 | decide-nilpy-deepcopy-over-the-container-subset | U | 40 | decide | `copy.deepcopy`: implement over the subset, or keep the loud absence? | — |
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
@@ -442,7 +441,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (14)
+## backlog_new (13)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -450,7 +449,6 @@ _none_
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 25 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
-| bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | bug-t-concurrent-sync-runs-can-squash-two-commits-into-one | T | 45 | bug | With several checkouts syncing at once, tools/sync.sh's rebase-and-retry loop squashed two separate commits into one: the second commit's content survived, its message and its `resolves:` line did not. Silent — the tree is clean, the push succeeds, and the only tell is a `git log` one shorter than expected. | — |
 | bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test | T | 55 | bug | npy_cross_target_expectation_devtest.py ratchets duplicated expectations for .npy sources only, though its own COMPILE_RE already matches .pas and .c. The very next divergence was a .pas test duplicated into the SAME two targets the guard was written about, and it cost a p70 regression ticket and a live red on master. Widening the filter naively does not work — the natural population is full of legitimate cross-target asymmetry — but a keyed sub-population of 137 native identical-invocation sources has 15 deliberate exceptions and would have caught this one. | — |
 | chore-t-board-html-render-is-13s-of-every-ticket-move | T | 40 | chore | tools/progress.sh board-md takes 18.7s, of which ~87% is BOARD.html — a 26MB render every lane pays on every ticket move. Hoisting six re.sub pattern literals out of the inline() hot loop is measured at 18.66s -> 12.99s with byte-identical output. Not landed: progress.py is shared tooling, not Track T's. | — |
@@ -486,7 +484,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (45)
+## rainy-day (44)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -508,7 +506,6 @@ _none_
 | feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-dwarf-debug-info | A | 50 | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
 | feature-eliah-ai-command-rail | B | 45 | feature | feature: Eliah AI command rail + console pane | — |
-| feature-extended-type-support | A | 50 | feature | Proper `Extended` type support (currently aliased to Double) | — |
 | feature-fpc-vs-pxx-feature-boundary | A | 50 | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-handle-compacting-heap | A | 50 | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
@@ -536,7 +533,7 @@ _none_
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 | meta-fpc-error-reporting-parity-cluster | U | 10 | meta | Parking lot for the whole FPC error-REPORTING parity cluster: the SEGV default, stack overflow's 202, --mimic-fpc not implying the --fpc-*-errors flags, tier-2 catchable EAccessViolation, and the per-arch gap. All low prio by the recorded principle that a strict flag governs compilation, not death. NOT in scope: emitted nil checks, which are language-level catchability and stay ranked. | — |
 
-## float (21)
+## float (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -548,14 +545,17 @@ _none_
 | bug-nilpy-complex-pow-is-a-few-ulp-off-cpython | B+F | 20 | bug | `(-8) ** (1/3)` answers a complex now, but its imaginary part is 5 ulp low: pylib cannot `uses math`, so complex pow rides hand-rolled sqrt/sin/cos beside PyMathLn/PyMathExp. Every other line of the complex oracle matches CPython exactly. | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N+F | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-float-power-is-a-ulp-off-the-rtl-already-has-the-fix | B+F | 20 | bug | NilPy's `**` with a fractional exponent still uses exp(y*ln(x)), so 2**0.5 != math.sqrt(2); lib/rtl/math.pas's Power was fixed with a double-double kernel for exactly these cases and names 2^0.5 in its own comment | — |
+| bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P+F | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | compat-pascal-a-whole-valued-double-variant-writes-a-trailing-point-zero | P+F | 20 | compat | `writeln(v)` on a Variant holding a whole-valued Double prints `15.0` where FPC prints `15`. Rendering only — the value is right, and the same Double in a plain variable renders identically to FPC. Float FORMATTING, so it parks here. | — |
 | compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags | A+F | 30 | compat | FPC unmasks the FP exceptions every ISA leaves masked: 1/0 is a runtime error there and Inf here, and Floor(1e30) raises EInvalidOp where pxx now saturates. Decided that pxx keeps IEEE masked semantics by default and FPC's behaviour goes behind opt-in flags — TWO of them, because div-by-zero -> runtime error 208 is nearly free (an FPU control word bit) while Floor raising EInvalidOp costs sysutils, +127 KB code and +33 KB bss on every `uses math` program. | — |
 | decide-default-float-output-format-and-constant-precision | U+F | 10 | decide | decide: should WriteLn's default float format follow the STATIC type, and should untyped float constants evaluate at Single precision? | — |
+| decide-is-real-a-double-or-fpcs-80-bit-extended | U+F | 30 | decide | `writeln(3.14159)` prints ` 3.1415899999999999E+000` in pxx and ` 3.14158999999999999993E+0000` in FPC, because pxx's Real is a 64-bit Double and FPC's is the x87 80-bit Extended. Making them agree means implementing an 80-bit float type; keeping them apart means declaring the difference permanent. Both are defensible and neither is a bug. | — |
 | docs-publish-the-three-language-rounding-table | D+F | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | feature-a-expose-rounding-mode-intrinsic-to-pascal | A+F | 30 | feature | __pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode | — |
-| feature-a-extended-is-an-alias-for-double | A+F | 25 | feature | `Extended` is silently an alias for `Double` | — |
+| feature-a-extended-is-an-alias-for-double | A+F | 25 | feature | UMBRELLA for the `Extended` cluster. `Extended` is accepted and silently mapped to `Double`, so FPC code that uses it deliberately gets a quietly worse answer with no diagnostic. Owner ruled 2026-08-30 that real 80-bit Extended WILL be implemented eventually; the whole cluster is parked in `float/` until it is worked as one consolidated session. | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B+F | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B+F | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
+| feature-extended-type-support | A+F | 25 | feature | SUPERSEDED 2026-08-30 by [[feature-a-extended-is-an-alias-for-double]], which is the designated umbrella for the Extended cluster. Kept as a gravestone because it is cited from three places; its one unique constraint (the RTL ships Single + Double overloads only, on purpose) has been folded into the umbrella. | — |
 | feature-nilpy-math-atan2-now-that-arctan2-is-exact | N+F | 30 | feature | compiler/pyparser.inc deliberately leaves math.atan2 undefined, with a note citing ArcTan2 being 1 ulp off CPython for atan2(0.5, 1). That reason is gone as of 2026-08-15: ArcTan2 now forms the quotient in double-double, matches CPython on that exact value, and is correctly rounded where glibc is not. One table line, plus removing the stale note. | — |
 | feature-opt-complex-packed-double | O+F | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
 | feature-opt-float-format-fast-path | O+F | 30 | feature | Fixed-point float formatting is 4.7x slower since it started taking its digits from the double's exact decimal expansion (8.8us vs 1.85us per %.2f, measured over 200k). Correct now, and worth a fast path for the values that provably cannot sit near a midpoint. | — |
@@ -789,7 +789,6 @@ _none_
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
-- [p 65] [P] bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
@@ -1054,7 +1053,6 @@ _none_
 - [p 30] [T] chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected
 - [p 30] [T] chore-t-lint-fall-open-target-chains-without-the-false-positives
 - [p 30] [U] decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check
-- [p 30] [U] decide-is-real-a-double-or-fpcs-80-bit-extended
 - [p 30] [U] decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation
 - [p 30] [U] decide-where-a-persistent-fpc-trunk-oracle-lives
 - [p 30] [A] feature-a-a-general-x86-64-relocatable-object-writer

@@ -5,7 +5,7 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "`SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element."
-status: new
+status: float
 ---
 
 # `SizeOf(Extended)` disagrees with the storage `Extended` gets
@@ -94,3 +94,37 @@ end.
 
 Track P: `make compiler/pascal26` (the self-host fixedpoint) plus this repro
 printing three consistent numbers.
+
+## Parked in `float/` 2026-08-30 — with a caveat worth re-reading
+
+Moved `backlog_new/` → `float/` with the rest of the `Extended` cluster, at the
+owner's request, so the whole set can be worked in one consolidated session
+(umbrella: [[feature-a-extended-is-an-alias-for-double]]).
+
+**Two consequences to be aware of, because they cut against each other:**
+
+1. **This ticket is NOT blocked by the umbrella and should not wait for it.**
+   It is a self-inconsistency inside the *current alias*, not a step toward
+   80-bit Extended. Confirmed on this tree 2026-08-30: `:6417` is the **only
+   site in the whole compiler that produces `tyExtended`** — every other
+   reference (`ir_codegen.inc`, the backends, `cparser.inc:133`/`:172`) is a
+   consumer firing only on an already-Extended operand. Fixing it makes
+   `tyExtended` genuinely dead, which is the cleanest possible starting position
+   for the umbrella: both tables then move together, in one place, instead of
+   the split having to be re-merged first. It makes the big job smaller.
+
+2. **`float/` is never scanned by `ready`/`next`, so this prio-65 bug is now
+   invisible to the ranker.** That is the intended cost of parking, but note
+   this ticket is arguably not Track F at all by the folder's own rule — *rank
+   the mechanism, never the datatype.* Its subject is a two-table disagreement
+   producing a wrong `SizeOf`, and its damage is a stride two bytes too long per
+   element walking an `array of Extended`: silent wrong values, far from the
+   cause. That is the mechanism, and the `Extended` content is incidental — the
+   same defect on the `Real` arm was fixed as an ordinary Track A bug.
+
+   It is parked here because the owner asked for the cluster to be consolidated,
+   which is a decision about *attention*, not a reclassification. **If the
+   consolidated session does not happen soon, move this one back to `backlog/`
+   on its own** — it is a one-line fix at `pasparser_lval.inc:6417` plus the
+   audit of the sibling names (`valreal`, `tdatetime`, `currency`) that the
+   Suggested fix already asks for, and it does not need the session.

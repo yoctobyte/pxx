@@ -82,7 +82,7 @@ Living list; add rows rather than filing float tickets loose.
 | --- | --- | --- | --- |
 | `compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags` | A | 30 | already decided in shape (masked by default, FPC behind flags) |
 | `feature-a-expose-rounding-mode-intrinsic-to-pascal` | A | 30 | |
-| `feature-a-extended-is-an-alias-for-double` | A | 25 | |
+| `feature-a-extended-is-an-alias-for-double` | A | 25 | **umbrella for the Extended cluster — see below** |
 
 ### Formatting — related but a DIFFERENT question, do not conflate
 
@@ -93,8 +93,30 @@ Printing is not accuracy; a correctly-rounded value can still print wrong.
 | `compat-pascal-write-fixed-huge-magnitude-differs-from-fpc` | A | 40 |
 | `bug-b-write-of-a-real-ignores-the-field-width-without-decimals` | B | 20 |
 | `compat-pascal-writeln-of-a-single-uses-double-width` | A | 30 |
-| `decide-default-float-output-format-and-constant-precision` (rainy-day) | U | — |
+| `decide-default-float-output-format-and-constant-precision` | U | — |
 | `docs-publish-the-three-language-rounding-table` | D | 30 |
+
+### The `Extended` cluster — consolidated 2026-08-30, work it as ONE session
+
+Owner ruling, 2026-08-30: *"eventually we will implement 80-bit extended type
+properly. for now, we move all related tickets to the float subfolder. so we can
+work on those tickets in a consolidated session."* Three overlapping umbrellas
+existed in three folders and none referenced the others; they are now one.
+
+| ticket | track | prio | role |
+| --- | --- | --- | --- |
+| `feature-a-extended-is-an-alias-for-double` | A+F | 25 | **the umbrella** — scope, the four workstreams, the ruling |
+| `feature-extended-type-support` | A+F | 25 | superseded gravestone (kept for three inbound citations) |
+| `decide-is-real-a-double-or-fpcs-80-bit-extended` | U | 30 | residual open question: does bare `Real` follow `Extended` on x86-64? |
+| `bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets` | P | 65 | **not blocked by the umbrella** — a one-line fix that makes the big job smaller |
+
+This cluster is the clearest instance of what this index exists for. The four
+aspects — the 10-byte type with its padding, x87 codegen (the SSE2 path cannot
+express 80-bit), `Str`/`Val`/`FloatToStr`/`WriteLn`, and `lib/rtl/math.pas`'s
+deliberately Single+Double-only overload set — are individually tractable and
+collectively the point: a 10-byte type nothing can print, or an x87 path no math
+routine reaches, is **worse than the honest alias shipped today**. Hence
+collect-do-not-fix-piecemeal, in its strongest form.
 
 ### Performance (accuracy-adjacent: the reason a fast tier exists at all)
 

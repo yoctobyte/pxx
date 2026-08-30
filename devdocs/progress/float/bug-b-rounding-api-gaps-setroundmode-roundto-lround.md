@@ -110,7 +110,9 @@ is to multiply by `10^-digits`. Not cosmetic — `2.675 / 0.01` is
 gives **2.68** and the second **2.67**. FPC says 2.68.
 
 No Extended overloads, deliberately: Extended is aliased to Double and this RTL
-targets Single + Double only ([[feature-extended-type-support]]).
+targets Single + Double only ([[feature-a-extended-is-an-alias-for-double]],
+the Extended umbrella; this was [[feature-extended-type-support]] before it was
+superseded 2026-08-30).
 
 ## `SetRoundMode` / `GetRoundMode`: the primitive exists, but not for Pascal
 

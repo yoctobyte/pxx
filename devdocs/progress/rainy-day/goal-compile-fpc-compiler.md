@@ -148,7 +148,8 @@ tickets; unknown walls behind them get filed as the probe hits them:
    only *verified* RTL-semantics gap after the coupling-claim correction.
 4. (existing, for the differential bar only) 80-bit extended constant
    folding — see "The one real language gate" above and
-   `feature-extended-type-support` (rainy-day). Not needed for
+   `feature-a-extended-is-an-alias-for-double` (float/ — the umbrella;
+   `feature-extended-type-support` was superseded by it 2026-08-30). Not needed for
    "compiles and runs".
 
 Beyond these: shadow-RTL surface accretion (SysUtils/CStreams breadth) filed
