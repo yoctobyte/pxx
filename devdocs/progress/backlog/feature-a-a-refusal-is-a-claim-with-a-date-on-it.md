@@ -6589,3 +6589,71 @@ was written by a session that no longer exists, and re-read by sessions that ass
 available.** By 150a it should be among the most rotted files in the tree, and by 152 the
 same readership argument applies — every tick reads it, and reading is what preserves an
 error rather than exposing it.
+
+### 153 — WHEN A CONSTRUCT HAS N SYNTACTIC ROADS, FIXING ONE ROAD AND TESTING ONE ROAD IS INDISTINGUISHABLE FROM FINISHING
+
+*frankwasm, 2026-08-30, `list.sort(key=…, reverse=…)`.*
+
+The first fix wired the callable coercion into the argument loop it had found. A **local**
+receiver worked. A **field** receiver worked. `nested[0].sort(key=f)` still segfaulted —
+same construct, different loop. **NilPy method calls have SEVEN arity-driven argument
+loops** (local, field, indexed, dynamic, star-unpack, collect, class-method), spread
+across files two other tracks own.
+
+> **Not a partial feature that answers *wrong*, but one that answers *right* often enough
+> to look finished.**
+
+That is the third name for the decorator failure (135a) and the most dangerous of the
+three, because the demo passes. It is 146a with the scope moved again: there the acceptance
+inherited the *ticket's* scope, then the *author's habit* (149), and here the *road they
+happened to walk*. **A receiver/shape matrix is the cheap defence — not more careful
+reading.** The seven loops were only found because a probe on each candidate site came back
+**silent**, forcing instrumentation of `PyKwArgIndex` itself to find who actually called it.
+
+**And the fix was PLACEMENT, not more code.** All seven funnel through `PyBindKwArgs`, so
+the coercion goes there, after its reorder: one site, every loop — and no Track A or P file
+touched, which is also how a Track N ticket avoided needing a grant on `pasparser_lval.inc`.
+`root-cause-over-microfix` paying out twice: fewer cases *and* fewer lanes.
+
+Standing note for every lane touching NilPy method calls: **seven argument loops, one choke
+point, `PyBindKwArgs`.**
+
+### 153a — A TICKET WHOSE BLOCKER IS "X CANNOT REACH Y" AGES BADLY, BECAUSE THE REPO KEEPS ADDING BRIDGES
+
+The queue-wide half, which the worker correctly said it could observe and not act on.
+
+The ticket was priced by its own last pass as *"needs a new pyeval routine plus a frontend
+dispatch table that does not exist yet."* Actual cost: **one parameter, one extracted
+helper, one call site.** The overpricing came from a blocker **dissolved by unrelated work
+eleven days earlier** — `pyeval` installs `PyCallKey1` into `PyIterCallHook` precisely to
+invert that dependency, because map/filter cursors in pylib had the identical problem — and
+nobody re-read it.
+
+**Distinguish the two blocker kinds, because they age in opposite directions:**
+
+| stated blocker | ages |
+| --- | --- |
+| *"feature F is missing"* | **well** — F is still missing until someone builds it |
+| *"X cannot reach Y"* / *"there is no mechanism that…"* | **badly** — it is a claim about the shape of the code, and the shape changes under it |
+
+An architectural cannot-reach is a **false limit** (rule 2's third corollary) with a
+delayed fuse: true when written, quietly false later, and *never re-checked because it
+reads as structural rather than contingent.* Worse, it prices the ticket — so the queue
+carries an inflated estimate that keeps it un-dispatched, which is the mechanism by which
+it stays un-re-read.
+
+**Measured 2026-08-30, ranked tickets (`urgent`/`backlog`/`backlog_new`/`unfinished`):
+16 state an architectural cannot-reach.** Some are noise — the pattern also matches prose
+*about* unreachability, this file included — but the shape it is looking for is real, and
+the two oldest at p65 are both Track N (`feature-nilpy-thirdparty-libraries-as-targets`,
+12 days; `feature-nilpy-cpyext-c-api-from-source`, 3 weeks), in the lane that has been
+adding bridges fastest. **Dispatched as a re-measure rather than filed as a sweep** — one
+lane, two tickets, evidence before a broader pass (134a: the check you were about to build
+may be a fix, and 16 is not yet a population).
+
+The third blocker, incidentally, was one **neither** earlier pass had: the frontend never
+coerced the callable into the raw `Pointer` the slot wants, and a callable value is a
+16-byte variant whose first word is the **tag**, taken as a code address. `sorted()` was
+immune only because the plain-call path had that coercion inline — so **the working sibling
+was working for an accidental reason**, which is why it could not serve as the model.
+Moving the sort to `pyeval` as the ticket directed would not have prevented one row of it.
