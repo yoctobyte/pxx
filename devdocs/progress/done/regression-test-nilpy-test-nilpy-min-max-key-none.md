@@ -158,4 +158,4 @@ baseline run stops at its first hard failure:
 | before the library fix | row 2 — variant receiver |
 | after it, before the frontend fix | row 4 — `min("cab", key=None)`, literal receiver |
 | after both | passes, all 9 rows |
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit faee264e5.

@@ -268,4 +268,4 @@ That is `bug-nilpy-keyword-arg-vs-overload-set`, pre-existing (it fails at
 `7b73a385d^` too, as this ticket already recorded) and untouched here.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit faee264e5.
