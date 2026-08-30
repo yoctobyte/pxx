@@ -216,8 +216,9 @@ const
   { Pascal WideString/UnicodeString -- fixed-width UTF-16. Length in the header
     stays a BYTE count exactly as for BYTESTR, so every existing memcpy,
     compare, retain/release and free path works on it unchanged; only the
-    PUBLIC Length() halves it, and that lowers statically from tyWideString
-    rather than by consulting this tag. See feature-unicodestring-model. }
+    PUBLIC Length() halves it, and that lowers statically off the string's
+    ELEMENT type (tyChar vs tyWideChar) rather than by consulting this tag.
+    See feature-unicodestring-model. }
   PXX_KIND_WIDESTR = 5;
   PXX_KIND_MAX     = 5;
   PXX_KIND_MASK    = $FF;
@@ -1766,8 +1767,8 @@ end;
   PXXStrIncRef/DecRef, PXXBlockCopy, the free path and every backend's
   retain/release blob work on a wide string with no second arm -- the exact
   "sibling arm" cost the stride objection predicted and that keeping bytes in
-  the header avoids. Length() halving it is a FRONTEND lowering off
-  tyWideString, not a runtime tag lookup.
+  the header avoids. Length() halving it is a FRONTEND lowering off the
+  string's ELEMENT type, not a runtime tag lookup.
 
   No ASCII flag is stamped. PXX_FLAG_ASCII means "no byte >= $80", which for
   UTF-16 is true of any ASCII text and says nothing useful, while

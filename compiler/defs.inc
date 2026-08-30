@@ -1709,47 +1709,7 @@ type
       where they are — they are additive, they still catch shapes the kind does
       not reach, and removing them is a separate migration.
       bug-a-writeln-of-a-widechar-prints-its-ordinal }
-    tyWideChar,    { 31: UTF-16 code unit — 2 unsigned bytes, converts as UTF-8 }
-    { A managed UTF-16 STRING — FPC's `WideString` and `UnicodeString`, which
-      are ONE kind here and two spellings of it. FPC separates them because
-      `WideString` is a COM BSTR on Windows; the owner ruled Windows explicitly
-      out of scope for this model, and on Linux fpc 3.2.2 the two are
-      observably identical — measured: same handle size (8), same
-      `Length('héllo')` (5), same element size (2), and freely
-      cross-assignable in both directions. Two kinds would buy a distinction
-      nothing here can observe.
-
-      Its own kind for CONVERSION, exactly as tyWideChar/tyUCS4Char/tyBool8
-      are, not for layout: the HANDLE is pointer-sized like tyAnsiString's and
-      the managed block is the same 24-byte header, so nothing about
-      allocation, refcounting or freeing changes. What changes is that
-      `Length` counts 2-byte code units (the header's BYTE count shifted right
-      by one) and indexing yields a tyWideChar — and that `WideChar(u1) +
-      WideChar(u2)` must build a two-unit STRING instead of adding two
-      ordinals, which is the wall feature-unicodestring-model exists to
-      remove.
-
-      The runtime half is already in builtinheap.pas (PXX_KIND_WIDESTR,
-      PXXWideAlloc/Concat/FromUtf8, PXXUtf8FromWide) and is exercised by
-      test_widestring_transcode.pas.
-
-      LANDING RULE, same as TTypeRef's below: this kind is ADDITIVE and
-      READERS-FREE as landed. `WideString` is still parsed as an ALIAS for
-      tyAnsiString, so nothing constructs a tyWideString yet and no lockstep
-      table can be caught out. Before anything DOES construct one, these
-      measured sites must gain a case for it in the same change — this is the
-      "one of six parallel arrays not written" class, and tyWideChar is the
-      worked example of which tables matter:
-        symtab.inc:~2922   TypeSize            (else a wide string sizes 0)
-        symtab.inc:~3120   ordinal-ness
-        symtab.inc:~8949   the type-name table
-        pasparser_lval.inc:~6316 and ~6380     name -> kind resolution
-        rtti_emit.inc:~942 the RTTI kind list
-      Breaking the alias is the deliberate moment sysutils' UTF8Encode/Decode
-      identity functions stop being merely honest and become WRONG; change
-      them in that same commit rather than leaving a window where the
-      declaration lies. feature-unicodestring-model }
-    tyWideString   { 32: managed UTF-16 string — WideString/UnicodeString }
+    tyWideChar     { 31: UTF-16 code unit — 2 unsigned bytes, converts as UTF-8 }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
