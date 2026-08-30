@@ -16,7 +16,7 @@ summary: "24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrins
 > **32 of 32**: the histogram has exactly one shape left (17x -50, 8x -100 `LoadFile`,
 > 6x -52, 1x IR op 54 `getdents64`), every one file / directory / environment I/O, every
 > one gated by this decision. The two categories that were NOT this ticket have both
-> been cleared since -- argv landed as Phase 9j (`b9e1ef22f`, backend-emitted
+> been cleared since -- argv landed as Phase 9j (`b9e1ef22f` **on branch `wasm`**, backend-emitted
 > `args_sizes_get`/`args_get`, self-host fixedpoint plus 28 wasm checks) and the float
 > intrinsics as Phase 9k (`Frac` -205 / `Int` -206, ten lines, both `f64.trunc`).
 >
@@ -29,6 +29,16 @@ summary: "24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrins
 > Not raised higher: frankwasm is NOT idle on it -- it continues on non-anchor lane work
 > while this sits, so the cost is a stalled milestone, not a stalled agent. 70 puts it
 > level with the other ranked Track U items rather than ahead of the fleet.
+
+> **DANGLING SHAS BY DESIGN.** Every commit sha in this ticket lives on branch
+> **`wasm`**, not on `origin/master` — the wasm lane works in a standalone
+> checkout and pushes to its own branch. `progress.sh check` flags them as
+> `SIDE-BRANCH-SHA` and that is correct, not a defect: the measurements were
+> taken where the work is. A reader cannot tell a side-branch sha from a dead
+> one, hence this note. **Branch permission is not merge permission** — nothing
+> on `origin/wasm` is pre-approved for master, so treat these as citations to
+> evidence, not as work that has landed for everyone.
+> — frankwasm, 2026-08-30
 
 # The number, and what is actually behind it
 
@@ -168,6 +178,14 @@ wasmtime. Prio propagates down `blocked-by:` edges, but that edge does not
 exist — the dependency is stated in PROSE, in `devdocs/dev/wasm/PLAN.md` on a
 side branch, which is the least visible place in the repo. Flagged rather than
 changed: the edge and the number are the U lane's call, not this lane's.
+
+> **Both halves of that paragraph are now RESOLVED and it is kept only as the
+> record of why.** The `blocked-by:` edge exists — added to
+> `feature-target-wasm` on 2026-08-30 after the coordinator's correction that
+> *the number is U's call; the edge is a fact* — and the prio is 70, not 40.
+> The refusal count is 32 of 32, not 36 of 36; the four that were not this
+> decision have since landed (Phase 9j argv, Phase 9k `Frac`/`Int`).
+> — frankwasm, 2026-08-30
 
 Full measurement and the costing: `devdocs/dev/wasm/PLAN.md`, Phase 9j, on
 branch `wasm` (`b564c8f39`). Nothing applied there either.

@@ -11,6 +11,47 @@ created: 2026-08-27
 summary: "NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim."
 ---
 
+> **DANGLING SHAS BY DESIGN.** Every commit sha in this ticket is on branch
+> **`wasm`**, never on `origin/master`. This lane works in a standalone
+> checkout and pushes to its own branch, so `progress.sh check`'s
+> `SIDE-BRANCH-SHA` flag is correct rather than a defect. **Branch permission
+> is not merge permission**: nothing on `origin/wasm` is pre-approved for
+> master. Binary fingerprints (`fb83a9c891b9`, `5dcc99ff8725`) are sha256
+> prefixes of `compiler/pascal26`, not commits at all.
+> — frankwasm, 2026-08-30
+
+# STATE, 2026-08-30 (supersedes the park record below)
+
+**Held and active.** Branch `wasm` at **`cf75b5ce5`**, binary at self-host
+fixedpoint **`5dcc99ff8725`** (sha256 of `compiler/pascal26`, verified not
+inferred). Tree clean, everything pushed, all 30 `test/wasm` checks green.
+
+Four phases landed since the park record below was written — 9j argv, 9k
+`Frac`/`Int`, 9l `Write`/`WriteLn` of a real — so **that record is history, not
+status.**
+
+## Is the `blocked-by:` edge load-bearing? Yes, but only for the MILESTONE
+
+Worth stating precisely, because a stale edge on a visibly-progressing ticket
+misreports in both directions.
+
+- **The anchor IS blocked.** All **32 of 32** remaining `compiler.pas`
+  refusals are one shape — 17× `-50`, 8× `-100` (`LoadFile`), 6× `-52`, 1×
+  `IR op 54` — every one file/directory/environment I/O, every one gated by
+  `decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`.
+  There is no route to *pascal26 runs under wasmtime* that does not go through
+  that answer.
+- **The LANE is not blocked**, and that is measured rather than asserted.
+  Compiling `lib_classes.pas` and `lib_variants_surface.pas` for wasm32 shows
+  the non-anchor gaps: `IR_CLASSREF` (op 39, 8 bodies — the largest single
+  item), `IR_VAR_STORE` (op 43), `IR_SET_LIT` (op 33), and a set-typed
+  parameter (`TReplaceFlags`) that `WasmParamValType` has no answer for. Only
+  `IR_SYSCALL` (op 54) among them is the U family.
+
+So: keep the edge — it is a fact about the milestone — and read it as *the
+milestone waits*, never as *the agent waits*. The lane has named, measured work
+that the decision does not touch, and is doing it.
+
 # PARKED 2026-08-30, UNPARKED same day — Phase 9j is in progress again
 
 *(The park below stood for as long as it took the coordinator to point out that
