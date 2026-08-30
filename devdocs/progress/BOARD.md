@@ -68,7 +68,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (385)
+## backlog (386)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -79,9 +79,9 @@ _none_
 | bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing | A+S | 40 | bug | A bare ESP boot compiles a raw `clock_gettime64` into `Randomize`, behind a guard that never ran | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
+| bug-a-a-nested-routine-cannot-capture-a-fixed-size-array | A | 40→45 | bug | `nested routine: capture of fixed-size array 'x' not yet supported` — the lambda-lift machinery in pasparser_decl.inc:6701 captures scalars and DYNAMIC arrays by reference but refuses a fixed-size one, because a lifted param carries capTk/capArr/capDyn and has nowhere to put the array's length and low bound. Blocks refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths, where 21 fixed-size staging arrays are the exact thing a helper would need to see. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
-| bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted | A | 55 | bug | A routine declared `external` never reaches the durable param-pointee store, so `ProcParamPtrElemTk` stays at the `tyUnknown` sentinel for every one of its pointer params — and the narrowing guard that sentinel feeds fails OPEN. Identical signature, body vs `external`, is the whole difference: `procedure g(p: PInteger)` with a body correctly rejects a class argument; the same line declared `external 'c' name 'abs'` compiles clean and passes an object pointer to libc `abs`. FPC rejects it. This is the SAME fail-open as bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching, on the one registration path that fix did not cover. | — |
 | bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa | A+S | 45 | bug | ArgStr reads past argv into the environment on riscv32 and xtensa | — |
 | bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets | A | 50 | bug | x86-64's argv->frozen-string copy is now clamped and riscv32/xtensa clamp via PXXCStrToFrozen, but aarch64, arm32 and i386 were never checked — the parent ticket listed them and I did not close that gap. Also: the clamp is duplicated per path rather than shared, so a new target gets a new copy. | — |
 | bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area | A | 45 | bug | arm32 cdecl refuses any argument block over 4 core registers — so arm32 only HALF-joins the cdecl campaign | — |
@@ -420,6 +420,7 @@ _none_
 | refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 18 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
 | refactor-a-seven-frontends-borrow-rust-parser-helpers | A | 22 | refactor | Zig, ALGOL, Erlang, Fortran, LOLCODE and Whitespace all call five helpers whose bodies live in rparser.inc, so PXX_NO_RUST alone fails with 198 errors and Rust can only be omitted together with all six. Three different layers are marooned under one R prefix: AST constructors (share, wrong file), RWiden (numeric widening — SEMANTICS, should not be shared at all), and REmitParamRegSpill (raw x86-64 emission in a frontend). | — |
 | refactor-a-the-const-cast-width-table-is-the-third-copy | A | 35 | refactor | ConstIntCastWidth is a third copy of the builtin type-name table -- name to width+signedness, for const-expression casts -- and it carries the same longint/nativeint disagreements that bug-a-the-builtin-type-name-table-exists-twice just settled in the other two. Not a bug today: nothing observably differs. It is the count that is the problem. | — |
+| refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths | A | 45 | refactor | ParseSubroutine registers a routine's params on THREE paths — `external` (which then Exits), forward/interface, and the body pass — and each hand-copies the ~20 durable ProcParam* columns. Measured 2026-08-30 BEFORE they were equalised: body wrote all of them, forward 14, external THREE, and that one asymmetry produced three divergences from fpc in both directions. All three copies are now complete, so no defect is open; the DUPLICATION is, and it is a standing trap because a new column added to one copy silently misses the other two. The collapse is written and blocked: the 21 staging arrays are fixed-size locals the compiler cannot capture in a nested routine, and ParseSubroutine is re-entrant so they cannot be globals. | bug-a-a-nested-routine-cannot-capture-a-fixed-size-array |
 | refactor-a-the-managed-string-index-cow-rule-is-spelled-seven-times | A | 45 | refactor | The 'is this a managed string being indexed, so an lvalue write needs copy-on-write' rule is implemented independently in all SEVEN backends. Six spell the stride test `(elemSize = 1)`; aarch64 spells it `(Integer(IRIVal[node]) = 1)` because it never hoists the local — so a grep for the common spelling returns six files and silently omits the seventh. Changing the rule means editing seven files atomically, which is exactly what feature-unicodestring-model step 4 had to do. | — |
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 55 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-a-unify-the-five-remaining-pascal-postfix-suffix-walks | A | 35 | refactor | Successor to the six-copies ticket. Its inventory measured all six copies against FPC and found only site 6 diverging; site 6 is fixed. Unifying the remaining five is worth doing to prevent the NEXT site 6, but it has zero measured behavioural payoff and five conversions of regression risk, so it is filed at its real priority rather than inherited. Blocking design question inside: ASTIVal on an AN_DEREF currently means two different things. | — |
@@ -730,9 +731,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2858)
+## done (2859)
 
-2858 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2859 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (65)
 
@@ -870,7 +871,6 @@ _none_
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
-- [p 55] [A] bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted
 - [p 55] [B] bug-b-rtl-provides-no-ienumerable-generic-interface
 - [p 55] [C] bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead [parked — re-claim, do not duplicate]
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
@@ -942,6 +942,7 @@ _none_
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-a-nested-routine-cannot-capture-a-fixed-size-array (unblocks 1)
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
 - [p 45] [A] bug-a-2d-array-row-as-a-const-array-param-still-segfaults
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
@@ -1241,6 +1242,7 @@ _none_
 
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
