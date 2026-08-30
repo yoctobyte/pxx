@@ -428,8 +428,8 @@ def unoracled(limit=40):
     CMAPC = re.compile(r'\$\(COMPILER\)[^\n]*?\b(test/[A-Za-z0-9_./-]+\.c)\s+\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
     b2s = {}
     for l in mk:
-        for m in CMAPP.finditer(l): b2s.setdefault(m.group(2), (m.group(1), 'pas'))
-        for m in CMAPC.finditer(l): b2s.setdefault(m.group(2), (m.group(1), 'c'))
+        for m in CMAPP.finditer(l): b2s.setdefault(m.group(2), (m.group(1), 'pas', l))
+        for m in CMAPC.finditer(l): b2s.setdefault(m.group(2), (m.group(1), 'c', l))
     E2 = re.compile(r'expect_same\.sh\s+([A-Za-z0-9_./-]+)\s+(".*")\s*$')
     BIN = re.compile(r'\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
     rows = []
@@ -438,12 +438,23 @@ def unoracled(limit=40):
         if not m: continue
         names = set(BIN.findall(l)) & set(b2s)
         if len(names) != 1: continue
-        b = next(iter(names)); src, kind = b2s[b]
-        rows.append((b, src, kind, m.group(1), l, i + 1))
+        b = next(iter(names)); src, kind, cline = b2s[b]
+        rows.append((b, src, kind, m.group(1), l, i + 1, cline))
+    # Buildability is a property of (source, oracle) and does not change between
+    # runs, but re-deriving it costs ~20 minutes of fpc/gcc. Cache it so the
+    # RANKING can be iterated on -- the ranking is the part that needed fixing.
+    cachef = os.environ.get('UNORACLED_CACHE', '.unoracled_buildable')
+    want = sorted({r[0] for r in rows})
+    if os.path.isfile(cachef):
+        d = dict(l.split(' ', 1) for l in open(cachef).read().split('\n') if ' ' in l)
+        if set(d) >= set(want):
+            print("buildability from cache %s (delete it to re-derive)" % cachef)
+            buildable = {b for b in want if d.get(b, '').strip() == 'yes'}
+            return _rank(rows, b2s, buildable, E2, limit)
     tmp = tempfile.mkdtemp(prefix='unoracled_'); u = os.path.join(tmp, 'u'); os.makedirs(u, exist_ok=True)
     buildable = set()
     for b in sorted({r[0] for r in rows}):
-        src, kind = b2s[b]
+        src, kind, _cl = b2s[b]
         cmd = (['fpc', '-Mobjfpc', '-vw', '-FU' + u, '-o' + os.path.join(tmp, b), src]
                if kind == 'pas' else ['gcc', '-w', '-I', 'test', '-o', os.path.join(tmp, b), src])
         try:
@@ -452,18 +463,45 @@ def unoracled(limit=40):
                 buildable.add(b)
         except subprocess.TimeoutExpired:
             pass
+    with open(cachef, 'w') as fh:
+        for b in want:
+            fh.write('%s %s\n' % (b, 'yes' if b in buildable else 'no'))
+    return _rank(rows, b2s, buildable, E2, limit)
+
+
+def _rank(rows, b2s, buildable, E2, limit):
+    import os, re
     out = []
     cache = {}
-    for b, src, kind, name, line, ln in rows:
+    for b, src, kind, name, line, ln, cline in rows:
         cross = 'run_target.sh' in line
         if b in buildable and not cross:
             continue                      # an oracle can reach it; not our problem here
-        if src not in cache:
-            cache[src] = open(src, errors='replace').read()
+        if (src, cline) not in cache:
+            # The overlap signal must read every file the test COMPILES, not just
+            # the primary source. A multi-file test's whole point is that the value
+            # lives in the companion unit/header it pulls in, so keying on the .pas
+            # alone ranks "second file" identically to "computed" -- and the first
+            # run's entire hit=0.00 band turned out to be that artefact, not signal.
+            txt = open(src, errors='replace').read()
+            for d in re.findall(r'-(?:I|Fu)([A-Za-z0-9_./-]+)', cline):
+                if os.path.isdir(d):
+                    for fn in sorted(os.listdir(d)):
+                        if fn.endswith(('.pas', '.inc', '.h', '.c')):
+                            txt += open(os.path.join(d, fn), errors='replace').read()
+            m_uses = re.search(r'(?is)\buses\b(.*?);', txt[:4000])
+            if m_uses:
+                for unit in re.findall(r'[A-Za-z_][A-Za-z0-9_]*', m_uses.group(1)):
+                    for ext in ('.pas', '.h', '.c'):
+                        for cand in (os.path.join('test', unit + ext),
+                                     os.path.join('test', unit.lower() + ext)):
+                            if os.path.isfile(cand):
+                                txt += open(cand, errors='replace').read()
+            cache[(src, cline)] = txt
         args = split_args(E2.search(line).group(2))
         exp = args[-1] if args else ''
         toks = tokens(exp)
-        hit = 1.0 if not toks else sum(1 for t in toks if t in cache[src]) / len(toks)
+        hit = 1.0 if not toks else sum(1 for t in toks if t in cache[(src, cline)]) / len(toks)
         why = 'cross-target' if cross else ('%s cannot build it' % ('fpc' if kind == 'pas' else 'gcc'))
         out.append((round(hit, 2), name, src, why, exp[:70], ln))
     out.sort(key=lambda r: r[0])
