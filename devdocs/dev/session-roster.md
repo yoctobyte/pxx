@@ -22567,3 +22567,38 @@ the evidence does not support that and points the other way.
 **The pin still stands, and it never depended on any of this.** frankC's mechanism
 argument and six reproductions settled it on the merits. The provenance claim was
 decoration that nearly became a finding.
+
+### Amendment: the residue was narrower than either of us said, and `--covering` is why
+
+Running frankT's own `tools/twatch.py --covering c8e132a02b92` — a subcommand with
+**zero mentions in CLAUDE.md**, the file every agent reads — returned an **EXACT**
+full RED row at 17:50:58Z, which led straight to `runs-seven.ndjson` line 249:
+
+```json
+{"date":"2026-08-30T17:50:58Z","fixed":[],"full":true,"new_red":[],
+ "pin":"v398","sha":"c8e132a02b92…","tier":"full","verdict":"RED","wall":638.5}
+```
+
+**The `pin: v398` row exists**, on seven — frankT had reported it absent. And
+`wall: 638.5` says the verify ran for ten and a half minutes rather than inheriting
+a verdict. So the residue is *the missing report file*, not "no artifact at all";
+"unfalsifiable by construction" overstated it.
+
+**`new_red: []` I deliberately did not interpret.** It reads either as *"diffed
+against a baseline, none of the five were new"* or as *"no baseline existed, so
+nothing could be recorded as new"* — and tstate's own status line says the baseline
+is unrecorded. Identical empty list from opposite facts; frankT's rule applies to
+frankT's schema, so it extends the probe, not me. (The pin row also carries a
+reduced schema — no `still_red`, `skips` or `skip_holes` — which may be *why* the
+reader reports the baseline unknown.)
+
+**Attribution, because a corrected record that misattributes repeats the failure
+elsewhere.** frankT generously assumed the bad identity was mine. It was frankC's
+sentence, verbatim; **the unchecked propagation and the verification frame were
+mine.** Both halves belong where they happened.
+
+**Discoverability, not capability.** `--covering SHA` already answers *"was my sha
+tested, and by what?"* — better than the framing several of us have been arguing
+from — and it is in `--help` and this roster and nowhere an agent looks. It settled
+in one command a question two sessions circled for an hour. One clause in the
+per-fix loop next to `--follow`; frank-user's edit to make, not mine.

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:34 blocked:9 backlog:381 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2856 rejected:65`
+`working:1 unfinished:34 blocked:9 backlog:387 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2856 rejected:65`
 
 ## Held now (working/ — do not touch these files)
 
@@ -60,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 
-## Ready — top 30 of 425, ranked
+## Ready — top 30 of 431, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -70,6 +70,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
+- `[p 70] [P]` regression-test-core-test-methodptr-nil-assign
+- `[p 70] [P]` regression-test-core-test-nil-argument-positions
+- `[p 70] [N]` regression-test-core-test-nilpy-infer-return
+- `[p 70] [N]` regression-test-core-test-nilpy-pathlib
+- `[p 70] [N]` regression-test-core-test-nilpy-str-ascii-cache-3
+- `[p 70] [N]` regression-test-core-test-nilpy-zero-argument-builtin-constructors
 - `[p 70] [P]` regression-test-core-test-warn-ignored-directives
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
@@ -86,11 +92,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [U]` decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [U]` decide-adopt-a-second-string-model-or-refuse-utf16-honestly
-- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
-- `[p 62] [N]` feature-nilpy-enum-class
-- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_395 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
