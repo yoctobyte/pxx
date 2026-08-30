@@ -8,16 +8,15 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64. | — |
-| feature-opt-static-literal-blocks-should-never-be-written-to | A+O | 40 | feature | Static literal blocks should never be written to at all | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge. Re-measured 2026-08-30 late (frankwasm) at fixedpoint 414252435fb1, corpus content-hashed identical to frankB's: 6a Generics.Defaults ok (procs=1661); 6b BOTH known walls are DOWN -- bug-b-rtl-provides-no-ienumerable-generic-interface and bug-a-max-template-params-is-4-but-rtl-generics-declares-6 are both landed -- and the INTERFACE SECTION NOW COMPILES CLEAN on its own (all 948 lines, both dictionary includes, procs=1783, non-vacuous). 6b full stops on EXACTLY ONE error at generics.collections.pas:4165, which is the file's LAST LINE, the bare `end.`: 'unexpected token in a unit implementation section'. So the remaining defect is in the implementation section (949-4165) and the parser has a scope it thinks is still open at EOF -- same family as 28b2851cd. Truncation bisect over the 316 declaration boundaries is the localisation. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy: near: is now stale across a UNIT boundary (it points into our lib/rtl/classes.pas while the error is in the corpus file), and file/line has been mispaired before. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit. | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 
-## unfinished (32)
+## unfinished (33)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,6 +41,7 @@ _none_
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-user-defined-decorators | N | 68 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython | O | 55 | feature | Container subscript is NilPy's worst primitive against CPython: b[2] 234 ns vs 12 (19x), d['k'] 495 vs 30 (16x), while pxx BEATS CPython at isinstance, len, exec and a zero-arg call. One allocation removed (PyVarSlotSet's unconditional s := ''), giving b[2] -41%. RESOLVED SINCE (2026-08-30): all three remaining candidates are now measured and NONE is worth chasing here -- per-call managed-temp init was a codegen bug, fixed by frankA in d27b4a28a; the dict half is the static-literal pass, now named in decide-the-o3-tier-*; the 16-byte rep-stosb clears are ~4%, under the noise floor. What is left of this ticket is a re-measurement, not an investigation. | — |
+| feature-opt-static-literal-blocks-should-never-be-written-to | A+O | 40 | feature | Static literal blocks should never be written to at all | — |
 | feature-pal-esp-posix-fd-semantics | S | 20→30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
@@ -1037,6 +1037,7 @@ _none_
 - [p 40] [N] feature-nilpy-str-surface-gaps-2026-08-09
 - [p 40] [A+O] feature-opt-dynarray-grows-in-place
 - [p 40] [A+O] feature-opt-o3-now-has-differential-coverage-and-it-should-be-standing
+- [p 40] [A+O] feature-opt-static-literal-blocks-should-never-be-written-to [parked — re-claim, do not duplicate]
 - [p 40] [A] feature-rtl-libc-frontend-sites-and-thread-errno
 - [p 40] [T] feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets
 - [p 40] [T] feature-t-audit-tests-that-pass-with-the-implementation-removed

@@ -1,8 +1,8 @@
 ---
 prio: 40
 track: A
-status: working
-owner: frank-optimize
+status: unfinished
+owner: 
 ---
 
 # Static literal blocks should never be written to at all
@@ -136,3 +136,9 @@ answer is "not worth it", that is a legitimate close, but it should be a decisio
 rather than a silence.
 
 **Not claiming this further.** Released.
+
+## Parked 2026-08-30
+
+five backends landed and clean; the x86-64 half was built, measured 2.3% slower at 1/11 pairs and dropped. What remains is a design fork, not implementation: x86-64 -O2 still writes its static blocks and a per-release floor test is the priced-and-rejected answer.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
