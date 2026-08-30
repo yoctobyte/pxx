@@ -126,6 +126,119 @@ tossed one.
    pointed at `devdocs/dev` and needs a directory argument, which is a small
    change and the cheapest part of this ticket.
 
+## The sweep itself — measured 2026-08-30, audit only, nothing edited
+
+The ticket above was filed from an inventory. The sweep then ran, and it found
+something sharper than staleness. Recorded here because it changes what the
+classification decision is *for*.
+
+### 1. The tree hands agents the exact command the repo refuses
+
+Four sections in unowned pages are headed as gates and open with a command that
+`.claude/hooks/no-full-suite.sh` now **denies**:
+
+| page | heading | first instruction |
+| --- | --- | --- |
+| `todo-dynamic-arrays.md:219` | **## Verification Gate** — "Run:" | `make test` then `make test-nilpy` |
+| `threads-todo.md:198` | **## 7. Exit Gate** — "Each phase must pass:" | "1. Default `make test`." |
+| `nil-python.md:83` | **## Regression Tests** | `make test-nilpy` |
+| `esp32-support.md:86` | "Run + validate" | `make test-esp-bare` |
+
+The hook's own header comment names the reason it exists: an agent *"reached for
+`make test-nilpy` twice in one session."* **These pages are where that
+instruction still lives.** The hook is in `.claude/` and is owned; the
+instruction is in `devdocs/developer/` and is not, so nobody connected them.
+
+This is not a stale fact. It is a **live supply of the behaviour the hook was
+built to stop**, and an agent following it hits a REFUSED wall with no idea why,
+because nothing on the page knows the rule changed.
+
+`threads-todo.md`'s ladder is the `autonomy.md` shape again — *partly* stale.
+Items 2 and 3 (self-host fixedpoint; the same path under `--threadsafe`) are
+still exactly right. Only item 1 is superseded. A reader cannot tell which.
+
+**Honest scoping, because the raw grep overstates.** 24 of 58 top-level pages
+mention a now-denied command; **only these four prescribe one.** The rest are
+*descriptive* — "`make test` covers procedural Pascal, units and arrays",
+"all wired into `make test`", and `cli.md`'s reference table of what each
+Makefile target does. Those are facts about where coverage lives, they are not
+wrong, and they should not be swept. `project-state.md:155` looks prescriptive
+in a grep and is not: it sits under *"Verification passed after the batch:"* —
+past tense, a record, correctly.
+
+### 2. Three "not implemented" claims, disproved by measurement
+
+Compiled against `$(PXX_STABLE)`, not reasoned about:
+
+- `todo.md:306` — *"Float intrinsics. `Trunc`, `Round`, `Int`, `Float` not
+  implemented"*, and `limitations.md:62` says the same. All work:
+  `Trunc(2.7)=2`, `Round(2.5)=2`, `Int(2.7)=2.0`, `Frac(2.75)=0.75`.
+- `nil-python.md:77` — *"Containers, classes, dynamic attributes ... are outside
+  the v1 frontend"*, and `nil-python-plan.md:126` — *"containers, no classes
+  yet"*. A nine-line `.npy` with `class Point` and a method compiled and printed
+  `7`. NilPy is mainline with a gated suite; CLAUDE.md lists classes in its
+  coverage.
+- `ir-handover.md:104` — *"Optimization passes (none planned yet — this is by
+  design for now)"*. Track O is a formal lane; `-O2` is the proven default and
+  `-O3` a free tier for new passes.
+
+Same class as `concurrency.md`'s false limitation found in `docs/**` last night,
+and the same mechanism: **a "not supported yet" is never contradicted by use,
+because nobody who reads it tries.** Optimistic errors get removed by the first
+reader who hits them; pessimistic ones accumulate forever.
+
+### 3. The heading that asserts a legal position
+
+`licensing-concerns.md:10` — **`## Current Position: No License Yet`**.
+
+The repo root now carries `LICENSE` *and* `LICENSE.md`, and `README.md` states a
+per-component split: zlib for the embedded builtin code, 0BSD for examples,
+CC BY 4.0 for docs. The page carries no `**Status:**` line, so nothing marks it
+as a record of a past position.
+
+Flagged, not fixed — but of everything in this tree this is the one whose
+staleness is not merely an engineering cost, and a launch is the moment someone
+reads it.
+
+### 4. Why nothing here was corrected — the tree does not classify itself
+
+**12 of 58** top-level pages carry any self-classifying line (`**Status:**`,
+`**Updated:**`, `**Audited:**`, `**Authored**`). Seven more declare themselves by
+filename prefix (`plan-*`, `anomaly*`), and the 34 files under `historic/` and
+`anomaly-evidence-2026-06-02/` declare themselves by location. That still leaves
+roughly forty top-level pages a reader **cannot classify without reading the git
+log**.
+
+The best of them show it is a solved problem when someone bothers:
+
+- `plan-rtti-streaming-lfm.md:3` — *"**Status (2026-05-31): delivered.** This
+  document is retained as the design [record]"*. Perfect: old, accurate, and
+  says which.
+- `frontends-and-targets-strategy.md:122` — *"## Current read (subject to change
+  — this is brainstorm)"*. A currency heading that disarms itself.
+
+And the worst is the one the ticket already named: `nil-python-plan.md` is
+titled **"Plan:"** for a frontend that is now **mainline with its own gate**, and
+says nothing anywhere about having been delivered. The plan was executed; the
+plan does not know. A reader cannot tell a plan not yet done from the record of
+one that was — and that ambiguity is what makes correcting any of these pages
+unsafe, because **correcting a record falsifies history**.
+
+So: nothing in this tree was edited. That is not caution, it is the finding.
+The classification in step 1 below is not preparation for the real work — it is
+the work, and roughly forty pages need one line each.
+
+### Revised recommendation
+
+Step 1 of the ask stands, and gets cheaper and more urgent:
+
+- **The four gate prescriptions above are separable and should not wait** for the
+  classification. They are actively harmful, they are four edits, and three of
+  the four pages are plainly live documents rather than records.
+- The `licensing-concerns.md` heading is a **Track U** call, not a docs edit.
+- Everything else waits on classification, and the cheapest sufficient
+  classification is one `**Status:**` line per page — not a rewrite.
+
 ## Prior art from the sweep that produced this
 
 - `devdocs/dev/README.md` §4 — where that directory rots, and why a *command*
