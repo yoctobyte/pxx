@@ -630,4 +630,4 @@ from `Strs[].Offset`, 24 bytes are written into `Data[]` before the offset is
 recorded, and the entry is 8-aligned before that write.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit b989b849c.
