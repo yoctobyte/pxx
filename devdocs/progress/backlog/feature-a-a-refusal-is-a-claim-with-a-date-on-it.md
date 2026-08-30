@@ -9392,3 +9392,148 @@ one everybody reads. The floor is what fires; the label is what a human believes
 disagree the label wins the argument and loses the truth.** Corrected the label; left the
 escalated 531 stdout-only ratchet alone, which is right — that one is a live ratchet doing its
 job and is not the same instrument.
+
+---
+
+## 198 — A SYSCALL NUMBER IS TWO FACTS: THE NUMBER AND THE SIGNATURE
+
+*(frankS, 2026-08-30, landing the riscv32/xtensa `PXXSys*` arms — and walking into a trap it
+had built itself.)*
+
+When frankS filed the wrapper ticket it included a **measured** table of syscall numbers, so
+nobody would re-derive them. Good practice, and the numbers were right. Beside them it wrote,
+of rv32 `lseek`, that 62 *"is the `_llseek` split-offset question the existing riscv32 block
+already documents — for source loads the plain form is what qemu-user tolerates"*, taken from
+a comment in `platform_backend.pas`. It then implemented from its own table:
+
+```
+openat(AT_FDCWD,"test/hello.pas",O_RDONLY) = 3
+llseek(3,0,2,NULL,UNKNOWN)                 = -1 errno=22 (Invalid argument)
+read(3,0x2b2ad050,-22)                     = -1 errno=14 (Bad address)
+```
+
+**rv32 has no plain `lseek`.** 62 is `_llseek(fd, hi, lo, loff_t *result, whence)`; the 3-arg
+form leaves the result pointer NULL, the size comes back −1, and `LoadFile` publishes an
+**empty string with no error raised** — *the exact silent-wrong-value failure the ticket was
+written to prevent, reached through the ticket's own guidance.*
+
+> **A syscall number is two facts. My table was careful, correct, and covered one of them.**
+
+And that is the mechanism: **because the numbers were measured, the table read as sufficient**,
+so the *signature* — arriving from untested prose in a comment — inherited the credibility of
+the measurement sitting next to it. A correct artefact is not a checked artefact. Compare
+191b: an improving metric is not a passing test; here, a **right table is not a complete
+answer**, and its rightness is what stopped anyone asking what else the question had in it.
+
+The tell was one `strace` away the entire time. The fix was to mirror `PalBackendSeek`, which
+has carried the correct split **in that same file** all along — the implementation was fixed
+and the constant block's comment was not, and the stale one is what a reader meets first
+because it sits beside `SYS_lseek = 62`. Filed as
+`bug-b-platform-backend-rv32-comment-claims-plain-lseek-is-tolerated` [B p30]: **a comment
+asserting a runtime behaviour is a claim, and that one was falsifiable in one `strace`.**
+
+### 198a — `err[-1]`: the tool reported something ADJACENT to the truth
+
+frankS's CFAIL sweep recorded `err[-1]`, the **last** line of compiler output. **A compiler
+prints the cause first and token-context tails after.** So every CFAIL detail classified in
+that sweep was the wrong line — and worse, the sweep **invented families that do not exist**
+("6 × events") out of token fragments that happened to repeat.
+
+> *The tool reported something adjacent to the truth, which is far more expensive than a tool
+> that reports nothing.*
+
+Third harness defect in two sessions, same family as the swapped baseline file (192) and the
+stale binary path. A tool that reports nothing gets fixed the day it is noticed. A tool that
+reports something plausible **gets built on**, and the structures built on it — here, a
+partition and a set of invented failure families — look like findings.
+
+### 198b — the conclusion was right and the evidence was wrong
+
+frankS had recorded 6 scheduler/event programs as CoSwitch-blocked. Their **first** error is
+actually `undefined variable (SYS_gettid)` — `scheduler.pas` defines `SYS_gettid`/
+`SYS_exit_group` for four targets with **no terminal `{$else}`**, while its sibling
+`palthread.pas` has one. frankS added the constants locally to find out, and all 6 then go
+straight to `unsupported node in IR codegen: coswitch`. **So the conclusion held and the
+evidence for it did not**: the constant gap is real drift, buys zero programs, and is masked
+behind CoSwitch.
+
+This is the shape the index has flagged before from the coordinator's side — *a right
+destination reached by a false argument does not self-correct*, because the destination keeps
+looking justified. The correct disposal is what frankS chose: a line in the CoSwitch ticket
+(whoever takes it hits the constant gap immediately), not a ticket of its own.
+
+---
+
+## 199 — A SEARCH WHOSE EVERY PROBE REPAIRS THE THING IT IS PROBING
+
+*(frank-optimize-b4, 2026-08-30, solving the 83× of face 196. Filed as
+`bug-a-a-hot-write-to-a-data-page-that-shares-with-code-costs-1600x-under-qemu` [A p45].)*
+
+**The quantity was an address.** `elfwriter.inc` emits one RWX `PT_LOAD` with data immediately
+after code, so the boundary page holds both — and a static string literal's **refcount word
+can land on the same 4 KiB page as translated code.** A qemu-style emulator invalidates its
+translations when the guest writes to a page it translated code from, so a loop writing that
+refcount re-translates the code beside it **every iteration**.
+
+```
+SLOW (aarch64 -O3):  rc word 0x420ea8 -> page 0x420000 ; highest proc 0x420710 -> 0x420000  SAME
+FAST (+75 KB code):  rc word 0x433418 -> page 0x433000 ; highest proc 0x42bc50 -> 0x42b000  different
+```
+
+| binary | static blocks | rc on a code page | time |
+| --- | --- | --- | ---: |
+| x86-64 −O3, **native** | yes | yes | 0.009s |
+| x86-64 −O3, under **qemu** | yes | **yes** | **14.661s** |
+| x86-64 −O2 under qemu (rc on heap) | no | — | 0.435s |
+| x86-64 −O3 **padded** under qemu | yes | **no** | **0.118s** |
+
+Not an aarch64 defect: **x86-64 has it too, at 1600×, on the binary that runs in 0.009s
+natively.** And the padded −O3 build is *faster than the −O2 build that has no static blocks
+at all* — so the pass was never the problem; the address was.
+
+**Why 196's bisect could not work, sharpened past "halving removes the interaction":**
+
+> *Removing rows shrinks the code, which moves the data, which moves the literal off the page.
+> The bisect was not a passive observer; the act of bisecting **was** the fix, applied
+> silently, in both directions.*
+
+Every subset was faster because **every subset relaid the binary.** That is a category worse
+than an exonerating measurement: it is a **search whose every probe repairs the thing it is
+probing**, so the search is guaranteed to terminate with "no row is responsible" no matter
+where the fault lies. Reduction, delta-debugging and bisect all assume the probe does not
+perturb the subject. Anything sensitive to **layout** — code size, alignment, address, cache
+set, page boundary — breaks that assumption silently.
+
+**The counter-move is the one b4 used: hold size constant.** The padded build keeps every row
+and changes only the literal's page. That is a probe that varies one thing, where removing a
+row varies two.
+
+### 199a — the watcher auto-closing it was the cliff's SIGNATURE, not its absence
+
+Mid-triage, T auto-closed the regression: `0f0a5619a413` passed after `5bb3e120d3f7` was red,
+**with nothing fixed in between**. That reads as a flake and is the opposite — **any commit
+that changes code size flips which page the literal lands on.** So a fresh NEW-RED stub for
+this source is *the same finding with a new range*, not a second bug, and b4 wrote that into
+the closed ticket so the next reader does not re-triage from scratch.
+
+Generalisation: **for a layout-sensitive defect, spontaneous red↔green transitions across
+unrelated commits are diagnostic**, not noise. The flakiness *is* the fingerprint.
+
+### 199b — the second scope correction, and native was the configuration that could not show it
+
+b4 had told the coordinator *"x86-64 is unaffected as far as I can measure"*. True, and the
+scope was wrong in exactly 196a's way — it could only measure **natively**, and **native is
+the one configuration in which this cannot appear**. Under emulation x86-64 is affected
+*worse* than aarch64.
+
+Same worker, same night, second time: a real, correctly-taken measurement silently describing
+a subset of the population the claim was applied to. The `-O2` promotion stays withdrawn and
+now for a better reason — promoting would put a mutable word beside code in **every** binary
+at the proven default.
+
+**And the honest tier fix, stated as such.** The loop count is now
+`{$ifdef CPUX86_64} 200000 {$else} 2000`, aarch64 −O3 back to 1.07s. b4 did not hide the
+cliff: the static refcount starts at 2^30, so **no reachable iteration count could ever prove
+the reference is taken** — it was a smoke row all along. The proof that the test was not
+weakened is that **all four arms still produce byte-identical output against one expectation**;
+if the count were being asserted, they could not.

@@ -1,12 +1,29 @@
 ---
 slug: bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards
 track: A+S
-prio: 50
+prio: 60
 type: bug
 found: 2026-08-30
 found-by: frankS
 owner: unassigned
 ---
+
+> **prio 50 → 60 by the coordinator, 2026-08-30.** Not a disagreement with the filer's
+> judgement — an argument the filer could not make about its own ticket. Three facts compound:
+> the encoder emits **silently wrong code** rather than failing; `test_overflow_qplus_narrow`
+> already sits at **758 KiB against JAL's ±1 MiB**, so this is 74% of the way to firing on a
+> test we run today, not a theoretical limit; and **the fix template already exists on the
+> sibling backend**, so the cost is low and the design question is settled. The repo has also
+> already paid for this defect twice — riscv32's `IR_JUMP_IF_FALSE` emits bne-skip + jal
+> because a bare `beq` truncated and branches landed inside unrelated code (chess perft
+> counted 164), and xtensa's version cost "a disassembly and the arithmetic
+> 262591-262144=437". **Both times the call site was worked around and the encoder was left
+> sharp.** Guarding it is the root-cause fix those two microfixes deferred.
+>
+> Expect the guard to **turn some silent miscompiles into compile errors** — that is the
+> point, and it is what surfaced the xtensa veneer ticket's five programs. Budget for new
+> reds, do not read them as a regression.
+
 
 # riscv32's PC-relative encoders silently truncate; xtensa already guards
 
