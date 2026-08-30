@@ -212,4 +212,4 @@ Filing it as `bug-c-a-c-function-s-calling-convention-depends-on-the-target`
 rather than silently widening this one.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit fe422d136.
