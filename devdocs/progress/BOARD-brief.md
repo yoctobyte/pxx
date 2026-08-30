@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:26 blocked:7 backlog:330 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2691 rejected:56`
+`working:4 unfinished:26 blocked:7 backlog:329 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2691 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45` [A+S] — owner: frankS
+- `feature-nilpy-user-defined-decorators` [N] — owner: frankwasm
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
@@ -52,7 +53,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 350, ranked
+## Ready — top 30 of 349, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -66,7 +67,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-core-test-c-gtk3-stock
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
-- `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [P]` bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
@@ -84,5 +84,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
+- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_320 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_319 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
