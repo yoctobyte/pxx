@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `c13654637236` | 2026-08-30T17:11:36Z | RED (native) | 102.5s | `7076e6ff8ad5` RED |
+| seven | `c13654637236` | 2026-08-30T17:21:13Z | RED (full) | 543.6s | `c13654637236` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -42,4 +42,3 @@
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-core#src:test/test_warn_ignored_directives.pas** — test/test_warn_ignored_directives.pas tools/expect_same.sh (seven): bad `83fb0ef72419`, last good `42fde2a7e025`, 4 commit(s) in range
-- **test-fgl#src:compiler/.pascal26.fixedpoint** — compiler/.pascal26.fixedpoint tools/run_fgl_corpus.sh (seven): bad `719bef10ea68`, last good `a8947307fa98`, 5 commit(s) in range
