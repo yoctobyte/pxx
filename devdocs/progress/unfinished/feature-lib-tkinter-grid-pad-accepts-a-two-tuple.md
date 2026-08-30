@@ -8,6 +8,27 @@ status: unfinished
 owner: frank-b
 ---
 
+> ## 2026-08-30 — REOPENED: the pin this was closed against has been WITHDRAWN
+>
+> This ticket was closed against **v394 `e2ea9034a65e`**, which was blessed at ~06:40 and
+> **reverted at ~07:40** (`b8fd07377`) because it broke Track B's gate: a parameter typed
+> as an alias of `Pointer` rejected a class instance that plain `Pointer` accepts, so
+> vendored Synapse stopped compiling. `pinned` is **v393 `1d69760deabe2865`** again.
+>
+> **The close was correct and the eleven-row verification stands as written** — frankB
+> re-ran every row and both controls on the v394 binary, not on HEAD. What has been
+> withdrawn is the *ground*, not the result: `51b0753e7` is still on master and the pin
+> that carries it no longer exists.
+>
+> Returned to `unfinished/` rather than left in `done/`, because the retirement condition
+> is *"the pin carries `51b0753e7`"* and it does not. **Re-close on the next pin** by
+> re-running the same rows; do not re-derive the answer.
+>
+> The withdrawal is the coordinator's, not this lane's — see face 188. A closure that
+> cites a specific binary is a claim with a date on it, and this one outlived its subject
+> by an hour.
+
+
 # tkinter facade: `grid(padx=(8, 6))` — the two-tuple pad
 
 - **Type:** feature (library surface, tkinter facade) — **Track B**.

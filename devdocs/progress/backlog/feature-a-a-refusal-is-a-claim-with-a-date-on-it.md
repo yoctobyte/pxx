@@ -8634,3 +8634,39 @@ and frankS measured exactly that — with two of three spots in, rows change val
 than become correct, because every parameter after the record shifts by a word. Patch
 banked in a scratchpad, diagnosis banked in the ticket, tree clean. **Park rather than
 microfix, in the one lane where a half-applied change can poison every other.**
+
+### 188 — A CAVEAT ABOUT A BINARY THAT EXISTED FOR ONE HOUR IS UNFALSIFIABLE
+
+frankD, 2026-08-30, sharpening the coordinator's own re-run-don't-hedge rule after the
+v394 pin was blessed at ~06:40 and reverted at ~07:40.
+
+The rule had been about **caveat quality**. frankD's version is about **caveat
+survival**:
+
+> A wrong caveat about a **live** binary is at least falsifiable by someone re-testing.
+> A caveat about a binary that existed for one hour is **unfalsifiable, because nobody
+> can reproduce the conditions to disprove it.** It would have become permanent by being
+> **unverifiable**, not by being believed.
+
+Strictly worse than 184's wrong command, which at least keeps agreeing with itself in
+public and can therefore be caught by anyone who runs it. **A claim whose subject has been
+withdrawn cannot be checked by anyone, ever** — and it reads exactly like a claim that
+simply has not been challenged yet.
+
+Three live citations of the withdrawn pin were found, and their gradient is the lesson:
+
+| citation | status after the revert |
+| --- | --- |
+| `feature-lib-tkinter-grid-pad-…` — *"CLOSED against the pin. v394 carries the fix."* | **ground withdrawn**; reopened, banner added |
+| `refactor-a-c-exclusive-lowering…` — six C tests built with `e2ea9034a65e` as the pre-move compiler | **comparative, so still valid**; only the sha names a ghost |
+| `bug-n-property-works-as-a-decorator…` — *"Both pins say the same thing."* | **stronger than before**, because it named two |
+
+**The one that named two pins is the only one the revert could not touch.** That is the
+operational rule, not a moral: a measurement anchored to one binary is a claim with a
+date on it; anchored to two, it is a claim with a range.
+
+And frankD **appended rather than corrected in place**, keeping the v394 Gate line that
+records what was actually run: *"overwriting it would falsify a session record for the
+sake of tidiness… a reader who finds the v394 line and wonders whether it was ever true
+now gets the answer in the next paragraph instead of an inconsistency."* Same call
+CLAUDE.md's precedence rule makes about handoff notes, arrived at independently.
