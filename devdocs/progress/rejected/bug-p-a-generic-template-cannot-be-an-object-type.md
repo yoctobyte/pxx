@@ -1,13 +1,44 @@
 ---
 slug: bug-p-a-generic-template-cannot-be-an-object-type
 track: P
-prio: 60
+prio: 0
 type: bug
-status: backlog
+status: rejected
 blocked-by: []
 summary: "`TCustomPointersCollection<T, PT> = object` is rejected with `generic templates must be class, record, interface, array or procedure declarations`. FPC accepts a generic over an OBJECT type; the frontend's template-kind check simply has no arm for it. This is the CURRENT stop for `uses Generics.Collections` (generics.collections.pas:146) — measured on both HEAD and pinned, so it is not a recent regression."
 owner: unassigned
 ---
+
+# REJECTED 2026-08-30 (frankP) — DUPLICATE, filed before I read the decided/ queue
+
+Superseded by **`bug-p-object-value-types-standard-meaning`** [P p70,
+`working/`, owner frank-user], which the owner decided in
+`decided/decide-revisit-object-types-rtl-generics-fired-the-trigger` hours before
+I filed this. Same wall, same line, same message. **Do not work this ticket**;
+that one is a live lock.
+
+I filed it off a measurement without checking `decided/` or `working/` for the
+same subject first — the wall reproduced, so the finding was real, but the
+*ticket* was not new. A duplicate is the invisible-work problem in the ticket
+system itself: two entries that each look individually reasonable, and the reader
+who greps for the wall now has to work out which is authoritative.
+
+**One fact from my measurement that the live ticket does not carry**, offered
+here rather than edited into another lane's `working/` ticket: the wall
+reproduces **identically on `pinned` and on HEAD** — same line, same message —
+so it is long-standing and NOT a regression from the generics work of
+2026-08-29/30. That distinction is worth having before anyone bisects for it.
+
+The reproduction command, for whoever wants it:
+
+```
+$ ./compiler/pascal26 -Fu<rtl-generics/src> coll.pas   # {$mode delphi}; uses Generics.Collections
+$ stable_linux_amd64/default/pinned -Fu<same> coll.pas
+```
+
+Both: `generics.collections.pas:146: generic templates must be class, record,
+interface, array or procedure declarations`.
+
 
 # A generic template cannot be an `object` type
 

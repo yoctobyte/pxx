@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (368)
+## backlog (367)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -171,7 +171,6 @@ _none_
 | bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface | P | 65 | bug | A unit that specializes another unit's generic IN ITS INTERFACE gets the template's method bodies streamed into the interface section, where a method implementation is not a declaration: `unexpected token in a unit interface section` pointing at the TEMPLATE's file. Pre-existing on pinned, objfpc binder form, no Delphi surface involved — the same-file and the program-level cases both work, and a template with only FIELDS works cross-unit too. This is the next wall for `uses Generics.Collections`, because real templates have methods. Named as tgeneric91 in test/test_generic_spec_per_unit.pas's own header but never ticketed. | — |
 | bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template | P | 55 | bug | In mode Delphi, `TE = TBox<TOuter>;` fails with `unknown type: TOuter` when TOuter is declared AFTER TBox in the same type section — reorder the two declarations and the identical program compiles and runs. FPC accepts both orders. DelphiRewriteGenericUses splices its minted alias declarations immediately behind the TEMPLATE, so they can only name types already declared at that point. objfpc is unaffected (its aliases are emitted at the use). 20-line repro, both orders. | — |
 | bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name | P | 45 | bug | A program declaring `TBox<T>` while also importing a unit that declares `TBox<T>` now parses, but every use resolves to the IMPORTED template: `b.Local` answers `no such member`. FPC takes the local declaration and prints 42. The declaration is parsed and then loses to the import. | — |
-| bug-p-a-generic-template-cannot-be-an-object-type | P | 60 | bug | `TCustomPointersCollection<T, PT> = object` is rejected with `generic templates must be class, record, interface, array or procedure declarations`. FPC accepts a generic over an OBJECT type; the frontend's template-kind check simply has no arm for it. This is the CURRENT stop for `uses Generics.Collections` (generics.collections.pas:146) — measured on both HEAD and pinned, so it is not a recent regression. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
 | bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
@@ -687,7 +686,7 @@ _none_
 
 2779 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (57)
+## rejected (58)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -707,6 +706,7 @@ _none_
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-uforth-rc4-corpus-stack-underflow | N | 45 | bug | WITHDRAWN — not a pxx bug. `ERROR: Stack underflow` came from MY harness invoking `INCLUDE testje.for`; uforth's INCLUDE POPS a string, so the correct form is `\"testje.for\" INCLUDE`. With that, all four RC4 corpora are byte-identical to CPython. | — |
 | bug-nonreproducible-miscompile-2026-06-02 | A | 50 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
+| bug-p-a-generic-template-cannot-be-an-object-type | P | 0 | bug | `TCustomPointersCollection<T, PT> = object` is rejected with `generic templates must be class, record, interface, array or procedure declarations`. FPC accepts a generic over an OBJECT type; the frontend's template-kind check simply has no arm for it. This is the CURRENT stop for `uses Generics.Collections` (generics.collections.pas:146) — measured on both HEAD and pinned, so it is not a recent regression. | — |
 | bug-p-lowercase-resolves-to-a-different-implementation-in-the-seed-build | P | 45 | bug | DUPLICATE of bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed, filed 2026-08-28. Tombstone kept so citations resolve; the surviving ticket carries this one's analysis. | — |
 | bug-pascal-local-var-not-registered-wrong-sym | P | 0 | bug | REJECTED — "a method's local is not registered" — my evidence was wrong | — |
 | bug-r-fpc-seed-drift-rexprrecid-needs-a-forward | R | 60 | bug | FPC seed canary RED: rparser.inc calls RExprRecId at :1416, defined at :1754, no forward. pxx self-hosts fine (it does not require the forward); FPC does, so the cold-start bootstrap is broken. One-line fix, Track R's file. | — |
@@ -778,7 +778,6 @@ _none_
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- [p 60] [P] bug-p-a-generic-template-cannot-be-an-object-type
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 - [p 60] [U] decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane

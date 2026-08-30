@@ -251,8 +251,13 @@ So the "current stop is line 120, `TEnumerator<TDictionaryPair>`" in the summary
 above does not reproduce against either binary today, and this change moves the
 corpus **not at all**. The next wall is
 `TCustomPointersCollection<T, PT> = object` — a generic over an OBJECT type,
-which the frontend rejects outright — filed as
-`bug-p-a-generic-template-cannot-be-an-object-type`. Stated plainly because a
+which the frontend rejects outright. That wall already had a ticket and a
+DECISION — `bug-p-object-value-types-standard-meaning` [P p70, `working/`], from
+`decided/decide-revisit-object-types-rtl-generics-fired-the-trigger`. I filed a
+duplicate for it before reading `decided/`; mine is closed in `rejected/` with a
+pointer. The one fact worth carrying across: the wall reproduces identically on
+`pinned` and on HEAD, so it is long-standing and not a regression from this
+session's generics work. Stated plainly because a
 "this unblocks the corpus" claim is exactly the kind that gets believed and is
 expensive to unwind.
 
