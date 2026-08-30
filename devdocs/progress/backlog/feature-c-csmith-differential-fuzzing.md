@@ -139,6 +139,26 @@ and then went further than the bullet asked:
 with, is in `done/`. **So the cross-target axis is not blocked on T; it is ready
 to run.** Nobody updated the bullet.
 
+### Why it sat idle — and this is a finding about the BOARD, not the fuzzer
+
+The ticket calls this axis **"High value, cheap"** in its own words. It then sat
+untouched for months. Not because anyone judged it low priority, but because
+**everyone believed it needed a `--target` pass-through that Track T had already
+built.**
+
+That is worse than a stale park condition, and the difference is worth naming: a
+stale `blocked-by:` edge or a prose park is an *artefact* — it sits in a file,
+`check` can grep it, and someone eventually re-reads it. **A belief held by
+everyone has no owner and leaves no artefact to go stale.** Nothing points at it,
+so nothing re-checks it, and each new reader inherits it from the last summary
+rather than from the code. The bullet describing the axis as needing work that
+was already done is the closest thing to a record, and it reads as a plan rather
+than as a claim someone should verify.
+
+Recorded here so the next reader does not conclude the axis was simply
+deprioritised. It was ready, and cheap, and idle, for the whole time it was
+described as blocked.
+
 **2. The `--opts 0,2,3` bullet is actionable right now** and I am running it this
 sitting. Nothing was needed: `--opts` has always been a flag.
 
