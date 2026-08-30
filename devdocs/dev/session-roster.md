@@ -189,6 +189,25 @@ into the work. Ones that have actually gone wrong:
   (~11s to build), reading **call counts**, not percentages -- the percentages
   are dominated by FPC RTL, the counts are ours. It named a hot function on the
   first run.
+- **`testmgr --tier native` is REFUSED.** `.claude/hooks/no-full-suite.sh` denies
+  every testmgr tier except `quick` -- native, slow and opt cost the same ten
+  minutes as full and limited. The hook's pattern USED to name only
+  `full|limited`, which is why "native is what the watcher runs, so it must be
+  allowed" is a natural and wrong belief. It went into two dispatch briefs on
+  2026-08-30 and both workers hit the refusal. A worker's repro line is
+  `make compiler/pascal26` plus the ticket's own recipe, run by hand -- when the
+  recipe rows ARE the assertion they need no harness at all.
+- **Do not put the `PXX_ALLOW_FULL_SUITE=1` hatch in a brief.** Two workers
+  independently declined to use it on the grounds that it is the user's to grant,
+  and they were right: a coordinator cannot grant it either. If a worker asks,
+  the answer is to escalate to the owner, not to authorise it.
+- **A GRANT is a lock the ranker cannot see.** A coordinator handing one shared
+  file to a named lane writes it in the ticket BODY, so `ready`/`next` (frontmatter
+  only) will keep offering that ticket, and `working/` will be empty whenever the
+  grantee works in slices and releases between them -- which is correct behaviour.
+  **Before dispatching a refactor of a shared file, grep the ticket for `GRANT`
+  and check `git log` for recent slices.** Filed as
+  `bug-t-a-grant-is-a-lock-the-ranker-cannot-see`.
 - **`working/` may hold a stale lock.** It is a live lock only while a session is
   on it; a lock outliving its session is released, not respected. Say which locks
   are real when a brief touches contended files.
