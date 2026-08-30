@@ -233,6 +233,15 @@ fix has no failing test to go green, so the only evidence available is that
 nothing new goes red — and if you land it with four other changes you will not
 learn which one segfaulted.
 
+**And that discipline needs its own honesty clause, or it degrades into the
+thing it replaced** (frankwasm): if the site is unreachable in the configuration
+you built, your "exercise" silently collapses back into *nothing went red* — and
+it looks like success, because the run is green **and** you did the extra work.
+So establish that the exercise REACHES the site, and when it cannot, report the
+fix as **unexercised** rather than as verified. The model is a probe that moves a
+number: breaking a saturation floor to 0 and watching peak RSS go 392 KB → 13824
+KB proves reachability and effect in one step, where a green run proves neither.
+
 ## Do not read a green as coverage
 
 **One shape passing is not the shape space passing.** arm32 passed five of six
