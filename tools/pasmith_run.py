@@ -134,10 +134,11 @@ def build_oracles(cross):
     return o
 
 
-def run(cmd, timeout, cwd=None):
+def run(cmd, timeout, cwd=None, env=None):
     try:
         p = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, timeout=timeout)
+                           stderr=subprocess.STDOUT, timeout=timeout,
+                           env=(dict(os.environ, **env) if env else None))
         return p.returncode, p.stdout.decode("utf-8", "replace")
     except subprocess.TimeoutExpired:
         return 124, ""
@@ -539,7 +540,7 @@ def ledger_throttling(led):
             if e.get("class") not in NONACTIONABLE_CLASSES}
 
 
-def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha):
+def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha, oracles=None):
     """Fold one divergence into the ledger. Returns True if the SIGNATURE is new
     (or has reopened after being marked fixed) -- i.e. if this is news."""
     e = led["findings"].get(sig)
@@ -551,6 +552,10 @@ def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha):
             "examples": [{"seed": seed, "args": gen_args, "sha": sha}],
             "hits": 1, "note": note, "ticket": None,
             "reopened_from_fixed": False,
+            # WHICH oracles saw it. Without this a cross-only finding rechecked
+            # by a native-only run trivially "no longer reproduces" — a green
+            # verdict from a comparison that could not have gone red.
+            "oracles": list(oracles or []),
         }
         return True
 
@@ -609,6 +614,57 @@ def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha):
     return news
 
 
+def oracle_gap(e, oracles):
+    """Oracle names the finding needs that this run does not have.
+
+    Exact when the entry records its oracle set. Legacy entries (everything
+    filed before 2026-08-30) do not, so fall back to a HEURISTIC: if the
+    signature, kind or note names a cross architecture and this run has no
+    cross oracles, the finding is unjudgeable here.
+
+    The heuristic is deliberately biased. It can only ever produce a CANNOT
+    JUDGE, never a FIXED, so its failure mode is a finding re-measured later
+    instead of a finding closed wrongly. A heuristic that errs toward "I did
+    not manage to look" is safe in a way one that errs toward "clean" is not.
+    """
+    have = {o.name for o in oracles}
+    want = set(e.get("oracles") or [])
+    if want:
+        return sorted(want - have)
+    if any(o.arch for o in oracles):
+        return []                      # this run HAS cross oracles: nothing to miss
+    blob = " ".join(str(e.get(k, "")) for k in ("sig", "kind", "note")).lower()
+    hits = sorted(a for a in CROSS_ARCHS if a in blob)
+    return ["pxx-%s" % a for a in hits]
+
+
+def ledger_recheckable(led):
+    """The findings worth RE-MEASURING — a different question from ledger_open().
+
+    ledger_open() answers "what throttles fuzzing?", and it is right that a
+    `dodged` finding does not: the generator avoids the shape, so the fuzzer
+    cannot trip over it. But recheck() used that same set as "what should be
+    re-measured", and those two questions have different answers. A dodged
+    finding can be FIXED and nothing will ever notice, because the arm that
+    would notice is the arm that never runs — the entry is latched, exactly the
+    way a false "still reproduces" was latched before it regenerated properly.
+
+    The cost is visible in pasmith.py: three NO_* dodge constants, each
+    hand-annotated `FIXED: <sha>`. Every one of those was a human remembering to
+    go and look, which is the precise property recheck's own docstring claims
+    nobody should need.
+
+    Measured 2026-08-30: pxx-reject_store-through-pointer-cross had sat `dodged`
+    since 2026-07-14 with its ticket in done/ and its repro compiling on all
+    four targets.
+
+    Everything except `fixed`, then — re-measuring something already fixed is
+    the only genuinely wasted work here.
+    """
+    return {sig: e for sig, e in led["findings"].items()
+            if e.get("status") != "fixed"}
+
+
 def recheck(led, oracles, workdir, sha=None):
     """Re-run every open signature's example seeds against the CURRENT compiler.
 
@@ -641,16 +697,34 @@ def recheck(led, oracles, workdir, sha=None):
     # generate() names files by seed alone.
     rdir = os.path.join(workdir, "recheck")
     os.makedirs(rdir, exist_ok=True)
-    for sig, e in sorted(ledger_open(led).items()):
+    for sig, e in sorted(ledger_recheckable(led).items()):
         reproduces = False
         why = ""
+        # A dodge REMOVES the shape from the generator, so a dodged entry can
+        # only be measured with dodges forced off — otherwise the regenerated
+        # program never had the chance to fail and "no longer reproduces" is a
+        # green verdict from no data.
+        genv = {"PASMITH_NO_DODGES": "1"} if e.get("status") == "dodged" else None
+        missing = oracle_gap(e, oracles)
+        if missing:
+            # Refuse rather than guess. A finding only i386/aarch64/arm32 could
+            # see cannot be judged by a native-only recheck: every oracle that
+            # disagreed is absent, so the comparison comes back clean for a
+            # reason that has nothing to do with the compiler. Widening the
+            # recheck population to include `dodged` is what made this
+            # reachable — the cross findings parked there had never been
+            # re-measured at all before today.
+            unknown += 1
+            print("  %-28s CANNOT JUDGE -- needs oracle(s) this run lacks: %s"
+                  % (sig, ", ".join(missing)))
+            continue
         examples = e.get("examples", [])
         if not examples:
             # Zero measurements is not evidence of a fix. Never silently pass an
             # entry that has nothing to run.
             why = "no example seeds recorded"
         for ex in examples:
-            rc, out, src = generate(ex["args"], rdir, ex["seed"])
+            rc, out, src = emit(ex["args"], rdir, ex["seed"], env=genv)
             if rc != 0:
                 last = ((out or "").strip().splitlines() or [""])[-1][:120]
                 why = "seed %s would not regenerate (rc=%d): %s" % (
@@ -813,7 +887,7 @@ def gen_args_for(a, seed):
     return args
 
 
-def emit(gen_args, workdir, seed, trace=False, tag=""):
+def emit(gen_args, workdir, seed, trace=False, tag="", env=None):
     """Emit one subject; returns (rc, output, the .pas to compile).
 
     THE one place that knows a unit set is written with --outdir and a single
@@ -840,10 +914,10 @@ def emit(gen_args, workdir, seed, trace=False, tag=""):
         # would compile and mislead.
         d = os.path.join(workdir, "%su%d" % (tag, seed))
         shutil.rmtree(d, ignore_errors=True)
-        rc, out = run([sys.executable, PASMITH] + args + ["--outdir", d], 60)
+        rc, out = run([sys.executable, PASMITH] + args + ["--outdir", d], 60, env=env)
         return rc, out, os.path.join(d, "pasmith_%d.pas" % seed)
     src = os.path.join(workdir, "%sp%d.pas" % (tag, seed))
-    rc, out = run([sys.executable, PASMITH] + args + ["-o", src], 60)
+    rc, out = run([sys.executable, PASMITH] + args + ["-o", src], 60, env=env)
     return rc, out, src
 
 
@@ -995,8 +1069,8 @@ def main():
         if led is None:
             print("--recheck needs --ledger PATH", file=sys.stderr)
             return 2
-        n = len(ledger_open(led))
-        print("pasmith_run: rechecking %d open finding(s) against %s" % (n, PXX))
+        n = len(ledger_recheckable(led))
+        print("pasmith_run: rechecking %d unfixed finding(s) against %s" % (n, PXX))
         fixed, still, unknown = recheck(led, oracles, workdir, a.sha)
         save_ledger(led, os.path.join(FINDINGS, "LEDGER.json"))
         if a.ledger_inplace:
@@ -1072,7 +1146,8 @@ def main():
             # a report. It is the whole point -- 639 files, one bug.
             fresh = True
             if led is not None:
-                fresh = ledger_record(led, sig, cls, kind, seed, gen_args, note, a.sha)
+                fresh = ledger_record(led, sig, cls, kind, seed, gen_args, note,
+                                      a.sha, oracles=[o.name for o in oracles])
                 dups += 0 if fresh else 1
                 save_ledger(led, os.path.join(FINDINGS, "LEDGER.json"))
                 if a.ledger_inplace:

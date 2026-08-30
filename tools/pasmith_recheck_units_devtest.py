@@ -40,6 +40,7 @@ distinction is written down rather than left to be inferred from a count.
 import importlib.util
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -74,7 +75,7 @@ class Capture:
 
 def run_recheck(m, led, gen, bad):
     """recheck() with generate/evaluate/classify stubbed. Returns (counts, text)."""
-    m.generate = gen
+    m.emit = gen
     m.evaluate = lambda o, src, wd: "chk"
     m.classify = lambda res: (bad, None, None, "cls")
     with tempfile.TemporaryDirectory() as wd:
@@ -106,18 +107,81 @@ def t_pasmith_still_rejects_units_with_dash_o():
 
 # --- regeneration ----------------------------------------------------------
 
-def t_recheck_regenerates_through_generate():
+def t_recheck_regenerates_through_emit():
     """recheck must NOT hand-roll the generator command line.
 
-    generate() is the single place that knows a unit set needs --outdir. Two
-    call sites building that command line is how the two drifted apart.
+    emit() is the single place that knows a unit set needs --outdir. Two call
+    sites building that command line is how the two drifted apart.
     """
     src = io.open(SRC, encoding="utf-8").read()
     body = src[src.index("def recheck("):src.index("def ledger_status(")]
-    assert "generate(" in body, "recheck no longer calls generate()"
+    assert "emit(" in body, "recheck no longer calls emit()"
     assert '"-o"' not in body, "recheck builds its own -o command line again"
-    assert "PASMITH" not in body, "recheck invokes the generator directly again"
-    return "recheck regenerates via generate()"
+    assert "PASMITH]" not in body, "recheck invokes the generator directly again"
+    return "recheck regenerates via emit()"
+
+
+def t_recheck_walks_more_than_the_throttle_set():
+    """ledger_open() answers "what throttles"; recheck asks "what to re-measure".
+
+    Reusing one set for both meant a `dodged` finding could be fixed and nothing
+    would ever notice — latched, because the arm that would notice never ran.
+    """
+    m = load()
+    led = {"version": 1, "findings": {
+        "a": {"status": "open", "examples": []},
+        "b": {"status": "ticketed", "examples": []},
+        "c": {"status": "dodged", "examples": []},
+        "d": {"status": "fixed", "examples": []}}}
+    assert set(m.ledger_recheckable(led)) == {"a", "b", "c"}, m.ledger_recheckable(led)
+    assert set(m.ledger_open(led)) == {"a", "b"}, "the THROTTLE set must not widen"
+    return "recheck walks open+ticketed+dodged; throttle stays open+ticketed"
+
+
+def t_dodged_is_regenerated_with_dodges_off():
+    """A dodge REMOVES the shape, so a dodged entry measured with the dodge
+    active is a green verdict from a program that never had the chance to fail.
+
+    This is the trap that makes the population widening dangerous on its own:
+    the naive fix manufactures false FIXEDs, the same failure in the opposite
+    direction. Both halves have to ship together.
+    """
+    m = load()
+    seen = {}
+
+    def gen(args, wd, seed, env=None, **kw):
+        seen[args[1]] = env
+        return 0, "", "/x.pas"
+
+    led = {"version": 1, "findings": {
+        "dod": {"status": "dodged",
+                "examples": [{"seed": 11, "args": ["--seed", "11"]}]},
+        "opn": {"status": "open",
+                "examples": [{"seed": 22, "args": ["--seed", "22"]}]}}}
+    run_recheck(m, led, gen, bad=True)
+    assert seen["11"] == {"PASMITH_NO_DODGES": "1"}, seen
+    assert seen["22"] is None, "a non-dodged entry must regenerate normally: %r" % (seen,)
+    return "a dodged entry regenerates with PASMITH_NO_DODGES=1"
+
+
+def t_pasmith_honours_the_dodge_override():
+    """The generator half. Without it the env var is a no-op and the recheck of
+    a dodged entry silently measures the dodged program anyway.
+    """
+    src = io.open(os.path.join(ROOT, "tools", "pasmith.py"), encoding="utf-8").read()
+    assert 'PASMITH_NO_DODGES' in src, "pasmith.py does not read PASMITH_NO_DODGES"
+    blk = src[src.index('PASMITH_NO_DODGES'):]
+    blk = blk[:blk.index("def ")]
+    for name in ("NO_SHORTSTRING_TRUNCATION", "NO_ONE_CHAR_STRING_LITERAL",
+                 "NO_BARE_NOT_ORD"):
+        assert name in blk, "%s is not forced off by PASMITH_NO_DODGES" % name
+    declared = set(re.findall(r"^(NO_[A-Z_]+) *=", src, re.M))
+    forced = set(re.findall(r"(NO_[A-Z_]+) *= *False", blk))
+    assert declared == forced, (
+        "dodges declared but not forced off: %s — a new NO_* constant must be "
+        "added to the override, or a dodged recheck silently measures the "
+        "dodged program" % (declared - forced))
+    return "every NO_* dodge is forced off by the override"
 
 
 def t_emit_uses_outdir_for_units():
@@ -192,7 +256,7 @@ def t_multi_unit_example_is_judgeable():
     m = load()
     calls = []
 
-    def gen(args, wd, seed):
+    def gen(args, wd, seed, **kw):
         calls.append(list(args))
         return 0, "", os.path.join(wd, "p%d.pas" % seed)
 
@@ -209,7 +273,7 @@ def t_multi_unit_example_is_judgeable():
 def t_returns_three_counts():
     m = load()
     led = ledger([{"seed": 1, "args": ["--seed", "1"]}])
-    counts, _ = run_recheck(m, led, lambda a, w, s: (0, "", "/x.pas"), bad=True)
+    counts, _ = run_recheck(m, led, lambda a, w, s, **kw: (0, "", "/x.pas"), bad=True)
     assert len(counts) == 3, "recheck returns %d value(s), want 3" % len(counts)
     return "recheck returns (fixed, still, unknown)"
 
@@ -219,7 +283,7 @@ def t_unmeasurable_is_not_reported_as_reproducing():
     m = load()
     led = ledger([{"seed": 7, "args": ["--seed", "7"]}])
     (fixed, still, unknown), text = run_recheck(
-        m, led, lambda a, w, s: (2, "boom: --units needs --outdir", ""), bad=False)
+        m, led, lambda a, w, s, **kw: (2, "boom: --units needs --outdir", ""), bad=False)
     assert (fixed, still, unknown) == (0, 0, 1), (fixed, still, unknown)
     assert "still reproduces" not in text, "unmeasurable printed as reproducing:\n" + text
     assert "CANNOT JUDGE" in text, "no distinct word for unmeasurable:\n" + text
@@ -230,7 +294,7 @@ def t_unmeasurable_is_not_reported_as_fixed_either():
     """Unknown is unknown in BOTH directions -- the entry stays open."""
     m = load()
     led = ledger([{"seed": 7, "args": ["--seed", "7"]}])
-    _, text = run_recheck(m, led, lambda a, w, s: (2, "boom", ""), bad=False)
+    _, text = run_recheck(m, led, lambda a, w, s, **kw: (2, "boom", ""), bad=False)
     assert led["findings"]["s_one"]["status"] == "open", "unmeasurable was closed"
     assert "FIXED" not in text, text
     return "unmeasurable entry stays open"
@@ -241,7 +305,7 @@ def t_unmeasurable_names_the_seed_and_the_reason():
     m = load()
     led = ledger([{"seed": 92001, "args": ["--seed", "92001"]}])
     _, text = run_recheck(
-        m, led, lambda a, w, s: (2, "pasmith.py: error: --units needs --outdir", ""),
+        m, led, lambda a, w, s, **kw: (2, "pasmith.py: error: --units needs --outdir", ""),
         bad=False)
     assert "92001" in text, "seed not named:\n" + text
     assert "outdir" in text, "generator's own message not carried:\n" + text
@@ -257,7 +321,7 @@ def t_no_examples_is_unknown_not_fixed():
     m = load()
     led = ledger([])
     (fixed, still, unknown), text = run_recheck(
-        m, led, lambda a, w, s: (0, "", "/x.pas"), bad=False)
+        m, led, lambda a, w, s, **kw: (0, "", "/x.pas"), bad=False)
     assert (fixed, still, unknown) == (0, 0, 1), (fixed, still, unknown)
     assert led["findings"]["s_one"]["status"] == "open"
     return "an entry with no examples cannot be marked fixed"
@@ -268,7 +332,7 @@ def t_genuine_reproduction_still_says_so():
     m = load()
     led = ledger([{"seed": 1, "args": ["--seed", "1"]}])
     (fixed, still, unknown), text = run_recheck(
-        m, led, lambda a, w, s: (0, "", "/x.pas"), bad=True)
+        m, led, lambda a, w, s, **kw: (0, "", "/x.pas"), bad=True)
     assert (fixed, still, unknown) == (0, 1, 0), (fixed, still, unknown)
     assert "still reproduces" in text, text
     assert "CANNOT JUDGE" not in text, text
@@ -289,8 +353,90 @@ def t_summary_line_surfaces_unknowns():
     return "the summary line reports unmeasured findings"
 
 
+class FakeOracle:
+    def __init__(self, name, arch=None):
+        self.name, self.arch = name, arch
+
+
+NATIVE = [FakeOracle("fpc-O0"), FakeOracle("pxx-O0"), FakeOracle("pxx-O3")]
+CROSS = NATIVE + [FakeOracle("pxx-i386", "i386"), FakeOracle("pxx-aarch64", "aarch64"),
+                  FakeOracle("pxx-arm32", "arm32")]
+
+
+def t_oracle_gap_is_exact_when_recorded():
+    m = load()
+    e = {"oracles": ["fpc-O0", "pxx-O0", "pxx-aarch64"]}
+    assert m.oracle_gap(e, NATIVE) == ["pxx-aarch64"], m.oracle_gap(e, NATIVE)
+    assert m.oracle_gap(e, CROSS) == [], m.oracle_gap(e, CROSS)
+    return "a recorded oracle set is compared exactly"
+
+
+def t_oracle_gap_falls_back_for_legacy_entries():
+    """Every entry filed before 2026-08-30 has no recorded oracle set. The real
+    one that motivated this: a note reading "i386/aarch64/arm32 reject EVERY
+    store through a pointer to a record that has a string[N] field".
+    """
+    m = load()
+    e = {"sig": "pxx-reject_store-through-pointer-cross",
+         "kind": "store-through-pointer",
+         "note": "i386/aarch64/arm32 reject EVERY store through a pointer to a "
+                 "record that has a string[N] field. Only bites --cross runs."}
+    assert m.oracle_gap(e, NATIVE), "the legacy cross finding was judged native-only"
+    assert m.oracle_gap(e, CROSS) == [], "a cross run should have no gap"
+    return "a legacy cross finding is not judged by a native-only run"
+
+
+def t_oracle_gap_leaves_ordinary_findings_alone():
+    """The heuristic must not make every legacy entry unjudgeable — the fpc-self
+    findings recheck correctly today and must keep doing so.
+    """
+    m = load()
+    e = {"sig": "fpc-self_if", "kind": "if", "note": "FPC CONTRADICTS ITSELF (-O0 vs -O2)"}
+    assert m.oracle_gap(e, NATIVE) == [], m.oracle_gap(e, NATIVE)
+    return "a native finding is still judged by a native run"
+
+
+def t_a_gap_can_only_produce_cannot_judge():
+    """The heuristic's safety property, asserted rather than argued: an oracle
+    gap must never mark an entry fixed. It errs toward "I did not manage to
+    look", which is recoverable; erring toward "clean" is not.
+    """
+    m = load()
+    led = {"version": 1, "findings": {"x": {
+        "status": "dodged", "sig": "pxx-reject_cross-thing",
+        "note": "aarch64 rejects it", "oracles": [],
+        "examples": [{"seed": 5, "args": ["--seed", "5"]}]}}}
+    m.evaluate = lambda o, src, wd: "chk"
+    m.classify = lambda res: (False, None, None, "cls")   # would say FIXED
+    m.emit = lambda a, w, sd, **kw: (0, "", "/x.pas")
+    with tempfile.TemporaryDirectory() as wd:
+        with Capture() as cap:
+            fixed, still, unknown = m.recheck(led, NATIVE, wd, sha="d")
+    assert (fixed, still, unknown) == (0, 0, 1), (fixed, still, unknown)
+    assert led["findings"]["x"]["status"] == "dodged", "an oracle gap closed an entry"
+    assert "CANNOT JUDGE" in cap.text, cap.text
+    return "an oracle gap cannot produce a FIXED"
+
+
+def t_new_findings_record_their_oracles():
+    m = load()
+    led = {"version": 1, "findings": {}}
+    m.ledger_record(led, "s", "pxx-self", "case", 1, ["--seed", "1"], "n", "abc",
+                    oracles=["fpc-O0", "pxx-aarch64"])
+    assert led["findings"]["s"]["oracles"] == ["fpc-O0", "pxx-aarch64"], led
+    return "a new finding records the oracle set that saw it"
+
+
 TESTS = [t_pasmith_still_rejects_units_with_dash_o,
-         t_recheck_regenerates_through_generate,
+         t_recheck_regenerates_through_emit,
+         t_recheck_walks_more_than_the_throttle_set,
+         t_dodged_is_regenerated_with_dodges_off,
+         t_pasmith_honours_the_dodge_override,
+         t_oracle_gap_is_exact_when_recorded,
+         t_oracle_gap_falls_back_for_legacy_entries,
+         t_oracle_gap_leaves_ordinary_findings_alone,
+         t_a_gap_can_only_produce_cannot_judge,
+         t_new_findings_record_their_oracles,
          t_emit_uses_outdir_for_units,
          t_the_generator_command_line_exists_once,
          t_check_mode_goes_through_emit,
