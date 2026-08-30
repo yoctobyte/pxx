@@ -179,3 +179,62 @@ about the missing mechanism.
 is that a `prio:` comment is not a mechanism, and `ab584382e` is the proof — the same commit
 would silently undo it again. `NOT DISPATCHABLE` / `gated-by:` survive a re-price because they
 are not prices.
+
+---
+
+## RESOLVED 2026-08-30 — the owner: **not parked**
+
+> *"ESP is not parked - that was temporary"*
+
+Reading 1, and with a word the ticket did not offer: **temporary**. Neither
+"superseded" nor "still in force" is quite what happened — the park was never
+meant to outlive the reason for it. That is why the later xtensa ruling reads
+as consistent with it (frankB's point stands: *"when we do ESP, do xtensa
+first"* really is compatible with *"don't do ESP yet"*), and why nothing in the
+tree ever recorded a supersession. There was nothing to supersede. A temporary
+call simply expired, and the fossil outlived it.
+
+**Track S is live.** frankS stays staffed, the 23 ranked ESP/xtensa rows stand
+at their current prices, and everything the fleet did on ESP on 2026-08-29/30
+was correct work, not erosion of a user call. The two new ESP tickets the
+coordinator filed at p70/p65 keep their numbers.
+
+### What was struck
+
+The park text was removed everywhere it still read as a standing call:
+
+| file | was |
+| --- | --- |
+| `done/bug-esp-emit-obj-proc-fixup-non-iram.md` | `prio: 30  # ESP parked (user 2026-07-12): Pascal has prio` |
+| `done/bug-esp-idf-heap-linux-mmap-ecall.md` | `prio: 35  # ESP parked …; still the top ESP ticket when resumed` |
+| `done/feature-dns-esp-backend.md` | a "The other reason it sits low" section |
+| `backlog/feature-dns-esp-wire-nameservers-from-lwip.md` | a Priority paragraph citing the standing call, and its `blocked-by:` on this ticket |
+
+Struck rather than annotated, because the failure mode here was a **reader**
+believing a dead ruling, and a fossil with a footnote is still a fossil. The
+history is not lost: `ad649f55f` applied the park, `ab584382e` deleted its live
+copy, and this ticket records both.
+
+### The general defect is NOT resolved by this answer
+
+frankB's evidence stands on its own merits and outlives the ruling: `ab584382e`
+("apply the approved re-triage") rewrote `prio: 30  # ESP parked …` to a bare
+`prio: 20` and erased the comment, in the same commit that swept the NilPy hold
+from 20 to 55. **One commit, two user rulings, neither mentioned in its
+message.** The class has one cause — *a user decision whose only enforcement is
+a number, met by a process that rewrites numbers in bulk* — and this answer does
+not fix it. It only means the ESP instance cost nothing.
+
+That repair is filed separately as
+[[feature-t-a-user-hold-must-survive-a-bulk-re-price]]. It is worth doing even
+though both known instances are now closed, because the next hold will be
+recorded the same way unless the recording form changes.
+
+### The tell to keep
+
+The park survived in both `done/` tickets, where it could no longer act, and was
+deleted from the one live ticket, where it still could — because a re-triage
+re-prices open tickets and does not touch `done/`. **Enforcement was destroyed
+exactly where it was load-bearing and preserved exactly where it was inert.**
+That is the shape to recognise: if a rule appears to survive only in places it
+cannot act, it has probably already been erased where it mattered.

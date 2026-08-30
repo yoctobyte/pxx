@@ -3,7 +3,7 @@ slug: feature-dns-esp-wire-nameservers-from-lwip
 track: B
 prio: 15
 type: feature
-blocked-by: [decide-is-the-2026-07-12-esp-park-still-in-force]
+blocked-by: []
 summary: "Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets."
 status: backlog
 ---
@@ -66,12 +66,13 @@ the host side of any `dns_config` change.
 
 ## Priority
 
-Low (15), and lower than the parent was. Nothing is blocked on it, the default
-route works without it, and ESP remains parked behind Pascal by the user's
-standing call ("ESP parked (user 2026-07-12): Pascal has prio"). It is filed so
-the design is not lost, not to schedule work.
+Low (15), and lower than the parent was. Nothing is blocked on it and the
+default route works without it, so it is filed so the design is not lost, not to
+schedule work. The price is on its own merits: ESP is **not** parked (owner,
+2026-08-30 — [[decide-is-the-2026-07-12-esp-park-still-in-force]]), so 15 means
+15.
 
-## 2026-08-30 — blocked on the ESP-park decision, by the agent who filed it
+## 2026-08-30 — was blocked on the ESP-park decision; ANSWERED, edge cleared
 
 Filed earlier today, ranked, and dispatchable within the hour — which is the
 problem. The 2026-07-12 user ruling *"ESP parked: Pascal has prio"* exists as a
@@ -90,3 +91,16 @@ decision is about.
 Narrow on purpose: this is the one ESP row I filed myself. The other 22 ranked
 ESP/xtensa rows are not mine to gate, and gating them is part of what the
 decision has to settle.
+
+> **Answered the same day: not parked** — *"ESP is not parked - that was
+> temporary"* (owner, 2026-08-30). The `blocked-by:` edge is cleared and this
+> ranks normally at 15, which is where it belonged all along. The 22 rows this
+> deliberately did not gate never needed gating.
+>
+> Holding it for a few hours cost one low-prio row its place in the queue and
+> was still right: the edge said *"not dispatchable until the question is
+> answered"* without presuming either answer, which is the shape a block on an
+> open question should have. Recorded because the ticket that raised the
+> question also names the general defect — a hold enforced only by a number does
+> not survive a bulk re-price — and a `blocked-by:` edge is one of the two forms
+> that does. [[feature-t-a-user-hold-must-survive-a-bulk-re-price]]

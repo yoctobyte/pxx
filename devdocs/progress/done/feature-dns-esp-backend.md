@@ -106,8 +106,9 @@ prologue), which are each silent on their own. Fixed in
 
 `net-c3` now boots once and prints `PXX-net-smoke status=0`, so **the ESP lwIP
 socket path is proven working under QEMU on this box**, and this ticket's Gate
-is reachable. What remains is the work itself, plus the user's standing
-priority call that ESP is parked behind Pascal.
+is reachable. What remains is the work itself. (This used to add "plus the
+user's standing priority call that ESP is parked behind Pascal" — that call was
+temporary and has expired; see the section below.)
 
 ## The blocker as originally found (2026-08-02)
 
@@ -122,13 +123,18 @@ runner, which is what an earlier revision wrongly claimed. It also means the
 Gate below cannot pass today no matter how good the backend is, since the smoke
 would die before reaching any DNS code.
 
-## The other reason it sits low
+## The other reason it sat low — EXPIRED, 2026-08-30
 
-**ESP is parked by the user** — "ESP parked (user 2026-07-12): Pascal has prio",
-recorded in [[feature-pal-esp-posix-fd-semantics]]. That is a priority decision,
-not a capability limit, and it is a perfectly good reason not to pick this up
-unprompted. It is also a completely different statement from "cannot be run
-here", and the difference matters to whoever reads this next.
+This section used to cite a 2026-07-12 user call, *"ESP parked: Pascal has
+prio"*, as a standing reason not to pick this up. **It is not standing.** The
+owner ruled on 2026-08-30: *"ESP is not parked - that was temporary."* Track S
+is live and staffed.
+
+The distinction this section drew is still the useful part and is why the text
+is kept rather than deleted: a priority decision is not a capability limit, and
+"nobody should work on this yet" is a completely different statement from
+"this cannot be run here". Only the first one expired.
+[[decide-is-the-2026-07-12-esp-park-still-in-force]]
 
 ## Gate
 

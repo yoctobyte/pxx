@@ -231,7 +231,6 @@ _none_
 | decide-install-qemu-system-and-a-freebsd-image-on-plexus | U | 55 | decide | The FreeBSD port needs a bootable FreeBSD kernel and plexus has none — qemu-user is installed, qemu-system is not, and no VM image exists anywhere on the box. Installing a system emulator and fetching a multi-GB OS image is a change to the owner's workstation, so it is the owner's call. One-line answer unblocks feature-t-freebsd-image-and-runner and, behind it, feature-port-freebsd-native. | — |
 | decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check | U | 30 | decide | decide-nilpy-import-rule-vs-a-cpyext-extension-module ratified `PyInit_<name>` as the extension-module criterion; the implementation substituted 'the unit binds the cpyext runtime' after measuring that PyInit_<name> holds for only 3 of the 6 real units, and flagged the deviation for the owner to overrule. Nobody overruled it either way, and it is now shipped, pinned in v391, and — as of this ticket — documented on the public website. Ratify the substitution or order it changed. | — |
 | decide-is-real-a-double-or-fpcs-80-bit-extended | U | 30 | decide | `writeln(3.14159)` prints ` 3.1415899999999999E+000` in pxx and ` 3.14158999999999999993E+0000` in FPC, because pxx's Real is a 64-bit Double and FPC's is the x87 80-bit Extended. Making them agree means implementing an 80-bit float type; keeping them apart means declaring the difference permanent. Both are defensible and neither is a bug. | — |
-| decide-is-the-2026-07-12-esp-park-still-in-force | U+S | 65 | decide | DECIDE: is the 2026-07-12 ESP park still in force? 23 ranked tickets and a staffed agent depend on it | — |
 | decide-may-a-lane-be-given-the-full-suite-escape-for-four-corpus-builds | U | 55 | decide | DECIDE: one yes/no — may a lane run four corpus builds under `PXX_ALLOW_FULL_SUITE=1`? | — |
 | decide-nilpy-deepcopy-over-the-container-subset | U | 40 | decide | `copy.deepcopy`: implement over the subset, or keep the loud absence? | — |
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
@@ -286,7 +285,7 @@ _none_
 | feature-demo-nilpy-ide | E | 30 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
 | feature-demo-portable-userland | E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 68 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | bug-nilpy-render-backend-py-compile-does-not-terminate |
-| feature-dns-esp-wire-nameservers-from-lwip | B+S | 15 | feature | Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets. | decide-is-the-2026-07-12-esp-park-still-in-force |
+| feature-dns-esp-wire-nameservers-from-lwip | B+S | 15 | feature | Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets. | — |
 | feature-dynamic-include-paths-config | A | 55 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-embed-dwscript-rtti | P | 40 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
@@ -363,6 +362,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-libc-frontend-sites-and-thread-errno | A | 40 | feature | Finish --rtl-libc: convert the C/Rust/Zig frontend syscall sites, and test the thread errno hazard the raw clone stub creates | — |
 | feature-t-a-second-oracle-dimension-section-alignment | T | 25 | feature | An external alignment oracle: what is left after `df98fea47`, measured | — |
+| feature-t-a-user-hold-must-survive-a-bulk-re-price | T | 55 | feature | One commit (ab584382e, `apply the approved re-triage`) erased two user rulings in the same sweep -- the ESP park and the NilPy except-tuple hold -- because each was enforced only by a `prio:` number with the reason in a `#` comment, and a bulk re-price rewrites numbers and drops comments. Both instances are now closed on their merits, so this is not urgent; it is filed because the next hold will be recorded the same way unless the recording form changes. | — |
 | feature-t-audit-tests-that-pass-with-the-implementation-removed | T | 40 | feature | frankB wrote a regression test for bug-b-resolver-sends-localhost-to-the-wire, got eight green rows, then reverted the fix to control it — and the test still passed, every row. This box's systemd-resolved is itself RFC 6761 compliant and synthesises the localhost subtree, so the broken code returned the right ANSWER and merely emitted 20 DNS queries to get it. A value assertion was testing systemd-resolved. Three instances of this shape landed in one night. This ticket is the sweep for others. | — |
 | feature-t-commit-trailer-hook | T | 60 | feature | Two thirds of agent commits (840 of 1262 in one night) carry no Claude-Session trailer, so a collision cannot be attributed to the sessions involved. CLAUDE_CODE_SESSION_ID is in every agent's environment; a prepare-commit-msg hook can append the trailer unconditionally instead of relying on the voluntary act that is already failing 2 times in 3. | — |
 | feature-t-dead-commit-is-a-closed-stock-and-a-counter-nobody-will-read | T | 30 | feature | The 350 dead citations are unrecoverable and finished; the risk is now the counter | — |
@@ -560,7 +560,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (118)
+## decided (119)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -593,6 +593,7 @@ _none_
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | decide-interface-members-in-aggregates-lock-strategy | U | 60 | decide | SIX open Track A tickets (two of them use-after-frees) are all the same missing capability: a COM interface held inside an aggregate is invisible to every container-level retain/release walk. The one fix is blocked on a heap-lock question that was attempted once and reverted. Which strategy — reentrant lock, unlocked interface pass, or a copy-site-only stopgap — and who validates it against the threading stress tests? | — |
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
+| decide-is-the-2026-07-12-esp-park-still-in-force | U+S | 65 | decide | DECIDE: is the 2026-07-12 ESP park still in force? 23 ranked tickets and a staffed agent depend on it | — |
 | decide-may-agents-fetch-thirdparty-sources-as-oracles | U | 50 | decide | Several ranked Track B tickets need a third-party package present on the box — as a differential oracle (reportlab) or as the compile target itself (html5lib, tinycss2, webencodings). None is installed here and fetching one is a supply-chain action, so the lane is stalled on a policy answer, not on work | — |
 | decide-may-uses-math-cost-the-heap-and-exception-runtime | U | 30 | decide | Making Floor/Ceil raise EInvalidOp like FPC needs `uses sysutils` in math's implementation — measured, that is the ONLY way to raise anything, since Exception is not visible otherwise. That makes every `uses math` program require the heap + exception runtime: test/test_math.pas stops compiling today. Fork: pay it (and fix the prescan in A), saturate silently, or leave the wrong values. Blocks bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises. | — |
 | decide-merge-variant-c-with-bare-name-collision | U | 75 | decide | Variant C (sibling Exception classes) is BUILT and GREEN on wip/exception-sibling-design. Merging it makes both sysutils and pylib export a class named `Exception`, and pxx resolves such a collision to the FIRST unit named where FPC resolves it to the LAST. Ship now and accept a backwards bare-name answer for programs using both units, ship behind the parity fix, or change the tests' contract. Recommendation inside. | — |
@@ -764,7 +765,6 @@ _none_
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
-- [p 65] [U+S] decide-is-the-2026-07-12-esp-park-still-in-force (unblocks 1) [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - [p 65] [P] bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
@@ -846,6 +846,7 @@ _none_
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
+- [p 55] [T] feature-t-a-user-hold-must-survive-a-bulk-re-price [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 55] [A] grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm
 - [p 55] [A+S] grant-ir-codegen-xtensa-cleanup-arm-to-franks-b4-verified-off
 - [p 55] [A+O] perf-o-promote-constant-divisor-strength-reduction-to-o2
@@ -1120,6 +1121,7 @@ _none_
 - [p 15] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 15] [A] chore-a-trim-the-stale-cross-reference-in-pxxsyslseek-s-rv32-comment
 - [p 15] [P] compat-pascal-the-strict-fpc-flag-family-is-incomplete
+- [p 15] [B+S] feature-dns-esp-wire-nameservers-from-lwip [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 15] [A] feature-n-a-quoted-from-import-reaches-another-language
 - [p 15] [P] feature-p-legacy-value-object-types
 - [p 15] [P] feature-p-tobject-api-classparent-instancesize-tostring
@@ -1157,7 +1159,6 @@ _none_
 - **1** — decide-does-nilpy-random-seed-itself-at-import
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-install-qemu-system-and-a-freebsd-image-on-plexus
-- **1** — decide-is-the-2026-07-12-esp-park-still-in-force
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-posix-master-vs-fpc-named-master-for-the-socket-facades
