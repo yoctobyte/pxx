@@ -143,10 +143,34 @@ function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: Nativ
   and the two transcoders. Everything else a wide string needs -- refcounting,
   freeing, in-place append, block copy -- is byte-shaped and already exists.
   feature-unicodestring-model }
+{ NOT ON A BARE ESP BOOT. PXX_ESP here is the PROFILE, not the ISA (line 18:
+  PXX_ESP_BARE defines it) — so UTF-16 survives under IDF, where FreeRTOS
+  supplies a real heap, and is excluded only from a bare boot whose allocator is
+  a 64 KiB static arena. That arena is not a plausible UTF-16 host, and the four
+  bodies below were 13,232 bytes of every bare xtensa image and 15,724 of every
+  bare riscv32 one — a third of the flash budget on the target family whose
+  whole campaign is size — in programs that cannot reach them.
+
+  They are excluded rather than made lazy because this unit has no dead-code
+  elimination: it arrives whole or not at all
+  (bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce). The real fix is
+  to move these into their own builtin unit pulled on demand the way `math` is,
+  which also recovers the x86_64 cost this does not; that lands with
+  feature-unicodestring-model step 7, where the trigger site already exists.
+
+  DECLARATIONS, BODIES AND CALLERS ARE GUARDED TOGETHER. There are no callers —
+  measured, not assumed: nothing in builtin.pas, no shim forward in
+  pasparser_prog.inc, no FindProc by name; the only caller anywhere is
+  test/test_widestring_transcode.pas, which is a hosted test and never built
+  bare. Guarding a declaration and leaving a sibling behind is exactly
+  bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out, which is why the
+  grep came first. }
+{$ifndef PXX_ESP}
 function PXXWideAlloc(units: NativeInt): Pointer;
 function PXXWideConcat(bytesA: NativeInt; srcA: Pointer; srcB: Pointer; bytesB: NativeInt): Pointer;
 function PXXWideFromUtf8(src: Pointer; byteLen: NativeInt): Pointer;
 function PXXUtf8FromWide(src: Pointer; byteLen: NativeInt): Pointer;
+{$endif}
 { APPEND lenB bytes onto the managed string held in strSlot, in place when it
   can be. This is the destination-aware form PXXStrConcat cannot be: concat
   returns a fresh handle and never learns where the result is going, so it must
@@ -1779,6 +1803,7 @@ end;
 { A fresh wide block of `units` UTF-16 code units, zero-filled, 2-byte NUL
   terminated. Returns nil for an empty result, matching every other managed
   string constructor here (an empty managed string IS the nil handle). }
+{$ifndef PXX_ESP}   { bare ESP: see the note at the forward declarations }
 function PXXWideAlloc(units: NativeInt): Pointer;
 var base, d, i, nbytes: Int64;
 begin
@@ -2007,6 +2032,7 @@ begin
   Result := Pointer(d);
 end;
 
+{$endif}   { PXX_ESP — the wide runtime, see the note at the forwards }
 function PXXSysRead(fd, buf, count: NativeInt): Int64;
 begin
 {$if defined(CPUX86_64)}
