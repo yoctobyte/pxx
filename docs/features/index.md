@@ -13,7 +13,7 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - Direct ELF executable output: no assembler or linker subprocess for normal
   Pascal programs.
 - Alternate output modes for interop with other toolchains: `--emit-obj`
-  writes a relocatable `.o` on any target; `--shared` writes an x86-64 `.so`
+  writes a relocatable `.o` on x86-64, riscv32 and xtensa; `--shared` writes an x86-64 `.so`
   (currently validated via the `.asm` assembly-source frontend).
 - Zero-dependency binaries by default: no libc, no `DT_NEEDED`, only Linux
   kernel syscalls at runtime — for every frontend, not just C. Linking a system

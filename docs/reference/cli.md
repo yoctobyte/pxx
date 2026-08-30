@@ -122,7 +122,7 @@ the optional rows; each `no` costs exactly the one capability its row names.
 | `--xtensa-cpu=lx6` | Use the older ESP32 LX6 software divide/mod profile. |
 | `--xtensa-fpu` | Use Xtensa hardware single-precision float operations where supported. |
 | `--esp-profile=bare` | Select the bare-metal ESP platform profile for `riscv32` or `xtensa`. |
-| `--emit-obj` | Emit a relocatable object (`.o`) instead of a linked executable, on any target. Same as an output path ending in `.o`. |
+| `--emit-obj` | Emit a relocatable object (`.o`) instead of a linked executable. **x86-64, riscv32 and xtensa only** — i386, aarch64 and arm32 refuse it. Same as an output path ending in `.o`, which carries the same restriction. |
 | `--shared` | Emit an ET_DYN shared library (`.so`) instead of an executable. x86-64 only; introduced for and validated with the `.asm` assembly-source frontend. Same as an output path ending in `.so`. |
 | `-S` | Also write `<output>.s`, a best-effort x86-64 disassembly text dump of the emitted code. Additive — the normal output (executable, `--emit-obj`, or `--shared`) still happens. x86-64 only. |
 | `-g` | Emit DWARF debug information. |

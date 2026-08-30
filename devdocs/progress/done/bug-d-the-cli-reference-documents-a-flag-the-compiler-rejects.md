@@ -59,7 +59,16 @@ an option that never existed, and the reasoning belongs here.
 three of them producing visible output. The neighbours were verified rather than
 assumed, because a bad row's neighbours are the next most likely to be bad.
 
-## And the rest of the page is right — 62 of 63
+## The aperture, in the sentence rather than below it
+
+**This sweep checked which flags EXIST, not what they apply to.** A page that names a
+real flag and lies about its targets or its accepted sources passes every check here,
+because the flag is in both lists. One such claim was found the same day and it was on
+this very page — `--emit-obj` "on any target", false on three of six backends. See
+[[bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep]].
+**Do not read the result below as "the docs agree with the compiler".**
+
+## The rest of the page's flag EXISTENCE is right — 62 of 63
 
 Every flag presented in a `docs/reference/cli.md` table was run. **Exactly one
 was rejected.** Two more looked rejected and were my probe's fault, not the

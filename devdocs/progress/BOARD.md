@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (367)
+## backlog (369)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -109,6 +109,7 @@ _none_
 | bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one | A | 35 | bug | 'x86-64, i386, aarch64 and arm32 self-host byte-identical' is true but is TWO gates, not one: the native proof builds with no flags at all (PXXFLAGS empty) while cross-bootstrap builds with -dPXX_MANAGED_STRING, whose own rule comment says the managed runtime is REQUIRED. Nothing outside Makefile:13809 says so. Track A owns the reason; docs can place the sentence once A supplies it. | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
 | bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code | A | 30 | bug | DbgArchSupported states the DWARF Tier-1 target set correctly and is NEVER CALLED. The live gate is duplicated across three doDebug assignments in two ELF writers, and three comments said x86-64 only. Comments fixed; the duplication and the dead authority are not. Measured: -g emits debug sections on all four targets. | — |
+| bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 | A | 25 | bug | `--emit-obj` on i386/aarch64/arm32 refuses with `only xtensa/riscv32 targets` -- but x86-64 supports it and is the target most users are on. The message names a set that excludes a working target, so a reader who trusts the diagnostic over the docs concludes the feature is ESP-only. | — |
 | bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss | A+S | 25 | bug | An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate — nothing watches this number. | — |
 | bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use | A | 25 | bug | defs.inc:816 documents IR_FRAME with 'the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address' — stated as universal. It is false on riscv32, where s0 points at the BOTTOM of the frame and the links sit at +8/+12. ir.inc:4977 knows this and says assuming the common layout 'would have silently walked into the locals'. The lowering is correct (it asks FramePrevFpOffset/FrameRetAddrOffset); the DOC a backend implementer reads is not. | — |
 | bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never | A+S | 60 | bug | test-xtensa has 107 executed rows and every one is Call0. The windowed ABI appears twice in the whole Makefile and BOTH rows are compile-only — one greps a .o header, the other prints 'lowers ok'. Nothing has ever run a windowed program and compared its output, which is why 41 windowed programs SIGBUS'd for an unknown length of time and were fixed by accident. | — |
@@ -119,6 +120,7 @@ _none_
 | bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 40 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 50 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
 | bug-c-an-unterminated-declaration-still-parses-the-appended-pascal-rtl | C | 50 | bug | The statement half of bug-c-an-unterminated-construct-parses-past-eof is fixed; the DECLARATION half is not. An unterminated `struct`/`enum`/initializer still swallows the appended Pascal RTL and fails with `main function not found` at line 1313 of platform_backend.pas. | — |
+| bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
@@ -980,6 +982,7 @@ _none_
 - [p 35] [A] bug-a-help-does-not-advertise-flags-the-compiler-accepts
 - [p 35] [A] bug-a-pxx-home-is-advertised-but-not-honoured
 - [p 35] [A] bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one
+- [p 35] [D] bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep
 - [p 35] [N] bug-n-pypal-ppoll-passes-a-64-bit-timespec-on-32-bit-targets
 - [p 35] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 35] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds
@@ -1055,6 +1058,7 @@ _none_
 - [p 25] [A] bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout
 - [p 25] [A] bug-a-set-membership-truncates-the-test-value-on-32-bit-backends
 - [p 25] [A+S] bug-a-the-div-by-zero-check-is-still-missing-on-xtensa
+- [p 25] [A] bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64
 - [p 25] [A+S] bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss
 - [p 25] [A] bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use
 - [p 25] [A] bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july
