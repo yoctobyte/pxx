@@ -451,7 +451,18 @@ programs are UB-free by construction, so a divergence is not the test's fault;
 and it reaches code no human-written corpus does.
 
 **Run it when a pass lands in the free tier**, in unused seed space, and record
-the range so the next author does not re-walk it. Ranges used so far: 1-200,
+the range so the next author does not re-walk it.
+
+**Why standing rather than once: differential coverage is keyed to a compiler,
+and the compiler moves under it.** The 443-program x86-64 batch of 2026-08-30
+was run against `f2bfbb3c94a5` at HEAD `f278ddaca`. Every compiler commit since
+is uncovered by it, and at this repo's commit rate that is a large number within
+hours — the same decay that makes a banked speedup unquotable once its baseline
+is gone. A batch is evidence about **one binary**, so quote it with the sha it
+ran against, and re-run it when the tier changes rather than citing the old
+number. That is the argument for making this standing, and it is stronger than
+"a new pass deserves a check": even with no new pass, last week's batch is not
+coverage of this week's compiler. Ranges used so far: 1-200,
 2000, 5000, 20000, 40000-40299, 50000-50099, 95000, 300100-300249,
 310100-310219, 320000-320099, 330000-330149, 700000.
 
