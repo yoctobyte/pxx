@@ -175,4 +175,4 @@ should read it as a fresh measurement rather than as confirmation of that
 ticket's `:120`, which still does not reproduce on any binary here.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f02f2c79c.
