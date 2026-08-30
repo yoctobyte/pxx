@@ -2495,8 +2495,13 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
 | regression-test-core-test-c-cross-ns-arity | T | 70 | regression | regression: test-core#src:test/test_c_cross_ns_arity.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk-call-2 | T | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at 98ed38202254 (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-call-3 | C | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk-call | T | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at ef7f17d45caa (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-types | C | 70 | regression | regression: test-core#src:test/test_c_gtk_types.pas red at bfec13534396 (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-window-2 | C | 70 | regression | regression: test-core#src:test/test_c_gtk_window.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk-window | T | 70 | regression | regression: test-core#src:test/test_c_gtk_window.pas red at ef7f17d45caa (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk | C | 70 | regression | regression: test-core#src:test/test_c_gtk.pas red at bfec13534396 (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk3-stock | C | 70 | regression | regression: test-core#src:test/test_c_gtk3_stock.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-core-test-c-macro-soup | T | 70 | regression | regression: test-core#src:test/test_c_macro_soup.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-c-packed-aligned | T | 70 | regression | regression: test-core#src:test/test_c_packed_aligned.pas red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-test-c-preprocess | T | 70 | regression | regression: test-core#src:test/test_c_preprocess.pas@1 red at 34c41bde6fd6 (auto-filed by twatch) | — |

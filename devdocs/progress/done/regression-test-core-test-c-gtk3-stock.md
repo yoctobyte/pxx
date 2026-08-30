@@ -1,7 +1,28 @@
 ---
 prio: 70
-track: P
+track: C
+status: done
 ---
+
+> **RESOLVED and RE-LANED P -> C, 2026-08-30.** Root-caused and reverted by frankC as
+> `2b64dd1e5`, one-commit attribution rather than a bisect — it still had compilers built
+> either side of `eefa85d70`, and `test_c_gtk` needs no X server, passes on the parent,
+> fails to compile on the commit. All five verified green by building and running each.
+>
+> **The cause was not what the consolidation guessed.** Not "a Pascal binding reaches the
+> importer by a different route" — the header walk is **not entered only by the user's
+> `uses <header>`: crtl's own modules flow through it.** `uses gtk` pulls `gtk.h` pulls
+> `stdlib.h`, which brings `lib/crtl/src/stdlib.c` into the same token buffer and the same
+> single-pass walk, and that path cannot support compiled bodies (file-scope `static`
+> variables are never reserved there; the walk sends every declaration to
+> `ParseCSubroutine`, never to `ParseCGlobalVarDecl`).
+>
+> **The track guess P was right on the source extension and the fault was C-lane** — one
+> defect, two lanes, which is why the frontmatter answer and the ownership answer differed.
+>
+> Reopened work continues under the C-lane ticket: scope by token **provenance**
+> (`CModuleOfTok`) rather than by mode — a bodied static from the header the user named
+> should compile; one from a crtl module pulled in behind it should not.
 
 > **CONSOLIDATED by frank-coordinator, 2026-08-30 — these FIVE tickets are one cause.**
 > All five gtk regressions carry the **same** red sha `bfec13534396`, the **same**
@@ -31,14 +52,14 @@ track: P
 
 > **origin/master has advanced 6 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
 
-# regression: test-core#src:test/test_c_gtk.pas red at bfec13534396 (auto-filed by twatch)
+# regression: test-core#src:test/test_c_gtk3_stock.pas red at bfec13534396 (auto-filed by twatch)
 
 - **Type:** regression (auto-filed by Track T watcher, host seven). Untriaged.
 - **Found:** 2026-08-30T00:34:41Z
-- **Test source:** test/test_c_gtk.pas tools/expect_same.sh
+- **Test source:** test/test_c_gtk3_stock.pas test/gtk3stock/gtk3_c.h +1
 
 ## Repro
-`tools/testmgr.py --tier native --job 'test-core#src:test/test_c_gtk.pas'` at bfec135343961cc33559d058bccc63e4c871eceb
+`tools/testmgr.py --tier native --job 'test-core#src:test/test_c_gtk3_stock.pas'` at bfec135343961cc33559d058bccc63e4c871eceb
 
 ## Range
 > **The named sha `bfec13534396` CANNOT be the cause** — it touches no buildable file (docs / tickets / tstate only). It is the sha that was TESTED, i.e. the upper bound of an untested range; the cause is somewhere below it.
@@ -49,10 +70,10 @@ bad `bfec13534396`, last good `f8b0eea0049c`, 3 commit(s) in range — the watch
 ```
 pascal26:90: error: undeclared identifier passed as argument 2 of '__pxx_read', where a pointer is expected — this would call/dereference through NULL
 (tail)
-pascal26:2: warning: #include <alloca.h> resolved from the host system (/usr/include), not pxx's own headers — ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave
-pascal26:2: warning: #include <dirent.h> resolved from the host system (/usr/include), not pxx's own headers — ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave
-pascal26:2: warning: #include <features.h> resolved from the host system (/usr/include), not pxx's own headers — ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave
-pascal26:2: warning: #include <linux/limits.h> resolved from the host system (/usr/include), not pxx's own headers — ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave
+pascal26:7: warning: #include <alloca.h> resolved from the host system (/usr/include), not pxx's own headers — ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave
+pascal26:7: warning: #include <dirent.h> resolved from the host system (/usr/include), not pxx's own headers — ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave
+pascal26:7: warning: #include <features.h> resolved from the host system (/usr/include), not pxx's own headers — ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave
+pascal26:7: warning: #include <linux/limits.h> resolved from the host system (/usr/include), not pxx's own headers — ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave
 pascal26:86: warning: undeclared identifier 'pxx_env_loaded' used as value (treated as 0)
 pascal26:87: warning: undeclared identifier 'pxx_env_loaded' used as value (treated as 0)
 pascal26:90: warning: undeclared identifier 'pxx_env_buf' used as value (treated as 0)
@@ -63,3 +84,4 @@ pascal26:90: error: undeclared identifier passed as argument 2 of '__pxx_read', 
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

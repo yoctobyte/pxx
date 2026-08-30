@@ -1,7 +1,28 @@
 ---
 prio: 70
-track: P
+track: C
+status: done
 ---
+
+> **RESOLVED and RE-LANED P -> C, 2026-08-30.** Root-caused and reverted by frankC as
+> `2b64dd1e5`, one-commit attribution rather than a bisect — it still had compilers built
+> either side of `eefa85d70`, and `test_c_gtk` needs no X server, passes on the parent,
+> fails to compile on the commit. All five verified green by building and running each.
+>
+> **The cause was not what the consolidation guessed.** Not "a Pascal binding reaches the
+> importer by a different route" — the header walk is **not entered only by the user's
+> `uses <header>`: crtl's own modules flow through it.** `uses gtk` pulls `gtk.h` pulls
+> `stdlib.h`, which brings `lib/crtl/src/stdlib.c` into the same token buffer and the same
+> single-pass walk, and that path cannot support compiled bodies (file-scope `static`
+> variables are never reserved there; the walk sends every declaration to
+> `ParseCSubroutine`, never to `ParseCGlobalVarDecl`).
+>
+> **The track guess P was right on the source extension and the fault was C-lane** — one
+> defect, two lanes, which is why the frontmatter answer and the ownership answer differed.
+>
+> Reopened work continues under the C-lane ticket: scope by token **provenance**
+> (`CModuleOfTok`) rather than by mode — a bodied static from the header the user named
+> should compile; one from a crtl module pulled in behind it should not.
 
 > **CONSOLIDATED by frank-coordinator, 2026-08-30 — these FIVE tickets are one cause.**
 > All five gtk regressions carry the **same** red sha `bfec13534396`, the **same**
@@ -63,3 +84,4 @@ pascal26:90: error: undeclared identifier passed as argument 2 of '__pxx_read', 
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
