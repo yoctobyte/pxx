@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: N
+status: done
 ---
 
 > **Track guessed as N** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -41,3 +42,22 @@ Unhandled exception: TypeError: expected a number, got object
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## Already fixed — this report predates the fix
+
+Second auto-file of the same test, from a different watcher host (`plexus`; the
+first came from `seven`). Not a second defect and not a reopen.
+
+- tested sha `c4fba16e4675` — 2026-08-30 09:54:04 +0200
+- fix `f5f361d74` — 2026-08-30 10:14:40 +0200
+
+`git merge-base --is-ancestor f5f361d74 c4fba16e4675` is false, so the fix was
+not in the tree the watcher measured. Verified PASS at HEAD (`daa4a9661`).
+
+Cause, fix and the full receiver x key matrix are in
+`regression-test-nilpy-test-nilpy-min-max-key-in-a-variable` (done/). The sibling
+`...-key-none` stays BLOCKED on the literal-receiver defect and is deliberately
+not closed by this.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
