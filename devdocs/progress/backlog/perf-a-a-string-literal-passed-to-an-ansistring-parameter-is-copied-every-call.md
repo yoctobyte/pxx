@@ -4,9 +4,9 @@ track: A
 prio: 70
 type: perf
 blocked-by: []
-status: working
+status: backlog
 created: 2026-08-30
-owner: frankB
+owner: ""
 summary: "Passing a string LITERAL to an AnsiString parameter allocates and copies it on every call — 28x slower than passing a typed constant, and the cost scales with the literal's length. `const` does not help, though by definition it needs no copy. Comparing against a literal INLINE is free, so this is parameter marshalling specifically. Compiler-wide: every CaseEqual(x,'lit') pays it, and so does every pxx program. Found while diagnosing perf-p-parsefactorcore, whose 9.4% is this defect rather than the 92-arm walk the ticket describes."
 ---
 
@@ -132,3 +132,29 @@ reach it. **Diff those two lowerings; do not design a third.**
 what it does and does not prove here: a marshalling change must leave the
 emitted *program* byte-identical while changing the code that marshals. If the
 `cmp` differs, the change altered semantics, not just cost.
+
+## Gate — and which direction of the result is a FAILURE, named in advance
+
+`make compiler/pascal26` byte-identical fixedpoint, then `compiler.pas` in and
+`cmp` the two emitted binaries.
+
+**State this before running it, not after:** the oracle proves the *emitted
+program* is unchanged while the code that does the marshalling changes. So
+
+- `cmp` **identical** = the change altered cost only. This is the pass.
+- `cmp` **differs** = the change altered SEMANTICS, not just cost. **That is a
+  failure, not an interesting result to investigate.** A marshalling fix that
+  moves an emitted byte has changed what the compiler compiles.
+
+Naming the failing direction up front is deliberate: a differing `cmp` on a
+nice-looking diff is exactly the result that gets rationalised after the fact.
+
+Then re-time the three tables above. The `literal -> const AnsiString` row
+should approach the typed-constant row (~30ms); if it improves but stays well
+above, the literal arm is reaching a *different* cheap path rather than the
+constant arm's, and the diff is not finished.
+
+### Second pair of eyes available (frankB)
+
+The harness that produced every table here is in scratch (`b3`/`b4`/`b5`) and
+re-times a candidate fix in about a minute. Ask rather than rebuild it.
