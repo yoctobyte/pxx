@@ -23011,3 +23011,81 @@ conclusion.
 **And the lane note worth keeping from the same exchange**, frankB declining to
 lobby for an A ticket its own queue could not offer:
 **"wanting a ticket is the worst possible reason to widen my own lane."**
+
+## Arithmetically impossible, and the correlation was still exact
+
+frankT, resolving the 30-red pin shadow I handed it as a correlation rather than a
+story. **The result vindicates refusing the story, and by a wider margin than the
+caution deserved.**
+
+```
+new_red at d24df3f09 : 24
+NEVER seen before    : 24
+seen before (real)   :  0        across 62 prior full runs on seven
+```
+
+**And the killer is not the counts.** All 24 are `test-nilpy#*.npy`. frankwasm's
+commit wires **nine `.pas` tests**, touches the **Makefile only**, and adds no
+compiler code. Not "each test contributed several rows" — **a different suite
+entirely.** Probe: `test-nilpy#src:test/test_nilpy_to_bytes.npy` occurs exactly once
+in the whole archive, at 18:39:13Z, as `new_red`.
+
+> **The obvious mechanism was not merely unproven — it was arithmetically
+> impossible, and the correlation was still exact.**
+
+Three consecutive WOULD-PIN runs, then 24 new reds at the one commit that made
+never-executed tests executable. Nothing in the *shape* of that evidence warns
+anyone. Had it been filed as the obvious story, the bisector would have landed on
+`d24df3f09` correctly by its own rules and produced a true-sounding, false finding.
+
+**Cause still open, non-cause proven.** `fe297522b` — *"plexus was running a smaller
+suite than seven, and nothing said so"* — gives the absent→executed transition a
+real mechanism, but frankT correctly declined to adopt it as the cause. (It read
+that sha as a ghost; it is real and its own checkout was behind — see the previous
+entry, my error an hour earlier.)
+
+## THE finding of the night: the tool knows and the record does not say
+
+frankT's, third instance in one day, and it is a category rather than three bugs:
+
+| tool | knew | record said |
+| --- | --- | --- |
+| watcher | which job skipped, and why | `skip_holes: 1` |
+| pin verify | computed `new_red` | hardcoded `[]` |
+| `diff_jobs` | `first_seen`, plus a written argument for why it matters | dropped |
+
+**None of the three is a bug in the reasoning. Each is a bug in the reporting of
+correct reasoning** — which is the kind no behavioural test catches, because the
+behaviour is right. `diff_jobs` even argues the case at length: *"NEVER SEEN is not
+the same fact as WAS GREEN… for the RANGE it is a fabrication: the job has no
+earlier passing sha, so there is no interval that contains its cause, and every
+commit the range would name is equally innocent."* The ledger honours it; the two
+artifacts a human reads collapse it. Fixed in the archive row at `817cc8435`; the
+pin-shadow prose left for a separate deliberate change.
+
+## A new IR/AST shape is new to EVERY backend — and only the frontend agent knows
+
+frankC's, and it is a **dispatch** lesson, so it is mine to act on.
+
+`const S1: Single = 0.5` read back as **zero** on riscv32 *and* xtensa; a whole
+`array of Single` came back as four zeros. A float constant carries the **double**
+bit pattern whatever its declared type says, so a backend reading a `tySingle` const
+must narrow it — both took `Low32`, the low half of a double's mantissa. Landed
+`fc0055bff` (riscv32 + the C f-suffix) and `4b6f21d68` (xtensa).
+
+**Neither lane was negligent, which is why no lane rule can catch it.** Pascal cannot
+test a shape its own frontend never emits; Track C had no reason to look at a riscv32
+backend. It needed a `tySingle`-tagged constant reaching `IR_CONST_INT`, and what
+produced one was **the C frontend starting to type `0.1f` as single** — a Track C fix
+landing on a path Pascal had been quietly mis-walking all along. **The visible defect
+sat on top of the older, larger one.**
+
+**My action:** when a frontend lands a change that widens the set of reachable IR/AST
+shapes, relay it to the backend lanes **as a shape, not as a fix**, and ask for the
+sibling grep rather than a re-test. Natural trigger: a frontend commit whose message
+says *"now types X as Y"*.
+
+**`Low32` was a shape, not a site, and the grep returned two** — third time today the
+double-case rule reached a further arm. A corpus that structurally cannot emit the
+shape is the self-consistency boundary one level further back: **no measurement, not
+a null.**
