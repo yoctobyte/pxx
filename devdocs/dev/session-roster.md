@@ -21968,3 +21968,47 @@ error** — the same shape as everything else that went wrong today:
 Full recipe in `decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`.
 **Do not characterise a cost by timing alone while believing profiling is
 unavailable** — that was my advice and it was wrong.
+
+## A change that measures as NO CHANGE can be the finding — the arc closes
+
+frankA, 2026-08-30, closing the loop this roster opened three sections earlier.
+Read this with *"a perfectly confounded cause cannot be ranked by reading"* and
+*"deletion proves inert-TODAY, never irrelevant-AFTER"*; it is the same
+measurement arriving a third time and finally being read correctly.
+
+`ProcCdecl and (not CProgramMode)` at the prologue is **the gate anyone would
+write**, and it produces a table **byte-identical to baseline**. frankA built it
+and measured it anyway. Had it trusted the obvious reading — *"this is the fix,
+incomplete"* — the flag's real meaning would still be undiscovered and the next
+attempt would have been another deletion.
+
+**`CProgramMode` does not mean "this is a C program."** It means *"the source in
+front of me is C"*: `ParseCUnit` (`cparser.inc:13340`) sets it exactly as
+`ParseCProgram` (`:10085`) does, so it is True while compiling a C translation
+unit that a **Pascal** program `uses`. frankC's independent confirmation — a
+`double`-taking C function called from other C code inside a Pascal-used unit,
+**1000/1000 on five targets with no compiler change** — is what turns that from a
+probe's say-so into a measurement, and it is why the four positional arms are
+load-bearing rather than dead.
+
+**The rule.** A null result is only uninformative when you predicted it. When you
+predicted a *change* and got none, **the null is data about your model, not about
+the change** — and it is usually the cheapest data you will get, because you have
+already paid for the build. Three readings of one null were available tonight and
+only the third was right:
+
+| reading | verdict |
+| --- | --- |
+| "the thing I removed was irrelevant" | wrong — it was a compensation, inert until its counterpart moved |
+| "this is the fix, incomplete" | wrong — it would have led to another deletion |
+| **"my model of what this flag means is wrong"** | **right** |
+
+**And note what the whole arc cost and bought.** Three sessions, four falsified
+claims, one reversed coordinator dispatch and one reversed retraction — ending in
+a fix whose scope came in *smaller* than the design assumed: arm32 and riscv32
+needed no return-side change at all (arm32's bridge went green on the parameter
+half alone, its soft-float return already agreeing with its caller), and the
+"return-side counterpart to `EmitParamSpillsForTarget`" the ticket imagined turned
+out to be **two small arms in an epilogue that already existed**. The repeated
+falsification is what shrank it. A confident first implementation would have built
+the large version of the wrong thing.
