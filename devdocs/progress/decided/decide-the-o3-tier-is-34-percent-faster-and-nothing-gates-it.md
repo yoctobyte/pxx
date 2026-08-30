@@ -7,7 +7,7 @@ status: new
 owner: ""
 found: 2026-08-30
 found-by: frank-optimize, probing the per-call cost driver behind feature-opt-nilpy-container-subscript
-summary: "The compiler built at -O3 compiles compiler.pas 34% faster than the same compiler built at -O2, produces byte-identical output, is 3.3% smaller, and reaches a self-host fixedpoint in zero rounds. NilPy programs run 17-26% faster. -O2 is the default and -O3 is the untested tier, so the whole gap is currently unclaimed. The fork is what to do about it: promote per-pass as policy says, promote the tier wholesale, or change what the dev loop builds. Not a fork an agent should settle."
+summary: "The compiler built at -O3 compiles compiler.pas 28-34% faster than built at -O2, self-hosts in zero rounds, and is 3.3% smaller. FOUND (2026-08-30): ~71% of that win is ONE named pass -- EmitStaticLitHandle / PXX_FLAG_STATIC at ir_codegen.inc:3480, which gives string literals a static .data handle plus `inc qword [rax-16]` instead of a heap allocate+copy+free per evaluation. Promoting that single gate to -O2 gives 20% of -O3's 28%, 5/5 reps, and the build self-hosts and passes six programs. So per-pass promotion IS viable and is one pass, not a campaign. Decision needed on promoting it; the rest of the tier is a separate, smaller question."
 ---
 
 # The `-O3` tier is 34% faster than `-O2`, and nothing gates it
@@ -93,7 +93,78 @@ routines shaped like that. That the profile is flat — the uforth ticket's "134
 routines, no peak" — is consistent with a uniform baseline cost, but consistency
 is not attribution and I stopped calling it one.
 
-## Why no pass can be named — the attribution attempt, which failed
+## THE PASS IS NAMED — this supersedes the section below
+
+**2026-08-30, same session, third and final revision of this ticket.** I said
+first that the win was a code-shape improvement (wrong), then that no single
+pass reproduced it (also wrong, and I had already sent that upward). It is one
+pass, and I found it by **diffing emitted code instead of timing anything** —
+which is what I should have done before writing either earlier claim.
+
+**`EmitStaticLitHandle` — `compiler/ir_codegen.inc:3480`, gated `if OptLevel < 3
+then Exit;`.** This is the `PXX_FLAG_STATIC` work. A string literal becomes its
+static `.data` block plus a four-byte `inc qword [rax-16]`, replacing a heap
+allocation, a copy, and an eventual free **on every evaluation**.
+
+### Measured — promoting that ONE gate to `-O2`
+
+Compiling `compiler.pas`, min of 5 interleaved, load 9.7 -> 10.1:
+
+| compiler | min | vs `-O2` |
+| --- | ---: | ---: |
+| `-O2` (baseline) | 20.23 s | — |
+| **only `EmitStaticLitHandle` promoted** | **16.23 s** | **20%** |
+| every `-O3` gate promoted | 18.06 s | 11% |
+| `-O3` | 14.54 s | 28% |
+
+**One pass is ~71% of the whole tier.** All five reps agreed in direction
+(22.20/18.34, 20.23/16.23, 21.41/18.18, 23.01/18.15, 21.74/16.69) — this is not
+a noise-limited result the way the per-group zeros below were.
+
+**And promoting everything at once is WORSE than promoting this one alone**
+(18.06 vs 16.23). The passes interfere: enabling the scratch-register arms
+changes eligibility for others. That is a real caution for any promotion
+campaign — promote and measure one at a time, because the batch is not the sum.
+
+### How it hid, and the clue I had and misread
+
+`pint.pas` — a pure-integer loop — measured **exactly 1.000** at `-O2` vs `-O3`.
+I recorded that as "the win is not Pascal, it is many-local pointer routines".
+The true reading is simpler: **pure integer code has no string literals.** Every
+workload that moved (the compiler, NilPy programs, the RTL) is dense in them;
+the one that did not move has none. I had the discriminating experiment in hand
+and drew the wrong line through it.
+
+It also retro-explains the uforth ticket's oldest finding — `PXXAlloc +
+PXXStrFromLit + PXXFree` at 28.5% with *"a flat profile rather than a pole"* —
+and my own earlier measurement that `x = "k"` costs 80.3 ns at `-O2` and 0.0 ns
+at `-O3`. Three independent observations of one pass.
+
+### Correctness of the promoted build
+
+Self-host fixedpoint converged (2 rounds); it compiles and correctly runs six
+programs (2 Pascal, 4 NilPy); and the compiler *it* produces agrees with the
+reference `-O2` compiler's output on a third program. Same caveat as everywhere
+else in this ticket: that is evidence, not a gate.
+
+### What this does to the options
+
+**It reverses what I said an hour ago.** Option 1 (per-pass promotion) is not
+incapable — it is the right answer and it is *cheap*: one pass, one gate run,
+~71% of the win. Option 2 (gate the whole tier) is now the follow-up for the
+remaining ~29%, not the primary. **Recommendation: promote
+`EmitStaticLitHandle` to `-O2` behind a full gate, then re-open the tier
+question for what is left.**
+
+---
+
+## Superseded: "why no pass can be named" — the failed attribution attempt
+
+**Kept for the record; its conclusion is wrong and the section above replaces
+it.** Its per-group zeros were measured at min-of-3 under load 6-13, which
+cannot resolve what was being asked. The one row still worth trusting is the
+DCE row, because it was decided by a flag rather than by a margin: `-O2 --dce`
+is flat and `-O3 --no-dce` keeps the win, so DCE is genuinely not the cause.
 
 `CLAUDE.md`'s promotion policy is per-pass, so the obvious next step was to find
 which pass earns the 34%. I promoted each `-O3` gate group to `-O2`, rebuilt the
