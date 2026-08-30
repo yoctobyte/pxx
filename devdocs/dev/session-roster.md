@@ -20268,3 +20268,51 @@ the push, and that only worked because the gap had already been named.
 
 **Pre-merge tally: frank-user is now CLEAN. Outstanding: frankwasm alone (3
 dirty). `working/` holds one lock (`bug-o-uforth-blocktest`, pre-dating tonight).**
+
+## Tick 2026-08-30 ~11:2x — the last lock has a STOPPED owner, and five of my own directives had gone stale
+
+Measured: HEAD `e59189d0c` · seed green (`no use-before-declaration … and no
+duplicate forward`, 219552 lines) · pin still v394 `53800fbeb0b66e11` · load
+**18.5** (frankwasm building) · **frank-user CLEAN, 0 unpushed** · frankwasm
+dirty=6 on branch `wasm`, 0 unpushed · frankA / frankC / b4 / frank-rust all
+clean, 0 unpushed.
+
+**The finding: `working/` holds exactly one lock and its owner is stopped.**
+`bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O p65,
+`owner: frank-optimize-b4`] — and b4 has been stood down with a clean tree and
+everything pushed since ~10:00. **A lock with a stopped owner is indistinguishable
+from live work**, which is exactly the state that makes a pre-merge board
+unreadable for whoever runs the pin.
+
+Asked b4 to park it into `unfinished/` **itself, with a park note**, rather than
+moving it myself. Two reasons and the second is the real one: I made frank-rust
+put a ticket back an hour ago on this argument and owe the same request here; and
+**only b4 can write the note.** The `-dPXX_ALLOC_CENSUS` work and the zero-init
+experiment that *"reported −83.9% and was a segfault"* are obvious to it now and
+unrecoverable in a week. Its tree is clean and its three commits are pushed, so
+this is bookkeeping and not a rollback — stated explicitly, because *"move your
+ticket"* can read as *"undo your work"* and uncommitted work is the only state
+here with no backup.
+
+### DIRECTIVE AUDIT — five stale facts in my own carried prompt
+
+The tick step that keeps earning its place. Every one of these was true when
+written and false when read, and a carried prompt **re-asserts** rather than
+re-derives:
+
+| the prompt says | actually |
+| --- | --- |
+| `origin/master 90501813d` | `e59189d0c` — 20+ commits on |
+| two `working/` locks, **"BOTH with live owners"** | **one**, and its owner is **stopped** — the phrase that would have suppressed this tick's only finding |
+| frank-user dirty and LIVE | **clean, 0 unpushed** — the owner's wait is satisfied on that side |
+| load 13.6 | 18.5 |
+| HELD: frank-rust must file the `NSpecIns` consolidation | **filed** — `refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins` [P p55], and the `insertAt` lead is in the Delphi ticket with the disproof table |
+
+The second row is the one that matters, and it is the failure mode this audit step
+exists for: **a reassuring clause written into a recurring prompt does not decay,
+it re-justifies itself every wake.** *"Both with live owners"* would have read as
+a completed check on exactly the question this tick needed to ask. Same shape as
+the "PARKED and that is correct" line that once kept six sessions idle while p75s
+sat ready.
+
+**Outstanding for the owner's wait: frankwasm alone.**
