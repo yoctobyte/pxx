@@ -1688,6 +1688,7 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     isArr: Boolean;
     tk: TTypeKind;
     baseDynDepth, dynRootSym, dynBaseRec, slotAddrNode: Integer;
+    dpaSym: Integer;   { the pointer symbol behind a `p^[i]` array base }
     dynBaseTk: TTypeKind;
     recName, aliasIdx: Integer;
     strElemTk: TTypeKind;   { a managed string's ELEMENT type -- see the
@@ -1880,11 +1881,21 @@ begin
       meant "C is where this was noticed". Ungated, Pascal's dereference,
       function-result and computed bases route through the same one path
       instead of falling to the array path that wants an lvalue address.
-      feature-a-typeref-migrate-consumers }
+      feature-a-typeref-migrate-consumers
+
+      ...but an ARRAY base is not a pointer value, and this arm claimed several
+      of them: `p^[i]` where p: ^array[0..3] of PChar. IRNodePointerBase asks
+      ASTTk[baseNode], which on that deref holds the ARRAY's ELEMENT kind, so a
+      pointer-ELEMENTED array answered "I am a pointer" -- and the arm then took
+      the pointee's first eight bytes as the base address and strode 1. Ask
+      whether the base IS an array before asking what it points at; the array
+      tail below already computes both correctly.
+      bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
     if (ASTKind[baseNode] <> AN_IDENT) and
        (ASTKind[baseNode] <> AN_FIELD) and
        (ASTKind[baseNode] <> AN_PTR_CAST) and
        (ASTKind[baseNode] <> AN_INDEX) and
+       (not IsNodeArray(baseNode)) and
        IRNodePointerBase(baseNode) then
     begin
       indexNode := IRLowerAST(ASTRight[node]);
@@ -2088,6 +2099,21 @@ begin
           tk := Syms[ASTIVal[baseNode]].ElemType;
           recName := Syms[ASTIVal[baseNode]].ElemRecName;
         end;
+      end
+      else if DerefPtrArraySym(baseNode) >= 0 then
+      begin
+        { `p^[i]`: the element kind comes from the POINTER SYMBOL, for the same
+          reason the AN_IDENT arm above takes it from the array symbol — a base
+          node's own ASTTk is not the element's type. On a deref it is close
+          enough to look right and wrong where it counts: an `array of
+          string[7]` pointee tagged its deref tyString, the LEGACY frozen alias,
+          so the stride below came out LOCAL_STR_CAP+8 = 264 bytes for a
+          15-byte slot and `p^[1]` read from outside the array — printing
+          empty, exit 0. The symbol says tyFixedString and carries the capacity.
+          bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
+        dpaSym := DerefPtrArraySym(baseNode);
+        tk := Syms[dpaSym].PtrElemTk;
+        recName := Syms[dpaSym].PtrElemRec;
       end;
     end;
     
@@ -2180,6 +2206,14 @@ begin
           from the array symbol's capacity (matches AllocArray's sizing). }
         if ASTKind[baseNode] = AN_IDENT then
           elemSize := FrozenStrSlotSize(tk, SymStrCap[ASTIVal[baseNode]])
+        else if DerefPtrArraySym(baseNode) >= 0 then
+          { `p^[i]`, p: ^array[..] of string[N]. The capacity is the SLOT
+            STRIDE, and passing 0 here means DEFAULT_STR_CAP -- 263 bytes per
+            element for a 15-byte slot, i.e. the second element read from
+            outside the array. It rides on the pointer symbol because a deref
+            node carries no capacity and SymStrCap describes the string a symbol
+            IS, which a pointer never is. }
+          elemSize := FrozenStrSlotSize(tk, SymPtrElemStrCap[DerefPtrArraySym(baseNode)])
         else
           elemSize := FrozenStrSlotSize(tk, 0);
       end
@@ -2865,28 +2899,31 @@ begin
     end;
   end;
 
-  { 6b. The SAME element, reached through a POINTER to the array — `q^[i]`
-       where `q: ^array[..] of PChar`. Arm 6 requires ASTLeft to be an AN_IDENT
-       naming the array; here it is an AN_DEREF, so arm 6 could not answer and
-       WriteLn printed the pointer as a decimal number while `s := q^[i]`
-       through a PChar variable printed the text. Two spellings of one
-       expression disagreeing is the tell.
+  { 6b. The same element, reached THROUGH A POINTER — `p^[i]` where
+       `p: ^array[..] of PChar`. Arm 6 requires an AN_IDENT base and so answers
+       only the direct spelling: in one program, `WriteLn(a[1])` printed `hi`
+       and `WriteLn(p^[1])` printed 4303888, the pointer, from the same array.
 
-       Read exactly as arm 7 reads its own case — depth 2 over a char base —
-       with SymPtrElemArrLen > 0 as the marker that the pointee is the ARRAY
-       rather than another pointer. The metadata was already recorded by
-       ParseTypeKind's caret arm; only the reader was missing, which is what
-       arms 6 and 7 each say about themselves.
-       bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults }
+       "Reader half, again" — the third time in this one function (arms 6 and 7
+       say it of themselves). The metadata was recorded all along: a
+       pointer-to-array symbol parks the ELEMENT's depth and ultimate base one
+       level deeper than an array symbol does, so depth 2 over a char base is
+       exactly "the elements are PChars".
+
+       Two sessions wrote this arm independently within the hour and the merge
+       kept both halves: SymTR is the migration target that arm 2 above already
+       reads (feature-a-typeref-migrate-consumers), and the extra
+       `PtrElemTk = tyPointer` guard is a real check — `SymPtrElemArrLen > 0`
+       says the pointee is an array, not that its ELEMENTS are pointers. The
+       shape test goes through DerefPtrArraySym so this arm asks the same
+       question as every other consumer of the shape rather than open-coding a
+       fourth copy of it.
+       bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
   if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
-     (ASTKind[ASTLeft[node]] = AN_DEREF) and
-     (ASTLeft[ASTLeft[node]] >= 0) and
-     (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) then
+     (ASTKind[ASTLeft[node]] = AN_DEREF) then
   begin
-    symId := ASTIVal[ASTLeft[ASTLeft[node]]];
-    if (symId >= 0) and (symId < SymCount) and
-       (Syms[symId].TypeKind = tyPointer) and
-       (SymPtrElemArrLen[symId] > 0) and
+    symId := DerefPtrArraySym(ASTLeft[node]);
+    if (symId >= 0) and
        (Syms[symId].PtrElemTk = tyPointer) and
        (SymTR[symId].PtrDepth = 2) and
        ((SymTR[symId].PtrBaseTk = Ord(tyChar)) or

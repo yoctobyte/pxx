@@ -1,0 +1,19 @@
+int   42 42
+pchar hi hi
+str7  hi hi
+ansi  hi hi
+rec   7 7
+lo1   lo lo
+wint  9
+wstr  ok
+wansi ok
+wpchr ok
+wrec  5
+wlo1  ok
+len   4 3 0 16
+len1  4 4 1
+nd    8 8 2 24
+dyn   3 3 4
+expr  43
+asgn  hi
+loop  3

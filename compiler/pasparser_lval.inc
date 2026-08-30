@@ -1483,6 +1483,50 @@ begin
       end;
       if alreadyResolved then
         { type + node already set by the comma-sugar chain above }
+      else if DerefPtrArrayInfo(node, dpaCount, dpaLo, dpaFlat) then
+      begin
+        { `p^[i]` where p points at a named FIXED ARRAY. The `^` arm already
+          resolved tk/recName through PtrElemTk/PtrElemRec, which for this shape
+          ARE the element's, so the subscript changes the ADDRESS and not the
+          type — there is nothing to re-derive here.
+
+          IT IS TESTED FIRST, and that is the whole point: every other arm in
+          this chain dispatches on `tk`, and `tk` on a pointer-to-array deref is
+          the ARRAY's ELEMENT kind. So a pointer ELEMENT made the `(tk =
+          tyPointer) and (ASTKind[node] = AN_DEREF)` arm below fire — the arm for
+          `^PChar`, a different shape entirely — which answered a plausible type
+          and skipped the low-bound normalisation below, so `array[1..4] of
+          PChar` read one element past its end. Asking what the base IS beats
+          guessing from what its elements are.
+          bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds
+
+          Falling through to the tail below instead asked the ROOT symbol for an
+          ElemType, and a pointer variable has none: `p^[i]` came back with
+          REC_NONE, so `p^[i].b` resolved every field at offset 0 and printed
+          the FIRST field's value whatever you asked for. Silent, exit 0.
+          bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero }
+        { ...and the pointee's own LOW BOUND, which nothing downstream knows
+          about: `p^[i]` over `array[1..4]` indexed from the array's base and
+          ran one element past its end. Normalise the subscript here, the one
+          place that knows the bound, rather than teaching the lowering about a
+          second kind of base. }
+        { ...but NOT when the ND path above built the subscript: BuildFlatNDIndex
+          already subtracts EVERY dimension's low bound, dim 0 included, so
+          subtracting dpaLo here again would double-count it and index
+          (i - 2*lo0) — correct only for the lo=0 case that hid it. }
+        if (dpaLo <> 0) and (ASTRight[indexNode] >= 0) and (not isND) then
+        begin
+          dpaLoNode := AllocNode(AN_INT_LIT);
+          ASTIVal[dpaLoNode] := dpaLo;
+          ASTTk[dpaLoNode] := Ord(tyInteger);
+          dpaSubNode := AllocNode(AN_BINOP);
+          ASTIVal[dpaSubNode] := Ord(tkMinus);
+          ASTLeft[dpaSubNode] := ASTRight[indexNode];
+          ASTRight[dpaSubNode] := dpaLoNode;
+          ASTTk[dpaSubNode] := Ord(tyInteger);
+          ASTRight[indexNode] := dpaSubNode;
+        end;
+      end
       else if IsNodeArray(node) then
       begin
         if ASTKind[node] = AN_IDENT then
@@ -1577,40 +1621,6 @@ begin
         begin
           tk := tyUnknown;
           recName := REC_NONE;
-        end;
-      end
-      else if DerefPtrArrayInfo(node, dpaCount, dpaLo, dpaFlat) then
-      begin
-        { `p^[i]` where p points at a named FIXED ARRAY. The `^` arm already
-          resolved tk/recName through PtrElemTk/PtrElemRec, which for this shape
-          ARE the element's, so the subscript changes the ADDRESS and not the
-          type — there is nothing to re-derive here.
-
-          Falling through to the tail below instead asked the ROOT symbol for an
-          ElemType, and a pointer variable has none: `p^[i]` came back with
-          REC_NONE, so `p^[i].b` resolved every field at offset 0 and printed
-          the FIRST field's value whatever you asked for. Silent, exit 0.
-          bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero }
-        { ...and the pointee's own LOW BOUND, which nothing downstream knows
-          about: `p^[i]` over `array[1..4]` indexed from the array's base and
-          ran one element past its end. Normalise the subscript here, the one
-          place that knows the bound, rather than teaching the lowering about a
-          second kind of base. }
-        { ...but NOT when the ND path above built the subscript: BuildFlatNDIndex
-          already subtracts EVERY dimension's low bound, dim 0 included, so
-          subtracting dpaLo here again would double-count it and index
-          (i - 2*lo0) — correct only for the lo=0 case that hid it. }
-        if (dpaLo <> 0) and (ASTRight[indexNode] >= 0) and (not isND) then
-        begin
-          dpaLoNode := AllocNode(AN_INT_LIT);
-          ASTIVal[dpaLoNode] := dpaLo;
-          ASTTk[dpaLoNode] := Ord(tyInteger);
-          dpaSubNode := AllocNode(AN_BINOP);
-          ASTIVal[dpaSubNode] := Ord(tkMinus);
-          ASTLeft[dpaSubNode] := ASTRight[indexNode];
-          ASTRight[dpaSubNode] := dpaLoNode;
-          ASTTk[dpaSubNode] := Ord(tyInteger);
-          ASTRight[indexNode] := dpaSubNode;
         end;
       end
       else
@@ -5204,6 +5214,23 @@ begin
   end
   else if ASTKind[node] = AN_INDEX then
     Result := NodePtrElem(ASTLeft[node], elemTk, elemRec, depth + 1)
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    { `p^[i]` where p: ^array[..] of <some pointer>. The AN_INDEX arm above
+      recurses into its base, which for this spelling is the DEREF -- and with
+      no arm here it answered "not a pointer", so `WriteLn(p^[1])` on an
+      `array of PChar` printed the ADDRESS while `WriteLn(a[1])` on the same
+      array printed the string. The array symbol's own arm reads exactly this
+      pair of slots (AllocArray parks the ELEMENT's depth and base there); a
+      pointer-to-array symbol parks them the same way, one level deeper.
+      bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
+    baseRec := DerefPtrArraySym(node);
+    if baseRec < 0 then Exit;
+    if SymPtrDepth[baseRec] < 2 then Exit;
+    elemTk := IntToTypeKind(SymPtrBaseTk[baseRec]);
+    elemRec := SymPtrBaseRec[baseRec];
+    Result := elemTk <> tyUnknown;
+  end
   else if ASTKind[node] = AN_FIELD then
   begin
     { A pointer-typed FIELD: the pointee is the FIELD's, from UFldPtrElem*. }

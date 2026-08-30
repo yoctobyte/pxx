@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -40,3 +41,40 @@ expect_same: MISMATCH [test_pfixarr26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## Fixed — frank-rust, 2026-08-30
+
+**GREEN on the merged tree.** Ran the exact job's program at fixedpoint
+`75a59e7ea507`: output matches `test_pointer_to_a_named_fixed_array.expected`
+byte for byte, `lowbnd` row included.
+
+I can name the mechanism rather than guess it, because I hit the identical
+failure in my own working tree an hour later and it is in this ticket's own
+log tail:
+
+```
+-lowbnd : 101 102 103 104      <- expected
++lowbnd : 102 103 104 4314200  <- one element past the start
+```
+
+That is the pointee's LOW BOUND not being subtracted. `ParseLValueAST`'s suffix
+chain does that normalisation in its `DerefPtrArrayInfo` arm — and that arm sat
+BELOW `else if IsNodeArray(node)`. So the moment `IsNodeArray` learned to answer
+TRUE for `p^` over a pointer-to-array (`5d840acdd`, the correct and necessary
+half of the fix), the earlier arm began claiming the node and the low-bound
+subtraction stopped running. `array[0..3]` was unaffected — lo is 0 — which is
+why only the `lowbnd` row moved and why it read as a narrow regression rather
+than as the arm-ordering problem it is.
+
+Fixed by moving the `DerefPtrArrayInfo` arm to the HEAD of that chain, above
+every arm that dispatches on `tk`:
+`bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds`.
+Same root as the ticket it came from — every arm in both the parser's chain and
+`IRLowerAddress`'s dispatches on a `tk` that, for this shape, is the ARRAY's
+ELEMENT kind. Asking what the base IS has to come first.
+
+`test/test_pointer_to_array_indexing.pas` carries a `array[1..4] of PChar` row
+for exactly this, beside the `array[0..3]` rows that cannot catch it.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

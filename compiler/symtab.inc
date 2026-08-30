@@ -4104,7 +4104,7 @@ begin
   SetLength(SymStrElemTk, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
-  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
+  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
@@ -4215,8 +4215,40 @@ begin
           ' ptrElemNDims=', SymPtrElemNDims[si]);
 end;
 
+{ The pointee's SHAPE, recorded on the pointer symbol: `PFixed = ^TFixed` where
+  TFixed is a named FIXED array. Extent, dim count, low bound(s), per-dim spans,
+  and the element's frozen-string capacity — everything a deref needs, since a
+  deref NODE carries none of it (see DerefPtrArrayInfo, which reads these back).
+
+  ONE copy. This block was written out four times verbatim — AllocVar,
+  AllocParam, AllocArray, AllocDynArray — and adding SymPtrElemStrCap to it was
+  the moment that stopped being free: a fifth field means four more chances for
+  the copies to drift, and the drift is silent because a missing field reads as
+  a confident 0 rather than an error. That is the shape that produced
+  `Length(pdy^) = 1` in this very block's history.
+  bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
+procedure SetPtrElemArrayInfo(si: Integer);
+var ptrArrDimI: Integer;
+begin
+  if LastTypePointerElemArrAi < 0 then Exit;
+  if ArrTypeIsDyn[LastTypePointerElemArrAi] then Exit;
+  SymPtrElemArrLen[si] := ArrTypeHi[LastTypePointerElemArrAi] -
+                          ArrTypeLo[LastTypePointerElemArrAi] + 1;
+  SymPtrElemNDims[si] := ArrTypeNDims[LastTypePointerElemArrAi];
+  SymPtrElemStrCap[si] := ArrTypeElemStrCap[LastTypePointerElemArrAi];
+  SymArrDimLo[si * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
+  if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
+    for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
+    begin
+      SymArrDimLo[si * MAX_ARR_DIMS + ptrArrDimI] :=
+        ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+      SymArrDimSpan[si * MAX_ARR_DIMS + ptrArrDimI] :=
+        ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+    end;
+end;
+
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;
-var sz, align: Integer; ptrArrDimI: Integer;
+var sz, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   Syms[SymCount].Name     := name;
@@ -4253,6 +4285,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
@@ -4312,22 +4345,7 @@ begin
       SymPtrElemDynDepth[SymCount] := ArrTypeDynDepth[LastTypePointerElemArrAi];
       if SymPtrElemDynDepth[SymCount] < 1 then SymPtrElemDynDepth[SymCount] := 1;
     end;
-    if (LastTypePointerElemArrAi >= 0) and
-       (not ArrTypeIsDyn[LastTypePointerElemArrAi]) then
-    begin
-      SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
-                                    ArrTypeLo[LastTypePointerElemArrAi] + 1;
-      SymPtrElemNDims[SymCount] := ArrTypeNDims[LastTypePointerElemArrAi];
-      SymArrDimLo[SymCount * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
-      if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
-        for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
-        begin
-          SymArrDimLo[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
-            ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
-          SymArrDimSpan[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
-            ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
-        end;
-    end;
+    SetPtrElemArrayInfo(SymCount);
   end;
 
   if tk = tyAuto then
@@ -4435,7 +4453,7 @@ begin
 end;
 
 function AllocParam(const name: AnsiString; tk: TTypeKind; isRef, isArray: Boolean): Integer;
-var sz, align: Integer; ptrArrDimI: Integer;
+var sz, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -4482,6 +4500,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
@@ -4517,22 +4536,7 @@ begin
       `High(pdy^)` = 0 came from: not a missing case, a CONFIDENT wrong answer
       derived from two fields that were never set.
       bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
-    if (LastTypePointerElemArrAi >= 0) and
-       (not ArrTypeIsDyn[LastTypePointerElemArrAi]) then
-    begin
-      SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
-                                    ArrTypeLo[LastTypePointerElemArrAi] + 1;
-      SymPtrElemNDims[SymCount] := ArrTypeNDims[LastTypePointerElemArrAi];
-      SymArrDimLo[SymCount * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
-      if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
-        for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
-        begin
-          SymArrDimLo[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
-            ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
-          SymArrDimSpan[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
-            ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
-        end;
-    end;
+    SetPtrElemArrayInfo(SymCount);
   end;
 
   if (tk = tyRecord) and not isRef and not isArray and (RecSize(LastTypeRecId) <= 8) then
@@ -4727,7 +4731,7 @@ begin
 end;
 
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
-var elemSize, totalSize, align: Integer; ptrArrDimI: Integer;
+var elemSize, totalSize, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -4824,6 +4828,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
@@ -4872,22 +4877,7 @@ begin
       `High(pdy^)` = 0 came from: not a missing case, a CONFIDENT wrong answer
       derived from two fields that were never set.
       bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
-    if (LastTypePointerElemArrAi >= 0) and
-       (not ArrTypeIsDyn[LastTypePointerElemArrAi]) then
-    begin
-      SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
-                                    ArrTypeLo[LastTypePointerElemArrAi] + 1;
-      SymPtrElemNDims[SymCount] := ArrTypeNDims[LastTypePointerElemArrAi];
-      SymArrDimLo[SymCount * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
-      if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
-        for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
-        begin
-          SymArrDimLo[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
-            ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
-          SymArrDimSpan[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
-            ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
-        end;
-    end;
+    SetPtrElemArrayInfo(SymCount);
   end;
 
   if (CurProc < 0) or AllocStaticLocal then
@@ -4915,7 +4905,6 @@ function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integ
   ArrLen = -1 marks the symbol as dynamic (static arrays always have ArrLen >= 1).
   depth is the nesting count: 1 for `array of T`, 2 for `array of array of T`...
   elemType is the BASE element type at the deepest level. }
-var ptrArrDimI: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -4956,6 +4945,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   { `array of T` where T is a named FIXED array: the parser leaves the row
     shape in LastTypeDynElemRowLen/Lo; stamp it (depth-1 only) and reset. }
@@ -5016,22 +5006,7 @@ begin
       `High(pdy^)` = 0 came from: not a missing case, a CONFIDENT wrong answer
       derived from two fields that were never set.
       bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
-    if (LastTypePointerElemArrAi >= 0) and
-       (not ArrTypeIsDyn[LastTypePointerElemArrAi]) then
-    begin
-      SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
-                                    ArrTypeLo[LastTypePointerElemArrAi] + 1;
-      SymPtrElemNDims[SymCount] := ArrTypeNDims[LastTypePointerElemArrAi];
-      SymArrDimLo[SymCount * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
-      if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
-        for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
-        begin
-          SymArrDimLo[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
-            ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
-          SymArrDimSpan[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
-            ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
-        end;
-    end;
+    SetPtrElemArrayInfo(SymCount);
   end;
   if CurProc < 0 then
   begin
@@ -13009,6 +12984,25 @@ end;
   product — so this is the deref spelling catching up with the shape the rest of
   the compiler already agreed on, not a new rule.
   bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent }
+{ The pointer SYMBOL behind `p^`, when the pointee is a named FIXED array —
+  else -1. Split out of DerefPtrArrayInfo because INDEXING wants the symbol
+  rather than the extent: the element metadata it needs (kind, record, frozen
+  capacity) lives on that symbol and nowhere else, and re-testing the shape at
+  the index site would be the second copy of the predicate this pair exists to
+  prevent. One question, two answers built on it.
+  bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
+function DerefPtrArraySym(node: Integer): Integer;
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  if ASTLeft[node] < 0 then Exit;
+  if ASTKind[ASTLeft[node]] <> AN_IDENT then Exit;
+  Result := ASTIVal[ASTLeft[node]];
+  if (Result < 0) or (Result >= SymCount) then begin Result := -1; Exit; end;
+  if SymPtrElemArrLen[Result] <= 0 then Result := -1;
+end;
+
 function DerefPtrArrayInfo(node: Integer;
                            var elemCount, lowBound, flatCount: Integer): Boolean;
 var dpaSi: Integer;
@@ -13017,13 +13011,8 @@ begin
   elemCount := 0;
   lowBound := 0;
   flatCount := 0;
-  if node < 0 then Exit;
-  if ASTKind[node] <> AN_DEREF then Exit;
-  if ASTLeft[node] < 0 then Exit;
-  if ASTKind[ASTLeft[node]] <> AN_IDENT then Exit;
-  dpaSi := ASTIVal[ASTLeft[node]];
-  if (dpaSi < 0) or (dpaSi >= SymCount) then Exit;
-  if SymPtrElemArrLen[dpaSi] <= 0 then Exit;
+  dpaSi := DerefPtrArraySym(node);
+  if dpaSi < 0 then Exit;
   flatCount := SymPtrElemArrLen[dpaSi];
   lowBound := SymArrDimLo[dpaSi * MAX_ARR_DIMS];
   if SymPtrElemNDims[dpaSi] >= 2 then
@@ -13474,12 +13463,11 @@ function IsNodeArray(node: Integer): Boolean;
   the managed-STRING arm: `p^[1]` loaded p^ as a string handle and indexed it
   1-based at stride 1, returning a CHAR. Compiles clean, segfaults.
 
-  Three call sites of ONE predicate, not three mechanisms -- the tag is
-  ambiguous everywhere it is read, and DerefPtrArrayInfo is the only thing that
-  knows the real shape. It is narrow (AN_DEREF over a plain identifier whose
-  SymPtrElemArrLen > 0) and pure.
-  bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults }
-var inaCount, inaLo, inaFlat: Integer;
+  Call sites of ONE predicate, not several mechanisms -- the tag is ambiguous
+  everywhere it is read, and DerefPtrArraySym / DerefPtrArrayInfo are the only
+  things that know the real shape. It is narrow (AN_DEREF over a plain
+  identifier whose SymPtrElemArrLen > 0) and pure.
+  bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
 begin
   Result := False;
   if DynArrayNodeDepth(node) > 0 then
@@ -13489,7 +13477,15 @@ begin
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if ASTKind[node] = AN_DEREF then
-    Result := DerefPtrArrayInfo(node, inaCount, inaLo, inaFlat);
+    { `p^` where p: ^array[..] of T. The node's own ASTTk holds the ARRAY's
+      ELEMENT kind (a deref node has nowhere else to put it), so every caller
+      that dispatches on tk reads `p^` as a T rather than as an array of T --
+      and the symptom then depends on which arm T collides with: a pointer
+      element crashed, an AnsiString element crashed, a `string[N]` element
+      printed EMPTY and exited 0, and writing to one was rejected as "cannot
+      assign ShortString to Char". One wrong answer here, four faces downstream.
+      bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
+    Result := DerefPtrArraySym(node) >= 0;
 end;
 
 procedure ResolvePendingPointerAliases;

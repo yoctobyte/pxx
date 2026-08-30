@@ -3,13 +3,19 @@ slug: bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-
 track: A
 prio: 60
 type: bug
-status: working
-owner: frankA
+status: done
+owner: frank-rust
 blocked-by: []
-summary: "`p^[i]` where p points to an ARRAY is broken for several element kinds, and the WORST arm is SILENT: `array[0..3] of string[7]` (also string[31], ShortString) yields an EMPTY string where FPC yields `hi`, exit 0, no crash and no diagnostic -- a plausible wrong VALUE, which is the expensive class. Other element kinds (Pointer, PChar, PInteger, AnsiString) segfault; Integer, Int64, Double, Boolean, Char, TObject and a record element are correct. It compiles clean in every case, so a build-only check reports success. DIAGNOSED: the crash is a bad BASE, not a bad index -- `ppa^[1]` emits an extra load_mem with size=1, computing [[ppa]] + 1*1. THE MODEL IS NOT ABOUT POINTERS: the `[` arm chain dispatches on `tk`, and for a pointer-to-array `tk` holds the ARRAY ELEMENT KIND while every arm reads it as the type of the thing being indexed -- collide with an arm above the array fall-through and you break, collide with nothing and you are fine. The crash site is IRLowerAddress AN_INDEX (~40 lines: baseAddr choice and elemSize), NOT the parser -- proven by routing past all five element-kind arms and getting a byte-identical segfault. A second real parser defect makes the string[7] row silently wrong and is separable."
+summary: "FIXED. `p^[i]` where p points at a named FIXED array was wrong for several element kinds, with FOUR different faces: a pointer/PChar/AnsiString element SEGFAULTED, a `string[7]`/`string[31]`/ShortString element printed EMPTY and exited 0, writing to one was refused as \"cannot assign ShortString to Char\", and `WriteLn(p^[1])` on an `array of PChar` printed the pointer as a number. ROOT CAUSE, one sentence: the `[` arm chains in BOTH the parser and IRLowerAddress dispatch on the node tk, and on a pointer-to-array deref tk is the ARRAY ELEMENT kind -- so whichever arm that element kind collides with claims the node, and the symptom is a property of the ARM, not of the type. Fixed by asking what the base IS before what its elements are: IsNodeArray and NodePtrElem learn the shape, the parser`s DerefPtrArrayInfo arm moves to the head of its chain, the IR array tail takes element kind/rec/capacity from the POINTER SYMBOL, and a new SymPtrElemStrCap carries the frozen-string element capacity (the stride was LOCAL_STR_CAP+8 = 264 bytes for a 15-byte slot). Test `test/test_pointer_to_array_indexing.pas`, 19 rows, every one FPC-verified and every one comparing the pointer spelling against the direct `a[i]` -- because four of the broken rows exited 0."
 ---
 
-# `p^[i]` segfaults when the array's element type is a pointer
+# `p^[i]` over a pointer to a fixed array is wrong for several element kinds
+
+> The title and slug said **segfaults** and **of-pointers** until frankB renamed
+> the file (`c1f1231ad`): both were 100% accurate about the rows they described
+> and wrong about the axis and the worst symptom. The silent `string[7]` row is
+> the one that mattered and neither name could hold it. Sections below predate
+> the rename and still use the old framing — they are history, not instructions.
 
 ## Measured
 
@@ -430,3 +436,94 @@ diagnosed further.
 Test: `test/test_ptr_to_array_of_pointers_index.pas`, wired in `make test`.
 Non-vacuous per row on `pinned` (139 / compile error / 139 / 139), measured
 individually because the file stops at the first compile error.
+
+
+---
+
+## Resolved — frank-rust, 2026-08-30
+
+Binary `3a53468cb267`+ (rebuilt per change; the final fixedpoint sha is on the
+commit). Every row below is FPC-verified with `{$MODE OBJFPC}` on the oracle —
+without it FPC's `Integer` is 16-bit and `SizeOf` diverges for a reason that has
+nothing to do with this bug. That cost a confused minute; noting it so it costs
+the next person none.
+
+### The model, finished
+
+frankB's and mine converged on this and it is the whole bug:
+
+> The `[` arm chain dispatches on `tk`, and for a pointer-to-array `tk` holds
+> the ARRAY's ELEMENT kind while every arm reads it as the type of the thing
+> being indexed.
+
+Two things the earlier diagnosis had wrong, both found by measuring:
+
+1. **There are TWO such chains, not one.** `IRLowerAddress`'s was the crash
+   site, and `ParseLValueAST`'s suffix loop has the identical disease — its
+   `(tk = tyPointer) and (ASTKind[node] = AN_DEREF)` arm (written for `^PChar`,
+   a genuinely different shape) fired for a pointer-ELEMENTED array and skipped
+   the low-bound normalisation sitting in the arm below it. My earlier note
+   "the crash site is NOT the parser" was true of the CRASH and false as a
+   statement about the bug.
+2. **The symptom is a property of the ARM, not of the element type.** That is
+   why a symptom list could never produce the model: "crashes" and "prints
+   empty" and "refuses to compile" looked like three bugs.
+
+### What was actually wrong, and where
+
+| # | site | wrong because |
+| --- | --- | --- |
+| 1 | `IsNodeArray` (`symtab.inc`) | answered FALSE for `p^` over a pointer-to-array — so the `and not isArr` guards the AnsiString and frozen-string arms ALREADY CARRY could not protect them. The guards were right; the predicate under them was blind. |
+| 2 | the computed-pointer-value arm (`ir.inc`) | consults no `isArr` at all and runs FIRST. `IRNodePointerBase` asked `ASTTk`, a pointer ELEMENT answered "I am a pointer", and the arm took the pointee's first 8 bytes as the base and strode 1. |
+| 3 | `ParseLValueAST`'s chain (`pasparser_lval.inc`) | the `DerefPtrArrayInfo` arm — which exists precisely for this shape and does the low-bound normalisation — sat BELOW three tk-dispatch arms. |
+| 4 | the IR array tail (`ir.inc`) | for a non-AN_IDENT base it takes `tk` from `ASTTk[baseNode]`. On this deref that is `tyString`, the LEGACY frozen alias, so the stride came out `LOCAL_STR_CAP + 8` = **264 bytes for a 15-byte slot** — element 1 read from outside the array. |
+| 5 | `SymPtrElemStrCap` | did not exist. `SymStrCap` is the capacity of the string a symbol IS and stays 0 on a pointer, so nothing carried `string[N]`'s N through a pointer-to-array. |
+| 6 | `IsNodePChar` (`ir.inc`) | arm 6 answers `a[i]` over `array of PChar` and had no twin for `p^[i]`, so `WriteLn(a[1])` printed `hi` and `WriteLn(p^[1])` printed `4303888` — in the same program, off the same array. |
+| 7 | `NodePtrElem` (`pasparser_lval.inc`) | same gap, other reader. |
+
+Sites 1, 3, 6 and 7 are all one shape: **the metadata was recorded and the
+reader was missing.** `IsNodePChar`'s own arms 6 and 7 say "reader half, again"
+about themselves; this is the third and fourth time in that one function.
+
+### The fix, and the one line to remember
+
+**Ask what the base IS before you ask what its elements are.** Concretely: the
+shape test (`DerefPtrArraySym`, split out of `DerefPtrArrayInfo` so indexing can
+reach the symbol) goes at the HEAD of each chain, above every arm that
+dispatches on `tk`.
+
+Also extracted `SetPtrElemArrayInfo` — the pointee-shape block was written out
+**four times verbatim** across AllocVar/AllocParam/AllocArray/AllocDynArray, and
+adding a fifth field to four copies is how the copies drift. Adding it once is
+why the capacity is now correct everywhere rather than in the one allocator I
+happened to test.
+
+### Rows, all matching FPC
+
+`test/test_pointer_to_array_indexing.pas`, 19 lines, wired into `test-core`.
+Read and write for Integer / PChar / `string[7]` / AnsiString / record /
+`array[1..4]`; `Length`/`High`/`Low`/`SizeOf` over the same deref; a multi-dim
+pointee (must NOT be low-bound-normalised twice — `BuildFlatNDIndex` already
+did it); a dynamic pointee (a different slot, `SymPtrElemDynDepth`, unaffected);
+and expression / assignment positions, not just `Write`.
+
+**The gate compares VALUES, not exit codes** — frankB's point, and it is the
+load-bearing property of this test. Four of the broken rows exited 0.
+
+### Not fixed here, filed separately
+
+C's `sizeof(*p)` on `int (*p)[4]` answers 4 where gcc says 16 — the same family
+(an extent through a pointer-to-array), the C frontend's lane. Byte-identical
+before and after this change, so it is pre-existing, not a regression:
+`bug-c-sizeof-of-a-dereferenced-pointer-to-array-answers-the-element-size`.
+
+### What I checked, precisely
+
+C `test/test_zig_advanced.zig`, `test/test_rust_advanced.rs` and a C
+pointer-to-array program: **byte-identical output against the pinned compiler**,
+which is the claim that matters for a shared-`ir.inc` change — not "the gate was
+green". A NilPy canary and `gate.sh quick` are green. Everything else is Track
+T's sweep.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -2783,6 +2783,13 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_const_array_of_sets.pas $(TESTTMP)/test_casets26
 	@$(TESTTMP)/test_casets26 | diff -u test/test_const_array_of_sets.expected - \
 	  || { echo 'test_const_array_of_sets: FAIL - set element of a const array'; exit 1; }
+	@# `p^[i]` over a pointer to a FIXED array, every element kind, read AND
+	@# write, each row beside the direct `a[i]` spelling. Compare VALUES: four of
+	@# the rows this test was written for exited 0 while being wrong, and one of
+	@# them printed an empty string rather than crashing.
+	@./$(COMPILER) test/test_pointer_to_array_indexing.pas $(TESTTMP)/test_ptrarr26
+	@$(TESTTMP)/test_ptrarr26 | diff -u test/test_pointer_to_array_indexing.expected - \
+	  || { echo 'test_pointer_to_array_indexing: FAIL - p^[i] element kind or stride'; exit 1; }
 	@# PWideChar(w) — the cast, sharing the PChar arm. The PChar rows are the
 	@# control for that sharing. Needs PXX_WIDE_PAYLOAD (the file defines it):
 	@# without it the cast is deliberately REFUSED, because on the UTF-8 payload
