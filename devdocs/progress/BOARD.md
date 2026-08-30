@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (325)
+## backlog (326)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -387,6 +387,7 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-core-test-generic-arg-is-enclosing-template-param-objfpc | P | 70 | regression | regression: test-core#src:test/test_generic_arg_is_enclosing_template_param_objfpc.pas red at 1d8b44e59042 (auto-filed by twatch) | — |
+| ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
@@ -796,6 +797,7 @@ _none_
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
+- [p 55] [A+S] ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
