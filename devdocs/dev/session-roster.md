@@ -19250,3 +19250,60 @@ unread.*
 `mimic_xml_dom_minidom.py.parked` is a hard block that just came unblocked by
 frankA's symtab fix, unblocking work outranks another audit increment, and the
 59 are bounded, non-urgent, and will keep.
+
+## Tick 2026-08-30 ~12:2x — "latent" was reachable in six lines, and the count chose the design
+
+**`RENAMED` is dismissed — pure adjacency, exactly as suspected.** It is the
+test's own identifier: `test_nilpy_relative_import_in_package.npy:34` reads
+`from nilpy_relpkg import S, T, U, A, B, RENAMED`, a re-exported name the test
+checks. Compiles clean at HEAD, matches its `.expected`. Nothing to do with a
+symbol renamed after insert. **I flagged it as a question and explicitly not a
+claim, and that was the right call for a lead that cost thirty seconds to kill.**
+
+**p45's cycle guard is landed (`e3cb3b955`, verified with
+`merge-base --is-ancestor`) — and the ticket was WRONG that it was latent.** Six
+lines of Pascal hang the compiler forever, 100% CPU, no output, no exit, on
+`pinned` and at HEAD:
+
+```pascal
+type TB = class; TA = class(TB) end; TB = class(TA) end;
+```
+
+Confirmed for a 2-cycle, a 3-cycle and the self-cycle; a forward declaration that
+does *not* close a cycle compiled throughout. frankA went looking for a
+constructive case because **"I could not build one" describes the search, not the
+language** — it took three minutes. FPC rejects the spelling, which does not
+rescue us: **a compiler that spins on input it should reject is still a compiler
+that spins.**
+
+**THE FACE — the count chose the design.** The ticket's population went
+**four → eight → thirteen → seventy-two** as it was actually enumerated rather
+than eyeballed. `UClsParent` is stepped at 72 sites across five files and two
+lanes, none bounded; only nine assign the chain and only **four** assign a real
+parent. *Four walks* reads like "patch four walks"; *seventy-two* reads like
+"stop making the data cyclic". **A count that keeps growing under enumeration is
+a signal the FIX LOCATION is wrong, not just that the estimate was low.** The
+guard went on the **write**: refuse the link, and all 72 walks terminate because
+the data cannot be cyclic — an invariant every future walk inherits instead of a
+rule each must remember. Bounding 72 reads would have been cross-lane and would
+only have converted a hang into an internal error.
+
+**And frankA nearly shipped a second mechanism for an existing one.** After
+guarding all four write sites it found `pyparser.inc:35822` already refuses the
+whole chain via `PyClsHasAncestor`, with a comment making this ticket's own
+argument. Its NilPy edits were redundant **and harmful** — they fired first and
+replaced the established diagnostic that `Makefile:901` and `:11079` assert by
+`grep -q 'cannot inherit from itself'`. Reverted. **What caught it was not care:
+it was grepping for who else asserts that string before changing a message.**
+The `PyClsHasAncestor`/`UClsParentWouldCycle` convergence left as a Track N
+follow-up rather than slipping a refactor into another lane's file.
+
+**Tooling: `DUP-FACE-NUMBER` was missing 90 faces and both of the lanes that
+counted the file missed the same 90.** The check required an em/en-dash and did
+not see the OLDER numbering style — `### 30. Two fields of one report
+disagree` — which is 90 numbered faces written with a period. pxx-a5 and I each
+counted independently, each got 317, and **both patterns had been written by
+reading the file's recent tail, where every entry uses a dash.** A pattern
+derived from the current convention cannot see the convention it replaced.
+Separator set widened; **407 headings now seen, zero same-level duplicates**, so
+the verdict is unchanged and the coverage is no longer overstated.
