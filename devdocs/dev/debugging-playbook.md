@@ -406,6 +406,19 @@ independence and stationarity and this box is neither — **while the conclusion
 supported survived anyway.** That is the retraction nothing prompts and nobody
 catches, and it is the one worth naming.
 
+**None of this was self-generated, and that is the part to copy.** The correction
+is recorded at the measurer's own request, because the section read as though the
+discipline arrived on its own. It did not: **frankwasm declined to accept a
+result reported as settled** and told them to go find the on/off version of the
+question. The null row exists because a peer refused a summary.
+
+So the reproducible move here is not "remember to run a control" — nobody
+remembers, and the session that produced the ~6% floor had already published
+three rows without one. It is: **when someone hands you a settled-sounding
+summary, ask what would make the question on/off**, and be the peer who does not
+accept it. That is cheap, it does not require you to know anything about their
+measurement, and on this occasion it retired three published numbers.
+
 ### The natural repair action can destroy the diagnostic
 
 `tools/gate.sh:104`, and it is the only thing that knows this:
