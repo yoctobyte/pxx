@@ -1,0 +1,84 @@
+---
+slug: bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend
+title: "Two copies of the WASI capability model: the PAL's and wasibackend's, and the promised de-duplication was never filed"
+track: A
+prio: 50
+type: bug
+status: backlog
+owner: ""
+created: 2026-08-30
+found-by: frankwasm (closing feature-a-wasm32-sys-intrinsics-and-ir-syscall-lowering)
+summary: "compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it."
+---
+
+# The state
+
+Two independent implementations of the same capability model:
+
+| file | has | since |
+| --- | --- | --- |
+| `lib/rtl/platform/wasi/platform_backend.pas` | preopen table (~line 254), `WasiFindPreopen` (~line 393), rights masks, `WasiErr` | the WASI PAL |
+| `compiler/builtin/wasibackend.pas` | a copy of all of it | `8f6f3e373` |
+
+Nothing is broken today. Both work; `check_wasi.sh` and `check_pal.sh` are
+green and so is the wasm-hosted compiler's own file I/O.
+
+# Why it is filed as a bug and not as a cleanup
+
+Because the unit that created it says so, in its own header:
+
+> DUPLICATION, DELIBERATE AND TEMPORARY. […] Two copies of a CAPABILITY MODEL
+> is exactly the kind that drifts silently — one path opening files the other
+> refuses — so it does not stay: the next commit makes platform_backend
+> delegate here and deletes its copy. **If you are reading this comment and
+> platform_backend still has its own preopen table, that follow-up did not
+> happen and this is now a real defect.**
+
+I am reading that comment and `platform_backend` still has its own preopen
+table. By the author's own criterion this is now a defect rather than a debt.
+
+**Nothing else would have caught it.** `grep -rl wasibackend devdocs/progress/`
+returns only the BOARD and the decision doc — no ticket was ever filed, both
+copies pass every check, and a divergence would first appear as a path that
+opens under one caller and returns `ENOTCAPABLE` under the other. This is the
+self-reporting comment doing the entire job it was written for, and it is worth
+noting as a pattern that worked.
+
+# The constraint that makes it non-obvious, and why it is not just "move it"
+
+The obvious shapes are both closed:
+
+* **A shared include is OUT, measured.** The decision doc records that option
+  (c) was implemented far enough to fail: both units can co-occur in one
+  program — a raw `sysopen` alongside `uses SysUtils` — so a shared `{$i}`
+  defines every symbol twice.
+* **`wasibackend uses platform_backend` is OUT by design.** `compiler.pas`
+  links no PAL, deliberately; that is the whole reason `wasibackend` exists.
+
+So the only direction left is the one the header names: **`platform_backend`
+delegates to `wasibackend`**, guarded by `{$ifdef CPU_WASM32}`. That is
+feasible — `compiler/builtin/` is a compiler SEARCH DIRECTORY whose units are
+read per-program, so a `uses wasibackend` resolves — but it points a `lib/rtl`
+unit at a `compiler/builtin` one, which is backwards from how every other
+dependency in the tree runs.
+
+**That direction is the actual open question, and it is a design call rather
+than a typing job.** Worth settling before the edit, not during it. If pointing
+the PAL at `compiler/builtin/` is unacceptable, the alternative is a third home
+both can reach, which reopens the question of what that home may depend on.
+
+# Lane note
+
+`lib/rtl/platform/wasi/**` is normally Track B's. It was assigned to the wasm
+lane for this campaign, and the original landing was made under an explicit
+owner grant of sole occupancy that is no longer in force (three Track A
+sessions now run concurrently). So this needs a coordination check before it is
+picked up, not just a claim.
+
+# Gate
+
+`test/wasm/check_all.sh` 33/33 (it is `check_wasi.sh` and `check_pal.sh` that
+prove the PAL's behaviour is unchanged by the delegation) plus
+`make compiler/pascal26` self-host fixedpoint. The wasm-hosted compiler must
+still resolve its unit chain — `--list-libraries` under WASI is the cheapest
+end-to-end witness, since it walks a directory through the model in question.
