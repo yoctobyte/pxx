@@ -2470,6 +2470,34 @@ def split_jobs(target, lines):
     for i, g in enumerate(groups):
         text = "\n".join(g)
         toks = set(tmp_re.findall(text))
+        # A PRODUCER MAY NAME THE DIRECTORY AND THE CONSUMER A FILE INSIDE IT,
+        # and exact-path equality cannot see that. The C include-nesting test
+        # is the whole shape in three lines: one recipe line generates 16
+        # headers plus a gmain.c into `$(TESTTMP)/cnest16`, the NEXT line
+        # compiles `$(TESTTMP)/cnest16/gmain.c` -- and because that next line
+        # is a compile following a non-compile, the split above puts them in
+        # different jobs. Their token sets are {/tmp/cnest16} and
+        # {/tmp/cnest16/gmain.c, /tmp/cnest16_26}: no string in common, no
+        # merge, no ordering. It passed for as long as it did only because the
+        # producer's job usually got dispatched first -- a race, not a
+        # dependency -- and it finally lost that race on a busy box as
+        # `test-core#src:tools/expect_same.sh@276`, reporting
+        # `cannot read input file: .../cnest16/gmain.c` against a job named
+        # after expect_same.sh.
+        #
+        # So every ancestor directory strictly below TESTTMP becomes a token
+        # too. STRICTLY below: TESTTMP itself would merge every job in the
+        # target into one, since they all name something under it. Measured
+        # before adding it -- across test-core, test-threads, lib-test,
+        # test-nilpy and test-asm there are exactly THREE paths with a
+        # subdirectory component, so this cannot merge anything by accident;
+        # it is a named blind spot, not a widened net. Same reasoning as the
+        # LOADER_DIR token below, which models a different invisible edge.
+        for t in list(toks):
+            d = os.path.dirname(t)
+            while len(d) > len(TESTTMP):
+                toks.add(d)
+                d = os.path.dirname(d)
         if so_prod_re.search(text) or loader_dir_re.search(text):
             toks.add(LOADER_DIR)
         for f in toks:
