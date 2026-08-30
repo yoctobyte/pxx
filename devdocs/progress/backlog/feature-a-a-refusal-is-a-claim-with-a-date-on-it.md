@@ -9771,3 +9771,73 @@ Note where the check landed, because it is the standing lesson about where verif
 pxx-a5 spent care on the *fuzz* findings — five oracles, two refuted hypotheses, a deferred
 revalidation labelled NOT VALIDATED — and passed the tool's output along unread. The scrutiny
 went to the thing it had doubts about.
+
+---
+
+## 203 — A NUMBER THAT LOOKS *FINISHED*, OVER A BUILD THAT SEGFAULTS ON THE FIRST SIGNAL
+
+*(frankA, 2026-08-30, increment 3 of `--rtl-libc`, `c4db6474f` — the sharpest instance of 191b
+this index will get.)*
+
+`rt_sigreturn` nearly shipped through the out-of-line thunk. It takes **no arguments** and
+restores the entire context from a signal frame at a **fixed offset from `rsp`** — so the
+thunk's return address plus six pushes move that frame out from under the kernel. A libc-mode
+program sent SIGTERM died with **SIGSEGV (139)** where the default build exits **143**.
+
+What makes it a face rather than a bugfix line is **the state it was in at the moment frankA
+nearly stopped**:
+
+| signal | reading |
+| --- | --- |
+| residual syscall count | **0** |
+| `hello` | correct |
+| div0 | byte-identical behaviour to default |
+| self-host | converged |
+| default codegen | byte-identical to the **pinned** compiler's output |
+
+**Six green signals over a build that segfaults on the first signal it receives.** And the most
+persuasive of them was the **zero**:
+
+> *It is 191b with the metric at its most flattering: not a number that looked **acceptable**,
+> a number that looked **finished**.*
+
+That is the distinction worth keeping. An acceptable number invites one more check; a *complete*
+one closes the question — 0 of 73 is the shape of a job done, and it terminates the search by
+looking like an answer rather than a measurement. **The count was measuring "no `syscall`
+instruction remains", which was true and was not the question.** Only a test that *delivered an
+actual signal* could tell the difference, and no amount of staring at the six greens would have
+produced one.
+
+Note the byte-identical rows especially. Two of the six are exactly the disjoint-oracle checks
+this index recommends (190, 201) — output against the pinned binary, behaviour against default
+— and **both passed while the build was broken**, because neither exercises a delivered signal.
+A disjoint oracle is still only as good as the population it runs over (187). Nothing here
+demotes those checks; it demotes the idea that a stack of them adds up to coverage.
+
+The fix: a new `syscall_raw` mnemonic that **never becomes a call on any flag**, so the raw
+contract is a property of the site rather than of a reviewer remembering.
+
+### 203a — "previously true by omission, now true by statement"
+
+Same change. `clone`'s child stub in `thread_emit.inc` was already raw, and frankA had recorded
+it as *"not converted"* — an accident of the enumeration. It turns out to be **required** to be
+raw: the child runs on a fresh stack, and libc's errno path would touch the **parent's** TLS.
+
+> Previously true by omission, now true by statement.
+
+The behaviour did not change; its **status** did. An invariant holding by accident and an
+invariant holding by rule are indistinguishable from the outside — right up to the moment
+someone tidies the accident. This is the cheapest possible fix for a whole class of latent
+breakage, and it costs one sentence: when you discover that something you left alone *had* to
+be left alone, say so where the next person will be tempted.
+
+### 203b — scope stated because the ticket now states it
+
+frankA declined to call the feature done, and named the population instead: `--rtl-libc` is
+exercised on **Pascal hello / div0 / signal paths only**. The frontend sites
+(`cparser`/`eparser`/`rparser`/`zparser`) and most of the 17 need threads, fork/exec or richer
+signal use to be *emitted at all*, so they are **converted-but-untested**.
+
+That is 196a's rule applied *before* anyone had to correct it: a measurement carries its
+configuration or it carries nothing. "Converted-but-untested" is a state with a name, and
+naming it is what stops the next reader reading 73 → 1 as coverage.
