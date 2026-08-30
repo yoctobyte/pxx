@@ -2310,6 +2310,16 @@ Four more from a single day, all different mechanisms, all the same shape:
   and measure one at a time. "All of them" is not a shortcut through "each of
   them" — it is a different experiment with a different answer.
 
+- **A SHELL READS ITS SCRIPT ONCE — the sync that pulls in a fix still runs the
+  old copy.** Measured 2026-08-30, and it hit the agent who had corrected two
+  others for the same underlying bug three times that night: `sync.sh` had been
+  taught to print the landed sha at 21:35, and his next *two* syncs still did not
+  print it, because the run that fetched the new script was already executing the
+  old one. He quoted two ghost shas in between. **The fix landed, the running
+  process did not have it, and nothing anywhere said so.** After any sync that
+  updates a tool you are about to rely on, the FIRST run of that tool is the old
+  one; check the behaviour changed rather than assuming the pull applied it.
+  Generalises past shells to anything that loads once and is edited underneath.
 - **"master is broken" vs "my copy is" — `git stash` + rebuild on clean HEAD,
   2.5 s.** One measurement instead of an argument, and against a 120 s timeout it
   is free. CLAUDE.md's parking note has the slower form (build with the *pinned*

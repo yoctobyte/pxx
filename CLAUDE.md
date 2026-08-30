@@ -398,8 +398,13 @@ ticket carries the field it thought it was reading.
 That earned itself immediately: frankT's first rewrite passed the bad metric too,
 green and testing nothing, and the control caught it where reasoning would not
 have. **The same exposure applies to any "proof-grade" flag**, including the
-`tier == full and skip_holes == 0` one this file now leans on: a flag that cannot
+`tier == full and skip_holes == 0` one this file leans on: a flag that cannot
 come out false is the same animal as a guard that cannot fail.
+**That flag is NOT BUILT — do not cite it as existing** (frankT, who owns it).
+The *property* is checkable today, because `skip_holes` is in every
+`tstate/runs-*.ndjson` row; the *check* is not written. When it is, it ships with
+a run that MUST classify not-proof-grade, asserted — and the positive control is
+free: **a `quick`-tier run can never qualify by definition.**
 
 ## Debugging — measure, do not reason
 
