@@ -375,4 +375,4 @@ left above as the record of what was known before the pin, not restated as if it
 were the close. The close is this section, and its evidence is the pinned binary.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 39c9a2e54.
