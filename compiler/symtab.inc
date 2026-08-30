@@ -1623,6 +1623,7 @@ begin
   SetLength(UFldSubLo, n);      SetLength(UFldSubHi, n);        SetLength(UFldSetEnumId, n);
   SetLength(UFldEnumId, n);
   SetLength(UFldSetElemTk, n);  SetLength(UFldBitWidth, n);     SetLength(UFldBitShift, n);
+  SetLength(UFldStrElemTk, n);
   SetLength(UFldBitBytes, n);   SetLength(UFldArrNDims, n);
   SetLength(UFldArrDimLo, n * MAX_ARR_DIMS);   SetLength(UFldArrDimSpan, n * MAX_ARR_DIMS);
   UFldCapacity := n;
@@ -1673,6 +1674,7 @@ begin
       UFldSetEnumId[dst+k] := UFldSetEnumId[src];
       UFldEnumId[dst+k] := UFldEnumId[src];
       UFldSetElemTk[dst+k] := UFldSetElemTk[src];
+      UFldStrElemTk[dst+k] := UFldStrElemTk[src];
       UFldIsArray[dst+k] := UFldIsArray[src];  UFldArrLen[dst+k] := UFldArrLen[src];
       UFldDynDepth[dst+k] := UFldDynDepth[src];
       UFldArrNDims[dst+k] := UFldArrNDims[src];
@@ -1737,6 +1739,15 @@ begin
     UFldSetEnumId[fi] := -1;
     UFldSetElemTk[fi] := 0;
   end;
+  { A managed string field's ELEMENT. tyChar is the only thing reachable today --
+    `widestring` is still an alias, so no field can be wide -- but stamping it
+    here rather than leaving 0 means the field arm reads the same shape the
+    symbol arm does, instead of a sentinel that happens to mean the same thing.
+    feature-unicodestring-model }
+  if tk = Ord(tyAnsiString) then
+    UFldStrElemTk[fi] := Ord(tyChar)
+  else
+    UFldStrElemTk[fi] := 0;
   UFldIsArray[fi] := False;
   UFldArrLen[fi] := 1;
   UFldDynDepth[fi] := 0;
@@ -2619,6 +2630,22 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := IntToTypeKind(UFldPtrElemTk[fi]);
+  end;
+end;
+
+function RecFieldStrElemTk(rec: Integer; const field: AnsiString): Integer;
+{ Element TTypeKind ordinal of a managed-STRING field -- Ord(tyWideChar) for a
+  UTF-16 field, Ord(tyChar) for a byte one, 0 when the field is not a managed
+  string or the record is unknown. The field twin of Syms[].ElemType; `rec.w[i]`
+  gets its stride from here, since UFldTk only says tyAnsiString.
+  feature-unicodestring-model }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if (fi >= 0) and not UFldIsArray[fi] then Result := UFldStrElemTk[fi];
   end;
 end;
 

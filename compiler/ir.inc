@@ -1820,6 +1820,13 @@ begin
       strElemTk := tyChar;
       if ASTKind[baseNode] = AN_IDENT then
         strElemTk := Syms[ASTIVal[baseNode]].ElemType
+      else if (ASTKind[baseNode] = AN_FIELD) and
+              (RecFieldStrElemTk(ResolveNodeRec(ASTLeft[baseNode]),
+                                 GetASTIdentName(baseNode)) <> 0) then
+        { a string FIELD -- `rec.w[i]`. UFldTk says tyAnsiString and carries no
+          element, so the width comes from the field's own UFldStrElemTk. }
+        strElemTk := IntToTypeKind(RecFieldStrElemTk(ResolveNodeRec(ASTLeft[baseNode]),
+                                                     GetASTIdentName(baseNode)))
       else if ASTStrElemTk[baseNode] <> 0 then
         { an EXPRESSION base -- `(a + b)[i]`. No AST node carries an element
           type generally, so wide-string producers stamp ASTStrElemTk and this

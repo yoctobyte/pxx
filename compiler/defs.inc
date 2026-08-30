@@ -4483,6 +4483,15 @@ var
   UFldEnumId : array of Integer; { FIELD whose type is an enum — or whose ELEMENT type is, for an array field, since UFldTk is the element kind there too: that enum type index, else -1. A reader that means "this field's VALUE is an enum" must therefore check `not UFldIsArray[fi]` first. The record/class twin of SymEnumId, set at the Pascal field-decl site (never inside AddUField — the C frontend calls that with tyInteger constantly and LastTypeEnumId would be stale). Drives `WriteLn(r.f)` printing the member name. }
   UFldSetEnumId : array of Integer; { set field: element enum type index for `set of TEnum`, else -1. Drives `for e in obj.field` range }
   UFldSetElemTk : array of Integer; { set field: element TTypeKind ordinal (tyChar/enum-as-integer), else 0 }
+  { managed-STRING field: element TTypeKind ordinal -- Ord(tyWideChar) for a
+    UTF-16 field, else 0, which reads as the 1-byte default. The record/class
+    twin of Syms[].ElemType (which AllocVar already stamps tyChar for a
+    tyAnsiString symbol) and of ASTStrElemTk (the expression twin). Without it
+    `rec.w[i]` indexes a wide string at stride 1, silently -- UFldTk says
+    tyAnsiString and nothing else on a field carries an element for a string.
+    Note UFldTk holds the ELEMENT kind for an ARRAY field, so this is only ever
+    consulted when not UFldIsArray. feature-unicodestring-model }
+  UFldStrElemTk : array of Integer;
   UFldBitWidth : array of Integer; { C named bit-field width in bits; 0 = ordinary field }
   UFldBitShift : array of Integer; { C named bit-field least-significant bit offset within storage unit }
   UFldBitBytes : array of Integer; { C named bit-field storage bytes used for masked RMW }
