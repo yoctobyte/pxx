@@ -3182,6 +3182,7 @@ var
   mname, recNm, fullNm: AnsiString;
   mnOff, mnLen, mpi, i, nP, startIdx, k: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;   { ...and the depth + ultimate base beside it: feature-a-typeref-migrate-consumers }
+  retStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
   retPtrElemTk, retPtrElemRec: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
@@ -3319,11 +3320,24 @@ begin
   LastTypeRecId := REC_NONE;
   retPtrElemTk := Ord(tyUnknown);
   retPtrElemRec := REC_NONE;
+  retStrElemTk := 0;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
   if isFunc then
   begin
     Expect(tkColon, ':');
     retTk := ParseTypeKind;
+    { The managed-string RESULT's element width. NOTE the method-decl paths in
+      this file track no array returns at all (no retIsDynArr / retArrAi
+      anywhere here), so unlike pasparser_proc.inc's plain-routine path a
+      tyAnsiString is unambiguously a SCALAR string result. If array returns are
+      ever added to them, the element-vs-result ambiguity that broke the
+      self-host fixedpoint in 6c-params applies here too and this needs the
+      same guard. }
+    if retTk = tyAnsiString then
+    begin
+      if LastTypeStrElemTk = tyWideChar then retStrElemTk := Ord(tyWideChar)
+      else retStrElemTk := Ord(tyChar);
+    end;
     retPtrElemTk := Ord(LastTypePointerElemTk);
     retPtrElemRec := LastTypePointerElemRec;
     retPtrDepth := LastTypePointerDepth;
@@ -3389,6 +3403,8 @@ begin
 
   mpi := RegisterProc(fullNm, isFunc, retTk, nP, pn, pt);
   Procs[mpi].BodyAddr := -1;
+  if isFunc and (retTk = tyAnsiString) then
+    ProcRetStrElemTk[mpi] := retStrElemTk;
   if isFunc and (retTk = tyPointer) then
   begin
     ProcRetPtrElemTk[mpi] := retPtrElemTk;
@@ -4019,6 +4035,11 @@ begin
         tyUnknown, so IsNodePChar can't tell an indirect call through T returns
         char* and `AnsiString(fp(...))` mis-lowers. Same dropped-field pattern as
         the external-decl path. See bug-pascal-ansistring-cast-of-fnptr-call-result. }
+      if mIsFunc and (mRetType = tyAnsiString) then
+      begin
+        if LastTypeStrElemTk = tyWideChar then ProcRetStrElemTk[mpi] := Ord(tyWideChar)
+        else ProcRetStrElemTk[mpi] := Ord(tyChar);
+      end;
       if mIsFunc and (mRetType = tyPointer) then
       begin
         ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
@@ -4125,6 +4146,7 @@ var
   mDefaultIsSet: Boolean;
   mRetRecId: Integer;      { the DECL's return-type class/record id (ProcRetRecId) }
   mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec: Integer;   { ...and the depth + ultimate base: feature-a-typeref-migrate-consumers }
+  mRetStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
   mRetPtrElemTk, mRetPtrElemRec: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
@@ -4339,12 +4361,18 @@ begin
           mRetRecId := REC_NONE;
           mRetPtrElemTk := Ord(tyUnknown);
           mRetPtrElemRec := REC_NONE;
+          mRetStrElemTk := 0;
           mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
           if mIsFunc then
           begin
             Expect(tkColon, ':');
             mRetType := ParseTypeKind;
             mRetRecId := LastTypeRecId;   { the return type's class/record id }
+            if mRetType = tyAnsiString then
+            begin
+              if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
+              else mRetStrElemTk := Ord(tyChar);
+            end;
             mRetPtrElemTk := Ord(LastTypePointerElemTk);
             mRetPtrElemRec := LastTypePointerElemRec;
             mRetPtrDepth := LastTypePointerDepth;
@@ -4370,6 +4398,8 @@ begin
             result could not resolve. `.DumpJSON` silently degraded to a FIELD access, and the
             statement then demanded a ':='. }
           if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
+          if mIsFunc and (mRetType = tyAnsiString) then
+            ProcRetStrElemTk[mpi] := mRetStrElemTk;
           if mIsFunc and (mRetType = tyPointer) then
           begin
             ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
@@ -4942,12 +4972,18 @@ begin
 
             mRetPtrElemTk := Ord(tyUnknown);
             mRetPtrElemRec := REC_NONE;
+            mRetStrElemTk := 0;
             mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
             if mIsFunc then
             begin
               Expect(tkColon, ':');
               mRetType := ParseTypeKind;
               mRetRecId := LastTypeRecId;   { see the twin site above }
+              if mRetType = tyAnsiString then
+              begin
+                if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
+                else mRetStrElemTk := Ord(tyChar);
+              end;
               mRetPtrElemTk := Ord(LastTypePointerElemTk);
               mRetPtrElemRec := LastTypePointerElemRec;
               mRetPtrDepth := LastTypePointerDepth;
@@ -5017,6 +5053,8 @@ begin
                    ((mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord)) then
                   ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
               if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
+              if mIsFunc and (mRetType = tyAnsiString) then
+                ProcRetStrElemTk[mpi] := mRetStrElemTk;
               if mIsFunc and (mRetType = tyPointer) then
               begin
                 ProcRetPtrElemTk[mpi] := mRetPtrElemTk;

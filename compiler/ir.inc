@@ -1428,6 +1428,19 @@ begin
     Result := Ord(Syms[ASTIVal[node]].ElemType)
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldStrElemTk(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  { The RESULT of a call. A call node has no symbol and no field to ask, so the
+    callee's row is the only place the width can live -- the same argument
+    ProcRetEnumId makes for an enum-typed result. All three call shapes carry
+    the Procs[] index in IVal, and the virtual/interface ones belong here for
+    the reason IsNodePChar's arm 4 gives: a method reached through a VMT or an
+    interface returns just as concrete a string as a direct call does, and an
+    enumeration that lists only AN_CALL is wrong for every override. }
+  else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_INTF_CALL) then
+  begin
+    if (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
+      Result := ProcRetStrElemTk[ASTIVal[node]];
+  end
   else
   begin
     Result := ASTStrElemTk[node];

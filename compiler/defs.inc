@@ -2669,6 +2669,7 @@ var
   ProcGenInstSize : array of Integer;   { stackless: instance byte size (header + persistent slots) }
   ProcRetElemTk : array of TTypeKind;    { element type of a dyn-array result }
   ProcRetElemRec : array of Integer;     { element record id of a dyn-array result }
+  ProcRetStrElemTk : array of Integer; { managed-string RESULT: the element width as a TTypeKind ord -- Ord(tyChar) for a byte string, Ord(tyWideChar) for a wide one; 0 = not a managed string. The return half of the fifth carrier (see ProcParamStrElemTk); a call node has no symbol and no field to ask, so the callee's row is the only place the width can live -- the same argument ProcRetEnumId makes for an enum-typed result. Read by ASTStrElemTkOf's AN_CALL arm. Normalised on the way in, so 0 means "not a managed string" and never doubles as "narrow". feature-unicodestring-model }
   ProcRetPtrElemTk : array of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
   ProcRetEnumId : array of Integer;      { enum-typed RESULT: its enum type index, else -1. A call node has no symbol and no field to ask, so the callee's row is the only place the identity can live; read by NodeEnumIdOf's AN_CALL arm. }
   { ...and the rest of the returned pointer's identity, so `GetQ^` on a

@@ -9773,6 +9773,7 @@ begin
   SetLength(ProcIram, n);  SetLength(ProcIsInterrupt, n);  SetLength(ProcBodyEnd, n);
   SetLength(ProcDbgMain, n);  SetLength(ProcGenElemTk, n);  SetLength(ProcGenElemRec, n);
   SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcRetElemTk, n);
+  SetLength(ProcRetStrElemTk, n);
   SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);
   SetLength(ProcRetEnumId, n);
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
@@ -9837,6 +9838,7 @@ begin
   ProcRetElemTk[ProcCount]     := tyUnknown;
   ProcRetElemRec[ProcCount]    := REC_NONE;
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
+  ProcRetStrElemTk[ProcCount]  := 0;
   ProcRetEnumId[ProcCount]     := -1;
   ProcRetPtrDepth[ProcCount]   := 0;
   ProcRetPtrBaseTk[ProcCount]  := Ord(tyUnknown);

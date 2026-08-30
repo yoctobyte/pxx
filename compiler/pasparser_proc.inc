@@ -559,6 +559,7 @@ var
   retFixedArrBytes : Integer;   { a FIXED-array result's byte size; 0 = not one }
   retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
   retPtrElemTk, retPtrElemRec : Integer;
+  retStrElemTk : Integer;   { managed-string result: element width ord, 0 = not one }
   retEnumId : Integer;   { enum-typed result: its enum index, else -1 }
   retPtrDepth, retPtrBaseTk, retPtrBaseRec : Integer;
   retDynDepth : Integer;   { `array of` levels of a dyn-array result }
@@ -760,6 +761,7 @@ begin
   retDynDepth := 0;
   retFixedArrBytes := 0; retArrAi := -1;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
+  retStrElemTk := 0;
   retEnumId := -1;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
 
@@ -1089,8 +1091,15 @@ begin
         LastTypePointerElemRec := ArrTypePtrElemRec[retArrAi];
         if (retType = tyFixedString) or (retType = tyShortString) then
           LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
-          if ArrTypeStrElemTk[retArrAi] <> 0 then
-            LastTypeStrElemTk := IntToTypeKind(ArrTypeStrElemTk[retArrAi]);
+        { NOT nested under the frozen-string guard above -- deliberately a
+          separate statement, and now indented like one. 6cf371d817 wrote it at
+          the inner level, where it read as though the frozen-string arm gated
+          it. A MANAGED string element (tyAnsiString) has a width but no
+          capacity, so it must restore the channel on a path where that arm
+          does not fire at all. Correct but misindented is one begin/end away
+          from being neither. }
+        if ArrTypeStrElemTk[retArrAi] <> 0 then
+          LastTypeStrElemTk := IntToTypeKind(ArrTypeStrElemTk[retArrAi]);
         Next;   { consume the alias name ParseTypeKind would have eaten }
       end
       else
@@ -1104,6 +1113,23 @@ begin
       begin
         if (retArrAi >= 0) or retIsDynArr then retEnumId := -1
         else retEnumId := LastTypeEnumId;
+      end;
+      { The managed-string RESULT's element width, under exactly the rule the
+        enum arm states above and for the same reason: an ARRAY result reaches
+        here with retType = the ELEMENT kind, so `function F: array of
+        AnsiString` is indistinguishable at this line from `function F:
+        AnsiString`. The RESULT of the first is an array, not a string, and
+        records no width -- the ELEMENTS' width is the array type's business
+        (ArrTypeStrElemTk), not the result's. Getting this exact distinction
+        wrong on the PARAMETER side broke the self-host fixedpoint earlier in
+        6c: Syms[].ElemType for an `array of AnsiString` param legitimately IS
+        tyAnsiString, and overwriting it with tyChar retyped the elements to a
+        1-byte stride. }
+      if retType = tyAnsiString then
+      begin
+        if (retArrAi >= 0) or retIsDynArr then retStrElemTk := 0
+        else if LastTypeStrElemTk = tyWideChar then retStrElemTk := Ord(tyWideChar)
+        else retStrElemTk := Ord(tyChar);
       end;
       if (retType = tyRecord) or (retType = tyClass) then
         retRecId := LastTypeRecId;
@@ -1331,6 +1357,7 @@ begin
     ProcRetElemTk[procIdx] := retElemTk;
     ProcRetElemRec[procIdx] := retElemRec;
     ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+    ProcRetStrElemTk[procIdx] := retStrElemTk;
     ProcRetEnumId[procIdx] := retEnumId;
     ProcRetPtrElemRec[procIdx] := retPtrElemRec;
     ProcRetPtrDepth[procIdx] := retPtrDepth;
@@ -1680,6 +1707,7 @@ begin
       ProcRetElemTk[procIdx] := retElemTk;
       ProcRetElemRec[procIdx] := retElemRec;
       ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+      ProcRetStrElemTk[procIdx] := retStrElemTk;
       ProcRetEnumId[procIdx] := retEnumId;
       ProcRetPtrElemRec[procIdx] := retPtrElemRec;
       ProcRetPtrDepth[procIdx] := retPtrDepth;
@@ -1714,6 +1742,7 @@ begin
   ProcRetElemTk[procIdx] := retElemTk;
   ProcRetElemRec[procIdx] := retElemRec;
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+  ProcRetStrElemTk[procIdx] := retStrElemTk;
   ProcRetEnumId[procIdx] := retEnumId;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
   ProcRetPtrDepth[procIdx] := retPtrDepth;
