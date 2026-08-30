@@ -18284,3 +18284,56 @@ with reach outside their tickets:
 - **when you convert silence into checks, the risk moves to the success path** —
   the positive control is the one that gets skipped and the one this class of change
   breaks on.
+
+## 2026-08-30 ~02:5x — tick: five gtk reds are ONE defect; two near-misses of mine
+
+**All eight fleet sessions active.** `frankC` shows `shell` and `frank-rust` shows
+`waiting` — both AMBIGUOUS, neither a park line. Measured from last commit instead:
+frankC landed four C fixes in the preceding two hours (live); frank-rust's last
+Rust-file commit is ~6h old and it holds `feature-rust-option-type` — **asked for a
+park line, did not release the lock.**
+
+**Neither frankC nor frank-rust emits a `Lane:` trailer**, so `whoholds` cannot
+attribute their writes and the ownership question can only be answered by asking.
+Both told; the trailer is cheaper than the question.
+
+| session | on |
+| --- | --- |
+| frankA | typed-const generic regression + 5 gtk tickets as a set |
+| frankB | build `eefa85d70^` — settle the gtk range (its bisect method, proven) |
+| frankC | asked: does the header-static fix change the **Pascal-binding** include path? |
+| frankD | finishing the doc sweep at 26/42, told to stop rather than mine the tail |
+| frankS | `lib/rtl/platform` syscall table (14 sources) |
+| frank-optimize-b4 | the 132a gate-count assertion — **NOT** the A migration |
+| frank-rust | status asked |
+| frankwasm | down-queue on N for something completable |
+| pxx-a5 | `bug-a-testtmp-defaults-to-a-path-every-checkout-shares` |
+
+**Track U: 24.** Unchanged since 01:10. Only the owner drains it.
+
+### The consolidation
+Five `test-c-gtk*` regressions [P p70] share **one** red sha, **one** last-good, and
+**one** 3-commit range holding exactly two code commits. **One defect wearing five
+tickets** — bannered as a set so nobody triages it five times. Candidate is
+`eefa85d70 fix(C): a static defined in a used header keeps its body`, because the
+programs are Pascal binding gtk3 through `gtk3_c.h`. **Recorded as a bounded range,
+not a diagnosis**, with the confirming build named and dispatched.
+
+### Two near-misses, both mine, both the same shape
+1. **I nearly re-laned all five to Track C on the `test_c_` prefix.** The sources are
+   **Pascal**; the prefix means *C-interop*, not *C-language*. The watcher's guess was
+   right. This was two ticks after I banked *"retrack on a bounded argument, never on a
+   story"* — **the rule was not enough; running the check was**, and it cost one `ls`.
+2. **I told pxx-a5 I had flagged a routing note to frankA before I had.** Sent
+   immediately. A claim about an action is an action.
+
+**Standing correction to my own rule (frankD):** *"an obligation needs a command that
+re-derives its status"* is **necessary and not sufficient** — `name-resolution.md` had
+a one-grep acceptance test and went stale for two weeks, because **nothing scheduled
+the grep.** Order: file a ticket → else name a lane and a trigger → add the command
+either way.
+
+**Hook false positives are accumulating** (mine tonight: a test-glob pattern inside a
+heredoc; frankD's: two, for writing prose *about* the gate). Every lane worked around
+them correctly and nobody reached for the escape, which is the owner's to grant. **I am
+collecting, not editing** — `.claude/**` and hooks stay the owner's.
