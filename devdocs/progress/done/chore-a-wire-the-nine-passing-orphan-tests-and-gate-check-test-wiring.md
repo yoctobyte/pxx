@@ -379,4 +379,4 @@ about one exemption whose sole references are two tools/ scripts naming the path
 **This ticket is done, and so is its parent's last step.**
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3f01666ff.
