@@ -1252,3 +1252,114 @@ same-second granularity rather than a copied-in seed — and **the tell was
 identical: a success message where a rebuild belonged.** The fix is the one that
 section already prescribes: require the binary's sha256 to *change*
 (`df36eb4a47f9` → `0e5770fa2d2f`), never accept the absence of an error.
+
+## 7c — the lowering, landed; the wall is down
+
+`w := 'abcd'` now produces a UTF-16 payload, `w + v` concatenates in UTF-16,
+`Write(w)` transcodes back, and `WideChar($D83D) + WideChar($DE00)` — the
+surrogate pair this ticket was opened for — is a two-unit string whose units
+read back as 55357 and 56832 and whose UTF-8 round trip is the four correct
+bytes of U+1F600.
+
+`test_widestring_lowering.expected` is an **oracle**: FPC 3.2.2 produces it byte
+for byte across all six carriers (variable, type alias, record field,
+UnicodeString, array element, function result), both mixed-concat orders, and
+the round trip in both directions.
+
+### The finding that shaped it: 7c costs ZERO per-backend code
+
+The natural estimate was seven backends again — that is what the width cost
+every previous time (the seven COW guards, the seven `PXXStrConcat` sites, the
+per-backend inline write blobs). It cost none, and the reason generalises:
+
+> **Every width decision so far had to be per-backend because it is emitted
+> INLINE. A conversion is a CALL, and `IR_CALL` is something all seven backends
+> already lower.**
+
+So the whole of 7c is three arms in `ir.inc` plus three handle-taking wrappers
+in `builtinwide.pas`. The precedent was already in the file: `IRPromoCall` and
+the entire promotable-int subsystem are synthesised runtime calls and have never
+needed a backend arm. The wrappers exist so the frontend never marshals a
+`(len, src)` pair — `PXXWideConcat`'s four-argument shape exists because the
+backends had those values in registers already, and nothing above that layer
+should inherit it.
+
+This is `ir-as-substrate.md`'s claim paying out literally: the work went *down*
+into the IR and the frontends stayed thin.
+
+### Three bugs found, each by the first reader rather than by review
+
+**1. The concat had no width, so it transcoded twice.** `r := w + v` read the
+concat as narrow — `ASTStrElemTk` (the AST-node slot, step 2) is a carrier with
+**no writers** — and re-transcoded an already-UTF-16 payload: four bytes per
+character, `Length` 12 where FPC says 6. Fixed by **deriving** the answer in
+`ASTStrElemTkOf` rather than stamping the slot: a concat is wide when *either*
+operand is. Derivation cannot go stale, and it cannot depend on lowering order
+— a stamp written during lowering would have worked only because the assignment
+happens to read the width after lowering its right-hand side.
+
+**2. The index read one byte from a two-byte unit.** `IRLowerAddress` sets
+`elemSize := 2` *and* `tk := tyWideChar`, but the append one screen down takes
+`ASTTk[node]`, which the parser filled in as `tyChar`. **The stride was right
+and the load width was wrong**, and it reads as correct on every ASCII string,
+because a BMP unit's low byte IS the character on little-endian. `Ord(w[1])` on
+the surrogate pair answered 61 — the low byte of $D83D — where FPC says 55357,
+while the UTF-8 round trip was correct the whole time. The payload was never
+wrong; only the read of it.
+
+*Root cause banked, not fixed:* the AST node should carry `tyWideChar`, not just
+the address node. `NodeIsWideCharVal` already keys on exactly that kind, so
+typing the index node would make `Write(w[i])` and `s + w[i]` correct for free
+through the existing `WrapWideCharToUTF8` path instead of each needing its own
+arm. That is a parser change rippling through every consumer of an index node
+(store, compare, `Ord`, `Write`) and wants its own tests.
+
+**3. A leak, in one position only, found by measuring instead of by reading.**
+The conversion's result comes back with refcount 1. An assignment destination
+adopts it — `w := s` was flat over a million iterations — but a **concat
+operand** is consumed and dropped, and nothing released it: `v := w + s` grew 86
+bytes an iteration, linear, 78 MB at two million, while `v := w + w` (both
+already wide, no conversion) was flat. That contrast is what localised it.
+
+This is the *other end* of the bug `IRPromoInitFromLiteral` documents. That
+comment is about the ARGUMENT side of a synthesised call; this is the RESULT
+side of the same call, and the same hidden-owning-local fixes it. **Worth
+generalising: a synthesised runtime call has two ownership holes, not one, and
+the existing note only warns about the first.**
+
+### What I deliberately did NOT do, and why
+
+**The literal is not folded to a static UTF-16 block.** It is tempting —
+`InternStr` already lays down a complete static managed header, so
+`w := 'lit'` could be a pointer store with no allocation, exactly as the narrow
+path is. It is not done, because `InternStr` unconditionally computes and stamps
+`MSTR_FLAG_ASCII | MSTR_FLAG_ASCII_KNOWN`, and `builtinwide.pas` **deliberately
+refuses** to stamp ASCII on a wide block, with the reason written out: the flag's
+contract is that byte positions equal character positions, which is false for
+every UTF-16 string. A folded literal would therefore carry a flag its runtime
+twin refuses, marked KNOWN so nothing rescans — two producers of one object
+disagreeing, silently, in the direction that skips the rescan.
+
+Doing it properly needs a wide-aware intern entry point and an
+`MSTR_KIND_WIDESTR` constant in `defs.inc`, which is **released to frankS**
+right now. Filed as an **O** follow-up rather than smuggled in: it is a
+performance change (one allocation per literal assignment), not a correctness
+one, and the correctness path — one runtime producer, one meta stamp — is the
+one `normalise-dont-special-case` argues for keeping.
+
+**No `MSTR_KIND_WIDESTR` tag on runtime-built blocks beyond what 7a set.**
+Nothing branches on the kind (`builtinheap`'s own header says so, and the
+width lowers off the element TYPE), so it is diagnostic. Not worth touching a
+locked file for.
+
+### Still open
+
+- **6d-2** — the four remaining pointee-side carriers. Unchanged by this.
+- **`w[i]` as a wide value** — the parser-level root cause above. `Write(w[i])`
+  of a non-BMP unit still prints the low byte; only the READ through `Ord` is
+  correct. Needs its own ticket.
+- **sysutils `UTF8Encode`/`UTF8Decode`** are still documented as the identity.
+  With a real wide type they are now a lie, and `PXXWideFromStr` /
+  `PXXStrFromWide` are exactly their bodies.
+- The default (undefined) direction is unchanged and still pinned by
+  `test_widestring_alias_gate`.
