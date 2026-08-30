@@ -77,3 +77,58 @@ and dies 143, which needs `kill`, not the signal runtime. So it is **a green row
 signal family that is not evidence any of the signal family works**, and it is already in
 the suite. frankS flagged it against its own just-landed work, which is the direction that
 almost never happens.
+
+## Addendum 2026-08-30 (frankS): THE FILE LIST IS MISSING ONE, and it is in a third lane
+
+Measured, not reviewed: `grep -rn "not a Unix\|FreeRTOS" compiler/*.inc`.
+
+The ruling names `EmitSignalRuntimeXtensa`, `ir_codegen.inc`,
+`pasparser_expr.inc` and `EmitDefaultSignalInstallForTarget`. There is a **fifth
+site**, carrying the refusal and its justifying comment **verbatim**:
+
+| file | line | guard |
+| --- | --- | --- |
+| `compiler/pasparser_expr.inc` | 4382 | `if TargetArch = TARGET_XTENSA then Error(...)` |
+| `compiler/pyparser.inc` | 45973 | `if TargetArch = TARGET_XTENSA then Error(...)` |
+
+Same comment in both, down to the wording: *"Every hosted Linux target now
+installs with SA_SIGINFO; only xtensa/ESP is left out, and deliberately —
+FreeRTOS is not a Unix and has no signal runtime at all."*
+
+**Why the duplicate is correct and still a hazard.** Per
+`the-substrate-is-ast-and-ir-not-the-parser`, each frontend owns its own parser
+and its own refusals — so two copies is the intended design, not drift. The
+hazard is the ordinary one: *fix one arm, grep for the sibling*. A session that
+implements the runtime and updates only the Pascal site leaves **NilPy programs
+on hosted xtensa still refused**, by a comment whose premise the same commit just
+retired. Silent, and only reachable by someone writing NilPy for hosted xtensa.
+
+**It changes the contention analysis, which is what the ruling gates on.**
+`pyparser.inc` is Track **N**, carved out and disjoint from the `pasparser_*`
+set frankA holds — so this widens the grant by one file without widening the
+collision surface. The blocking constraint stays exactly what the ruling says it
+is: the P files.
+
+## The mechanism behind this ruling generalises, and it has already been seen once tonight
+
+The ruling's step 2 is the whole finding: *"that sentence reasons from ARCH to
+PLATFORM. It was written when the two were the same thing for xtensa, and the
+hosted profile made them different."*
+
+That is not one comment. **The hosted xtensa profile separated two axes that had
+always been one, and every claim written before it that used "xtensa" to mean
+"ESP/FreeRTOS" expired at that moment without being edited.** A second instance
+was found and falsified independently the same night, in `test-xtensa`:
+
+> *"no runner: windowed images link through xtensa-esp-elf-gcc"*
+
+— the stated reason there is no executed windowed row. Hosted windowed programs
+run today under plain `tools/run_target.sh xtensa`
+([[bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never]]).
+
+Two instances, different files, different lanes, neither noticed at the time.
+The cheap sweep for the rest is the grep above plus `EspBareBoot` (26 sites) vs
+`TargetArch = TARGET_XTENSA` — the first is the correct axis and riscv32's model,
+the second is the one that expires. **This addendum does not claim the remaining
+sites are wrong**; several arch checks are genuinely about the instruction set.
+It claims only that the axis is worth checking per site, and that nothing has.
