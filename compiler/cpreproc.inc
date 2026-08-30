@@ -59,7 +59,14 @@ var
   CPOutLine    : Integer;   { line number the NEXT emitted content lands on }
   { path of the file being processed at each recursion depth (0 = the main
     translation unit); CPProcessText reads its own depth's entry }
-  CPPathAtDepth: array[0..17] of AnsiString;
+  { Sized to the include limit, not to a literal 17. It was array[0..17] while
+    the buffers capped nesting at 16, so the bound was never reachable and the
+    `<= 17` clamp at its write site was dead. Raising the include limit without
+    this would have made CPProcessText's `CPPathAtDepth[depth]` read OUT OF
+    BOUNDS at depth 18 — a bound correct only by the accident of a smaller bound
+    elsewhere. Raising the cap was the trigger, not the bug. One limit, spelled
+    once. }
+  CPPathAtDepth: array[0..MAX_CPREP_INCLUDES] of AnsiString;
   CPCurFileId  : Integer;   { .debug_line id of the file being read }
   CPCurPath    : AnsiString;
   CPCurLine    : Integer;   { line within that file — the last one CONSUMED }
@@ -2024,68 +2031,28 @@ end;
 
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer); forward;
 
-{ THE SLOT TABLE STOPS AT 15, and the nesting guard does not.
-  `MAX_CPREP_INCLUDES` is 128 and `CPInclude` errors at that, but the buffers
-  below are sixteen separate globals dispatched by hand — so at depth >= 16 this
-  procedure did nothing and `CPIncludeLength` fell off the end of its `case`
-  with `Result` never assigned. The include search then read that unassigned
-  value: non-zero meant "found, empty content" and the 17th nested header
-  vanished with no diagnostic (measured: `LEVEL16` came back 0 where gcc says
-  16); zero would have meant a not-found error for a header that exists. Which
-  one you got was not a property of the program.
+{ One line each, because the buffer is `CPrepInclude[depth]`.
 
-  Both are now `else`-terminated so the read cannot be undefined, and
-  `CPInclude` refuses past the real limit instead of the imaginary one. That
-  turns a silent wrong answer into a message; it does not raise the limit,
-  which needs the buffers to become an array and therefore Track A —
-  `bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array`. }
+  These three were `case depth of 0..15` ladders over sixteen separate globals,
+  and the ladders are the whole story of the bug that preceded this.
+  `CPIncludeLength` fell off the end of its case with `Result` never assigned,
+  and the include search read that: non-zero meant "found, empty content" and the
+  17th nested header vanished with no diagnostic (measured — `LEVEL16` came back
+  0 where gcc says 16); zero would have meant not-found for a header that exists.
+  Which one you got was not a property of the program.
+
+  Neither is reachable now, and not because a guard was added — because there is
+  nothing left to disagree. One array, one bound, three expressions.
+  `normalise-dont-special-case.md`: a dispatch written out N times is a defect
+  that stays hidden exactly as long as the copies happen to agree. }
 procedure CPLoadInclude(depth: Integer);
 begin
-  case depth of
-    0: LoadFile(CPrepPath, CPrepInclude0);
-    1: LoadFile(CPrepPath, CPrepInclude1);
-    2: LoadFile(CPrepPath, CPrepInclude2);
-    3: LoadFile(CPrepPath, CPrepInclude3);
-    4: LoadFile(CPrepPath, CPrepInclude4);
-    5: LoadFile(CPrepPath, CPrepInclude5);
-    6: LoadFile(CPrepPath, CPrepInclude6);
-    7: LoadFile(CPrepPath, CPrepInclude7);
-    8: LoadFile(CPrepPath, CPrepInclude8);
-    9: LoadFile(CPrepPath, CPrepInclude9);
-    10: LoadFile(CPrepPath, CPrepInclude10);
-    11: LoadFile(CPrepPath, CPrepInclude11);
-    12: LoadFile(CPrepPath, CPrepInclude12);
-    13: LoadFile(CPrepPath, CPrepInclude13);
-    14: LoadFile(CPrepPath, CPrepInclude14);
-    15: LoadFile(CPrepPath, CPrepInclude15);
-  end;
-  { No `else` needed here and one would be noise: this is a PROCEDURE, so
-    falling off the end of the case leaves nothing undefined. The bug was in
-    CPIncludeLength, which is a function. }
+  LoadFile(CPrepPath, CPrepInclude[depth]);
 end;
 
 function CPIncludeLength(depth: Integer): Integer;
 begin
-  case depth of
-    0: Result := Length(CPrepInclude0);
-    1: Result := Length(CPrepInclude1);
-    2: Result := Length(CPrepInclude2);
-    3: Result := Length(CPrepInclude3);
-    4: Result := Length(CPrepInclude4);
-    5: Result := Length(CPrepInclude5);
-    6: Result := Length(CPrepInclude6);
-    7: Result := Length(CPrepInclude7);
-    8: Result := Length(CPrepInclude8);
-    9: Result := Length(CPrepInclude9);
-    10: Result := Length(CPrepInclude10);
-    11: Result := Length(CPrepInclude11);
-    12: Result := Length(CPrepInclude12);
-    13: Result := Length(CPrepInclude13);
-    14: Result := Length(CPrepInclude14);
-    15: Result := Length(CPrepInclude15);
-  else
-    Result := 0;      { no slot — never an unassigned Result }
-  end;
+  Result := Length(CPrepInclude[depth]);
 end;
 
 procedure CPProcessInclude(depth: Integer; const baseDir: AnsiString);
@@ -2093,25 +2060,8 @@ begin
   { -g: the file just loaded is processed one level down; record its path there
     so CPProcessText can name it in a line marker. CPrepPath holds whatever the
     include search finally resolved to. }
-  if depth + 1 <= 17 then CPPathAtDepth[depth + 1] := CPrepPath;
-  case depth of
-    0: CPProcessText(CPrepInclude0, baseDir, depth + 1);
-    1: CPProcessText(CPrepInclude1, baseDir, depth + 1);
-    2: CPProcessText(CPrepInclude2, baseDir, depth + 1);
-    3: CPProcessText(CPrepInclude3, baseDir, depth + 1);
-    4: CPProcessText(CPrepInclude4, baseDir, depth + 1);
-    5: CPProcessText(CPrepInclude5, baseDir, depth + 1);
-    6: CPProcessText(CPrepInclude6, baseDir, depth + 1);
-    7: CPProcessText(CPrepInclude7, baseDir, depth + 1);
-    8: CPProcessText(CPrepInclude8, baseDir, depth + 1);
-    9: CPProcessText(CPrepInclude9, baseDir, depth + 1);
-    10: CPProcessText(CPrepInclude10, baseDir, depth + 1);
-    11: CPProcessText(CPrepInclude11, baseDir, depth + 1);
-    12: CPProcessText(CPrepInclude12, baseDir, depth + 1);
-    13: CPProcessText(CPrepInclude13, baseDir, depth + 1);
-    14: CPProcessText(CPrepInclude14, baseDir, depth + 1);
-    15: CPProcessText(CPrepInclude15, baseDir, depth + 1);
-  end;
+  CPPathAtDepth[depth + 1] := CPrepPath;   { array is sized to the limit; depth+1 cannot exceed it }
+  CPProcessText(CPrepInclude[depth], baseDir, depth + 1);
 end;
 
 { Register a `-I` C include search root. Normalised to a trailing '/'. }
@@ -2487,16 +2437,16 @@ procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
 var a, b, k: Integer; hdrResolved, incName, searchList: AnsiString;
 begin
-  { 16, not MAX_CPREP_INCLUDES. The constant says 128; the slot table in
-    CPLoadInclude holds sixteen, and guarding on the constant let depths
-    16..127 through to a load that did nothing. Guard on the limit that
-    exists — and keep the constant's own check, so that if the buffers ever
-    become an array this line is the only one to delete. }
-  if depth >= MAX_CPREP_INCLUDES then Error('C include nesting overflow');
-  if depth > 15 then
+  { The buffers ARE an array now, so the sixteen-slot guard that used to sit
+    below this line is gone — it was written to be the only line to delete once
+    this happened, and it was. MAX_CPREP_INCLUDES is the single limit, and the
+    message names it rather than a hand-written number that can drift from the
+    table it describes. }
+  if depth >= MAX_CPREP_INCLUDES then
   begin
-    ErrorIdent := 'the preprocessor has 16 include buffers; this include is at '
-                  + 'level ' + CPSmallIntStr(depth + 1);
+    ErrorIdent := 'the preprocessor has ' + CPSmallIntStr(MAX_CPREP_INCLUDES)
+                  + ' include buffers; this include is at level '
+                  + CPSmallIntStr(depth + 1);
     Error('C include nesting too deep');
   end;
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);

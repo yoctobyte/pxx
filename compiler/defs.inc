@@ -3781,22 +3781,23 @@ var
   CPrepLineExp  : AnsiString;
   CPrepLine     : AnsiString;
   CPrepPath     : AnsiString;
-  CPrepInclude0 : AnsiString;
-  CPrepInclude1 : AnsiString;
-  CPrepInclude2 : AnsiString;
-  CPrepInclude3 : AnsiString;
-  CPrepInclude4 : AnsiString;
-  CPrepInclude5 : AnsiString;
-  CPrepInclude6 : AnsiString;
-  CPrepInclude7 : AnsiString;
-  CPrepInclude8 : AnsiString;
-  CPrepInclude9 : AnsiString;
-  CPrepInclude10: AnsiString;
-  CPrepInclude11: AnsiString;
-  CPrepInclude12: AnsiString;
-  CPrepInclude13: AnsiString;
-  CPrepInclude14: AnsiString;
-  CPrepInclude15: AnsiString;
+  { One buffer per include depth. Sixteen separate globals until 2026-08-30,
+    dispatched by three hand-written `case depth of 0..15` ladders in
+    cpreproc.inc — one datum wearing sixteen names, and the shape that hid an
+    unassigned function Result for as long as the three ladders happened to
+    agree (bug-c-an-include-nested-deeper-than-16-is-silently-dropped).
+
+    MAX_CPREP_INCLUDES is now the ONE limit. The slots are handles, not buffers —
+    an unused depth costs a nil pointer, and only depths actually entered hold
+    content, exactly as sixteen did.
+
+    Raising the cap does NOT unblock busybox: that turned out to be runaway
+    resolution of <sys/param.h>, filed separately as
+    bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback.
+    This change stands on its own merits — three ladders and a latent
+    out-of-bounds read deleted.
+    bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array }
+  CPrepInclude  : array[0..MAX_CPREP_INCLUDES-1] of AnsiString;
   CPrepChars    : array[0..MAX_CPREP_CHARS-1] of Char;
   CPrepCharLen  : Integer;
   CPActiveMacros : array[0..63] of Integer;

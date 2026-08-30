@@ -4,7 +4,7 @@ track: A
 type: refactor
 blocked-by: []
 summary: "The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A."
-status: working
+status: done
 owner: frankS
 ---
 
@@ -277,3 +277,53 @@ this recipe goes red as written. It needs its depth moved past the new limit
 match gcc, one that must produce the nesting diagnostic. The ticket's own "what a
 fix must assert" list already called for this ("already a test; update the
 depth"); recording the exact recipe so it is not missed under the pin.
+
+## STAGE 2 LANDED (frankS, 2026-08-30), on pin v398 `992065f21f33`
+
+`CPrepInclude: array[0..MAX_CPREP_INCLUDES-1]`, three `case depth of 0..15`
+ladders collapsed to one expression each, `CPPathAtDepth` sized to the same
+constant with its dead `<= 17` clamp deleted, and the sixteen-slot guard in
+`CPInclude` removed — the line its own comment said would be the only one to
+delete once this happened. **Net −45 lines in `compiler/**`.**
+
+### A near-miss worth recording, because it would have been silent
+
+Stage 2 was held on disk for the duration of the pin as **whole-file copies** of
+`defs.inc` and `cpreproc.inc`. Restoring those copies over the post-pin tree
+would have reverted frankA's `CUnitOfPascalProgram` block in `defs.inc` and 124
+changed lines in `cpreproc.inc` — other agents' work, deleted with no conflict
+and no diagnostic, because a file copy has no idea what else moved underneath it.
+
+It surfaced only because the restored tree then failed to build with
+`undefined variable (CUnitOfPascalProgram)`, which looked at first like a broken
+master. The check that separated the two was one command: the pinned compiler
+against a **clean** tree, which built fine. **Hold a parked change as an EDIT you
+can re-apply, never as a copy of the file it lives in** — the copy is a snapshot
+of a whole shared file, and every other lane's work is inside it. Re-applied as
+scripted edits against current HEAD, with every anchor asserted.
+
+### Verified
+
+- `make compiler/pascal26` — `converged after 1 round(s)`, binary
+  `3e9fce7f6027`, distinct from pin `992065f21f33`.
+- 16-deep: pxx `0 15`, gcc `0 15`.
+- 18-deep — **the point of the change**, refused before it: pxx `0 17`, gcc `0 17`.
+- 129 headers (depth 128 = `MAX_CPREP_INCLUDES`): refused with
+  *"the preprocessor has 128 include buffers; this include is at level 129"*.
+- `tools/gate.sh quick` GREEN.
+
+### `Makefile` assertions updated, both halves kept
+
+The old pair was "16 compiles" + "18 is refused". 18 must now compile, so:
+16-deep compiles and matches gcc (kept deliberately — it was the old ceiling, so
+it is the cheapest guard against a regression that reinstates one), 18-deep
+compiles and matches gcc (new, and red before this change), and **129** headers
+report the limit. That last number has to move with `MAX_CPREP_INCLUDES`, which
+is noted in the recipe.
+
+### Not the busybox blocker
+
+Recorded above and unchanged: the busybox wall is
+[[bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback]].
+This ticket closes on its original merits.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

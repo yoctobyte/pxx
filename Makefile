@@ -6854,29 +6854,41 @@ test-core: $(COMPILER)
 	@$(TESTTMP)/cmember_lenient26 || { echo 'cmember_lenient: FAIL - a real fn-pointer member and a missing semicolon before the closing brace must both still compile and run'; exit 1; }
 	@echo 'ok: cmember_lenient keeps the leniency the refusal must not widen into'
 	# Include nesting: the depth limit must be REPORTED, never silently applied.
-	# The preprocessor has sixteen include buffers, dispatched by a hand-written
-	# `case depth of 0..15`; MAX_CPREP_INCLUDES said 128, so 16..127 fell through
-	# to a load that did nothing and to a CPIncludeLength that returned an
+	# The buffers were sixteen separate globals dispatched by a hand-written
+	# `case depth of 0..15` while MAX_CPREP_INCLUDES said 128, so 16..127 fell
+	# through to a load that did nothing and to a CPIncludeLength that returned an
 	# UNASSIGNED function Result. The 17th nested header vanished with no
 	# diagnostic -- LEVEL16 came back 0 where gcc says 16 -- and whether you got
 	# that or a spurious not-found was not a property of the program.
-	# Both halves are asserted, and the first is the one that pins the limit:
-	# exactly 16 levels must still COMPILE and produce gcc's values.
+	# They are `CPrepInclude: array[0..MAX_CPREP_INCLUDES-1]` now, so the constant
+	# is the ONE limit and 16 is no longer special. BOTH halves still have to
+	# hold, and they are what this pair of checks is for: a depth WELL INSIDE the
+	# limit compiles and produces gcc's values, and a depth PAST it reports the
+	# limit instead of dropping a header. 16 is kept as the inside-the-limit
+	# depth deliberately -- it is the depth that used to be the ceiling, so it
+	# stays the cheapest guard against a regression that reinstates one.
 	@python3 -c "import os,sys; d=sys.argv[1]; os.makedirs(d,exist_ok=True); N=16; [open('%s/g%d.h'%(d,i),'w').write(('#include \"g%d.h\"\n'%(i+1) if i+1<N else '')+'#define GL%d %d\n'%(i,i)) for i in range(N)]; open(d+'/gmain.c','w').write('#include <stdio.h>\n#include \"g0.h\"\nint main(void){ printf(\"%d %d\\\\n\", GL0, GL15); return 0; }\n')" $(TESTTMP)/cnest16
 	./$(COMPILER) $(TESTTMP)/cnest16/gmain.c $(TESTTMP)/cnest16_26
 	tools/expect_same.sh cnest16_26 "$$($(TESTTMP)/cnest16_26)" "0 15"
-	# ...and one level past it is an ERROR naming the limit, not a dropped header.
-	@python3 -c "import os,sys; d=sys.argv[1]; os.makedirs(d,exist_ok=True); N=18; [open('%s/g%d.h'%(d,i),'w').write(('#include \"g%d.h\"\n'%(i+1) if i+1<N else '')+'#define GL%d %d\n'%(i,i)) for i in range(N)]; open(d+'/gmain.c','w').write('#include <stdio.h>\n#include \"g0.h\"\nint main(void){ printf(\"%d\\\\n\", GL17); return 0; }\n')" $(TESTTMP)/cnest18
+	# ...and 18 -- one past the OLD sixteen-buffer ceiling -- must now COMPILE and
+	# match gcc. This row is the point of the array: before it, 18 was refused.
+	@python3 -c "import os,sys; d=sys.argv[1]; os.makedirs(d,exist_ok=True); N=18; [open('%s/g%d.h'%(d,i),'w').write(('#include \"g%d.h\"\n'%(i+1) if i+1<N else '')+'#define GL%d %d\n'%(i,i)) for i in range(N)]; open(d+'/gmain.c','w').write('#include <stdio.h>\n#include \"g0.h\"\nint main(void){ printf(\"%d %d\\\\n\", GL0, GL17); return 0; }\n')" $(TESTTMP)/cnest18
+	./$(COMPILER) $(TESTTMP)/cnest18/gmain.c $(TESTTMP)/cnest18_26
+	tools/expect_same.sh cnest18_26 "$$($(TESTTMP)/cnest18_26)" "0 17"
+	# ...and one PAST THE REAL LIMIT is an ERROR naming it, not a dropped header.
+	# 129 headers = depth 128 = MAX_CPREP_INCLUDES. This number has to move with
+	# the constant; it is the whole reason the constant exists in one place.
+	@python3 -c "import os,sys; d=sys.argv[1]; os.makedirs(d,exist_ok=True); N=129; [open('%s/g%d.h'%(d,i),'w').write(('#include \"g%d.h\"\n'%(i+1) if i+1<N else '')+'#define GL%d %d\n'%(i,i)) for i in range(N)]; open(d+'/gmain.c','w').write('#include <stdio.h>\n#include \"g0.h\"\nint main(void){ printf(\"%d\\\\n\", GL128); return 0; }\n')" $(TESTTMP)/cnestover
 	@# `> file 2>&1`, not `2> file`: pxx prints diagnostics on STDOUT, so a
 	@# stderr-only capture is empty and the grep below fails for the wrong reason
 	@# -- which is how this recipe first went red against a working compiler.
-	@if ./$(COMPILER) $(TESTTMP)/cnest18/gmain.c $(TESTTMP)/cnest18_26 > $(TESTTMP)/cnest18.err 2>&1; then \
-	  echo "FAIL: 18-deep include nesting compiled clean; it must report the limit"; \
+	@if ./$(COMPILER) $(TESTTMP)/cnestover/gmain.c $(TESTTMP)/cnestover_26 > $(TESTTMP)/cnest18.err 2>&1; then \
+	  echo "FAIL: nesting past MAX_CPREP_INCLUDES compiled clean; it must report the limit"; \
 	  echo "      (pre-fix this dropped the header and printed 0 for GL17)"; exit 1; \
 	elif grep -q 'C include nesting too deep' $(TESTTMP)/cnest18.err; then \
-	  echo "ok: 18-deep include nesting reports the limit"; \
+	  echo "ok: nesting past MAX_CPREP_INCLUDES reports the limit"; \
 	else \
-	  echo "FAIL: 18-deep nesting failed, but not with the nesting diagnostic:"; \
+	  echo "FAIL: over-limit nesting failed, but not with the nesting diagnostic:"; \
 	  head -3 $(TESTTMP)/cnest18.err; exit 1; fi
 	# Rust chess FULL legality (feature-rust-corpus-chess): Move packed into one i64
 	# (from|to<<6|flags<<12) replaces the engine's Move struct + ArrayVec; EP, castling,
