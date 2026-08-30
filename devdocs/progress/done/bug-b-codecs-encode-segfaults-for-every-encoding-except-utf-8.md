@@ -150,4 +150,4 @@ side still diverges — [[bug-b-codecs-strict-decode-does-not-raise-on-invalid-u
 — so the differential cannot land green until that one closes too.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3c5f5bf6e.
