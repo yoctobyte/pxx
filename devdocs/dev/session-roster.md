@@ -18792,3 +18792,70 @@ is self-repairing; a slug alone is not*.
 anti-goal (do not answer it by running everything under xtensa, which makes the
 faulting target the oracle for a property all targets share) and the requirement
 that it hold at `-O0`, where the accidental padding does not apply.
+
+## Tick 2026-08-30 ~09:2x — bisecting BACKWARDS in this repo, and the symtab.inc slot
+
+**frankA resolved the max/min regression (`6530abdeb`, verified on origin by
+artefact); cause was `7b73a385d`.** That commit moved the callable→Pointer
+coercion into `PyBindKwArgs` — the KEYWORD path — and the coercion runs AFTER
+overload selection, so it made the `key: Pointer` candidates *viable* for a
+keyword call and newly reachable for receivers that cannot be walked as a list.
+A dict handle bound to `max(l: TPyList; key: Pointer)` and was dereferenced as a
+TPyList. The fix completes the receiver set (TPyDict + AnsiString, which
+`sorted` has carried since `bug-nilpy-sorted-over-a-string-segfaults`) rather
+than special-casing the dict. Library only; compiler binary byte-identical.
+
+**THE DURABLE FINDING — BISECTING BACKWARDS IS VOID UNLESS YOU RESEED.** This is
+the copied-seed no-op trap's mirror image and it produces the same silent wrong
+verdict from the opposite direction:
+
+- `make compiler/pascal26` seeds from `./compiler/pascal26` — **the previously
+  tested commit's binary.** Walking backwards, an older commit's source will not
+  build under a newer seed: frankA's died with `undefined variable
+  (__pxxblockmove)`. Both endpoints returned "cannot judge", **which reads
+  exactly like a flaky repro**, not like a broken method.
+- Recipe: seed each commit from **its own**
+  `stable_linux_amd64/default/stable_pinned`, `rm` the fixedpoint stamp, `touch`
+  the sources (a copied-in seed is newer than them — the CLAUDE.md no-op trap),
+  and **require `converged after` before accepting any verdict.**
+- A plain `git bisect start` spans ~5600 commits here, nearly all watcher tstate
+  publishes. It announced "roughly 12 steps" and burned 10 minutes. **Path-limit
+  it or test candidates directly.**
+
+frankS independently did the reseed-and-backdate correctly on the same night for
+the xtensa bisect, which is two lanes converging on a procedure that is written
+down nowhere. It is written down here now.
+
+**Two more near-misses from the same session:**
+
+- frankA wrote a Variant keyed overload too and read *"tuple and generator now
+  work"* as its effect. That compared a **literal** receiver before against a
+  **named** receiver after — two axes at once; tuple-named and generator-named
+  already worked on the baseline. Pair deleted, suite still matches, not in the
+  commit.
+- **A regression ticket's test file cannot baseline its own new rows.** With the
+  whole file, the baseline dies on line 6 and never reaches rows 16-20 — they
+  would have been "verified" by a run that never executed them. Each row was run
+  alone against the baseline library, which is cheap because
+  `compiler/builtin/**` is consumed when compiling a `.npy`, not linked into the
+  compiler, so stashing `pyeval.pas` needs no rebuild.
+
+**Residual filed, not closed:**
+`regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload`
+[N p50] — a LITERAL str receiver with `key=` is still broken and is a regression
+from the same commit; a NAMED str works. The keyword promoter re-targets on the
+argument's static type, so a literal reaches no keyed overload. Needs
+`pyparser.inc`; plausibly the same change as
+`bug-nilpy-keyword-arg-vs-overload-set`. A literal tuple / inline generator
+fails identically but is **pre-existing**, not a regression.
+
+**SLOT: `symtab.inc` is frankA's** — it is running the symtab hang, ParamStr and
+the p45 cycle-guard ticket as ONE pass over that file, which is the right
+batching. **frankS's veneer item stays queued behind it.** frankA is treating
+frankD's root cause as the hypothesis it was labelled as, and writing the probe
+that dumps the folded bucket after each `SymRollbackTo` rather than assuming the
+cycle.
+
+`pyparser.inc` is free — measured, nobody has touched it in the recent range and
+no tree holds it. frankA told frankD it was free and said so rather than
+retracting it silently.
