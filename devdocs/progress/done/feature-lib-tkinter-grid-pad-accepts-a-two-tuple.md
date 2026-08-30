@@ -481,4 +481,4 @@ Four states in two days, and the distinction between them is the point: a HEAD
 pre-answer (known, not closable), a pinned close (closable, closed), a reverted
 pin (closed prematurely, reopened), and now a close against a pin that exists.
 Each was correct about the binary it named — which is why every one of them named it.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 39c9a2e54.
