@@ -3111,8 +3111,6 @@ begin
         end
         else
         begin
-          if ABIRetViaHiddenDestProc(procIdx) then
-            Error('target aarch64: aggregate result with more than 8 params not supported');
           { AAPCS: args 0..7 in x0..x7, args 8.. in an outgoing stack block at sp.
             Build the block from the temp slots without consuming them, load the
             register args by offset, then drop block + temps after the call.
@@ -3134,8 +3132,28 @@ begin
             sz := hi + (nArgs - 1 - i) * 16;
             EmitI32($F94003E0 or i or ((sz div 8) shl 10)); { ldr x[i], [sp, #sz] }
           end;
+          { THE HIDDEN DESTINATION, which this arm used to refuse outright.
+            AAPCS64 passes the indirect result location in x8, and the <=8 arm
+            above gets it by popping one slot further than the args. Here the
+            temps are read by OFFSET rather than popped, so x8 is loaded the
+            same way: the hidden-dest temp was pushed BEFORE arg0, so it sits
+            immediately past the nArgs arg temps at [sp + hi + nArgs*16].
+
+            Its absence was not a lowering difficulty -- the slot was already
+            being pushed at the top of this case, and the old Error fired after
+            that push. What was missing was this load and the 16 bytes below.
+            bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params }
+          sz := hi + nArgs * 16;                          { hidden-dest temp offset }
+          if ABIRetViaHiddenDestProc(procIdx) then
+            EmitI32($F94003E0 or 8 or ((sz div 8) shl 10)); { ldr x8, [sp, #sz] }
           EmitCallProc(procIdx);
-          EmitI32($910003FF or ((hi + nArgs * 16) shl 10)); { add sp, sp, #(hi+nArgs*16) }
+          { Drop the outgoing block and every temp. The hidden-dest slot is one
+            MORE 16-byte temp than the args, and forgetting it here would leak
+            16 bytes of stack per call rather than fault -- the quiet half of
+            this fix, and the reason the cleanup is not simply left alone. }
+          if ABIRetViaHiddenDestProc(procIdx) then
+            sz := sz + 16;
+          EmitI32($910003FF or (sz shl 10));              { add sp, sp, #sz }
         end;
       end;
 

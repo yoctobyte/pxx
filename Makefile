@@ -4762,6 +4762,32 @@ test-core: $(COMPILER)
 	# invisible on x86-64 -- an under-aligned qword array returns the right
 	# answer there, and faults on xtensa's l32i.
 	# bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section
+	# AN AGGREGATE RESULT FROM A FUNCTION WITH MORE THAN 8 PARAMETERS.
+	#
+	# aarch64 refused this outright until the x8 load and the matching stack
+	# cleanup landed, so any program reaching it did not build for that target.
+	# It fired from builtin/pylib.pas, which is how examples/json/jsondemo.pas
+	# left the aarch64 corpus unannounced -- cross sweeps run test/, not
+	# examples/, so the shard stayed green over a corpus that had shrunk. The
+	# shape lives here now, where the sweeps look.
+	#
+	# Native is the ORACLE and aarch64 is the target that was broken. The other
+	# three cost ~13s of qemu per run to re-confirm a path this fix never
+	# touched; they were verified once, at fix time, and agree.
+	#
+	# The program's own 2000000-iteration loop is the stack-leak assertion --
+	# the second, quiet half of the bug leaked 16 bytes per call and returned
+	# the right answer. Sized, not guessed: 8 MiB / 16 = 524288 calls to fault,
+	# and a 200000 version of this test PASSED against the broken compiler.
+	# bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params
+	./$(COMPILER) test/test_aggregate_result_over8_params.pas $(TESTTMP)/test_agg9_26
+	tools/expect_same.sh test_agg9_26 "$$($(TESTTMP)/test_agg9_26)" "AGG9 OK calls=2000000"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/test_aggregate_result_over8_params.pas $(TESTTMP)/test_agg9_a64 >/dev/null; \
+	  tools/expect_same.sh aarch64/test_agg9_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_agg9_a64)" "AGG9 OK calls=2000000"; \
+	else \
+	  echo "=== test-core: qemu-aarch64 not present, skipping aarch64 aggregate-result row ==="; \
+	fi
 	./$(COMPILER) test/test_const_array_align.pas $(TESTTMP)/test_const_align26
 	tools/expect_same.sh test_const_align26 "$$($(TESTTMP)/test_const_align26)" "CONST-ARRAY-ALIGN OK checked=5"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1 \
