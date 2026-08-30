@@ -90,7 +90,7 @@ be run, which is the point.
   `-999` was NOT an xtensa gap, exactly as this ticket said: it is `SPECIAL_IN`,
   missing on riscv32 too, closed under
   [[bug-a-special-in-has-no-arm-in-the-two-32-bit-cross-backends]].
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 42c8ded06.
 
 ### What the four cost, measured
 
@@ -107,4 +107,4 @@ any of tonight's work. x86-64 bounds-checks. Filed as
 [[bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa]]
 rather than folded into the `-55` commit — a grant for one defect does not cover
 an adjacent different one.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 42c8ded06.
