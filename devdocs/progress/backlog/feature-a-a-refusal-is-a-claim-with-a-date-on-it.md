@@ -12116,13 +12116,38 @@ irreconcilable until both were given definitions, at which point they reconcile 
 | — of those, **numbered** faces `## N —` | **40** |
 | `### ` headings (what I called "sub-entries") | 387 |
 | — of those, **numbered** sub-faces | **277** |
-| **numbered entries at any level** | **317** (= 40 + 277) |
+| **numbered entries, `N —` style** | **317** (= 40 + 277) |
+| numbered entries, `N.` style (older) | **90** |
+| **numbered entries, either style** | **407** |
 
-The gap is 34 unnumbered `##` prose sections and 110 unnumbered `###` ones, sharing a heading
-level with the numbered faces. So the numbered population is well defined and both counts were
-rigorous; only one of them was a count of faces. **Cite the number with its definition attached,
-or do not cite it** — and note that a disagreement between two careful counts is usually two
-populations, not two errors.
+The 34 unnumbered `##` prose sections and 110 unnumbered `###` ones share a heading level with
+the faces, which is why a naive heading count cannot find them. That much was clear from the
+first reconciliation. **The 90 were not, and they are the better lesson.**
+
+### The 90 both of us missed, and why we missed them identically
+
+The file has **two eras**. Faces up to line 4470 are written `### 30. Two fields of one report
+disagree…`; from line 4497 on they are written `## 224 — SLOTS DO NOT SAVE YOU…`. The switch is
+clean — no interleaving — and it happened long enough ago that everything either of us had
+recently read was on the far side of it.
+
+So both greps were built by looking at the file's tail, both required the em-dash, and **both
+returned 317.** Two independent counts, by two parties, agreeing exactly — and wrong by 90,
+because they shared an upstream neither had examined: the part of the file we each happened to
+have read.
+
+> **Agreement between two arms with a common upstream is not corroboration.** A pattern derived
+> from the current convention cannot see the convention it replaced, and the second person
+> deriving it the same way from the same sample adds no independence at all.
+
+That is why "state the definition" is necessary and **not sufficient**: a definition drawn from
+today's convention silently excludes yesterday's. **Date the definition, not just the number.**
+The file is less shapeless than the disagreement suggested and less uniform than the
+reconciliation suggested.
+
+**Cite the number with its definition attached, or do not cite it** — and when two careful counts
+disagree, suspect the definitions before the arithmetic. Two populations, not two errors; here,
+three populations, and still no errors.
 
 The ones that survive contact are the ones with a measurement stapled to them.
 
