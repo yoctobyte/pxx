@@ -793,13 +793,39 @@ begin
   w^ := 0;
 end;
 
-{ The spill half of PXXPromoFromInt, kept in its OWN routine on purpose.
+{ The spill half of PXXPromoFromInt, kept in its own routine — HISTORICALLY on
+  purpose, and as of 2026-08-30 no longer necessary.
 
-  A function that so much as mentions a TBig pays managed prologue/epilogue on
-  EVERY call — the record holds a dynamic array, so its temps are zero-inited
-  and finalized whether or not the branch that uses them runs. Measured: with
-  the slow path inline, one PXXPromoAddInt cost ~344 ns; split out, the fast
-  path is a handful of instructions. Keep every hot routine free of TBig. }
+  THE RULE THIS COMMENT USED TO STATE IS RETIRED. It said: a function that so
+  much as mentions a TBig pays managed prologue/epilogue on EVERY call, because
+  the record holds a dynamic array, so its temps were zero-inited and finalized
+  whether or not the branch using them ran — measured at ~344 ns for one
+  PXXPromoAddInt with the slow path inline versus a handful of instructions
+  split out. It ended "Keep every hot routine free of TBig."
+
+  That was a correct diagnosis of a CODEGEN defect and a workaround for it, and
+  the defect is fixed: d27b4a28a
+  (bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized).
+  The real cause turned out to be neither the zeroing nor the branch — AN_SEQ
+  called IRFlushPostCallIntf once per statement, so a temp created inside an
+  `if` had its finalize emitted into the MERGE block and ran on every call.
+
+  Re-measured after the fix by un-splitting PXXPromoCmp (inlining CmpSlow back
+  into it) and diffing the emitted program: **the unsplit form adds 2 rep-stosb
+  and 282 instructions to the whole binary**, against a prologue that used to
+  zero 21 managed temps and finalize them in 30 calls within its first 400
+  instructions. The isolated repro closed from 47x to ~1.8x on the same box.
+  A static instruction diff rather than a timing, deliberately: the box was at
+  load 13.9 and could not resolve the difference, while the instruction count
+  cannot be contended.
+
+  So: **do NOT hand-split a new routine to keep it free of TBig.** The splits
+  below (FromIntSpill, and the AddSlowVV/SubSlowVV/MulSlowVV/DivSlow/CmpSlow
+  set added in 0c3ad8a10) are kept because they are harmless and working, not
+  because they are load-bearing — deleting eight correct routines to recover 2
+  instructions is churn. If you are editing this file anyway, folding one back
+  in is safe. Mod/And/Or/Xor/Shl/Shr/ToStr/ToVariant were never split and now
+  never need to be. }
 procedure FromIntSpill(dst: Pointer; v: Int64);
 begin
   StoreBig(dst, BFromInt(v));
