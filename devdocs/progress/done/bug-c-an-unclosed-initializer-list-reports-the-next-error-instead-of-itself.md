@@ -252,4 +252,4 @@ it had already cost three builds; I read that comment during this ticket and
 still paid twice. The added comments now spell braces out in words and say why.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3e43a1bd0.
