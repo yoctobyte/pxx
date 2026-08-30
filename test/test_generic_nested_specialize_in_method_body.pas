@@ -18,11 +18,14 @@
 
   NOT covered here, deliberately: specializing the SAME template on BOTH
   enclosing parameters in one template
-  (`specialize TCmp<T>.Size * 100 + specialize TCmp<U>.Size`) still fails, with
-  `SizeOf: unknown type or variable` pointing at the inner template's own body.
-  That is a separate defect this fix newly exposed, filed as
-  bug-p-two-different-nested-specializations-of-one-template-collide -- kept out
-  of this file so a pass here means what it says.
+  (`specialize TCmp<T>.Size * 100 + specialize TCmp<U>.Size`). When this file
+  was written that shape still failed, with `SizeOf: unknown type or variable`
+  pointing at the inner template's own body, and it was kept out so a pass here
+  would mean what it says.
+  UPDATE 2026-08-30: it no longer fails -- fixed incidentally, already correct
+  on pin v394. It now has its own file,
+  test_generic_two_nested_specializations_of_one_template, and the exclusion
+  above stands only as a description of scope, not of a live defect.
 
   Output verified against FPC 3.2.2.
   bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body }

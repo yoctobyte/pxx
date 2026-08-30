@@ -2682,6 +2682,14 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_generic_nested_specialize_in_method_body.pas $(TESTTMP)/test_gen_nested_spec26
 	@$(TESTTMP)/test_gen_nested_spec26 | diff -u test/test_generic_nested_specialize_in_method_body.expected - \
 	  || { echo 'test_generic_nested_specialize_in_method_body: FAIL'; exit 1; }
+	@# Two DIFFERENT specializations of the SAME inner template inside ONE generic
+	@# (`specialize TCmp<T>.Size * 100 + specialize TCmp<U>.Size`). Excluded from
+	@# the test above because it still failed then; fixed incidentally by one of
+	@# the wall-6 ordering fixes, so nothing guarded it until this row.
+	@# bug-p-two-different-nested-specializations-of-one-template-collide
+	@./$(COMPILER) test/test_generic_two_nested_specializations_of_one_template.pas $(TESTTMP)/test_gen_two_nested26
+	@$(TESTTMP)/test_gen_two_nested26 | diff -u test/test_generic_two_nested_specializations_of_one_template.expected - \
+	  || { echo 'test_generic_two_nested_specializations_of_one_template: FAIL'; exit 1; }
 	@# `resourcestring` is a runtime-replaceable VARIABLE in FPC, so `@S` is legal.
 	@# We parsed the section as plain consts, and a const has no address, so the
 	@# Delphi/FPC `Exception.CreateRes(@SArgumentOutOfRange)` idiom -- 28 sites in

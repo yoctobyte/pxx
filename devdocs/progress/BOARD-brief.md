@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:26 blocked:8 backlog:357 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2740 rejected:56`
+`working:4 unfinished:26 blocked:8 backlog:356 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2741 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -54,7 +54,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 378, ranked
+## Ready — top 30 of 377, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -75,7 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [U+S]` decide-is-the-2026-07-12-esp-park-still-in-force (unblocks 1)
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
-- `[p 65] [P]` bug-p-two-different-nested-specializations-of-one-template-collide
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -86,5 +85,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [A+S]` bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards
 
-_348 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_347 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
