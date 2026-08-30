@@ -7,14 +7,14 @@ track: P
 
 > **origin/master has advanced 8 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
 
-# regression: test-pascal-conformance#shard3/6 red at f6303d410d78 (auto-filed by twatch)
+# regression: test-pascal-conformance#shard0/6 red at f6303d410d78 (auto-filed by twatch)
 
 - **Type:** regression (auto-filed by Track T watcher, host seven). Untriaged.
 - **Found:** 2026-08-30T09:10:29Z
 - **Test source:** tools/run_pascal_conformance.sh
 
 ## Repro
-`tools/testmgr.py --tier full --job 'test-pascal-conformance#shard3/6'` at f6303d410d783b2cbfad4ba500bf86bfa1a53b6d
+`tools/testmgr.py --tier full --job 'test-pascal-conformance#shard0/6'` at f6303d410d783b2cbfad4ba500bf86bfa1a53b6d
 
 ## Range
 > **The named sha `f6303d410d78` CANNOT be the cause** — it touches no buildable file (docs / tickets / tstate only). It is the sha that was TESTED, i.e. the upper bound of an untested range; the cause is somewhere below it.
@@ -23,25 +23,25 @@ bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range — the watch
 
 ## Log tail
 ```
-e IGenericIntf<T>)` parent-list specialize (interface templates capture now)
-SKIP tgeneric84.pp — gap: accepts-invalid — invalid generic record body accepted (pre-specialization checking)
-SKIP tgeneric8.pp — gap: objfpc generic syntax + inline methods over nested generic types
-SKIP tgeneric95.pp — gap: specialize inside a generic routine signature (`expected name` at line 16)
-SKIP tgenfunc10.pp — gap: inline `specialize` expression inside generic function body
-SKIP tgenfunc2.pp — gap: generic (parameterized) standalone functions in mode delphi
-SKIP tgenfunc8.pp — gap: generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
-SKIP tmoperator10.pp — wontfix: probes TypInfo GetTypeData ElType/ElType2 RTTI layout of dyn array
-SKIP tmoperator5.pp — gap: management operators Initialize/Finalize invocation order
-SKIP tobject1.pp — gap: object constructor `fail`, erroru/ExitCode RTL support
-SKIP tobject7.pp — gap: `object` with private nested type, typed const and static class property
-SKIP toperator2.pp — gap: unit-level `operator +` overload on records (global operator overloading)
-SKIP tover4.pp — gap: 80-bit extended/cextended float type and overload resolution across single/double/extended
-SKIP tpropdef.pp — wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault)
-SKIP trange5.pp — gap: `with` over a record typecast (int64rec(q)) plus 64-bit {$R+} range checks
-SKIP tset2d.pp — gap: explicit enum ordinal values (dA:=17) + {$packset 2} packed-set semantics
-SKIP tstring3.pp — gap: typed-const array of short/ansistring initialized from char & resourcestring consts
-test-pascal-conformance: 51 pass, 6 fail, 29 skip, 6 auto-gated (of 92)
-test-pascal-conformance: FAILURES: tgenconstraint13.pp(accepted-invalid) tgenconstraint19.pp(accepted-invalid) tgenconstraint24.pp(accepted-invalid) tgenconstraint2.pp(accepted-invalid) tgenconstraint35.pp(accepted-invalid) tgenconstraint9.pp(accepted-invalid)
+eclared in another unit (inline class funcs)
+SKIP tgeneric10.pp — gap: objfpc generic/specialize syntax + nested type (TCompareFunc) of a specialization
+SKIP tgeneric16.pp — gap: generic class inheriting from specialize of another generic
+SKIP tgeneric21.pp — gap: accepts-invalid — nested generic-in-generic declaration — semantics unverified, real gap (see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
+SKIP tgeneric5.pp — gap: objfpc generic syntax + `typeinfo(_T)` intrinsic and typinfo unit
+SKIP tgeneric65.pp — gap: generic record with nested `object` type
+SKIP tgeneric76.pp — gap: generic record with static class methods + specialized aliases (TPointEx<T>) unsupported
+SKIP tgeneric92.pp — gap: objfpc generic syntax + `with` over a generic type parameter record
+SKIP tgenfunc19.pp — gap: generic global function + class helper method resolution via specialize
+SKIP tgenfunc5.pp — gap: generic instance methods (objfpc generic function ... <T>)
+SKIP tinterface4.pp — wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
+SKIP tmoperator2.pp — gap: record Initialize/Finalize management operators with managed fields
+SKIP tmoperator8.pp — gap: management operators AddRef/Copy/Initialize/Finalize on records
+SKIP tover1.pp — gap: overload resolution across shortstring/ansistring/widestring/pchar params
+SKIP tprocvar3.pp — gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses
+SKIP tset2a.pp — gap: explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics
+SKIP tstring11.pp — gap: overload resolution RawByteString vs UnicodeString (char/array/pchar args)
+test-pascal-conformance: 55 pass, 6 fail, 26 skip, 5 auto-gated (of 92)
+test-pascal-conformance: FAILURES: tgenconstraint10.pp(accepted-invalid) tgenconstraint16.pp(accepted-invalid) tgenconstraint21.pp(accepted-invalid) tgenconstraint27.pp(accepted-invalid) tgenconstraint32.pp(accepted-invalid) tgenconstraint6.pp(accepted-invalid)
 
 ```
 
@@ -104,3 +104,31 @@ about a check that stopped firing.
 **tgenconstraint21 (`TTest8<ITest1>`) and 27 (`TTest15<TTestClass4>`) do not
 involve `object` at all**, so either the cause is broader than the `object` change
 or there are two causes. Do not close the shards on the `object` link alone.
+
+
+## SUPERSEDED 2026-08-30 — one defect, six views
+
+Root cause found and filed as
+[[bug-p-generic-type-constraints-are-parsed-and-discarded]] (P, p70). Closing
+this shard ticket in its favour; do not work it separately.
+
+**The mechanism.** `pasparser_generic.inc:1321` consumes a generic constraint
+and never records it (`Next; { skip the constraint list }`), so no
+specialization has ever been checked against one. Constraint checking is not
+broken — it was never written.
+
+**Why it appeared today.** `d23f52948` gave `object` its standard Pascal
+meaning, which made `ugenconstraints.pas` parse. Before that, its line 65
+(`TTestObject1 = object`) killed the whole shared unit, so every test importing
+it failed to compile and reported green for a reason unconnected to what it
+tests. Verified against both binaries: `pinned` rejects with
+*"unexpected token in a unit interface section ... in: ugenconstraints.pas"*,
+HEAD accepts.
+
+**The count in these tickets is a shard artifact.** Six shards reported; the
+real figure is **35 of 35** FAIL-marked tests that use that unit, wrongly
+accepted on HEAD.
+
+**Not a revert.** Reverting restores green by restoring a false green, and
+re-breaks real Pascal source. These reds are the first accurate report this
+suite has given about constraint checking.

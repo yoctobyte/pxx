@@ -101,3 +101,31 @@ about a check that stopped firing.
 **tgenconstraint21 (`TTest8<ITest1>`) and 27 (`TTest15<TTestClass4>`) do not
 involve `object` at all**, so either the cause is broader than the `object` change
 or there are two causes. Do not close the shards on the `object` link alone.
+
+
+## SUPERSEDED 2026-08-30 — one defect, six views
+
+Root cause found and filed as
+[[bug-p-generic-type-constraints-are-parsed-and-discarded]] (P, p70). Closing
+this shard ticket in its favour; do not work it separately.
+
+**The mechanism.** `pasparser_generic.inc:1321` consumes a generic constraint
+and never records it (`Next; { skip the constraint list }`), so no
+specialization has ever been checked against one. Constraint checking is not
+broken — it was never written.
+
+**Why it appeared today.** `d23f52948` gave `object` its standard Pascal
+meaning, which made `ugenconstraints.pas` parse. Before that, its line 65
+(`TTestObject1 = object`) killed the whole shared unit, so every test importing
+it failed to compile and reported green for a reason unconnected to what it
+tests. Verified against both binaries: `pinned` rejects with
+*"unexpected token in a unit interface section ... in: ugenconstraints.pas"*,
+HEAD accepts.
+
+**The count in these tickets is a shard artifact.** Six shards reported; the
+real figure is **35 of 35** FAIL-marked tests that use that unit, wrongly
+accepted on HEAD.
+
+**Not a revert.** Reverting restores green by restoring a false green, and
+re-breaks real Pascal source. These reds are the first accurate report this
+suite has given about constraint checking.
