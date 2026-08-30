@@ -716,6 +716,9 @@ name.
 - `## A CENSUS is a predicate, not a number` -- six counts of the same thing,
   13 to 45, all correct about what they measured; relay the predicate and the
   command, never the number
+- `### The same error one level up: pricing a NAME by its position in an
+  ordering` -- quick<native<limited<full is not a volume knob; `limited` is the
+  no-qemu tier, so it answers 0% of a cross question, not a fraction of it
 - `## A STANDING-RULES block is skipped by whoever has landed the most slices`
   -- not buried, not stale, not hard to find; skipped by the reader most
   confident he knows the campaign, which is the one with the most slices landed
@@ -1829,6 +1832,36 @@ is stale within hours of being taken, so a relayed number is a claim about a tre
 nobody still has. `check_o3_backend_parity.py` is the right shape for exactly
 this reason: it does not relay a number, it **re-derives** it and fails when it
 moves.
+
+### The same error one level up: pricing a NAME by its position in an ordering
+
+Recorded the same night, by the same person, about a different artifact — which
+is what makes it a class rather than an anecdote.
+
+Asked for a cross-target verdict, they offered to downgrade the request from
+`full` to `limited` as *"a fraction of the question for a fraction of the cost"*.
+It is **0%** of the question: `limited` is by construction the **no-qemu** tier
+(`TIERS` in `tools/testmgr.py` — *"the cross variants stay in full"*, and
+`test-float-determinism` is excluded **specifically** to keep a qemu-less box able
+to run it). There is no cross in `limited` to break. Their own diagnosis:
+
+> I was pricing a tier by its position in an ordering rather than by what it
+> contains — the same error as reading a count without its command.
+
+**quick < native < limited < full looks like a volume knob and is not.** The
+tiers differ in *contents*, and the contents are not nested along the axis you
+care about. Same shape as the `-O` levels, where CLAUDE.md already has to say it
+out loud: **trade-offs are NOT a level** — `-Ofast`, `-Os`, `-funroll-loops` are
+*sideways*, not "more than `-O3`", and an author chooses **which** trade, never
+**how much**. A name that sorts is the most confident-feeling proxy there is,
+because sorting feels like knowing.
+
+**And the economics inverted once the contents were read.** The sampler already
+had three native runs at descendants of the target, so the native half was
+answered and `full`'s entire marginal value was the cross matrix — making `full`
+the **cheap** option per question answered. The downgrade would have paid for the
+half already free and skipped the half being asked about. **Ask what a tier
+contains before pricing it, not where it sits.**
 
 **The rule, and the coordinator sharpened it in retracting the version built on
 the bad count: the unit is the COMMAND, not the predicate.** A predicate stated
