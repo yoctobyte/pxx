@@ -322,4 +322,4 @@ answers the question directly: plant something that cannot compile inside the
 region, and see whether it does.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d8861d02b.
