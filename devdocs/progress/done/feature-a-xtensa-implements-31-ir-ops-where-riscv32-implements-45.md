@@ -237,4 +237,4 @@ opened with cannot be reproduced from the Makefile and its category table's
 totals are superseded, though its categories stand.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 284f991f4.
