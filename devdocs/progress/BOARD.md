@@ -78,6 +78,7 @@ _none_
 | bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params | A | 55 | bug | jsondemo and life do not build for aarch64 at all -- 'aggregate result with more than 8 params not supported', raised from builtin/pylib.pas, so it fires for any program pulling that unit in. The sharp part is not the two programs: it silently narrows the corpus available for BEHAVIOURAL verification on aarch64, while census tables built from target-independent IR keep listing those same programs as aarch64 data points. Two purposes, one list, only one of them ever checked. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull | A | 50→55 | bug | CModuleOfTok is STICKY: CMarkTokModule is only called for a path ending in `.c`, so returning from a crtl `.c` pull back into the enclosing `.h` never resets the attribution and every following token still reports that `.c` as its module. Blocks the remaining half of bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead: a bodied static after `#include <stdio.h>` cannot be told apart from one inside crtl's stdio.c. Filed by Track C -- the table lives in dbg_filetable.inc, which is Track A. | — |
+| bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array | A | 40 | bug | The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A. | — |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
 | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs | A+S | 40 | bug | Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs | — |
 | bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown | A | 45 | bug | `IROpName` names 68 of 75 IR ops, so a missing backend arm for the other seven reports `unknown` | — |
@@ -107,7 +108,6 @@ _none_
 | bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer | A+S | 45 | bug | `CALL0`/`CALL8` encode an 18-bit WORD offset, so a call can reach at most +-512 KiB. Nothing emits a veneer, so once the image passes that, EVERY sufficiently distant call is a hard compile error: `call0 displacement -131454 is outside the encodable range`. Five test programs hit it the moment the xtensa syscall table let them reach codegen at all. This is not an edge case — 512 KiB is a SMALL image here: test_overflow_qplus_narrow is 758 KiB of code on riscv32. | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 40 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
 | bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works | A+S | 45 | bug | `Write` of any real SIGBUSes on xtensa — while `Str` of the same value is correct | — |
-| bug-c-an-include-nested-deeper-than-16-is-silently-dropped | C | 50 | bug | MAX_CPREP_INCLUDES is 128 and the nesting guard errors at 128, but CPLoadInclude/CPIncludeLength are `case depth of 0..15` with no else -- so at depth >= 16 the load is a no-op and CPIncludeLength returns an UNSET function result. Measured: the 17th nested header and everything below it vanishes, with no error. LEVEL16 came back 0 where gcc says 16, and the only diagnostic is `undeclared identifier ... treated as 0` pointing at the use site, nowhere near the dropped include. | — |
 | bug-c-has-include-with-a-macro-operand-answers-0 | C | 35 | bug | `__has_include(HDR)` where HDR is a macro expanding to `<stdio.h>` answers 0 under pxx and 1 under gcc. Same silent shape as the pdfgen endian bug it was found beside: no error, no warning, the guarded #include is simply skipped and whatever the header would have defined stays undefined. The literal forms `__has_include(<x>)` and `__has_include(\"x\")` are correct; only a macro-expanded operand is affected. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
@@ -651,9 +651,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2724)
+## done (2725)
 
-2724 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2725 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -817,7 +817,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
-- [p 50] [C] bug-c-an-include-nested-deeper-than-16-is-silently-dropped
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
@@ -881,6 +880,7 @@ _none_
 - [p 45] [P] refactor-p-the-field-declaration-parser-exists-twice
 - [p 45] [P] refactor-p-the-overload-probe-cannot-see-the-argument-match-channels
 - [p 42] [P] feature-pascal-builtin-tobject-class
+- [p 40] [A] bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
 - [p 40] [A] bug-a-function-result-assignment-does-not-narrow-to-the-result-type
 - [p 40] [A+S] bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse

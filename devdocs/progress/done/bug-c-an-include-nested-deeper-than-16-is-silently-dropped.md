@@ -3,9 +3,9 @@ prio: 50
 track: C
 type: bug
 blocked-by: []
-summary: "MAX_CPREP_INCLUDES is 128 and the nesting guard errors at 128, but CPLoadInclude/CPIncludeLength are `case depth of 0..15` with no else -- so at depth >= 16 the load is a no-op and CPIncludeLength returns an UNSET function result. Measured: the 17th nested header and everything below it vanishes, with no error. LEVEL16 came back 0 where gcc says 16, and the only diagnostic is `undeclared identifier ... treated as 0` pointing at the use site, nowhere near the dropped include."
-status: new
-owner: ""
+summary: "MAX_CPREP_INCLUDES was 128 while CPLoadInclude/CPIncludeLength are `case depth of 0..15` with no else, so past depth 15 the load was a no-op and the LENGTH was an unassigned function Result -- the 17th nested header vanished with no diagnostic (LEVEL16 came back 0 where gcc says 16). FIXED 2026-08-30: `else Result := 0` and a guard that names the real limit, so it is now an error rather than a silent wrong value; both directions tested. The LIMIT is still 16 and is now bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array, because the buffers live in defs.inc."
+status: done
+owner: frankC
 ---
 
 # An `#include` nested deeper than 16 is silently dropped
@@ -124,3 +124,77 @@ measurement and should not be written into the ticket as if it were.
   to know which include-buffer depths are safe to probe at. Filed rather than
   fixed: a different defect from the one being worked, and the buffer-array
   change wants its own gate.
+
+## RESOLVED (the dangerous half) — 2026-08-30 (frankC)
+
+Both defects the ticket names are fixed; the *limit* is unchanged and now has
+its own Track A ticket, because the storage is not in this lane.
+
+**1. The undefined read is gone.** `CPIncludeLength` was
+`case depth of 0..15` with no `else`, so past the table it returned a function
+`Result` that was never assigned — non-zero meant "found, with empty content"
+and the header vanished; zero would have meant "not found" for a header that
+exists. Which one you got was not a property of the program. Now
+`else Result := 0`.
+
+`CPLoadInclude` deliberately did **not** get an `else`, and the code says so:
+it is a *procedure*, so falling off the end of its case leaves nothing
+undefined. Adding one there would have implied a bug that was not there.
+
+**2. The guard now names the limit that exists.** It tested
+`depth >= MAX_CPREP_INCLUDES`, which is 128, against a table of sixteen — so
+16..127 were "allowed" straight into a no-op. It now also refuses past 15, with
+the count in the message:
+
+```
+error: C include nesting too deep
+       (the preprocessor has 16 include buffers; this include is at level 17)
+```
+
+The `MAX_CPREP_INCLUDES` test is kept above it on purpose, so that when the
+buffers become an array there is exactly one line to delete.
+
+## Measured
+
+| | pinned (pre-fix) | HEAD | gcc |
+| --- | --- | --- | --- |
+| 18-deep chain, reading `GL17` | compiles clean, prints **0** | **error naming the limit** | 17 |
+| 16-deep chain, reading `GL0`/`GL15` | 0 15 | 0 15 | 0 15 |
+
+The second row is the one that matters more: the fix must not move the boundary
+it is making honest. Both are now in `test-core`.
+
+**Nothing real trips the new error.** All five gtk tests green, and
+`<pango/pango.h>` — the deepest set the model flagged — compiles with no nesting
+diagnostic. That was the risk worth checking: turning a silent drop into an
+error can only break something that was silently working, so I looked for it
+rather than assuming.
+
+## The limit itself is Track A
+
+`CPrepInclude0..15` are sixteen separate globals in **`defs.inc`**, so the
+array-ification this ticket proposed as its first option cannot be done here.
+Filed as `bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array`
+with the shape, the memory note, and the assertion list — including that the
+extra guard added here is deliberately the only line that fix needs to delete.
+
+Its prio is 40, below this one's 50, and that is the right way round: the
+silent wrong value is fixed, so what remains is a ceiling that nothing currently
+reaches. The margin is thin — `gtk/gtk.h` models at 15 against a limit of 16 —
+but thin-and-loud is a different class of problem from silent.
+
+## A test that failed for the wrong reason first
+
+The 18-deep assertion greps the compiler's output for the diagnostic. Written
+as `2> $(TESTTMP)/cnest18.err` it captured nothing, because **pxx prints
+diagnostics on stdout**, so the grep failed against a compiler that was working
+correctly. `> file 2>&1`, and the recipe carries the reason so the next person
+does not re-derive it.
+
+Validated in both directions, as the pair above shows: the assertion passes at
+HEAD and would fail against `pinned`, which compiles the same source clean.
+
+## Log
+- 2026-08-30 — undefined read and dishonest guard fixed by frankC, both tests
+  in `test-core`; the limit itself handed to Track A. Commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

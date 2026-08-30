@@ -1964,6 +1964,21 @@ end;
 
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer); forward;
 
+{ THE SLOT TABLE STOPS AT 15, and the nesting guard does not.
+  `MAX_CPREP_INCLUDES` is 128 and `CPInclude` errors at that, but the buffers
+  below are sixteen separate globals dispatched by hand — so at depth >= 16 this
+  procedure did nothing and `CPIncludeLength` fell off the end of its `case`
+  with `Result` never assigned. The include search then read that unassigned
+  value: non-zero meant "found, empty content" and the 17th nested header
+  vanished with no diagnostic (measured: `LEVEL16` came back 0 where gcc says
+  16); zero would have meant a not-found error for a header that exists. Which
+  one you got was not a property of the program.
+
+  Both are now `else`-terminated so the read cannot be undefined, and
+  `CPInclude` refuses past the real limit instead of the imaginary one. That
+  turns a silent wrong answer into a message; it does not raise the limit,
+  which needs the buffers to become an array and therefore Track A —
+  `bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array`. }
 procedure CPLoadInclude(depth: Integer);
 begin
   case depth of
@@ -1984,6 +1999,9 @@ begin
     14: LoadFile(CPrepPath, CPrepInclude14);
     15: LoadFile(CPrepPath, CPrepInclude15);
   end;
+  { No `else` needed here and one would be noise: this is a PROCEDURE, so
+    falling off the end of the case leaves nothing undefined. The bug was in
+    CPIncludeLength, which is a function. }
 end;
 
 function CPIncludeLength(depth: Integer): Integer;
@@ -2005,6 +2023,8 @@ begin
     13: Result := Length(CPrepInclude13);
     14: Result := Length(CPrepInclude14);
     15: Result := Length(CPrepInclude15);
+  else
+    Result := 0;      { no slot — never an unassigned Result }
   end;
 end;
 
@@ -2407,7 +2427,18 @@ procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
 var a, b, k: Integer; hdrResolved, incName, searchList: AnsiString;
 begin
+  { 16, not MAX_CPREP_INCLUDES. The constant says 128; the slot table in
+    CPLoadInclude holds sixteen, and guarding on the constant let depths
+    16..127 through to a load that did nothing. Guard on the limit that
+    exists — and keep the constant's own check, so that if the buffers ever
+    become an array this line is the only one to delete. }
   if depth >= MAX_CPREP_INCLUDES then Error('C include nesting overflow');
+  if depth > 15 then
+  begin
+    ErrorIdent := 'the preprocessor has 16 include buffers; this include is at '
+                  + 'level ' + CPSmallIntStr(depth + 1);
+    Error('C include nesting too deep');
+  end;
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
   if p > last then Exit;
   if (line[p] = '"') or (line[p] = '<') then
