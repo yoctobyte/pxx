@@ -2,9 +2,9 @@
 track: C
 prio: 40
 type: bug
-status: new
+status: working
 blocked-by: []
-owner: ""
+owner: frankC
 summary: "`16777217.0f` keeps its double value where C requires the single-precision 16777216.0, and `0.1f` prints 0.100000000 instead of 0.100000001. The explicit `(float)` cast rounds correctly and a store into a float lvalue rounds correctly -- only the literal SUFFIX is ignored. All five targets, so it is a frontend defect, not an ABI or backend one."
 ---
 

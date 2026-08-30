@@ -149,6 +149,33 @@ different claims and only the running program separates them. This is how a fix
 that would have started refusing `ptr := o.I` — which FPC accepts — was caught:
 an interface is spelled `tyRecord`.
 
+**A SKIP is not an answer — go find the corpus.** Asked whether an aarch64
+sqlite red was a real defect, the honest report from a checkout with no sqlite
+tree is "SKIP: no source here", and that is a passlike hole wearing the shape of
+a verdict: nobody reverts a pin on a SKIP and nobody clears one either. Pointing
+`SQLITE_SRC` at a read-only tree elsewhere on the box
+(`/home/neo/pxx/library_candidates/sqlite`) turned it into six real runs and a
+real verdict. The same move settled an unrelated `fgl` question the same evening
+from a different agent, unprompted — which makes it a pattern worth naming rather
+than an anecdote about sqlite.
+
+The generalisation: **when the instrument cannot reach the subject, move the
+instrument.** A corpus you do not own is usually somewhere on the machine, and a
+read-only path costs nothing. Report a hole only after looking, and say where you
+looked — a SKIP that has been chased is evidence; a SKIP that has not is the
+absence of any.
+
+Its mirror, when the corpus IS reachable: **check that your view of it is the
+whole of it.** A scan of the run archive piped through `tail -8` while looping
+several hosts scrolled every one of the target host's rows off the end, and the
+truncated view was read as the complete set — "there is no `pin: v398` row" when
+the row is at line 249. That is not a misread of the data; it is a misread of the
+instrument, and it is the more dangerous kind, because a ghost value is a wrong
+answer while a truncated view is a *right answer to a question you did not ask*.
+It then travelled: it was taken into a ticket second-hand and had to be corrected
+there. Bound your own view before you quote it, and when you pass a negative on,
+say whether you measured it or read it.
+
 **`make compiler/pascal26` is not sufficient evidence for widening a
 diagnostic.** What is cheap and decisive: compile two or three `examples/*` plus
 a Rust and a Zig sample as individual commands. Twenty seconds, catches a
