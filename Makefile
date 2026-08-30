@@ -12988,17 +12988,17 @@ test-riscv32: $(COMPILER)
 # fixed denominator.
 #
 # HANDBACK STATE (frankS, 2026-08-30, HEAD fa01f7111, compiler a6b4e6e1816c):
-# Call0 99 match / 8 differ / 21 do not compile, of 129. Over the night 69 -> 99
+# Call0 100 match / 7 differ / 21 do not compile, of 129. Over the night 69 -> 100
 # matching and 21 -> 8 diverging across nine changes, no sweep regressing a
 # program. Windowed is 50/55/23 and is a different target in practice. The full
 # partition — all 8 divergences and all 21 compile failures, each with a ticket
 # or marked as needing one — is the HANDBACK section at the bottom of
 # bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs. Two of the
 # eight are wrong-VALUE bugs with no ticket yet and are where to start:
-# test_shortstring_trunc prints `b-CLOBBERED` (a shortstring write corrupting a
-# neighbouring variable) and test_arm32_record_byval_wide renders a live address
-# as a decimal number, the same signature as the var-string-param bug fixed
-# earlier that night, now on by-value wide records.
+# test_arm32_record_byval_wide renders a live address as a decimal number, the
+# same signature as the var-string-param bug fixed earlier that night, now on
+# by-value wide records. (The other one named there, test_shortstring_trunc's
+# `b-CLOBBERED`, was NOT memory corruption -- see the row below -- and is fixed.)
 #
 # THE SYSCALL-TABLE SWEEP BOUGHT ONE ROW, and that is the honest number.
 # lib/rtl had per-arch syscall blocks for five arches and no xtensa row, so 14
@@ -13352,6 +13352,16 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow_x64
 	tools/expect_same.sh xtensa/test_xtensa_string_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_string_cow)" "$$($(TESTTMP)/test_xtensa_string_cow_x64)"
+	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
+	# which answered FALSE while b printed BBBB with Length 4 -- the equality
+	# guard was gated on tyAnsiString only, so both-frozen fell through to the
+	# integer compare and compared buffer ADDRESSES. Note what this row must NOT
+	# be replaced by: a literal-vs-literal check passes on the broken compiler,
+	# because two identical literals intern to one address and address equality
+	# and string equality agree. The variable is the whole test.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_trunc.pas $(TESTTMP)/test_xtensa_shortstring_trunc
+	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_xtensa_shortstring_trunc_x64
+	tools/expect_same.sh xtensa/test_xtensa_shortstring_trunc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_shortstring_trunc)" "$$($(TESTTMP)/test_xtensa_shortstring_trunc_x64)"
 	# The first row the xtensa syscall table unblocked. ASSERTS THE EXIT STATUS,
 	# not stdout: the program's whole subject is dying by SIGTERM (-> 143) once
 	# the dispatch stub restores SIG_DFL and re-raises, and its stdout is one
@@ -13360,7 +13370,7 @@ test-xtensa: $(COMPILER)
 	# asserts the wrong observable is a green that means nothing.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_xtensa_sigdfl
 	tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigdfl > /dev/null 2>&1; tools/expect_same.sh xtensa/test_xtensa_sigdfl-rc "$$?" "143"
-	@echo "hosted xtensa: 100 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	@echo "hosted xtensa: 101 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

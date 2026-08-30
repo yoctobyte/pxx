@@ -1929,10 +1929,9 @@ begin
           Exit;
         end;
 
-        if (((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
-            ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString)))
-           or
-           (((op = Ord(tkLt)) or (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
+        if (((op = Ord(tkEq)) or (op = Ord(tkNeq)) or
+             (op = Ord(tkLt)) or (op = Ord(tkLe)) or
+             (op = Ord(tkGt)) or (op = Ord(tkGe))) and
             ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString) or
              TypeIsFrozenString(IntToTypeKind(IRTk[left])) or TypeIsFrozenString(IntToTypeKind(IRTk[right])))) then
         begin
@@ -1951,9 +1950,29 @@ begin
             src &slot. Builds a4=lenA, a5=srcA, a6=lenB, a7=srcB (a2-a7 survive
             call8).
 
-            The ordered guard also accepts a FROZEN string on either side,
-            which the equality guard does not need: frozen equality already
-            works. Char-vs-string reaches the ordered arm through the
+            ONE guard for all six operators, and the two-guard version it
+            replaces is the bug this arm was written to fix, committed a second
+            time inside the fix. The ordered guard accepted a FROZEN string on
+            either side; the equality guard did not, above a comment asserting
+            "frozen equality already works". It does not. Both sides frozen —
+            `b: string[4]` against a literal — fell through to the INTEGER
+            compare below and compared the two buffer ADDRESSES, so `b =
+            'BBBB'` was false while `b` printed BBBB and Length(b) was 4.
+
+            The false claim is not carelessness, it is a measurement that
+            passes for the wrong reason: `'BBBB' = 'BBBB'` really does answer
+            true, because two identical literals INTERN TO ONE ADDRESS, so
+            address equality and string equality agree. Check frozen equality
+            with two literals and it works; check it with a variable and it
+            never did. Measured both ways here before this was written.
+
+            riscv32 already carried the fix, with the same root cause in its own
+            comment: "Was gated on tyAnsiString only, so frozen = frozen (e.g.
+            ParamStr(1) = '--selftest') compared ADDRESSES." Sixth backend
+            skipped while its siblings were visited, again — the same shape as
+            PXXStrCmp3's own miscount three lines above, which is what makes
+            merging the two guards, rather than adding the missing terms beside
+            them, the actual fix. Char-vs-string reaches this through the
             tyAnsiString on the other side.
 
             Slot offsets go through XtensaSlotOff: the hand-written

@@ -215,9 +215,12 @@ title is wrong and cannot be reproduced from the Makefile at any target
 combination; treat the partition as N/matching, never as a fixed denominator.**
 
 ```
-Call0      MATCH 99   DIFF  8   CFAIL 21   (oracle can't build 1)
-windowed   MATCH 50   DIFF 55   CFAIL 23
+Call0      MATCH 100   DIFF  7   CFAIL 21   (oracle can't build 1)
+windowed   MATCH  50   DIFF 55   CFAIL 23
 ```
+
+*(Updated after the handback: `test_shortstring_trunc` is fixed, and the reason
+it was in the DIFF column was not the reason this table originally gave.)*
 
 Call0 over the night: **69 → 99 matching, 21 → 8 diverging**, across nine
 changes, **no sweep regressed a program**. Windowed is a different target in
@@ -230,17 +233,20 @@ practice and is NOT the subject of any of this — see the windowed ticket.
 | `test_cross_float_const` | SIGBUS indexing a const array | [[bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section]] — **read that ticket's correction block first**, its per-target table is invalid |
 | `test_cross_float` | ` 3.500000000E+00` vs ` 3.5000000000000000E+000` — exponent digit count and mantissa width | **Track F** (float FORMATTING is F by the 2026-08-19 ruling) — needs a ticket in `float/` |
 | `test_cross_trunc_round_saturate` | `Trunc(1e30)` gives `2147483647`, not `9223372036854775807` | **NOT F — needs a bug ticket.** xtensa's `-203/-204` arm calls the **32-bit** `__pxx_d2i` kernel and sign-extends, so Trunc/Round→Int64 is structurally 32-bit. The subject is the conversion mechanism, not float accuracy; rank the mechanism, never the datatype |
-| `test_shortstring_trunc` | prints `b-CLOBBERED` — a shortstring write corrupts a NEIGHBOURING variable | **needs a bug ticket, and it is the one I would take first.** Memory corruption, and the only reason it is visible is that this test plants guard variables |
+| ~~`test_shortstring_trunc`~~ | **FIXED, and my classification of it was wrong.** Not memory corruption — nothing was clobbered. `b` printed `BBBB` with `Length` 4 and the neighbour was intact; `b = 'BBBB'` compared buffer ADDRESSES because the equality guard was gated on `tyAnsiString` only | [[bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable]] — slug kept, premise corrected at the top |
 | `test_arm32_record_byval_wide` | `1 7 222 2` and `134730463` where the oracle says `1 7 8 2` and `8` | **needs a bug ticket.** A live address rendered as a decimal number — the exact signature of the `var string` param bug fixed earlier tonight, now on **by-value wide records** |
 | `test_cross_syscall` | `0 0 -1` vs `1 1 12345` | needs a ticket; pre-dates the syscall-table work (it was already DIFF in every earlier sweep) |
 | `test_rtti` | `InstanceSize: 80` vs `64` | `test-xtensa`'s row filters `InstanceSize:`/pointer lines, as i386/arm32/aarch64 do, so this is excluded there by the same convention — but 80-vs-64 is a real layout difference and deserves its own look |
 | `test_asm_ifdef_multiarch` | `0` vs `42` | inline asm under `{$ifdef}` per arch; needs a ticket |
 
-**Three of those eight have no ticket yet and two of them are wrong-VALUE bugs**
-(`shortstring_trunc`'s clobber, `record_byval_wide`'s address-as-number). I am
-naming them here rather than filing them because I am handing the corpus back
-and a ticket I do not work is worth less than a row in the table someone reads.
-Whoever picks this up: those two first.
+**Three of those eight had no ticket and two were wrong-VALUE bugs.** I named
+them here rather than filing them, because a ticket I do not work is worth less
+than a row someone reads. One is now fixed — and **the label I put on it was
+wrong**: `shortstring_trunc`'s `b-CLOBBERED` was not a clobber at all. I took
+the test's own failure message as a diagnosis and repeated it in three places
+before anyone had looked at the mechanism. A guard row that names a cause it
+does not verify propagates that cause into every summary that quotes it. The
+remaining untriaged one is `record_byval_wide`'s address-as-number.
 
 ## The 21 that do not compile — seven categories, all named
 
