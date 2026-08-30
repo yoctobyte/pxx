@@ -5,11 +5,55 @@ prio: 55
 type: bug
 blocked-by: []
 status: backlog
-summary: "TYPED-CONST ARRAYS ARE NOT ALIGNED AT ALL, on any target -- widened 2026-08-30 from the original filing below. A `Double` before the array is not the trigger: with NOTHING before it the array is already at mod 8 = 1 on x86-64. Measured 31 of 50 cells misaligned over 10 preceding shapes x 5 targets, residues 0/1/2/4/5/6; the same 50 cells with a `var` array are aligned every time, which is the control that localises it to the typed-const data path. The original per-target table is not reproducible by construction (the offset is a function of everything emitted earlier) and a fix must not be validated against it. Only xtensa faults; the rest is hardware tolerance, not correctness. xtensa unverified here."
+summary: "The typed-const data path does not align at all. A const array lands at whatever offset the preceding emitted bytes leave -- ANY residue, ODD ones included -- while the `var` path is 8-aligned in every cell measured. Originally filed as `a Double typed const misaligns the NEXT const array`; that framing is WRONG and is kept only so the links resolve. The Double is not a trigger, nothing is: with nothing declared before it, `const A: array[0..3] of Int64` is already misaligned, on all six targets."
 owner: unassigned
 ---
 
 # A `Double` typed const misaligns the next typed-const array
+
+> ## CORRECTION, and it invalidates this ticket's own table (frankS, 2026-08-30)
+>
+> **Read this before using anything below.** The title and the per-target table
+> are wrong in a way that matters, and both are left in place only because three
+> pushed tickets and a Makefile comment link to this slug.
+>
+> **1. The `Double` is not the trigger. Nothing is.** frankB measured ten
+> preceding shapes x five targets: 31 of 50 cells misaligned, residues
+> 0/1/2/4/5/6, on every target. With *nothing* declared before it,
+> `const A: array[0..3] of Int64 = (1,2,3,4)` is already misaligned. The bisection
+> below is real but it was reading noise as signal: what it actually varied was
+> how many bytes got emitted first.
+>
+> **2. The control that settles it holds on all SIX targets**, xtensa included
+> (measured here, the cell frankB could not build):
+> `var V: array[0..3] of Int64` is `mod 8 = 0` everywhere; the same declaration
+> as a typed `const` is not. It is the const path that never aligns, and the
+> defect is that, not any interaction between two declarations.
+>
+> **3. The per-target table below MUST NOT be used to validate a fix.** The
+> offset is a function of every byte emitted before it, so any compiler or RTL
+> change moves every number. Re-measured at `840d4edf1c00` with the identical
+> five-line program, **x86-64 gives `mod 8 = 3` and xtensa gives `0`** — the exact
+> reverse of the table. Nothing changed but the compiler binary.
+>
+> **4. So the "odd residue is xtensa-specific" question is closed: it is not.**
+> `mod 8 = 3` was the only odd residue in fifty cells and it looked like a
+> distinct additional effect on xtensa. It is reachable on **x86-64** with
+> today's binary, on the minimal control, with no `Double` and no xtensa
+> anywhere. It was an artefact of which binary took the measurement.
+>
+> **5. Tested and false, recorded so nobody re-derives it:** an odd-length
+> string literal is *not* the knob. Const strings of 3, 4 and 5 characters ahead
+> of the array give **identical** residues on all six targets. The plausible
+> mechanism was worth ten seconds to check and would have been worth a wasted
+> afternoon to write down unchecked.
+>
+> What survives unchanged: the *category* — shared typed-const data accounting,
+> not a backend arm — and the consequence, that on xtensa an unaligned const
+> array is a **SIGBUS** rather than a silent under-alignment. That is why this is
+> not Track F, and why it is worth prio 55 despite being invisible on five of six
+> targets.
+
 
 > **WIDENED 2026-08-30 — read the boundary measurement at the bottom first.**
 > The title and the two tables below describe a `Double`-triggered defect on two
