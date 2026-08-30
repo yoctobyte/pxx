@@ -14137,7 +14137,33 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_rv32x_cusweep
 	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cusweep; tools/expect_same.sh riscv32/test_rv32x_cusweep-rc "$$?" "42"
 	# SKIP test/cunsigned_div_mod_b123.c on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery ok"
+	# ONE PROCEDURE BIGGER THAN JAL'S +-1 MB. A forward jump to a label in the
+	# same body reserved a single 4-byte JAL before its target existed, so the
+	# fixup could only refuse: `jal displacement 1106292 is outside the
+	# encodable range`. The compiler itself was the first program to cross it
+	# (ParseFactorCore is 2.20 MB of rv32 code), which is a terrible regression
+	# test -- it needs the whole self-build to fail. This is the same wall in
+	# 0.9 s. GENERATED rather than checked in: the source has to be ~260 KB to
+	# produce >1 MB of code, and that is not a file worth carrying.
+	# bug-a-riscv32-cannot-reach-a-far-call-so-the-compiler-will-not-link
+	@awk 'BEGIN{print "program bigbody;"; print "var n: Integer;"; \
+	  print "procedure Big(x: Integer);"; print "var i: Integer;"; \
+	  print "begin"; print "  i := 0;"; \
+	  for(k=0;k<4000;k++) printf "  if x = %d then begin i := i + %d; Writeln(\"a%d\", i); end;\n", k, k, k; \
+	  print "  n := i;"; print "end;"; print "begin"; print "  Big(7);"; \
+	  print "  Writeln(\"n=\", n);"; print "end."}' | tr '"' "'" > $(TESTTMP)/rv32_bigbody.pas
+	./$(COMPILER) --target=riscv32 $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody | tee $(TESTTMP)/rv32_bigbody.log
+	# THE POSITIVE CONTROL. If the generator, the backend or an optimisation
+	# ever brings this body back under 1 MB, the test still passes and proves
+	# nothing -- so assert the thing it exists to exceed. It is also what makes
+	# the `| tee` above safe: a pipeline's status is tee's, so a FAILED compile
+	# would exit 0 -- and then leave no `code=` line for this to read.
+	@sz=$$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/rv32_bigbody.log); \
+	  test -n "$$sz" && test "$$sz" -gt 1048576 || \
+	  { echo "rv32_bigbody: code=$$sz does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for"; exit 1; }
+	./$(COMPILER) $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody_x64
+	tools/expect_same.sh riscv32/test_rv32_bigbody "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_bigbody)" "$$($(TESTTMP)/test_rv32_bigbody_x64)"
+	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery + far-jump body ok"
 
 
 # ---------------------------------------------------------------------------

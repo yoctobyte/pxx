@@ -127,6 +127,25 @@ Five copies of the same if-known-else-record-a-fixup block collapsed into
 - Gate: `make compiler/pascal26` converged 1 round (6b9d17ec4961),
   `tools/gate.sh quick` GREEN.
 
+## Regression test
+
+`make test-riscv32` grew one: a GENERATED `bigbody.pas` -- one procedure with a
+4000-arm if-chain, 1146732 B of rv32 code, compiled and run against the x86-64
+oracle in 0.9 s. The compiler itself is the only other program that crosses the
+wall and it is a terrible regression test (the whole self-build has to fail
+first). Generated rather than checked in: the source has to be ~260 KB to
+produce >1 MB of code.
+
+It carries its own POSITIVE CONTROL -- an assertion that the body really does
+exceed 1048576 B -- because a generator, a backend change or an optimisation
+could quietly bring it back under the line and the test would go on passing
+while covering nothing. Verified to reject both a small `code=` and a missing
+one; the missing case is also what makes the `| tee` safe, since a pipeline's
+status is tee's and a failed compile would otherwise exit 0.
+
+Pinned refuses that file today (`jal displacement 1106292 ...`); the new
+compiler builds it and it prints the oracle's output under qemu.
+
 ## What this does NOT close
 
 `asmtext_rv32.inc`'s own forward-reference patch (inline-asm labels) is still a
