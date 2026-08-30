@@ -1395,6 +1395,31 @@ end;
 
   Both readers that need a width -- indexing (stride) and Length (halving) -- ask
   here rather than repeating the three arms. feature-unicodestring-model }
+{ The frozen-string ELEMENT capacity of an index-store target `<base>[i] := s`,
+  for the truncating shortstring clamp. Two shapes reach it and they had two
+  arms, of which only one existed:
+
+    a[0]   := s     base is AN_IDENT  -> the array SYMBOL's SymStrCap
+    r.a[0] := s     base is AN_FIELD  -> the array FIELD's UFldStrCap
+
+  The symbol arm was added when `a[0] := s` was found writing past the element's
+  N chars into its neighbour. The field arm was not, so the identical store one
+  level in kept doing exactly that — and being a record, the neighbour it
+  reached was the next FIELD (bug-a-record-field-array-of-string-n-drops-the-
+  element-capacity-and-corrupts-the-next-field). Asked in ONE place now, per
+  devdocs/dev/normalise-dont-special-case.md: a second arm of a double case is
+  the arm that stays broken. }
+function FrozenStrElemCapOf(base: Integer): Integer;
+begin
+  Result := 0;
+  if base < 0 then Exit;
+  if (ASTKind[base] = AN_IDENT) and
+     TypeIsFrozenString(Syms[ASTIVal[base]].ElemType) then
+    Result := SymStrCap[ASTIVal[base]]
+  else if ASTKind[base] = AN_FIELD then
+    Result := RecFieldStrCap(ResolveNodeRec(ASTLeft[base]), GetASTIdentName(base));
+end;
+
 function ASTStrElemTkOf(node: Integer): Integer;
 begin
   Result := 0;
@@ -9484,16 +9509,14 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then
           lhsTk := lhsStoreTk;
       end
-      else if (ASTKind[ASTLeft[node]] = AN_INDEX) and (lhsTk = tyString) and
-              (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) and
-              TypeIsFrozenString(Syms[ASTIVal[ASTLeft[ASTLeft[node]]]].ElemType) then
+      else if (ASTKind[ASTLeft[node]] = AN_INDEX) and (lhsTk = tyString) then
         { `array[..] of string[N]` ELEMENT: same capacity clamp the record-field
           arm above has had all along. Without it `a[0] := s` copied the SOURCE
           length — writing past the element's N chars into its neighbour, and
-          reading back with a length that is not the slot's. The declared
-          capacity lives on the array symbol (SymStrCap), the way the element
-          stride in IRLowerAddress reads it. }
-        lhsStrCap := SymStrCap[ASTIVal[ASTLeft[ASTLeft[node]]]];
+          reading back with a length that is not the slot's. Both bases — an
+          array SYMBOL and an array FIELD — are asked in FrozenStrElemCapOf;
+          only the symbol one used to be handled here. }
+        lhsStrCap := FrozenStrElemCapOf(ASTLeft[ASTLeft[node]]);
       if ASTKind[ASTRight[node]] = AN_DEFAULT then
       begin
         if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then

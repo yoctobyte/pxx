@@ -1,0 +1,14 @@
+global   abcdefgh 8
+local    abcdefgh 8
+param    abcdefgh 8
+return   abcdefgh 8
+plainfld abcdefgh 8
+aliasfld abcdefgh 8
+inlinefld abcdefgh 8
+nested   abcdefgh 8
+arrofrec abcdefgh 8
+dynarr   abcdefgh 8
+overrun  abcdefgh 8
+neighbour-elem  ZZZ
+neighbour-field 12345
+nested t1=222 t2=111 arr t1=333
