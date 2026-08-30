@@ -1391,6 +1391,8 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     baseDynDepth, dynRootSym, dynBaseRec, slotAddrNode: Integer;
     dynBaseTk: TTypeKind;
     recName, aliasIdx: Integer;
+    strElemTk: TTypeKind;   { a managed string's ELEMENT type -- see the
+                              tyAnsiString index arm below }
 begin
   { Address of an address-of: `&(&x)`. In valid C this only arises from array
     decay (`&arr` where arr is an array yields arr's address), so the address of
@@ -1794,8 +1796,40 @@ begin
     if (tk = tyAnsiString) and not isArr then
     begin
       lo := 1;
-      elemSize := 1;
-      tk := tyChar;
+      { ELEMENT WIDTH. This was `elemSize := 1; tk := tyChar` -- the ONE site in
+        the compiler that decided a managed string indexes byte-wise, and the
+        only thing standing between the existing machinery and UTF-16.
+        IR_INDEX already carries elemSize as an operand and every backend
+        already multiplies by it, so nothing below the IR needs to change; the
+        stride was simply a constant one level up.
+
+        The element type is not re-derived here -- it is already recorded, per
+        entity: AllocVar deliberately writes `ElemType := tyChar` for a
+        tyAnsiString symbol (symtab.inc), which is the slot a WIDE string sets
+        to tyWideChar. Reading it rather than adding a parallel array is why
+        this costs no new mechanism.
+
+        NOT YET COVERED, and it must be before the alias in pasparser_lval
+        breaks: a string FIELD (`rec.w[i]`) has no element slot at all --
+        record fields carry UFldTk and UFldPtrElemTk but nothing for a string's
+        element -- and an expression temporary (`(a + b)[i]`) has none either,
+        since no AST node carries an element type. Both would index a wide
+        string at stride 1, silently. Same hazard class as the six backend COW
+        guards, same ordering rule: everything is inert until the alias breaks,
+        so all of it must land first. feature-unicodestring-model }
+      strElemTk := tyChar;
+      if ASTKind[baseNode] = AN_IDENT then
+        strElemTk := Syms[ASTIVal[baseNode]].ElemType;
+      if strElemTk = tyWideChar then
+      begin
+        elemSize := 2;
+        tk := tyWideChar;
+      end
+      else
+      begin
+        elemSize := 1;
+        tk := tyChar;
+      end;
       recName := REC_NONE;
       { A pointer-deref string base (`p^[k]`, p: ^AnsiString): IRLowerAddress
         yields the ADDRESS p points at (the string's frame slot), not the loaded
