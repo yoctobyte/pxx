@@ -12763,3 +12763,51 @@ The general shape, and it is 235 again: **the discriminating power of a check ca
 be a property of WHERE it runs, not of what it tests.** Same command, same
 argument, same output string, and it carries information in one checkout and none
 in another.
+
+### 235d-control — the discriminator needed a control, and the check is LOCAL to the tree that wrote it
+
+Two things wrong with 235d as filed, both found by the coordinator running my own
+check in its checkout and getting a different answer.
+
+**1. I cited one observation where the claim needed two.** 235d rests on
+`git cat-file -e a1a8ba4` → *no such object*. On its own that shows nothing: it
+is only evidence of fabrication if a **stale-but-real** sha *would* have
+resolved in the same tree. I never checked. Run now, in the authoring checkout:
+
+| sha | kind | `cat-file -e` here |
+| --- | --- | --- |
+| `1000d6edc`, `a3bbd8587`, `1c43fbb21`, `25282279e`, `771980f3d` | my own, rebased away | **all resolve** |
+| `a1a8ba4` | quoted in a message | **no such object** |
+
+Five controls, one subject, clean separation — the conclusion holds. But it held
+by luck of being true, not because the entry demonstrated it. **A discriminator
+asserted without showing it discriminates is the empty-population failure**
+(`the-empty-tree-audit.md`) wearing a one-line command: the negative result reads
+identically whether the check separates the two cases or separates nothing.
+
+**2. The check is local, and that is a property of the CHECK, not of the sha.**
+In the coordinator's checkout all three of 235c's rows answer `NO SUCH OBJECT` —
+mine *and* the two genuinely-stale ones. A pre-rebase object lives in the reflog
+of the tree that created it **and nowhere else**, so:
+
+> `cat-file -e` separates *invented* from *stale* only in the authoring
+> checkout, in the session that wrote it. Everywhere else — which is every
+> reader of a message, a ticket, or the board — the two are one observation.
+
+So the inversion in 235d is right and under-specified. The full form:
+
+**Retire a check from a QUESTION, not from your habits — and ask where the check
+has to RUN.** `cat-file -e` is the cheap catch for a fabrication in the tree that
+produced it, and decays to "unknown" the moment the claim travels.
+`merge-base --is-ancestor` answers the question a *reader* has — is this citation
+live? — from anywhere, which is why it dominates. Same command, same argument,
+same output string, carrying information in one checkout and none in another.
+
+**Consequence, and it is not small:** a dead citation cannot be classified by
+anyone downstream. The 350 `DEAD-COMMIT` citations pxx-a5 found are unrecoverable
+*as a population* even though some fraction were once real — `patch-id --stable`
+cannot help, because computing a patch-id requires having the object, and 264 of
+269 distinct shas are absent entirely. **235d is a real distinction that only its
+author can draw, and only while they are still there to draw it.** Which is the
+argument for drawing it at once, in the ticket, rather than leaving a dead sha
+for a reader who will have strictly less information than you did.
