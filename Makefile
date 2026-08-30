@@ -16310,8 +16310,32 @@ pin:
 	@# Non-fatal would be wrong: the whole cost of this failure is that nobody
 	@# looks, so it exits 1 and names the undo, rather than scrolling past.
 	@if [ -f test/test_uses_sysutils.pas ]; then 	  if ! $(STABLE_DEFAULT_DIR)/pinned test/test_uses_sysutils.pas 	       $(TESTTMP)/pinsmoke > $(TESTTMP)/pinsmoke.log 2>&1; then 	    echo "PIN VERIFY FAILED — the binary just pinned cannot build lib/rtl:"; 	    sed 's/^/  /' $(TESTTMP)/pinsmoke.log | head -6; 	    echo "  The pin HAS already moved. Undo with: make revert"; 	    echo "  An 'undefined variable' in lib/rtl means a builtin is referenced"; 	    echo "  that compiler/builtin/** does not define — fix that, then re-pin."; 	    exit 1; 	  fi; 	  echo "pin verify: pinned still builds lib/rtl (uses SysUtils)"; 	else 	  echo "pin verify: SKIPPED — test/test_uses_sysutils.pas is gone"; 	fi
-	@echo "Hand to track B:  git add -u stable_linux_amd64/ && git commit -m 'chore(stable): pin vN' -- stable_linux_amd64/"
-	@echo "  (-u stages the in-place-overwritten stable_pinned/stable_latest; all stable files are tracked, so nothing can dangle.)"
+	@# Stage the pin HERE rather than printing advice for a human to retype.
+	@# The freeze above is a glob, so a pin picks up a NEW builtin unit without
+	@# anyone having to remember -- but the staging half had no such protection.
+	@# The line this replaces printed `git add -u`, which stages TRACKED files
+	@# ONLY. A unit added since the last pin was therefore frozen on disk,
+	@# passed pin verify (the files ARE there), and was then left out of the
+	@# commit: every check in the chain passed and the blessed artifact was
+	@# still incomplete. It cannot be seen from this checkout, because the
+	@# compiler falls back to CWD-relative compiler/builtin/ -- only a consumer
+	@# of $(STABLE_ROOT)/ alone (a release, or a fresh checkout of just that
+	@# directory) ever meets it. Measured 2026-08-30 with two units missing.
+	@# -A, not -u: `rm -rf` + `cp` makes a REMOVED unit the mirror case, and
+	@# that is the half -u did catch. `make revert` already stages itself this
+	@# way; pin was the odd one out.
+	@# bug-a-a-pin-that-adds-a-builtin-unit-cannot-commit-it-with-git-add-u
+	@if git rev-parse --git-dir >/dev/null 2>&1; then \
+	   git add -A -- $(STABLE_ROOT) || \
+	     { echo "PIN STAGING FAILED -- stage it by hand: git add -A -- $(STABLE_ROOT)"; exit 1; }; \
+	   N=$$(git diff --cached --name-only -- $(STABLE_ROOT) | wc -l); \
+	   echo "staged $$N file(s) under $(STABLE_ROOT)/ (additions and deletions included):"; \
+	   git diff --cached --name-status -- $(STABLE_ROOT) | sed 's/^/  /'; \
+	   echo "STAGED, not committed. Commit with:"; \
+	   echo "  git commit -m 'chore(stable): pin v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo N)' -- $(STABLE_ROOT)"; \
+	 else \
+	   echo "not a git repo -- nothing staged."; \
+	 fi
 
 # Curated GREEN smoke for the library surface, against the pinned stable. May
 # hard-fail (a smoke gate for track B). Keep every entry here passing; move
