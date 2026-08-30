@@ -1,9 +1,9 @@
 ---
 summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers"
-type: bug
+type: umbrella
 track: O
-prio: 65
-status: unfinished
+prio: 25
+status: backlog
 
 owner: frank-optimize
 ---
@@ -1102,3 +1102,92 @@ that no single change can resolve.
 ~800s pair, and this box had three other agents gating, csmith running and a
 multi-hour refactor starting. The short word sets are the evidence above; a
 quiet-window `blocktest` pair is worth taking before anyone quotes a new ratio.
+
+---
+
+## Converted to an UMBRELLA, p65 -> p25 (coordinator, 2026-08-30)
+
+**Not closed, and not left ranked as a bug.** frank-optimize delivered a measured
+cause at HEAD `0604b414089f` (binary `883476f0abaf`, confirmed != `pinned`) and
+recommended re-filing as its four children and closing this. The children are
+filed; this stays as the aggregate, because a bug ticket and an umbrella fail
+differently:
+
+- Left at **p65 `type: bug`**, the ranker keeps offering it as though a single
+  change closed it. **No single change does** — that is this ticket's finding.
+- **Closed**, the aggregate signal disappears: "pxx runs this real program ~2.3x
+  slower than CPython" is worth tracking even with no single fix, and nothing
+  else in the tree records it.
+
+An umbrella at p25 says both: real, tracked, and **not a unit of work** — spin out
+a rung, do not claim this.
+
+### Both numbers in the original table are dead — and not for the same reason
+
+```
+blocktest ratio  2.1x -> 1.66x
+  pxx half     ~252s   — UNCHANGED (matches the Makefile's own uncontended ~240s note)
+  CPython half   80s -> 152s   under Python 3.14.4
+```
+
+**The ratio "improved" because the reference got slower.** The oracle changed
+under us — a Python upgrade — and a ratio is exactly the shape that hides it,
+since the number moves in the direction that looks like progress. Neither half
+survives; both need re-running together in a quiet window.
+
+**Nothing here was re-measured against `blocktest` after `0c3ad8a10`** — an ~800s
+pair on a box with four sessions compiling. Every figure below it is from the
+short word sets, run back to back with the load recorded. **Do not quote a new
+blocktest ratio until someone gets a quiet box.**
+
+### Why there is no hot spot, as a number
+
+593 gdb samples across five word sets (`perf` unusable — `perf_event_paranoid=4`,
+deliberately not relaxed): **4% of samples in code compiled from `uforth.py`, 96%
+in the RTL**, 67% in the first 130KB of `.text`. Allocator 12.3%, free 7.6%,
+string size/offset 6.1%, block copy 5.1%, `PXXHighBits` 5.1%, pyeval 4.2%. 134
+routines, long tail, no peak.
+
+pxx is **19x slower at list subscript and 16x at dict subscript** — and **2.6x
+faster at `isinstance`, 7x faster at `len`, 10x faster at a bare call, level at
+`exec`**. cProfile puts 30% of CPython's runtime in operations pxx *wins*. That
+is why primitives 15x apart yield a program only 2.3x apart, and why no single
+change closes it.
+
+### Three hypotheses eliminated by INTERVENTION, not argument
+
+Each was built and measured to do nothing — which is why they are eliminated
+rather than deprioritised:
+
+| hypothesis | intervention | result |
+| --- | --- | --- |
+| arithmetic | fixed a real 17-24x promotable-int cost (`0c3ad8a10`) | **uforth moved 0-5%** |
+| threading dispatch | hoisted per-token attribute reads out of `run_forth_word` | 3.45 -> 3.53, nothing |
+| `exec`/pyeval (5643 execs per word set) | measured `exec`+call | 68.8us pxx vs 74.9us CPython — **pxx wins** |
+
+The arithmetic fix is worth having on its own and is not this ticket's answer.
+
+### Children
+
+- [[bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized]] (A p55)
+  — the codegen cause behind `0c3ad8a10`; isolated 44x repro, 20M calls,
+  0.294s vs 13.060s, identical semantics, same never-taken branch.
+- [[feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython]] (O p55)
+- [[bug-a-pxxhighbits-builds-a-constant-with-an-eight-iteration-loop]] (A p50) —
+  `builtinheap.pas:1608` builds `$8080808080808080` with a shift/or loop, per
+  machine word of every string scan: **5.1% of total runtime, more than all of the
+  user's compiled code.** Fix is a per-width `const`, not a literal — the loop
+  exists to be right on 32-bit.
+- [[bug-n-exec-only-publishes-a-def-named-body]] (N p45) — and see below.
+
+### One child is a guard that cannot fire
+
+`pyeval.pas:5748` publishes exactly one def into the caller's namespace: one
+literally named `__body__`, hand-wired to uforth's idiom. `exec("def body(): return
+1", {}, ns); ns["body"]()` raises `KeyError` under pxx and prints `1` under
+CPython. The comment beside it calls the next loop "the general case" — but that
+loop publishes *bindings*, and a def is not one.
+
+**uforth cannot fail on this: it is the program the special case was written
+from.** So the existing coverage is structurally incapable of catching it, and no
+amount of running uforth ever will. That warning is in the child ticket.

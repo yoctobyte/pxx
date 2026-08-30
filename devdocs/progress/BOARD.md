@@ -25,7 +25,7 @@ _none_
 | bug-n-a-local-named-after-its-own-def-aliases-the-function-result | N | 60 | bug | A NilPy local whose name equals its enclosing def's name aliases the function result instead of being an ordinary local: `def mode(label): tonic, mode = label.split(' '); return tonic, mode` returns ('C', None) where CPython returns ('C', 'minor'). Silent wrong value, no diagnostic. | — |
 | bug-nilpy-render-backend-py-compile-does-not-terminate | N | 55→68 | bug | It loops forever after a known point emitting nothing — not slowness. PXXDBG=all output is byte-identical at 20s and 45s (54,577 lines, cmp-clean) with VmRSS flat at 7,616 kB, so it is a tight non-allocating spin entered right after _text's parameter list (render_backend.py:244); the method-block bisect agrees independently. NOT minimised: seven candidate shapes are recorded as DISPROVED, including the tuple-unpack cycle that was the leading suspect. | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
-| bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
+| bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 25 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
 | feature-c-corpus-busybox-applet | C | 60 | feature | Spun out of idea-c-realworld-test-targets (its own top pick, #1 in the suggested order). Build ONE busybox applet -- cat -- from upstream source with cfront, standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, run under tools/run_target.sh on x86-64 + aarch64. busybox is syscall-heavy, which points it straight at crtl, the layer that is actually thin. | bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array |
@@ -815,7 +815,6 @@ _none_
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
-- [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
@@ -1138,6 +1137,7 @@ _none_
 - [p 25] [N] bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver
 - [p 25] [N] bug-n-an-import-inside-exec-is-silently-skipped-and-execution-continues
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
+- [p 25] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate] [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 25] [P] bug-p-set-membership-item-constant-truncated-to-32-bits
 - [p 25] [T] bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference
 - [p 25] [A] bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
