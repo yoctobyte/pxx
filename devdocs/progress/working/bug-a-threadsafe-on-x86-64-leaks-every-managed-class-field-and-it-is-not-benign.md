@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`--threadsafe` on x86-64 gates PXXClassFinalize's string/dynarray pass off (PXX_TS_HARDLOCK), so EVERY managed field of EVERY destroyed class instance leaks. Documented as a `pre-existing benign leak` and never measured: a plain Pascal program creating and Freeing 200k instances with one 2000-byte AnsiString field goes 392 kB -> 398336 kB. A thousandfold, in Pascal, not just NilPy. The word to challenge is `benign`."
-status: backlog
+status: working
 owner: frankS
 ---
 
