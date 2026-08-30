@@ -62,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (337)
+## backlog (338)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -216,6 +216,7 @@ _none_
 | decide-may-a-lane-be-given-the-full-suite-escape-for-four-corpus-builds | U | 55 | decide | DECIDE: one yes/no — may a lane run four corpus builds under `PXX_ALLOW_FULL_SUITE=1`? | — |
 | decide-nilpy-deepcopy-over-the-container-subset | U | 40 | decide | `copy.deepcopy`: implement over the subset, or keep the loud absence? | — |
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
+| decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies | U | 60 | decide | The NilPy fixed tax (~2.2s/compile, ~1,940 CPU-s per full tier) has two possible routes and the ticket assumes one. Serialising the compiled unit image is a 176+ parallel-array checklist that every future Track A commit can silently invalidate. Deferring routine bodies persists nothing and has no staleness class, but only pays if most bodies are unreachable, which is unmeasured. Decide the route before either is built. | — |
 | decide-nilpy-what-version-does-sys-version-info-claim | U | 62 | decide | sys.version_info is absent, and providing it is a product claim, not an implementation detail: real code branches on it to select code paths, so any number we answer silently steers third-party libraries. Decide what version a NilPy build reports — and whether it reports a CPython version at all. | — |
 | decide-posix-master-vs-fpc-named-master-for-the-socket-facades | U | 25 | decide | `Posix.*` is master, or the FPC-named units are? The tree has already answered, the other way | — |
 | decide-release-signing-key-custody | U | 25 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
@@ -751,6 +752,7 @@ _none_
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane
+- [p 60] [U] decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
 - [p 60] [U] decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
@@ -1033,7 +1035,7 @@ _none_
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
-- [p 20] [B] chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run
+- [p 20] [B] chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 20] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
 - [p 20] [U] decide-should-writeableconst-off-be-honoured
 - [p 20] [A+S] feature-a-promoint-variant-esp-targets

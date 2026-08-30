@@ -92,3 +92,91 @@ hello-world. Ranked 60 rather than 85 because the two cheap causes are already
 gone: the tax was 5.4s when this campaign started and is 3.0s now, so the
 remaining prize is smaller and the remaining route is the expensive, dangerous
 one. Raise it if the matrix figure after `13e196cc8` says otherwise.
+
+---
+
+## Survey before building, 2026-08-30 (frankA) — the serialiser's surface is 176+ parallel arrays, and that changes the risk
+
+Claimed and surveyed before writing code, because this ticket says "a Track A
+project, not an afternoon" and the survey decides which project it is.
+
+### Baseline re-measured at HEAD `eb3b0fd5c642`, not reused
+
+| workload | HEAD | ticket's figure (`13e196cc8`) |
+| --- | --- | --- |
+| zero-byte `.npy` | **2.39 / 2.51 / 2.42** s | 3.0 s |
+| `begin end.` (Pascal) | 0.21 / 0.21 / 0.21 s | 0.27 s |
+| emitted code, zero-byte `.npy` | 1,253,550 B, 1859 procs | 1,241,361 B |
+
+loadavg 2.76 (the ticket's numbers were taken at 8.15). So the fixed tax is
+**~2.2s**, not 2.7-2.9s — the prize is real but smaller than the ticket says,
+and some of the gap is the box, not the compiler. Re-measure before quoting.
+
+### The finding: a unit image is 176+ parallel arrays, and this repo has a NAMED failure class for exactly that
+
+The design says "serialise `Code[]`, `Procs`, `Syms`, `UCls`, the fixup and RTTI
+tables". Counted, those are not five things. The capacity growers in `symtab.inc`
+resize:
+
+| grower | arrays |
+| --- | ---: |
+| `EnsureProcCapacity` | **100** |
+| `EnsureSymCapacity` | **44** |
+| `EnsureUFieldCapacity` | **32** |
+| **subtotal, per-entity tables** | **176** |
+
+plus `Code[]`, the string pool, RTTI and fixup tables. `defs.inc` declares
+**242** `array of` globals in total.
+
+**Every one of them must be written by the serialiser, and every array added
+later must be added to it, or the cache silently emits stale or incomplete
+code.** That is not a hypothetical: `symtab.inc:3932` names this failure class in
+so many words — *"the 'one of six parallel arrays not written' class this file's
+SymTR comment names"* — and records a measured instance of it, twelve symbols
+that carried an immediate pointee over depth 0 because nine of twenty-one write
+sites touched only part of the tuple.
+
+So the ticket's stated sharp edge (the cache KEY) is real but is **the smaller of
+the two**. The key's hazard is bounded and has a complete solution — hash the
+whole normalised argv plus the compiler's build sha, and an unrecognised flag
+changes the hash by construction, no allowlist to forget. The **serialiser's**
+hazard is unbounded and has no by-construction solution: it is a 176-entry
+checklist that every future Track A commit can silently invalidate, at the widest
+blast radius in the compiler.
+
+### What makes it safe-able, if it is built
+
+Not enumeration. **Cold-vs-cached byte-identity over a CORPUS.** A missed array
+is only observable if some compiled program's output depends on it, so the gate
+must be "compile with the cache cold and warm, diff the binaries" across many
+`.npy` programs, not one. The coverage instrument already exists: Track T's
+**719 NilPy jobs**. That converts an unbounded enumeration problem into a
+measurable coverage one, and it is the only form of the gate I would trust.
+
+A single-program `same key => same bytes` check — which is what the ticket's gate
+section currently implies — would pass a serialiser that forgot 170 of the 176.
+
+### A second route the ticket does not consider, and it needs a decision
+
+The ticket asserts *"nothing short of caching the compiled unit image will move
+it"*. That is not established. The cost is **parsing 24,460 lines**, and the
+alternative to persisting the result is **not doing the parse**: defer each
+routine body, record its token range, and parse only the bodies the user's
+program actually reaches.
+
+Evidence it is idiomatic here rather than speculative: the generic path already
+has the primitive — `GenericMethodBodyEnd` finds a body's token extent and
+`AppendTokenRangeToTemplateArena` buffers it for later parsing
+(`pasparser_generic.inc`). What does **not** exist is any body-skipping in the
+normal unit path (grepped; no hits).
+
+Trade-off, stated honestly: deferred bodies persist **nothing**, so they have no
+staleness class at all and no 176-entry checklist — but they only help if most
+bodies are unreachable, which is unmeasured, and they do not help the parse of
+interfaces. Serialisation helps unconditionally but carries the checklist
+forever.
+
+**That is a fork about what to build, not about how**, so it is escalated rather
+than guessed: [[decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies]].
+
+**Nothing is half-applied. No compiler file touched.**
