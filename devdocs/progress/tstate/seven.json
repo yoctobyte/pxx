@@ -516,7 +516,7 @@
  ],
  "host": "seven",
  "idle_yield": {
-  "aborts": 1,
+  "aborts": 2,
   "phase": "verify-request",
   "target": "1d8db86672676310675225590908054741a9c1cd"
  },
