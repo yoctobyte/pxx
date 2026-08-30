@@ -11361,7 +11361,19 @@ end;
   decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
   -- it changes in one line rather than at eight.
 
-  `CUnitOfPascalProgram`, NOT `not CProgramMode`: ParseCUnit sets CProgramMode
+  TWO populations reach the C ABI and a guard that names only one of them is
+  wrong at the other. A PASCAL caller of a cdecl proc has CProgramMode False --
+  that is the `not CProgramMode` the seven call-site guards were written with,
+  and it is correct as far as it goes. But an INTRA-C call inside a Pascal-used
+  unit has CProgramMode True, and it must marshal the same way, because that
+  unit's callee prologue is now on the C ABI. Naming only the first population
+  left positional callers calling a C-ABI callee -- the ticket's original
+  disagreement, relocated from the Pascal<->C boundary to the C<->C one
+  (bug-a-the-c-abi-gate-moved-the-callee-but-not-the-intra-c-call-sites, found
+  by frankC on the one subject neither wired test can reach).
+
+  `CUnitOfPascalProgram` is the half `not CProgramMode` cannot express: ParseCUnit
+  sets CProgramMode
   True exactly as ParseCProgram does, so inside C source it is True in both
   populations and discriminates nothing. Measured twice, independently: a probe
   here reported cprog=1 for every function of a C unit reached from a Pascal
@@ -11370,7 +11382,8 @@ end;
   can only do if the flag is True there. }
 function CProcUsesCAbi(procIdx: Integer): Boolean;
 begin
-  Result := (procIdx >= 0) and CUnitOfPascalProgram and ProcCdecl[procIdx];
+  Result := (procIdx >= 0) and ProcCdecl[procIdx] and
+            ((not CProgramMode) or CUnitOfPascalProgram);
 end;
 
 { Does the routine being closed have to leave its float result in the target's

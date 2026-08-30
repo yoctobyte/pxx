@@ -2990,7 +2990,7 @@ begin
           copying it is the whole point; the classification below is the proven
           one on this target.
           bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
-        if ProcExternal[procIdx] or (ProcCdecl[procIdx] and (not CProgramMode)) then
+        if ProcExternal[procIdx] or CProcUsesCAbi(procIdx) then
         begin
           { External C call (AAPCS): integer/pointer args in x0..x7, FP args in
             v0..v7 (the two classes are allocated independently, mirroring the
@@ -3185,7 +3185,7 @@ begin
     IR_CALL_IND:
       begin
         procIdx := Integer(IRIVal[node]);                 { signature proc index }
-        if (procIdx >= 0) and ProcCdecl[procIdx] and (not CProgramMode) then
+        if CProcUsesCAbi(procIdx) then
         begin
           { AAPCS64 (cdecl) indirect call through a `cdecl` proc-type value — a
             dlsym'd C function. PASCAL-mode only: the C frontend marks every C

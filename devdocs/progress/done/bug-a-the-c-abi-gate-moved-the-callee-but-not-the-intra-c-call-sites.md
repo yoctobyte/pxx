@@ -2,9 +2,9 @@
 track: A
 prio: 65
 type: bug
-status: new
+status: done
 blocked-by: []
-owner: ""
+owner: frankA
 summary: "b4ff9adea routed the prologue and epilogue through CProcUsesCAbi but left the seven call-site guards on `not CProgramMode`, which is False inside a C unit. So in a Pascal-used C unit the callee moved to the C ABI and intra-unit C->C call sites did not: an intra-C call passing a double returns 0 instead of 1000 on aarch64 and i386. Regression, found by the verification row neither wired subject can reach."
 ---
 
@@ -83,3 +83,79 @@ implementation it is, and a program. **They belong in `test/`** as a third wired
 subject beside `test_c_abi_pascal_caller.pas` and `c_abi_pure_c_control.c`;
 frankC is adding that, since a population that no wired test reaches is how this
 got through two independent verifications.
+
+---
+
+## RESOLVED — seven guards, one predicate, and arm32 was red too
+
+Fixed by routing **all seven** call-site guards through `CProcUsesCAbi(procIdx)`
+and widening the predicate to name both populations:
+
+```pascal
+Result := (procIdx >= 0) and ProcCdecl[procIdx] and
+          ((not CProgramMode) or CUnitOfPascalProgram);
+```
+
+`not CProgramMode` alone is the **Pascal caller** of a cdecl proc, which is what
+the seven guards were written for and is correct as far as it goes.
+`CUnitOfPascalProgram` alone is the **intra-C call inside a gated unit**. Both
+reach the C ABI; a predicate naming either one is wrong at the other. Replacing
+the guards with the narrow form would have broken the bridge subject exactly as
+the wide-but-incomplete form broke this one.
+
+Sites: `ir_codegen_aarch64.inc:2993,3188`, `ir_codegen386.inc:3204,3561,3646`,
+`ir_codegen_arm32.inc:2658,2965`. The `3561` site is the variadic `vaFwd`
+expression, which carried the same test in a third spelling.
+
+### arm32 was NOT passing — the caution was right and the shape was too narrow
+
+frankC flagged that arm32 and riscv32 passing might be a coincidence of the one
+shape tested, and said to vary it before calling them clean. It is, and here is
+the row:
+
+| shape | aarch64 | arm32 | i386 | riscv32 | x86-64 |
+| --- | --- | --- | --- | --- | --- |
+| `(double, int)` | red | *green* | red | green | green |
+| **`(int, double)`** | red | **RED** | red | green | green |
+| `(int,int,int)` | green | green | **red** (321) | green | green |
+| `(double,double)` | red | green | red | green | green |
+| `(float, int)` | red | green | red | green | green |
+| `(double,int)->int` | red | green | red | green | green |
+
+arm32 needs `(int, double)` specifically — AAPCS32 puts a 64-bit argument in an
+**even** core-register pair, and the word-based positional convention uses
+`(r1,r2)`. That is the same discriminator `int_first` provides in the parent
+ticket's bridge subject, and it is the only one of six shapes that finds arm32.
+riscv32 is genuinely unaffected: its prologue is not gated.
+
+### Measured, with the sha of every binary
+
+- **Baseline `992065f21f33`** (pin v398, `91815a50e`): intra-C **FAIL on
+  aarch64, arm32, i386**; PASS on riscv32 and x86-64. Bridge and control both
+  PASS on all five — the two wired subjects cannot see this.
+- **After `76d38e0bd420`**: intra-C **PASS on all five**; bridge and control
+  still PASS on all five. `gate.sh quick` GREEN, fixedpoint 1 round.
+
+### One row still red, and it pre-dates this
+
+A seventh shape, `(double,int,double,int,double,int)`, does not **compile** on
+arm32:
+
+```
+target arm32: ... argument block exceeds 4 core registers
+```
+
+That is [[bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area]] (open, p45), not
+this fix. Confirmed rather than assumed: the **pinned** binary `992065f21f33`
+refuses the identical source with the identical message.
+
+### Why the harness could not have caught it
+
+frankC owns this and said so first: the bridge subject has a Pascal caller and
+the control is a pure C program where the gate is off, so **the population that
+broke is the one neither wired subject can reach**. It found it by reading the
+diff and noticing the guards were untouched — not by running the instrument.
+The subject is worth wiring for that reason alone, and frankC is adding it.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

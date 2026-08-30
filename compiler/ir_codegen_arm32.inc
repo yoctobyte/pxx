@@ -2655,7 +2655,7 @@ begin
           spill really is SysV. In Pascal mode ProcCdecl implies this target has
           the prologue arm, which is what makes the path safe here.
           bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
-        if ProcExternal[procIdx] or (ProcCdecl[procIdx] and (not CProgramMode)) then
+        if ProcExternal[procIdx] or CProcUsesCAbi(procIdx) then
         begin
           { External C call (armel / base AAPCS soft-float): the cross sysroot is
             armel (gnueabi, ld-linux.so.3), so FP and 64-bit values pass in the
@@ -2962,7 +2962,7 @@ begin
     IR_CALL_IND:
       begin
         procIdx := Integer(IRIVal[node]);                 { signature proc index }
-        if (procIdx >= 0) and ProcCdecl[procIdx] and (not CProgramMode) then
+        if CProcUsesCAbi(procIdx) then
         begin
           { armel (cdecl) indirect call through a `cdecl` proc-type value — a
             dlsym'd C function. PASCAL-mode only: the C frontend marks every C

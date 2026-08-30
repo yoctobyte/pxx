@@ -3201,7 +3201,7 @@ begin
           same omission on aarch64/arm32 broke lua and four conformance shards
           (bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32).
           bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
-        if ProcExternal[procIdx] or (ProcCdecl[procIdx] and (not CProgramMode)) then
+        if ProcExternal[procIdx] or CProcUsesCAbi(procIdx) then
         begin
           { External C call (cdecl): args at [esp+0], [esp+4], ... (arg0 lowest);
             caller cleans the stack. Each arg occupies its natural cdecl width:
@@ -3558,7 +3558,7 @@ begin
           arg0 at the LOWEST stack address, i.e. pushed LAST. The internal
           convention pushes leftmost-first, which handed a dlsym'd pow(2,10) its
           args swapped (= 100.0, not 1024.0). }
-        vaFwd := (procIdx >= 0) and (ProcVariadic[procIdx] or (ProcCdecl[procIdx] and not CProgramMode));
+        vaFwd := ((procIdx >= 0) and ProcVariadic[procIdx]) or CProcUsesCAbi(procIdx);
         if vaFwd then
         begin
           vaO1 := 0; vaO2 := vaNvw - 1;
@@ -3643,7 +3643,7 @@ begin
           cleans up), but a C float/double result comes back in st0 — bridge it
           to xmm0, the i386 float value model, exactly like the external-direct
           path (feature-cdecl-indirect-cross-targets). }
-        if (procIdx >= 0) and ProcCdecl[procIdx] and (not CProgramMode) then
+        if CProcUsesCAbi(procIdx) then
         begin
           if Procs[procIdx].RetType = tySingle then
           begin
