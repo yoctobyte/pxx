@@ -14,6 +14,46 @@ summary: "feature-unicodestring-model [A p62] says in its own body that this is 
 ---
 
 
+> ### CORRECTION TO THIS RESOLUTION, 2026-08-30 (frankwasm, measured while building it)
+>
+> **My "worked precedent" argument was wrong on the facts, and the conclusion is
+> right for a better reason.** I wrote that `PXX_KIND_TEXTSTR` proved the tag
+> mechanism works. Measured: `PXX_KIND_BYTESTR` and `PXX_KIND_TEXTSTR` are
+> defined and documented but **never stamped and never read** — every write to the
+> kind field in `builtinheap.pas` is `PXX_KIND_LEGACY`. The kind word was dead
+> weight. **`WIDESTR` is the first kind ever actually stamped.**
+>
+> NilPy's character semantics are real — `len("héllo")` is 5 and `t[0]` is 日,
+> CPython-exact — but they were achieved by **static typing plus the ASCII flag**,
+> not by the kind tag. So the precedent holds for *semantics*, not for the
+> mechanism I cited.
+>
+> **And the "does the two-kind design extend to three?" question I raised
+> dissolves.** There is no third semantics. BYTESTR's rule is *Length counts
+> storage elements, index yields one element*; WIDESTR is that same rule at element
+> width 2. **TEXTSTR is the odd one out — the only kind that decodes.** The axis is
+> `elements vs characters`, not `bytes / chars / code units`, and UTF-16 joins the
+> side that already exists.
+>
+> That is also the real reason the stride retraction holds, independently of the
+> `elemSize` argument: **the header length was already a BYTE count**, so refcount,
+> free, block copy, in-place append and every backend's retain/release blob are
+> byte-shaped and work unchanged. Nothing needed a second arm — not because the
+> kind machinery existed, but because the byte-counted header made width
+> irrelevant to everything except indexing.
+>
+> **`Length` and `s[i]`, settled against fpc as oracle** (with `{$codepage utf8}` —
+> without it fpc widens the raw source bytes, reports 6, and appears to agree with
+> pxx, which is an artifact):
+>
+> | | fpc wide | fpc uni | fpc ansi | pxx today |
+> | --- | --- | --- | --- | --- |
+> | `Length('héllo')` | 5 | 5 | 6 | 6 |
+> | `Ord(w[2])` | 233 (é) | | | 195 (`$C3`) |
+>
+> So `Length(s)` = UTF-16 **code units** = header bytes >> 1, and `s[i]` yields a
+> **WideChar**. fpc-exact.
+
 > ## RESOLUTION, 2026-08-30 — **adopt it. A fixed-width UTF-16 kind, and it is the EASY case.**
 >
 > Owner: *"(a) we don't care for windows, and (b) I'm not seeing how widestring is
