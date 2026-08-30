@@ -400,7 +400,7 @@ begin
   EmitB($50);                                      { push eax }
   EmitwriteSyscall(MINUS_OFFSET, 1);               { clobbers eax..edx }
   EmitB($58);                                      { pop eax }
-  Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
+  PatchRel8(jnsOff);
   EmitB($31); EmitB($C9);                          { xor ecx, ecx  (digit count) }
   EmitB($BB); EmitI32(10);                         { mov ebx, 10 }
   EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE); { mov edi, buf end }
@@ -412,7 +412,7 @@ begin
   EmitB($88); EmitB($17);                          { mov [edi], dl }
   EmitB($41);                                      { inc ecx }
   EmitB($85); EmitB($C0);                          { test eax, eax }
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1))); { jnz .loop }
+  EmitB($75); EmitRel8(loopStart); { jnz .loop }
   { write(1, edi, ecx): eax=4, ebx=1, ecx=buf, edx=len }
   EmitB($89); EmitB($CA);                          { mov edx, ecx }
   EmitB($89); EmitB($F9);                          { mov ecx, edi }
@@ -468,7 +468,7 @@ begin
   EmitB($88); EmitB($17);                                { mov [edi], dl }
   EmitB($41);                                            { inc ecx }
   EmitB($85); EmitB($C0);                                { test eax, eax }
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($75); EmitRel8(loopStart);    { jnz loop }
   EmitB($89); EmitB($CA);                                { mov edx, ecx }
   EmitB($89); EmitB($F9);                                { mov ecx, edi }
   EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
@@ -485,7 +485,7 @@ begin
   EmitB($79); jnsOff := CodeLen; EmitB(0);               { jns .positive }
   EmitB($F7); EmitB($D8);                                { neg eax }
   EmitB($46);                                            { inc esi }
-  Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
+  PatchRel8(jnsOff);
   EmitB($31); EmitB($C9);                                { xor ecx, ecx }
   EmitB($BB); EmitI32(10);                               { mov ebx, 10 }
   EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, INTBUF_OFFSET + INTBUF_SIZE }
@@ -497,7 +497,7 @@ begin
   EmitB($88); EmitB($17);                                { mov [edi], dl }
   EmitB($41);                                            { inc ecx }
   EmitB($85); EmitB($C0);                                { test eax, eax }
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($75); EmitRel8(loopStart);    { jnz loop }
   EmitB($57);                                            { push edi }
   EmitB($51);                                            { push ecx }
   EmitB($B8); EmitI32(width);                            { mov eax, width }
@@ -511,11 +511,11 @@ begin
   EmitB($B9); EmitDataRef(SpacesOffset);                 { mov ecx, spaces }
   EmitB($5A);                                            { pop edx }
   EmitB($CD); EmitB($80);                                { int 0x80 }
-  Code[jleOff] := Byte(CodeLen - (jleOff + 1));
+  PatchRel8(jleOff);
   EmitB($85); EmitB($F6);                                { test esi, esi }
   EmitB($74); jzOff := CodeLen; EmitB(0);                { jz .no_sign }
   EmitwriteSyscall(MINUS_OFFSET, 1);
-  Code[jzOff] := Byte(CodeLen - (jzOff + 1));
+  PatchRel8(jzOff);
   EmitB($5A);                                            { pop edx }
   EmitB($59);                                            { pop ecx }
   EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
@@ -538,7 +538,7 @@ begin
   EmitB($88); EmitB($17);                                { mov [edi], dl }
   EmitB($41);                                            { inc ecx }
   EmitB($85); EmitB($C0);                                { test eax, eax }
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($75); EmitRel8(loopStart);    { jnz loop }
   EmitB($57);                                            { push edi }
   EmitB($51);                                            { push ecx }
   EmitB($B8); EmitI32(width);                            { mov eax, width }
@@ -551,7 +551,7 @@ begin
   EmitB($B9); EmitDataRef(SpacesOffset);                 { mov ecx, spaces }
   EmitB($5A);                                            { pop edx }
   EmitB($CD); EmitB($80);                                { int 0x80 }
-  Code[jleOff] := Byte(CodeLen - (jleOff + 1));
+  PatchRel8(jleOff);
   EmitB($5A);                                            { pop edx }
   EmitB($59);                                            { pop ecx }
   EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
@@ -783,12 +783,12 @@ begin
   EmitB($B8); EmitI32(Int32(-1));                      { mov eax, $FFFFFFFF }
   EmitB($BA); EmitI32(Int32($7FFFFFFF));               { mov edx, $7FFFFFFF (INT64_MAX) }
   EmitB($EB); pEnd := CodeLen; EmitB(0);               { jmp .done }
-  Code[pNeg] := Byte(CodeLen - (pNeg + 1));            { .neg: eax already 0 }
+  PatchRel8(pNeg);            { .neg: eax already 0 }
   EmitB($BA); EmitI32(Int32($80000000));               { mov edx, $80000000 (INT64_MIN) }
-  Code[pHi]  := Byte(CodeLen - (pHi + 1));
-  Code[pLo]  := Byte(CodeLen - (pLo + 1));
-  Code[pNaN] := Byte(CodeLen - (pNaN + 1));
-  Code[pEnd] := Byte(CodeLen - (pEnd + 1));
+  PatchRel8(pHi);
+  PatchRel8(pLo);
+  PatchRel8(pNaN);
+  PatchRel8(pEnd);
 end;
 
 procedure EmitTruncToIntegral386;
@@ -889,7 +889,7 @@ begin
   EmitwriteSyscall(MINUS_OFFSET, 1);               { clobbers eax..edx }
   EmitB($58);                                      { pop eax }
   EmitB($5A);                                      { pop edx }
-  Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
+  PatchRel8(jnsOff);
   EmitwriteUInt64_386;
 end;
 
@@ -921,7 +921,7 @@ begin
   end;
   EmitB($75); jOff := CodeLen; EmitB(0);           { jnz .ok }
   EmitCallProc(dzProc);                            { never returns }
-  Code[jOff] := Byte(CodeLen - (jOff + 1));        { .ok: }
+  PatchRel8(jOff);        { .ok: }
 end;
 
 procedure EmitUDivMod64Core_386(wantMod: Boolean);
@@ -955,14 +955,14 @@ begin
   EmitB($8B); EmitB($DE);                          { mov ebx, esi (R.lo) }
   EmitB($3B); EmitB($1C); EmitB($24);              { cmp ebx, [esp] (D.lo) }
   EmitB($72); skip2 := CodeLen; EmitB(0);          { jb .skip }
-  Code[jaOff] := Byte(CodeLen - (jaOff + 1));       { .sub: }
+  PatchRel8(jaOff);       { .sub: }
   EmitB($2B); EmitB($34); EmitB($24);              { sub esi, [esp] }
   EmitB($1B); EmitB($7C); EmitB($24); EmitB($04);  { sbb edi, [esp+4] }
   EmitB($83); EmitB($C8); EmitB($01);              { or eax, 1 (set quotient bit) }
-  Code[skip1] := Byte(CodeLen - (skip1 + 1));       { .skip: }
-  Code[skip2] := Byte(CodeLen - (skip2 + 1));
+  PatchRel8(skip1);       { .skip: }
+  PatchRel8(skip2);
   EmitB($49);                                      { dec ecx }
-  EmitB($75); EmitB(Byte(loopOff - (CodeLen + 1))); { jnz .loop }
+  EmitB($75); EmitRel8(loopOff); { jnz .loop }
   EmitB($83); EmitB($C4); EmitB($10);              { add esp, 16 (pop D + N) }
   if wantMod then
   begin
@@ -986,7 +986,7 @@ begin
   EmitB($83); EmitB($D2); EmitB($00);              { adc edx, 0 }
   EmitB($F7); EmitB($DA);                          { neg edx (abs divisor) }
   EmitB($83); EmitB($CB); EmitB($01);              { or ebx, 1 (quotient negate) }
-  Code[dpos] := Byte(CodeLen - (dpos + 1));         { .dpos: }
+  PatchRel8(dpos);         { .dpos: }
   EmitB($8B); EmitB($34); EmitB($24);              { mov esi, [esp] (N.lo) }
   EmitB($8B); EmitB($7C); EmitB($24); EmitB($04);  { mov edi, [esp+4] (N.hi) }
   EmitB($85); EmitB($FF);                          { test edi, edi (dividend sign) }
@@ -998,7 +998,7 @@ begin
   EmitB($89); EmitB($7C); EmitB($24); EmitB($04);  { mov [esp+4], edi }
   EmitB($83); EmitB($CB); EmitB($02);              { or ebx, 2 (remainder negate) }
   EmitB($83); EmitB($F3); EmitB($01);              { xor ebx, 1 (flip quotient negate) }
-  Code[npos] := Byte(CodeLen - (npos + 1));         { .npos: }
+  PatchRel8(npos);         { .npos: }
   EmitB($88); EmitB($1D); EmitDataRef(INTBUF_OFFSET); { mov [INTBUF], bl (stash flags) }
   EmitUDivMod64Core_386(wantMod);                  { result in edx:eax }
   EmitB($8A); EmitB($1D); EmitDataRef(INTBUF_OFFSET); { mov bl, [INTBUF] }
@@ -1010,7 +1010,7 @@ begin
   EmitB($F7); EmitB($D8);                          { neg eax }
   EmitB($83); EmitB($D2); EmitB($00);              { adc edx, 0 }
   EmitB($F7); EmitB($DA);                          { neg edx (apply sign) }
-  Code[doneOff] := Byte(CodeLen - (doneOff + 1));   { .done: }
+  PatchRel8(doneOff);   { .done: }
 end;
 
 procedure EmitBinop64_386(left, right, op: Integer; signedOp: Boolean;
@@ -1129,7 +1129,7 @@ begin
       if pMulProc < 0 then
         Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
       EmitCallProc(pMulProc);
-      Code[pMulSkip] := Byte(CodeLen - (pMulSkip + 1));
+      PatchRel8(pMulSkip);
     end;
   end
   else if (op = Ord(tkShl)) or (op = Ord(tkIdent)) or (op = Ord(tkShr)) then
@@ -1157,7 +1157,7 @@ begin
       EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
       EmitB($89); EmitB($C2);                      { mov edx, eax }
       EmitB($31); EmitB($C0);                      { xor eax, eax }
-      Code[skipOff] := Byte(CodeLen - (skipOff + 1));
+      PatchRel8(skipOff);
       if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
       begin
         { narrow operand: the result is the low 32 bits, sign/zero-extended
@@ -1182,7 +1182,7 @@ begin
       EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
       EmitB($89); EmitB($D0);                      { mov eax, edx }
       EmitB($C1); EmitB($FA); EmitB($1F);          { sar edx, 31 (sign-fill) }
-      Code[skipOff] := Byte(CodeLen - (skipOff + 1));
+      PatchRel8(skipOff);
     end
     else
     begin
@@ -1193,7 +1193,7 @@ begin
       EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
       EmitB($89); EmitB($D0);                      { mov eax, edx }
       EmitB($31); EmitB($D2);                      { xor edx, edx }
-      Code[skipOff] := Byte(CodeLen - (skipOff + 1));
+      PatchRel8(skipOff);
     end;
   end
   else if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
@@ -1259,7 +1259,7 @@ begin
   if procIdx < 0 then
     Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
   EmitCallProc(procIdx);
-  Code[pSkip] := Byte(CodeLen - (pSkip + 1));
+  PatchRel8(pSkip);
 end;
 
 procedure EmitIntToXmm386(dst: Integer; srcTk: TTypeKind);
@@ -1741,10 +1741,10 @@ begin
             EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
             EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
             EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
-            Code[pNil386] := Byte(CodeLen - (pNil386 + 1));  { empty: }
+            PatchRel8(pNil386);  { empty: }
             EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
             EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
-            Code[pDone386] := Byte(CodeLen - (pDone386 + 1)); { done: }
+            PatchRel8(pDone386); { done: }
             Exit;
           end;
           EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
@@ -2223,8 +2223,8 @@ begin
             EmitB($46);                                { inc esi }
             EmitB($47);                                { inc edi }
             EmitB($49);                                { dec ecx }
-            EmitB($75); EmitB(Byte(pLoopLhs - (CodeLen + 1)));
-            Code[pNilLhs] := Byte(CodeLen - (pNilLhs + 1));
+            EmitB($75); EmitRel8(pLoopLhs);
+            PatchRel8(pNilLhs);
           end
           else
           begin
@@ -2260,8 +2260,8 @@ begin
             EmitB($46);                                { inc esi }
             EmitB($47);                                { inc edi }
             EmitB($49);                                { dec ecx }
-            EmitB($75); EmitB(Byte(pLoopRhs - (CodeLen + 1)));
-            Code[pNilRhs] := Byte(CodeLen - (pNilRhs + 1));
+            EmitB($75); EmitRel8(pLoopRhs);
+            PatchRel8(pNilRhs);
             EmitB($59);                                { pop ecx }
           end
           else
@@ -2289,7 +2289,7 @@ begin
           { mov eax, 256 }
           EmitB($B8); EmitI32(256);
           { .cap: }
-          Code[pCap] := Byte(CodeLen - (pCap + 1));
+          PatchRel8(pCap);
           { mov [ebx], eax }
           EmitB($89); EmitB($03);
           { mov dword [ebx+4], 0 }
@@ -2984,9 +2984,9 @@ begin
               EmitB($F2); EmitB($0F); EmitB($10); EmitB($40); EmitB($08); { movsd xmm0,[eax+8] }
               EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);             { cvttsd2si eax, xmm0 }
               EmitB($EB); nextJmp2 := CodeLen; EmitB(0);  { jmp .done }
-              Code[nextJmp] := Byte(CodeLen - (nextJmp + 1));
+              PatchRel8(nextJmp);
               EmitB($8B); EmitB($40); EmitB($08);         { mov eax, [eax+8] (payload low) }
-              Code[nextJmp2] := Byte(CodeLen - (nextJmp2 + 1));
+              PatchRel8(nextJmp2);
               Exit;
             end;
             IREmitNode386(valNode);
@@ -4077,10 +4077,10 @@ begin
             EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
             EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
             EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
-            Code[pNil386] := Byte(CodeLen - (pNil386 + 1));  { empty: }
+            PatchRel8(pNil386);  { empty: }
             EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
             EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
-            Code[pDone386] := Byte(CodeLen - (pDone386 + 1)); { done: }
+            PatchRel8(pDone386); { done: }
             Exit;
           end;
           EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
@@ -4697,7 +4697,7 @@ begin
               EmitCallProc(procIdx);
               EmitB($81); EmitB($C4); EmitI32(4);        { add esp, 4 }
             end;
-            Code[j] := Byte(CodeLen - (j + 1));          { patch jz done }
+            PatchRel8(j);          { patch jz done }
           end
           else if tk = tyString then
           begin

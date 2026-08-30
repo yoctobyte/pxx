@@ -6391,7 +6391,7 @@ begin
   EmitB($48); EmitB($31); EmitB($C0);               { xor rax, rax }
   EmitStoreStrLen(dstIdx);                           { dst := '' }
   EmitB($EB); doneOutPatch := CodeLen; EmitB(0);    { jmp done }
-  Code[inRangePatch] := Byte(CodeLen - (inRangePatch + 1));
+  PatchRel8(inRangePatch);
   EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
   EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
   EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
@@ -6417,12 +6417,12 @@ begin
   EmitB($48); EmitB($81); EmitB($F9); EmitI32(FROZEN_CSTR_CAP);  { cmp rcx, cap }
   EmitB($76); capPatch := CodeLen; EmitB(0);                     { jbe fits }
   EmitB($48); EmitB($C7); EmitB($C1); EmitI32(FROZEN_CSTR_CAP);  { mov rcx, cap }
-  Code[capPatch] := Byte(CodeLen - (capPatch + 1));
+  PatchRel8(capPatch);
   EmitB($48); EmitB($89); EmitB($C8);               { mov rax, rcx }
   EmitStoreStrLen(dstIdx);
   EmitLeaStrDataRdi(dstIdx);
   EmitB($F3); EmitB($A4);
-  Code[doneOutPatch] := Byte(CodeLen - (doneOutPatch + 1));
+  PatchRel8(doneOutPatch);
 end;
 
 procedure EmitTerminateString(idx: Integer);
@@ -6549,12 +6549,12 @@ begin
     EmitB($EB); pLhsDone := CodeLen; EmitB(0);
     
     { lhs_nil: }
-    Code[pLhsNil] := Byte(CodeLen - (pLhsNil + 1));
+    PatchRel8(pLhsNil);
     EmitB($31); EmitB($F6);                         { xor esi, esi }
     EmitB($31); EmitB($D2);                         { xor edx, edx }
     
     { lhs_done: }
-    Code[pLhsDone] := Byte(CodeLen - (pLhsDone + 1));
+    PatchRel8(pLhsDone);
   end
   else
   begin
@@ -6576,12 +6576,12 @@ begin
     EmitB($EB); pRhsDone := CodeLen; EmitB(0);
     
     { rhs_nil: }
-    Code[pRhsNil] := Byte(CodeLen - (pRhsNil + 1));
+    PatchRel8(pRhsNil);
     EmitB($31); EmitB($FF);                         { xor edi, edi }
     EmitB($45); EmitB($31); EmitB($C0);             { xor r8d, r8d }
     
     { rhs_done: }
-    Code[pRhsDone] := Byte(CodeLen - (pRhsDone + 1));
+    PatchRel8(pRhsDone);
   end
   else
   begin
@@ -6638,10 +6638,10 @@ begin
     EmitB($48); EmitB($89); EmitB($C6);             { mov rsi, rax }
     EmitB($48); EmitB($8B); EmitB($50); EmitB($F8); { mov rdx, [rax-8] }
     EmitB($EB); pLhsDone := CodeLen; EmitB(0);      { jmp lhs_done }
-    Code[pLhsNil] := Byte(CodeLen - (pLhsNil + 1));
+    PatchRel8(pLhsNil);
     EmitB($31); EmitB($F6);                         { xor esi, esi }
     EmitB($31); EmitB($D2);                         { xor edx, edx }
-    Code[pLhsDone] := Byte(CodeLen - (pLhsDone + 1));
+    PatchRel8(pLhsDone);
   end
   else
   begin
@@ -6657,10 +6657,10 @@ begin
     EmitB($48); EmitB($89); EmitB($CF);             { mov rdi, rcx }
     EmitB($4C); EmitB($8B); EmitB($41); EmitB($F8); { mov r8, [rcx-8] }
     EmitB($EB); pRhsDone := CodeLen; EmitB(0);      { jmp rhs_done }
-    Code[pRhsNil] := Byte(CodeLen - (pRhsNil + 1));
+    PatchRel8(pRhsNil);
     EmitB($31); EmitB($FF);                         { xor edi, edi }
     EmitB($45); EmitB($31); EmitB($C0);             { xor r8d, r8d }
-    Code[pRhsDone] := Byte(CodeLen - (pRhsDone + 1));
+    PatchRel8(pRhsDone);
   end
   else
   begin
@@ -6673,14 +6673,14 @@ begin
   EmitB($4C); EmitB($39); EmitB($C1);               { cmp rcx, r8 }
   EmitB($76); pMinOk := CodeLen; EmitB(0);          { jbe min_ok }
   EmitB($4C); EmitB($89); EmitB($C1);               { mov rcx, r8 }
-  Code[pMinOk] := Byte(CodeLen - (pMinOk + 1));     { min_ok: }
+  PatchRel8(pMinOk);     { min_ok: }
   EmitB($48); EmitB($85); EmitB($C9);               { test rcx, rcx }
   EmitB($74); pLenCmp := CodeLen; EmitB(0);         { jz len_cmp }
   EmitB($F3); EmitB($A6);                           { repe cmpsb }
   EmitB($75); pSetcc := CodeLen; EmitB(0);          { jne set_cc (flags = lhs-rhs) }
-  Code[pLenCmp] := Byte(CodeLen - (pLenCmp + 1));   { len_cmp: }
+  PatchRel8(pLenCmp);   { len_cmp: }
   EmitB($4C); EmitB($39); EmitB($C2);               { cmp rdx, r8 }
-  Code[pSetcc] := Byte(CodeLen - (pSetcc + 1));     { set_cc: }
+  PatchRel8(pSetcc);     { set_cc: }
   case op of
     tkLt: begin EmitB($0F); EmitB($92); EmitB($C0); end;  { setb }
     tkLe: begin EmitB($0F); EmitB($96); EmitB($C0); end;  { setbe }
@@ -6723,7 +6723,7 @@ begin
   { mov [BSS_HEAP_END], rax }
   EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   { Patch short jump offset }
-  Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+  PatchRel8(jbePatch);
   { mov rax, [BSS_HEAP_PTR] }
   EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
   { mov [BSS_HEAP_PTR], rbx }
@@ -9837,7 +9837,7 @@ begin
   EmitB($50);
   EmitwriteSyscall(MINUS_OFFSET, 1);
   EmitB($58);
-  Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
+  PatchRel8(jnsOff);
   EmitB($48); EmitB($31); EmitB($C9);
   MovRbxImm(10);
   EmitB($48); EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);
@@ -9849,7 +9849,7 @@ begin
   EmitB($88); EmitB($17);
   EmitB($48); EmitB($FF); EmitB($C1);
   EmitB($48); EmitB($85); EmitB($C0);
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));
+  EmitB($75); EmitRel8(loopStart);
   EmitB($48); EmitB($89); EmitB($FE);
   EmitB($48); EmitB($89); EmitB($CA);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
@@ -9869,7 +9869,7 @@ begin
   EmitB($88); EmitB($17);
   EmitB($48); EmitB($FF); EmitB($C1);
   EmitB($48); EmitB($85); EmitB($C0);
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));
+  EmitB($75); EmitRel8(loopStart);
   EmitB($48); EmitB($89); EmitB($FE);
   EmitB($48); EmitB($89); EmitB($CA);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
@@ -9902,7 +9902,7 @@ begin
   EmitB($79); jnsOff := CodeLen; EmitB(0);               { jns .positive }
   EmitB($48); EmitB($F7); EmitB($D8);                    { neg rax }
   EmitB($49); EmitB($FF); EmitB($C0);                    { inc r8 }
-  Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
+  PatchRel8(jnsOff);
   { Digit conversion into INTBUF from end }
   EmitB($48); EmitB($31); EmitB($C9);                    { xor rcx, rcx }
   MovRbxImm(10);
@@ -9915,7 +9915,7 @@ begin
   EmitB($88); EmitB($17);                                { mov [rdi], dl }
   EmitB($48); EmitB($FF); EmitB($C1);                    { inc rcx }
   EmitB($48); EmitB($85); EmitB($C0);                    { test rax, rax }
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($75); EmitRel8(loopStart);    { jnz loop }
   { Save digit start/count; compute padding = width - digits - sign }
   EmitB($57);                                            { push rdi }
   EmitB($51);                                            { push rcx }
@@ -9927,12 +9927,12 @@ begin
   EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);    { mov rsi, spaces }
   EmitB($48); EmitB($89); EmitB($C2);                    { mov rdx, rax }
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-  Code[jleOff] := Byte(CodeLen - (jleOff + 1));
+  PatchRel8(jleOff);
   { Write sign if negative }
   EmitB($4D); EmitB($85); EmitB($C0);                    { test r8, r8 }
   EmitB($74); jzOff := CodeLen; EmitB(0);                { jz .no_sign }
   EmitwriteSyscall(MINUS_OFFSET, 1);
-  Code[jzOff] := Byte(CodeLen - (jzOff + 1));
+  PatchRel8(jzOff);
   { Write digits }
   EmitB($5A);                                            { pop rdx }
   EmitB($5E);                                            { pop rsi }
@@ -9954,7 +9954,7 @@ begin
   EmitB($88); EmitB($17);                                { mov [rdi], dl }
   EmitB($48); EmitB($FF); EmitB($C1);                    { inc rcx }
   EmitB($48); EmitB($85); EmitB($C0);                    { test rax, rax }
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($75); EmitRel8(loopStart);    { jnz loop }
   EmitB($57);                                            { push rdi }
   EmitB($51);                                            { push rcx }
   MovRaxImm(width);
@@ -9964,7 +9964,7 @@ begin
   EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
   EmitB($48); EmitB($89); EmitB($C2);                    { mov rdx, rax }
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-  Code[jleOff] := Byte(CodeLen - (jleOff + 1));
+  PatchRel8(jleOff);
   EmitB($5A);                                            { pop rdx }
   EmitB($5E);                                            { pop rsi }
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
@@ -9993,7 +9993,7 @@ begin
   EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 }
   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
   MovRaxImm(Ord('-')); EmitwriteChar;
-  Code[jncOff] := Byte(CodeLen - (jncOff + 1));                 { .pos: }
+  PatchRel8(jncOff);                 { .pos: }
 
   { intpart = trunc(value) -> rax ; frac double = value - intpart }
   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);   { cvttsd2si rax, xmm0 }
@@ -10010,7 +10010,7 @@ begin
   EmitB($72); jbCarry := CodeLen; EmitB(0);                     { jb .nocarry }
   EmitB($4C); EmitB($29); EmitB($C3);                           { sub rbx, r8 }
   EmitB($48); EmitB($FF); EmitB($C0);                           { inc rax }
-  Code[jbCarry] := Byte(CodeLen - (jbCarry + 1));               { .nocarry: }
+  PatchRel8(jbCarry);               { .nocarry: }
   EmitB($49); EmitB($89); EmitB($DD);                           { mov r13, rbx (frac) }
 
   { print intpart (non-negative) then '.' }
@@ -10170,7 +10170,7 @@ begin
     EmitB($48); EmitB($0F); EmitB($BA); EmitB($E0); EmitB($3F);   { bt rax, 63 }
     EmitB($73); pNotNeg := CodeLen; EmitB(0);                     { jnc .notneg }
     EmitB($48); EmitB($FF); EmitB($C6);                           { inc rsi (sign char) }
-    Code[pNotNeg] := Byte(CodeLen - (pNotNeg + 1));
+    PatchRel8(pNotNeg);
     EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 (abs bits) }
     EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C8);   { movq xmm1, rax }
     { The intpart AS PRINTED, which means AFTER the fraction's rounding: `9.999:7:2`
@@ -10206,8 +10206,8 @@ begin
     EmitB($48); EmitB($31); EmitB($D2);                           { xor rdx, rdx }
     EmitB($48); EmitB($F7); EmitB($F1);                           { div rcx }
     EmitB($48); EmitB($FF); EmitB($C6);                           { inc rsi }
-    EmitB($EB); EmitB(Byte(pCntTop - (CodeLen + 1)));             { jmp .cnt }
-    Code[pCntDone] := Byte(CodeLen - (pCntDone + 1));            { .cntdone: }
+    EmitB($EB); EmitRel8(pCntTop);             { jmp .cnt }
+    PatchRel8(pCntDone);            { .cntdone: }
     if decimals > 0 then
     begin
       EmitB($48); EmitB($81); EmitB($C6); EmitI32(decimals + 1); { add rsi, decimals+1 }
@@ -10219,7 +10219,7 @@ begin
     EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);           { mov rsi, spaces }
     EmitB($48); EmitB($89); EmitB($C2);                           { mov rdx, rax }
     MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-    Code[pNoPad] := Byte(CodeLen - (pNoPad + 1));                { .nopad: }
+    PatchRel8(pNoPad);                { .nopad: }
   end;
 
   { sign: if the sign bit is set, print '-' and clear it (abs) }
@@ -10229,7 +10229,7 @@ begin
   EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 }
   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
   MovRaxImm(Ord('-')); EmitwriteChar;
-  Code[jncOff] := Byte(CodeLen - (jncOff + 1));
+  PatchRel8(jncOff);
 
   { rax = trunc(|v|) exactly; rbx = round((|v| - rax) * 10^fdigits), which
     cannot overflow because the fraction is below 1. A fraction that rounds up
@@ -10386,9 +10386,9 @@ begin
   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
   MovRaxImm(Ord('-')); EmitwriteChar;
   EmitB($EB); jmpSignDone := CodeLen; EmitB(0);                 { jmp .signdone }
-  Code[jncPos] := Byte(CodeLen - (jncPos + 1));                 { .pos: }
+  PatchRel8(jncPos);                 { .pos: }
   MovRaxImm(Ord(' ')); EmitwriteChar;
-  Code[jmpSignDone] := Byte(CodeLen - (jmpSignDone + 1));       { .signdone: }
+  PatchRel8(jmpSignDone);       { .signdone: }
 
   { 10.0 -> xmm1, 1.0 -> xmm2 (preserved across syscalls) }
   MovRaxImm(10); EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8); { cvtsi2sd xmm1, rax }
@@ -10414,15 +10414,15 @@ begin
   EmitB($72); laJb := CodeLen; EmitB(0);                       { jb .ea }
   EmitB($F2); EmitB($0F); EmitB($5E); EmitB($C1);              { divsd xmm0, xmm1 }
   EmitB($49); EmitB($FF); EmitB($C4);                          { inc r12 }
-  EmitB($EB); EmitB(Byte(laTop - (CodeLen + 1)));              { jmp .la }
-  Code[laJb] := Byte(CodeLen - (laJb + 1));                    { .ea: }
+  EmitB($EB); EmitRel8(laTop);              { jmp .la }
+  PatchRel8(laJb);                    { .ea: }
   lbTop := CodeLen;                                            { .lb: while value<1 }
   EmitB($66); EmitB($0F); EmitB($2E); EmitB($C2);              { ucomisd xmm0, xmm2 }
   EmitB($73); lbJae := CodeLen; EmitB(0);                      { jae .eb }
   EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);              { mulsd xmm0, xmm1 }
   EmitB($49); EmitB($FF); EmitB($CC);                          { dec r12 }
-  EmitB($EB); EmitB(Byte(lbTop - (CodeLen + 1)));              { jmp .lb }
-  Code[lbJae] := Byte(CodeLen - (lbJae + 1));                  { .eb: }
+  EmitB($EB); EmitRel8(lbTop);              { jmp .lb }
+  PatchRel8(lbJae);                  { .eb: }
 
   { m = round-to-nearest(value * 10^FRAC) built as a (FRAC+1)-digit integer in
     rbx, extracted MSD-first by iteration so each step only truncates a value in
@@ -10437,20 +10437,20 @@ begin
   EmitB($48); EmitB($83); EmitB($F8); EmitB($09);              { cmp rax, 9 }
   EmitB($7E); clampJle := CodeLen; EmitB(0);                   { jle .ok }
   EmitB($B8); EmitI32(9);                                      { mov eax, 9 }
-  Code[clampJle] := Byte(CodeLen - (clampJle + 1));            { .ok: }
+  PatchRel8(clampJle);            { .ok: }
   EmitB($48); EmitB($6B); EmitB($DB); EmitB($0A);              { imul rbx, rbx, 10 }
   EmitB($48); EmitB($01); EmitB($C3);                          { add rbx, rax }
   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D8);  { cvtsi2sd xmm3, rax }
   EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C3);              { subsd xmm0, xmm3 }
   EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);              { mulsd xmm0, xmm1 }
   EmitB($48); EmitB($FF); EmitB($C9);                          { dec rcx }
-  EmitB($75); EmitB(Byte(bdLoop - (CodeLen + 1)));             { jnz .bd }
+  EmitB($75); EmitRel8(bdLoop);             { jnz .bd }
   { guard digit: round half-up }
   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);  { cvttsd2si rax, xmm0 }
   EmitB($48); EmitB($83); EmitB($F8); EmitB($05);              { cmp rax, 5 }
   EmitB($7C); roundJl := CodeLen; EmitB(0);                    { jl .noround }
   EmitB($48); EmitB($FF); EmitB($C3);                          { inc rbx }
-  Code[roundJl] := Byte(CodeLen - (roundJl + 1));              { .noround: }
+  PatchRel8(roundJl);              { .noround: }
   { carry past the leading digit (9.99..->10.0): drop a digit, bump exponent }
   divisor := 1; for k := 0 to FRAC do divisor := divisor * 10;  { 10^(FRAC+1) }
   EmitB($48); EmitB($B8); EmitI64(divisor);                    { mov rax, 10^17 }
@@ -10462,7 +10462,7 @@ begin
   EmitB($48); EmitB($F7); EmitB($F1);                          { div rcx }
   EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
   EmitB($49); EmitB($FF); EmitB($C4);                          { inc r12 }
-  Code[ovJb] := Byte(CodeLen - (ovJb + 1));                    { .nov: }
+  PatchRel8(ovJb);                    { .nov: }
 
   { print m as d.<FRAC digits>, most significant first }
   for k := FRAC downto 0 do
@@ -10487,10 +10487,10 @@ begin
   EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
   MovRaxImm(Ord('-')); EmitwriteChar;
   EmitB($EB); jmpEd := CodeLen; EmitB(0);                      { jmp .ed }
-  Code[jnsPos2] := Byte(CodeLen - (jnsPos2 + 1));              { .pos2: }
+  PatchRel8(jnsPos2);              { .pos2: }
   EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
   MovRaxImm(Ord('+')); EmitwriteChar;
-  Code[jmpEd] := Byte(CodeLen - (jmpEd + 1));                  { .ed: }
+  PatchRel8(jmpEd);                  { .ed: }
   for k := 2 downto 0 do
   begin
     divisor := 1; for j := 1 to k do divisor := divisor * 10;
