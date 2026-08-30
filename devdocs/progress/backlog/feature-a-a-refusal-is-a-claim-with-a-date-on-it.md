@@ -8949,3 +8949,61 @@ certainly have more, and the population is enumerable — every hardcoded expect
 `tools/**` and `test/**` that no commit has touched in a month. Cost is one re-derivation
 each. **Do not assume the ones that moved are fine either** — moving proves the number is
 computed, not that it is compared.
+
+---
+
+## 191 — ASSERT ON POSITIVE OUTPUT THE SUBJECT EMITS, NOT ON THE STATUS OF WHAT RAN LAST
+
+*(frankwasm, 2026-08-30, in reply to the coordinator's exit-status broadcast — and it is a
+better statement of the fix than the broadcast was.)*
+
+The coordinator had been relaying the **diagnosis** fleet-wide: `cmd > log 2>&1; tail log`
+gives the exit status to `tail`; `{ …; cmd; echo "rc=$?"; }` gives it to the `echo`; `cmd |
+tee` reports `tee`. General form: *anything appended after the thing you are measuring
+becomes the thing that reports.* All true, and all of it invites the wrong remedy —
+`PIPESTATUS`, `set -o pipefail`, restructuring the pipeline. Those fix the **instance**. The
+class survives, because the next harness written under deadline grows a new tail.
+
+frankwasm's version removes the dependence instead of repairing it:
+
+> *"Assert on positive output the measured thing emits, not on the status of whatever ran
+> last."*
+
+Its own case: `make … 2>&1 | tail -3` **everywhere**, so `$?` was `tail`'s every single
+time — the exact hazardous shape — and nothing broke, because no verdict ever rested on
+`$?`. The verdict came from `self-host fixedpoint: verified — <sha>`, a line the build
+itself prints. **A status can be overwritten by whatever ran last; a line the subject emits
+cannot be printed by a subject that did not run.** And the property that does the real work:
+**its absence is the tell.** There is no silent success to mistake for a silent failure.
+
+Two conditions, or it degrades back into the same hole:
+
+- **The subject must emit it, not a wrapper.** A harness printing its own "OK" after the
+  step is the identical defect wearing a different hat — it is one more thing appended after
+  the thing being measured.
+- **Assert the line, do not merely display it.** `| tail` that *shows* the line and a grep
+  that *requires* it are different checks; only the second fails when the line is absent.
+
+Diagnostic question, corrected. **"Do you use pipelines?" is the wrong question** — frankwasm
+used them universally and was fine. The right one is **"does any verdict rest on `$?` after
+one?"** Pattern present, reliance absent, and only the reliance is the bug.
+
+### 191a — a silent failure does not look neutral; it looks like the result you wanted
+
+Three independent instances in one night, which makes it a property of the failure mode
+rather than a coincidence:
+
+| lane | silent failure | how it read |
+| --- | --- | --- |
+| frankA (186) | red run inside a timing harness | a **speedup** |
+| frankB | aborted suite, 804 log lines and 141 artifacts unrun | "**one test fails**" |
+| frankwasm | wasm build dies early | a **smaller module** — the hypothesis under test |
+| coordinator | zero-init experiment segfaulted | **−83.9%** |
+
+The bias has a direction and it is always toward the hypothesis. A run that stops early
+produced less of everything — less time, less output, fewer failures, fewer bytes — and
+*less* is what almost every experiment here is hoping to see. So the harness's own optimism
+is not psychological, it is arithmetic: **the failure and the desired outcome are the same
+measurement.** Which is why 191's positive assertion beats every negative one: "nothing went
+wrong" is indistinguishable from "nothing ran", and only a line the subject emits separates
+them.
