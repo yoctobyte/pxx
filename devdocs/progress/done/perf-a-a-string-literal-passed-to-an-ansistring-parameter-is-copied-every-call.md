@@ -243,4 +243,4 @@ Different absolutes, same ~19x. A candidate fix has worked when row 1 approaches
 row 3 **and rows 2 and 3 are unchanged**.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 9588c8535.
