@@ -19943,3 +19943,46 @@ TObject without a unit"* — **true then**; builtin TObject landed 2026-07-12, n
 days later, **in the same file**, and nothing revisited it. Usage today is 4
 lines, all inside its own two regression tests. Worth a sweep for other stopgaps
 whose justification has since been fixed properly.
+
+### A FOURTH vacuous measurement, and it is the sharpest — frankC, same hour
+
+Building `tools/c_corpus_probe.sh`, frankC proved all five outcome arms fire
+rather than assuming it. **The first attempt caught it:** its negative controls
+branched on `__PXX__`, **which does not exist**, so DIFF and exit-code-FAIL both
+quietly reported **SAME**. *The probe's own failure arms were, for one run,
+exactly the disarmed coverage the probe exists to prevent.*
+
+That is **195** in its purest form — *repairing the visible defect retires the
+only detector for the invisible one* — except the detector was never armed.
+
+**The repair generalises and is the rule to carry: key a negative control on
+something the ORACLE defines and the subject does not.** `__GNUC__`, not
+`__PXX__`. A property of the *other* implementation cannot be silently absent
+from both sides; keying on your own side produces a control indistinguishable
+from a no-op. All five arms fire now: SAME, DIFF, SKIP, exit-code FAIL, build
+FAIL.
+
+**And the terminating token should be house style:**
+`C-CORPUS-PROBE-COMPLETE programs=N identical=M skipped=K failed=F`, emitted **by
+the subject**, never a status for the caller to read. That is face 191, and it is
+the specific defence against the pipeline failures that caught three of the four
+of us tonight — **a `grep -c` cannot fake that line into existence.**
+
+**Verified by running it here rather than relaying**: 3 programs, all SAME,
+exit 0, seconds from a cold tree. It prints `compiler <sha> oracle <ver>` on its
+own line — mine reported `a3f0f9e3325f` where frankC's reported `5f4cfd02e25f`,
+which is exactly the difference that makes a corpus verdict meaningless when it
+is not carried.
+
+Not a `make` target, deliberately: *the moment it is `make test-ccorpus` it is
+one rename from the refused set, and being runnable is the whole point.* Corpus
+built in rather than vendored, so it stays inside `gate.sh`'s no-tracked-vendor
+rule. `$PXX_C_CORPUS_DIR` **prints the path it looked for when absent** — a
+widening hook that cannot pass vacuously. Honest limit in the sentence: *three
+programs is not zlib; this does not replace T's corpora, it makes the push worth
+T's ten minutes.*
+
+**Running total for the hour: four vacuous measurements, four lanes, every one
+returning the answer the measurer expected.** The four differ in what was empty —
+a population, a stream, a parse, a preprocessor symbol — and are identical in
+shape: **the check ran, and could not have said anything else.**
