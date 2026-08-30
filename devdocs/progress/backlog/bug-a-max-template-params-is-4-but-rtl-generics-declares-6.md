@@ -6,7 +6,7 @@ type: bug
 status: backlog
 owner:
 blocked-by: []
-summary: "MAX_TEMPLATE_PARAMS = 4 (compiler/defs.inc:1818). rtl-generics' TDictionaryEnumerable declares SIX type parameters, so generics.dictionariesh.inc:127 fails with `too many generic parameters (MAX_TEMPLATE_PARAMS)`. This is the CURRENT rtl-generics corpus wall (rung 6b) as of HEAD 4dae78ad9 + the IEnumerable RTL fix -- the whole compile is down to this ONE error. Raising the constant is one line but is NOT free: it is the stride of at least two flat arrays (TemplateParamNames[ti*MAX_TEMPLATE_PARAMS+kk], seenArg[si*MAX_TEMPLATE_PARAMS+k]) plus three locals in pasparser_generic.inc, so measure bss before and after rather than assuming."
+summary: "MAX_TEMPLATE_PARAMS = 4 (compiler/defs.inc:1818). rtl-generics' TDictionaryEnumerable declares SIX type parameters, so generics.dictionariesh.inc:127 fails with `too many generic parameters (MAX_TEMPLATE_PARAMS)`. This is the CURRENT rtl-generics corpus wall (rung 6b) as of HEAD 4dae78ad9 + the IEnumerable RTL fix -- the whole compile is down to this ONE error. Raising the constant is one line but is NOT free: it is the stride of at least two flat arrays (TemplateParamNames[ti*MAX_TEMPLATE_PARAMS+kk], seenArg[si*MAX_TEMPLATE_PARAMS+k]) plus three locals in pasparser_generic.inc, so measure bss before and after rather than assuming. PRECEDENT: MAX_NESTED_SPECS was raised 24->96 for this same corpus (defs.inc:1832) and its comment is the model -- measured trigger, insufficient-vs-runaway, and the cost stated in the same breath; its cost clause is NSpecArg, sized 96*MAX_TEMPLATE_PARAMS, so this change multiplies against that 96."
 ---
 
 # `MAX_TEMPLATE_PARAMS = 4`, but real generic code declares six
@@ -46,20 +46,56 @@ against real code.
 ## Why this is not just `s/4/8/`
 
 Raising it is one line **plus a memory question**, and the ticket exists so the
-next person measures rather than assumes. The constant is a **stride**, not just
-a bound:
+next person measures rather than assumes. The constant is a **stride**, not a
+bound, and `compiler/defs.inc` alone sizes six arrays by it:
 
-| site | shape |
-| --- | --- |
-| `pasparser_generic.inc:1235` | `TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + kk]` — flat, global |
-| `pasparser_generic.inc:1338` | `seenArg[si * MAX_TEMPLATE_PARAMS + k]` — flat |
-| `:1079`, `:1083`, `:1084` | three locals, one sized `MAX_DGEN_TUPLES * MAX_TEMPLATE_PARAMS` |
+| line | array | multiplier |
+| --- | --- | --- |
+| 1926 | `TemplateParamNames` | `MAX_TEMPLATES *` |
+| 1946 | `NSpecArg` | `MAX_NESTED_SPECS *` (**96**) |
+| 1949 | `NSpecIns` | `MAX_NESTED_SPECS * (8 + 2*...)` |
+| 1963 | `SpecConcreteNames` | `MAX_SPECIALIZATIONS *` |
+| 1964 | `SpecConcreteKinds` | `MAX_SPECIALIZATIONS *` |
+| 1898/1919-21 | `SpecSub*` | flat, cheap |
 
-Doubling 4 -> 8 doubles a `MAX_DGEN_TUPLES * MAX_TEMPLATE_PARAMS` array. **Take
-`bss=` off the `ok:` line before and after** — `make compiler/pascal26` prints it
-— and put both numbers in the resolve. 6 is the measured requirement; 8 is
-headroom that may or may not be worth its bytes, and that is a measurement, not
-a preference.
+plus `seenArg` / `argTok` / `ins` as locals in `pasparser_generic.inc:1079-84`.
+So 4 -> 8 does not add four slots; it doubles several arrays whose *other*
+dimension is already in the dozens-to-hundreds.
+
+### There is a precedent, and it is the method to copy
+
+`MAX_NESTED_SPECS` at `defs.inc:1832` was raised **24 -> 96 for this exact
+corpus**, and its comment is the model answer:
+
+> `was 24 -- MEASURED insufficient: rtl-generics' generics.collections exhausts
+> 24 at line 1313 and compiles past it at 96. Not a runaway; raising it moved
+> the frontier ~1200 lines further into the unit. Cost is 96 AnsiStrings x2 +
+> 96*MAX_TEMPLATE_PARAMS TRawTokens.`
+
+Three things that comment does and this change should do too: it records the
+**measured** trigger, it distinguishes *insufficient* from *runaway* (the
+frontier moved and then stopped, so the limit was a real bound rather than a
+symptom of unbounded recursion), and it states the **cost in the same breath**.
+Note its last clause: that array is `NSpecArg`, sized `96 * MAX_TEMPLATE_PARAMS`
+— so this change multiplies directly against the 96 that change chose.
+
+**Take `bss=` off the `ok:` line before and after** — `make compiler/pascal26`
+prints it — and put both numbers in the resolve. **6 is the measured
+requirement; 8 is headroom that may or may not be worth its bytes**, and that is
+a measurement, not a preference.
+
+## Probe timing — a success that reads as a hang
+
+The corpus probe went **75s -> 118s** as the two walls before this one fell. That
+is the compiler getting *further*, not a hang, and it will get slower again if
+this ticket lands and the compile reaches deeper into the unit. Two consequences,
+both measured rather than predicted:
+
+- **A 2-minute default timeout truncates a SUCCESSFUL run.** It cost one run
+  here, and the truncated output is indistinguishable from a hang. Give it 480s.
+- **Do not read a longer run as a regression** while walls are falling. Wall-clock
+  on this probe is a function of how far the compile gets, so it moves the wrong
+  way on progress.
 
 ## Gate
 
