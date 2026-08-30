@@ -99,219 +99,92 @@ green at once; measure by tickets-closed-per-change, not lines touched. Too big
 for the session? **Bank the diagnosis in the ticket and park it** — never
 microfix as a consolation.
 
-### Track A in one line
-Own `compiler/**` (shared internals: AST, IR, symtab, backends, ABI, ELF). Gate
-= `make test` + self-host fixedpoint (byte-identical). When a feature B/C needs
-lands: **`make stabilize-fast`** (~35s) then `make pin` (blesses it, moves
-`pinned`), then commit `stable_linux_amd64/**`. `stabilize` alone does NOT move
-B's ground.
+### The lanes, in one table
 
-**Use `stabilize-fast`, not `stabilize`** (user, 2026-08-09): all-target
-verification belongs to a RELEASE, not to a pin. Other tracks — and the human —
-are BLOCKED while a pin runs, and `stabilize`'s ~25 minutes buys breadth that is
-cheap to undo (`make revert` moves `pinned` back), while the one property a bad
-pin could poison for everyone — a compiler that cannot reproduce itself — is
-what `stabilize-fast`'s self→next→fixedpoint chain proves in seconds. Same
-"confirm native, offload the matrix" split as the per-fix loop above; Track T
-sweeps the matrix against the pinned sha. Full `stabilize` is for a RELEASE, or
-when Track T is PROVEN down.
-
-### Track B in one line
-Build everything with `$(PXX_STABLE)` (= `stable_linux_amd64/default/pinned`);
-never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
-(dashboard). Compiler/language gaps → file a ticket in `devdocs/progress/backlog`.
-
-### Track C in one line
-Own the C-frontend files (`clexer`/`cparser`/`cpreproc`, C→IR lowering,
-`lib/crtl`, C tests) on `master`. **Shared internals are still A's TERRITORY,
-but that is ownership, not a lock** (2026-08-30): edit them when your ticket
-needs it, say so in the commit, and tell whoever else is in that file. Do NOT
-hand off a half-understood diff — that costs more than it saves. File a Track A
-ticket when the change needs MEMORY (a shared model accumulating across
-sessions), not to ask permission. Node-number and token collisions in
-`lexer.inc`/`defs.inc` are the one real interaction; coordinate those by message.
-Gate = C tests green + self-host byte-identical + cross. Land only green; big destabilizing work goes in
-behind a flag or incrementally, never a long-lived branch.
-
-### Combined-track assignment (one agent, several tracks)
-The user may put a single agent on **more than one track** — e.g. "you are Track
-A *and* C". The tracks stay distinct (own files, own gates) and you respect every
-gate you span. **The file/hand-off/self-resolve ceremony is gone** (2026-08-30):
-there is nothing to hand off, because there was never permission to withhold.
-File a ticket when the work needs coordination, ranking or **memory** — and
-memory is usually the real one, since a shared model accumulating across sessions
-cannot live in a message thread.
-
-Combinations differ in how much they overlap, and it is about **shared files,
-not topics**:
-- **Frontend + frontend** (C/N/P/R/Z pairs) is the low-risk combo — each owns a
-  mostly-disjoint file set (`cparser` vs `pyparser` vs `zparser` vs the Rust files…),
-  so their edits merge cleanly. So **A+N, B+N, N+C**, etc. are all fine — N owns
-  `pylexer`/`pyparser`, disjoint from every other lane. The catch is **P**: the
-  Pascal frontend still shares `lexer.inc` with A (its parser is carved out, its
-  lexer is not), so "P + anything" still touches A's ground — hold the P edits to
-  A's gate, and say so when you land in `lexer.inc`. (N does NOT have this catch
-  — it's carved out like C/Z.) For automated /
-  scheduled workers the overlap rules may need tuning, but a single supervised
-  agent holding e.g. A+N is exactly the intended combined-track case.
-- **Anything + A** is the highest-overlap combo, because A is where the shared
-  files (`ir*.inc`, `symtab.inc`, `defs.inc`, backends, the P-shared `lexer`)
-  live. **No confirmation is required** — that guard was cut 2026-08-30 after
-  firing twice, indefensibly, in one night. Two agents in one of those files is
-  normal: `symtab.inc` took commits from seven lanes that day with zero
-  collisions. Tell the other agent what you are touching — not to ask, but
-  because the *reply* is where the value is ("I'm committing to that file all
-  night, rebase immediately before you write").
-
-Even when the source would merge, keep the *default* to one lane (top of this
-section) — combining is a deliberate call the user makes, not a convenience you
-reach for, because the context cost lands on your reasoning, not on git.
-
-### Track D in one line
-Own `docs/**` (Markdown the website publishes verbatim from git). No build,
-no compiler, no `lib/**`. Gate = docs stay internally consistent and examples
-compile against `$(PXX_STABLE)` (never rebuild). A compiler/library gap found
-while documenting → file a ticket in `devdocs/progress/backlog`, don't fix code.
-Verify code snippets by compiling them; don't invent behaviour.
-
-### Track P in one line
-Full Pascal-language frontend (peer of C/Z), but its files aren't carved out yet
-— its PARSER is carved out (`pasparser_*.inc`) but its LEXER still lives in the
-SHARED `lexer.inc`. So same
-`master`, same gate = `make test` + self-host fixedpoint (byte-identical), plus
-cross where a target is touched. `lexer.inc` is shared with A — edit it when you
-need to, and say so, because token/node numbering is the one place two edits
-genuinely interact. IR / backends / ABI / ELF are core A: a Pascal feature
-needing a new IR op or AST node is an A change you may simply make.
-
-### Track R in one line
-Own the Rust-frontend files (`rfront` lexer/parser, Rust→IR lowering, `lib/rrtl`,
-Rust tests) on `master`; live work under `devdocs/progress/working/feature-rust-*`.
-**Shared internals are still A's TERRITORY, but that is ownership, not a lock**
-(2026-08-30): edit them when your ticket needs it, say so in the commit, and
-tell whoever else is in that file. Do NOT hand off a half-understood diff —
-that costs more than it saves. File a Track A ticket when the change needs
-MEMORY (a shared model accumulating across sessions), not to ask permission. Gate = Rust tests green +
-self-host byte-identical + cross. Land only green; destabilizing work behind a
-flag or incrementally, never a long-lived branch.
-
-### Track E in one line
-Examples & apps (demos, games, GUIs, IDEs, the portable-userland/shell showcase)
-= **file-owned by Track B**. Build with `$(PXX_STABLE)`, never rebuild the
-compiler; gate = `make lib-test`/`demos` + the app runs. A compiler/frontend gap
-an app hits → file it under the owning lane (A / the frontend), don't fix it under E.
-
-### Track O in one line
-Optimization lane = **implicitly Track A**. Codegen/runtime speed (register
-allocation, `-O` passes, heap allocator). Edits A's shared files (`ir*.inc`,
-`symtab.inc`, backends, `compiler/builtin/**`) — edit them; O is the visible
-grouping, not a permission boundary. Obey A's gate: `make test` + self-host
-byte-identical (+ cross where a backend/runtime is touched). New passes land
-behind `-O3`, promote to `-O2` per-pass only after the full gate; `-O2` is the
-proven default and the stable fallback. Land only green.
-
-### Track T in one line
-Own the tools & test infra: `tools/testmgr.py`, `tools/twatch.py`,
-`devdocs/progress/tstate/**`, and the fuzzers (`tools/fuzz.sh`,
-`tools/pasmith*.py`, Csmith runs). Face 1 (watcher daemon) writes ONLY
-`tstate/`; face 2 (agent, supervised or cron) files regression tickets, fuzzes
-in spare cycles, and OWNS the T codebase: it is free to improve/refactor/
-optimize Track T sources (testmgr, twatch, fuzzers, report format, tier
-composition) on its own initiative — no ticket or approval needed,
-self-optimization is part of the job. Gate for T tooling changes =
-`tools/testmgr.py --tier full` green — and test the tooling itself with QUICK
-tiers + a scratch bare repo, never long runs. Track T pushes CODE too (its own
-tooling), not just tstate — those commits belong to lane T and follow the
-push-your-own-lane rule: T touches `tools/testmgr.py` / `tools/twatch*` /
-`tools/fuzz.sh` / `tools/pasmith*` / `tstate/**` and nothing else. **T owns the
-tool, never the bug**: a compiler or test-target gap it hits (including a fuzz
-divergence) → ticket for the owning track (IR/codegen → A, dialect → P,
-RTL → B), never a fix under T.
-
-### Track S in one line
-The ESP32 campaign (xtensa/riscv32 backends, ESP PAL, IDF profile,
-`examples/esp32/**`) surfaced as one lane — a work-tag like O, file-owned by A
-or B per ticket and gated by that lane. ESP is not a Unix: 33 PAL entries are
-unsupported even under IDF, so POSIX-shaped code meets `PAL_ERR_UNSUPPORTED`
-rather than a wrong answer, and that failure mode is deliberate. Primary target
-is **xtensa** (the user's S2/S3 hardware); riscv32 (C3) is what works today.
-
-### Track F in one line
-Floating point = **low prio by definition** (owner, stated four times). A work-tag,
-not a file-lane: carry the owning lane too (`B+F`, `P+F`, `A+F`) and obey that
-lane's gate. `ready --track F` prints nothing by design — F lives in `float/`, which the
-ranker never scans; `ls devdocs/progress/float/` is how you see the set. F = float MATH and float FORMATTING both: ulps, rounding,
-subnormals, edge-of-range, fast-vs-exact tiers, type precision, and the rendering
-side — Write/Writeln of a real, FloatToStr/Str, digit counts, exponent form — plus
-float-subject perf. **NOT F** = a crash, a hang, a wrong signature, a control-flow
-bug that merely lives in float code, or a missing function a working program calls.
-Rank the mechanism, never the datatype. Tickets park
-in `devdocs/progress/float/`, invisible to `ready`/`next`; picked up on request only.
-
-### Track Z in one line
-Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,
-Zig tests) on `master`. **Shared internals are still A's TERRITORY, but that is ownership, not a lock**
-(2026-08-30): edit them when your ticket needs it, say so in the commit, and
-tell whoever else is in that file. Do NOT hand off a half-understood diff —
-that costs more than it saves. File a Track A ticket when the change needs
-MEMORY (a shared model accumulating across sessions), not to ask permission. Node-number and token collisions are the real hazard; coordinate those
-by message. Gate = Zig tests green + self-host byte-identical + cross. Land only green; big
-destabilizing work behind a flag or incrementally, never a long-lived branch.
-
-### Track N in one line
-Own the Nil-Python frontend files (`pylexer.inc` / `pyparser.inc`, Python→IR
-lowering, `.npy` tests) on `master`. Mainline + gated (peer of C, not X). **Shared internals: see the C line above** — territory, not a lock; edit when
-your ticket needs it and say so. Gate = `test-nilpy` green +
-self-host byte-identical + cross. Land only green. The language is N; an IDE/app
-built with NilPy is an E app (Track B), not N.
-
-### Track U in one line
-The decision lane — human judgment, no files, no gate, no build. **Escalate,
-don't guess:** hit a design/intent/semantics fork you can't settle from code,
-request, or a sane default → file `decide-<topic>` (fork + options + trade-offs +
-your recommendation) and move to the next queue item. The user resolves `decide-*`
-to steer; one answer unblocks the ranked chain behind it. A U item that's plain
-work once decided → re-file into the owning lane. See `devdocs/dev/autonomy.md`.
-
-### Track W in one line
-The website — a separate private repo (`~/pxx-website`: app, `deploy/`,
-`secrets/`, blog), not `docs/**` and not this checkout. A real file-lane, earned
-because it is a new place code lives (same test Track T's own clone passes).
-Track D writes the Markdown here that W's machinery publishes. Gate + disclosure
-rules: `feature-web-track-w-bootstrap`.
-
-### Track M in one line
-The MSWindows campaign (PE/COFF writer + MS x64 ABI, `lib/pcl` win32 widgetset
-and Tk compat, the Wine harness) surfaced as one lane — a work-tag like O and S,
-**file-owned per ticket by A / B / T** and gated by that lane, never a file-lane
-of its own. `*-windows-*` / `*-win32-*` / `*-wine-*` slugs auto-tag M. Not W: W
-is the website (see above).
-
-## Claims discipline — TWO different "byte-identical", never conflate them
-Internal shorthand blurs these; **public-facing copy must not**. A compiler engineer
-will catch it in seconds and the correction costs more than the claim ever gained.
-
-| claim | what is identical | to what | kind |
+| | lane | files it owns | gate |
 | --- | --- | --- | --- |
-| **self-host fixedpoint** | the **binary** | our own previous output | true binary reproducibility, **at the DEFAULT `-O` level only** |
-| **zlib / C corpora vs the gcc oracle** | the **program's OUTPUT** (e.g. zlib's compressed stream) | the output of a gcc-**built** zlib | *behavioral* parity |
+| **A** | compiler core | `compiler/**` — AST, IR, symtab, backends, ABI, ELF | `make test` + self-host fixedpoint |
+| **B** | libraries / demos | `lib/rtl` `lib/pcl` `lib/crtl`, `examples/**` | `make lib-test` / `make demos` |
+| **C** | C frontend | `clexer` `cparser` `cpreproc`, C→IR, `lib/crtl` | C tests + self-host + cross |
+| **D** | public docs | `docs/**` (prose only) | snippets compile against `$(PXX_STABLE)` |
+| **N** | Nil-Python frontend | `pylexer.inc` `pyparser.inc`, Python→IR, `.npy` tests | `test-nilpy` + self-host + cross |
+| **P** | Pascal frontend | `pasparser_*.inc`; **`lexer.inc` shared with A** | `make test` + self-host + cross |
+| **R** | Rust frontend (X) | `rfront` lexer/parser, Rust→IR, `lib/rrtl` | Rust tests + self-host + cross |
+| **Z** | Zig frontend (X) | `zlexer` `zparser`, Zig→IR, `lib/zrtl` | Zig tests + self-host + cross |
+| **T** | tools & testing | `tools/testmgr.py` `twatch.py` `fuzz.sh` `pasmith*`, `tstate/**` | `testmgr --tier full` |
+| **W** | website | the separate `~/pxx-website` repo | that repo's own |
+| **U** | decisions | none | none |
+| *tags* | **O** optim → A · **E** apps → B · **S** ESP → A/B · **M** Windows → A/B/T · **F** float → file owner · **X** experimental · **compat** | inherit the file-lane's | inherit the file-lane's |
 
-**Scope note on the first row (added 2026-08-19):** `make compiler/pascal26` builds
-`compiler.pas` at the **default** optimisation level, and the fixedpoint proves
-byte-identity *at that level*. Nothing in the per-fix loop compiles the compiler's own
-source at another `-O` level. So "it passes the self-host gate" is evidence the compiler
-compiles itself **at one optimisation level**, not that it compiles itself — a `-O0`-only
-self-compile failure passed the entire gate on 2026-08-19 and was found by a benchmark.
-State the scope when you lean on the claim.
+**Shared internals are A's TERRITORY — ownership, not a lock.** Any lane may edit
+them when its ticket needs it: say so in the commit, and tell whoever else is in
+that file, because **the value is in their reply**, not in permission ("I'm
+committing there all night — rebase immediately before you write"). Do NOT hand
+off a half-understood diff; that costs more than it saves.
 
-We do **NOT** emit the same machine code as gcc and must never imply it. Say
-"zlib built with pxx produces compressed output byte-identical to a gcc-built
-zlib's", never "zlib byte-identical to gcc". Both claims are strong; they are
-strong for different reasons.
+**Telling them is not asking them. State what you are touching, name a window,
+and proceed if nobody objects** — do not sit waiting for an answer. An agent sat
+on a diagnosed fix on 2026-08-30 waiting for a reply that a grant system would
+have made mandatory, which is the guard growing back under a new name. Peer-to-peer
+works when it *answers*; when it does not answer, you go ahead. Silence is not a
+refusal, because there is nobody with standing to refuse. File a Track A ticket
+when the change needs **memory**, not when it needs permission. The one place two
+edits genuinely interact is **token/node numbering in `lexer.inc` / `defs.inc`** —
+coordinate that by message.
 
-Applies to: `docs/**`, the website, release notes, README, any promo/launch copy.
-Write public claims **uncompressed** — the qualifying words ("output", "oracle",
-"built with") carry the entire distinction, and terse styles drop them first.
+**Land only green** where your gate is cheap; destabilizing work goes behind a
+flag or lands incrementally, never on a long-lived branch.
+
+### The per-lane facts a table cannot carry
+
+- **A — pin with `make stabilize-fast && make pin` (~35s), never plain
+  `stabilize`.** All-target verification belongs to a RELEASE. A pin blocks every
+  other lane and the human while it runs; `stabilize`'s ~25 min buys breadth that
+  is cheap to undo (`make revert`), while the one property a bad pin could poison
+  for everyone is what `stabilize-fast` proves in seconds. `stabilize` alone does
+  NOT move B's ground — only `make pin` does, then commit `stable_linux_amd64/**`.
+- **B / E — build with `$(PXX_STABLE)` and never rebuild the compiler.**
+  A compiler or language gap → ticket in `devdocs/progress/backlog`, don't fix it
+  here.
+- **T — owns the TOOL, never the BUG.** A compiler gap it hits (fuzz divergence
+  included) → ticket in the owning lane. It may improve its own tooling freely,
+  no ticket or approval; its daemon face writes ONLY `tstate/`.
+- **S — ESP is not a Unix.** FreeRTOS gives tasks, not processes: 33 PAL entries
+  refuse even under IDF, deliberately, so POSIX-shaped code meets
+  `PAL_ERR_UNSUPPORTED` rather than a wrong answer. Primary target is **xtensa**
+  (the user's S2/S3); riscv32 works today.
+- **F — low prio by definition**, and it parks in `devdocs/progress/float/`,
+  which `ready`/`next` never scan. F is float **math and formatting both**
+  (ulps, rounding, subnormals, precision of a type; `Write` of a real,
+  `FloatToStr`, digit counts, exponent form) plus float-subject perf. **NOT F:**
+  a crash, a hang, a wrong signature, a control-flow bug that merely lives in
+  float code, or a missing function a working program calls. *Rank the mechanism,
+  never the datatype.*
+- **N — NilPy is UPWARD compatible with CPython**, one direction: code that works
+  on CPython must work here. Accepting something CPython rejects is a feature,
+  not a defect (`devdocs/dev/nilpy-semantics-divergences.md`).
+- **O — new passes land behind `-O3`**, promote to `-O2` per-pass after the full
+  gate. `-O2` is the proven default. (Under review: measured 2026-08-30, no
+  individual pass reproduces `-O3`'s 23-34% win, so per-pass promotion may never
+  deliver it.)
+- **D — verify snippets by compiling them.** Don't invent behaviour, don't touch
+  `compiler/**` or `lib/**`.
+- **Claims discipline** — "self-host fixedpoint" (our binary reproduces itself,
+  at the DEFAULT `-O` level only) and "zlib matches the gcc oracle" (the
+  program's OUTPUT matches) are DIFFERENT claims. Never conflate them in public
+  copy; we do not emit gcc's machine code. Full rule:
+  `devdocs/dev/parallel-tracks.md`.
+
+### Holding several lanes at once
+
+Tracks stay distinct and you respect every gate you span. **The
+file/hand-off/self-resolve ceremony is gone** — there was never permission to
+withhold. Frontend + frontend is the low-overlap combo (disjoint parsers); the
+catch is **P**, whose lexer still lives in A's `lexer.inc`. **Anything + A needs
+no confirmation** — that guard was cut after firing twice indefensibly in one
+night, and `symtab.inc` took commits from seven lanes that day with zero
+collisions. Still default to **one lane per session**: the cost of combining
+lands on your reasoning, not on git.
 
 ## Platonic code — no compiler-appeasement workarounds (all tracks)
 
@@ -368,7 +241,17 @@ not "unread" — it is **partially read and confidently acted on**, which is wor
 because it produces action. Two measured instances in one day: an agent appended
 a diagnosis to a 1193-line ticket after reading ~40 lines, re-deriving what was
 already at line 586; and a decision file's tail was read and briefed as the
-option the ruling explicitly *rejected*. The essay format is for something that
+option the ruling explicitly *rejected*.
+**Length was necessary and not sufficient** — the agent in the first case says
+so, and the correction sharpens the rule rather than softening it: that ticket's
+top 40 lines read like a *complete* problem statement while the two load-bearing
+facts sat as prose in the body, so **rule 2 is the load-bearing fix there, not
+rule 3.** A 1193-line ticket whose summary said "two follow-ups have landed"
+would not have fooled anyone. And the deeper mechanism is neither: **he was
+appending to a ticket he had just claimed.** The agent most likely to bolt a
+diagnosis onto a long ticket is the one under the most pressure to produce
+something — so the guard is to re-read the summary *at claim time*, before you
+add to it. The essay format is for something that
 genuinely changed a design decision — not for a bug. If the body is longer than
 the diff it describes, ask whether you are filing because it needs filing or
 because filing is the habit.
@@ -437,49 +320,33 @@ Evidence for the cut, and the list of what was deliberately KEPT:
   worktree until it merged at v80, also retired. Exception: Track T's watcher
   daemon runs in its own dedicated clone — it's infra, not a dev agent.)
 
-### BRANCHES — one branch, `master`, and why `dev` came and went
+### BRANCHES — one branch, `master`
 
-**Retired by the user, 2026-08-26**, one day after it was created: *"let's work
-in master again, as we are the only agent."*
+**All tracks work on `master`.** No worktrees, no clones, no `dev`. (Track T's
+watcher daemon runs in its own clone; it is infra, not a dev agent.)
 
-`dev` existed to decouple **many lanes'** pushes from a shared gate. With a
-single agent there are no other lanes to decouple, so the branch cost a merge
-ceremony per pin and bought nothing — and the sync-back itself became the
-expensive event it was meant to remove. The collapse landed as `8b2a6bae6`.
+Two rules survive from the `dev` experiment and both are load-bearing:
 
-**What survives the collapse — this is the part worth keeping:**
+- **You may land non-green.** Read, analyse, fix, commit, push, next — do not
+  wait for tests. Commit mid-refactor, bank a partial fix. What you must NOT do
+  is push something you know is broken and say nothing: **note it in the commit
+  message**, because that message is the only warning anyone gets.
+- **`gate.sh quick` is REQUIRED before a pin**, and optional otherwise.
 
-- **You may land non-green.** This was `dev`'s actual contribution and it is
-  independent of where the commits sit. Read, analyse, fix, commit, push, next;
-  do not wait for tests. Commit mid-refactor, bank a partial fix, deliberately
-  craft a regression to see what catches it. What you must **not** do is push
-  something you know is broken and say nothing — **note it in the commit
-  message**, because with no sync-back gate left, that message is the only
-  warning anyone gets.
-- **Quick gating only.** `make compiler/pascal26` plus your repro is the loop
-  (next section). Track T owns breadth and sweeps your exact sha
-  asynchronously. `gate.sh quick` (~30s) is optional — run it when you touched
-  something you're nervous about.
-- **`gate.sh quick` is REQUIRED before a pin**, which is the one remaining
-  deliberate brake. Pins hold the repo lock: `make stabilize-fast && make pin`.
+**Rebasing `master` is wrong** — tstate verdicts and the board's `resolve`
+citations are keyed by **sha**. `git pull --rebase` of your *own* unpushed
+commits is the normal loop. `tools/sync.sh` does it and fills in the sha a
+`resolve` landed as.
 
-**What is gone:** the `git merge --no-ff dev` sync-back, the "master is a
-snapshot advanced only at a pin" rule, and the never-rebase-never-squash
-constraint that protected it. Rebasing `master` is still wrong for the same
-reason it always was — tstate verdicts and the board's `resolve` citations are
-keyed by **sha** — but `git pull --rebase` of your *own* unpushed commits is the
-normal loop and always was.
-
-**Re-split when a second agent returns.** The reason `dev` was created has not
-been disproven; it was simply not load-bearing for one agent. If the user staffs
-concurrent lanes again, read this section's history (`git log -- CLAUDE.md`)
-rather than reinventing the split — the failure mode it hit is documented there:
-nine syncs in under six hours, each spending a full gate run on the box whose
-contention is the binding constraint on the test matrix.
-
-`tools/sync.sh` is branch-aware: it syncs whatever branch you are ON against
-`origin/<that branch>`. On one branch that is simply `pull --rebase` + push, and
-it fills in the sha a `resolve` landed as.
+**The re-split question is OPEN, and it is the owner's** (raised by frankB,
+2026-08-30). This section used to reason from *"we are the only agent"*, and its
+own trigger — *re-split when a second agent returns* — has fired: eleven agent
+sessions ran concurrently that day. It was left unacted-on, which means the
+answer was **made by default rather than made**. The default is also the current
+direction: `dev` costs a merge ceremony per pin, and the day's whole thrust was
+removing ceremony. So we stay on `master` deliberately rather than accidentally —
+but if a real cost shows up, `git log -- CLAUDE.md` has the original reasoning and
+`devdocs/dev/parallel-tracks.md` has the post-mortem. Don't reinvent it.
 
 ### THE PER-FIX LOOP — this file is the authority on it
 
@@ -515,6 +382,28 @@ a full-tier sweep that would have returned a clean verdict for a sha using a
 `touch -d '2000-01-01'` the seed), and do not accept the build until you have
 seen `converged after N round(s)` and confirmed the binary's sha256 differs from
 `pinned`.** Absence of that line is the tell; there is no error to wait for.
+
+**A CLEAN TREE IS NOT EVIDENCE ABOUT THE BINARY. The `converged after N round(s)`
+line is.** `compiler/pascal26` is untracked, so `git status` says nothing about
+which compiler is on disk. Four agents hit this in one day, by three different
+routes:
+
+1. **A seeded tree** — the `cp`-mtime case above.
+2. **A reverted experiment** — you restore the `.inc` and the binary is still the
+   experimental one until you rebuild. Tree clean, binary wrong.
+3. **A sync that pulled someone else's `compiler/**`** — your binary was a valid
+   fixedpoint *of the previous sources*, and nothing you did changed. `make` is
+   not lying; it is answering about a tree that moved. This one briefly read as a
+   Makefile bug.
+
+The habits that defeat all three, from the agents who lost hours to them:
+**rebuild after any sync that touched `compiler/**` before you measure**, and
+**print `sha256sum compiler/pascal26` beside every number you report.** A wrong
+47x measurement was caught by exactly that, and a correct day's work was nearly
+retracted for want of it. Related trap in the same family: the pinned compiler is
+reached through `stable_linux_amd64/default/pinned`, a **13-byte symlink** — `git
+log` on that path reads the symlink's history (frozen since July), not the
+binary's.
 
 **`tools/gate.sh quick` (~30s) is OPTIONAL per fix** — run it when you touched
 something you are nervous about, skip it when you are not. It is **REQUIRED
@@ -650,16 +539,31 @@ fix the doc, not the loop.
 - `git pull --rebase` before pushing; push promptly. Your lane is where your
   work normally lives — it is not a fence, and it never was a reason to hand off
   a fix you already understand.
-- **Parking held work: park an EDIT you can re-apply (patch, stash, anchored
-  scripted edits) — NEVER a whole-file copy of a shared file.** A copy is a
-  snapshot of everyone else's work too, and restoring it over a moved tree
-  reverts all of it as a *clean, well-formed commit*: no conflict, no diagnostic,
-  and no track letter sees it. Measured 2026-08-30 — copies of `defs.inc` and
-  `cpreproc.inc` would have silently reverted another lane's block and 124 lines.
+- **Parking held work: ALWAYS park as a patch or a stash. Never a file copy.**
+  Unconditionally — do not stop to ask whether the file is shared. The property
+  that matters is not what you are copying, it is that **a patch and a stash go
+  through a merge and can therefore CONFLICT, while `cp` has no merge step to
+  fail at.** Park held work in a form that either merges or fails loudly, never
+  one that overwrites silently. `git diff -- f > x.patch` is not more work than
+  `cp f f.bak`, so the judgment call buys nothing — and misjudging exactly that
+  call is what produced both of the day's near-misses: `defs.inc` and
+  `cpreproc.inc` were *obviously* shared and were copied anyway, because at copy
+  time you are thinking about your change, not about the file. A restored copy
+  reverts everything that landed while it sat there, as a clean well-formed
+  commit: no conflict, no diagnostic, and no track letter sees it.
+  (**A stash's fresh-clone fragility is a DURABILITY problem, not a safety one**
+  — you lose your own work, you do not destroy anyone else's. Do not read it as
+  a reason to reach for `cp`, which inverts the blast radius.)
   **Do not rely on the build to catch it**; that case surfaced only because the
   reverted code had a live caller. When something does surface, separate "my copy
   is stale" from "master is broken" in one command: build with the **pinned**
-  compiler against a **clean** tree. Full note:
+  compiler against a **clean** tree.
+  **Guard the REVERT, not the edit** — two near-misses in one day, both at
+  restore time, neither at write time. A `.PRISTINE` copy taken before a
+  measurement patch silently reverts everything that landed while it sat there;
+  `git checkout -- <file>` is the safe restore and a copy-back is not. This is
+  also why the hazard is invisible to lanes: the danger is in a *revert*, which
+  no letter and no lock has ever looked at. Full note:
   `devdocs/dev/parallel-tracks.md`, "Parking a held change".
 - **Push only your own lane.** Each track pushes the commits it made. During a
   sync, do **not** push, commit, or rebase another track's branch or in-flight
