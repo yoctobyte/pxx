@@ -326,4 +326,4 @@ is noted in the recipe.
 Recorded above and unchanged: the busybox wall is
 [[bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback]].
 This ticket closes on its original merits.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 85114f34f.
