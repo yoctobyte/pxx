@@ -205,14 +205,21 @@ gdb ./out
 
 `-g -O2` works and is usually right: `-O2` is where the ownership bugs appear.
 
-> **BROKEN on `compiler.pas` as of 2026-08-30, and this row is the reason it
-> matters.** `-g` alone builds the compiler; `-g -O2` and `-g -O3` both die with
-> `error: DWARF buffer overflow (-g)`. Smaller programs are unaffected, so the
-> instrument this row recommends is unavailable on precisely the largest program
-> in the tree. Tracked as
-> `bug-a-g-with-o2-or-o3-overflows-the-dwarf-buffer-on-compiler-pas` [A, p60].
-> Until it lands: `-g` alone still works, and for a value question
-> `PXXDBG` needs no debug info at all.
+> **Was broken on `compiler.pas` for a few hours on 2026-08-30; FIXED in
+> `e1b35bad1`, and the lesson is not the one the ticket title suggests.**
+> `-g -O2` and `-g -O3` died with `DWARF buffer overflow (-g)` while plain `-g`
+> built — but **nothing about `-O2` was special except that it got there first.**
+> Measured: plain `-g` was already emitting 1,033,241 bytes against a fixed
+> 1 MiB cap (98.5%, ~15 KB of headroom), and `-O2` added 17,673 bytes of
+> `.debug_line`. `.debug_info` grew by ONE byte, and `.debug_abbrev` and
+> `.debug_frame` were identical, so inlining produces no extra DIEs. One more
+> unit under plain `-g` would have broken it identically. The cap is now a
+> ceiling with the buffer grown on demand (`GrowDbg`, modelled on the existing
+> `Code`/`GrowCode` pair), and BSS dropped 1,048,568 bytes as a side effect.
+> **Do not read this as "avoid `-O2` with `-g`".** Verified past "it compiles":
+> `gdb -batch -ex 'info line IRLowerAST'` on the `-g -O2` compiler resolves to
+> `compiler/ir.inc:5831` — a buffer fix can easily yield well-formed-looking
+> truncated DWARF, so compiling was never the acceptance test.
 Works for Pascal, NilPy, C, Rust, Zig, including breakpoints inside imported
 `.py` modules and C headers.
 
