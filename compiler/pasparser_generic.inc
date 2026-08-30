@@ -1580,7 +1580,29 @@ begin
     end
     else
     begin
-      if not (isClass and GCIsDescOrSelf(argCi, conCi)) then
+      { `T: TObject` is the ROOT constraint, and it cannot be answered by
+        walking UClsParent: pasparser_decl.inc:4594-4606 deliberately leaves
+        parentCi = -1 for `class(TObject)` AND for a plain `class`, because a
+        real parent link would relocate every `class(TObject)` VMT and break the
+        implicit-root model. TObject is nonetheless a registered builtin class
+        ROW, so FindUClass finds it here and the walk below then looks for a row
+        the chain structurally never reaches -- terminating at -1 for every user
+        class. `TBox<TObject>` passed only because argCi = conCi matched on the
+        first iteration; every descendant, implicit or explicit, was rejected.
+
+        Two representations of "descends from TObject" that were never
+        reconciled -- the parent chain says -1, the class table says a row --
+        and the check asked in the coordinate system where the answer is
+        unreachable. Answer it in the other one: in Pascal EVERY class descends
+        from TObject, so this constraint means exactly `isClass`, which is
+        already computed. Not a loosening -- a non-class still fails, so the
+        FAIL-marked tgenconstraint tests stay rejected.
+        regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section }
+      if CaseEqual(conName, 'TObject') then
+        conOk := isClass
+      else
+        conOk := isClass and GCIsDescOrSelf(argCi, conCi);
+      if not conOk then
         Error(pfx + 'is constrained to `' + conName + '`, but ' + specArg +
               ' is not ' + conName + ' or a descendant of it');
     end;
