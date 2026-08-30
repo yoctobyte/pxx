@@ -1148,16 +1148,39 @@ across its five carriers (`Syms[].PtrElemTk` 22, `ArrTypePtrElemTk` 21,
 one-capture-site finding should cut that hard the same way it did here — but
 that needs measuring per carrier, not assuming.
 
-### Unmeasured, shared with two older fields
+### CORRECTION — the AllocRecVar / AllocTemp gap does not exist
 
-`AllocRecVar` and `AllocTemp` reset **none** of `SymStrCap`, `SymStrElemTk` or
-`SymPtrElemStrTk`. That is an established pattern predating this campaign
-(`SymStrCap` is old code), matched here rather than diverged from for one field.
-Sym slots are recycled and an unwritten field keeps the previous occupant's
-value — a landmine this codebase has been bitten by repeatedly (`SymArrNDims`,
-`SymBlockId`, both recorded in `AllocParam`'s own comments). Whether a record
-variable or a temp can carry any of the three is **one** unmeasured question for
-all three, and worth answering once rather than three times.
+**The paragraph that stood here was wrong, and so is the claim in
+`451485561`'s commit message.** It said `AllocRecVar` and `AllocTemp` reset none
+of `SymStrCap` / `SymStrElemTk` / `SymPtrElemStrTk`, and asked whether the resets
+belonged there. They already do: **both delegate to `AllocVar`** —
+`AllocRecVar` calls `AllocVar(name, tyRecord)`, `AllocTemp` calls
+`AllocVar('', tyInteger)` — so they inherit every reset it performs. I derived
+the gap from a grep for `<field>[SymCount]` that named four enclosing functions,
+and read "four of six allocators" off it without checking what the other two
+actually do.
+
+That is the same error the campaign has been cataloguing, committed by me in the
+direction the method is supposed to prevent: **a count read off a grep, believed
+without reading the sites.**
+
+Measured properly: exactly **five** routines allocate a symbol by writing
+`Syms[SymCount].Name` directly — `AllocVar` (4167), `AllocParam` (4387),
+`AllocArray` (4695), `AllocDynArray` (4824), `AddConst` (4979). The first four
+reset all three carriers. **`AddConst` resets none of them** — it is the only
+real uncovered allocator, and it was invisible to the original grep because it
+was never in the four-function list.
+
+**And it appears unreachable for these three fields.** `AddConst(name, tk, v)`
+takes an `Int64` value and every call site passes an ordinal type — `tyChar` is
+the widest, at `pasparser_decl.inc:2811` and `:2876`. A char has neither a
+capacity nor an element width, and all three carriers are read only for
+string-, array- or pointer-typed symbols, so a const symbol is never consulted
+through them. **No ticket filed**: CLAUDE.md's table puts an observable no
+compiling program can reach in `rejected/`, not at prio 10, and I have an
+argument rather than a repro. If someone gives `AddConst` a string-typed or
+pointer-typed const, the three resets belong in it and this note is the
+pointer to why.
 
 ### All carriers are still unexercised
 
