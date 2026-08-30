@@ -82,3 +82,35 @@ differential must be unchanged on both ABIs. If a flag is chosen, the default
 path must stay byte-identical — verify by diffing emitted output against a
 binary blessed before the change, since the self-host fixedpoint does not check
 xtensa output at all.
+
+## The wall directly behind this one (frankA, 2026-08-30 — measured to be MASKED, not absent)
+
+riscv32's twin of this ticket is fixed
+([[bug-a-riscv32-cannot-reach-a-far-call-so-the-compiler-will-not-link]],
+`1df4ee490`), and the useful part for whoever takes this one is that the far
+call was **not** what its repro was hitting. Two walls sat in series there, and
+the same two are in series here:
+
+1. the forward **call** (this ticket), and
+2. the forward **jump to a label in the same body**, patched by the label fixup
+   loop at the bottom of `IREmitMachineCodeXtensa` —
+   `Patch24(pos, EncodeXtensaJ(LabelPositions[lblId] - pos))`, three bytes
+   reserved before the target existed, **no long form and nowhere to put one**.
+   J reaches ±128 KiB, four times tighter than riscv32's JAL, so a body needs
+   only 128 KB to break it.
+
+Measured, and the measurement is why this is a note rather than a ticket: a
+generated single procedure of ~1 MB of code refuses at **this** ticket's error
+first —
+
+```
+target xtensa: the forward call to __pxx_run_finalizers at code offset 143450
+cannot reach its body at 1033672
+```
+
+— so (2) is unreachable today and cannot be given a repro of its own. **Expect
+it to appear the moment (1) is fixed**, and file it then. The shape that closed
+both on riscv32 is in `ir_codegen_riscv32.inc`: `Rv32JumpSlotBytes` /
+`EmitRv32JumpToLabel` / `PatchRv32JumpSlot` — reserve the wide slot for a
+forward jump, let the reach test pick the form at patch time, keep the cheap
+form for every backward jump that reaches (80348 of 80399 in a 20 MB image).
