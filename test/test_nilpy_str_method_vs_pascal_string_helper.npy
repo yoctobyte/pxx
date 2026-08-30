@@ -1,0 +1,71 @@
+# Python's `str` surface must win over sysutils' TStringHelper when the two
+# spell the same member -- and must NOT win where only the helper has the name.
+#
+# The precondition is the import below: sysutils declares
+# `TStringHelper = type helper for AnsiString`, so from that point every
+# str-typed receiver has a Pascal helper in scope, and Pascal member lookup is
+# case-insensitive. Four Python spellings collide with it. Only the first was
+# visible as a failure; the other three COMPILED and silently called the
+# Pascal method, which is the half worth guarding.
+#
+# The receiver is spelled as a PARAMETER annotated `: str` in a def that is
+# pulled as a UNIT, because that is the shape the dispatch keys on -- a
+# statically str-typed named receiver. Compiled directly the module has no
+# sysutils in scope and the collision cannot arise at all.
+# bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter
+
+import 'strhelperprobe.pas' as probe
+
+# --- the four collisions: Python semantics must win ---
+
+def c_split(label: str):
+    # TStringHelper.Split takes ONE argument (an open array of Char); Python's
+    # str.split takes two. This is the arity failure that was the visible wall.
+    return label.split(" ", 1)
+
+def c_startswith(label: str):
+    # A TUPLE argument is Python-only -- TStringHelper.StartsWith takes an
+    # AnsiString, so reaching the helper fails on argument TYPE, not arity.
+    return label.startswith(("C", "D"))
+
+def c_endswith(label: str):
+    return label.endswith(("r", "x"))
+
+def c_replace(label: str):
+    # The expensive one. str.replace's optional third argument is a COUNT;
+    # TStringHelper.Replace's third is a TReplaceFlags SET. Both compile.
+    # "aaaa" with a count of 2 is "bbaa"; the helper would not stop at two.
+    return label.replace("a", "b", 2)
+
+# --- the negative arms: the guard must still DECLINE for helper-only names ---
+#
+# Without these the test cannot distinguish a correct guard from one that
+# swallows the type-helper dispatch entirely: a guard that is too broad simply
+# stops the helper from ever being reachable, and nothing else in this file
+# would notice. PyParseStrMethod REJECTS an unknown method outright, so if the
+# guard fired here these two would be a compile error, not a wrong value.
+
+def h_trim(label: str):
+    # Not a Python str method -- Python spells it .strip().
+    return label.Trim()
+
+def h_isempty(label: str):
+    # Not a Python str method under any spelling.
+    return label.IsEmpty()
+
+print(c_split("C minor"))
+print(c_startswith("C minor"))
+print(c_endswith("C minor"))
+print(c_replace("aaaa"))
+print(h_trim("  hi  "))
+print(h_isempty(""))
+
+# The def's own NAME used to decide whether the helper was found at all, so the
+# same body passed under `word` and failed under `zzzz` with nothing else
+# changed. Asserted here so a fix that only works for well-behaved names does
+# not pass: this is the exact body above under a name from the failing set.
+def zzzz(label: str):
+    tonic, mode = label.split(" ", 1)
+    return tonic, mode
+
+print(zzzz("C minor"))

@@ -126,3 +126,32 @@ def negated(x):
 
 
 print("usable    ", arith("abcabc"), negated("abcabc"))
+
+
+# --- str methods whose row is a CLASS, not a scalar ---
+#
+# The arm above pairs `cur := smRetTk` with `PyInferLastCi := -1`, which is
+# right for a scalar (there is no class identity to carry) and destroys the
+# answer for a list or tuple (there is). Claiming these rows regressed a def
+# returning s.rsplit(...) to a bare handle printed as an integer, while the
+# same call OUTSIDE a def stayed correct -- only the def-return path goes
+# through that arm, so nothing else in this file could have caught it.
+#
+# Both spellings are here on purpose: `split` also collides with sysutils'
+# TStringHelper.Split and is guarded elsewhere, so on its own it could pass for
+# the wrong reason. `rsplit` has no Pascal helper and no other guard, which
+# makes it the row that actually pins this arm.
+def ret_rsplit(x: str):
+    return x.rsplit(" ", 1)
+
+
+def ret_split(x: str):
+    return x.split(" ", 1)
+
+
+# `partition` belongs in this family and is deliberately ABSENT: returned from
+# a def it prints raw memory, on `pinned` as well as here, so it is pre-existing
+# and not this arm's. Filed as
+# bug-n-a-tuple-returning-str-method-prints-raw-memory-when-returned-from-a-def.
+# Asserting it here would make this test fail for a reason it does not test.
+print("class-ret ", ret_rsplit("C minor"), ret_split("C minor"))

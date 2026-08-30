@@ -5,20 +5,20 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:22 blocked:9 backlog:323 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2680 rejected:55`
+`working:4 unfinished:23 blocked:9 backlog:322 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2682 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
-- `bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter` [N] — owner: frankwasm
 - `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45` [A+S] — owner: frankS
 - `feature-pal-esp-posix-fd-semantics` [S] — owner: pxx-b
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
+- `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument` [P] — blocked-by: bug-p-a-qualified-type-name-cannot-be-a-generic-argument

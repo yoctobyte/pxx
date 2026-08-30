@@ -4,7 +4,7 @@ track: N
 type: bug
 blocked-by: []
 summary: "convertrawtext.py and SongFormatter.py fail at key_analysis.py:82 (`tonic, mode = label.split(\" \", 1)`) with `unexpected token`. Pre-existing, was hidden behind the grid keyword-call refusal. Does NOT reproduce standalone or through a plain from-import — needs more of convertrawtext.py's context, not yet minimised."
-status: working
+status: done
 owner: frankwasm
 ---
 
@@ -302,3 +302,101 @@ Track A — same situation as the `pasparser_call.inc` change in
 [[bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]],
 which needed a grant and A's gate (`gate.sh quick`), not just the fixedpoint.
 Not applied under Track N.
+
+---
+
+## FIXED, 2026-08-30 (frankwasm)
+
+### Correction: the site is in pyparser.inc, NOT pasparser_lval.inc
+
+The section above names `pasparser_lval.inc:275` as the site and I requested —
+and received — a Track A grant for that file
+([[grant-pasparser-lval-to-the-wasm-lane-for-the-nilpy-str-helper-collision]]).
+**The grant was not needed and the file is returned untouched.** Patching it
+changed nothing, and a `PXXDBG` probe on the guard showed why: it is never
+asked during a NilPy parse. The TYPE-HELPER dispatch is **duplicated** — the
+same block, comment and all, also lives at `compiler/pyparser.inc:39038`, and
+that is the copy NilPy runs.
+
+That duplication is deliberate (`devdocs/dev/the-substrate-is-ast-and-ir-not-
+the-parser.md`: share the AST and IR, duplicate the parser per language), so
+the fix belongs in the NilPy copy, which is Track N's own ground. What I got
+wrong was reading one copy and assuming it was the only one — the sibling rule
+in CLAUDE.md, applied one step too late. **Grepping `FindHelperForType` is what
+found it, and would have found it before the grant request.**
+
+### The fix
+
+`compiler/pyparser.inc` — a new `PyStrMethodOwnsMember` (forwarded in
+`pyforwards.inc`), and one condition on the dispatch:
+
+```pascal
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+     not PyStrMethodOwnsMember(Syms[idx].TypeKind, GetTokenStr(TokPos)) then
+```
+
+Gated on the **method table** (`PyStrMethodInfo` — the same table the lowering
+consults to pick the pylib entry), not on the receiver alone, so it answers
+True only where the two surfaces actually collide.
+
+### Verified — the positive AND the negative arm
+
+`test/test_nilpy_str_method_vs_pascal_string_helper.npy` (+ `.expected`, +
+`test/strhelperprobe.pas`, the minimal unit whose `uses sysutils` IS the
+precondition):
+
+| row | before | after / CPython |
+| --- | --- | --- |
+| `split(" ", 1)` | `unexpected token` | `['C', 'minor']` |
+| `startswith(("C","D"))` | `no overload ... matches` | `True` |
+| `endswith(("r","x"))` | `no overload ... matches` | `True` |
+| `replace("a","b",2)` | compiled, **flags not count** | `bbaa` |
+| `Trim()` | helper | helper — still |
+| `IsEmpty()` | helper | helper — still |
+
+The last two rows are the point, not padding. `PyStrMethodInfo` gating makes
+the guard's selectivity invisible to every oracle: a guard that is too broad
+silently stops the type-helper dispatch from ever being reachable and
+everything still compiles, as Python. `Trim` and `IsEmpty` are spellings
+Python's `str` does not have, and `PyParseStrMethod` REJECTS an unknown method
+outright — so if the guard fired on them they would be a compile error rather
+than a wrong value. **The guard is observed rejecting, not only accepting.**
+
+The def-name effect is gone with it: the test carries the original `zzzz` body
+under a name from the failing set.
+
+### A regression of my OWN, found and fixed in the same pass
+
+Adding the class-return rows to
+`test/test_nilpy_str_method_return_type_on_a_variable.npy` turned up that
+`def a(label: str): return label.rsplit(" ", 1)` printed a bare handle
+(`124150846851152`) instead of `['C', 'minor']`. **Mine, in `7ddcb9650`**, and
+already on master. That arm pairs `cur := smRetTk` with `PyInferLastCi := -1`,
+which is right for a scalar and destroys a class result. Confirmed against an
+honest control — HEAD **without** the uncommitted patch, same base,
+`74afbc8f0a22` — not against `pinned`, and reproduced with `rsplit`, which has
+no Pascal helper and so cannot be the collision above.
+
+Fixed by a third gate on that arm (`smRetTk <> tyClass`, `<> tyRecord`), with
+the class rows now asserted in that test so the arm cannot silently reclaim
+them. Only the DEF-RETURN path went through it — `print(s.rsplit(...))` and
+`x = s.rsplit(...)` were correct throughout, which is why nothing caught it.
+
+### Filed, not hidden
+
+`partition` belongs to that class-return family and prints raw memory when
+returned from a def — **on `pinned` too**, so pre-existing and neither of the
+above. It is deliberately absent from the test, with the reason written at the
+row, and filed as
+[[bug-n-a-tuple-returning-str-method-prints-raw-memory-when-returned-from-a-def]].
+The list arm works and the tuple arm does not, which is a one-concept-two-
+mechanisms smell rather than a `partition` bug.
+
+### Gate
+
+`make compiler/pascal26` — self-host fixedpoint `e632e0d82ef9`. Plus
+`gate.sh quick`. Track N ground only (`pyparser.inc`, `pyforwards.inc`,
+`test/**`); `pasparser_lval.inc` untouched.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

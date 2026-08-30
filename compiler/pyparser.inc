@@ -4273,6 +4273,42 @@ begin
   end;
 end;
 
+{ Does NilPy's own `str` surface own this spelling on this receiver? Asked by
+  the TYPE-HELPER dispatch in pasparser_lval.inc, which resolves `recv.member`
+  against a `record helper for T` in scope and Exits with the PASCAL method --
+  before the NilPy str-method loop in pasparser_expr.inc can run.
+
+  sysutils.pas declares `TStringHelper = type helper for AnsiString`, so the
+  moment any imported unit pulls sysutils, EVERY str-typed NilPy receiver has a
+  Pascal helper in scope, and Pascal member lookup is case-insensitive. Four
+  Python spellings collide with TStringHelper, and only the first was visible:
+
+    split(sep, maxsplit) vs Split(array of Char)   -> arity, `unexpected token`
+    startswith(tuple)    vs StartsWith(AnsiString) -> `no overload ... matches`
+    startswith(str)      -> COMPILED, silently the Pascal method
+    endswith(str)        -> COMPILED, silently the Pascal method
+    replace(old, new)    -> COMPILED, silently the Pascal method
+
+  The last three are the expensive half: `str.replace`'s optional third argument
+  is a COUNT, `TStringHelper.Replace`'s third is a TReplaceFlags set. Same
+  spelling, different function, no diagnostic.
+
+  Gated on the METHOD TABLE rather than on the receiver alone, deliberately:
+  a str-typed NilPy receiver calling a Pascal-only helper member (`s.Trim`,
+  `s.Substring`, `s.IsEmpty` -- spellings Python's str does not have) must keep
+  reaching the helper, because PyParseStrMethod would reject them outright. So
+  this answers True only where the two surfaces actually collide, and the guard
+  is observed rejecting as well as accepting -- see the negative rows in
+  test_nilpy_str_method_vs_pascal_string_helper.npy.
+
+  See bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter. }
+function PyStrMethodOwnsMember(recvTk: TTypeKind; const memb: AnsiString): Boolean;
+var oPName: AnsiString; oTk: TTypeKind; oWant: Integer;
+begin
+  PyStrMethodOwnsMember := isNilPy and PyIsStrBaseTk(recvTk)
+                           and PyStrMethodInfo(memb, oPName, oTk, oWant);
+end;
+
 { Can this str method be called with exactly `argCount` explicit arguments?
 
   PyStrMethodFinish ERRORS on an arity its row does not accept, which is right
@@ -31514,8 +31550,25 @@ begin
 
           Reached only when the user-class arm declined, so a local holding a
           class that defines its own `find` still resolves as a method: that
-          case exits above with recvCi2 >= 0 and never arrives here. }
+          case exits above with recvCi2 >= 0 and never arrives here.
+
+          A THIRD gate, added after the first two shipped: the row's type must
+          be a SCALAR. PyStrMethodInfo answers tyClass for the methods that
+          return a list or a tuple (`split`, `rsplit`, `partition`,
+          `splitlines`), and this arm pairs `cur := smRetTk` with
+          `PyInferLastCi := -1` -- which is right for a scalar, where there is
+          no class identity to carry, and destroys the answer for a class,
+          where there is. Claiming those rows regressed
+          `def a(label: str): return label.rsplit(" ", 1)` from ['C', 'minor']
+          to a bare handle printed as 124150846851152: the def's result became
+          an untyped class. Silent, and NOT reachable through the shapes this
+          arm was written for -- `print(s.rsplit(...))` and `x = s.rsplit(...)`
+          both stayed correct, because only the DEF RETURN path comes through
+          here. Mine, in 7ddcb9650; the pre-existing chase typed the class
+          results correctly and is left to keep doing so.
+          bug-n-a-str-method-returning-a-list-loses-its-class-in-a-def-return }
         else if PyStrMethodInfo(GetTokenStr(j + 3), smPname, smRetTk, smWant)
+                and (smRetTk <> tyClass) and (smRetTk <> tyRecord)
                 and PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi,
                                      PyInferBodyLo, PyInferBodyHi,
                                      GetTokenStr(j + 1)) then
@@ -38999,7 +39052,15 @@ begin
   if (idx >= 0) and (CurTok.Kind = tkDot) and
      (Syms[idx].RecName < REC_UCLASS_BASE) and (not Syms[idx].IsArray) and
      not (Syms[idx].TypeKind in [tyRecord, tyClass, tyVariant, tyPointer]) and
-     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+     { ...unless NilPy's own `str` surface owns the spelling -- see
+       PyStrMethodOwnsMember for the collision table. sysutils' TStringHelper
+       is in scope for every str-typed receiver the moment any imported unit
+       pulls sysutils, and Pascal member lookup is case-insensitive, so
+       `split` / `startswith` / `endswith` / `replace` resolved to the PASCAL
+       method here and Exited before the str-method loop below could run.
+       Three of the four compiled clean and called the wrong function. }
+     not PyStrMethodOwnsMember(Syms[idx].TypeKind, GetTokenStr(TokPos)) then
   begin
     mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
     if (mci >= 0) and (FindUMeth(mci, GetTokenStr(TokPos)) >= 0) then
