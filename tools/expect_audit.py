@@ -367,12 +367,26 @@ def oracle_pas(limit=None):
             res['timeout'] += 1; continue
         if p.returncode == 0:
             res['DERIVED (fpc reproduces it)'] += 1
-        elif not p.stdout.strip():
+        elif not [x for x in (p.stdout + p.stderr).split('\n')
+                  if x.startswith('+') and not x.startswith('+++') and x[1:].strip()]:
             # FPC BUILT it but the binary produced nothing -- it crashed, or it
             # needs a runtime this harness does not give it. That is not a
             # disagreement, it is the absence of an answer, and counting it as a
             # divergence overstates the candidate list. Found by hand-judging
             # the candidates: several "differences" were empty FPC output.
+            #
+            # The test is for no NON-EMPTY '+' line: a binary that emits a single
+            # blank line has emitted no content, and an earlier version of this
+            # check counted that bare '+' as output and classified 2 of the 3 as
+            # divergences.
+            #
+            # NOTE the emptiness is in the PROGRAM's output, not the recipe's:
+            # expect_same.sh prints its diff on stdout, so the recipe's stdout is
+            # never empty on a mismatch. The first version of this check tested
+            # the recipe's stdout and therefore never fired once -- a fix that
+            # changed no number, which is exactly the failure it was written to
+            # catch. The '+' lines of expect_same's unified diff ARE the actual
+            # side; no '+' lines means the subject emitted nothing.
             res['no oracle: fpc built it but it produced no output'] += 1
         else:
             res['candidate: fpc differs (read it)'] += 1

@@ -386,7 +386,7 @@ derivable justification. Every one has an identified reason:
 | `test_getinterface_guid_b25726` | `GetInterface` by GUID resolution | impl choice |
 | `test_interface_containers_ts26` | interface refcount lifetime in containers | impl choice |
 | `test_tcs26`, `test_syncobjs26` | our RTL's lock semantics — the test itself prints `BUG:` for the behaviour FPC shows | deliberate |
-| `test_var_litcat26`, `test_aoc_xunit26`, `test_aoc_types26` | variant/`array of const` marshalling | dialect |
+| `test_aoc_types26` | `array of const` marshalling of a float | dialect |
 | `test_variant_catchable26` | *"cannot convert string to integer"* vs *"Invalid variant type cast"* | **error wording — deferred by the compat table** |
 | `test_sizeofexpr26` | SizeOf of an expression: width promotion | dialect |
 | `test_anontype26` | anonymous enum/subrange support | pxx extension |
@@ -396,16 +396,38 @@ derivable justification. Every one has an identified reason:
 | `test_sow_default26` | `--strict-overload` widths — a pxx flag | pxx-only flag |
 | `test_trsat26` | float→int **saturation**, which we define and FPC does not | deliberate |
 | `test_dynlib_stub26` | expects the no-loader stub path on this host | host/config |
-| `test_thread_api_no_uses26`, `test_cast_deref_varparam26` | FPC binary produced **no output at all** | see below |
+| `test_thread_api_no_uses26`, `test_cast_deref_varparam26`, `test_var_litcat26`, `test_aoc_xunit26` | FPC binary emitted **no content** | not a divergence — see below |
 | `test_sizeof26` | `SizeOf(Variant)` 16/24, `SizeOf(String)` 8/256 | dialect (worked example above) |
 
-### A limitation of my own instrument, found by reading rather than by running
+### A limitation of my own instrument — and a count that moved three times
 
-Three of the 26 were not divergences at all: **FPC built the binary and it
-produced nothing** — it crashed, or wanted a runtime this harness does not give
-it. The tool counted that as `differs`, which **overstates the candidate list**:
-an absent answer is not a disagreement. Fixed — those now report as
+**Four** of the 26 are not divergences at all: FPC built the binary and it
+**emitted no content**. That is the absence of an answer, not a disagreement,
+and counting it as one overstates the candidate list. Now reported as
 `no oracle: fpc built it but it produced no output`.
+
+The number is worth its own paragraph because it moved **3 → 1 → 4** before
+settling, and every move was my measuring instrument rather than the corpus:
+
+1. **3**, read off a hand-judging script that printed only the first six diff
+   lines. Rows whose `+` lines fell past the cap looked like they had none —
+   the *silent-cap* failure I had fixed in the audit tool minutes earlier,
+   reproduced in the throwaway script I used to check the audit tool.
+2. **1**, after re-checking with a detector that asked "are there any `+`
+   lines?". That contradicted the ticket, so I went to correct it — and the
+   contradiction was the new detector's fault: a binary emitting a single blank
+   line produces a bare `+`, which counted as output.
+3. **4**, asking the question that actually matters: is there a `+` line
+   carrying **non-whitespace content**? `test_cast_deref_varparam26`,
+   `test_var_litcat26`, `test_aoc_xunit26`, `test_thread_api_no_uses26`.
+
+The first correction was right to make and *arrived at a worse number than the
+one it replaced*, which is the part worth keeping: a check that disagrees with a
+recorded claim is not automatically the better measurement. Both the claim and
+the check have to be able to say precisely what they counted, and neither of
+mine could until the third attempt. **"Emitted nothing" turned out to have three
+different definitions, and all the disagreement lived there** — not in the corpus,
+which never changed.
 
 Worth noting how it was found. The oracle had already "worked" through two full
 runs; nothing errored, and the count was plausible. It took hand-reading the
