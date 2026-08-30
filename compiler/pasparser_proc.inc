@@ -1163,10 +1163,15 @@ begin
       Warn('directive ''iram'' ignored here: IRAM placement exists on the ESP ' +
            'targets (xtensa, riscv32) only; this target has no separate ' +
            'instruction RAM to place ' + name + ' in');
-    if sawCdecl then
-      Warn('directive ''cdecl'' ignored here: the calling convention is the ' +
-           'target''s and is not selectable per routine, so ' + name +
-           ' already uses it; the marker is documentation only');
+    { x86-64 is no longer in this warning's population: there `cdecl` selects a
+      genuine SysV prologue. Narrowed rather than deleted because the other five
+      targets still cannot select a convention per routine.
+      feature-cdecl-bodied-sysv-prologue }
+    if sawCdecl and (TargetArch <> TARGET_X86_64) then
+      Warn('directive ''cdecl'' ignored here: on this target the calling ' +
+           'convention is not selectable per routine, so ' + name +
+           ' already uses it; the marker is documentation only (on x86-64 it ' +
+           'selects a genuine SysV prologue)');
     if sawRegister then
       Warn('directive ''register'' ignored here: the calling convention is the ' +
            'target''s and is not selectable per routine');
@@ -1690,6 +1695,22 @@ begin
   ProcIsAsync[procIdx] := isAsync;
   ProcIsGenerator[procIdx] := isGenerator;
   ProcIsStackless[procIdx] := isStackless;
+  { `cdecl;` on a BODIED proc SELECTS the convention on x86-64 rather than being
+    documentation: the body gets a genuine SysV prologue (the ProcCdecl arm of
+    EmitParamSpillsForTarget) and every direct call site already marshals SysV
+    (ir_codegen.inc IR_CALL, `ProcExternal or ProcCdecl`), so the two agree and
+    @-taking it as a `cdecl` function pointer is sound.
+    feature-cdecl-bodied-sysv-prologue
+
+    x86-64 ONLY, deliberately, and not out of caution -- setting it elsewhere
+    would be actively wrong. On i386/arm32/aarch64/riscv32/xtensa the direct
+    IR_CALL path never consults ProcCdecl (every read on those targets is on
+    IR_CALL_IND, against the fnptr SIGNATURE's proc index, never a bodied
+    proc), so they keep internal prologue + internal direct call, which is
+    self-consistent. The flag would give them no SysV prologue; it would only
+    stop inline_expand from inlining the proc. }
+  if sawCdecl and (TargetArch = TARGET_X86_64) then
+    ProcCdecl[procIdx] := True;
   if isInterrupt and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
     Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) and xtensa Call0 (esp32s3) only. Use `iram;` for an IDF-registered ISR.');
   if isInterrupt and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then

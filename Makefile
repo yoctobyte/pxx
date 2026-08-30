@@ -4803,6 +4803,22 @@ test-core: $(COMPILER)
 	# bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows
 	./$(COMPILER) -Fucompiler test/test_rel8_guard.pas $(TESTTMP)/test_rel8_guard26
 	tools/expect_same.sh test_rel8_guard26 "$$($(TESTTMP)/test_rel8_guard26)" "REL8-GUARD OK checks=13"
+	# A BODIED `cdecl` PROC MUST RECEIVE GENUINE SysV, AND ITS CALL SITES AGREE.
+	# Before this landed a bodied cdecl proc got the INTERNAL convention (params
+	# in GP registers by position, >6 all-stack) while every cdecl CALL site
+	# marshalled true SysV; the two coincide only for <=6 integer/pointer
+	# params. ir.inc rejected the unsound binding in the ASSIGNMENT shape only,
+	# so `Take(@MyCb)` walked past it and printed 4261032 where 9 was correct.
+	# Every case here uses that ARGUMENT shape. 5 of the 10 checks fail on the
+	# pre-fix binary; the 5 direct-call ones passed before and after, because
+	# both sides were internally consistent either way.
+	# The mixed int/float case is the discriminating one: SysV counts the
+	# integer and SSE classes independently, so an all-float or all-int
+	# signature cannot tell a correct implementation from a shifted one.
+	# feature-cdecl-bodied-sysv-prologue
+	# bug-a-a-cdecl-procaddr-passed-as-an-argument-escapes-the-sysv-soundness-reject
+	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_sysv.pas $(TESTTMP)/test_cdecl_bodied_sysv26
+	tools/expect_same.sh test_cdecl_bodied_sysv26 "$$($(TESTTMP)/test_cdecl_bodied_sysv26)" "CDECL-SYSV OK checks=10"
 	# AN AGGREGATE RESULT FROM A FUNCTION WITH MORE THAN 8 PARAMETERS.
 	#
 	# aarch64 refused this outright until the x8 load and the matching stack

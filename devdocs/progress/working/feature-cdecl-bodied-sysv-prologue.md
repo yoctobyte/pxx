@@ -2,6 +2,8 @@
 track: A
 prio: 58
 type: feature
+status: working
+owner: claude-A
 ---
 
 # Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args)

@@ -1019,6 +1019,7 @@ procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
   local parr/pbyref/ptypes arrays were replaced by the equivalent
   Procs[procIdx].Params[] fields, which the driver mirrors them into. }
 var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
+    intIdx, sseIdx, stackOff: Integer;   { SysV arg classification, cdecl arm }
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -1488,6 +1489,128 @@ begin
     end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
       xtensa_mov(reg_xtensa_a7, reg_xtensa_a15);
+  end
+  else
+  if ProcCdecl[procIdx] and (TargetArch = TARGET_X86_64) then
+  begin
+    { GENUINE SysV prologue for a proc whose declaration selected the C
+      convention. Integer and SSE classes have INDEPENDENT register counts
+      (int/ptr -> rdi,rsi,rdx,rcx,r8,r9; float/double -> xmm0..xmm7); anything
+      past either bank spills to 8-byte stack slots from [rbp+16] upward, in
+      left-to-right order across both classes.
+      feature-cdecl-bodied-sysv-prologue
+
+      WHY THIS ARM HAS TO EXIST. Without it a bodied `cdecl` proc received the
+      INTERNAL convention (every param in a GP register by position, >6
+      all-stack) while every cdecl CALL site marshalled true SysV, and the two
+      coincide only for <=6 integer/pointer params. ir.inc rejects the unsound
+      binding -- but only in the ASSIGNMENT shape, so `Take(@MyCb)` walked past
+      it and silently printed 4261032 where 9 was correct
+      (bug-a-a-cdecl-procaddr-passed-as-an-argument-escapes-the-sysv-soundness-reject).
+
+      A by-value SINGLE arrives as a RAW single in its xmm register, not as
+      double bits: the caller narrows with `cvtsd2ss xmm[n],xmm[n]` before the
+      call, so the callee stores it with movss and does NOT convert. That pairing
+      is the one the C frontend has been running on for its whole life. The
+      LANDMINE comment on the internal arm below applies here too -- this is a
+      second place x86-64 decides where tySingle gets narrowed.
+
+      DUPLICATION, STATED RATHER THAN HIDDEN: cparser.inc:11282 already contains
+      this classification, because the C frontend needed a SysV prologue before
+      this shared layer existed. These bytes are mirrored from it deliberately,
+      not reinvented. They should be ONE routine -- that is what
+      EmitParamSpillsForTarget was created for, and its own header comment names
+      the private per-frontend copies it already absorbed from NilPy and Rust.
+      cparser.inc is held by another agent right now, so collapsing its copy into
+      this arm is filed as refactor-a-collapse-the-c-frontend-sysv-prologue-copy
+      rather than done here. Do not fix one of these two without the other. }
+    intIdx := 0;
+    sseIdx := 0;
+    stackOff := 16;
+    for i := 0 to nparams-1 do
+    begin
+      idx := Procs[procIdx].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      if TypeIsFloat(Syms[idx].TypeKind) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      begin
+        if sseIdx < 8 then
+        begin
+          if Syms[idx].TypeKind = tySingle then EmitB($F3) else EmitB($F2);
+          EmitB($0F); EmitB($11);                    { movss/movsd [rbp+off], xmm[n] }
+          case sseIdx of
+            0: EmitB($85);  1: EmitB($8D);  2: EmitB($95);  3: EmitB($9D);
+            4: EmitB($A5);  5: EmitB($AD);  6: EmitB($B5);  7: EmitB($BD);
+          end;
+          EmitI32(Syms[idx].Offset);
+          Inc(sseIdx);
+          Continue;
+        end;
+        { 9th+ float: the caller pushed it as double bits, so narrow a Single
+          here exactly as the internal all-stack arm does. }
+        EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff);   { mov rax, [rbp+stackOff] }
+        Inc(stackOff, 8);
+        if Syms[idx].TypeKind = tySingle then
+        begin
+          EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+          EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+          EmitB($F3); EmitB($0F); EmitB($11); EmitB($85);
+          EmitI32(Syms[idx].Offset);                                 { movss [rbp+off], xmm0 }
+          Continue;
+        end;
+        EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); { mov [rbp+off], rax }
+        Continue;
+      end;
+
+      if intIdx >= 6 then
+      begin
+        EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff);   { mov rax, [rbp+stackOff] }
+        Inc(stackOff, 8);
+        if sz = 1 then begin EmitB($88); EmitB($85); end          { mov [rbp+off], al }
+        else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($85); end
+        else if sz = 4 then begin EmitB($89); EmitB($85); end
+        else begin EmitB($48); EmitB($89); EmitB($85); end;
+        EmitI32(Syms[idx].Offset);
+        Inc(intIdx);
+        Continue;
+      end;
+
+      if intIdx < 4 then
+      begin
+        if sz = 1 then
+        begin
+          if (intIdx = 0) or (intIdx = 1) then EmitB($40);  { REX for dil, sil }
+          EmitB($88);
+        end
+        else if sz = 2 then begin EmitB($66); EmitB($89); end
+        else if sz = 4 then EmitB($89)
+        else begin EmitB($48); EmitB($89); end;
+        case intIdx of
+          0: EmitB($BD);   { rdi }
+          1: EmitB($B5);   { rsi }
+          2: EmitB($95);   { rdx }
+          3: EmitB($8D);   { rcx }
+        end;
+        EmitI32(Syms[idx].Offset);
+      end
+      else if intIdx = 4 then
+      begin
+        if sz = 1 then begin EmitB($44); EmitB($88); EmitB($85); end
+        else if sz = 2 then begin EmitB($66); EmitB($44); EmitB($89); EmitB($85); end
+        else if sz = 4 then begin EmitB($44); EmitB($89); EmitB($85); end
+        else begin EmitB($4C); EmitB($89); EmitB($85); end;
+        EmitI32(Syms[idx].Offset);
+      end
+      else
+      begin
+        if sz = 1 then begin EmitB($44); EmitB($88); EmitB($8D); end
+        else if sz = 2 then begin EmitB($66); EmitB($44); EmitB($89); EmitB($8D); end
+        else if sz = 4 then begin EmitB($44); EmitB($89); EmitB($8D); end
+        else begin EmitB($4C); EmitB($89); EmitB($8D); end;
+        EmitI32(Syms[idx].Offset);
+      end;
+      Inc(intIdx);
+    end;
   end
   else
   if nparams > 6 then
