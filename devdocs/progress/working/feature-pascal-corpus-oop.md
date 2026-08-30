@@ -1,12 +1,13 @@
 ---
 prio: 75
+owner: frank-rust
 ---
 
 # Pascal OOP corpus — real libraries that hammer classes/interfaces/generics
 
 - **Type:** feature (umbrella — Pascal frontend validation)
 - **Track:** P — tag: compat (FPC-parity on real OO code; see parallel-tracks.md)
-- **Status:** backlog (umbrella — the actionable work is always a rung sub-ticket)
+- **Status:** working
 - **Unblocks:** the whole OO surface's credibility (RTTI, streaming, generics×classes)
 
 ## Why
