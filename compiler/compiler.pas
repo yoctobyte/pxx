@@ -862,6 +862,9 @@ begin
                         frontend work. feature-selfhost-guard-ir-unsupported. }
   TargetPlatform := PLATFORM_POSIX;
   PlatformExplicit := False;
+  RtlOverLibc := False;
+  LibcSyscallProcIdx := -1;
+  LibcErrnoProcIdx := -1;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   SocExplicit := False;
@@ -1080,6 +1083,15 @@ begin
       SocExplicit := True;   { NAMED, not derived — see TargetDisplayName }
       if SocIsXtensa(TargetSoc) then TargetArch := TARGET_XTENSA
       else TargetArch := TARGET_RISCV32;
+      Inc(i);
+    end
+    else if option = '--rtl-libc' then
+    begin
+      { Reach the kernel through libc's syscall(3) rather than the raw
+        instruction. Opt-in and x86-64 only for now; raw-syscall stays the
+        default because the libc-free Linux build is the identity the self-host
+        gate rests on. feature-port-rtl-over-libc }
+      RtlOverLibc := True;
       Inc(i);
     end
     else if option = '--platform=posix' then

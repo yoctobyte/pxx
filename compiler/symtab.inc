@@ -11708,6 +11708,43 @@ end;
 
 { ===== Call emission ===== }
 
+{ Manufacture the two libc imports the --rtl-libc lowering calls.
+
+  No Pascal source declares them, which is what made this look like it needed
+  new ELF machinery. It does not: an import in this compiler IS an ordinary
+  Procs[] entry carrying ProcExternal + ProcLibrary + ProcExtName, and
+  RegisterExternal below then hands out the GOT/PLT slot while the ELF writer
+  emits DT_NEEDED libc.so.6 off ExternalProc[]/ProcLibrary[] with no change of
+  its own. So synthesising an import is manufacturing a proc, not teaching
+  elfwriter a new trick.
+
+  ParamCount stays 0 deliberately: the IR_SYSCALL arm marshals the SysV
+  registers itself rather than routing through the general call path, so no
+  parameter metadata is consulted. Idempotent (-1 = not yet created).
+  feature-port-rtl-over-libc }
+procedure EnsureLibcSyscallProcs;
+var dummyNames: array[0..0] of AnsiString; dummyTypes: array[0..0] of TTypeKind;
+begin
+  if LibcSyscallProcIdx >= 0 then Exit;
+  { NOT a `__pxx_*` name: that prefix is reserved for pxx's own runtime bridge
+    and RegisterExternal below refuses to import it -- correctly, since no
+    library exports those. Only ProcExtName reaches the ELF (elfwriter.inc:128),
+    so the Pascal-level name is free to be anything that does not trip that
+    guard or collide with a user symbol. }
+  LibcSyscallProcIdx := RegisterProc('libc$syscall', True, tyNativeInt, 0,
+                                     dummyNames, dummyTypes);
+  ProcExternal[LibcSyscallProcIdx] := True;
+  ProcCdecl[LibcSyscallProcIdx]    := True;
+  ProcLibrary[LibcSyscallProcIdx]  := InternStr('libc.so.6');
+  ProcExtName[LibcSyscallProcIdx]  := InternStr('syscall');
+  LibcErrnoProcIdx := RegisterProc('libc$errno_location', True, tyPointer, 0,
+                                   dummyNames, dummyTypes);
+  ProcExternal[LibcErrnoProcIdx] := True;
+  ProcCdecl[LibcErrnoProcIdx]    := True;
+  ProcLibrary[LibcErrnoProcIdx]  := InternStr('libc.so.6');
+  ProcExtName[LibcErrnoProcIdx]  := InternStr('__errno_location');
+end;
+
 { Ensure the external procIdx has a GOT slot; return its ExternalProc[] index. }
 function RegisterExternal(procIdx: Integer): Integer;
 var i, extIdx: Integer; enm: AnsiString;

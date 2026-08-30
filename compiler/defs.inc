@@ -3407,6 +3407,20 @@ var
     overrides. Set explicitly = PlatformExplicit True (suppresses derivation). }
   TargetPlatform : Integer;
   PlatformExplicit : Boolean;
+  { RTL-over-libc lowering mode (--rtl-libc). Routes IR_SYSCALL through libc's
+    syscall(3) instead of emitting the raw `syscall` instruction, so the binary
+    reaches the kernel only through the system C library -- the supported
+    boundary on every mainstream OS except Linux. OPT-IN: raw-syscall stays the
+    default and must stay bit-identical, because it is what the self-host gate
+    and the libc-free Linux identity rest on.
+    The two synthetic imports the lowering needs. They are ordinary external
+    Procs[] entries manufactured by EnsureLibcSyscallProcs -- no Pascal source
+    declares them -- so the existing ExternalProc[]/ProcLibrary[] path emits the
+    DT_NEEDED and PLT slot with no elfwriter change. -1 = not yet created.
+    feature-port-rtl-over-libc }
+  RtlOverLibc : Boolean;
+  LibcSyscallProcIdx : Integer;
+  LibcErrnoProcIdx : Integer;
   { Xtensa ABI selector. Call0 remains the bare-target default; ESP-IDF uses
     the windowed ABI. }
   XtensaABI : Integer;

@@ -282,3 +282,69 @@ properties re-checked directly, because they are the ones being relied on:
    that residue and 0.
 
 Raw-syscall stays the default and must stay bit-identical; libc mode is opt-in.
+
+## Increment 1 landed — `IR_SYSCALL` lowers to libc, and a scope correction
+
+`--rtl-libc` (opt-in, x86-64) lowers `IR_SYSCALL` to libc's `syscall(3)` with the
+errno mapping. Four small pieces, no `elfwriter.inc` change, no `lib/rtl` change:
+
+- `defs.inc` — the mode flag and two synthetic proc-index caches
+- `compiler.pas` — `--rtl-libc`
+- `symtab.inc` — `EnsureLibcSyscallProcs`, which manufactures the two imports as
+  ordinary external `Procs[]` entries (this is all an import IS here; the
+  existing `RegisterExternal` path then emits DT_NEEDED and the PLT slot)
+- `ir_codegen.inc` — the lowering plus two alignment helpers
+
+### Measured
+
+| program | raw | `--rtl-libc` | output |
+| --- | ---: | ---: | --- |
+| hello-world | 73 | 67 | identical |
+| file I/O + heap + string growth + exceptions | 195 | **105** | **byte-identical** |
+
+And the property that matters most: **raw-mode output is byte-identical to the
+pinned v394 binary** (`53800fbeb0b66e11`) for both programs. The default path is
+untouched, which is the condition this ticket has to meet before anything else
+about it is interesting.
+
+### Scope correction: the switch reaches FOUR files, not two
+
+The ticket's 2026-07-21 scout note says raw `syscall` lives in **two** places —
+RTL primitives (via the intrinsic) and the `_start` stub. Measured, that is
+incomplete: the compiler ALSO emits the raw instruction directly through
+`EmitSyscall` (`emit.inc:193`) at **42 call sites**:
+
+| file | `EmitSyscall` call sites |
+| --- | ---: |
+| `ir_codegen.inc` | 19 |
+| `symtab.inc` | 13 |
+| `exception_emit.inc` | 6 |
+| `emit.inc` | 4 |
+
+That is why hello-world only moved 73 → 67: the RTL's 61 intrinsic sites funnel
+through `IR_SYSCALL` and are now lowered, but the compiler's own builtin/runtime
+emissions do not go through the IR at all. It is also why the heavier program
+moved much further — more of its kernel traffic comes through the RTL.
+
+### Increment 2 is smaller than that table suggests
+
+`EmitSyscall` is a **single choke point**, and its callers set up the *raw*
+convention (rax = nr, then rdi/rsi/rdx/r10/r8/r9). So all 42 sites convert at
+once by doing the conversion inside `EmitSyscall` — a register rotation into the
+SysV slots (`r11 <- r9`, `r9 <- r8`, `r8 <- r10`, `rcx <- rdx`, `rdx <- rsi`,
+`rsi <- rdi`, `rdi <- rax`, in that order, which has no read-after-write
+conflict) followed by the same aligned call. **No caller changes.** Doing it
+there rather than duplicating the lowering is the `normalise-dont-special-case`
+answer, and it would let increment 1's `IR_SYSCALL` arm collapse back into the
+raw pops plus one `EmitSyscall`.
+
+**The hazard to settle first, and it is a real one.** The raw `syscall`
+instruction clobbers only `rax`, `rcx` and `r11`; a C call clobbers every
+caller-saved register. Any `EmitSyscall` caller that sets up an argument
+register once and issues two syscalls, or that relies on `rdi`/`rsi`/`rdx`/
+`r8`/`r9`/`r10` surviving, breaks silently under the libc path. The conservative
+fix is to push/pop the six raw-convention registers around the call inside
+`EmitSyscall`, preserving the raw contract exactly at ~12 extra instructions per
+syscall — acceptable for a portability mode. **Whether any of the 42 callers
+actually depends on that is unmeasured**, and it should be measured rather than
+assumed in either direction before increment 2 lands.

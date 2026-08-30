@@ -4767,6 +4767,33 @@ begin
 end;
 
 
+{ SysV requires rsp 16-byte aligned AT the call instruction, and the raw-syscall
+  path never had to care because `syscall` has no alignment requirement. Park the
+  old rsp in r11 (caller-saved, not an argument register, and not touched by
+  EmitExternalIndirectCall -- which calls through memory and whose FloatPoolSave
+  is rbp-relative), align down, and reserve 16 so the optional 7th argument sits
+  at [rsp] with the alignment still correct.
+
+  rax cannot be used for the parking: a variadic callee reads AL as the count of
+  vector registers used, so it must be zero at the call.
+  feature-port-rtl-over-libc }
+procedure EmitLibcAlignedCallPre(hasStackArg: Boolean);
+begin
+  EmitB($49); EmitB($89); EmitB($E3);                        { mov r11, rsp }
+  EmitB($48); EmitB($83); EmitB($E4); EmitB($F0);            { and rsp, -16 }
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($10);            { sub rsp, 16 }
+  EmitB($4C); EmitB($89); EmitB($5C); EmitB($24); EmitB($08);{ mov [rsp+8], r11 }
+  if hasStackArg then
+  begin
+    EmitB($4C); EmitB($89); EmitB($54); EmitB($24); EmitB($00); { mov [rsp], r10 }
+  end;
+end;
+
+procedure EmitLibcAlignedCallPost;
+begin
+  EmitB($48); EmitB($8B); EmitB($64); EmitB($24); EmitB($08); { mov rsp, [rsp+8] }
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
@@ -4779,6 +4806,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx, lastOrd: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
+    libcNoErr: Integer;    { --rtl-libc: rel8 patch site over the errno fixup }
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
@@ -4940,17 +4968,71 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        for i := nArgs - 1 downto 0 do
-          case i of
-            0: EmitB($58);                        { pop rax }
-            1: EmitB($5F);                        { pop rdi }
-            2: EmitB($5E);                        { pop rsi }
-            3: EmitB($5A);                        { pop rdx }
-            4: begin EmitB($41); EmitB($5A); end; { pop r10 }
-            5: begin EmitB($41); EmitB($58); end; { pop r8 }
-            6: begin EmitB($41); EmitB($59); end; { pop r9 }
-          end;
-        EmitB($0F); EmitB($05); { syscall }
+        if RtlOverLibc then
+        begin
+          { --rtl-libc: reach the kernel through libc's syscall(3) instead of
+            the raw instruction, so the binary's only kernel boundary is the
+            system C library. That is the supported boundary on every
+            mainstream OS except Linux, and it is what makes an OpenBSD build
+            `pinsyscalls`-compliant by construction.
+
+            The register mapping is a SHIFT, not a remap: `long syscall(long nr,
+            ...)` takes the number as its first C argument, so value i lands in
+            SysV integer argument slot i -- rdi, rsi, rdx, rcx, r8, r9 -- and
+            the 7th value goes on the stack. All 61 RTL call sites pass the full
+            7 (the intrinsic zero-pads), so the stacked argument is always
+            present rather than a special case, which is why the alignment
+            sequence below is unconditional.
+
+            rax is NOT free here: SysV requires AL = the number of vector
+            registers used for a variadic callee, so it is zeroed at the call
+            and the old rsp is parked in r11 instead. r10 carries the 7th value
+            (both are caller-saved and neither is an argument register). }
+          EnsureLibcSyscallProcs;
+          for i := nArgs - 1 downto 0 do
+            case i of
+              0: EmitB($5F);                        { pop rdi  = nr }
+              1: EmitB($5E);                        { pop rsi  = a0 }
+              2: EmitB($5A);                        { pop rdx  = a1 }
+              3: EmitB($59);                        { pop rcx  = a2 }
+              4: begin EmitB($41); EmitB($58); end; { pop r8   = a3 }
+              5: begin EmitB($41); EmitB($59); end; { pop r9   = a4 }
+              6: begin EmitB($41); EmitB($5A); end; { pop r10  = a5, to the stack slot }
+            end;
+          EmitLibcAlignedCallPre(nArgs > 6);
+          EmitB($31); EmitB($C0);                             { xor eax, eax }
+          EmitExternalIndirectCall(RegisterExternal(LibcSyscallProcIdx));
+          EmitLibcAlignedCallPost;
+          { Error convention: a raw syscall returns -errno; libc returns -1 and
+            sets errno. Mapping it back HERE means no RTL error check changes
+            and program output is byte-identical to the raw build by
+            construction rather than by inspection. Measured before this was
+            written: bad-fd write returns -1 with errno 9, and the raw build
+            returns -9. }
+          EmitB($48); EmitB($83); EmitB($F8); EmitB($FF);     { cmp rax, -1 }
+          EmitB($75); libcNoErr := CodeLen; EmitB(0);         { jne .done }
+          EmitLibcAlignedCallPre(False);
+          EmitB($31); EmitB($C0);                             { xor eax, eax }
+          EmitExternalIndirectCall(RegisterExternal(LibcErrnoProcIdx));
+          EmitLibcAlignedCallPost;
+          EmitB($8B); EmitB($00);                             { mov eax, [rax] }
+          EmitB($48); EmitB($F7); EmitB($D8);                 { neg rax }
+          Code[libcNoErr] := Byte(CodeLen - (libcNoErr + 1));
+        end
+        else
+        begin
+          for i := nArgs - 1 downto 0 do
+            case i of
+              0: EmitB($58);                        { pop rax }
+              1: EmitB($5F);                        { pop rdi }
+              2: EmitB($5E);                        { pop rsi }
+              3: EmitB($5A);                        { pop rdx }
+              4: begin EmitB($41); EmitB($5A); end; { pop r10 }
+              5: begin EmitB($41); EmitB($58); end; { pop r8 }
+              6: begin EmitB($41); EmitB($59); end; { pop r9 }
+            end;
+          EmitB($0F); EmitB($05); { syscall }
+        end;
       end;
 
     IR_COSWITCH:
