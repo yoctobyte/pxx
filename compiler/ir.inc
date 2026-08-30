@@ -1382,6 +1382,31 @@ begin
     Result := IRAppend(IR_LOAD_MEM, Result, -1, -1, 0, Ord(tyPointer));
 end;
 
+{ The ELEMENT TypeKind of a managed-string-typed expression -- Ord(tyWideChar)
+  for UTF-16, Ord(tyChar) for bytes, 0 when the node is not a managed string.
+
+  ONE function because there are THREE places a managed string can come from and
+  each records its element somewhere different, which is exactly the shape that
+  grows divergent copies if each caller walks it itself:
+
+    AN_IDENT  Syms[].ElemType      AllocVar stamps tyChar for tyAnsiString
+    AN_FIELD  UFldStrElemTk        AddUField stamps it; UFldTk only says "string"
+    other     ASTStrElemTk         stamped by wide-string producers, 0 = narrow
+
+  Both readers that need a width -- indexing (stride) and Length (halving) -- ask
+  here rather than repeating the three arms. feature-unicodestring-model }
+function ASTStrElemTkOf(node: Integer): Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := Ord(Syms[ASTIVal[node]].ElemType)
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldStrElemTk(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else
+    Result := ASTStrElemTk[node];
+end;
+
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     rcSym, rcPi, rcArg, rcArg2: Integer;
@@ -1817,25 +1842,8 @@ begin
         string at stride 1, silently. Same hazard class as the six backend COW
         guards, same ordering rule: everything is inert until the alias breaks,
         so all of it must land first. feature-unicodestring-model }
-      strElemTk := tyChar;
-      if ASTKind[baseNode] = AN_IDENT then
-        strElemTk := Syms[ASTIVal[baseNode]].ElemType
-      else if (ASTKind[baseNode] = AN_FIELD) and
-              (RecFieldStrElemTk(ResolveNodeRec(ASTLeft[baseNode]),
-                                 GetASTIdentName(baseNode)) <> 0) then
-        { a string FIELD -- `rec.w[i]`. UFldTk says tyAnsiString and carries no
-          element, so the width comes from the field's own UFldStrElemTk. }
-        strElemTk := IntToTypeKind(RecFieldStrElemTk(ResolveNodeRec(ASTLeft[baseNode]),
-                                                     GetASTIdentName(baseNode)))
-      else if ASTStrElemTk[baseNode] <> 0 then
-        { an EXPRESSION base -- `(a + b)[i]`. No AST node carries an element
-          type generally, so wide-string producers stamp ASTStrElemTk and this
-          reads it; 0 means narrow, which is every string expression that
-          exists before the alias breaks. The AN_FIELD arm is still missing:
-          record fields carry UFldTk/UFldPtrElemTk and nothing for a string's
-          element, so `rec.w[i]` would come out stride 1. That is item 3 of the
-          ordering constraint and must land before the alias, not after. }
-        strElemTk := IntToTypeKind(ASTStrElemTk[baseNode]);
+      strElemTk := IntToTypeKind(ASTStrElemTkOf(baseNode));
+      if strElemTk = tyUnknown then strElemTk := tyChar;
       if strElemTk = tyWideChar then
       begin
         elemSize := 2;
@@ -5821,6 +5829,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     ctorArgCpi, ctorArgSlot: Integer;   { construction: coerce ctor args by the ctor's param types }
+    lenArg: Integer;   { Length(<wide string>): the arg node, to halve the byte count }
     dfltAST, dfltSym, dfltIdent, dfltAsgn: Integer;   { a filled default, materialised for IRLowerCallArg }
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     lstNode, varNode: Integer;   { NilPy list-vs-variant equality }
@@ -11580,6 +11589,25 @@ NO LONGER x86-64 (feature-cdecl-bodied-sysv-prologue) and NO LONGER
       end
       else
         Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);
+      { Length(<managed string>) returns the header's [-8] field, which is a BYTE
+        count -- that is what the header has always held and what every backend's
+        tyAnsiString Length path loads. A UTF-16 string stores 2 bytes per element,
+        so its CHARACTER count is that byte count shr 1. Done here, on the call's
+        RESULT, rather than in each backend: the six Length arms would otherwise
+        each need the same width test, and the width is a frontend fact (the
+        element type) that the IR does not carry to them.
+        Guarded on the arg being tyAnsiString so a `array of WideChar` -- whose
+        Syms[].ElemType is also tyWideChar -- keeps its element count untouched.
+        See feature-unicodestring-model item 5. }
+      if (cpi = -Ord(tkLength)) and (ASTLeft[node] >= 0) then
+      begin
+        lenArg := ASTLeft[ASTLeft[node]];
+        if (lenArg >= 0) and (IntToTypeKind(ASTTk[lenArg]) = tyAnsiString) and
+           (IntToTypeKind(ASTStrElemTkOf(lenArg)) = tyWideChar) then
+          Result := IRAppend(IR_BINOP, Result,
+            IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+            Ord(tkShr), 0, Ord(tyInteger));
+      end;
       { Class instantiation: carry the ctor the FRONTEND picked from the argument
         types. Backends resolve the ctor with a first-name-match that cannot see
         overloads, so without this an overloaded ctor set always ran whichever
