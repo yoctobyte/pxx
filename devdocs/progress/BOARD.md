@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead | C | 55 | bug | A `static`/`static inline` function DEFINED in a .h reached through `uses` has its body discarded and becomes an external, so the program links a DT_NEEDED on a lib<header>.so that does not exist and dies at load. The identical function in a .c compiles and runs. Discovered while fixing bug-a-a-c-include-path-captures-a-pascal-uses; it is the OTHER half of that ticket's silent arm and survives its fix. | — |
 | bug-nilpy-render-backend-py-compile-does-not-terminate | N | 55→68 | bug | songformatter's render_backend.py (413 lines) does not finish compiling: killed at 25:00.06 wall clock, 95% CPU, RSS FLAT at 102 MB, state R — spinning, not allocating. The 2026-07-31 record says it compiled. Bounded rather than diagnosed: lines 1..296 compile in 7s, the whole file spins. Filed with no proposed cause because every cause tried so far has been wrong, and each wrong one is recorded so nobody re-walks it. | — |
 | feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45 | A+S | 50 | feature | Xtensa implements 31 IR ops; riscv32 implements 45 and aarch64 53 | — |
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
@@ -635,9 +634,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2687)
+## done (2688)
 
-2687 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2688 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (55)
 

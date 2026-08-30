@@ -8039,6 +8039,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh crtl_tiny_regex_match26 "$$($(TESTTMP)/crtl_tiny_regex_match26)" "tiny-regex: all cases pass"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c $(TESTTMP)/cinc_main26
 	tools/expect_same.sh cinc_main26 "$$($(TESTTMP)/cinc_main26)" "$$(printf 'local-ok\ninc-ok')"
+	# A `static`/`static inline` DEFINED in a header reached by `uses` keeps its
+	# body. The pair is the invariant: the same source text must behave the same
+	# whichever extension it is given, and neither binary may acquire a
+	# DT_NEEDED on a lib<header-stem>.so the header itself defines. Before the
+	# fix the .h half emitted libhdrstatic.so and died at load; the .c half was
+	# always fine.
+	# bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead
+	./$(COMPILER) -Itest/chdrstatic test/test_header_static_body.pas $(TESTTMP)/test_header_static_body26
+	tools/expect_same.sh test_header_static_body26 "$$($(TESTTMP)/test_header_static_body26)" "$$(printf '4242\n42')"
+	./$(COMPILER) -Itest/chdrstatic test/test_header_static_body_c.pas $(TESTTMP)/test_header_static_body_c26
+	tools/expect_same.sh test_header_static_body_c26 "$$($(TESTTMP)/test_header_static_body_c26)" "$$(printf '4242\n42')"
+	# NOT `grep -qv`: that passes whenever ANY line fails to match, which is
+	# every ELF, so it would never fail. Negate the whole grep instead.
+	! readelf -d $(TESTTMP)/test_header_static_body26 | grep -q libhdrstatic.so
 	./$(COMPILER) test/test_declared_directive.pas $(TESTTMP)/test_declared_directive26
 	tools/expect_same.sh test_declared_directive26 "$$($(TESTTMP)/test_declared_directive26)" "$$(printf '1\n2\n3\n4\n5')"
 	./$(COMPILER) test/dotted/test_dotted_uses.pas $(TESTTMP)/test_dotted_uses26

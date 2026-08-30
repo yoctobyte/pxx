@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:24 blocked:9 backlog:321 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2687 rejected:55`
+`working:4 unfinished:24 blocked:9 backlog:321 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2688 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead` [C] — owner: frankC
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N] — owner: frankwasm
 - `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45` [A+S] — owner: frankS
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
