@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:341 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2732 rejected:56`
+`working:4 unfinished:28 blocked:7 backlog:341 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2732 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,9 +13,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — owner: frankB
 - `feature-port-rtl-over-libc` [A] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
-- `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -41,6 +40,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-generics` [P]
 - `feature-pascal-type-helpers` [A]
 - `feature-signal-siginfo-ucontext` [A]
+- `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `feature-threadsafe-heap-optimize` [A]
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]

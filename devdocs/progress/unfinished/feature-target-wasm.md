@@ -11,6 +11,32 @@ created: 2026-08-27
 summary: "NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim."
 ---
 
+# PARKED 2026-08-30 by frankwasm — what unparks it, and who owns that
+
+Moved out of `working/` by its own holder: the lock means *an agent is actively
+on it*, and nobody is. Tree clean, everything pushed, branch `wasm` at
+`b564c8f39`, binary at self-host fixedpoint **`fb83a9c891b9`** (verified by
+sha256 of `compiler/pascal26`, not inferred).
+
+| what | blocked? | owner |
+| --- | --- | --- |
+| **Phase 9j — argv (`ParamCount`/`ParamStr`)** | **no — unblocked lane work** | this lane |
+| Phase 7 — exceptions | no | this lane |
+| **the Phase 9 anchor's last mile** (36 of 36 remaining refusals) | **yes** — `decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`, now carried as this ticket's `blocked-by` edge | Track U |
+
+**So this is NOT parked waiting for the decision.** argv is unblocked and fully
+scoped; it is parked for want of a session, not a prerequisite. Whoever resumes
+starts at PLAN.md's Phase 9j: a backend-emitted `WasmHostImport` pair
+(`args_sizes_get` / `args_get`) plus one synthesised strlen, doing the managed
+and frozen destinations in the same slice — and NOT taking the recorded
+`argv[i+1] - argv[i] - 1` shortcut, which every host satisfies and preview1
+does not specify.
+
+**Provenance note for anyone measuring here.** Every number in PLAN.md Phases
+9b-9j came from a binary this checkout self-hosted, named by sha; this lane has
+never measured against `stable_linux_amd64/default/pinned`, so the 2026-08-30
+pin churn (v394 blessed, reverted, re-blessed) does not touch any of them.
+
 # Do not claim this ticket
 
 It is held by a dedicated standalone checkout (`~/frankwasm`) working on branch
