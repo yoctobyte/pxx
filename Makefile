@@ -14867,9 +14867,33 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_asm.pas > $(TESTTMP)/test_esp_asm.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_asm.oracle $(TESTTMP)/test_esp_asm.s3; then echo "esp32s3 inline asm ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 inline asm MISMATCH"; exit 1; fi; fi
-	# the windowed ABI picks a7 as the frame pointer, not a15 — it must at least
-	# lower (no runner: windowed images link through xtensa-esp-elf-gcc)
+	# the windowed ABI picks a7 as the frame pointer, not a15 — this row checks it
+	# lowers. It used to say "no runner: windowed images link through
+	# xtensa-esp-elf-gcc", which stopped being true and nothing noticed: a HOSTED
+	# windowed program runs under plain tools/run_target.sh xtensa, the same
+	# runner the 107 Call0 rows here already use. The executed row is below.
 	@./$(COMPILER) --target=xtensa --xtensa-abi=windowed test/test_esp_bare_asm.pas $(TESTTMP)/test_esp_asm_win.o >/dev/null && echo "xtensa windowed inline asm lowers ok"
+	# THE ONE EXECUTED WINDOWED ROW. Every other xtensa row in this file is Call0,
+	# so until this landed the entire windowed backend was gated on "the compiler
+	# did not crash" — a check whose pass and whose skip print the same thing.
+	# What it guards: the data section begins right after code, so its alignment
+	# is whatever CodeLen happens to leave. Xtensa's l32i faults on a misaligned
+	# word (SIGBUS, signal 7); x86-64 and riscv32 do not. 41 of 94 windowed
+	# programs were dying on that and nobody could see it. test_cross_record
+	# reads multi-word record descriptors, which is the shape that faults.
+	# MEASURED, not hopeful: this row SIGBUSes at 75d2ba662^ and passes at
+	# 75d2ba662. AlignCodeForData in elfwriter.inc is what holds it now — verified
+	# by deleting the page pad and re-running this row, which still passed.
+	# bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_record.pas $(TESTTMP)/xt_win_record
+	./$(COMPILER) test/test_cross_record.pas $(TESTTMP)/xt_win_record_x64
+	# Two outcome slots, because the subject has two outcomes: a SIGBUS is a
+	# status, not a string, and the ticket's one-line form would have compared
+	# truncated stdout and called the difference a value mismatch.
+	tools/run_target.sh xtensa $(TESTTMP)/xt_win_record > $(TESTTMP)/xt_win_record.out; tools/expect_same.sh xtensa-windowed/test_cross_record-rc "$$?" "0"
+	$(TESTTMP)/xt_win_record_x64 > $(TESTTMP)/xt_win_record_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_record "$$(cat $(TESTTMP)/xt_win_record.out)" "$$(cat $(TESTTMP)/xt_win_record_x64.out)"
 	# bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c: the
 	# xtensa C ABI starts a 64-bit argument at an EVEN word index; pxx now applies
 	# that rule unconditionally on BOTH sides (caller pad + callee spill), so a

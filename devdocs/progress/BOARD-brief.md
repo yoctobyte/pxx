@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:3 unfinished:28 blocked:8 backlog:366 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2755 rejected:56`
+`urgent:1 working:3 unfinished:28 blocked:8 backlog:367 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2755 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -59,7 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 388, ranked
+## Ready — top 30 of 389, ranked
 
 - `[p 65] [N]` bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever (unblocks 1)
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -92,4 +92,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [A]` feature-unicodestring-model
 
-_358 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_359 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

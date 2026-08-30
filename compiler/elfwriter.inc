@@ -1591,13 +1591,64 @@ end;
 const
   ELF_DATA_PAGE = 4096;
 
+{ THE DATA SECTION MUST BE WORD-ALIGNED, AND FOR YEARS IT ONLY WAS BY LUCK.
+
+  Every executable writer here places data immediately after code --
+  `dataBase := LOAD_ADDR + codeOffset + CodeLen` -- so the data section began
+  wherever the last instruction happened to end. Code lengths are byte-granular,
+  so that is an arbitrary residue: measured across a 129-source differential,
+  EVERY program sampled started its data three bytes past a word boundary.
+
+  x86-64 and riscv32 absorb an unaligned word load. Xtensa's l32i/s32i does not
+  -- it raises an alignment fault, which surfaces under qemu as
+  `uncaught target signal 7 (Bus error)`. So whether a given program died came
+  down to whether it happened to dereference a word that landed misaligned: 41
+  of 94 windowed-ABI programs did. The other 53 were never safe, only untested.
+
+  The one line that has been holding this up since 75d2ba662 is
+  PadCodeToPageBoundary below, which pads to 4096 and therefore to 8 as a side
+  effect -- a constant introduced for an unrelated qemu translation-cache
+  reason, in a writer under active edit, propping up a correctness property
+  nothing asserts. Four routes take it away with no diagnostic: a second
+  PT_LOAD, a 16 KiB-page host, `--emit-obj`, and any bare-metal ESP image
+  (which skips the page pad outright and so has been misaligned all along).
+
+  Hence this: an explicit, unconditional, stated invariant, and an Error rather
+  than a silent miscompile if it is ever violated. Diagnosed by frankS,
+  bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why.
+
+  8 and not 4: the same width bssBase has always used two lines below, for the
+  same reason plus aarch64's 64-bit exclusives, and a typed constant can be a
+  qword. There is no target on which 4 is enough and 8 is too much. }
+const
+  ELF_DATA_ALIGN = 8;
+
+procedure AlignCodeForData(codeOffset: Int64);
+begin
+  { Record where filler starts so `-S` can stop there -- see CodePadStart in
+    defs.inc. First padder wins: this runs before the page pad, so the listing
+    stops at the first byte that is not an instruction, not at the last. }
+  if CodePadStart < 0 then CodePadStart := CodeLen;
+  while ((codeOffset + CodeLen) mod ELF_DATA_ALIGN) <> 0 do
+    EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note below }
+end;
+
+{ The invariant checked where it is USED, not where it is established -- the
+  loop above cannot fail, but a writer that computes dataBase without calling
+  AlignCodeForData can, and so can a load base that is not itself aligned
+  (SocIramBase is a per-chip constant, not something this file controls). An
+  Error here is a build that stops; the alternative is a program that faults on
+  xtensa and runs everywhere else. }
+procedure CheckDataBaseAligned(dataBase: Int64);
+begin
+  if (dataBase mod ELF_DATA_ALIGN) <> 0 then
+    Error('internal: data section base is not 8-byte aligned -- xtensa l32i '
+          + 'will fault on it');
+end;
+
 procedure PadCodeToPageBoundary(codeOffset: Int64);
 begin
-  { Record where the filler starts so `-S` can stop there -- see CodePadStart
-    in defs.inc. Set unconditionally: when the code already ends on a page
-    boundary no bytes are appended and CodePadStart = CodeLen, which trims
-    nothing. }
-  CodePadStart := CodeLen;
+  if CodePadStart < 0 then CodePadStart := CodeLen;
   while ((codeOffset + CodeLen) mod ELF_DATA_PAGE) <> 0 do
     EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note above }
 end;
@@ -1622,8 +1673,10 @@ begin
     phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
+  AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
+  CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
     per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
@@ -1765,8 +1818,10 @@ begin
     phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
+  AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
+  CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
     per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
@@ -1968,8 +2023,12 @@ begin
   { NOT for a bare-metal ESP image: it loads into SoC SRAM measured in
     hundreds of KB, where 4 KiB is a real cost — and nothing is translating
     from that page there, so the hazard does not exist to be avoided. }
+  { Unconditional, ESP included: the bare image skips the page pad, so this is
+    the ONLY thing aligning its data -- and xtensa is the target that faults. }
+  AlignCodeForData(codeOffset);
   if not EspBareBoot then PadCodeToPageBoundary(codeOffset);
   dataBase := loadBase + codeOffset + CodeLen;
+  CheckDataBaseAligned(dataBase);
   { BSS holds word-sized globals laid out with AlignTo offsets, so the base
     itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on
     misaligned word access. Code+data lengths are byte-granular, so pad. }
