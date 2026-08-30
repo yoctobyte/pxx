@@ -5,15 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:27 blocked:7 backlog:326 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2716 rejected:56`
+`working:4 unfinished:26 blocked:7 backlog:326 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2716 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-pascal-corpus-expansion` [P] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
+- `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## unfinished (26) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -39,7 +40,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-type-helpers` [A]
 - `feature-port-rtl-over-libc` [A]
 - `feature-signal-siginfo-ucontext` [A]
-- `feature-target-wasm` [A+B]
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
@@ -53,7 +53,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 348, ranked
+## Ready — top 30 of 347, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -86,4 +86,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` feature-nilpy-process-exec-binding
 - `[p 60] [N]` feature-nilpy-tkinter-surface-vs-a-real-application
 
-_318 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_317 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
