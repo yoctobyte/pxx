@@ -6,6 +6,24 @@ in anyone's context. CLAUDE.md wins over this file on gating and lane rules.
 
 Updated 2026-08-25.
 
+> **Audited 2026-08-30 (frankD), head sections only — the tick log below is a
+> record and was not touched.** Four sections asserted a present tense they no
+> longer had, and each carries an inline correction: **Branches** (said work
+> happens on `dev`, retired 2026-08-26), the **worktree dispatch** paragraph
+> (`.claude/worktrees/` does not exist, and its sole-A advice now points away
+> from `ListAgents`, which answers the question directly), **Roles — LIVE** (none
+> of its five sessions exists), and **Current assignments** (2026-08-17, and
+> `frank2` appears three times with three assignments). Two more are flagged for
+> the owner rather than corrected: the one-week mandate whose evaluate-by date
+> passed on 2026-08-25, and the `frank2` row the owner contradicted on
+> 2026-08-27.
+>
+> **Checked clean:** the gating in this file (the coordinator loop correctly says
+> `make stabilize-fast && make pin`, and the header defers to CLAUDE.md — the six
+> stale gates found elsewhere in `devdocs/dev/` are not here); every
+> `tools/*` this file names exists; and both live-section `parser.inc` mentions
+> are correctly historical.
+
 ---
 
 ## IF YOU WERE JUST MADE COORDINATOR, THIS IS THE WHOLE JOB
@@ -224,6 +242,31 @@ default currently answers both at the point where the distinction still exists.
 
 ## Roles — LIVE, 2026-08-25
 
+> **Not live. Checked against `ListAgents` on 2026-08-30 (frankD): none of the
+> five sessions named below exists.**
+>
+> | the table says | actually |
+> | --- | --- |
+> | `frank1-72` — coordinator | gone. The coordinator is **`frank-coordinator`** |
+> | `pxx-aa` — watcher + Track T agent | gone. There is a `pxx-a5` |
+> | `neo-4a` — host/sysadmin | gone. There is a `neo-76` |
+> | `cA` — out-of-band | gone |
+> | `frank2-99` — idle, stale clone | gone |
+>
+> Nor does the table carry any of the sessions that **do** exist: `frankA`,
+> `frankB`, `frankC`, `frankD`, `frankS`, `frankwasm`, `frank-rust`,
+> `frank-optimize-b4`, `frank-coordinator`, `frank-user`, `pxx-a5`, `neo-76` —
+> 13 interactive sessions, five days after the table's date. Two of them,
+> `frankwasm` and `frank-rust`, staff lanes the table does not mention at all.
+>
+> **The heading is the defect, not the rows.** A table of who holds what is
+> stale between ticks by construction, and that is fine — it is `ListAgents`
+> territory, and `ListAgents` is authoritative and free. What is not fine is
+> `LIVE` in the heading: a word no data can contradict, on a section whose
+> contents nothing re-derives. **Run `ListAgents`; do not read this table.** It
+> is left below because the prose around it — the sole-A guard, the subagent
+> warning — is still worth reading.
+
 Sessions address each other by these names. **`ListAgents` lists them and
 `SendMessage` reaches them** — run `ListAgents` BEFORE spawning any subagent
 that would touch a clone other than your own, because the sibling clones on
@@ -239,6 +282,39 @@ working there; the lane letters cannot see a subagent you created.
 | neo-4a | host/sysadmin, no lane | none | none (cwd `/home/neo`) |
 | cA | **out-of-band** — driven directly by the human, not a pxx dev session | none | none |
 | frank2-99 | idle, stale clone, unresponsive to roster pings | unknown | `/home/neo/frank2` |
+
+**That last row is contradicted by the owner, later in this same file.** See
+*STANDING — `frank1` / `frank2` are LIVE ad-hoc trees* (owner, 2026-08-27):
+*"we also have frank1 and frank2 checkouts, user may use them at random."* Both
+trees were measured clean, seeded and immediately usable. **Read them as live**,
+not as stale clones to be retired — an ad-hoc session in either is a real agent
+on `master` that no dispatch created. The row above is not merely out of date;
+it says the opposite of a later owner ruling, and it is the row a coordinator
+would act on first because it sits in the table. (Noted 2026-08-30, frankD.)
+
+> **Corrected 2026-08-30 (frankD): the dispatch model below is not the one in
+> use, and following it weakens the sole-A guard.**
+>
+> `.claude/worktrees/` **does not exist** and `git worktree list` shows one entry
+> — the main checkout. Nothing is dispatched as a worktree agent. Today's lane
+> holders are ordinary **sessions in their own clones** (`/home/neo/frankA`,
+> `frankB`, `frankC`, `frankD`, `frankS`, `frankwasm`, `frank-rust`, …), every
+> one of them named and visible to `ListAgents`.
+>
+> That inverts the rule this paragraph exists to state. It tells the coordinator
+> that *"is anyone else on A right now?"* is answered **only** by their own
+> dispatch record, *"not by the table above and not by `ListAgents`"* — advice
+> that was correct for invisible worktree agents and is now advice to ignore the
+> one instrument that works. **`ListAgents` answers it directly**, and it is the
+> more reliable answer, because a dispatch record is memory and a session list is
+> observation. Keep the dispatch record for subagents you spawn yourself; check
+> `ListAgents` for everyone else, and prefer it when the two disagree.
+>
+> The concurrency figures below are likewise historical: `ListAgents` showed
+> **13 interactive sessions** on 2026-08-30. Whether that is intended is the
+> owner's call and is NOT settled here — the 1-2 worker target and the
+> four-die-at-once limit are both human-attributed rulings, and observed practice
+> is data, not a repeal.
 
 **Worktree workers are lane holders and are NOT in that table.** The coordinator
 dispatches ticket work as background agents, each in its own git worktree under
@@ -268,13 +344,38 @@ most expensive recent failures — see *Host coupling* below.
 
 ## Branches — read CLAUDE.md, not this file
 
-Since 2026-08-25 work happens on **`dev`**; `master` is a stable snapshot the
-coordinator advances once or twice a day with `git merge --no-ff dev`, only from
-a `dev` state Track T called green. Never rebase, never squash — tstate verdicts
-and the board's `resolve` citations are keyed by sha. **Advancing master is a
-coordinator duty, and it has the same shape as a pin: it is the lock.**
-CLAUDE.md's "BRANCHES" section is the authority; this line exists only so a
-coordinator reading the roster first does not land work on master out of habit.
+**All tracks work on `master`. One branch. `dev` is retired.**
+
+Retired by the user on 2026-08-26, one day after it was created — *"let's work in
+master again, as we are the only agent"* — and the collapse landed as
+`8b2a6bae6`. What went with it: the `git merge --no-ff dev` sync-back, the
+"master is a snapshot the coordinator advances" rule, and the
+never-rebase-never-squash constraint that protected it. `git pull --rebase` of
+your own unpushed commits is the normal loop and always was. Rebasing *published*
+`master` is still wrong, for the unchanged reason: tstate verdicts and the
+board's `resolve` citations are keyed by sha.
+
+What survived the collapse is the part worth keeping: **you may land non-green**,
+provided you say so in the commit message.
+
+> **Corrected 2026-08-30 (frankD).** This section said *"Since 2026-08-25 work
+> happens on `dev`"* and made advancing `master` a coordinator duty with the
+> shape of a pin. Four days stale, and it is the **worst-placed** stale rule in
+> this file for two reasons. It sits under a heading that says *read CLAUDE.md,
+> not this file* — a deference claim that reads as though someone had checked —
+> and its closing sentence gives its own reason for existing: *"so a coordinator
+> reading the roster first does not land work on master out of habit."* A line
+> written to stop a coordinator reaching for `master` by habit now stops them
+> reaching for the only branch there is.
+>
+> `origin/dev` still exists and is 7 commits ahead of `master`, which looks
+> alarming and is not: all five tickets those commits filed are present on
+> `master` (three in `backlog/`, one `done/`, one `unfinished/`, plus
+> `refactor-a-target-properties-have-no-single-answer` in `urgent/`), so the
+> content re-landed by another path and only the duplicates are stranded. The
+> other two are watcher `tstate` publishes, superseded continuously. **Checked
+> rather than reported**, because "7 commits master lacks" is exactly the shape
+> that gets relayed as a crisis.
 
 ## Host coupling — the failure mode that cost the most in August 2026
 
@@ -888,6 +989,22 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   the tip has not moved since the sha you are citing.
 
 ## Current assignments
+
+> **Historical — these are the assignments of 2026-08-17, not of now (checked
+> 2026-08-30, frankD).** `frank2`, `frank3` and `plexus-T` are not live sessions;
+> `plexus-T` shows as an offline Remote Control row. The section also names
+> `parser.inc`, a file that stopped existing on 2026-08-20 when it was split into
+> the `pasparser_*.inc` set. And it lists `frank2` three times with three
+> different assignments (PAUSED, then TRACK A, then "(superseded) → Track N"),
+> which is what a log looks like when it is filed under a heading that says
+> *Current*.
+>
+> **Do not skip it.** The assignments are dead; the **coordinator-error
+> retrospectives inside them are the durable part of this file** — never tell a
+> stopping session to revert; a session that says it should stop is not made safe
+> by handing it easier work; a standing prio ruling is not re-litigated by
+> finding another category the ticket also fits. Those are why this section is
+> bannered rather than trimmed.
 
 - **coordinator → also holds Track P** while testing the combined role (see
   above). P cannot collide with N.
@@ -1769,6 +1886,17 @@ valuable review.
 
 **Evaluate: 2026-08-25.** This section is the charter for every coordinator session in
 between — it outlives any one context, so read it before the check log.
+
+> **The evaluation date passed on 2026-08-25; it is now 2026-08-30 (frankD).**
+> By its own terms the charter covered the sessions *"in between"*, and there is
+> no longer a between. Nothing in this file records the evaluation happening, or
+> the mandate being renewed, extended or ended.
+>
+> **This is flagged, not resolved, and deliberately so** — a mandate is the
+> owner's to renew and a coordinator cannot extend its own. It is noted here
+> because a charter that has quietly outlived its expiry is indistinguishable
+> from a current one to the next session that reads it, and *"read this before
+> the check log"* means every session does. Ask; do not assume either way.
 
 ### What "NilPy over the bump" means concretely
 
