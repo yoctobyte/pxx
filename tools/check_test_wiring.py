@@ -360,10 +360,20 @@ def main():
     advisory = [p for p in exempt
                 if p in wired and p not in stale and not _mk_backed(p)]
 
+    # THE POPULATION IS PRINTED ON EVERY PATH, not only the silent one.
+    # It used to be part of the all-clear line, so the one number that says
+    # whether this check LOOKED AT ANYTHING appeared precisely when there was
+    # nothing else to say -- and vanished the moment the output was non-trivial
+    # (today: one advisory, so no count at all). A scanner that reports "no
+    # findings" without the size of the population it searched cannot be
+    # distinguished from a scanner whose scan stopped matching, and the two
+    # read identically. Measured 2026-08-30: `tools/test_wiring_gate_devtest.py`
+    # passed against a tree containing ZERO test files.
+    print("check-test-wiring: scanned %d test subject(s) against %s"
+          % (len(subs), os.path.relpath(EXEMPT, ROOT)))
+
     if not unwired and not stale and not advisory:
-        print("check-test-wiring: OK — %d test subject(s), all referenced by a "
-              "rule or explained in %s"
-              % (len(subjects()), os.path.relpath(EXEMPT, ROOT)))
+        print("check-test-wiring: OK — all referenced by a rule or explained")
         return 0
 
     if unwired:

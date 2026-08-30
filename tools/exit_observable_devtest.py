@@ -129,7 +129,18 @@ def main():
     print("3. ...and the exposure the family CANNOT cover, held at its measured size")
     cross = [ln for _, ln in rows() if "run_target.sh" in ln and ln.count('"$$(') >= 2]
     capped = [ln for ln in cross if CAPTURE in ln]
-    check(len(cross) >= 500, "cross-target differential rows are still ~536",
+    # The LABEL used to say "still ~536" while measuring 561 — a precise number
+    # in the prose, 25 out of date, sitting behind a floor 61 below it that
+    # could never have noticed. The floor is right and stays: it is a COLLAPSE
+    # detector for the population (a parse that stops matching reports zero
+    # drift forever), not a ratchet. The drift question belongs to the
+    # stdout-only check below, which owns it deliberately. What was wrong was
+    # a stated figure nothing re-derived. It now prints the live count and
+    # names when the quoted one was taken.
+    check(len(cross) >= 500,
+          "the cross-target differential population is intact "
+          "(536 on 2026-08-30 when this was armed; the floor is a collapse "
+          "detector, not a ratchet)",
           "%d" % len(cross))
     check(len(cross) - len(capped) <= 531,
           "and the stdout-only count has not grown past its 2026-08-30 measurement",
