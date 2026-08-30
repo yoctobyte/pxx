@@ -51,6 +51,29 @@ already sitting in the same `WasmEmitWrite` arm (*"needs the slot ADDRESS, not
 its value"*) — same shape, and a variant already lives in a slot, so it wants
 `WasmLValueAddr` rather than the shadow-stack spill Phase 9l used for floats.
 
+## Before you rebase from master: run forwardlint, and a red seed may not be yours
+
+`python3 tools/forwardlint.py` — about a second, and it is what proves the FPC
+BOOTSTRAP SEED still builds. Run it after any rebase from master, and before
+each `make compiler/pascal26` while working.
+
+**This is a coverage hole, not a discipline rule.** `make compiler/pascal26` is
+the mandatory per-fix gate and it *cannot* catch a use-before-declaration, by
+construction: pxx resolves across the unit and FPC resolves in source order, so
+the file self-hosts green and only the seed fails. `gate.sh quick` does run
+forwardlint (step 2, `fpc seed compiles (forward decls)`, `tools/gate.sh:216`) —
+but `gate.sh quick` is OPTIONAL per fix and the loop that is mandatory does not
+include it. So the check lives in the gate you may skip and is absent from the
+one you may not.
+
+**And the seed on `origin/master` was RED when this was parked**
+(`pasparser_generic.inc:844` and `:1022`, another lane's, already routed). If
+you rebase and the seed goes red, **check whether it is yours before assuming
+it is** — five instances across four lanes on 2026-08-30 alone, every one with
+the documented loop followed correctly, and at least one agent nearly spent a
+session proving a break was not its own. This branch was green at
+`f97477cf9`; forwardlint answers the question in a second.
+
 ## The one sentence a future reader most needs
 
 **All 32 of 32 remaining `compiler.pas` refusals are a single shape.** The
