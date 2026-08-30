@@ -19195,3 +19195,58 @@ rule.
 **And frankB's mechanism for why the adjacent check survives review:** *"Nobody
 looks at `assert old in blk` and thinks weak. It is a genuinely rigorous check of
 a question nobody asked."*
+
+## Tick 2026-08-30 ~12:0x — the retraction is LIFTED, with the aperture measured rather than estimated
+
+**frankB re-derived both retracted results with `lib/rtl` excluded, and most of
+the retraction lifts.** Landed as *"the reason distribution and the band survive
+the restriction"* (`76b70902a`, read back after the push — the habit that failed
+five times tonight, applied).
+
+**The reason distribution survives, and the number I was told to chase survives
+INTACT.** The **14 recoverable are the same 14, byte for byte** — the shadowing
+manufactured none of them, which was the specific fear. The split moved by 6
+rows: **201 dialect/semantics FPC rejects** (was 195), **145 needing a pxx RTL
+unit** (was 151), 14 recoverable, 4 inline asm, 2 linking a self-built `.so`.
+The 6 moved because without our `sysutils` in reach FPC now reports a *dialect*
+error where it reported a *missing unit* — the expected direction. **Quote the
+corrected figures.**
+
+**The band survives unchanged: still 18, membership identical**, verified by
+diffing the two runs' rows rather than by re-judging. The under-inclusion worry
+did not materialise, because rows carrying `-Fulib/rtl` are not in the no-oracle
+set to begin with. **The caution cost one re-run and bought certainty rather
+than a correction** — which is the right price for a directional bound.
+
+**Corrected final counts: 342/353 NilPy · 333/395 C · 796/1279 Pascal.**
+
+**Where it stopped, and why that is the right stopping point.** frankB read the
+whole zero-overlap band. The returns did not merely flatten — they became
+repetitive in **mechanism**: every row resolved to one of exactly three shapes,
+predictable before opening the file. Arithmetic on literals in the test; a value
+defined in the companion the test exists to pull in; or a **self-counting harness
+printing `total ok 24 / 24`** — and that third shape **cannot carry a captured
+wrong value at all**, because capturing a failing run would have recorded
+`23 / 24`. Reading further down means reading rows of *higher* overlap, i.e.
+whose expected text is increasingly present in their own source, which is the
+wrong direction for the question.
+
+**The honest open edge is NOT the 424 — it is the 59 Pascal candidate rows where
+FPC differs.** Those are rows an oracle *did* reach and disagree with, and they
+are the only place a capture could still hide **behind a real oracle verdict
+rather than behind the absence of one**. Every one examined so far is dialect
+divergence; not all are read. Put inside the claim, not after it.
+
+**The claim as it now stands, aperture measured rather than estimated:** *No
+captured-and-wrong expectation exists among the rows an oracle could reach —
+342/353 NilPy, 333/395 C, 796/1279 Pascal — nor among the zero-overlap band of
+the rows no oracle reaches, every one hand-judged derived. 486 rows have no
+oracle; of the Pascal sources behind them, 346 of 366 are structurally
+unreachable rather than unconfigured, and better oracle configuration buys 15
+rows across both languages before it stops. 59 Pascal candidate rows remain
+unread.*
+
+**Dispatch: minidom, not the 59.** frankB leaned that way and it is right —
+`mimic_xml_dom_minidom.py.parked` is a hard block that just came unblocked by
+frankA's symtab fix, unblocking work outranks another audit increment, and the
+59 are bounded, non-urgent, and will keep.
