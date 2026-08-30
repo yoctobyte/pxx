@@ -67,7 +67,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (386)
+## backlog (385)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -406,7 +406,6 @@ _none_
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | grant-elf-writer-and-object-writers-to-b4 | A | 50 | grant | frankA holds Track A. frank-optimize-b4 keeps a bounded file slice under A's gate: compiler/elfwriter.inc, defs.inc's ELF constants, and the object writers (writeELFRelX64 / writeELF32Rel). Dispatched by ticket, not by lane. Disjoint from symtab.inc and every frontend. | — |
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
-| grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break | A+P | 50 | grant | frankwasm holds compiler/defs.inc, compiler/pasparser_lval.inc and compiler/rtti_emit.inc for feature-unicodestring-model. symtab.inc is QUEUED behind frank-optimize. DO NOT CLAIM these files — this ticket is a lock record, not work. | — |
 | idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 5 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
 | idea-a-fold-the-asm-emit-harness-mock-preludes-into-one | A | 35 | idea | Fold the five asm-emit harnesses' mock preludes into one shared include | — |
 | idea-adaptive-heap-growth | A | 5 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
@@ -733,7 +732,7 @@ _none_
 
 2856 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (60)
+## rejected (61)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -787,6 +786,7 @@ _none_
 | feature-t-bench-record-host-hardware-specs | T | 55 | feature | Benchmarks record the host *name*, but nothing about the hardware | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | grant-compiler-pas-c-branch-tok-unbounded-to-frankc | A+C | 50 | grant | Bounded one-line grant: frankC may set MainProgramTokCount := TOK_UNBOUNDED in the C branch of compiler.pas (~:1923), as its own commit, with tools/forwardlint.py clean before the push. Nothing else in compiler.pas. Granted because routing one line costs a full context transfer to a busy Track A agent for a line whose semantics only the C lane understands. | — |
+| grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break | A+P | 0 | grant | HISTORICAL RECORD — the grant system was cut on 2026-08-30 and nothing in here is an instruction any more. Kept for the correction it contains: symtab.inc makes a type well-formed, pasparser_lval.inc is what makes one EXIST, and a file list that named only the first would have landed an unnameable type. | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 18 | refactor | DUPLICATE of refactor-a-seven-frontends-borrow-rust-parser-helpers. Tombstone kept so citations resolve; the 123-places-in-zparser measurement and the substrate-doc framing were merged into the survivor. | — |
 | regression-cascade-110774a14648 | T | 70 | regression | regression CASCADE: 17 jobs newly red at 110774a14648 (auto-filed by twatch) | — |
 | regression-cascade-154d1aa3fba6 | T | 70 | regression | regression CASCADE: 18 jobs newly red in e417731e9..154d1aa3f (12 commits) — auto-filed by twatch | — |
@@ -928,7 +928,6 @@ _none_
 - [p 50] [A] feature-port-openbsd-libc
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] grant-elf-writer-and-object-writers-to-b4
-- [p 50] [A+P] grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)

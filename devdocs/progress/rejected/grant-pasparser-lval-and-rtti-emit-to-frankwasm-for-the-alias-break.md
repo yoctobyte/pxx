@@ -2,13 +2,13 @@
 slug: grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break
 title: "GRANT: pasparser_lval.inc + rtti_emit.inc to frankwasm (A+P), for the WideString alias break"
 track: A+P
-prio: 50
-type: grant
-status: backlog
+prio: 0
+type: record
+status: rejected
 owner: "frankwasm"
 created: 2026-08-30
 found-by: frank-coordinator
-summary: "frankwasm holds compiler/defs.inc, compiler/pasparser_lval.inc and compiler/rtti_emit.inc for feature-unicodestring-model. symtab.inc is QUEUED behind frank-optimize. DO NOT CLAIM these files — this ticket is a lock record, not work."
+summary: "HISTORICAL RECORD — the grant system was cut on 2026-08-30 and nothing in here is an instruction any more. Kept for the correction it contains: symtab.inc makes a type well-formed, pasparser_lval.inc is what makes one EXIST, and a file list that named only the first would have landed an unnameable type."
 ---
 
 # The grant
@@ -253,3 +253,44 @@ thing visible there. **A correction about line numbers exposed a wrong mechanism
 you in code that runs and "read the signature" does not. `debugging-playbook`'s
 rule, arriving sideways: reading the interface and inferring the behaviour is not
 reading the code.
+
+
+---
+
+# Closed 2026-08-30: the mechanism is gone, the correction is not
+
+**The grant system was cut the same day this was filed.** Nothing reserves a
+file now; `symtab.inc` took commits from seven lanes in one day with zero
+collisions, and there is no queue for anything to be QUEUED behind. So every
+imperative above — the `DO NOT CLAIM`, the held/queued table, the
+stops-and-asks rule for `lexer.inc` — describes a machine that no longer runs.
+
+Moved to `rejected/` rather than `done/` because no work was ever done *here*:
+this was a lock record, and a record of an unreachable mechanism does not
+belong at a prio in the ranker's scan. The `feature-unicodestring-model` work
+it was guarding landed on its own ticket.
+
+**Why it had to move rather than just decay.** The frontmatter `summary` is the
+only part of a ticket everyone reads — the ranker prints it, `ready` prints it,
+an idle agent decides from it. This one told every Track A agent not to touch
+three compiler files, two of which several agents were in that same evening.
+The ranker was already skipping it as do-not-claim, so the imperative was
+being *obeyed* by the tooling while being false in the world: the most
+expensive shape a stale line can take, because nothing about it looks broken.
+
+**What survives, and it is the reason this is `rejected/` and not `rm`:** the
+correction in "The correction that produced this grant". A file list assembled
+from where a type is *used* omitted the file where it is *named*, and the
+result would have compiled, passed its gate, and produced a type no program
+could ever write down. That failure mode is not about grants and is worth
+keeping.
+
+Two sibling tickets ask the tooling to model grants better
+(`bug-t-a-grant-is-a-lock-the-ranker-cannot-see`,
+`bug-t-check-has-no-aperture-for-a-stale-grant-or-an-absent-holder`); with the
+mechanism cut they are presumably moot too, but they are Track T's to judge.
+Three more `grant-*` tickets remain in `backlog/` under other owners
+(`grant-elf-writer-and-object-writers-to-b4`,
+`grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy`,
+`chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping`) and are stale
+in exactly this way. They are not mine to close.

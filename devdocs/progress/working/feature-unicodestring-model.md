@@ -1428,3 +1428,82 @@ than claiming there is no UTF-16 to convert to.
 It described the ARGUMENT side of a synthesised call. The RESULT side is the
 same gap at the other end and is what leaked in 7c. The comment now says so and
 points at `IRStrWidthConv`, which parks both.
+
+## 6d-2 — landed: the pointee width at every position, and the ticket's own sizing was wrong twice
+
+6d-1 gave the plain **symbol** a pointee-width carrier. 6d-2 is the other eight
+places a `^WideString` can be held. Enumerated by POSITION, and measured before
+and after with the same source — pinned on the left, this build on the right,
+FPC 3.2.2 answering 4 for every line:
+
+| position | pinned | now |
+| --- | --- | --- |
+| plain symbol `q^` | 4 | 4 |
+| value parameter `z^` | 4 | 4 |
+| record field `r.p^` | **8** | 4 |
+| inline array element `inl[0]^` | **8** | 4 |
+| named array-type element `nam[1]^` | **8** | 4 |
+| plain function result `PlainGetP^` | **8** | 4 |
+| record method result `r.GetP^` | **8** | 4 |
+| virtual method result `d.GetP^` | **8** | 4 |
+| interface method result `ih.GetP^` | **8** | 4 |
+
+Seven of nine wrong, in a campaign step whose predecessor had already "done the
+pointee width".
+
+### It was two carriers and a reader, not three carriers
+
+The ticket sized 6d-2 as three carriers — field, array element, function result.
+
+**The field one was right** (`UFldPtrElemStrTk`, four write sites: the
+declaration capture, its non-pointer reset, the class-inheritance copy, the
+forward-alias backfill). Miss the inheritance copy and a descendant reads its
+own inherited field narrow while the base reads it wide: one row, two answers,
+depending on which class you ask.
+
+**The array one was two different things wearing one name.** The INLINE form
+`a: array[0..1] of PW` needs **no carrier at all** — `AllocArray` already stamps
+`SymPtrElemStrTk`, because for an inline array `LastTypePointerStrElemTk` is
+still live when it runs, and every element of an array shares its element type's
+pointee width. Four lines of reader. The NAMED form `TArr = array[0..1] of PW`
+genuinely needs a row (`ArrTypePtrElemStrTk`), for the staleness reason
+`ArrTypeStrElemTk` already gives one level up: a USE of a named type is
+arbitrarily far from where that type was parsed. **Same declaration, two
+answers, and the ticket had them as one item** — the inline form measured 4 and
+the named form 8 before anything was written.
+
+Its cost is also on the wrong side of the ledger: two write sites, **eighteen
+read sites**. Every `LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai])`
+needed its width twin beside it or the fact dies at the type boundary, and that
+is where the work was.
+
+**The result one was right and large** (`ProcRetPtrElemStrTk`, nineteen write
+sites — plain routines in `pasparser_proc.inc`, record/class/interface methods
+in `pasparser_decl.inc` — plus `AllocProc`'s recycled-slot reset). The C
+frontend's two sites are deliberately NOT paired: C has no `WideString`, so the
+reset is the whole correct answer and a C store could only ever write 0.
+
+### The result is THREE positions, not one
+
+`ASTStrElemTkOf`'s existing call arm already carried the note that a method
+reached through a VMT or an interface returns just as concrete a value as a
+direct call, and that an enumeration listing only `AN_CALL` is wrong for every
+override. The new deref arm was written to that shape from the start, and the
+test enumerates `recmeth` / `virtmeth` / `intfmeth` separately for it.
+
+This is the same blindness the earlier addendum recorded — *a test matrix
+inherits the shape of the list it was derived from.* That list enumerated the
+six entities holding a width and was blind to positions. This one enumerated
+positions and was blind to the fact that one position is three call shapes and
+that "array element" is two declaration forms.
+
+### Carrier and reader together, as required
+
+Each carrier landed in the same commit as its arm in `ASTStrElemTkOf`. Nothing
+here is reachable without the arm, and the arm answers 0 without the carrier —
+a split would have been invisible from both sides, which is the whole reason
+for the rule.
+
+`test/test_widestring_pointee_width.pas` (FPC oracle, ASCII on purpose so a
+wrong answer is 8 rather than a subtly wrong 5). Landed `61ab4ae03` (field) and
+the follow-up commit (array type + result + inline reader).
