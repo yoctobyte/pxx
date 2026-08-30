@@ -192,4 +192,4 @@ Gate: Makefile only, no compiler source touched; `make -n pin` parses and expand
 correctly, and the recipe was executed against a scratch repo as above.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 930c3ca69.
