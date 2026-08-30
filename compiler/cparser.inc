@@ -2995,7 +2995,7 @@ var tmpSym, n, i, len, idn, idxLit, inode, asn, seq, tail, node: Integer;
 begin
   n := 0;
   Next;   { consume the opening brace }
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     if n > 255 then Error('too many array compound-literal elements');
     elems[n] := ParseCExpr; Inc(n);
@@ -5117,7 +5117,7 @@ begin
       begin
         Next; Expect(tkBegin, '{');
         ei := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        while CBlockContinues do
         begin
           if CurTok.Kind = tkAmp then Next;   { `&func` == `func` }
           initExpr := ParseCExpr;             { function name -> its address }
@@ -5541,7 +5541,7 @@ begin
       begin
         Next; Next;   { consume the assign then the open brace }
         curElemIdx := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        while CBlockContinues do
         begin
           if nArrElems > 255 then begin nArrElems := -1; Break; end;
           { `[k] =` element designator, and `[lo ... hi] =` GNU range, reposition
@@ -6203,12 +6203,93 @@ begin
   Result := blk;
 end;
 
+function CTokIsPastCSource: Boolean;
+{ Has the parser walked out of the C token stream and into the PASCAL units
+  appended after it?
+
+  There is ONE shared token array. A C program's tokens are lexed first, its
+  tkEOF is then DELETED (clexer.inc's CLexAppend does `Dec(TokCount)` when
+  MainProgramTokCount = TOK_UNBOUNDED), and the pulled units are appended in its
+  place so pass 1/2 walk straight into the crtl prototypes. That is deliberate
+  and it is what makes the pull work -- but it also leaves an UNTERMINATED C
+  construct with no EOF to stop at. A `main` whose body opens and never closes
+  reported `expected C expression`, `in: ./compiler/builtin/builtinheap.pas`
+  and a near: window reading `unit builtinheap`: the parser had reached token 9,
+  which really IS builtinheap's first token, so every part of that diagnostic was
+  correct about a place the user has never seen.
+
+  The test is the PASCAL SOURCE RANGE, not a token index. CLexAppend plants
+  PasMarkTokFile(unitStart, '') over every appended C region for exactly this
+  reason, so an empty answer means "still C" for the user's text AND for the
+  pulled crtl modules, while an appended Pascal unit carries its real path. The
+  table is populated in every build, not only under -g. }
+begin
+  Result := PasSrcOfTok(TokPos - 1) <> '';
+end;
+
+function CLastCSourceLine: Integer;
+{ The line of the last token that was still C -- the end of the user's file, for
+  a diagnostic raised once the cursor is past it. CurTok.Line would be a line of
+  builtinheap.pas, and that number is a parsed interface: the IDE keys
+  jump-to-error off it (see WriteDiagSourceFile's note). }
+var t: Integer;
+begin
+  Result := 0;
+  t := TokPos - 1;
+  while (t > 0) and (PasSrcOfTok(t) <> '') do Dec(t);
+  if t >= 0 then Result := Tokens[t].Line;
+end;
+
+procedure CRefuseUnterminated;
+{ THE one wording for "the C text ran out mid-construct". Two call shapes reach
+  it -- the loop condition below, for every braced member/statement list, and
+  ParseCStatementAST's entry, for a statement that is not inside such a loop
+  (`if (x) <stmt>` running off the end). One predicate, one message, one place
+  to change either.
+
+  ErrorAt, not Error: the line must be the user's last C line, and the `in:` /
+  `near:` context must be SUPPRESSED, because from here both would describe
+  Pascal. That is the whole bug -- every part of the old diagnostic was correct
+  about a place the user has never seen. }
+begin
+  ErrorIdent := '';   { the message says it all; a stale ident would read as the culprit }
+  ErrorAt(CLastCSourceLine,
+          'unterminated C construct: end of file before its closing `}`');
+end;
+
+function CBlockContinues: Boolean;
+{ The loop condition for every braced list in the C parser: struct and enum
+  members, initializers, statement blocks, asm sections. Was written out
+  fourteen times as `(CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF)`, and all
+  fourteen shared the same hole -- the C stream's tkEOF is deleted when units are
+  appended, so `tkEOF` is a test that cannot fire until the Pascal RTL has been
+  parsed as C. An unterminated struct whose member list never closes consumed
+  RTL and then failed with `main function not found` at line 1313 of
+  platform_backend.pas. Fourteen copies of a condition is fourteen chances to
+  fix one of them; this is the one place. }
+begin
+  if CTokIsPastCSource then CRefuseUnterminated;
+  Result := (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF);
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk: Integer;
     asmSections, asmDepth: Integer; asmEmpty: Boolean;   { GCC inline asm }
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;
+  { The C text ended without closing this construct, and the next token belongs
+    to an appended Pascal unit -- see CTokIsPastCSource. Raised HERE, at the one
+    place every statement context funnels through, rather than in the fourteen
+    `while CurTok.Kind <> tkEnd` loops that would each need their own copy. It
+    must ERROR and not Exit: returning -1 without consuming would spin those
+    loops forever, since the kind is not tkEOF. ErrorAt, so the line is the
+    user's last C line and the `in:`/`near:` context -- both of which would
+    describe Pascal from here -- is suppressed. }
+  if CTokIsPastCSource then
+  begin
+    CRefuseUnterminated;
+  end;
 
   { empty statement }
   if CurTok.Kind = tkSemicolon then
@@ -6480,7 +6561,7 @@ begin
   scopeMark := SymCount;
   blockNode := AllocNode(AN_BLOCK);
   lastSeq := -1;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     stmtNode := ParseCStatementAST;
     if stmtNode <> -1 then
@@ -6544,7 +6625,7 @@ begin
   blockNode := AllocNode(AN_BLOCK);
   lastSeq := -1;
   prevStmt := -1;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     stmtNode := ParseCStatementAST;
     if stmtNode <> -1 then
@@ -6620,7 +6701,7 @@ begin
   if CurTok.Kind = tkBegin then
   begin
     Next;                        { consume the opening brace }
-    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+    while CBlockContinues do
     begin
       stmtNode := ParseCStatementAST;
       if stmtNode <> -1 then
@@ -7188,7 +7269,7 @@ begin
     { braced scalar `{ expr }` (C99 6.7.8p11) }
     Next;
     CInitLeaf(tkOrd, emit);
-    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+    while CBlockContinues do
     begin
       CSkipCInitElement;
       if not Eat(tkComma) then Break;
@@ -7302,7 +7383,7 @@ begin
     begin
       Next;
       CInitFillCharArray(UFldTk[fi], UFldArrLen[fi], emit);
-      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      while CBlockContinues do
       begin
         CSkipCInitElement;
         if not Eat(tkComma) then Break;
@@ -7832,7 +7913,7 @@ begin
     begin
       Next; Next;                        { consume assign and opening brace }
       fnCurTgt := 0; fnHadDesig := False;
-      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      while CBlockContinues do
       begin
         if nArrElems > 255 then begin nArrElems := -1; Break; end;
         { `[k] =` / `[lo ... hi] =` element designators (C 6.7.8 / GNU range) —
@@ -8100,7 +8181,7 @@ begin
     begin
       ptrArrDeferTok := TokPos;  { the opening brace's token index (not yet a defer) }
       Next; Next;  { consume assignment and opening initializer token }
-      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      while CBlockContinues do
       begin
         if nArrElems > 255 then begin nArrElems := -1; Break; end;
         if CurTok.Kind = tkString then
@@ -8377,7 +8458,7 @@ begin
       begin
         Next;   { consume the opening brace }
         ei := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        while CBlockContinues do
         begin
           { `[k] =` repositions the index; `[lo ... hi] =` (GNU range) fills every
             index lo..hi with the one value. Skipped slots stay 0 (BSS-zeroed). }
@@ -8441,7 +8522,7 @@ begin
           tySingle slot. }
         Next;   { consume the opening brace }
         ei := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        while CBlockContinues do
         begin
           if CurTok.Kind = tkLBrack then
           begin
@@ -11704,7 +11785,7 @@ var nextVal, val: Int64; nm: AnsiString;
 begin
   Next; { consume the opening brace }
   nextVal := 0;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     if CurTok.Kind = tkIdent then
     begin
@@ -12063,7 +12144,7 @@ begin
   SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
   for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     { Nested inline aggregate member: struct or union with an inline body followed
       by member name(s). Lay the body out as a sub-record (recursively) and buffer

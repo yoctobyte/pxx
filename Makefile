@@ -6488,6 +6488,28 @@ test-core: $(COMPILER)
 	 echo "$$out" | grep -q '^  in: ' \
 	  && { echo 'cdiag_main: FAIL - the MAIN .c must not be named; the user typed it'; echo "$$out"; exit 1; }; \
 	 echo 'ok: cdiag_main leaves the main source unnamed'
+	# An unterminated C construct must stop at the end of the C text. There is one
+	# shared token array: the C program's tkEOF is DELETED when the pulled units
+	# are appended, so `while CurTok.Kind <> tkEOF` could not fire until the Pascal
+	# RTL had been parsed as C. `int main(void) { return 1;` reported
+	# `pascal26:2: expected C expression`, `in: ./compiler/builtin/builtinheap.pas`
+	# and a near: window reading `unit builtinheap` -- every part correct about a
+	# place the user has never seen. BOTH rows are real before/afters: the pinned
+	# compiler gives line 2 and the builtin path for each.
+	@printf 'int main(void) { return 1; \n' > $(TESTTMP)/cunterm.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cunterm.c $(TESTTMP)/cunterm26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:1: error: unterminated C construct' \
+	  || { echo 'cunterm: FAIL - expected an unterminated-construct error on the C source line 1'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -q '^  in: ' \
+	  && { echo 'cunterm: FAIL - the diagnostic must not name a Pascal unit'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cunterm stops at the end of the C text'
+	# ...and after a crtl pull, where the appended region is C (path "") and must
+	# still be walked, so the boundary cannot be "anything was appended".
+	@printf '#include <string.h>\nint main(void) { char b[4]; return (int)strlen(b);\n' > $(TESTTMP)/cunterm_pull.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cunterm_pull.c $(TESTTMP)/cunterm_pull26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:2: error: unterminated C construct' \
+	  || { echo 'cunterm_pull: FAIL - expected the error on C source line 2, after the crtl pull'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cunterm_pull stops at the end of the C text after a crtl pull'
 	# Include nesting: the depth limit must be REPORTED, never silently applied.
 	# The preprocessor has sixteen include buffers, dispatched by a hand-written
 	# `case depth of 0..15`; MAX_CPREP_INCLUDES said 128, so 16..127 fell through
