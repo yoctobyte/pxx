@@ -3021,7 +3021,67 @@ def cmd_claim(args: argparse.Namespace) -> int:
     subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f"claimed {args.slug} -> working/ (owner: {args.owner}).", file=sys.stderr)
     print(f"staged, not committed. regenerate the board ({Path(sys.argv[0]).name} board-md) and commit the move + edits together.", file=sys.stderr)
+    _warn_claim_is_local(args.slug, args.owner)
     return 0
+
+
+def _warn_claim_is_local(slug: str, owner: str) -> None:
+    """Say that the claim just written cannot be seen by anyone yet.
+
+    A CLAIM IS ONLY A HINT IF IT IS PUBLISHED. `working/` is a status hint, and
+    a hint nobody can read is not one -- until this lands on origin, `ready`,
+    `next`, `git log` and every other check any agent has will CORRECTLY report
+    this ticket as unclaimed. Nothing looks broken from either end.
+
+    Measured 2026-08-30: FOUR near-duplicate efforts in one evening, every one
+    the same shape -- the work existed, the claim existed, and neither had left
+    the author's disk. frankA's form: **a pull is a snapshot, and every check we
+    have reads the snapshot.** Two agents wrote the same const-`if` fix; two
+    collided on the carrier-set bug; two independently wrote the same playbook
+    section.
+
+    Third instance today of *the tool knows and the record does not say* --
+    `sync.sh` proved a commit was on origin and discarded the sha, and
+    `skip_summary` counted coverage holes without naming them. In all three the
+    tool had the fact and did not write it down.
+
+    ALSO CHECKS FOR A CLAIM ALREADY ON ORIGIN, which is the half that prevents
+    a collision rather than merely explaining one: if origin's copy of this
+    ticket is already in `working/` under a different owner, you are about to
+    duplicate someone's live work and a `git pull --rebase` will tell you so
+    only after you have started.
+
+    Advisory only. It never fails the claim, and it does NOT push -- pushing on
+    someone's behalf is a different decision, and there are legitimate holds
+    (avoiding a rebase under a running gate, for one).
+    """
+    try:
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT,
+            capture_output=True, text=True).stdout.strip() or "master"
+        held = subprocess.run(
+            ["git", "show", f"origin/{branch}:devdocs/progress/working/{slug}.md"],
+            cwd=ROOT, capture_output=True, text=True)
+    except OSError:
+        return
+    if held.returncode == 0:
+        m = re.search(r"^owner:\s*(.+)$", held.stdout, re.I | re.M)
+        other = (m.group(1).strip().strip('"\'') if m else "")
+        if other and other != owner:
+            print(f"\nclaim: HEADS UP — origin/{branch} already has this ticket in "
+                  f"working/ under {other}.", file=sys.stderr)
+            print("claim:      Pull before you start. Either they are on it now, or "
+                  "the lock is stale —", file=sys.stderr)
+            print("claim:      message them; do not decide it from the board.",
+                  file=sys.stderr)
+    print("\nclaim: this claim is NOT on origin yet, so no other agent can see it.",
+          file=sys.stderr)
+    print("claim:      Until it lands, `ready` and `next` will correctly offer this "
+          "ticket to", file=sys.stderr)
+    print("claim:      everyone else — a pull is a snapshot, and every check we have "
+          "reads the", file=sys.stderr)
+    print("claim:      snapshot. Publishing it costs seconds: tools/sync.sh",
+          file=sys.stderr)
 
 
 def cmd_park(args: argparse.Namespace) -> int:
