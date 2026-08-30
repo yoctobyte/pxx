@@ -4031,6 +4031,30 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_shrwidensf326 "$$($(TESTTMP)/test_shrwidensf326)" "$$(printf 'acc=1121256676948\none=373752225564\ndone')"
 	./$(COMPILER) -O0 --strict-fpc test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwidensf026
 	tools/expect_same.sh test_shrwidensf026 "$$($(TESTTMP)/test_shrwidensf026)" "$$(printf 'acc=1121256676948\none=373752225564\ndone')"
+	# AARCH64 W1 slices 5+7, which collapse into ONE arm there: `cmp Xn, Xm` on
+	# aarch64 IS `subs xzr, Xn, Xm`, so BOTH sources are free register fields and
+	# a resident left AND a resident right are each read where they live. x86-64
+	# needed two slices and a memory form to say the same thing.
+	# Every row is a band straddled from both sides -- a one-sided row is
+	# satisfied by almost any junk a wrong register field could hold. The
+	# unsigned rows sit one apart above 2^63 where a signed reading flips.
+	# x86-64 is a THIRD control here and must not move at all: this pass lives
+	# entirely in ir_codegen_aarch64.inc. Verified against FPC 3.2.2; three
+	# deliberate breaks (wrong Rn, wrong Rm, unfolded-right default) each move
+	# aarch64 -O3 while -O0 and x86-64 stay correct.
+	# feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen
+	./$(COMPILER) -O3 test/test_cmp_both_in_place.pas $(TESTTMP)/test_cbip326
+	tools/expect_same.sh test_cbip326 "$$($(TESTTMP)/test_cbip326)" "$$(printf 'acc=49149\none=16383\ndone')"
+	./$(COMPILER) -O0 test/test_cmp_both_in_place.pas $(TESTTMP)/test_cbip026
+	tools/expect_same.sh test_cbip026 "$$($(TESTTMP)/test_cbip026)" "$$(printf 'acc=49149\none=16383\ndone')"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  for o in 0 3; do \
+	    ./$(COMPILER) --target=aarch64 -O$$o test/test_cmp_both_in_place.pas $(TESTTMP)/test_cbip_a64_$$o >/dev/null || { echo "cbip aarch64 -O$$o compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh aarch64/test_cbip_a64_$$o "$$$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cbip_a64_$$o)" "$$$$(printf 'acc=49149\none=16383\ndone')" || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_cmp_both_in_place: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
 	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
 	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
 	# "evaluate both bounds before assigning the control variable"; eliding it

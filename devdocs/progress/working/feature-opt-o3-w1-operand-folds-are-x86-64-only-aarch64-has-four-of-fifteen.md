@@ -1,8 +1,8 @@
 ---
 prio: 55
 track: A
-status: backlog
-owner: ""
+status: working
+owner: frank-optimize-b4
 ---
 
 # -O3: the W1 operand folds are x86-64-only — aarch64 has 4 gate sites to x86-64's 15
@@ -153,3 +153,82 @@ qemu against the x86-64 result for the same program.
   section is the claim this ticket measures)
 - Same shape, different chain: the xtensa managed-local cleanup arm (1 kind
   released where the others release 7)
+
+
+## LANDED 2026-08-30: slices 5 and 7, as ONE arm
+
+Baseline compiler `a60f92ba830a`, new `0d4f0b2a4ceb` — both built at the same
+HEAD, the baseline being HEAD with only this hunk reverted.
+
+`cmp Xn, Xm` on aarch64 **is** `subs xzr, Xn, Xm`: both sources are free
+register fields. So the two x86-64 slices collapse into one arm here — a
+resident LEFT and a resident RIGHT are each read where they live, and both
+staging moves disappear. x86-64 needed slice 5, then slice 7, then slice 8's
+memory form, to say what one encoding says on aarch64. **The port was not a
+transliteration and it was not a rename; it was smaller than either.**
+
+**Measured (aarch64, -O3, output identical, `-O0`/`-O1`/`-O2` byte-identical):**
+`test_cmp_right_in_place` **-1072 bytes**, `bench/w1_three_locals` **-988**,
+`lispdemo` **-3604** — 901 instructions deleted in lispdemo alone. x86-64 output
+is byte-identical at every level, as it must be: the pass lives entirely in
+`ir_codegen_aarch64.inc`.
+
+This is also, incidentally, the highest-leverage single arm available on this
+backend, for a reason worth recording: **aarch64 has no fused compare-and-branch
+path.** A conditional jump evaluates the comparison into x0 through this same
+generic arm and then tests it, so every loop condition in every program goes
+through the code this slice just shortened. x86-64 has a separate fused-jump
+path and needed both halves wired.
+
+### `CmpFusible` is shared, not copied
+
+The cross backends are included BEFORE `ir_codegen.inc`, so the predicate is
+forward-declared in `compiler.pas` — two lines below `IRNodeOwnsManagedStr`,
+which is forwarded for exactly the same reason and carries the reason in its
+comment: four cross backends each hand-rolled a narrower copy of a shared
+predicate and **every one of them was wrong**. A second definition of "which
+comparisons reach the bare cmp" would be that bug waiting.
+
+### The scope guard is about SIZE, not correctness — and I had the reason wrong
+
+The fold is restricted to the const-right and leaf-sym-right arms. I wrote that
+the general arm was excluded because "a left value that was never materialised
+cannot be pushed across an arbitrary right subtree". **That is false**, and
+removing the guard on purpose left every test GREEN, which is what sent me to
+measure instead of assert.
+
+- The pushed x0 is dead: the cmp reads the home register, so popping garbage
+  into x0 harms nothing.
+- The real candidate hazard is reordering — `a < f()` where f writes `a` would
+  read the NEW value at cmp time. **That cannot happen**: a local reachable
+  through a nested procedure or a `var` parameter is marked `escapes` by the
+  residency assigner and never gets a register at all. Verified both routes
+  with `PXXDBG=a.resid` — the mutating probe's `a` shows `escapes` and no
+  `ASSIGN` line.
+
+So the fold is correct in that arm too, and the exclusion is temporary: folding
+there while keeping the `str`/`ldr` saves one instruction and leaves two dead
+ones, where doing it properly drops the whole staging for three. Different
+shape, own control pair, own commit —
+`feature-opt-o3-a64-fold-a-resident-compare-left-across-a-complex-right`.
+
+**A break that is NOT caught is a finding.** Three of the four deliberate breaks
+moved `-O3` while `-O0` and x86-64 stayed correct: a wrong Rn field gives
+`acc=0` (every comparison false), a wrong Rm field `acc=42876`, and an unfolded
+right defaulting to x0 instead of x1 produces no output at all. The fourth —
+widening the scope guard — was **not** caught, and chasing that rather than
+recording three-out-of-four is what produced the two paragraphs above.
+
+### Per-backend gate count: x86-64 22, aarch64 **7** (was 6)
+
+First real use of `tools/check_o3_backend_parity.py`, and it fired in the good
+direction — the gap closing, not widening. Bumped in the same commit, which is
+the workflow the assertion exists to force.
+
+### Still not ported
+
+Slice 6 (resident left times a constant, three-operand multiply — aarch64 has
+`madd`/`mul` natively and no imm form, so this needs a different shape), slice 8
+(the narrow 32-bit compare — `cmp Wn, Wm` exists and should be a small
+follow-on), and the last-call-argument push/pop collapse. The ticket stays open
+for those.

@@ -1385,6 +1385,18 @@ begin
   else Error('target aarch64: unsupported float compare operator');
 end;
 
+{ cmp Xn, Xm -- which on aarch64 IS `subs xzr, Xn, Xm`, so BOTH sources are
+  free register fields. That is the whole reason -O3 W1 slices 5 and 7 collapse
+  into one arm here where x86-64 needed two: neither operand has to be staged.
+  0 means "the standing contract" -- x0 for the left, x1 for the right -- so the
+  unfolded call emits exactly the $EB01001F this replaced. }
+procedure EmitCmpRegsA64(lreg, rreg: Integer);
+var rm: Integer;
+begin
+  if rreg = 0 then rm := 1 else rm := rreg;
+  EmitI32($EB00001F or (rm shl 16) or (lreg shl 5));
+end;
+
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
@@ -1393,6 +1405,7 @@ var
   pNilPos, pDonePos: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
+  w1CmpLA64, w1CmpRA64: Integer;   { -O3 W1 slices 5+7 (aarch64): 0 = the normal x0/x1 contract, else x19..x24 read in place }
   sgn, isComp, savedLValueWrite: Boolean;
 begin
   if node = -1 then Exit;
@@ -2108,18 +2121,85 @@ begin
           else, so this is a substitution rather than a reimplementation — there
           is no second loader to keep in step, which is the whole point of
           having done step 1. }
+        { -O3 W1 slices 5 and 7, ported from x86-64 -- and aarch64 is where the
+          concept was always cleaner, because `cmp` here IS `subs xzr, Xn, Xm`:
+          BOTH source registers are free fields, so neither operand has to be
+          staged anywhere. x86-64 needed two separate slices (5 for the left,
+          7 for the right, the second with a memory form) to say what one
+          encoding says here.
+
+          A comparison has no destination, so a register-resident operand can be
+          read where it lives and the `mov` that stages it into x0 or x1 simply
+          disappears -- one instruction for a resident left, another for a
+          resident right, both gone. This is the move DELETED, not a value
+          recomputed: the resident register and the frame slot hold the same
+          value by the residency contract, which is the same fact
+          EmitLoadVarA64Dest's own resident arm already relies on.
+
+          CmpFusible is the SHARED predicate, forward-declared in compiler.pas
+          rather than re-stated here. That is deliberate and the precedent is
+          two lines above it in that file: IRNodeOwnsManagedStr is forwarded for
+          exactly this reason, after four cross backends each hand-rolled a
+          narrower copy and every one of them was wrong. A second definition of
+          "which comparisons reach the bare cmp" is the same bug waiting.
+
+          Scope: only the const-right and leaf-sym-right arms fold. The
+          push/pop arm below is EXCLUDED, and the reason is not the one it looks
+          like -- this was measured, and the obvious answer was wrong.
+
+          The obvious answer is "a left value that was never materialised cannot
+          be pushed across an arbitrary right subtree". That is false: the cmp
+          reads the home register, so the pushed x0 is dead and popping garbage
+          into it harms nothing. Removing the guard on purpose left every test
+          GREEN, which is what sent me to measure instead.
+
+          Nor is it mutation. `a < f()` where f writes `a` would be a real
+          reordering hazard -- reading the register at cmp time would see the
+          NEW value -- except that a local reachable by a nested procedure or by
+          a `var` parameter is marked ESCAPES by the residency assigner and is
+          never given a register at all (measured both ways with
+          PXXDBG=a.resid). So a resident left cannot be mutated by any right
+          subtree, and the fold is correct in that arm too.
+
+          The exclusion is about SIZE, and it is temporary. Folding there while
+          still emitting the str/ldr pair saves one instruction and leaves two
+          dead ones; done properly the whole staging goes -- the left is never
+          materialised, so there is nothing to preserve across the right -- and
+          that is three instructions, not one. Different shape, its own control
+          pair, its own commit:
+          feature-opt-o3-a64-fold-a-resident-compare-left-across-a-complex-right }
+        w1CmpLA64 := 0;
+        w1CmpRA64 := 0;
+        if (OptLevel >= 3) and CmpFusible(node) then
+        begin
+          if LeafSymRcxLoadable(left) and
+             ((IRKind[right] = IR_CONST_INT) or (IRKind[right] = IR_LOAD_SYM)) then
+            w1CmpLA64 := ResidentRegOf(IRA[left]);
+          if LeafSymRcxLoadable(right) then
+            w1CmpRA64 := ResidentRegOf(IRA[right]);
+        end;
+
         if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) then
         begin
-          IREmitNodeAarch64(left);              { x0 = left }
+          if w1CmpLA64 = 0 then IREmitNodeAarch64(left);   { x0 = left }
           EmitLoadImmA64(1, IRIVal[right]);     { x1 = right, no stack round trip }
         end
         else if (OptLevel >= 3) and (IRKind[right] = IR_LOAD_SYM) then
         begin
-          IREmitNodeAarch64(left);                 { x0 = left }
-          EmitLoadVarA64Dest(IRA[right], 1);       { x1 = right, no stack round trip }
+          if w1CmpLA64 = 0 then IREmitNodeAarch64(left);      { x0 = left }
+          if w1CmpRA64 = 0 then
+            EmitLoadVarA64Dest(IRA[right], 1);    { x1 = right, no stack round trip }
         end
         else
         begin
+          { Unreachable with a flag set, and structurally so rather than by
+            luck: w1CmpLA64 is only assigned when the right operand is a
+            CONST_INT or a LOAD_SYM, and w1CmpRA64 only when LeafSymRcxLoadable
+            says LOAD_SYM -- both of which take an arm above. No reset here,
+            because a guard that cannot fire is not a guard; it is a claim
+            nobody can check. If a future edit widens the pre-decision, THIS is
+            the arm that breaks, and the test's complex-right row is what says
+            so. }
           IREmitNodeAarch64(left);
           EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
           IREmitNodeAarch64(right);
@@ -2255,7 +2335,7 @@ begin
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin
-          EmitI32($EB01001F); { cmp x0, x1 }
+          EmitCmpRegsA64(w1CmpLA64, w1CmpRA64);   { cmp x0|xN, x1|xM }
           { TypeCompareUnsigned, the SAME rule x86-64 and the fused-jump path
             use — not `unsigned(l) or unsigned(r)`, which this backend used to
             do. That version ignored integer promotion: an operand narrower than

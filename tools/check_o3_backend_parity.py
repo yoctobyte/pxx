@@ -103,7 +103,7 @@ def strip_comments(src):
 #   386 / arm32 / riscv32 / xtensa
 EXPECTED = {
     "ir_codegen.inc": 22,
-    "ir_codegen_aarch64.inc": 6,
+    "ir_codegen_aarch64.inc": 7,
     "ir_codegen386.inc": 0,
     "ir_codegen_arm32.inc": 0,
     "ir_codegen_riscv32.inc": 0,
@@ -153,8 +153,13 @@ def main():
                 f"scope has changed)."
             )
         elif count != EXPECTED[name]:
+            way = "GREW" if count > EXPECTED[name] else "SHRANK"
+            note = ""
+            if name == "ir_codegen_aarch64.inc" and count > EXPECTED[name]:
+                note = "  <- the gap CLOSING; this is the good direction"
             problems.append(
-                f"{name}: {EXPECTED[name]} -O3 gate site(s) expected, {count} found."
+                f"{name}: {EXPECTED[name]} -O3 gate site(s) expected, {count} "
+                f"found ({way}).{note}"
             )
     for name in sorted(EXPECTED):
         if name not in actual:
@@ -170,15 +175,18 @@ def main():
     for p in problems:
         print(f"  {p}")
     print(
-        "\nThis is not a failure, it is a question, and it has exactly two honest\n"
-        "answers:\n"
+        "\nThis is not a failure, it is a question. Which question depends on\n"
+        "which way it moved:\n"
         "\n"
-        "  1. The slice SHOULD have an aarch64 arm and does not. Port it, and\n"
-        "     both numbers move.\n"
-        "  2. The slice is legitimately x86-64-only (an encoding with no\n"
-        "     one-to-one aarch64 spelling is the usual reason). Then say so:\n"
-        "     bump the number in EXPECTED in this file, IN THE SAME COMMIT, and\n"
-        "     name the slice in the commit message.\n"
+        "  aarch64 GREW  -- the gap is closing. Nothing to argue: bump the\n"
+        "     number in EXPECTED in this file, in the same commit, and name the\n"
+        "     ported slice in the commit message.\n"
+        "  x86-64 GREW   -- a new one-armed slice. Either port it (and both\n"
+        "     numbers move), or, if it is legitimately x86-64-only because the\n"
+        "     encoding has no one-to-one aarch64 spelling, bump the number and\n"
+        "     SAY SO in the commit message.\n"
+        "  either SHRANK -- a pass was removed or a gate re-spelled. Confirm\n"
+        "     that was intended before lowering the number.\n"
         "\n"
         "What is NOT an answer is landing it and letting the count drift, which\n"
         "is how the ratio drifted this far with a stated scope saying otherwise.\n"

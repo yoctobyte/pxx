@@ -157,6 +157,14 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
   IR_BINOP only, so every `'lit' + F(x)` leaked F's result on all four targets
   (bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target). }
 function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
+{ "does this comparison reach the bare integer cmp" — the ONE predicate for
+  which ops the -O3 W1 operand folds may touch, body in ir_codegen.inc.
+  Forwarded here for the same reason as the line above, and with the same
+  history behind that reason: aarch64's port of W1 slices 5+7 needs it, the
+  cross backends are included BEFORE ir_codegen.inc, and a second hand-rolled
+  copy of "which comparisons are safe to fold" is how the string arms get
+  quietly included on one target and not another. }
+function CmpFusible(node: Integer): Boolean; forward;
 {$ifndef PXX_NO_AARCH64}{$include ir_codegen_aarch64.inc}{$endif}
 {$ifndef PXX_NO_I386}{$include ir_codegen386.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include ir_codegen_arm32.inc}{$endif}
