@@ -4,10 +4,10 @@ track: P
 prio: 70
 type: bug
 blocked-by: []
-status: working
+status: unfinished
 created: 2026-08-30
 summary: "A generic template's own type parameter is not in scope inside a `class abstract(...)` body: generics.collections' TCustomPointersEnumerator<T, PT> reports `unknown type: PT` for its own PT. This is the wall the rtl-generics corpus hits now that bug-p-object-value-types-standard-meaning cleared the one 26 lines later that used to abort the parse first."
-owner: frankR
+owner: 
 ---
 
 # P: a generic type parameter is unresolved inside a `class abstract` template
@@ -269,3 +269,57 @@ the field type came out as `TCustomListWithPointers$UInt32<UInt32>`. A nested
 class naming its enclosing template is substituted twice.
 
 That one IS this lane's, and it is in `pasparser_generic.inc`.
+
+## PARKED 2026-08-30 (frankR) — waiting on a person, not on work
+
+**Do not re-run the probe. It has been run three times and the answer does not
+change.** The three binaries below all stop at `:135` and none of them ever
+mentions `PT`:
+
+| binary | sha256 | first stop | `:120` present? |
+| --- | --- | --- | --- |
+| frankR, earlier session | `6319b892f517` | `:135` | no |
+| frankR, HEAD `097f9b794` | `f92f3c013ac58cda` | `:135` | no |
+| **`pinned`** | **`abece5150983d95e`** | **`:135`** | **no** |
+
+`pinned` is the row that matters: it is the OLDEST binary available in this
+checkout and therefore the leading candidate for having produced the original
+`:120` observation. It does not.
+
+Running a fourth binary is the obvious next move and it is the wrong one.
+**The missing input is frank-user's shell history — which binary that run
+actually used.** That is one message when frank-user is next available, and
+nothing in this ticket can advance until it is answered.
+
+Two candidate mechanisms have been examined and neither closes it:
+
+- **`-Fu` placed AFTER the source file is silently ignored**, and the run then
+  dies at `:2 uses: unit source not found`. Real, hit first-hand, and a
+  plausible way to record a probe that did not do what its author thought — but
+  it produces FEWER errors, not more, so it does not explain a run that reported
+  `:120` and `:123` in front of `:135`.
+- **A binary taken mid-change, before its final commit**, would report more.
+  This remains the leading hypothesis and is exactly what the shell history
+  would settle.
+
+**The title is NOT corrected, deliberately.** The premise is disputed, not
+disproved, and rewriting a ticket mid-dispute replaces one wrong record with
+another. If the shell history shows the `:120` run cannot be reproduced, this
+ticket should be closed `rejected/` citing this section rather than retitled —
+its real content has already been split out:
+
+- `:135` root-caused and re-laned →
+  [[bug-b-rtl-provides-no-tarray-generic-but-pxx-claims-ver3-2-2]] (B, p65).
+  `TArray<T>` is missing from the RTL; the ticket's "generic array template
+  fails to resolve" hypothesis is disproved by `-dVER3_0_0`.
+- `:214`, the wall behind it and a real defect in this lane →
+  [[bug-p-a-nested-class-naming-its-enclosing-template-is-substituted-twice]].
+
+So nothing is blocked on this ticket except the question of whose observation
+`:120` was.
+
+## Parked 2026-08-30
+
+blocked on frank-user's shell history: which binary produced :120. Three binaries run (6319b892f517, f92f3c013ac58cda, pinned abece5150983d95e), all stop at :135, none mentions PT. Do not re-run the probe. :135 re-laned to B (TArray missing from RTL); :214 split into its own P ticket.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.

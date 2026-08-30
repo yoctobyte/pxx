@@ -5,18 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:2 unfinished:31 blocked:7 backlog:388 backlog_new:27 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2832 rejected:58`
+`urgent:1 working:2 unfinished:32 blocked:7 backlog:388 backlog_new:27 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2832 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-p-generic-type-param-unresolved-in-class-abstract-template` [P] — owner: frankR
+- `bug-p-a-nested-class-naming-its-enclosing-template-is-substituted-twice` [P] — owner: frankR
 - `feature-unicodestring-model` [A] — owner: frankwasm
 
 ## urgent (1) — jump the queue
 
 - `bug-a-a-pin-that-adds-a-builtin-unit-cannot-commit-it-with-git-add-u` [A]
 
-## unfinished (31) — parked mid-flight; re-claim, do not duplicate
+## unfinished (32) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S]
@@ -26,6 +26,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
+- `bug-p-generic-type-param-unresolved-in-class-abstract-template` [P]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-c-corpus-busybox-applet` [C] — blocked-by: bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
@@ -60,12 +61,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 429, ranked
+## Ready — top 30 of 430, ranked
 
 - `[p 65] [A]` bug-a-a-pin-that-adds-a-builtin-unit-cannot-commit-it-with-git-add-u
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
@@ -91,6 +93,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [A]` bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array (unblocks 1)
-- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
