@@ -198,4 +198,4 @@ unsafe). Either direction alone is a green that means nothing.
   and a passing check.)*
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 01851d5bf.
