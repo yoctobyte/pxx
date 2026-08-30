@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`--threadsafe` on x86-64 gates PXXClassFinalize's string/dynarray pass off (PXX_TS_HARDLOCK), so EVERY managed field of EVERY destroyed class instance leaks: 392 kB -> 398336 kB on 200k instances, in plain Pascal. MEASURED 2026-08-31: the guard is LOAD-BEARING — deleting it segfaults 3/3 at NT=4 and runs clean 3/3 at NT=1, so it is a real allocator race, not a double free. test_threadsafe_class_finalize_race.pas is the positive control, green today. Parked with the fix shape and the kind-6 recursion constraint that kills the one-line version."
-status: unfinished
+status: working
 owner: frankS
 ---
 
