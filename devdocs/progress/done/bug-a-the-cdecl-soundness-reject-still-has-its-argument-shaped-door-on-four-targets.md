@@ -2,7 +2,7 @@
 track: A
 prio: 50
 type: bug
-status: working
+status: done
 found: 2026-08-30
 found-by: claude-A
 owner: claude-A
@@ -82,7 +82,7 @@ option is taken.
 | aarch64 | done | done | AAPCS64, independent x0..x7 / d0..d7 banks |
 | arm32 | done | done | AAPCS soft-float; **half-joined**, see below |
 | i386 | done | done | cdecl argument ORDER; no float mechanism involved |
-| riscv32 | — | — | passes all 12 narrow checks today, which proves nothing |
+| riscv32 | **none needed** | done | its convention already IS the C convention — see below |
 
 **i386's mechanism was a third one, and no earlier case could see it.** x86-64
 and aarch64 diverged on independent register banks; arm32 on 8-byte alignment.
@@ -209,3 +209,62 @@ Track S. This is not a hypothetical observable.
 
 **xtensa was NOT measured** and must not be assumed to share this. It has the
 same zero-oracle-adoption property and no case has been built for it.
+
+
+## riscv32 needed no arm — the convention fix WAS its arm (2026-08-30)
+
+Target 4 closed differently from the other three, and the empirical check was
+worth running rather than assuming: the reject was lifted for riscv32 first, and
+then everything was measured.
+
+**No prologue arm, no admission change, no call-form change.** `ProcCdecl` is
+deliberately NOT set for riscv32 in `pasparser_proc.inc`, and that absence means
+something different from xtensa's. xtensa lacks an arm. riscv32 has nothing for
+the flag to *select*: after
+`bug-a-riscv32-passes-stack-arguments-in-reverse-psabi-order` its ordinary
+convention is the C convention at every width — word *k* in `a[k]`, no FP bank
+to count separately (ILP32 soft-float), no even-register alignment rule, and the
+overflow tail in psABI order. Setting the flag would assert a distinction the
+target does not have.
+
+Measured with the reject lifted: `CDECL-NARROW OK checks=12` on riscv32,
+assignment shape included, and `CDECL-WIDE OK checks=3` at ten words in all
+three shapes.
+
+### The ten-word file, and why it is not redundant
+
+`test_cdecl_bodied_wide.pas` cannot go in the narrow file (arm32 caps that at
+four words) and runs only on x86-64, i386 and riscv32 — aarch64 and arm32 refuse
+a >8-word signature outright.
+
+It asserts pxx-caller↔pxx-callee agreement, which **passed before the convention
+fix too**, because both ends shared the error. So it is not a proof of
+conformance — that was established by disassembly against
+`riscv32-esp-elf-gcc` 15.2.0 — it is a guard against the five sites **drifting
+apart**, which is this fix's actual failure mode.
+
+**Mutation-tested rather than claimed.** Reverting the reordering at one of the
+five sites (`IR_CALL_IND`, the shape a C function pointer takes) and rebuilding:
+
+```
+FAIL ten words via fnptr:               got 1234567909 want 1234567900
+FAIL ten words via assigned variable:   got 1234567909 want 1234567900
+CDECL-WIDE FAILURES=2
+CDECL-NARROW OK checks=12      <- the narrow file does NOT notice
+```
+
+`1234567909` is exactly words 8 and 9 swapped. The direct-call shape stayed
+green because `IR_CALL` was not the mutated site, so the three shapes are
+independently covered. And the narrow file passing throughout is the evidence
+that the new file earns its place.
+
+### Where the campaign leaves the reject
+
+All four campaign targets are out. What remains behind it is **xtensa** and
+wasm32, neither of which was ever in scope, and the argument-shaped door is
+still open for them — the reject is still keyed on the `AN_ASSIGN` shape and a
+`@proc` passed as a call *argument* still walks past it. That was true when this
+ticket was filed and it is still true for the targets that remain.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

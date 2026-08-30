@@ -1704,14 +1704,22 @@ begin
     @-taking it as a `cdecl` function pointer is sound.
     feature-cdecl-bodied-sysv-prologue
 
-    ONLY the targets that actually HAVE a C-convention prologue arm, which is
-    x86-64 and now aarch64. This list grows one target at a time and the order
-    matters: the arm lands and is proven FIRST, and only then does that target
-    join this condition. Setting the flag on a target with no arm would be
-    actively wrong -- i386/arm32/riscv32/xtensa keep internal prologue plus
-    internal direct call, which is self-consistent; the flag would give them no
-    C prologue, it would only make their direct calls marshal a convention
-    their prologue does not read.
+    ONLY the targets that actually HAVE a C-convention prologue arm: x86-64,
+    aarch64, arm32 and i386. This list grew one target at a time and the order
+    mattered: the arm landed and was proven FIRST, and only then did that
+    target join this condition. Setting the flag on a target with no arm would
+    be actively wrong -- it would give that target no C prologue, and only make
+    its direct calls marshal a convention its prologue does not read.
+
+    RISCV32 IS DELIBERATELY ABSENT, AND NOT BECAUSE IT LACKS AN ARM. It needs
+    no arm: after
+    bug-a-riscv32-passes-stack-arguments-in-reverse-psabi-order its ordinary
+    convention IS the C convention at every width -- word k in a[k], no FP bank
+    to count separately (ILP32 soft-float), no even-register alignment rule, and
+    the overflow tail now in psABI order. There is nothing for this flag to
+    SELECT on riscv32, so setting it would assert a distinction the target does
+    not have. XTENSA is absent for the original reason: no arm, internal
+    prologue plus internal direct call, self-consistent and not C-compatible.
     Note aarch64 needed MORE than x86-64 did, so do not assume the next target
     is free either: x86-64's direct-call site already switched on
     `ProcExternal or ProcCdecl`, so its call side came matched for nothing,

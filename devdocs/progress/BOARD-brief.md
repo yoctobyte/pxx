@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:30 blocked:7 backlog:384 backlog_new:23 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2824 rejected:58`
+`working:3 unfinished:30 blocked:7 backlog:384 backlog_new:23 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2825 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets` [A] — owner: claude-A
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S] — owner: frankS
 - `bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker` [C] — owner: frankC
 - `feature-unicodestring-model` [A] — owner: frankwasm

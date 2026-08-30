@@ -4881,11 +4881,13 @@ test-core: $(COMPILER)
 	# arm -- soft-float coincides with positional there -- so the other targets'
 	# discriminating case would have reported a false green here. Both orders
 	# are asserted for that reason.
-	# Wired for x86-64 + aarch64 + arm32 + i386. riscv32 passes all 12 WITHOUT an
-	# arm and is still not wired: passing three cases each built from a DIFFERENT
-	# target's ABI is not evidence about riscv32's, so that green means it needs
-	# its OWN discriminating case, not that it is done. It also cannot compile
-	# this file yet -- it has not left the ir.inc reject.
+	# Wired for all five: x86-64, aarch64, arm32, i386 and riscv32. riscv32
+	# passed all 12 of these WITHOUT an arm and that green turned out to be
+	# HONEST rather than mute -- it is ILP32 soft-float, so it has none of the
+	# three mechanisms these checks discriminate (no FP bank, no even-register
+	# alignment rule, no order flip). Its own divergence needed TEN words and
+	# lives in test_cdecl_bodied_wide.pas, which this file cannot hold because
+	# arm32 caps it at four.
 	# bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
 	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow26
 	tools/expect_same.sh test_cdecl_narrow26 "$$($(TESTTMP)/test_cdecl_narrow26)" "CDECL-NARROW OK checks=12"
@@ -4907,6 +4909,27 @@ test-core: $(COMPILER)
 	# pointer and through an assigned variable, 123 direct.
 	./$(COMPILER) --target=i386 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_i386
 	tools/expect_same.sh i386/test_cdecl_narrow "$$(tools/run_target.sh i386 $(TESTTMP)/test_cdecl_narrow_i386)" "CDECL-NARROW OK checks=12"
+	@if command -v qemu-riscv32 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=riscv32 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_rv32 && \
+	  tools/expect_same.sh riscv32/test_cdecl_narrow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cdecl_narrow_rv32)" "CDECL-NARROW OK checks=12"; \
+	else \
+	  echo "=== test_cdecl_bodied_narrow: qemu-riscv32 absent, riscv32 NOT verified ==="; \
+	fi
+	# TEN-WORD cdecl: the overflow tail, which only x86-64, i386 and riscv32
+	# accept -- aarch64 and arm32 refuse a >8-word signature outright, so they
+	# cannot compile the file at all. NINE words would prove nothing here: at
+	# nine there is one overflow word and the old descending formula and the
+	# psABI coincide. bug-a-riscv32-passes-stack-arguments-in-reverse-psabi-order
+	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_wide.pas $(TESTTMP)/test_cdecl_wide26
+	tools/expect_same.sh test_cdecl_wide26 "$$($(TESTTMP)/test_cdecl_wide26)" "CDECL-WIDE OK checks=3"
+	./$(COMPILER) --target=i386 test/test_cdecl_bodied_wide.pas $(TESTTMP)/test_cdecl_wide_i386
+	tools/expect_same.sh i386/test_cdecl_wide "$$(tools/run_target.sh i386 $(TESTTMP)/test_cdecl_wide_i386)" "CDECL-WIDE OK checks=3"
+	@if command -v qemu-riscv32 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=riscv32 test/test_cdecl_bodied_wide.pas $(TESTTMP)/test_cdecl_wide_rv32 && \
+	  tools/expect_same.sh riscv32/test_cdecl_wide "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cdecl_wide_rv32)" "CDECL-WIDE OK checks=3"; \
+	else \
+	  echo "=== test_cdecl_bodied_wide: qemu-riscv32 absent, riscv32 NOT verified ==="; \
+	fi
 	# AN AGGREGATE RESULT FROM A FUNCTION WITH MORE THAN 8 PARAMETERS.
 	#
 	# aarch64 refused this outright until the x8 load and the matching stack
