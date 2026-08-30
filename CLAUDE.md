@@ -164,42 +164,38 @@ flag or lands incrementally, never on a long-lived branch.
   on CPython must work here. Accepting something CPython rejects is a feature,
   not a defect (`devdocs/dev/nilpy-semantics-divergences.md`).
 - **O — the levels, charter ruled 2026-08-30** (`decided/decide-the-o-level-charter`):
-  `-O0` zero optimization, source 1:1 · `-O1` **debug-safe optimization** (our
-  divergence — this is `-Og` elsewhere; **unenforced until someone builds the
-  test**, so it is an intention today) · `-O2` the proven default · `-O3`
-  **experimental, staging for `-O2`** — where a pass lives while it earns the
-  default, not a staging area that ought to be empty.
-  **There is no `-O4` and there should not be one.** "Only for certain
-  applications" is a **trade-off**, not a maturity stage; a level holding both
-  draining and permanent passes lets you tell neither apart, and *"level 4"* does
-  not tell an author WHICH trade they are buying. **Permanent trade-offs are
-  named flags.**
-  **Proof is ruled and exhaustive: self-host + all tests passed.** *"We have no
-  more proof until we have a counterproof."* The reasoning is that **the compiler
-  and the target set ARE the proof** — a pass that miscompiles anything real does
-  not survive a compiler that compiles itself plus third-party C and Pascal across
-  seven targets. So an extra tier or approval on a green gate is ceremony —
-  **promote it** — and a later regression is the counterproof that demotes it.
-  **Three things that rule depends on, all measured 2026-08-30:**
-  1. **"All tests passed" means a full-tier run with `skip_holes == 0`.** A skip
-     is scored *passlike*, so a job that never ran is invisible in the verdict —
-     the report says so itself (*"a RED here speaks for the jobs that ran, not for
-     the suite"*). Cite a hole-free run or you are citing a suite that skipped the
-     thing you broke.
-  2. **The O-level sweep is `optdiff` (tier `opt`), and it is DISJOINT from the
-     quick<native<limited<full chain** — idle watcher work only, so no gate
-     verdict speaks for it. 690 of 2296 gated shas had ever been swept. Ask
-     `tools/trackt.py` for a sha's `opt` coverage rather than assuming a green
-     full run covered `-O3`.
-  3. **A benchmark is NOT ceremony — it answers a different question.** `optdiff`
-     is a *correctness* instrument: green proves the pass is not **wrong**. It
-     cannot prove the pass **fires**, because a pass that silently stopped firing
-     passes every level identically. The suite says "not wrong", never "works".
-  **Promote and measure ONE AT A TIME — the batch is not the sum** (all gates at
-  once measured *worse* than the best pass alone, 18.06 s vs 16.23 s; they
-  interfere). **Do NOT build the dev loop's compiler at `-O3`.**
-  Detail, numbers and the C-ABI-shaped boundary where a green is *no measurement*:
-  `decided/decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`.
+
+  | | means | promotes? |
+  | --- | --- | --- |
+  | `-O0` | zero optimization, source 1:1 | — |
+  | `-O1` | **debug-safe** optimization (this is `-Og` elsewhere — our divergence, and **unenforced until someone builds the test**, so an intention today) | — |
+  | `-O2` | the proven default | — |
+  | `-O3` | **experimental, on track for `-O2`** | **yes — it drains** |
+  | `-O4` | **research** — cache-slot code layout and the like | possible, never assumed |
+
+  **`-O4` exists to keep `-O3`'s drain honest** — one level cannot mean both *on
+  track for the default* and *may never be anything*. **Both must be CORRECT:**
+  `-O4` is speculative in value, never in correctness; a pass that fails
+  `optdiff` is unsweepable, not experimental. Sweep `-O4` on a slower cadence —
+  nothing depends on it.
+  **Trade-offs are NOT a level.** "Bigger code / worse float / longer compiles"
+  is a different axis and stays a **named flag**: an author chooses WHICH trade,
+  not HOW MUCH (`-Ofast`, `-Os`, `-funroll-loops` are sideways, not "more than
+  `-O3`"). A mature pass that is merely not universally beneficial is a flag.
+  **Proof for a promotion is ruled and exhaustive: self-host + all tests passed**
+  — *"no more proof until we have a counterproof"*, and the counterproof demotes.
+  Three things it depends on: **(1)** "all tests passed" means a full run with
+  `skip_holes == 0` (a skip is scored *passlike*, so a job that never ran is
+  invisible); **(2)** the O-level sweep is `optdiff` (tier `opt`), **disjoint**
+  from the quick<native<limited<full chain and idle-work only, so ask
+  `tools/trackt.py` for a sha's coverage rather than assuming a green `full`
+  covered `-O3`; **(3)** a **benchmark is not ceremony** — `optdiff` proves a
+  pass is not *wrong*, never that it **fires**, and only a bench answers the
+  second.
+  **Promote ONE AT A TIME — the batch is not the sum** (all gates at once
+  measured *worse* than the best pass alone). **Do NOT build the dev loop's
+  compiler at `-O3`.** Numbers, and the boundary where a green is *no
+  measurement*: `decided/decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`.
 - **D — verify snippets by compiling them.** Don't invent behaviour, don't touch
   `compiler/**` or `lib/**`.
 - **Claims discipline** — "self-host fixedpoint" (our binary reproduces itself,

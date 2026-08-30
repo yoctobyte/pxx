@@ -7,7 +7,7 @@ prio: 65
 status: decided
 found: 2026-08-30
 found-by: owner, proposing a five-level scheme and asking to be corrected
-summary: "RULED 2026-08-30. O0 zero optimization / O1 DEBUG-SAFE optimization (our divergence: this is -Og elsewhere, and it needs a test or it is only a label) / O2 proven default / O3 experimental, staging for O2. NO -O4 maturity tier: 'only for certain applications' is a TRADE-OFF, not a maturity stage, and mixing the two axes puts draining and permanent passes in one level where neither can be told apart. Permanent trade-offs are NAMED FLAGS, because an author must choose WHICH trade, not HOW MUCH."
+summary: "RULED 2026-08-30, amended the same day. O0 zero optimization / O1 DEBUG-SAFE optimization (our divergence: this is -Og elsewhere, unenforced until someone builds the test) / O2 proven default / O3 experimental, on track for O2 / O4 RESEARCH — correct but speculative, may never promote, and its purpose is to keep O3's drain honest. The rejected idea was O4 as the TRADE-OFF bin: 'only for certain applications' is a different axis, and those stay NAMED FLAGS because an author must choose WHICH trade, not HOW MUCH. O4 is swept on a slower cadence than the ladder, because nothing depends on it."
 ---
 
 # The O-level charter
@@ -53,32 +53,55 @@ which is the cheaper move. **Two things come with it:**
 bug* — timing-dependent failures vanish under it. A debug-safe optimized level is
 a working tool, not tidiness.
 
-## No `-O4` maturity tier — the axis error
+## `-O4` — RESEARCH, and what it is not
 
-The proposal used the number for **maturity** (experimental → very
-experimental). But *"only for certain applications"* is a **trade-off**, not a
-maturity stage, and the two axes behave in opposite ways:
+**Amended 2026-08-30, same day, by the owner, and the amendment is correct.**
+The first ruling rejected `-O4` outright. That was right about the *trade-off*
+reading and wrong about the one the owner meant.
 
-- a pass on its way up should **drain** out of its level;
-- a pass that is only right for some programs **never moves**, because moving
-  was never the point.
+**`-O4` is the research tier: correct, but so speculative it may never
+generalize.** Optimizations nobody has tried, or that go wildly beyond the usual
+shapes — the owner's example is **re-laying code out to fit a CPU cache slot**,
+which is not hypothetical (BOLT and Propeller do exactly this). Such a pass may
+pay enormously on one microarchitecture and nothing on another, may take years to
+mature, and may simply be abandoned.
 
-Put both in one level and **you cannot tell by looking which kind you are
-holding.** The permanent residents make the pipeline look stuck; the young
-passes inherit "this may never promote" and stop being chased. That is the same
-two-jobs-in-one-field conflation `owner:` and `working/` carried until they were
-untangled the same day.
+**It is the same axis as the rest of the ladder, and it PROTECTS `-O3`.** The
+whole objection to the original `-O4` was that one level cannot hold two
+populations that behave oppositely. That argument applies here in the owner's
+favour: if speculative research sits in `-O3`, then `-O3` stops meaning *"on
+track for `-O2`"* and starts meaning *"unproven, unclear"* — and its drain
+property, the thing that makes promotion legible, is gone. **Separating "on track"
+from "may never be anything" is the same separation, one notch further out.**
 
-**Second reason, and it is the user-facing one:** *"level 4"* does not tell an
-application author what they are buying. Bigger code? Worse float accuracy?
-Longer compile times? **They must choose WHICH trade, not HOW MUCH.** Every real
-toolchain expresses these sideways rather than upward for exactly this reason —
-`-Ofast` breaks IEEE, `-Os`/`-Oz` trade speed for size, `-funroll-loops` trades
-cache for branches. None of them is "more than `-O3`".
+| level | correct? | expected to promote? |
+| --- | --- | --- |
+| `-O3` | yes | **yes** — this is staging, and it drains |
+| `-O4` | **yes** | **no** — promotion is possible, never assumed |
 
-**So: permanent trade-offs are NAMED FLAGS.** If a bundle is ever wanted, `-O4`
-may exist as a **documented bundle of those flags** — never as a tier, and never
-as somewhere passes wait.
+**Both must be CORRECT.** `-O4` is not permission to be wrong: a pass that fails
+`optdiff` cannot be swept at all, and an unsweepable pass is not experimental, it
+is unmaintainable. *Speculative in value, never in correctness.*
+
+### What still does NOT belong in `-O4`
+
+**The trade-offs.** *"Only for certain applications"* in the sense of *bigger
+code / worse float / longer compiles* is a different axis and stays **named
+flags**, because the author must choose WHICH trade, not HOW MUCH — `-Ofast`,
+`-Os`, `-funroll-loops` are sideways moves, not "more than `-O3`". A pass that is
+mature and simply not universally beneficial is a **flag**, not `-O4`.
+
+### The two guards it needs
+
+1. **Sweep it on a slower cadence than the ladder.** The combinatorial cost is
+   real — see below — but it scales with what a level *promises*, and `-O4`
+   promises nothing. Nothing depends on it, so it does not need to be swept on
+   every `opt` run. On demand, or at a lower frequency, is enough.
+2. **A research tier becomes a graveyard by default.** Things land, nothing
+   revisits, and in a year it is the backlog problem in a new place. A drain
+   needs pressure: an `-O4` pass with no measurement in a long while should be
+   **deleted or written up**, not left. Decide that rule when the first pass
+   lands, not after the fifth.
 
 ## The cost that decides it if the principle does not
 
