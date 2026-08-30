@@ -208,6 +208,15 @@ on `converged after N round(s)` with a fixedpoint sha that **differs from the
 seed you copied in**, or you have measured the current compiler while believing
 you measured history.
 
+**Two controls in opposite directions, from ONE artifact, beat a green test.**
+For a change that should reach exactly one backend: the *other* backend's emitted
+bytes must be **byte-identical** (a negative control — the change did not leak)
+and this backend's must **differ** (a positive control — the change is not inert).
+Measured 2026-08-30 on an aarch64-only compare fold: x86-64 identical,
+aarch64 548 -> 546 stack pushes. **A green test is consistent with the change
+having done nothing at all**; a byte count is not, and neither costs a run you
+were not already making.
+
 **A property you get for free while doing this, and it is stronger than the one
 you were checking:** if the tree is reseeded from `pinned` and rebuilt, and it
 converges to the **same sha** as the build seeded from its own output, that is
@@ -240,6 +249,16 @@ fix. Built alone, nothing else, self-hosted: **`len("a" * 3)` segfaults.** The
 tag must describe what `IRLowerCallArg` **returns**, not what the parameter
 declares, and it becomes right only in company with an optimisation that makes
 the call hand back the literal's own handle.
+
+**And this is why the warning must carry the MECHANISM, not just the
+prohibition** (frankwasm, 2026-08-30, after the rule was tested on an arm nobody
+had considered): **a mechanism extends to new arms; a prohibition only forbids
+the arms someone thought of.** A ticket cleared two hazards for a compare fold by
+measurement, both correctly, and a later arm reached a third — a complex right
+subtree can contain a *store* — that the prohibition could not have covered and
+the mechanism did, because the mechanism could be re-asked of the new case. Write
+down *why* it is unsafe and the next person can decide whether it still is; write
+down *do not* and they can only obey or not.
 
 **The tell you are in this category:** the "wrong" thing has a partner, and
 changing either one alone is a regression *in either direction*. The warning that
