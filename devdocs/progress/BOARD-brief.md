@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:4 unfinished:28 blocked:8 backlog:360 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2753 rejected:56`
+`urgent:1 working:4 unfinished:28 blocked:8 backlog:361 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2753 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -60,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 382, ranked
+## Ready — top 30 of 383, ranked
 
 - `[p 65] [N]` bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever (unblocks 1)
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -71,6 +71,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-revisit-object-types-rtl-generics-fired-the-trigger
 - `[p 70] [U]` decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
+- `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [A]` regression-test-asm-hello-2
 - `[p 70] [P]` regression-test-asm-test-asm-emit-rv32
 - `[p 70] [A]` regression-test-asm-test-asmcore-x64
@@ -91,6 +92,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [A]` feature-unicodestring-model
-- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_352 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_353 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

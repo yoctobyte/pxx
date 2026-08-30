@@ -1669,8 +1669,33 @@ pre code{background:none;padding:0}
             # days." An active lock is the LONGEST-lived place a stale prose
             # dependency can sit, because the holder wrote the park and has
             # stopped re-reading it. Reported as HELD, never dispatched.
-            if t.status not in ("unfinished", "blocked", "working"):
+            # TWO CHECKS, TWO APERTURES -- separated 2026-08-30 after frankD
+            # measured the OUTER one. DANGLING-LINK was written inside the
+            # STALE-PARK family and inherited its folder filter, even though
+            # its own defect has nothing to do with parks: the scan INSIDE the
+            # loop was deliberately widened to read the whole body, and the
+            # loop's own aperture came along unexamined. The fixed check then
+            # reported 0 findings while FOUR live dangles sat in backlog/,
+            # including two of the specifying ticket's own worked examples.
+            #
+            # A dangle is a live obstacle wherever a ticket is still actionable
+            # -- ranked folders included. It is history in done/ and rejected/,
+            # where rewriting a finished record falsifies it, so those stay out.
+            # Negative control, frankD's and it is the right one: a link that
+            # dangles in backlog/ MUST produce a finding. Tonight it did not,
+            # four times.
+            if t.status in ("done", "rejected"):
                 continue
+            # A DELIBERATE DANGLE IS A REAL OUTCOME. Mirrors the DANGLING SHAS
+            # BY DESIGN escape: bug-pascal-subclass-inherited-members is cited
+            # four times by feature-demo-songformatter-pxx-target, the nearest
+            # candidate covers ONE of the four arms the prose names, and
+            # re-pointing it would silently mark the other three resolved. The
+            # right move there is to keep the dangle and write down what is and
+            # is not known -- so the check has to let a ticket say that, or it
+            # fires forever on the one case that was handled correctly.
+            park_scope = t.status in ("unfinished", "blocked", "working")
+            by_design = "DANGLING LINKS BY DESIGN" in t.text.upper()
             # EXCLUDE TICKETS THAT ARE ACTUALLY BEING WORKED. Measured by
             # frankwasm 2026-08-30, triaging the scan's first eleven: the two
             # loudest hits -- naming SIX and FOUR resolved slugs -- were both
@@ -1813,7 +1838,9 @@ pre code{background:none;padding:0}
                             and cand not in self._doc_basenames
                             and cand.split("-", 1)[0] in self._ticket_prefixes):
                         dangling.add(cand)
-            for i, line in enumerate(rows):
+            if by_design:
+                dangling.clear()
+            for i, line in enumerate(rows if park_scope else []):
                 if not PARK_COND.search(line):
                     continue
                 for j in range(max(0, i - 2), min(len(rows), i + 3)):
@@ -1850,9 +1877,15 @@ pre code{background:none;padding:0}
                     f"slug), a ticket that was PLANNED AND NEVER FILED (file "
                     f"it, or de-link and say so), work ALREADY DELIVERED under "
                     f"another name (say so -- the link is advertising finished "
-                    f"work as pending), or prose that was never a ticket at "
-                    f"all (de-link, keep the sentence). Deleting is one of four "
-                    f"outcomes and is rarely the right one"
+                    f"work as pending), a ticket MERGED INTO THE ONE CITING IT "
+                    f"(the absorbed slug's citations came along, so the "
+                    f"document is citing itself as a separate dependency -- "
+                    f"the evidence is in this file, not on the board, and the "
+                    f"link is what stops you looking), or prose that was never "
+                    f"a ticket at all (de-link, keep the sentence). Deleting "
+                    f"is one of FIVE outcomes and is rarely the right one; if "
+                    f"the dangle is deliberate and documented, put DANGLING "
+                    f"LINKS BY DESIGN in the body"
                 )
             if hits and live_block:
                 warning_count += 1
