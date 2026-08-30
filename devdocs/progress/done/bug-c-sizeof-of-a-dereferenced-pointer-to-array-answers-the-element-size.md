@@ -86,4 +86,4 @@ ADDRESS and not enough to SIZE.
 [[bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size]]
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 80560ba52.
