@@ -6378,7 +6378,7 @@ begin
 end;
 
 procedure EmitArgvToString(dstIdx: Integer);
-var inRangePatch, doneOutPatch: Integer;
+var inRangePatch, doneOutPatch, capPatch: Integer;
 begin
   { On entry: rax = argv index. Copy argv[rax] C-string to global string dstIdx. }
   { Bounds check: an out-of-range index (>= argc, or negative) yields '' rather
@@ -6403,6 +6403,21 @@ begin
   EmitB($74); EmitB($05);                           { je +5 }
   EmitB($48); EmitB($FF); EmitB($C1);               { inc rcx }
   EmitB($EB); EmitB($F5);                           { jmp -11 }
+  { CLAMP THE LENGTH. rcx is a full unbounded strlen(argv[i]); the destination is
+    a FROZEN slot of LOCAL_STR_CAP+8 bytes, so an argument longer than that used
+    to `rep movsb` straight past it into the neighbouring frame slot — in the
+    reported case the enclosing loop's own counter and bound, which made
+    `for i := 1 to ParamCount` run 1.29 MILLION iterations. It also stored a
+    length larger than the capacity, so Length() reported 300 for a 256-byte
+    buffer. Truncating is the established contract for a frozen string (abi.inc:
+    "capped at LOCAL_STR_CAP, the ShortString norm"), and it is what riscv32 and
+    xtensa already do via PXXCStrToFrozen. Clamped BEFORE `mov rax, rcx` so the
+    stored LENGTH and the copy COUNT are fixed by one clamp and cannot disagree.
+    bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp }
+  EmitB($48); EmitB($81); EmitB($F9); EmitI32(FROZEN_CSTR_CAP);  { cmp rcx, cap }
+  EmitB($76); capPatch := CodeLen; EmitB(0);                     { jbe fits }
+  EmitB($48); EmitB($C7); EmitB($C1); EmitI32(FROZEN_CSTR_CAP);  { mov rcx, cap }
+  Code[capPatch] := Byte(CodeLen - (capPatch + 1));
   EmitB($48); EmitB($89); EmitB($C8);               { mov rax, rcx }
   EmitStoreStrLen(dstIdx);
   EmitLeaStrDataRdi(dstIdx);

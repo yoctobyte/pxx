@@ -13611,6 +13611,24 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_arg_runtime.pas $(TESTTMP)/test_xtensa_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_xtensa_args_x64
 	tools/expect_same.sh xtensa/test_xtensa_args "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_args alpha beta; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_args_x64 alpha beta; echo "exit=$$?")"
+	# ...and the same construct with an argument LONGER than that hidden frozen
+	# temp. The x86-64 fill copied an unbounded strlen with `rep movsb` into a
+	# 264-byte slot, so it wrote through into the neighbouring frame slot -- the
+	# enclosing loop's own counter and bound -- and `for i := 1 to ParamCount`
+	# ran 1.29 MILLION iterations. rc is checked SEPARATELY from the output
+	# because the failure is a runaway, not a wrong string: without the timeout
+	# a regression hangs this suite instead of reporting.
+	# 255 and not LOCAL_STR_CAP is deliberate and is measured, not chosen: it is
+	# what FPC answers for this program (ParamStr returns a ShortString) and what
+	# riscv32/xtensa already produced via PXXCStrToFrozen, so the clamp buys FPC
+	# parity and cross-target agreement together. The managed row must stay 300 --
+	# that path sizes its allocation from the length and must NOT gain a clamp.
+	# bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp
+	./$(COMPILER) test/test_paramstr_long_arg.pas $(TESTTMP)/test_paramstr_long26
+	@long=$$(printf 'x%.0s' $$(seq 1 300)); \
+	  out=$$(timeout 60 $(TESTTMP)/test_paramstr_long26 alpha "$$long" 2>&1); rc=$$?; \
+	  if [ $$rc -ne 0 ]; then echo "test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
+	  tools/expect_same.sh test_paramstr_long26 "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
 	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
 	# which answered FALSE while b printed BBBB with Length 4 -- the equality
 	# guard was gated on tyAnsiString only, so both-frozen fell through to the

@@ -54,6 +54,17 @@ const
     bug-a-cross-bootstrap-aarch64-overflows-max-code }
   MAX_CODE      = 33554432;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
+  { Longest C string copied into a FROZEN string slot. 255 and not
+    LOCAL_STR_CAP: this mirrors PXXCStrToFrozen in builtin/builtinheap.pas,
+    which riscv32 and xtensa call for the same construct and which stops at
+    `len < 255`. The slot really does hold LOCAL_STR_CAP data bytes, so 255
+    leaves one unused — but the two paths disagreeing by one byte would make a
+    256-byte argv entry render differently per target, which is a cross-target
+    divergence a differential run would later file as its own bug. One limit,
+    shared, is worth more than the byte; raising BOTH to LOCAL_STR_CAP is a
+    single follow-up rather than two independent ones.
+    bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp }
+  FROZEN_CSTR_CAP = 255;
   DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 2097152;      { 2 MB }
