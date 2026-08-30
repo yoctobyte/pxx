@@ -86,7 +86,7 @@ hides every bug in the programs it stops from compiling*.
   (`ExcSetJmpAddr`, `ExcRaiseAddr`) go through the same check.
   Option **1** of "The fix" above, not option 2: no flag, no uniform slowdown,
   and everything in reach still emits the same three bytes.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f8d51818a.
 
 ### The register note this ticket gave was right to give and still not enough
 
@@ -123,4 +123,4 @@ image fails forward instead, on the RTL tail:
 [[bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build]].
 `ApplyCallFixups` now names that call and says why the direction is what makes
 it unfixable, rather than emitting the bare encoder message.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f8d51818a.
