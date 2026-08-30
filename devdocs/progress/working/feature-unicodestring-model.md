@@ -1086,3 +1086,84 @@ return capacity. **Not filed**: I have not checked whether any compiling program
 can observe it, and CLAUDE.md's table says an observable no program can reach is
 a `rejected/` ticket rather than a low-prio one. If a repro turns up, it is a bug
 ticket with that repro; if none can, this note is its permanent home.
+
+## 6d-1 — landed (the pointee's width: alias + symbol + deref)
+
+`p: ^WideString`. The pointee KIND is `tyAnsiString` for both widths, so after
+the alias break the kind alone no longer says how wide `p^` is — `Length(p^)`
+would count bytes and `p^[i]` would step one. Three carriers:
+`LastTypePointerStrElemTk` (channel), `AliasPtrStrElemTk` (alias),
+`SymPtrElemStrTk` (symbol), plus an AN_DEREF arm in `ASTStrElemTkOf`.
+
+Inert: param (20 lines), return (12 lines) and deref (4 lines, including a deref
+through a record field) matrices all byte-identical to `pinned`.
+
+### One capture site, not twenty-nine
+
+`LastTypePointerElemTk` is written on **29 paths across 8 routines**. Mirroring
+that was the obvious plan and would have been almost entirely wasted: 28 of them
+name a **builtin** pointer type — `PChar`, `PWideChar`, `PPChar`, `TClass`,
+`TObject` — and none of those can have a managed-string pointee. The general
+`^T` form is a **single** site, right after the recursive `ParseTypeKind`
+returns, and it is the only window where the pointee's width is knowable.
+
+**The method that produced that:** ask which subset of a family can actually
+produce your case, rather than mirroring the family. It took 6d-1 from ~29 sites
+to 8. It is the counterweight to "enumerate the analogous column and read every
+enclosing routine" — that method finds sites you would miss; this one discards
+sites you would waste effort on. Both are needed, and they pull in opposite
+directions.
+
+### The near-miss worth recording
+
+At alias registration the width comes from **`LastTypeStrElemTk`, not
+`LastTypePointerStrElemTk`** — which is the opposite of what the names suggest.
+Both arms there parse the POINTEE directly (`fTk := ParseTypeKind`, or the
+element kind of a named fixed-array type), so the live channel describes the
+pointee itself; the pointer-side channel belongs to `ParseTypeKind`'s own `^` arm
+and is 0 on that path.
+
+I wrote the pointer-side one first. It would have recorded **nothing, silently,
+for every `PWStr = ^WideString`** — the one spelling the entire carrier exists to
+serve — and every neutrality test would still have passed, because everything is
+narrow today. Caught by reading how `fTk` is obtained rather than trusting the
+variable's name.
+
+The two arms also differ in *where* the width lives — the channel for a parsed
+pointee, `ArrTypeStrElemTk` (6b's carrier) for an array-type pointee — so both
+are handled. That is the double-case rule from `normalise-dont-special-case`,
+applied at the point of writing rather than after a bug.
+
+### Scope: 6d-2 is the remaining four
+
+The AN_DEREF arm resolves an **AN_IDENT base only**. A deref of a record field
+(`r.p^`) or an array element (`a[i]^`) needs those entities' own pointee-width
+carriers, as do params and returns — the same five-entity set, one level down.
+They read 0 and stay narrow, which is today's behaviour, so 6d-1 is complete and
+correct on its own for the `PWStr = ^WideString; var p: PWStr` path.
+
+**Sizing for whoever takes 6d-2:** the pointee family has **71 write sites**
+across its five carriers (`Syms[].PtrElemTk` 22, `ArrTypePtrElemTk` 21,
+`ProcRetPtrElemTk` 14, `UFldPtrElemTk` 11, `ProcParamPtrElemTk` 3). The
+one-capture-site finding should cut that hard the same way it did here — but
+that needs measuring per carrier, not assuming.
+
+### Unmeasured, shared with two older fields
+
+`AllocRecVar` and `AllocTemp` reset **none** of `SymStrCap`, `SymStrElemTk` or
+`SymPtrElemStrTk`. That is an established pattern predating this campaign
+(`SymStrCap` is old code), matched here rather than diverged from for one field.
+Sym slots are recycled and an unwritten field keeps the previous occupant's
+value — a landmine this codebase has been bitten by repeatedly (`SymArrNDims`,
+`SymBlockId`, both recorded in `AllocParam`'s own comments). Whether a record
+variable or a temp can carry any of the three is **one** unmeasured question for
+all three, and worth answering once rather than three times.
+
+### All carriers are still unexercised
+
+6a–6d write widths that are always `Ord(tyChar)` today. **Step 7b is the first
+time any of them is read with a value that differs** — it is the test for the
+whole carrier set, not just for itself, and a carrier that was never wired
+correctly will not show up until then. The near-miss above is exactly that
+failure mode caught early; assume there are others and treat 7b's first wide
+program as a test of 6a–6d rather than of 7b alone.
