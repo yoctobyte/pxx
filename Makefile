@@ -11158,6 +11158,11 @@ test-core: $(COMPILER)
 	# riscv32 took the low 32 bits and every Single const there was 0.0.
 	./$(COMPILER) test/test_single_const_value.pas $(TESTTMP)/test_single_const26
 	tools/expect_same.sh test_single_const26 "$$($(TESTTMP)/test_single_const26)" "$$(printf '1 2.5000\n2 0.5000\n3 -1.5000\n4 1.5000\n5 0.00 -1.50 2.50\n6 TRUE')"
+	# the same defect through the one shape XTENSA can run: writing a Single pulls
+	# in softfloat, which needs calloc, and that backend emits no dynamic segment.
+	# Reading the bits needs none of it. xtensa was ZERO here before the fix.
+	./$(COMPILER) test/test_single_const_bits.pas $(TESTTMP)/test_single_bits26
+	tools/expect_same.sh test_single_bits26 "$$($(TESTTMP)/test_single_bits26)" "$$(printf '1056964608\n-1077936128')"
 	# feature-c-import-a-pascal-unit-under-a-mangled-name: `#include "x.pas"` is
 	# an IMPORT SITE, not textual inclusion -- the unit's routines arrive as
 	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
@@ -15120,6 +15125,15 @@ test-c-float-const-cross: $(COMPILER)
 	    else echo "test-c-float-const-cross: FAIL $$t (Pascal Single const)"; printf '%s\n' "$$pgot" | sed 's/^/    /'; overall=1; fi; \
 	  fi; \
 	done; \
+	if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  if ! ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_single_const_bits.pas $(TESTTMP)/p_scb_xtensa >$(TESTTMP)/p_scb_xtensa.err 2>&1; then \
+	    echo "test-c-float-const-cross: COMPILE FAIL xtensa (Single const bits)"; tail -2 $(TESTTMP)/p_scb_xtensa.err; overall=1; \
+	  else \
+	    xgot="$$(qemu-xtensa $(TESTTMP)/p_scb_xtensa 2>&1)"; \
+	    if [ "$$xgot" = "$$(printf '1056964608\n-1077936128')" ]; then echo "test-c-float-const-cross: PASS xtensa (Single const bits)"; \
+	    else echo "test-c-float-const-cross: FAIL xtensa (Single const bits)"; printf '%s\n' "$$xgot" | sed 's/^/    /'; overall=1; fi; \
+	  fi; \
+	else echo "test-c-float-const-cross: SKIP xtensa (qemu absent)"; fi; \
 	test "$$overall" = "0" || { echo "test-c-float-const-cross: RED"; exit 1; }
 
 .PHONY: test-c-abi-cross

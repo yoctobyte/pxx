@@ -1417,7 +1417,25 @@ var
 begin
   case IRKind[node] of
     IR_CONST_INT:
-      if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+      { The riscv32 case, on the target that matters most: a float constant's
+        IVal is the DOUBLE bit pattern whatever its tk says (defs.inc,
+        AN_FLOAT_LIT), so a tySingle const must be NARROWED, not truncated --
+        Low32 of a double pattern is the low mantissa half. Measured before the
+        fix, `const S1: Single = 0.5` read back as bits 0 (want 1056964608) and
+        `-1.5` as 0 (want -1077936128): EVERY Single constant on xtensa was
+        zero, in pure Pascal, silently.
+
+        Same shape and same fix as ir_codegen_riscv32.inc, for the same reason:
+        both are soft-float ILP32 and carry a single as its own 32 bits in the
+        first argument register. x86-64/aarch64 carry a single as double bits
+        and never needed it; arm32 loads the whole pattern into d0 and converts
+        on the way out; i386 goes through the shared MovRaxImm, which is a full
+        64-bit immediate. Three backends spell this path three ways and exactly
+        two of them truncated.
+        bug-c-the-f-suffix-on-a-float-literal-is-ignored }
+      if IntToTypeKind(IRTk[node]) = tySingle then
+        EmitLoadConstXtensa(reg_xtensa_a2, DoubleBitsToSingleBits(IRIVal[node]))
+      else if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
         EmitLoadConst64Xtensa(IRIVal[node])
       else
         EmitLoadConstXtensa(reg_xtensa_a2, Low32(IRIVal[node]));

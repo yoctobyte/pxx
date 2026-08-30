@@ -119,3 +119,40 @@ the same reason this ticket's own repro reads a float VARIABLE in row 11 of
 
 ## Log
 - 2026-08-30 — resolved, commit fc0055bff.
+
+## The sibling grep, which frankA asked for and which did NOT come back empty
+
+`Low32` of a double bit pattern is a **shape, not a site**. Every backend's
+`IR_CONST_INT`, checked:
+
+| backend | float const path | truncates? |
+| --- | --- | --- |
+| x86-64 / i386 (`ir_codegen.inc`) | `MovRaxImm(IRIVal[node])` — full 64-bit imm | no |
+| aarch64 | `EmitLoadImmA64(0, IRIVal[node])` | no |
+| arm32 | `TypeIsFloat` → loads the whole pattern into `d0`, converts on the way out | no |
+| **riscv32** | `Low32(IRIVal[node])` | **YES** |
+| **xtensa** | `Low32(IRIVal[node])` | **YES** |
+| wasm32 | no `IR_CONST_INT` case | n/a |
+
+So it was **the first of two**, not one — and the second is xtensa, the primary
+ESP target. Measured there rather than argued: `qemu-xtensa` exists, and the
+value form of the test cannot be built for it (writing a Single pulls in
+softfloat, which needs `calloc`, and that backend emits no dynamic segment), so
+the probe reads the constant's BITS instead.
+
+```
+xtensa BEFORE   0            0
+xtensa AFTER    1056964608   -1077936128     (0.5 = $3F000000, -1.5 = $BFC00000)
+```
+
+Landed as `test/test_single_const_bits.pas` with an xtensa arm in
+`test-c-float-const-cross`. Both truncating backends are soft-float ILP32 and
+carry a single as its own 32 bits in the first argument register, which is
+exactly the property that makes the narrowing necessary — three backends spell
+this path three ways and precisely the two with that value model got it wrong.
+
+**FPC is not the oracle for the bits form**, and it looks like a disagreement:
+FPC prints `0` for `p^`, for `PInteger(@s)^`, and for the inline cast, while
+printing `s:0:4` as `0.5000` in the same program. It agrees about the value and
+does not reflect it through the address. The oracle is IEEE-754, which is
+target-independent; all six of our targets agree with it and with each other.
