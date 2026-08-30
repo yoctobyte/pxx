@@ -158,4 +158,4 @@ fourth data point for.
 Gate: no compiler source touched — a test-only change. `make compiler/pascal26`
 converged (1 round, `0825ad27809f`); all five asm-emit harnesses compile and
 print their banners.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d0a2f5a72.
