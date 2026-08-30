@@ -2017,6 +2017,11 @@ test-nilpy: $(COMPILER)
 	@# list.sort(reverse=) -- the in-place method, not just the sorted() function
 	./$(COMPILER) test/test_nilpy_list_sort_method.npy $(TESTTMP)/test_nilpy_sortmethod26
 	$(TESTTMP)/test_nilpy_sortmethod26 | diff -u test/test_nilpy_list_sort_method.expected -
+	@# list.sort(key=) -- every callable SHAPE and every RECEIVER, since the
+	@# coercion that reaches the callback slot was per-loop and each was broken
+	@# independently; expectation generated from CPython
+	./$(COMPILER) test/test_nilpy_list_sort_key.npy $(TESTTMP)/test_nilpy_sortkey26
+	$(TESTTMP)/test_nilpy_sortkey26 | diff -u test/test_nilpy_list_sort_key.expected -
 	@# d[k] = None stores a real None, and a def with no return annotation parses
 	./$(COMPILER) test/test_nilpy_none_variant_residuals.npy $(TESTTMP)/test_nilpy_noneresid26
 	tools/expect_same.sh test_nilpy_noneresid26 "$$($(TESTTMP)/test_nilpy_noneresid26)" "$$(printf 'None\nTrue\nhi')"

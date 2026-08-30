@@ -2126,6 +2126,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-len-of-str | N | 50 | feature | NilPy: len() on a str (only TPyList is accepted today) | — |
 | feature-nilpy-lexer-literals | N | 55 | feature | NilPy lexer: hex/octal/binary int literals, triple-quoted strings, string line counting | — |
 | feature-nilpy-list-repeat | N | 40 | feature | NilPy: `[0] * 4` (list repeat) is not lowered | — |
+| feature-nilpy-list-sort-inplace-key-reverse | N | 62 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
 | feature-nilpy-list | N | 60 | feature | NilPy: list type v1 (pylib TPyList, literals, subscripts, methods, len) | — |
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
 | feature-nilpy-min-max-over-a-string | N | 30 | feature | `min("cab")` / `max("cab")` do not compile | — |

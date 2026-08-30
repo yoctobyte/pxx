@@ -123,6 +123,7 @@ function PyBareGenExprAhead: Boolean; forward;   { bare genexpr as a call arg (p
 function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean; forward;
 { a builtin TYPE handed to a callback (Pointer) parameter — body in pyparser.inc }
 function PyFixCallableTypeArgs(const nm: AnsiString; argsHead, nArgs: Integer): Boolean; forward;
+function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean; forward;
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
 function PyArgListHasStarElem: Boolean; forward;   { is any argument a `*`/`**` ELEMENT, wherever it sits? (pyparser.inc) }
 function PyStarMixedForwardCall(procIdx: Integer): Integer; forward;   { the one generic collector for a forwarded argument list (pyparser.inc) }

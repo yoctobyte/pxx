@@ -262,11 +262,13 @@ type
       NEW sequence. Returns Self so the statement lowering can use it as a
       value node, the same shape sort() and extend() use. }
     function reverse: Variant;
-    { list.sort(reverse=) -- in place, returns None. `key=` is still absent: it
-      needs PyCallKey1's callable dispatch, which lives in pyeval (which USES
-      this unit, so it cannot be called from here). `reverse=` needs no callable
-      at all — just the opposite pyvar_gt comparison. }
-    function sort(reverse: Boolean = False): Variant;
+    { list.sort(key=, reverse=) -- in place, returns None. `key=` was long
+      absent because calling it needs PyCallKey1's callable dispatch, which
+      lives in pyeval (which USES this unit, so it cannot be called from here);
+      it goes through PyIterCallHook, which is that very routine, installed
+      here by pyeval to invert exactly this dependency. `reverse=` needs no
+      callable at all — just the opposite pyvar_gt comparison. }
+    function sort(key: Pointer = nil; reverse: Boolean = False): Variant;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
       yield the file's LINES, and each keeps its newline, so joining them
       reproduces the file byte for byte — which is what CPython's read()
@@ -5648,14 +5650,30 @@ begin
   Result := pynone;   { Python returns None }
 end;
 
-{ Python's list.sort(reverse=) — IN PLACE, unlike sorted() (pyeval.pas), which
-  returns a new list. `key=` is still absent: it needs PyCallKey1's
-  generic-callable dispatch, which lives in pyeval.pas and cannot be called
-  from here (pyeval `uses pylib`, not the reverse) — refused rather than
-  guessed at. `reverse=` has no such constraint: it needs no callable, only the
-  opposite `pyvar_gt` content-order comparison this unit already has (see
-  max()/min() above). bug-nilpy-list-sort-method-missing,
-  bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error.
+{ Python's list.sort(key=, reverse=) — IN PLACE, unlike sorted() (pyeval.pas),
+  which returns a new list.
+
+  `key=` WAS absent, and the reason recorded here was that it needs PyCallKey1's
+  generic-callable dispatch, which lives in pyeval.pas and cannot be called from
+  a unit pyeval itself `uses`. That constraint is real and is also already
+  solved: pyeval installs PyCallKey1 into PyIterCallHook precisely to invert
+  this dependency, because map/filter cursors in THIS unit had the identical
+  problem. Going through the hook means sort() dispatches a key by the same one
+  entry point sorted()/map()/filter() do, so there is no shape it handles
+  differently — which was the objection that kept this refused (a pylib-side
+  re-implementation would have got the common lambda right and diverged on the
+  callable shapes that fall back). A nil hook raises rather than silently
+  sorting by the UNMAPPED element, the same call the cursors make.
+
+  `reverse=` never had that constraint: it needs no callable, only the opposite
+  `pyvar_gt` content-order comparison this unit already has (see max()/min()
+  above). bug-nilpy-list-sort-method-missing,
+  bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error,
+  feature-nilpy-list-sort-inplace-key-reverse.
+
+  `key` leads, as it does in sorted() and in CPython (`sort(*, key, reverse)`);
+  no caller can pass sort's arguments positionally, since CPython's are
+  keyword-only, so the added leading parameter cannot displace one.
 
   Declaring the parameter is the whole frontend fix. The method call path in
   pasparser_*.inc drives its argument loop off ParamCount (`while mai <=
@@ -5668,9 +5686,25 @@ end;
   way, so equal elements must retain input order in both directions. Flipping
   which operand `pyvar_gt` gets keeps the comparison STRICT, so equal elements
   still do not swap and stability is preserved. }
-function TPyList.sort(reverse: Boolean): Variant;
-var i, j: Integer; v: Variant; swapped: Boolean;
+function TPyList.sort(key: Pointer; reverse: Boolean): Variant;
+var i, j: Integer; v, kv: Variant; swapped: Boolean; keys: TPyList;
 begin
+  { The keys are computed ONCE, up front, and moved in lockstep with the
+    elements below — Python calls key() exactly once per element, and a key
+    with a side effect (or an expensive one) would otherwise be re-entered
+    O(n^2) times by the insertion sort. Same shape as sorted(). }
+  keys := TPyList.Create;
+  for i := 0 to Self.count - 1 do
+  begin
+    if key <> nil then
+    begin
+      if PyIterCallHook = nil then
+        raise TypeError.Create('list.sort(): callable dispatch is unavailable');
+      keys.append(PyIterCallHook(key, Self.at(i)));
+    end
+    else
+      keys.append(Self.at(i));
+  end;
   for i := 1 to Self.count - 1 do
   begin
     j := i;
@@ -5678,18 +5712,22 @@ begin
     while (j > 0) and swapped do
     begin
       if reverse then
-        swapped := pyvar_gt(Self.at(j), Self.at(j - 1))
+        swapped := pyvar_gt(keys.at(j), keys.at(j - 1))
       else
-        swapped := pyvar_lt(Self.at(j), Self.at(j - 1));
+        swapped := pyvar_lt(keys.at(j), keys.at(j - 1));
       if swapped then
       begin
         v := Self.at(j);
         Self.put(j, Self.at(j - 1));
         Self.put(j - 1, v);
+        kv := keys.at(j);
+        keys.put(j, keys.at(j - 1));
+        keys.put(j - 1, kv);
         Dec(j);
       end;
     end;
   end;
+  keys.Free;
   Result := pynone;   { Python returns None }
 end;
 

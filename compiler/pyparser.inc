@@ -8429,6 +8429,21 @@ begin
   argsHead := slot[0];
   lastArg := slot[maxIdx];
   nArgs := maxIdx + 1;
+
+  { A callable handed to a raw callback `Pointer` parameter, coerced here —
+    AFTER the reorder above, which is what makes an argument's position equal
+    its parameter index.
+
+    Here rather than in the argument loops because there are SEVEN of them (a
+    local receiver, a field receiver, an indexed receiver, a dynamic receiver,
+    the star-unpack and collect paths, the class-method path), spread across
+    files two tracks own, and every one of them funnels through this procedure.
+    Wiring the coercion into one loop is how `xs.sort(key=f)` came to work on a
+    local and a field receiver and SEGFAULT on `nested[0].sort(key=f)` — the
+    same construct, a different loop, no reason a reader could see.
+    devdocs/dev/normalise-dont-special-case.md
+    feature-nilpy-list-sort-inplace-key-reverse }
+  PyCoerceCallableArgsIn(mpi, argsHead);
 end;
 
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer;
@@ -15707,6 +15722,11 @@ begin
     lastArg := argNode;
     Inc(k);
   end;
+  { The same callable→Pointer coercion the plain-call path does, now that the
+    overload (and so the parameter TYPES) is settled: `xs.sort(key=f)` reaches
+    a raw callback Pointer exactly as `sorted(xs, key=f)` does. }
+  PyCoerceCallableArgsIn(mpi, selfArg);
+
   { VIRTUAL dispatch only when the class actually participates in a hierarchy.
     NilPy classes that merely SHARE a method name (songformatter has eight
     unrelated detector classes each declaring analyze) still get virtual slots,
@@ -21213,6 +21233,110 @@ begin
           ASTLeft[currArg] := node;
           Result := True;
         end;
+      end;
+    end;
+    currArg := ASTRight[currArg];
+    Inc(i);
+  end;
+end;
+
+function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean;
+{ A callable VALUE handed to a raw callback `Pointer` parameter, coerced to the
+  code address the slot has always wanted.
+
+  A `Callable[...]`/`key=` parameter is tyPointer (PyCallKey1 calls through it),
+  while every callable a NilPy program can NAME is a 16-byte variant: a lambda
+  or def in a variable (tag 9/12), a bound method (8), a lifted bound-fn (10).
+  The plain coercion takes the variant's first word — its TAG — as the code
+  address, so the program jumps to 8, 9, 10 or 12. The faulting PC being a
+  small tag number is the tell, the same one PyFixCallableTypeArgs documents
+  for the builtin-TYPE crossing.
+
+  Extracted from the free-function call path so the METHOD paths can ask the
+  same question. It was inline there, and being inline is exactly why
+  `sorted(xs, key=f)` worked for all six callable spellings while
+  `xs.sort(key=f)` segfaulted on five of them — one road had the coercion and
+  the other could not reach it. One implementation, two callers; the second
+  copy is the one that would have drifted.
+  devdocs/dev/normalise-dont-special-case.md
+  feature-nilpy-list-sort-inplace-key-reverse
+
+  argsHead is the whole AN_ARG chain INCLUDING Self on a method call, so the
+  walk lines up with Procs[].Params either way: Self sits at slot 0 and is
+  never tyPointer, so it is skipped by the test rather than by a special case. }
+var currArg, i, capSym, identNode, argSeq, tailArg, exprNode: Integer;
+    btPi, argN, code, wrapPi: Integer;
+begin
+  Result := False;
+  if not isNilPy then Exit;
+  if procIdx < 0 then Exit;
+  btPi := FindProc('pybtype');
+  currArg := argsHead;
+  i := 0;
+  while (currArg <> -1) and (i < Procs[procIdx].ParamCount) do
+  begin
+    { A builtin TYPE in the slot — `xs.sort(key=str)`. It is the `pybtype(code)`
+      call the frontend itself builds, and its payload is a small CODE, not an
+      address: coerced into the pointer slot the program jumps to 5. Rewritten
+      to the address of the one-argument routine that type performs, which is
+      what the slot has always wanted. PyFixCallableTypeArgs does exactly this
+      for the plain-call path, where it must run BEFORE overload matching (the
+      argument's TYPE is what picks the overload); here the overload is already
+      settled, so the resolved parameter answers the same question exactly
+      rather than by asking the whole name family.
+      bug-nilpy-a-builtin-type-as-a-key-callback-segfaults }
+    if (i < MAX_PROC_PARAMS) and (btPi >= 0) and
+       (Procs[procIdx].Params[i].TypeKind = tyPointer) and
+       (ASTLeft[currArg] >= 0) and (ASTKind[ASTLeft[currArg]] = AN_CALL) and
+       (ASTIVal[ASTLeft[currArg]] = btPi) then
+    begin
+      argN := ASTLeft[ASTLeft[currArg]];
+      if (argN >= 0) and (ASTLeft[argN] >= 0) and
+         (ASTKind[ASTLeft[argN]] = AN_INT_LIT) then
+      begin
+        code := Integer(ASTIVal[ASTLeft[argN]]);
+        wrapPi := PyBuiltinTypeCallbackProc(code);
+        if wrapPi >= 0 then
+        begin
+          exprNode := AllocNode(AN_PROCADDR);
+          ASTIVal[exprNode] := wrapPi;
+          ASTTk[exprNode] := Ord(tyPointer);
+          ASTLeft[currArg] := exprNode;
+          Result := True;
+        end;
+      end;
+    end;
+    if (i < MAX_PROC_PARAMS) and
+       (Procs[procIdx].Params[i].TypeKind = tyPointer) and
+       (ASTLeft[currArg] >= 0) and
+       (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyVariant) then
+    begin
+      { A parameter that DECLARES a default of nil means "not given" by nil, so
+        None is a legal value for it — `sorted(xs, key=None)` is CPython's own
+        no-key spelling. The strict form stays for a parameter with no default,
+        where None really is an error (map/filter refuse it in CPython too). }
+      if ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] then
+        capSym := FindProc('pyvar_callable_ptr_opt')
+      else
+        capSym := FindProc('pyvar_callable_ptr');
+      if capSym >= 0 then
+      begin
+        identNode := AllocNode(AN_STR_LIT);
+        ASTSOffset[identNode] := PyStoredName(Procs[procIdx].Params[i].Name);
+        ASTSLen[identNode] := Length(Procs[procIdx].Params[i].Name);
+        ASTTk[identNode] := Ord(tyString);
+        argSeq := AllocNode(AN_ARG);
+        ASTLeft[argSeq] := identNode;
+        ASTRight[argSeq] := -1;
+        tailArg := AllocNode(AN_ARG);
+        ASTLeft[tailArg] := ASTLeft[currArg];
+        ASTRight[tailArg] := argSeq;
+        exprNode := AllocNode(AN_CALL);
+        ASTIVal[exprNode] := capSym;
+        ASTLeft[exprNode] := tailArg;
+        ASTTk[exprNode] := Ord(tyPointer);
+        ASTLeft[currArg] := exprNode;
+        Result := True;
       end;
     end;
     currArg := ASTRight[currArg];
@@ -48633,49 +48757,17 @@ begin
                     + Procs[procIdx].Params[i].Name
                     + '", but the argument is a callable — call it, or declare '
                     + 'the parameter as a Callable');
-            { A `Callable[...]` parameter is tyPointer (the annotation registers a
-              $proctype signature), and a callable VALUE is a 16-byte variant. The
-              plain coercion took the variant's first word — its TAG — as the code
-              address, so passing a lambda to a Callable parameter jumped to 9.
-              pyvar_callee_addr yields the payload, unwrapping a {code, recv}
-              function value on the way
-              (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
-            if (Procs[procIdx].Params[i].TypeKind = tyPointer) and
-               (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyVariant) then
-            begin
-              { A parameter that DECLARES a default of nil means "not given" by
-                nil, so None is a legal value for it — `sorted(xs, key=None)` is
-                CPython's own no-key spelling and was raising a TypeError. The
-                strict form stays for a parameter with no default, where None
-                really is an error (map/filter refuse it in CPython too).
-                bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
-              if (i < MAX_PROC_PARAMS) and
-                 ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] then
-                capSym := FindProc('pyvar_callable_ptr_opt')
-              else
-                capSym := FindProc('pyvar_callable_ptr');
-              if capSym >= 0 then
-              begin
-                identNode := AllocNode(AN_STR_LIT);
-                ASTSOffset[identNode] := PyStoredName(Procs[procIdx].Params[i].Name);
-                ASTSLen[identNode] := Length(Procs[procIdx].Params[i].Name);
-                ASTTk[identNode] := Ord(tyString);
-                argSeq := AllocNode(AN_ARG);
-                ASTLeft[argSeq] := identNode;
-                ASTRight[argSeq] := -1;
-                lastArg := AllocNode(AN_ARG);
-                ASTLeft[lastArg] := ASTLeft[currArg];
-                ASTRight[lastArg] := argSeq;
-                exprNode := AllocNode(AN_CALL);
-                ASTIVal[exprNode] := capSym;
-                ASTLeft[exprNode] := lastArg;
-                ASTTk[exprNode] := Ord(tyPointer);
-                ASTLeft[currArg] := exprNode;
-              end;
-            end;
             currArg := ASTRight[currArg];
             Inc(i);
           end;
+          { A `Callable[...]` parameter is tyPointer (the annotation registers a
+            $proctype signature), and a callable VALUE is a 16-byte variant —
+            coerced to the code address by the ONE walk both the plain-call and
+            the method paths share. It lived inline here until a method call
+            needed the identical fix
+            (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable,
+            feature-nilpy-list-sort-inplace-key-reverse). }
+          PyCoerceCallableArgsIn(procIdx, argsHead);
         end;
 
         { NilPy nested def: fill the trailing parameters that stand for the
