@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (331)
+## backlog (332)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -348,6 +348,7 @@ _none_
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
+| grant-progress-py-to-pxx-a5-for-the-uncited-resolve-check | A | 50→45 | grant |  | — |
 | grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s | A+S | 55 | grant | GRANT: the xtensa arm of `EmitManagedLocalCleanupForTarget` → Track S | — |
 | idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 5 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
 | idea-adaptive-heap-growth | A | 5 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
@@ -871,6 +872,7 @@ _none_
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
 - [p 45] [B] feature-random-library [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
+- [p 45] [A] grant-progress-py-to-pxx-a5-for-the-uncited-resolve-check
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [A] refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count
 - [p 45] [N] refactor-n-two-import-handlers-are-twins

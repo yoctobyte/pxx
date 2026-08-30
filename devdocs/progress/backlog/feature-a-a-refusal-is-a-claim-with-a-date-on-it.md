@@ -5470,3 +5470,170 @@ Footnote worth keeping because it stops a future misfiling: the `No such fil`
 truncation in the error text is **pdfgen's own `char errstr[128]`**, reproduced
 identically by a C-only probe — not our rendering. Establishing whose bug a symptom
 is, before it becomes a ticket in the wrong lane, is the cheap half of this work.
+
+### 134 — declining a well-argued pattern because the SHAPE does not match
+
+*frank-optimize-b4, 2026-08-30, offered face 132a for its `-O3` campaign.*
+
+It refused, and named the reason: 132a applies where a fix is correct but the
+ungoverned set can **grow behind a fence**. Its case has the opposite shape —
+`-O3` is a free tier with nothing gating it, so an unpromoted pass is not an
+unbounded liability accumulating out of sight; it is fully live for anyone passing
+`-O3` and fully absent otherwise. *"A good shape, and I want to be honest that it
+does not fit here, rather than adopt it because it is well argued."*
+
+**A pattern arrives with the authority of the argument that produced it**, and that
+authority is about the *original* case. Adopting it elsewhere because the reasoning
+impressed you is how a good idea becomes ceremony — and ceremony is the thing people
+learn to route around, which costs the pattern its real applications too.
+
+Then it did the valuable half: **relocated it to where the shape does match.** Its
+aarch64 gap — x86-64 15 gate sites, aarch64 4 — *is* an ungoverned remainder, and it
+grows by one every time a slice lands on one arm, as slice 8 just did. Its umbrella
+already required recording the per-backend gate count per slice; that is a
+**measurement**, and 132a says make it an **assertion**. Freezing the delta so the
+next one-armed slice fails loudly beats a number in a log nobody diffs.
+
+**Declining a pattern and relocating it are one act, not two.** A bare refusal loses
+the insight; a bare adoption misapplies it.
+
+### 134a — and the check you were about to build may be a fix
+
+Proposed the same night, from a real instance: *a re-triage that moves frontmatter
+leaves the ticket's own prose contradicting the ranker — worth a sweep.* True
+instance, sound reasoning, and the finder had just fixed one.
+
+Measured across all **380** ranked + `working/` tickets: **1 states a prio in prose
+at all**, and that 1 disagrees. **One finding, ever, is not a check — it is a fix.**
+The cost of measuring was one script; the cost of not measuring is a permanent scan
+that fires once and thereafter teaches people it has nothing to say.
+
+Note the shape, because it is the inverse of the usual error and therefore rarer:
+not *a check that fires too often*, but **a check whose entire population is one
+row.** Both fail the same way — the guard stops being read — and both are caught by
+the same habit of counting the population before writing the guard.
+
+### 135 — a ticket's STATED blocker and its ACTUAL blocker are independent claims
+
+*frankwasm, 2026-08-30, NilPy user-defined decorators.*
+
+The ticket's own central premise was that three callable representations had to be
+reconciled — *"the first thing to measure, not to assume"* — and that this made the
+feature not-small. Measured: `g = deco(g)` written by hand works today, rebinds the
+def's own name, and **chains**, so a second one gives `W(W(g))` — stacked-decorator
+semantics for free. **The stated barrier does not exist.**
+
+A different one does, and it is now located precisely. Same `return g()` in a later
+def: the hand-written form emits `AN_CALL ival=1635 tk=22`, the decorated form emits
+`AN_CALL ival=1860 tk=23` — **`g` itself, called directly.** Global exists, is a
+variant, funcvalue built, assignment built, and the call site consults none of it.
+The hypothesis is a **token-position** key, because every neighbouring rule has that
+shape (`PyUserShadowsProc` tests `ProcPyDefTok[i] - 1 <= TokPos`; `PyRedefBindingAt`
+takes the last binding whose def token *precedes* the reference) — and **a
+synthesised assignment has no token index, so no such test can ever see it.**
+
+**Disproving the stated blocker is progress even when the feature does not land.**
+The ticket is worth more now than when it was opened: one barrier deleted, one
+located, one design ruled out by experiment (swapping `FindSym` for
+`PyAssignTargetSym` with a kind check — unchanged), and a third proposed (register
+the decorated def under a hidden name, closer to what CPython does).
+
+### 135a — and it reverted WORKING code to avoid shipping the half
+
+`@deco / def g / print(g())` compiled clean and printed `g` — **the undecorated
+answer.** The decorator ran and its result was discarded. Today's `unsupported
+decorator` error is worse ergonomics and **strictly better behaviour**, so the half
+was unshippable: it is the silent-wrong-answer class, which the same session had
+filed three tickets about that night.
+
+The pull toward shipping it is strongest exactly here — it *works*, it took real
+effort, and the failure is invisible in the demo. **A feature that is silently wrong
+is a defect with a changelog entry**, and the changelog is what stops anyone
+re-checking it.
+
+### 136 — 132a freezes a set too large to FIX; re-scoping fixes a set too large to REPORT
+
+*pxx-a5, 2026-08-30, offering the other side of 132a.*
+
+Same underlying quantity, opposite move, and **in both cases the answer is to change
+what the guard is allowed to look at rather than to make the guard cleverer.**
+
+31 uncited resolutions in the freshest six days are worthless as a standing report
+over the tree — that is a muted guard by construction. **The same 31 are valuable one
+at a time, addressed to the person who just resolved the ticket, at the moment fixing
+it costs one line.** So the check moved from `check()` over the tree to `sync.sh` over
+`manifest_resolved`, and **the hardest caution dissolved rather than being satisfied:
+there is no date floor to get wrong, because "this push" is the floor.**
+
+Two of its three cautions now hold **by construction rather than by care**, which is
+the right end state for all three. A caution that must be remembered is a caution that
+will eventually not be.
+
+### 136a — the grant I filed rested on a number its own author had retracted
+
+Mine. The grant cited *"3 of 681"*, and the commit rejecting that number was pushed
+**before** my grant landed: the count came from an ad-hoc test that scored a ticket
+merely *discussing* a `commit range 8fb3f776..b3fd1c76` as cited. Under the house
+definition the freshest six days give **31 of 328**, and the pre-August window **456
+of 1123** — so the date floor I wrote in as a caution was **falsified by the same
+data that motivated it**.
+
+I verified the *design* and not the *number*. The design was good, which is exactly
+why the number went unexamined — and I had spent the preceding hour telling other
+lanes that a plausible, load-bearing claim adjacent to something the author genuinely
+knows is the profile of a claim that goes unchecked. **An authorisation quotes its
+premise, and quoting freezes it**: the retraction had already landed on master, and
+my grant re-published the dead number with the coordinator's authority behind it.
+
+The lane returned the grant unspent rather than working inside it. **That is the
+system working** (operating rule 3), and the tell was in the grant itself: the ticket
+it cited was in `rejected/` at the moment I wrote the citation.
+
+### 137 — an AUDITOR's stated danger deserves the same scepticism as a doc's stated limitation
+
+*frankD, 2026-08-30, sweeping the live docs for unexecuted re-check obligations.*
+
+The mirror of the false-limit rule, and the half that was missing. A doc saying *"this
+is not possible"* reads as conscientious and stops anyone re-checking. **So does an
+auditor saying "this is dangerous."** Both are unfalsified claims wearing the costume
+of rigour.
+
+Concretely: bare-name shims (`re`, `configparser`, `tkinter`) sit beside `mimic_*`
+ones, and the resolver probes `<name>` **first**. The alarming reading is immediate —
+a bare-named shim shadows a user's own `re.py` — and it had a plausible mechanism and
+a real code smell behind it. The ticket was half-drafted.
+
+**It ran the test instead.** A local `re.py` defining `compile()`, beside `import re`,
+built with `$(PXX_STABLE)`: prints **`USER-RE`**. The user's module wins. Two minutes.
+
+The asymmetry that makes this worth banking: *"mine would have been more expensive
+than the doc's, because it would have arrived in frankB's queue wearing the authority
+of a measurement I had not taken."* An auditor's finding is **routed**, and routing
+converts it into someone else's premise. So the scepticism must be spent **before**
+filing, not after — and per the compat table's own rejection row, what actually
+survived here is expectation cost with no program behaving differently, which is a
+note in the doc, not a prio-10 ticket sitting in the ranker's scan forever.
+
+### 137a — WHICH docs to sweep, stated mechanically
+
+The selection criterion under 106 (*a documented trap is not a guard*), and the
+reason it is not merely restating it:
+
+> **The rule was written by someone who could execute it once, for a reader who has
+> no way to know whether anyone has.**
+
+So: **every such rule needs either a command that re-derives its own status, or a
+named owner who is asked.** `track-b-workarounds.md`'s *"verify the bug ticket is
+still in backlog/ before assuming the workaround is still needed"* had neither — 7 of
+8 rows cited closed tickets. `python-compat-tiers.md`'s *"should move behind the same
+mapping **when it lands**"* had neither — it landed, the three units have not moved,
+and `lib/pcl` now holds `tkinter.pas` beside `mimic_tkinter_font.pas`: **the
+convention applied inconsistently inside one package family.**
+
+That is a grep-able shape — *"when X lands"*, *"revisit once"*, *"until Y"* — and it
+separates obligations from aphorisms, which are the same sentence in a different mood.
+Yield on 18 of 42 docs: mostly aphorisms, one real, one **verified negative** worth
+recording (`nilpy-semantics-divergences.md`'s *"parked in rainy-day/, not rejected"* —
+still exactly there). Note that the real one was **the second instance in a file the
+same auditor had corrected two hours earlier**: the sibling rule bit twice in one
+night, in the same direction both times.
