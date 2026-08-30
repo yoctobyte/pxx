@@ -11295,149 +11295,29 @@ begin
   end
   else
   begin
-  { Copy SysV argument locations to local parameter slots. Integer and SSE
-    classes have independent register counts; overflow args are 8-byte stack
-    slots starting at [rbp+16]. }
-  intIdx := 0;
-  sseIdx := 0;
-  stackOff := 16;
-  for i := 0 to nparams-1 do
-  begin
-    idx := Procs[procIdx].Params[i].SymIdx;
-    sz := ParamSize(idx);
-    if TypeIsFloat(ptypes[i]) and (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
-    begin
-      if sseIdx < 8 then
-      begin
-        if ptypes[i] = tySingle then EmitB($F3) else EmitB($F2);
-        EmitB($0F); EmitB($11);
-        case sseIdx of
-          0: EmitB($85);
-          1: EmitB($8D);
-          2: EmitB($95);
-          3: EmitB($9D);
-          4: EmitB($A5);
-          5: EmitB($AD);
-          6: EmitB($B5);
-          7: EmitB($BD);
-        end;
-        EmitI32(Syms[idx].Offset);
-        Inc(sseIdx);
-        Continue;
-      end
-      else
-      begin
-        EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff); { mov rax, [rbp+stackOff] }
-        Inc(stackOff, 8);
-        if ptypes[i] = tySingle then
-        begin
-          EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
-          EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
-          EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); { movss [rbp+off], xmm0 }
-          Continue;
-        end;
-        { Stack-spilled DOUBLE named param (9th+ FP arg): store the loaded
-          bits. This was missing — control fell through into the integer
-          register-homing code below and the slot kept garbage/zero
-          (bug-c-vararg-vastart-named-fp-stack, the named-param half). }
-        EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); { mov [rbp+off], rax }
-        Continue;
-      end;
-    end
-    else if intIdx >= 6 then
-    begin
-      EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff); { mov rax, [rbp+stackOff] }
-      Inc(stackOff, 8);
-      if sz = 1 then
-      begin
-        EmitB($88); EmitB($85);                   { mov [rbp+off], al }
-      end
-      else if sz = 2 then
-      begin
-        EmitB($66); EmitB($89); EmitB($85);       { mov [rbp+off], ax }
-      end
-      else if sz = 4 then
-      begin
-        EmitB($89); EmitB($85);                   { mov [rbp+off], eax }
-      end
-      else
-      begin
-        EmitB($48); EmitB($89); EmitB($85);       { mov [rbp+off], rax }
-      end;
-      EmitI32(Syms[idx].Offset);
-      Continue;
-    end;
+    { COLLAPSED into the shared arm. This block held a full SysV classification
+      -- independent int/SSE banks, overflow from [rbp+16], the tySingle
+      narrowing pairing -- because the C frontend needed a SysV prologue before
+      EmitParamSpillsForTarget existed. feature-cdecl-bodied-sysv-prologue then
+      mirrored those exact bytes into the shared arm, taking the count from one
+      copy to two, and its comment said outright "do not fix one of these two
+      without the other".
 
-    if intIdx < 4 then
-    begin
-      if sz = 1 then
-      begin
-        if (intIdx = 0) or (intIdx = 1) then EmitB($40); { REX prefix for dil, sil }
-        EmitB($88);
-      end
-      else if sz = 2 then
-      begin
-        EmitB($66); EmitB($89);
-      end
-      else if sz = 4 then
-      begin
-        EmitB($89);
-      end
-      else
-      begin
-        EmitB($48); EmitB($89);
-      end;
+      The two read the parameter's type from different places -- this copy from
+      the local ptypes[], the shared arm from Syms[idx].TypeKind -- which is the
+      one thing that had to be checked before swapping, since a C declaration
+      can carry a type its symbol does not. MEASURED, not assumed: a probe
+      comparing them over array decay (`int a[]`, `int a[][4]`), pointer arrays,
+      function-pointer params, structs by value and by pointer, mixed float/int
+      and the 829-proc csmith corpus reported ZERO mismatches.
 
-      case intIdx of
-        0: EmitB($BD);   { rdi }
-        1: EmitB($B5);   { rsi }
-        2: EmitB($95);   { rdx }
-        3: EmitB($8D);   { rcx }
-      end;
-      EmitI32(Syms[idx].Offset);
-    end
-    else if intIdx = 4 then
-    begin
-      if sz = 1 then
-      begin
-        EmitB($44); EmitB($88); EmitB($85);
-      end
-      else if sz = 2 then
-      begin
-        EmitB($66); EmitB($44); EmitB($89); EmitB($85);
-      end
-      else if sz = 4 then
-      begin
-        EmitB($44); EmitB($89); EmitB($85);
-      end
-      else
-      begin
-        EmitB($4C); EmitB($89); EmitB($85);
-      end;
-      EmitI32(Syms[idx].Offset);
-    end
-    else if intIdx = 5 then
-    begin
-      if sz = 1 then
-      begin
-        EmitB($44); EmitB($88); EmitB($8D);
-      end
-      else if sz = 2 then
-      begin
-        EmitB($66); EmitB($44); EmitB($89); EmitB($8D);
-      end
-      else if sz = 4 then
-      begin
-        EmitB($44); EmitB($89); EmitB($8D);
-      end
-      else
-      begin
-        EmitB($4C); EmitB($89); EmitB($8D);
-      end;
-      EmitI32(Syms[idx].Offset);
-    end;
-    Inc(intIdx);
-  end;
+      Dispatch stays correct by construction rather than by this call site
+      knowing anything: EmitParamSpillsForTarget takes its SysV arm only for
+      `ProcCdecl[procIdx]`, which is True for a genuinely C-defined proc and
+      False for a C declaration bound to a Pascal routine (mangBound) -- and
+      that one must keep the Pascal prologue, which is exactly what it then
+      gets. refactor-a-collapse-the-c-frontend-sysv-prologue-copy }
+    EmitParamSpillsForTarget(procIdx, nparams);
   end;  { end of x86-64 param-spill else-branch }
 
   { Constant global initializers (struct/union brace inits recorded as PendingInit
