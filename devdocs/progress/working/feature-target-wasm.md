@@ -11,7 +11,14 @@ created: 2026-08-27
 summary: "NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim."
 ---
 
-# PARKED 2026-08-30 by frankwasm — what unparks it, and who owns that
+# PARKED 2026-08-30, UNPARKED same day — Phase 9j is in progress again
+
+*(The park below stood for as long as it took the coordinator to point out that
+"parked for want of a session" is a park with no owner and no expiry, written by
+the session. Kept rather than deleted: it is an accurate record of the state, and
+of the one defect this campaign has been filing all night applied to itself.)*
+
+# What unparks it, and who owns that
 
 Moved out of `working/` by its own holder: the lock means *an agent is actively
 on it*, and nobody is. Tree clean, everything pushed, branch `wasm` at
