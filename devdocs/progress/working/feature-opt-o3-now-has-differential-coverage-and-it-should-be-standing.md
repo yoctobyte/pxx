@@ -278,3 +278,59 @@ measured against no particular compiler, with nothing on disk to show it.
 from the four kinds of non-probe is one command —
 `grep -rc "PxxDbgEnabled('<tag>')" compiler/` plus which file the site is in.
 Running it over every `PXXDBG` tag in the tree is cheap and nobody has.
+
+### RESULT — x86-64 `-O3`, re-established against the CURRENT binary
+
+```
+tools/csmith_fuzz.py --opts 0,2,3 --iters 300 --seed-start 340000
+```
+
+**258 agreed with the gcc oracle, 42 skipped, ZERO findings.** Seeds
+**340000-340299**, compiler `ba3d1a18edf6` — unchanged for the whole run, which
+is the property the result depends on and the reason no rebuild happened while
+it was in flight.
+
+**This is not "443 + 258".** The 443 was measured against `f2bfbb3c94a5` and is
+evidence about that binary; this is evidence about `ba3d1a18edf6`. They do not
+add. **Two clean batches on one backend are the same evidence with a bigger
+denominator**, not twice the evidence — and 42 skips (14%) means 258 is the
+denominator, not 300.
+
+### The probes LANDED — and the control that nearly produced a false alarm
+
+`8d44c9754`. Both are inside `PxxDbgEnabled`, so the claim that they cannot
+change codegen is sound — and it was checked anyway, which is the right
+relationship between an argument and a cheap test.
+
+**The check first said they DID change codegen.** Whole-file `cmp` of a
+`-g` build, probe compiler vs no-probe compiler: 384 bytes apart. Section by
+section, the truth: **`.text` byte-identical**, `.data` identical, `.bss`
+identical — the entire difference was **`.debug_line`**.
+
+Then the discriminator, and it exonerates the probes completely: a **stage-1
+build WITH the probes** emits `e79b4908…`, byte-for-byte what the **no-probe**
+build emits. Probe and no-probe are indistinguishable; what differed was
+something else entirely.
+
+**It is `argv[0]`.** The same byte-identical binary, same source, same flags,
+same output path, invoked three ways:
+
+| output | invocation |
+| --- | --- |
+| `d17ef8a29b32d82f` | `./compiler/pascal26` |
+| `a7a9eba654ee6237` | `/home/neo/frank-optimize/compiler/pascal26` |
+| `e79b49081c9e0b68` | `$SCRATCH/p26-probe-s1` (byte-identical to the first) |
+
+**Known, deliberate, and not a bug**:
+[[bug-a-the-compilers-output-depends-on-argv0]] (done, `3b0a886e9`) fixed the
+emitted string pool via `KeyStrs` and scopes this out in as many words —
+*"Debug info (`-g`) records real source paths by design and is not in scope
+here."*
+
+**The reusable caveat, and it lands on the technique this ticket has been
+recommending all evening:** a **`-g` build cannot serve as a byte-comparison
+control between two compilers at different paths**, and the scratch-build
+technique *always* puts them at different paths. Compare `.text`
+section-by-section, or invoke both through equal-length paths. I was one step
+from reporting "my debug-only probe changed codegen", and the thing that caught
+it was refusing to accept a whole-file `cmp` as an answer about code.
