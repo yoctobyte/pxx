@@ -4367,12 +4367,28 @@ begin
           Error('__pxxSigNum is x86-64 only so far — this target''s signal '
                 + 'dispatch stub does not park the signal number '
                 + '(feature-signal-siginfo-ucontext item 4)');
-        { Every hosted Linux target now installs with SA_SIGINFO; only xtensa/ESP
-          is left out, and deliberately — FreeRTOS is not a Unix and has no
-          signal runtime at all (EmitSignalRuntime* has no xtensa sibling). }
-        if TargetArch = TARGET_XTENSA then
+        { Every target that HAS a signal runtime installs it with SA_SIGINFO, so
+          this asks that one question and nothing else. It used to read
+          `TargetArch = TARGET_XTENSA`, which was a fact about the PLATFORM
+          ("FreeRTOS is not a Unix") written as a test on the ARCH back when the
+          two were the same thing for xtensa; the hosted profile separated them
+          and the premise expired
+          (ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired).
+          TargetHasSignalRuntime is that axis, shared with the two dispatchers in
+          ir_codegen.inc so a target cannot be accepted here and absent there. }
+        if not TargetHasSignalRuntime then
           Error(name + ' needs SA_SIGINFO, which this target''s signal runtime '
                 + 'does not install (feature-signal-siginfo-ucontext)');
+        { __pxxSigPCPtr / __pxxSigSPPtr need one MORE per-arch fact than the rest:
+          the byte offset of the saved PC/SP inside ucontext_t, which is measured
+          per target and is -1 where nobody has measured it. Keyed on the VALUE
+          rather than on an arch list, because a list is what went stale above:
+          add the row to UContextPCOffset and this opens by itself. }
+        if ((CaseEqual(name, '__pxxSigPCPtr') and (UContextPCOffset < 0)) or
+            (CaseEqual(name, '__pxxSigSPPtr') and (UContextSPOffset < 0))) then
+          Error(name + ' needs the saved-PC/SP offset inside this target''s '
+                + 'ucontext_t, which has not been measured yet '
+                + '(UContextPCOffset in ir.inc)');
         if NoSignals then
           Error(name + ' requires the signal runtime (built with --no-signals)');
         Next;

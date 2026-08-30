@@ -54,6 +54,14 @@ procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Intege
 procedure PatchProgramEntryJump(jmpPatch: Integer); forward;
 procedure EmitParamSpillsForTarget(procIdx, nparams: Integer); forward;
 procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer); forward;
+function  TargetHasSignalRuntime: Boolean; forward;         { the ONE axis the five signal sites share -- platform, not arch }
+{ Both live in ir.inc, which compiler.pas includes AFTER the Pascal parser, so
+  the __pxxSigPCPtr / __pxxSigSPPtr guards in pasparser_expr.inc need them
+  forwarded here or the FPC bootstrap seed cannot resolve them -- pxx resolves
+  across the unit, FPC resolves in source order, so the gap self-hosts green and
+  breaks `make bootstrap` alone. }
+function  UContextPCOffset: Integer; forward;
+function  UContextSPOffset: Integer; forward;
 procedure EmitSignalRuntimeForTarget; forward;   { its sibling: the one place the per-arch signal runtime is chosen }
 procedure EnsureSignalBss; forward;                        { the BSS_SIG_* block, idempotent }
 procedure EmitDefaultSignalInstallForTarget; forward;       { SIGINT/SIGTERM install at program start }

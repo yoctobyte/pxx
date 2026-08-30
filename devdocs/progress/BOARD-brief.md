@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:33 blocked:9 backlog:392 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2883 rejected:68`
+`working:3 unfinished:32 blocked:9 backlog:393 backlog_new:27 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2884 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,7 +13,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-expansion` [P] — owner: frankwasm
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 
-## unfinished (33) — parked mid-flight; re-claim, do not duplicate
+## unfinished (32) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S]
@@ -47,7 +47,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
-- `ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired` [A+S]
 
 ## blocked (9) — has an unmet blocker; do not claim
 

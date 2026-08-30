@@ -3,7 +3,7 @@ slug: ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expire
 track: A+S
 prio: 55
 type: ruling
-status: unfinished
+status: done
 found: 2026-08-30
 owner: frankS
 ---
@@ -547,3 +547,134 @@ gate*, and that is not the situation here:
 
 **Re-claim before the first commit when this resumes** — the lock is not
 inherited from this session.
+
+## Addendum 7 (frankS, 2026-08-30): DONE — and step 3 of the derivation was wrong
+
+The axis moved, in one commit, in all five sites, with the runtime wired ahead of
+it exactly as addendum 2 required. `hits=2 / resumed after handler` on hosted
+xtensa, byte-identical to what x86-64, i386, aarch64, arm32 and riscv32 print for
+the same source. That is the **first execution of a single byte** of
+`EmitSignalRuntimeXtensa`, which landed as dead code in `d52476d8c` and said so.
+
+**Two things the ticket priced were wrong, in opposite directions.**
+
+### The cost estimate was stale in our favour
+
+`EmitSignalRuntimeXtensa` already existed. What was missing was the wiring —
+`EmitSignalRuntimeForTarget` and `EmitDefaultSignalInstallForTarget` had no
+xtensa arm, and `IR_SET_SIGNAL` had none either, so `SetSignalHandler` did not
+compile on xtensa at all. That last one is not in this ticket or in `d52476d8c`'s
+list; it was found by trying to run the thing.
+
+### Step 3 of the derivation IS WRONG, and the conclusion survives anyway
+
+> "riscv32 is both an ESP target and a hosted one, and it gates on the platform —
+> `if not EspBareBoot then` — never on the arch. So there is a model, in-tree,
+> tested, that this can copy."
+
+`not EspBareBoot` is riscv32's **spelling**, not the platform axis, and copying
+the spelling would have opened the hole this ticket exists to close. Measured:
+
+    compiler.pas:243  if EspBareBoot or (TargetArch = TARGET_XTENSA) then
+                        TargetPlatform := PLATFORM_ESP
+
+Xtensa defaults to **ESP**. An ordinary `--target=xtensa --platform=esp` IDF
+build has `EspBareBoot` FALSE, so a `not EspBareBoot` gate emits a
+Linux-`rt_sigaction` signal runtime for ESP-IDF *and calls its installer at
+program start*. For riscv32 the two spellings coincide (bare → ESP, else POSIX),
+which is precisely why copying looked safe.
+
+The axis is `TargetPlatform`, and it now lives in ONE predicate,
+`TargetHasSignalRuntime` (`ir_codegen.inc`), read by all five sites so they
+cannot drift apart again. It carries xtensa's second condition too — the runtime
+is **Call0-only** (a windowed unwind needs the register windows spilled first),
+so windowed hosted xtensa is still refused, and correctly.
+
+**This closed a live riscv32 defect nobody had filed.** `--target=riscv32
+--platform=esp` (an IDF build, non-bare — six such rows are in the Makefile) was
+being handed the full Linux signal runtime. Causal check, no baseline build
+needed: an ESP build is now byte-identical to the same build with
+`--no-signals`, on both riscv32 and xtensa; a hosted build of either is not.
+riscv32's ESP object shrank 404 bytes.
+
+### THE STUB'S CENTRAL ABI CLAIM DID NOT HOLD
+
+`d52476d8c` named this as *"the risk that decided whether this ticket was a
+session or a campaign"* and recorded it as measured and holding:
+
+> **The kernel enters a plain Call0 proc.** xtensa userland is conventionally
+> windowed and setup_frame is written for it … It holds.
+> Handler entry: a2 = sig, a3 = siginfo_t*, a4 = ucontext_t*, a0 = return address.
+
+**Every one of those four is wrong.** The kernel enters a signal handler with the
+**CALL4** convention whatever ABI the handler was built with. Measured with
+`qemu-xtensa -d cpu`, reading the register dump at the fault, whose a4/a6/a7 the
+stub had not yet touched:
+
+    a0 = 00000000   NOT a return address -- `ret` jumped to 0
+    a4 = 60801000   the return address, with the call4 WINDOW-INCREMENT BITS in
+                    the top two: ra = a4 and $3FFFFFFF = 20801000
+    a6 = 0000000f   the signal (SIGTERM), where a2 was assumed
+    a7 = 080ab600   siginfo*, where a3 was assumed -- and a3 was 0, so the
+                    defensive nil check silently took the no-siginfo arm
+    a8 =            ucontext*, where a4 was assumed
+
+Not one of them faults at the mistake. sig 0 fell out of the 1..64 bounds check,
+nil siginfo zeroed si_code/si_addr, and the only visible symptom was a SIGSEGV
+one instruction *after* the stub had already finished — the plausible-wrong-value
+shape this repo pays most for, in the code whose job is to catch it.
+
+**The general lesson is about the word MEASURED, not about xtensa.** Every number
+in that stub *was* measured — syscall numbers, struct offsets, the no-SA_RESTORER
+contract — and all of them were right. The entry ABI was measured too, by a
+hand-written probe, and the probe was not this stub. A measurement of a
+*neighbouring* artifact is a claim about that artifact. `d52476d8c` was right that
+its green meant nothing; what it could not know is that its own header was already
+wrong.
+
+### What is wired, and what is still refused (accurately, now)
+
+| row | before | after |
+| --- | --- | --- |
+| `test_signal_handler_callback_b336` | not on xtensa | **differential vs the native build**, exit asserted |
+| `test_signal_altstack` | not on xtensa | literal: `recursing / code=2 / handler-off-faulting-stack=TRUE / exit=0` |
+| `test_signal_default_revert_b336` | green, **and evidence about nothing** | unchanged (143), now behind a real stub |
+
+The default-revert row raises SIGTERM with the DEFAULT disposition and dies 143.
+It exercises `kill()` and the kernel's default action, and it was green on a
+target with **no signal runtime at all**. A row can be green in the signal family
+and evidence about nothing in it; that is why the two rows above install a
+handler and observe it fire.
+
+`code=2` (SEGV_ACCERR) where x86-64 reports `code=1` (SEGV_MAPERR) is the arch
+reporting a guard-page hit differently, **not a wrong siginfo offset** — and the
+uncontrolled fault cannot tell those apart. A controlled probe faulting on a
+KNOWN address (`$DEAD0000`) returns `code=1`, `addr-matches=TRUE` and the exact
+address on xtensa, x86-64 and riscv32 alike. Measuring the controlled case is
+what separates the two readings.
+
+Still refused on xtensa, each for a reason that is now true:
+
+- `__pxxSigNum` — the dispatch stub parks no signal number (x86-64 only; unchanged).
+- `__pxxSigPCPtr` / `__pxxSigSPPtr` — `UContextPCOffset`/`UContextSPOffset` have
+  no xtensa row and return -1. **The guard is keyed on that VALUE, not on an arch
+  list**, because an arch list is exactly what went stale in this ticket: measure
+  the two offsets, add the rows, and the feature opens by itself with no guard to
+  remember. Left undone deliberately — `ir.inc` was held by another agent — and
+  it is the one remaining gap. Follow-up: `feature-a-xtensa-ucontext-pc-sp-offsets`.
+
+Two unrelated gaps found while running the family, filed nowhere yet because
+neither is a signal defect: `test_signal_siginfo` needs `SYS_tkill` (undefined on
+xtensa) and `test_pal_signal` dies in `sysutils` on `High(Separators)`.
+`test_signal_handlers` prints `usr1=0 int=0 term=0 / unreachable` on xtensa —
+**identical to riscv32**, so it is a pre-existing cross-target gap, not xtensa's.
+
+Gate: `make compiler/pascal26` fixedpoint converged; `tools/gate.sh quick` GREEN
+— and the FIRST quick run was RED, on the FPC-seed canary: the two ucontext
+guards call `ir.inc` routines from a file compiler.pas includes earlier, which
+pxx resolves across the unit and FPC resolves in source order. Self-host was
+green throughout. That hole is invisible to the per-fix loop and is exactly what
+the optional step is for.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

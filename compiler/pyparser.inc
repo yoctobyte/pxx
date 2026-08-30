@@ -45978,23 +45978,37 @@ begin
           has no xtensa arm AT ALL, so neither ESP nor hosted xtensa installs a
           handler and refusing is correct on both today.
 
-          So do NOT re-key this on `not EspBareBoot` by itself. That IS where it
-          lands — riscv32's arm is the model, `if not EspBareBoot then
-          EmitSignalRuntimeRISCV32` — but flipping the axis BEFORE
-          EmitSignalRuntimeXtensa exists would accept __pxxSig* on hosted xtensa
-          and answer out of a handler that was never installed: a plausible wrong
-          value in code that dispatches on it, which is the exact failure mode
-          this refusal was written to prevent. The axis moves in the same commit
-          that adds the runtime, never ahead of it.
+          THE AXIS MOVED on 2026-08-30, in the same commit that wired
+          EmitSignalRuntimeXtensa into EmitSignalRuntimeForTarget — never ahead
+          of it, because flipping first would have accepted __pxxSig* on hosted
+          xtensa and answered out of a handler that was never installed.
+
+          It did NOT land as `not EspBareBoot`, which is what this note used to
+          predict and what the ruling's step 3 prescribed. That spelling is
+          riscv32's, and on xtensa it is not the platform axis at all:
+          DerivePlatform makes every xtensa target PLATFORM_ESP by default, so an
+          ordinary IDF build has EspBareBoot False and would have been handed a
+          Linux-syscall signal runtime. TargetHasSignalRuntime (ir_codegen.inc)
+          is the axis, and it carries xtensa's second condition too — the runtime
+          is Call0-only, so the WINDOWED ABI is still refused here.
 
           Sibling: pasparser_expr.inc carries this refusal verbatim. Two copies
           is the intended design — each frontend owns its own refusals, per
           the-substrate-is-ast-and-ir-not-the-parser — so they are a fix-one-arm
           hazard, not drift: move both or NilPy is left refused by a premise the
           Pascal side has already retired. }
-        if TargetArch = TARGET_XTENSA then
+        if not TargetHasSignalRuntime then
           Error(name + ' needs SA_SIGINFO, which this target''s signal runtime '
                 + 'does not install (feature-signal-siginfo-ucontext)');
+        { __pxxSigPCPtr needs one MORE per-arch fact than the rest: the byte
+          offset of the saved PC inside ucontext_t, measured per target and -1
+          where nobody has measured it. Keyed on the VALUE, not on an arch list —
+          a list is exactly what went stale above. Pascal's sibling site carries
+          the same pair (it also exposes __pxxSigSPPtr, which NilPy does not). }
+        if CaseEqual(name, '__pxxSigPCPtr') and (UContextPCOffset < 0) then
+          Error(name + ' needs the saved-PC offset inside this target''s '
+                + 'ucontext_t, which has not been measured yet '
+                + '(UContextPCOffset in ir.inc)');
         if NoSignals then
           Error(name + ' requires the signal runtime (built with --no-signals)');
         Next;

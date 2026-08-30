@@ -792,6 +792,48 @@ begin
   BSS_SIG_ALTSS   := BSSSize; Inc(BSSSize, 24);
 end;
 
+function TargetHasSignalRuntime: Boolean;
+{ Can this build install a POSIX signal handler at all? THE one predicate the
+  five signal sites share -- the two dispatchers below and the three parser
+  refusals (pasparser_expr.inc, pyparser.inc) -- so they cannot drift apart the
+  way they had by 2026-08-30.
+
+  IT ASKS THE PLATFORM, NEVER THE ARCH, and that is the whole content of
+  ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired:
+  the old xtensa exclusion said "FreeRTOS is not a Unix", which is a fact about
+  the PLATFORM that was written as a test on the ARCH back when the two were the
+  same thing for xtensa. The hosted profile separated them.
+
+  BUT `not EspBareBoot` IS NOT THAT AXIS ON XTENSA, and the ruling's step 3 got
+  this wrong by copying riscv32's spelling rather than its meaning. DerivePlatform
+  (compiler.pas:243) reads `if EspBareBoot or (TargetArch = TARGET_XTENSA) then
+  TargetPlatform := PLATFORM_ESP` -- xtensa defaults to ESP, so an ordinary
+  `--target=xtensa --platform=esp` IDF build has EspBareBoot FALSE. Gating on
+  `not EspBareBoot` there would emit a Linux-syscall signal runtime for ESP-IDF
+  and CALL its installer at startup. For riscv32 the two spellings coincide
+  (bare -> ESP, else POSIX), which is exactly why copying the spelling looked
+  safe. TargetPlatform is the axis; EspBareBoot is one input to it, kept here
+  only for the pathological `--esp-profile=bare --platform=posix`.
+
+  XTENSA CARRIES A SECOND CONDITION and it is an ABI fact, not a platform one:
+  EmitSignalRuntimeXtensa is Call0-only. A windowed handler needs the register
+  windows spilled before the unwind -- the same reason TargetHasProcCleanupFrame
+  is Call0-only -- so windowed hosted xtensa still has no runtime and must still
+  refuse. Call0 is the default ABI (compiler.pas:862), so this serves the
+  default path.
+
+  NoSignals is deliberately NOT folded in. It is an orthogonal user switch with
+  its own diagnostic at every call site ("built with --no-signals"), and folding
+  it here would replace that message with this one. }
+begin
+  Result := False;
+  if EspBareBoot or (TargetPlatform = PLATFORM_ESP) then Exit;
+  if TargetArch = TARGET_XTENSA then
+    Result := (XtensaABI = XTENSA_ABI_CALL0)
+  else
+    Result := True;
+end;
+
 procedure EmitSignalRuntimeForTarget;
 { THE one place that decides which signal runtime a build needs — the sibling of
   EmitIoLockStubsForTarget below, and added for the same reason: the per-arch
@@ -805,9 +847,12 @@ procedure EmitSignalRuntimeForTarget;
   shipped with no signal runtime at all: the same gap the I/O lock had, filed
   and fixed as bug-a-only-the-pascal-driver-emits-the-signal-runtime.)
 
-  xtensa has no sibling stub on purpose (see pasparser_*.inc's note at the AN_WRITE
-  lowering); riscv32 skips it under --esp-profile=bare, where there is no OS to
-  deliver a signal. }
+  The two dual-role targets ask TargetHasSignalRuntime rather than testing an
+  arch: riscv32 and xtensa are each BOTH an ESP target and a hosted one, and the
+  question "is there an OS to deliver a signal" is about the platform. xtensa was
+  absent here entirely until 2026-08-30 -- the exclusion was keyed on the arch and
+  its premise had expired
+  (ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired). }
 begin
   EnsureSignalBss;
   if NoSignals then Exit;
@@ -823,7 +868,11 @@ begin
 {$endif}
   else if TargetArch = TARGET_RISCV32 then
   begin
-    if not EspBareBoot then EmitSignalRuntimeRISCV32;
+    if TargetHasSignalRuntime then EmitSignalRuntimeRISCV32;
+  end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    if TargetHasSignalRuntime then EmitSignalRuntimeXtensa;
   end;
 end;
 
@@ -857,12 +906,24 @@ begin
     EmitLoadImmArm32(0, 15);                                           { SIGTERM }
     EmitI32($EB000000 or ((((SigInstallAddr - CodeLen - 8) div 4)) and $FFFFFF));
   end;
-  if (TargetArch = TARGET_RISCV32) and not NoSignals and (not EspBareBoot) then
+  if (TargetArch = TARGET_RISCV32) and not NoSignals and TargetHasSignalRuntime then
   begin
     rv32_addi(reg_a0, reg_zero, 2);                                    { SIGINT }
     rv32_jal(reg_ra, SigInstallAddr - CodeLen);
     rv32_addi(reg_a0, reg_zero, 15);                                   { SIGTERM }
     rv32_jal(reg_ra, SigInstallAddr - CodeLen);
+  end;
+  if (TargetArch = TARGET_XTENSA) and not NoSignals and TargetHasSignalRuntime then
+  begin
+    { EmitXtensaCallToCode, not xtensa_call0: the installer sits behind the whole
+      runtime blob and a program's entry stub may be further from it than call0's
+      512 KiB reach -- the same choice the proc-cleanup frame documents. It
+      clobbers a0/a9/a10 and preserves a2, which is the argument register here.
+      Nothing has returned into a0 yet at program start. }
+    xtensa_movi(reg_xtensa_a2, 2);                                     { SIGINT }
+    EmitXtensaCallToCode(SigInstallAddr);
+    xtensa_movi(reg_xtensa_a2, 15);                                    { SIGTERM }
+    EmitXtensaCallToCode(SigInstallAddr);
   end;
   if (TargetArch = TARGET_AARCH64) and not NoSignals then
   begin

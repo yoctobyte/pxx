@@ -14473,6 +14473,31 @@ test-xtensa: $(COMPILER)
 	# asserts the wrong observable is a green that means nothing.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_xtensa_sigdfl
 	tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigdfl > /dev/null 2>&1; tools/expect_same.sh xtensa/test_xtensa_sigdfl-rc "$$?" "143"
+	# AND THE ROW ABOVE IS NOT EVIDENCE THE SIGNAL FAMILY WORKS. It raises
+	# SIGTERM with the DEFAULT disposition and dies 143 -- that exercises kill()
+	# and the kernel's default action, and until 2026-08-30 it was green on a
+	# target with NO SIGNAL RUNTIME AT ALL. A row can be green in the signal
+	# family and evidence about nothing in it. These two install a handler and
+	# observe it fire, which is the assertion that was missing.
+	#
+	# The callback row is a DIFFERENTIAL against the native build, not a literal:
+	# hook fires twice, program resumes at the interruption point, exit 0 -- the
+	# same observable x86-64, i386, aarch64, arm32 and riscv32 already produce.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_xtensa_sigcb
+	./$(COMPILER) -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_xtensa_sigcb_x64
+	tools/expect_same.sh xtensa/test_xtensa_sigcb "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigcb; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_sigcb_x64; echo "exit=$$?")"
+	# SA_SIGINFO + sigaltstack: a stack-overflow SIGSEGV is caught ON THE ALT
+	# STACK -- the fault happens BECAUSE the faulting stack is exhausted, so
+	# without both halves the kernel cannot push a frame and kills outright.
+	# LITERAL, not a differential, for ONE measured divergence: si_code is
+	# SEGV_ACCERR(2) here where x86-64 reports SEGV_MAPERR(1). That is the arch
+	# reporting a guard-page hit differently, NOT a wrong offset -- a controlled
+	# probe that faults on a KNOWN address ($DEAD0000) returns code=1 and the
+	# exact fault address on xtensa, x86-64 and riscv32 alike. Measuring the
+	# controlled case is what separates those two readings; the uncontrolled one
+	# alone cannot.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_altstack.pas $(TESTTMP)/test_xtensa_sigalt
+	tools/expect_same.sh xtensa/test_xtensa_sigalt "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigalt; echo "exit=$$?")" "$$(printf 'recursing\ncode=2\nhandler-off-faulting-stack=TRUE\nexit=0')"
 	# The proc exception CLEANUP FRAME (Call0 only). Neither of these is in the
 	# 129-source cross differential, which has no exception-unwind coverage at
 	# all — so before these two rows existed, xtensa releasing nothing on an

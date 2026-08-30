@@ -3838,6 +3838,32 @@ begin
         AsmXtensaBlockResolve;
       end;
 
+    IR_SET_SIGNAL:
+      begin
+        { SetSignalHandler(sig, handler): a2 = sig, a3 = handler -> the sethook
+          stub (stores the hook slot, falls through into the installer).
+          riscv32's arm is the model; the register pair is xtensa's.
+
+          THE GUARD IS NOT DECORATION. Reaching here with no runtime emitted
+          would call SigSetHookAddr, which is 0 -- a jump to offset 0 of .text,
+          i.e. the program entry, from inside user code. That is a hang or a
+          re-entered program, not a diagnostic, and it is reachable two ways:
+          the WINDOWED ABI (EmitSignalRuntimeXtensa is Call0-only) and any ESP
+          platform build. Both are exactly what TargetHasSignalRuntime answers. }
+        if NoSignals then
+          Error('SetSignalHandler requires the signal runtime (built without it: --no-signals)');
+        if not TargetHasSignalRuntime then
+          Error('SetSignalHandler needs a signal runtime, which this build has none of'
+                + ' (xtensa installs one only on --platform=posix with the Call0 ABI)');
+        IREmitNodeXtensa(IRB[node]);                 { a2 = handler address }
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
+        xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);
+        IREmitNodeXtensa(IRA[node]);                 { a2 = signal number }
+        xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, 0);   { a3 = handler }
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+        EmitXtensaCallToCode(SigSetHookAddr);
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> a2 = the routine's absolute code address, via an inline
@@ -4111,12 +4137,47 @@ begin
   SigDispatchAddr := CodeLen;
   dispatchAt := CodeLen;
 
+  { THE KERNEL ENTERS A SIGNAL HANDLER WITH THE CALL4 CONVENTION, NOT CALL0, and
+    it does so whatever ABI the handler was compiled with -- setup_frame is
+    written for windowed userland and there is no flag that turns it off. This
+    stub's first version assumed a plain Call0 entry (a0 = return address,
+    a2/a3/a4 = sig/siginfo/ucontext) and it was WRONG on every one of the four:
+
+      MEASURED at handler entry under qemu-xtensa (`qemu-xtensa -d cpu`, the
+      register dump at the fault, whose a4/a6/a7 the stub had not yet touched):
+
+        a0 = 00000000    NOT a return address -- `ret` jumped to 0
+        a4 = 60801000    return address, with the CALL4 WINDOW-INCREMENT BITS
+                         in the top two: ra = a4 and $3FFFFFFF = 20801000, the
+                         kernel's rt_sigreturn trampoline
+        a6 = 0000000f    the signal (SIGTERM), where a2 was assumed
+        a7 = 080ab600    siginfo*, where a3 was assumed (and a3 was 0, so the
+                         defensive nil check silently took the no-siginfo arm)
+        a8 =             ucontext*, where a4 was assumed
+
+    Every one of those reads a plausible wrong value rather than faulting at the
+    mistake: sig 0 fell out of the 1..64 bounds check, siginfo nil zeroed
+    si_code/si_addr, and the only visible symptom was a SIGSEGV one instruction
+    after the stub was already finished. The dead-code note this runtime landed
+    with said its Call0-entry claim was "the risk that decided whether this
+    ticket was a session or a campaign"; it was measured with a hand-written
+    probe rather than through this stub, and it did not hold.
+
+    Masking a4 with $3FFFFFFF discards the two window bits the kernel packed in
+    (`areg[4] = (ra & 0x3fffffff) | 0x40000000`), which is exactly what RETW
+    reconstructs from the PC. It loses ra's own top two bits -- correct for a
+    hosted Linux image, where text, vdso and stack all live in the low 1 GiB. }
   xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
-  xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 0);      { kernel return address }
-  xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 8);      { sig, in the frame }
+  EmitLoadConstXtensa(reg_xtensa_a10, $3FFFFFFF);
+  xtensa_and(reg_xtensa_a10, reg_xtensa_a4, reg_xtensa_a10);
+  xtensa_s32i(reg_xtensa_a10, reg_xtensa_sp, 0);     { kernel return address }
+  xtensa_s32i(reg_xtensa_a6, reg_xtensa_sp, 8);      { sig, in the frame }
+  xtensa_mov(reg_xtensa_a3, reg_xtensa_a7);          { siginfo*, in a3 from here }
+  xtensa_mov(reg_xtensa_a11, reg_xtensa_a8);         { ucontext*, before a8 becomes
+                                                       EmitLoadGlobAddr's scratch }
 
   EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_CTX);
-  xtensa_s32i(reg_xtensa_a4, reg_xtensa_a8, 0);      { ucontext* for __pxxSigContext }
+  xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 0);     { ucontext* for __pxxSigContext }
 
   { siginfo_t is { si_signo(0), si_errno(4), si_code(8), union }. The union is
     pointer-aligned, so on ILP32 the preamble is NOT padded and si_addr sits at
