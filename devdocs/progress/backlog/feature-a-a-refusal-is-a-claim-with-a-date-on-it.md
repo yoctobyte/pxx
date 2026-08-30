@@ -9916,3 +9916,104 @@ temptation is strongest exactly when the number is striking, and 2× is striking
 of two binaries in a scratchpad — no compiler edits — so `ir_codegen.inc` and `emit.inc` stayed
 released throughout. A lane can contribute a decisive measurement to another lane's ticket
 **without taking the file**, and doing so is usually faster than the handoff.
+
+---
+
+## 205 — A DISJOINT ORACLE ANSWERS "IS THIS INSTRUMENT LYING TO ME", NEVER "AM I LOOKING AT THE RIGHT THING"
+
+*(frankA, 2026-08-30, correcting a defence it would otherwise have carried forward — and asking
+for it to be recorded paired with 204's misfire, which is the right call.)*
+
+This index spent the night recommending the **disjoint oracle**: the self-host fixedpoint proves
+the compiler reproduces *itself*, so compare emitted output against a binary blessed **before**
+the edit (190, 201). frankA had adopted it as *the* answer to the blind spot. It is not:
+
+> *Both of my disjoint-oracle checks ran over hello-world and div0 — programs that never receive
+> a signal — so the oracle was disjoint in **implementation** and identical in **population**.
+> Two independent instruments pointed at the same subset agree about the subset, and their
+> agreement carries no information about anything outside it. The independence I was banking was
+> real and was in the wrong dimension.*
+
+Stated as the rule:
+
+> **A disjoint oracle answers "is this instrument lying to me". It never answers "am I looking at
+> the right thing." The second question is only ever answered by widening the population.**
+
+And the cost ratio is worth remembering: **one test outside the population beat five checks
+inside it.** Delivering an actual signal found the `rt_sigreturn` breakage that a zero syscall
+count, a correct `hello`, byte-identical div0 behaviour, a converged self-host, and
+byte-identical-to-pinned codegen had all missed (203).
+
+### 205a — the pair: the instrument was fine and the REGION was wrong, twice in one hour
+
+frankA asked for this recorded alongside 204 rather than separately, and it is the more useful
+shape for both:
+
+| | instrument | region it ran over | what it reported |
+| --- | --- | --- | --- |
+| **203** | pinned-binary diff, self-host, behaviour-vs-default | hello-world and div0 — **no signal is ever delivered** | five greens over a build that segfaults on the first signal |
+| **204** | rel8 mid-instruction boundary check | code sliced from **file offset 0** — includes the ELF and program headers | 1 bad target at `-O2`, 2 at `-O3`; the extra one was in the header |
+
+**Both times the instrument was correct and the region was wrong.** Neither is an instrument
+bug, and looking harder at the instrument would have found nothing in either case — which is
+exactly why they are expensive: the natural response to a suspicious result is to audit the
+tool.
+
+The two failures are also mirror images, which is what makes the pair worth more than either
+alone. 203's region was **too narrow** and produced false greens. 204's was **too wide** and
+produced false hits. So the question to ask is not *"is my region big enough"* — it is
+**"what is in my region that should not be, and what is outside it that should be"**, and those
+are two separate questions with two separate answers.
+
+Practical form: **before reporting a result, state the population you measured over, in the same
+breath as the number.** Not the method, the *population*. "Zero bad targets across 554 short
+jumps, code region sliced from `e_entry`" is checkable; "zero bad targets" is not. Compare 203b,
+where frankA named the population *before* anyone had to ask — same lane, same night, and the
+one time it did so the claim needed no correction.
+
+### 205b — a grant for one defect does not cover an adjacent different one
+
+*(frankS, same hours, declining to fix something it had every file for.)*
+
+frankS found `ArgStr` reading past the end of `argv` into `envp` on **both** 32-bit backends,
+returning an environment string. Both files were inside its grant. It filed
+`bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa` [A+S p45] instead:
+
+> *A grant for one defect does not cover an adjacent different one.*
+
+That is the correct reading and it is worth stating because the opposite reading is so natural —
+*I have the file open, the fix is small, and nobody is contending it.* A grant is scoped to a
+**defect**, and its bounds are what let a coordinator reason about who is where; a grant that
+silently widens to "whatever I find in these files" is not a bound at all. The cost of being
+right here was one ticket; the cost of being wrong is that no one can tell what any grant covers.
+
+Note also the priority reasoning, which is not the obvious one: **p45 rather than p20 because the
+wrong value is attacker-influenceable process state a program might print, not garbage.** Reading
+*junk* is a bug; reading *the environment* is a different bug wearing the same symptom.
+
+### 205c — THE THIRD "FIXED ON ONE TARGET, LEFT ON THE OTHERS" IN ONE NIGHT
+
+frankS's own count, and it is now a pattern rather than three incidents:
+
+1. **`rv32enc.inc` masks every PC-relative offset and contains no `Error(` at all**, while
+   `xtensaenc.inc` range-checks four forms through one helper (`bug-a-riscv32-pc-relative-
+   encoders-silently-truncate-xtensa-already-guards`, raised to p60).
+2. **`ArgStr` bounds-checks against `argc` on x86-64** and does not on riscv32 or xtensa — and
+   riscv32's own comment *admits the gap*. The xtensa port is faithful to riscv32 and both are
+   unfaithful to x86-64.
+3. **`PXXSysRead` had riscv32/xtensa arms while its three siblings did not** — the tell that it
+   was drift rather than a decision.
+
+The mechanism is the same each time and it is not carelessness: **a fix is written where the bug
+was observed, and the sibling backends have no observer.** The x86-64 arm gets exercised by
+every developer on every run; the cross arms are exercised by a sweep that reports pass/fail, not
+parity. So the divergence accumulates silently and each instance looks like a local gap rather
+than an instance of anything.
+
+`devdocs/dev/normalise-dont-special-case.md` already says: *if you fix a bug on one arm of a
+double case, grep for the sibling before closing the ticket.* Three instances in one night says
+that instruction is not being followed — and the reason is visible in case 2: **the sibling's
+comment admitted the gap and no one read it**, because nothing routes a reader from the fixed arm
+to the unfixed one. **When a fix lands on one backend, the ticket's close should name what it
+checked on the others** — including "did not check", which is at least a fact the next reader can
+act on.
