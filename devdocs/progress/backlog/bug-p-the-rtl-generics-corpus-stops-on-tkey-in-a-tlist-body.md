@@ -225,3 +225,75 @@ itself on a copy (`cp -r` the src tree; both includes are plain `{$I}` lines).
 The two halves to separate first are whether the trigger is in the interface
 half (through `:470`) or needs the implementation half (`:2333`), and the
 `:1313` lead above is the first thread.
+
+---
+
+## NARROWED: collection is fine, CONSULTATION is where it breaks
+
+Binary `54a79a8a5cf1`. Three measurements, in order, each killing a candidate:
+
+**1. The spec-bound name table does not overflow.** `MAX_SPEC_BOUND_NAMES = 512`
+(`pasparser_generic.inc:734`) and the cap is silent — past it a real type-parameter
+name is simply not recorded, and the only symptom is exactly this wall. Its own
+comment says the occupancy is reported *"so a near-miss is visible before it
+becomes a wall"*, and it earned that:
+
+```
+PXXDBG p.specbound names=294 cap=512 overflow=0
+```
+
+294 of 512. Not the cause.
+
+**2. `TKey` IS in the collected set** — 4800 hits, 45 distinct names including
+`TKey`, `TValue`, `TDictionaryPair`, `PDictionaryPair`, `THashFactory`. So
+`CollectSpecializationBoundNamesFromTokens` sees the macro-supplied parameter
+list correctly; the `{$DEFINE}` does not hide the names from it. That is the last
+version of the macro hypothesis, and it is dead too.
+
+**3. Therefore the defect is in CONSULTATION, not collection.**
+`pasparser_generic.inc:1169` is the loop that sets `isParamForm := True` when any
+argument of a `<...>` group matches a spec-bound name. `TKey` is in the set and
+`IEqualityComparer<TKey>` is still minted as a concrete alias, so either that use
+never reaches this consultation site, or `isParamForm` is set and the deferred
+path mints anyway. **That is the fork to resolve next, and it is two arms rather
+than an open field.**
+
+### The error set is wider than "TKey", which supports the same conclusion
+
+On `6dfcd257a9f5` the wall reports `TKey`, `TValue`, **`TDictionaryPair`** and
+**`PDictionaryPair`**. The last two are NESTED TYPES of the enclosing template,
+not parameters — and `CollectSpecializationBoundNamesFromTokens` deliberately
+collects both kinds as *"two kinds, one concept"*. The whole set leaks together,
+which is what a single consultation failing looks like, and not what a
+name-by-name collection gap would look like.
+
+### Tooling: `p.specbound` now answers the other half of its question
+
+`PXXDBG=p.specbound` printed only the OCCUPANCY. That answers "did the table
+overflow" and cannot answer "is my name in it" — and a name never collected and a
+name collected but never consulted produce the *identical* symptom. The count
+cannot separate the two mechanisms, which is why this took three runs instead of
+one.
+
+Added `PXXDBG=p.specbound:names` (list them all) and `PXXDBG=p.specbound:<Name>`
+(ask about one).
+
+**A caution earned the hard way, in one shell line.** The first
+`p.specbound:TKey` run came back with no hits and I nearly recorded "TKey is not
+collected". It was a `sort -u | head -12` truncating the probe's own output — not a
+compiler result. Re-running it cleanly gave 4800. That would have been the fourth
+inverted reading of the day and the first from an instrument written twenty
+minutes earlier. **Verify a new probe against a control before believing a null
+from it.**
+
+### Bisection is a dead end on this corpus — do not retry it
+
+Two cuts were tried and both are invalid, for the same reason:
+
+| cut | what happened |
+| --- | --- |
+| remove the implementation include only | the include holds method BODIES for classes declared in the header include, so removing it changes what `BufferGenericMethod` buffers — the machinery the failure runs through. **The experiment perturbs its own subject.** |
+| remove BOTH includes (a whole-declaration cut) | `generics.collections.pas` references the dictionary family further down, so the unit no longer parses: a new error at `:1030` instead. |
+
+`generics.collections.pas` is too densely interdependent to cut. The instrument
+(`p.specbound`, `a.srcmap`, `p.dgen`) is the way in, not deletion.

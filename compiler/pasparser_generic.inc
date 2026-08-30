@@ -883,6 +883,8 @@ end;
 procedure CollectSpecializationBoundNamesFromTokens;
 var i, j, savedCount: Integer;
     ok, wantName: Boolean;
+    dbgI: Integer;
+    dbgArg: AnsiString;
 begin
   SpecBoundNameCount := 0;
   i := 0;
@@ -990,6 +992,23 @@ begin
             ' cap=', MAX_SPEC_BOUND_NAMES,
             ' overflow=', Ord(SpecBoundNameCount >= MAX_SPEC_BOUND_NAMES),
             ' tokcount=', TokCount);
+  end;
+  { ...and WHICH names, because the count answers the wrong half of the question.
+    An occupancy of 294/512 says the table did not overflow; it does not say the
+    name you care about is IN it, and a name that was never collected and a name
+    that was collected but not consulted produce the identical symptom -- a
+    specialization taking the alias path instead of the deferred one. Two
+    mechanisms, one wall, and the count cannot separate them.
+    `PXXDBG=p.specbound:names` to list, `:<Name>` to ask about one. }
+  if PxxDbgArg('p.specbound') <> '' then
+  begin
+    dbgArg := PxxDbgArg('p.specbound');
+    for dbgI := 0 to SpecBoundNameCount - 1 do
+      if (dbgArg = 'names') or
+         CaseEqual(dbgArg, GetTokenStrFromRaw(SpecBoundNameOff[dbgI],
+                                              SpecBoundNameLen[dbgI])) then
+        writeln('PXXDBG p.specbound   [', dbgI, '] ',
+                GetTokenStrFromRaw(SpecBoundNameOff[dbgI], SpecBoundNameLen[dbgI]));
   end;
 end;
 
