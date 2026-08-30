@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frank-optimize
 found: 2026-08-30
 found-by: frank-optimize, finishing chore-a-the-range-checked-fpc-seed-cannot-be-built
@@ -167,3 +167,6 @@ guard nobody has seen fail is not a guard. Each arm was reverted and rebuilt:
 
 `make compiler/pascal26` -> `converged after 1 round(s), d3fa1fa03ffd`;
 `tools/gate.sh quick` -> GREEN (7/7, self-host fixedpoint 41s).
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

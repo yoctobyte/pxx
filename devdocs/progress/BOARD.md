@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path | A | 30 | bug | A failed Expect() writeln's `Expected: X, but got:  (Kind: 57, Line: 2)` -- a token ORDINAL, no source path, and no `error:` prefix, so anything keying on `error:` does not see it as an error at all. lexer.inc:2838, shared by every frontend. Reached from C by an unclosed initializer followed by a real declaration. | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
 ## unfinished (29)
@@ -60,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (380)
+## backlog (379)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -70,7 +71,6 @@ _none_
 | bug-a-a-bad-value-for-a-known-option-is-reported-as-an-unknown-option | A | 30 | bug | `--target=x` answers `unknown option: --target=x`, but --target is a known option with a bad value. Same for --xtensa-cpu= and --esp-profile=. The message sends the reader to hunt a typo in the FLAG NAME when the flag is right and the VALUE is wrong, and it makes every value-taking option indistinguishable from a nonexistent one to any tool or person probing the CLI. | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
-| bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path | A | 30 | bug | A failed Expect() writeln's `Expected: X, but got:  (Kind: 57, Line: 2)` -- a token ORDINAL, no source path, and no `error:` prefix, so anything keying on `error:` does not see it as an error at all. lexer.inc:2838, shared by every frontend. Reached from C by an unclosed initializer followed by a real declaration. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
 | bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa | A+S | 45 | bug | ArgStr reads past argv into the environment on riscv32 and xtensa | — |
@@ -445,13 +445,12 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (14)
+## backlog_new (13)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data | A | 35 | bug | The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros. | — |
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 25 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
-| bug-a-the-range-checked-seed-traps-on-deliberate-wraparound-arithmetic | A | 55 | bug | The range-checked FPC seed now BUILDS (make fpc-seed-checked) but traps on its first compile: -Cr range-checks the compiler's deliberate wraparound arithmetic. First site is SymNameFoldHash's FNV-1a multiply in symtab.inc, second is the hex-literal lexer in lexer.inc — it is a chain, not one site. Fix shape is measured and one line per site, but the sites live in files other lanes hold. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
 | bug-t-concurrent-sync-runs-can-squash-two-commits-into-one | T | 45 | bug | With several checkouts syncing at once, tools/sync.sh's rebase-and-retry loop squashed two separate commits into one: the second commit's content survived, its message and its `resolves:` line did not. Silent — the tree is clean, the push succeeds, and the only tell is a `git log` one shorter than expected. | — |
@@ -705,9 +704,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2804)
+## done (2805)
 
-2804 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2805 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -827,7 +826,6 @@ _none_
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
-- [p 55] [A] bug-a-the-range-checked-seed-traps-on-deliberate-wraparound-arithmetic
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-from-import-alias-resolves-its-source-through-flat-scope
@@ -1042,7 +1040,6 @@ _none_
 - [p 30] [S] feature-pal-esp-posix-fd-semantics (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 30] [T] audit-t-verdict-functions-with-fewer-slots-than-outcomes
 - [p 30] [A] bug-a-a-bad-value-for-a-known-option-is-reported-as-an-unknown-option
-- [p 30] [A] bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
 - [p 30] [A] bug-a-proc-map-emits-static-addresses-for-a-dynamic-build
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
