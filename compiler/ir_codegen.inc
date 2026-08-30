@@ -1021,6 +1021,7 @@ procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
 var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     intIdx, sseIdx, stackOff: Integer;   { SysV arg classification, cdecl arm }
     isEight: Boolean;                    { AAPCS soft-float 8-byte by-value param }
+    wlo, whiEnd: Integer;                { i386 arg-offset walk bounds }
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -1045,8 +1046,26 @@ begin
               TypeIsFloat(Syms[idx].TypeKind) or
               (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant, tySet])) then
         Error('target i386: only ordinal/pointer parameters supported yet');
+      { THE WHOLE i386 cdecl DIFFERENCE IS THE DIRECTION OF THIS WALK.
+        pxx's internal convention pushes arguments LEFT TO RIGHT, so the
+        leftmost ends up deepest and param i sits above every param AFTER it.
+        cdecl puts arg0 at the LOWEST address, so param i sits above every param
+        BEFORE it. Same widths, same stores, opposite direction -- which is why
+        this is a bounds flip and not a second arm.
+
+        i386's divergence is therefore ARGUMENT ORDER, and it is visible with no
+        floats at all: f(1,2,3) returning a*100+b*10+c gave 321 instead of 123
+        before this. Neither the register-bank case that discriminates x86-64
+        and aarch64 nor the 8-byte alignment case that discriminates arm32 would
+        have found it -- and both of those PASS on i386, so reusing either would
+        have reported this target already green.
+        bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
+      if ProcCdecl[procIdx] then
+      begin wlo := 0; whiEnd := i - 1; end
+      else
+      begin wlo := i + 1; whiEnd := nparams - 1; end;
       sz := 0;
-      for j := i + 1 to nparams - 1 do
+      for j := wlo to whiEnd do
       begin
         { An OPEN ARRAY is a HANDLE: one 4-byte slot, whatever its element type.
           This walk used to widen it to 8 when the element was Int64/Double, to

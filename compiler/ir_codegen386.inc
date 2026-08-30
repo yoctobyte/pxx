@@ -3193,7 +3193,15 @@ begin
             Error('target i386: builtin/special call not yet supported');
           end;
         end;
-        if ProcExternal[procIdx] then
+        { A bodied `cdecl` proc joins this path: it now has a genuine cdecl
+          prologue (the ProcCdecl arm of EmitParamSpillsForTarget reads args in
+          cdecl order), so its direct call sites must push cdecl order too.
+          PASCAL MODE ONLY -- every C function is ProcCdecl and a C-DEFINED one
+          is not ProcExternal, and cparser's i386 prologue spill is its own; the
+          same omission on aarch64/arm32 broke lua and four conformance shards
+          (bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32).
+          bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
+        if ProcExternal[procIdx] or (ProcCdecl[procIdx] and (not CProgramMode)) then
         begin
           { External C call (cdecl): args at [esp+0], [esp+4], ... (arg0 lowest);
             caller cleans the stack. Each arg occupies its natural cdecl width:
@@ -3291,7 +3299,10 @@ begin
             Inc(i);
             argNode := IRB[argNode];
           end;
-          EmitExternalIndirectCall(RegisterExternal(procIdx)); { call dword [GOT slot] }
+          if ProcExternal[procIdx] then
+            EmitExternalIndirectCall(RegisterExternal(procIdx)) { call dword [GOT slot] }
+          else
+            EmitCallProc(procIdx);   { bodied cdecl proc: no GOT slot }
           EmitB($8B); EmitB($A4); EmitB($24); EmitI32(argBytes); { mov esp, [esp+argBytes] }
           if Procs[procIdx].RetType = tySingle then
           begin

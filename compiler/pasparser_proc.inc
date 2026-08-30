@@ -1720,7 +1720,7 @@ begin
     (cparser.inc's aarch64 spill is POSITIONAL and was no use as a model).
     bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
   if sawCdecl and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) or
-                   (TargetArch = TARGET_ARM32)) then
+                   (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_I386)) then
     ProcCdecl[procIdx] := True;
   if isInterrupt and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
     Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) and xtensa Call0 (esp32s3) only. Use `iram;` for an IDF-registered ISR.');
