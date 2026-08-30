@@ -686,3 +686,51 @@ Revised tail of the ordering constraint:
 Note this is the "one of six parallel arrays not written" class by name — which
 the deleted `tyWideString` comment was right about even though it was wrong
 about everything else. Recorded here rather than lost with it.
+
+### Reset reachability: verified, and the rule is narrower than "it works for pointers"
+
+The open caveat was whether `LastTypeStrElemTk` inherits `LastTypePointerElemTk`'s
+safety, given the reset at `pasparser_decl.inc:135`. It does not inherit it —
+it has to obey the same discipline, and the discipline is sharper than the
+reset line suggests.
+
+**`ParseTypeKind` is RECURSIVE.** Line 268, inside its own body (125-775), calls
+itself for a pointer's element type, and every entry re-runs the reset at 135.
+So a nested parse clobbers the outer declaration's companion globals
+unconditionally.
+
+The existing code handles this, and how it does so IS the rule (`:271-280`):
+
+```pascal
+elemTk := ParseTypeKind();          { the recursion — resets everything at :135 }
+childDepth   := LastTypePointerDepth;      { harvest the CHILD's globals into }
+childBaseTk  := LastTypePointerBaseTk;     { locals IMMEDIATELY on return }
+childBaseRec := LastTypePointerBaseRec;
+LastTypePointerElemTk := elemTk;           { then re-establish the OUTER values }
+```
+
+The globals are not storage; they are a **return channel from the recursive
+call**, valid only in the window between a `ParseTypeKind` returning and the
+next one entering. Everything that survives longer than that window has already
+been captured into a durable slot — which is the same conclusion the five-carrier
+count reached from the other direction.
+
+So the rule for step 6, stated so it cannot be misapplied:
+
+> Read `LastTypeStrElemTk` in the window immediately after the `ParseTypeKind`
+> that set it. If the value must outlive that window, it needs a durable slot,
+> not a longer-lived global.
+
+The immediate-declaration path satisfies this: `var w: WideString` calls
+`ParseTypeKind` once and allocates the symbol on return, with no intervening
+entry.
+
+**One case is NOT settled and is deliberately left open: `p: ^WideString`.** The
+recursion at :268 would set the element width for the POINTEE, and the outer
+type is `tyPointer` — so the width has to be harvested into a local like
+`childBaseTk` is, and then stored in a *sixth* carrier (a pointee-string-element
+slot) for `p^[i]` to index at stride 2. It is legal Pascal and it is the same
+shape as `Length(ps^)`, which already has its own history in `ir.inc:11150`.
+Whether to build the sixth carrier or reject `^WideString` until someone needs
+it is a real question; it is NOT a blocker for 6a-6c, which are all
+value-typed. Decide it when 6a-6c are done, with the code in front of you.
