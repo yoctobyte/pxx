@@ -65,7 +65,7 @@ makes drift visible; only an oracle makes it fail.
   duplicate-effort near-miss caught late, but the first thing a read of the file
   showed. The xtensa arm of `EmitManagedLocalCleanupForTarget` releases **7 of
   7** managed kinds at HEAD, not 1.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit a0c727cbe.
 
 ### Evidence, since "it looks done" is not the same as "it works"
 
@@ -92,4 +92,4 @@ evidence in prose where nothing re-evaluates it.
 
 A ticket whose body is a measurement has an expiry date that nothing in the
 board prints.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit a0c727cbe.
