@@ -2659,6 +2659,91 @@ begin
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);
             Exit;
           end;
+          if procIdx = -Ord(tkArgCount) then
+          begin
+            { ParamCount = argc - 1. The initial sp -- saved by the entry stub
+              in EmitProgramEntryForTarget, which is the half of this that had
+              to land in the same change -- points at argc.
+
+              Under --platform=esp there is no argc and BSS_INITIAL_RSP is a
+              zeroed BSS word, so the generic path would load [0] and answer -1:
+              a plausible wrong value where the truth is simply that an ESP
+              image has no command line. 0 is the honest answer and is what a
+              caller can act on. }
+            if TargetPlatform = PLATFORM_ESP then
+            begin
+              EmitLoadConstXtensa(reg_xtensa_a2, 0);
+              Exit;
+            end;
+            EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
+            xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 0);   { a8 = initial sp }
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a8, 0);   { a2 = argc }
+            xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -1);
+            Exit;
+          end;
+          if procIdx = -Ord(tkArgStr) then
+          begin
+            { ArgStr(index, strVar) -- the 2-arg statement form; a ParamStr(i)
+              EXPRESSION desugars to this with a hidden frozen temp, which is
+              why ParamCount alone does not make test_arm32_arg_runtime green
+              and both arms are in this change. Mirrors riscv32.
+
+              Refused rather than faked under --platform=esp: there is no argv
+              to index, and unlike SysGetRandom nothing in the portable RTL
+              calls ArgStr (checked, not assumed), so an ESP program reaching
+              here asked for it directly and an empty string would be a lie it
+              cannot detect. That is the opposite call from IR_SYSCALL's -ENOSYS
+              and for the stated reason: that arm exists to let STATICALLY
+              UNREACHABLE library calls compile away. }
+            if TargetPlatform = PLATFORM_ESP then
+              Error('target xtensa: ArgStr/ParamStr needs a command line, which '
+                    + 'an ESP image has not; ParamCount answers 0 there');
+            argNode := IRB[node];
+            if argNode = -1 then Error('target xtensa: ArgStr expects an index');
+            IREmitNodeXtensa(IRA[argNode]);            { a2 = index }
+            argNode := IRB[argNode];
+            if argNode = -1 then
+              Error('target xtensa: ArgStr expects a destination string');
+            valNode := IRA[argNode];
+            { index*4: xtensa has no shift-immediate, so two adds. }
+            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a2);
+            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a2);
+            EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
+            xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 0);  { initial sp }
+            xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, 4);  { argv base }
+            xtensa_add(reg_xtensa_a2, reg_xtensa_a8, reg_xtensa_a2);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { argv[index] }
+            if (IRKind[valNode] = IR_LOAD_SYM) and
+               (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
+            begin
+              { managed dest: strlen, PXXStrFromLit(len, src), publish. }
+              xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);    { a3 = src }
+              EmitAsmXtensa(['movi a4, 0', 'movi a6, 0',
+                             '.lp:', 'add a5, a3, a4', 'l8ui a5, a5, 0',
+                             'beq a5, a6, .done', 'addi a4, a4, 1', 'j .lp',
+                             '.done:']);
+              xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);    { a2 = len, a3 = src }
+              EmitStrFromLitXtensa;                        { a2 = handle }
+              xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);    { a3 = handle }
+              EmitSlotAddrXtensa(reg_xtensa_a2, IRA[valNode]);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXStrPublish'), 2);
+            end
+            else
+            begin
+              { frozen dest: buffer address then byte copy. Emitting the dest
+                lvalue may clobber a2..a7, so park src on the expression stack
+                -- XtensaPush/Pop, the one spelling correct under both ABIs. }
+              XtensaPushA2;
+              IREmitNodeXtensa(valNode);                   { a2 = dest buffer }
+              xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+              XtensaPopA2;                                 { a2 = src }
+              xtensa_mov(reg_xtensa_a4, reg_xtensa_a2);
+              xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);    { a2 = dest }
+              xtensa_mov(reg_xtensa_a3, reg_xtensa_a4);    { a3 = src }
+              EmitXtensaHelperCall(XtensaHelperProc('PXXCStrToFrozen'), 2);
+            end;
+            Exit;
+          end;
           { The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family. Numbers are
             xtensa's OWN table (arch/xtensa/include/uapi/asm/unistd.h), which is
             neither x86-64's nor asm-generic's: read=12, write=13, close=9,

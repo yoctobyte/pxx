@@ -1736,6 +1736,29 @@ begin
       xtensa_j(0);                                  { any other core: spin }
       EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP);
     end;
+    { Hosted (qemu-xtensa user mode): save the kernel-provided initial sp, which
+      points at argc, so ParamCount/ParamStr/ArgStr can find argv -- the same
+      thing every other hosted target's stub does, and xtensa was the one that
+      never did, which is why builtin -55 had no arm it could honestly have.
+
+      POSITION IS THE WHOLE CORRECTNESS ARGUMENT and it is why this sits here
+      rather than beside the CPENABLE/ATOMCTL block below:
+        * AFTER the bare-metal branch, which OVERWRITES sp with the SRAM top --
+          reading it before that would be reading the kernel's sp on a path that
+          has no kernel, and reading it after would save the synthetic one.
+        * BEFORE the windowed `entry` below, which rotates the register window
+          and moves sp. Saved after it, this stores a frame pointer and every
+          ParamStr indexes off the wrong base.
+      Skipped entirely on bare metal: there is no argc there, and a zeroed
+      BSS_INITIAL_RSP is what the -55 arm's own PLATFORM_ESP branch keys on.
+
+      a8 is scratch and safe pre-`entry` (no caller window to preserve at
+      process entry). }
+    if not EspBareBoot then
+    begin
+      EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
+      xtensa_s32i(reg_xtensa_sp, reg_xtensa_a8, 0);
+    end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin
       { app_main: program-level vars are globals (BSS), so no stack locals --

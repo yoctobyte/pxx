@@ -13469,6 +13469,16 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile_x64
 	tools/expect_same.sh xtensa/test_xtensa_loadfile "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_loadfile)" "$$($(TESTTMP)/test_xtensa_loadfile_x64)"
+	# ParamCount / ParamStr / ArgStr. xtensa was the only hosted target whose
+	# entry stub never saved the kernel-provided initial sp to BSS_INITIAL_RSP,
+	# so builtin -55 had no honest arm available -- the stub save and both arms
+	# landed as ONE change, because reading an unset BSS word answers
+	# ParamCount = -1, a plausible wrong value replacing a compile error.
+	# ParamStr is an EXPRESSION that desugars to ArgStr with a hidden frozen
+	# temp, which is why ParamCount alone does not make this test pass.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_arg_runtime.pas $(TESTTMP)/test_xtensa_args
+	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_xtensa_args_x64
+	tools/expect_same.sh xtensa/test_xtensa_args "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_args alpha beta)" "$$($(TESTTMP)/test_xtensa_args_x64 alpha beta)"
 	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
 	# which answered FALSE while b printed BBBB with Length 4 -- the equality
 	# guard was gated on tyAnsiString only, so both-frozen fell through to the
