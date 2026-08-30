@@ -13526,7 +13526,22 @@ test-xtensa: $(COMPILER)
 	# asserts the wrong observable is a green that means nothing.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_xtensa_sigdfl
 	tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigdfl > /dev/null 2>&1; tools/expect_same.sh xtensa/test_xtensa_sigdfl-rc "$$?" "143"
-	@echo "hosted xtensa: 101 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	# The proc exception CLEANUP FRAME (Call0 only). Neither of these is in the
+	# 129-source cross differential, which has no exception-unwind coverage at
+	# all — so before these two rows existed, xtensa releasing nothing on an
+	# unwind was invisible to every sweep we run.
+	# test_managed_exception_cleanup raises 9000 times through a frame holding a
+	# 64 KiB string: without the frame that is ~590 MB leaked and the program
+	# SEGFAULTED rather than leaking quietly. test_interface_arc_exc prints the
+	# missing release as a number — `unwind freed=2` against the oracle's 3.
+	# bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_exception_cleanup.pas $(TESTTMP)/test_xtensa_managed_exc_cleanup
+	./$(COMPILER) test/test_managed_exception_cleanup.pas $(TESTTMP)/test_xtensa_managed_exc_cleanup_x64
+	tools/expect_same.sh xtensa/test_managed_exception_cleanup "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_managed_exc_cleanup)" "$$($(TESTTMP)/test_xtensa_managed_exc_cleanup_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interface_arc_exc.pas $(TESTTMP)/test_xtensa_interface_arc_exc
+	./$(COMPILER) test/test_interface_arc_exc.pas $(TESTTMP)/test_xtensa_interface_arc_exc_x64
+	tools/expect_same.sh xtensa/test_interface_arc_exc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_interface_arc_exc)" "$$($(TESTTMP)/test_xtensa_interface_arc_exc_x64)"
+	@echo "hosted xtensa: 103 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
