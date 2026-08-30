@@ -41,10 +41,9 @@ from devtest_report import fail_detail  # noqa: E402
 pg = importlib.import_module("progress")
 
 
-def _board(tickets):
-    """Build a Board over a throwaway tree. `tickets` is (status, slug, fm)."""
-    tmp = tempfile.mkdtemp(prefix="stale-edge-")
-    root = Path(tmp)
+def _fixture(tickets):
+    """A throwaway progress tree. `tickets` is (status, slug, fm)."""
+    root = Path(tempfile.mkdtemp(prefix="stale-edge-"))
     for st in pg.STATUSES:
         (root / st).mkdir(parents=True, exist_ok=True)
     for st, slug, fm in tickets:
@@ -52,16 +51,65 @@ def _board(tickets):
                ["---", "", "body"]
         (root / st / ("%s.md" % slug)).write_text("\n".join(body) + "\n",
                                                   encoding="utf-8")
+    return root
+
+
+def _render_boards(root):
+    """Write the fixture's own BOARD*.md, rendered from its own tickets.
+
+    A CLEAN board has to actually BE clean. check() compares each BOARD file
+    against what it would render right now -- absent is NO-BOARD, different is
+    STALE-BOARD -- so a fixture with no boards, or with placeholder boards,
+    carries three findings and is not the state the clean-run guard below is
+    named for. Rendering them from the fixture's own Board is the only way to
+    satisfy a check that regenerates and compares.
+    """
     old = pg.PROG
     pg.PROG = root
     try:
-        return pg.Board()
+        b = pg.Board()
+        (root / "BOARD.md").write_text(b.render_board_md(), encoding="utf-8")
+        (root / "BOARD-brief.md").write_text(b.render_brief_md(),
+                                             encoding="utf-8")
+        for st in pg.ARCHIVED_STATUSES:
+            (root / ("BOARD-%s.md" % st)).write_text(b.render_archive_md(st),
+                                                     encoding="utf-8")
     finally:
         pg.PROG = old
 
 
 def _check(tickets, strict=False):
-    return _board(tickets).check(strict=strict)[1]
+    """Board.check() over `tickets` alone — PROG held for the WHOLE call.
+
+    THE FIXTURE USED TO LEAK, and it leaked in the way that is hardest to see:
+    it swapped `pg.PROG` to the throwaway tree, built the Board, and restored
+    PROG in a `finally` -- then called `.check()` outside the swap. Board()
+    captures its tickets at construction, so every assertion keyed on
+    `self.by_status` kept passing; but `check()` ALSO walks `PROG / st` on the
+    filesystem at call time, for the DUP-SLUG / NO-FRONTMATTER / NEAR-DUP
+    scans. Half of check() saw the fixture and half saw the live repo.
+
+    It stayed invisible for as long as the live repo happened to be clean.
+    The moment two real backlog tickets shared four slug words, a NEAR-DUP
+    about `decide-posix-master-vs-fpc-named-master-for-the-socket-facades` --
+    a ticket this devtest has nothing to do with -- landed in `out` and failed
+    the only guard that asserts on a CLEAN board. `tools-devtest#00` went red
+    on it (regression-tools-devtest-00-3) and the ticket read as a stale-edge
+    regression.
+
+    Same shape as the harness that deleted the pin it was measuring: a
+    `finally` that restores state before the thing under test has run. So the
+    swap now spans the call, and `_board()` is gone rather than left as a
+    second entry point that could be used the old way again.
+    """
+    root = _fixture(tickets)
+    _render_boards(root)
+    old = pg.PROG
+    pg.PROG = root
+    try:
+        return pg.Board().check(strict=strict)[1]
+    finally:
+        pg.PROG = old
 
 
 def t_cleared_edge_in_blocked_is_a_failure():
@@ -152,9 +200,61 @@ def t_the_aperture_note_is_always_printed():
     turned up on 2026-08-28 alone.
     """
     out = _check([("backlog", "solo", {"track": "T", "prio": 50})])
-    assert "reads FRONTMATTER only" in out, out
-    assert "not the family" in out
+    # KEYED ON THE NOTE'S IDENTITY AND ITS TWO CLAIMS, not on its wording.
+    # This asserted the literal "reads FRONTMATTER only" -- and 65a63f0d2
+    # rewrote the sentence to "reads FRONTMATTER; STALE-PARK reads PROSE ..."
+    # when it added the prose half, leaving the assertion behind. The guard has
+    # been red ever since, and it is what reddened tools-devtest#00
+    # (regression-tools-devtest-00-3). Proof rather than inference: the exact
+    # string is present in progress.py at 65a63f0d2~1 and absent at 65a63f0d2.
+    #
+    # A guard whose subject is "the scan states its own reach" should not be
+    # able to fail because the reach got WIDER and was described more
+    # precisely. So it now asserts what must be true of any wording: the note
+    # is emitted, it names the aperture it reads, and it disclaims the family.
+    # That is not a loosened tolerance -- delete the note and all three fail.
+    assert "NOTE stale-edge" in out, out
+    assert "FRONTMATTER" in out, out
+    assert "not the family" in out, out
     return "the scan states its own reach, clean run included"
+
+
+def t_the_filesystem_scan_sees_the_fixture_not_the_live_repo():
+    """check() walks PROG on disk as well as reading self.by_status.
+
+    THIS GUARD EXISTS BECAUSE ITS ABSENCE WAS NEARLY SHIPPED. The old fixture
+    restored `pg.PROG` before calling `.check()`, so the DUP-SLUG /
+    NO-FRONTMATTER / NEAR-DUP half of check() scanned the LIVE REPO while every
+    other assertion read the fixture. That was caught only by accident -- the
+    aperture guard's assertion had ALSO drifted, so it failed and dumped `out`,
+    which happened to contain a NEAR-DUP about two real backlog tickets. Repair
+    the wording and the leak becomes silent again: with the leak reinstated and
+    the wording fixed, this file reported OK. Measured, not assumed.
+
+    So the isolation is asserted directly and in a way the live repo cannot
+    satisfy or defeat:
+
+      * POSITIVE -- a synthetic near-duplicate pair in the fixture IS reported,
+        which proves the scan reaches the fixture at all (without this the
+        negative below is satisfied by a scan that reads nothing);
+      * NEGATIVE -- on a clean fixture, no finding names any file that is not
+        in the fixture. State-independent: it holds whether or not the live
+        repo currently carries near-duplicates of its own, and today it does
+        carry six.
+    """
+    out = _check([("backlog", "zz-fixture-alpha-beta-gamma-delta",
+                   {"track": "T", "prio": 50}),
+                  ("backlog", "zz-fixture-alpha-beta-gamma-epsilon",
+                   {"track": "T", "prio": 50})])
+    assert "NEAR-DUP" in out and "zz-fixture-alpha-beta-gamma-delta" in out, out
+
+    out = _check([("backlog", "solo", {"track": "T", "prio": 50})])
+    stray = [ln for ln in out.splitlines()
+             if ".md" in ln and "solo.md" not in ln
+             and not ln.startswith(("NOTE", "NO-BOARD", "STALE-BOARD"))]
+    assert not stray, "check() reported about files outside the fixture:\n" + \
+        "\n".join(stray)
+    return "the on-disk scan is confined to the fixture"
 
 
 TESTS = [t_cleared_edge_in_blocked_is_a_failure,
@@ -164,7 +264,8 @@ TESTS = [t_cleared_edge_in_blocked_is_a_failure,
          t_a_rejected_blocker_can_never_be_satisfied,
          t_a_decided_blocker_counts_as_closed,
          t_an_open_blocker_is_silent,
-         t_the_aperture_note_is_always_printed]
+         t_the_aperture_note_is_always_printed,
+         t_the_filesystem_scan_sees_the_fixture_not_the_live_repo]
 
 
 def main():
