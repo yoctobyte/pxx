@@ -454,3 +454,135 @@ rows — which is what makes it a bounded absence rather than an unbounded one.
 The single disagreement anywhere remains `test_nilpy_math_domain_errors`: a
 transcript of an *older CPython*, not of one of our bugs. A stale oracle rather
 than a defect, and fixing it would have been the error.
+
+## The aperture, read: measured, ranked, and smaller than it was
+
+The claim above was written with an aperture of 486 rows and a plan to rank
+them. Both happened. What follows supersedes the numbers in it.
+
+### The corrected oracle counts
+
+| population | rows | oracle-answered | no oracle |
+| --- | --- | --- | --- |
+| NilPy (CPython) | 353 | 342 derived | 11, registered in `test/nilpy_transcripts.txt` |
+| C (gcc) | 395 | 333 derived | 33 gcc rejects the source, 29 cross-target |
+| Pascal (FPC) | 1279 | 796 derived | 368 FPC cannot build, 44 cross-target, 12 built-but-silent |
+
+The Pascal figure was 784 before the FPC oracle was given the tests' own `-Fu`
+paths; 796 is the same corpus with the companion units it always needed.
+**59 Pascal rows are candidates (FPC differs) awaiting reading** — dialect
+divergence in every case examined so far, but they are not yet all read, and
+that is the honest remaining edge of this audit.
+
+### What the no-oracle region actually consists of
+
+Not an opaque 486. For the 366 Pascal sources FPC cannot build, with the reasons
+grouped over **all** of them (the first grouping said 262 of 366 because the
+script called `most_common(30)` — a silent cap, in the script measuring the
+aperture, and it hid the *largest* structural category, not a tail of oddities):
+
+| n | why FPC cannot build it |
+| --- | --- |
+| 201 | pxx dialect/semantics FPC rejects — `Identifier not found`, `Syntax error`, `Duplicate identifier`, `class type expected`, published section needs `{$M+}` |
+| 145 | a pxx RTL/support unit FPC does not have — `palparallel`, `scheduler`, `palthread`, `promocore`, `cprep_lib`, `Illegal unit name: platform` |
+| 14 | **recoverable** — builds once FPC gets the test's own `test/` companion paths |
+| 4 | inline asm FPC will not assemble |
+| 2 | links against a `.so` the test builds itself |
+
+On the C side, **exactly 1 of 52** unbuildable sources was recoverable by a flag
+(`-include alloca.h`), and that row then proved derived. So the obvious next
+suggestion — *configure the oracles better* — is answered with evidence rather
+than a shrug: **it buys 15 rows across both languages and then stops.** The rest
+is structural. These tests exercise constructs the reference implementations do
+not have, which is most of why they exist.
+
+### The ranked reading, and why the ranking is weaker than it looks
+
+`tools/expect_audit.py --unoracled` intersects the two instruments: rows no
+oracle reaches, ranked by whether the expected text appears in the files the row
+actually compiles. **Every row in the zero-overlap band is derived.** The
+mechanisms are three, and none is capture:
+
+- **arithmetic on literals in the test** — `add_two(3,4)/(10,20)/(100,1)` →
+  `7 30 101`; `sum7(1..7)`, `dsum10(1.0..10.0)`, `mix9(...)` → `28 55.0 45`;
+  `my_add(40,2)` → `42`; `tolower(65)` → `97`; `fact(25)` → 25! exactly;
+  `f(fact(20))` → 2×20!; `4π` → `12.5664`; `len("test/hello.pas")` → `14` and
+  `stat -c %s` of it → `54`, both checked.
+- **the value lives in the companion the test exists to pull in** — `4242` in
+  `test/chdrstatic/hdrstatic.h`, `#define MIXED_CASE_SENTINEL 77` in
+  `test/MixedCaseHeader.h`.
+- **a self-counting harness** — `total ok 24 / 24`, where every expected value
+  sits inline beside the code producing it (`Chk('ag sum', n, 11*(3+4+5+6+7+8+9))`)
+  and the expectation is only *all checks passed*. This shape cannot carry a
+  captured wrong value: capturing a failing run would have recorded `23 / 24`.
+
+**And that is the finding about the instrument, which matters more than the
+verdicts.** Literal overlap asks whether the expected text appears in the source.
+A *computed* expectation is absent by definition — and computing the expected
+value from literals in the test is the most common legitimate shape a test
+expectation takes. So **low overlap is evidence of arithmetic, not of capture**:
+the two populations are not separated by the thing the heuristic measures. The
+ranking is still useful — it produced a finite ordered set that resolved
+completely — but "lowest overlap first" is not "most likely to be a capture", and
+it was asserted before it was checked. *A ranking's discriminating power is
+itself a claim and needs its own measurement*; it usually gets validated by
+whether its top rows are interesting, which is exactly the reading that cannot
+tell a good metric from one that merely concentrates a shape.
+
+### The instrument defects found while doing this, because they are the result too
+
+Four, all in the audit's own tooling, and each found by running it rather than
+reading it:
+
+1. **The overlap metric could not see the second file.** It read only the primary
+   source, so multi-file tests sorted to the top — *exactly where the hypothesis
+   predicted captures*. A ranking that fails randomly costs a few rows; one that
+   fails by agreeing with you costs the conclusion.
+2. **Half of the repair was inert.** It read `-I`/`-Fu` from the `expect_same.sh`
+   line, which never carries them. Unnoticed because the *other* half fired and
+   moved the band 26 → 23, which reads as success. With the compile line carried
+   through: 18. **A fix with two independent parts can have one part inert and
+   still move the numbers — so numbers-moved is necessary, not sufficient, and
+   the size of the move must be plausible for the whole fix.**
+3. **The fix landed in the wrong function.** The old text was asserted present
+   inside `oracle_pas`, then replaced with `count=1` over the whole file, landing
+   in `oracle_c`, which had byte-identical code. The assert and the edit were
+   checking different things.
+4. **Giving an oracle the subject's own include paths turns it into a mirror.**
+   `lib/rtl` holds `sysutils.pas`, `math.pas`, `classes.pas`, `strings.pas`,
+   `dateutils.pas`, `strutils.pas` — each shadowing the FPC unit of that name —
+   and 98 compile lines carry `-Fulib/rtl`. FPC was compiling *our* RTL. For such
+   a row "FPC reproduces it" is our implementation built by FPC agreeing with our
+   implementation built by pxx: circular, and **in the one direction this audit
+   must never be wrong, because it manufactures confirmations of the claim under
+   test.** It reduced DERIVED only because our RTL does not compile cleanly under
+   FPC; had it compiled, the identical defect would have read as a *stronger*
+   result. The gcc mirror of the same "improvement" made gcc build 10 fewer
+   sources, because a pxx include dir shadows a system header.
+
+Both instruments are now restricted to `test/` companion directories, and the
+restriction is stated twice in the code with two different justifications —
+independence for the oracle, metric preservation for the overlap scan — so that
+relaxing one does not read the other as redundant.
+
+**Defect 4 was caught by direction, not inspection, and so was its gcc twin.** A
+change that can only *add* include paths cannot legitimately *reduce* the number
+of buildable sources, nor turn a reproduced row into a differing one. The sign of
+the move was wrong before the size was interesting — and **a sign is checkable
+without knowing the right answer**, which is what makes it cheaper than the
+magnitude check and usable on results you have no intuition about. Inspection
+would not have caught either: in both cases the code does exactly what it says.
+
+### The claim, restated with the aperture measured rather than estimated
+
+> **No captured-and-wrong expectation exists among the rows an oracle could
+> reach — 342/353 NilPy, 333/395 C, 796/1279 Pascal — nor among the
+> zero-overlap band of the rows no oracle reaches, every one of which was
+> hand-judged derived. 486 rows have no oracle; of the Pascal sources behind
+> them, 346 of 366 are structurally unreachable (dialect FPC rejects, or an RTL
+> unit it does not have) rather than unconfigured, and better oracle
+> configuration buys 15 rows across both languages before it stops. 59 Pascal
+> candidate rows remain unread.**
+
+That last sentence is the open edge, and it is deliberately inside the claim
+rather than after it.
