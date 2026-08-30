@@ -2030,6 +2030,14 @@ begin
       SetSymPointerType(idx, ptypesPtrElemTk[i], ptypesPtrElemRec[i],
                         ptypesPtrDepth[i], ptypesPtrBaseTk[i],
                         ptypesPtrBaseRec[i]);
+      if PxxDbgEnabled('p.ptrparam') then
+        writeln('PXXDBG p.ptrparam REG proc=', Procs[procIdx].Name,
+                ' i=', i, ' sym=', idx,
+                ' elemtk=', Ord(ptypesPtrElemTk[i]),
+                ' stored=', Ord(Syms[idx].PtrElemTk),
+                ' procParamSym=', Procs[procIdx].Params[i].SymIdx,
+                ' name=', Syms[idx].Name, ' kind=', Ord(Syms[idx].Kind),
+                ' symcount=', SymCount);
       SymProcSig[idx] := ptypesProcSig[i];
     end
     else if (ptypes[i] = tyRecord) and (ptypesProcSig[i] >= 0) then

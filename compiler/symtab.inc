@@ -7912,6 +7912,12 @@ begin
      and (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
   begin
     si := Procs[i].Params[j].SymIdx;
+    if PxxDbgEnabled('p.ptrparam') then
+      writeln('PXXDBG p.ptrparam MATCH proc=', Procs[i].Name, ' j=', j,
+              ' sym=', si, ' ptrelem=',
+              Ord(Syms[si].PtrElemTk),
+              ' name=', Syms[si].Name, ' kind=', Ord(Syms[si].Kind),
+              ' symcount=', SymCount);
     if (si >= 0) and (Syms[si].PtrElemTk <> tyUnknown)
        and (Syms[si].PtrElemTk <> tyClass) then
       Result := False;
