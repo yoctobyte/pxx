@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:34 blocked:9 backlog:387 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2847 rejected:60`
+`working:4 unfinished:34 blocked:9 backlog:386 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2847 rejected:60`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array` [A] — owner: frankS
 - `bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given` [A] — owner: frankA
 - `feature-unicodestring-model` [A] — owner: frankwasm
+- `perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call` [A] — owner: frankB
 
 ## unfinished (34) — parked mid-flight; re-claim, do not duplicate
 
@@ -62,12 +63,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 
-## Ready — top 30 of 428, ranked
+## Ready — top 30 of 427, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [A]` perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call (unblocks 1)
 - `[p 70] [P]` bug-p-generic-constraints-are-checked-before-the-type-section-closes
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
@@ -94,5 +94,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
-_398 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
