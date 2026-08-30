@@ -9,6 +9,8 @@ type
   TArr   = array[0..2] of Integer;
   TArr2  = array[0..1, 0..2] of Integer;
   TStrs  = array[0..2] of string[8];     { FROZEN-string element }
+  TMStrs = array[0..2] of AnsiString;    { MANAGED-string element }
+  TMStr2 = array[0..1, 0..1] of AnsiString;
   TRecX  = record a: Integer; b: string[4]; end;
   TRA    = array[0..2] of TRecX;
   TRA2   = array[0..1, 0..1] of TRecX;
@@ -31,6 +33,23 @@ end;
 function MkStr: TStrs;
 begin Inc(Calls); MkStr[0] := 'lo'; MkStr[1] := 'mid'; MkStr[2] := 'hi'; end;
 
+{ The MANAGED-string element. Procs[].RetType carries the ELEMENT kind, so this
+  reads as tyAnsiString at the suffix parser and used to take the
+  index-a-string-VALUE arm -- the whole array materialised into an AnsiString
+  temp and indexed 1-based by the byte, answering Length 1 and one garbage
+  character. The FROZEN row above could not catch it: string[8] is tyFixedString
+  there and never entered that arm.
+  bug-a-indexing-a-function-result-that-is-an-array-of-managed-strings-yields-garbage }
+function MkMStr: TMStrs;
+begin Inc(Calls); MkMStr[0] := 'alpha'; MkMStr[1] := 'beta'; MkMStr[2] := 'gamma'; end;
+
+function MkMStr2: TMStr2;
+var i, j: Integer;
+begin
+  Inc(Calls);
+  for i := 0 to 1 do for j := 0 to 1 do MkMStr2[i, j] := Chr(Ord('a') + i) + Chr(Ord('0') + j);
+end;
+
 function MkR: TRA;
 begin Inc(Calls); MkR[0].a := 7; MkR[1].a := 8; MkR[1].b := 'eight'; MkR[2].a := 9; end;
 
@@ -49,6 +68,10 @@ begin
   WriteLn('nd   ', MkArr2[1, 2]);
   WriteLn('ndbr ', MkArr2[1][2]);
   WriteLn('froz ', MkStr[1]);          { must be `mid`, not the length word }
+  WriteLn('mgd  ', MkMStr[1]);         { must be `beta`, not one garbage char }
+  WriteLn('mgdln', Length(MkMStr[0])); { must be 5, not 1 }
+  WriteLn('mgdnd', MkMStr2[1, 0]);
+  WriteLn('mgdbr', MkMStr2[1][0]);
   WriteLn('rec  ', MkR[1].a);
   WriteLn('recs ', MkR[1].b);
   WriteLn('ndrec', MkR2[1, 1].a);

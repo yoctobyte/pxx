@@ -4892,8 +4892,24 @@ begin
       tk := tyAnsiString;   { a 1-character str — see PyMakeStrIndex }
     end;
   end
-  else if (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) then
+  else if (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) and
+          not (ProcRetIsDynArray[procIdx] or (ProcRetFixedArrBytes[procIdx] > 0)) then
   begin
+    { The SAME exclusion the tyClass/tyRecord arm below carries, and for the same
+      reason: Procs[].RetType is the ELEMENT kind, so `function FS: array[0..2]
+      of AnsiString` reads as tyAnsiString here and `FS[0]` took the
+      index-a-string-VALUE path -- materialising the whole array into an
+      AnsiString temp and indexing it 1-based by the byte. It answered Length 1
+      and one garbage character where FPC answers the string that was assigned.
+      What decides the arm is whether the RESULT is an array, not what its
+      elements happen to be.
+
+      The record arm grew this guard and its AnsiString sibling did not, which
+      is the double case normalise-dont-special-case.md names: an array of
+      RECORDS was already excluded here by hand, an array of STRINGS was not.
+      Excluding it hands the call to the fixed/dyn-array arm below, which
+      materialises a SHAPED temp and gets the N-D spelling for free.
+      bug-a-indexing-a-function-result-that-is-an-array-of-managed-strings-yields-garbage }
     node := GenMakeStringValueIndex(node);
     tk := tyChar;
   end
