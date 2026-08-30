@@ -12408,3 +12408,75 @@ contradicted.
 The dating is not decoration — see 229: a definition drawn from today's convention silently
 excludes yesterday's, and the separator character class is exactly that failure. The population
 statement has an expiry the same way a ticket's evidence does (219).
+## 233 — A COMMENT THAT SAYS WHAT THE CODE DOES *NOT* DO IS A REFUSAL WITH NO ERROR PATH
+
+This file's own thesis is that a refusal is a claim with a date on it. The
+refusals it collects are *messages*: something printed, at a site that ran. This
+face is the same claim in the one place where **nothing ever runs** — a header
+comment saying what a mechanism does not do. It has no error path, so it cannot
+be stale-checked, cannot be tested, and cannot fail. It can only be believed.
+
+**Measured, frankC, 2026-08-30.** `compiler/cpreproc.inc`'s header block on the
+`# <line> "<path>"` line markers ended:
+
+> *"Only under -g: without it the preprocessed text is byte-for-byte what it
+> always was, so nothing that reads `--dump-cpp` changes."*
+
+True when written. **Twenty lines below, `CPSyncLine` says the opposite and is
+right:**
+
+> *"Emitted even WITHOUT -g now. The marker is the only record of which source
+> file the following text came from, and the C lexer needs that to attribute a
+> file-scope `static` to its own MODULE."*
+
+I was working `feature-c-diagnostics-name-the-module-they-are-in`, whose whole
+question is *what is available ungated*. The stale sentence answers that question
+directly, in the file that owns the mechanism, in the negative.
+
+**What it would have cost, concretely.** Believing it means the header path is
+`-g`-only, which means the ungated table has to be built from scratch — new
+arrays in `defs.inc`, new routines in `dbg_filetable.inc`, a Track A ticket, a
+hand-off, and a wait. The actual finding is one arm cheaper and points somewhere
+else entirely: the markers *are* ungated, `CLexLineMarker` **has** the header path
+and discards it, and the missing piece is a table twenty lines from one that
+already exists. I would not have built the wrong thing — I would have **filed the
+wrong ticket and been confident about it**, because a header comment in the owning
+file is about as authoritative as a source citation gets.
+
+**Why this is worse than a stale refusal message, not milder.** A stale refusal
+at least *runs*: it prints, it can be grepped for, `done/` can be checked against
+its cited slug — that is this ticket's own ~15-line check. A stale comment is
+inert. No sweep sees it, no test covers it, and the only thing that contradicts
+it is another comment, which is exactly as unenforced. The two disagreed **in one
+file, twenty lines apart, for months**, and the build was perfectly green
+throughout because neither is code.
+
+**And note which one a reader reaches first.** The header block is the
+orientation text — the thing you read *because* you are new to the mechanism and
+being careful. The correcting comment sits at the implementation, which you only
+reach if you already doubted the header. **The stale claim is positioned where
+the uninformed reader lands and the correction where the informed one does.**
+That is the same shape as this file's own opening note: a head that describes one
+thing, a body that has been another for months, and the head is what a careful
+reader consults.
+
+**The generalisation.** A comment asserting a *limitation* — "only under X",
+"not supported on Y", "never called from Z" — is load-bearing in a way a comment
+describing behaviour is not, because it is the one kind a reader acts on by **not
+looking**. Behaviour claims get checked against the code beside them; limitation
+claims send you away.
+
+- Write a limitation comment with the reason it holds, not just the fact, so a
+  reader can tell whether the reason still applies.
+- When you lift a limitation, grep the file for the sentence that stated it. The
+  `CPSyncLine` change did the hard part correctly — it documented the new truth
+  where the change was — and left the old sentence standing where it is read
+  first.
+- Treat "the comment says it does not do X" as a hypothesis to measure, at
+  exactly the moment X is what you need. It costs one probe. `PXXDBG=c.srcmap`
+  answered this one in a single run.
+
+Related: **face nine** (an inert flag, and it lived in a comment) is the same
+substrate — a comment carrying state nothing enforces. Nine is about a comment
+standing in for a *mechanism*; this is about a comment standing in for a
+*boundary*.
