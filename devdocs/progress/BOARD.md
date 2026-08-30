@@ -61,7 +61,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (356)
+## backlog (357)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -88,6 +88,7 @@ _none_
 | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-o3-alone-computes-a-different-result-for-a-nested-case-statement | A+O | 45 | bug | Fuzz finding pxx-self_case: at -O3 the compiler produces a DIFFERENT result than it does at -O0 and -O2 for a nested `case` statement, with no diagnostic. fpc-O0, fpc-O2, pxx-O0 and pxx-O2 all agree on 16452949249337348755; pxx-O3 alone says 16571182087083257235. Four independent implementations against one, so the program's meaning is a fact rather than a judgement call, and -O3 is the one that is wrong. --no-dce does not change it, so it is not the DCE pass. Contained to the -O3 free tier today, but it blocks promoting whichever pass is at fault to -O2. | — |
+| bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements | A+O | 50 | bug | Eight-line repro: two chained `h := h * 31 xor qword(v)` statements over qword. At -O3 the first statement's result is discarded — the value entering the second is the THIRD variable's value, not the first statement's — so the program prints 222 instead of 635218. -O0, -O1, -O2 and FPC at -O0 and -O2 all agree on 635218. Boundary established on four axes: the two-statement chain is required, the multiply in the second statement is required, qword (unsigned) is required (all-int64 is clean), and the -O3 answer is independent of the middle operand, which is what shows the first statement is dropped rather than miscomputed. Found by the pasmith multi-unit rung; units turned out to be irrelevant. | — |
 | bug-a-paramsize-and-allocparam-disagree-about-a-5-8-byte-byvalue-record | A | 40 | bug | ParamSize and AllocParam disagree about a 5-8 byte by-value record | — |
 | bug-a-proc-map-emits-static-addresses-for-a-dynamic-build | A | 30 | bug | --proc-map computes every address as LOAD_ADDR + CODE_OFFSET + BodyAddr, using the STATIC code offset unconditionally. A dynamic build (-dPXX_LIBC_HEAP, --shared) sits at DYNAMIC_CODE_OFFSET, so every PROC line is 0x70 low -- a constant shift over all routines. Measured on the pinned binary. It does not fail; tools/vgsym.py resolves the shifted address to the PRECEDING routine, so the symbolized stack is wrong rather than absent. compiler.pas's own comment already states the limitation; nothing enforces it. | — |
 | bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout | A | 25 | bug | ir.inc:9399 says a promotable-int store's two paths 'both go through promocore.pas, the only place that knows the layout'. x86-64's hand-emitted variant-release blob in ir_codegen.inc reads the payload as a literal [rax+8] at three sites, so it knows the layout too. The values agree today so nothing is broken — but this is the same arm, the same shape and the same file as instance #4 of the audit, where an x86-64 hand-emitted twin of a 'single choke point' silently diverged for two months. | — |
@@ -841,6 +842,7 @@ _none_
 - [p 55] [A+S] ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
+- [p 50] [A+O] bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
