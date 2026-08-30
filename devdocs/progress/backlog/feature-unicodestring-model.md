@@ -1,16 +1,23 @@
 ---
 prio: 62
 track: A
-blocked-by: [decide-adopt-a-second-string-model-or-refuse-utf16-honestly]
+blocked-by: []
 status: backlog
 ---
 
-> **Not dispatchable as implementation — the choice IS the work.** This ticket's
+> **DECIDED 2026-08-30: build it, as a fixed-width UTF-16 kind.** The owner ruled
+> that WideChar is easier than UTF-8 — which is right: the variable-width TEXTSTR
+> kind already shipped with an ASCII-flag scan cache, and fixed-width needs none of
+> it. Windows/`*W` interop is explicitly not a consideration. See the RESOLUTION in
+> `decide-adopt-a-second-string-model-or-refuse-utf16-honestly` for what the work
+> is. Sequenced behind `feature-a-typeref-migrate-consumers` — same file set.
+>
+> Superseded filing note: **Not dispatchable as implementation — the choice IS the work.** This ticket's
 > own body says "this is a model decision, not a function", and its title carries
 > both branches. Escalated 2026-08-30 to
 > `decide-adopt-a-second-string-model-or-refuse-utf16-honestly` (U p62) so an
 > agent does not settle the language's string model by picking one while
-> implementing. do not claim until that lands.
+> implementing. 
 
 # A real UnicodeString / WideChar model (UTF-16), or an honest refusal
 

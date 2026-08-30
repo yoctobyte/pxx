@@ -4,14 +4,65 @@ title: "UnicodeString/WideChar: adopt a second string model, or refuse UTF-16 ho
 track: U
 prio: 62
 type: decide
+status-note: "DECIDED 2026-08-30 by the owner: adopt a real fixed-width UTF-16 kind. Windows is explicitly NOT a consideration. The coordinator's stride objection was wrong and is retracted in the resolution."
 blocked-by: []
-status: backlog
+status: decided
 owner: ""
 created: 2026-08-30
 found-by: frank-coordinator, escalating feature-unicodestring-model rather than dispatching it
 summary: "feature-unicodestring-model [A p62] says in its own body that this is a MODEL DECISION, not a function to write -- and its title offers the alternative outright: a real UTF-16 model, or an honest refusal. pxx has one string model (bytes, CP_UTF8 passthrough) and the RTL is already candid about it at the declaration: UTF8Decode/UTF8Encode are the identity, WideChar casts to a 2-byte ordinal. Adopting UTF-16 is a second model in a compiler whose whole design pushes generality DOWN into one substrate. Refusing means fcl-json's \\uXXXX surrogate path stays uncompilable. Neither is derivable from the code or from a sensible default, so it is Track U."
 ---
 
+
+> ## RESOLUTION, 2026-08-30 — **adopt it. A fixed-width UTF-16 kind, and it is the EASY case.**
+>
+> Owner: *"(a) we don't care for windows, and (b) I'm not seeing how widestring is
+> hard in any way — yes, `Length()` would depend on the actual string type.
+> WideChar is already easier than UTF-8. I don't think it's a big issue."*
+>
+> **Both points land, and my stride objection above is RETRACTED.** I argued that
+> 2-byte storage would need a second arm in six backends because stride 1 is baked
+> in. Measured, that is wrong: the generic array-index lowering already multiplies
+> by `elemSize` — `(IRIVal[indexNode] - lo) * elemSize` in `ir_codegen.inc`, with
+> `elemSize` 2/4/8 handled throughout every backend. The `tyAnsiString`/`elemSize = 1`
+> test I cited is a **fast path**, not the only path. A 2-byte element rides
+> machinery that already exists for `array of Word`.
+>
+> **And the owner's real point is the decisive one: fixed-width is EASIER than what
+> already shipped.** `PXX_KIND_TEXTSTR` — NilPy `str`, variable-width UTF-8 with
+> public positions counting CHARACTERS — needs `PXX_FLAG_ASCII`/`ASCII_KNOWN` to
+> cache a scan so `len` and indexing stay O(1) in the common case, and falls back to
+> scanning when a byte is >= $80. That is the hard case and it is DONE. Fixed-width
+> UTF-16 needs none of it: index is `data + i*2` unconditionally, and `Length` is
+> the header's byte count shifted right by one. **The expensive string kind was
+> already built; this one is strictly cheaper.**
+>
+> **The Track M argument is struck entirely** — the owner does not care about
+> Windows, so the "convert at every `*W` boundary" cost that was doing the work in
+> my previous recommendation is not a cost anyone is paying. With it gone, real
+> 2-byte storage also wins on the merits it always had: it is FPC's actual layout,
+> so `PWideChar` interop is natural rather than a conversion.
+>
+> ### What the work actually is
+>
+> - a `PXX_KIND_WIDESTR` alongside BYTESTR/TEXTSTR; header `length` stays a BYTE
+>   count, so `Length()` lowers to a shift and every existing memcpy/compare/concat
+>   path keeps working unchanged;
+> - a `tyWideString` / `tyUnicodeString` static kind so assignment and overload
+>   rules work — and specifically so `WideChar(u1) + WideChar(u2)` builds a string
+>   instead of adding two ordinals, which is the actual `jsonscanner` wall;
+> - literal encoding for a wide literal;
+> - conversion helpers at the boundaries, which the owner named up front;
+> - `Write`/`Writeln` and file I/O converting on output.
+>
+> None of that is a second substrate. Track B/library work plus a type kind, as the
+> owner said.
+>
+> ### Sequencing note for whoever schedules it
+>
+> It touches `defs.inc`, `symtab.inc` and `ir.inc`, which is the same file set as
+> `feature-a-typeref-migrate-consumers` — currently held by frankwasm. Queue it
+> behind that rather than interleaving.
 
 > ## OWNER INPUT, 2026-08-30 — the groundwork exists, and it narrows the fork to ONE question
 >
