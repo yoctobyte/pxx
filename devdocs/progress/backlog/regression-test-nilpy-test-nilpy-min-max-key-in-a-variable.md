@@ -41,3 +41,83 @@ Unhandled exception: TypeError: expected a number, got object
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## 2026-08-30 — triaged (frankB). Reproduces at HEAD. Same cause as the key-none regression.
+
+**Track N is correct** — the guess in the header holds. The code is
+`compiler/builtin/pylib.pas` + `compiler/pyparser.inc`, not `lib/**`, so this is
+not Track B's despite the runtime-looking symptom.
+
+### Reproduces at the current pin
+
+v394 `53800fbeb0b66e11`. Both regressions still fail, so this is not one of the
+"already fixed by something else" cases the header warns about.
+
+### The boundary — it is the RECEIVER, not the key
+
+Minimal repro, three lines:
+
+```python
+def f(xs, key=None):
+    return min(xs, key=key)
+print(f([5, 2, 9]))          # CPython: 2      pxx: TypeError: expected a number, got object
+```
+
+The full matrix (`min(xs, key=K)`; CPython gives 9 for the callable keys, 2 for
+`None`):
+
+| receiver | `key=lambda x: -x` | `key=pk` (def name) | `key=f` (variable) | `key=None` |
+| --- | --- | --- | --- | --- |
+| module-level `xs = [5,2,9]` | 9 | 9 | 9 | 2 |
+| **function parameter `xs`** | 9 | **TypeError** | **TypeError** | **TypeError** |
+
+Every module-level row passes. Three of four function-parameter rows fail, and
+only the **inline lambda** survives.
+
+So the discriminator is **a variant receiver combined with a key that is not an
+inline-lambda (pointer-typed) node**. It is not about `None`, and it is not about
+being inside a function: `key=0` fails identically, and a literal list inside a
+function works. The earlier ticket
+[[bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload]]
+fixed exactly this family for the **static-list** receiver — its own table's
+rows all pass today — and the **variant-container** arm is the half that is red.
+That ticket's fix note names both shapes explicitly ("a static list boxed on the
+way in, and a variant container") as the two that `PyMinMaxByKey` was made the
+single meeting point for, which is why one arm regressing is the expected shape
+of a break here rather than a surprising one.
+
+### Same cause as `regression-test-nilpy-test-nilpy-min-max-key-none`
+
+Not merely the same exception string. Both need the same two conditions, and
+each ticket is one column of the table above: `key-none` is the `key=None`
+column, this one is the `key=f` column. `min([3,1], key=None)` at module level
+still prints `1` — which is why the `key-none` test's first two lines pass and it
+dies at the first row that routes through a function. **One fix, one gate.**
+
+### Candidate cause — NOT a confirmed bisect
+
+Exactly one commit in the watcher's 6-commit range touches either file:
+
+> `7b73a385d feat(N): list.sort(key=) — and the callable→Pointer coercion every
+> method loop was missing`
+
+It refactors the callable→Pointer coercion into `PyCoerceCallableArgsIn`, applies
+it in the method-call loop, and adds `pyvar_callable_ptr_opt` for the `key=None`
+spelling — i.e. it edits precisely the mechanism the earlier fix rests on.
+
+**This is circumstantial and is deliberately not recorded as the cause.**
+Confirming it means building at `7b73a385d~1` and at `7b73a385d` and running the
+matrix, which is a compiler rebuild and therefore Track A/N work, not Track B's.
+The named sha `0200df7eabcd` remains impossible as a cause (it touches no
+buildable file); this is a better candidate, not a verdict. Whoever takes it
+should run the two builds before writing a cause into this ticket — a plausible
+attribution nobody diffed is the failure this repo has recorded most often.
+
+### Gate
+
+The matrix above for `min` and `max`, both receiver shapes × all four key
+spellings, plus `sorted` with the same keys as the control (its overloads are all
+`key: Pointer`, so it has no competing numeric candidate and should stay green
+throughout). The two existing `.npy` tests already cover most of it; add the
+variant-receiver rows for `key=None`, which is the column neither test exercises
+outside a helper.

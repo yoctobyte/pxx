@@ -5,14 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:29 blocked:7 backlog:369 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2769 rejected:56`
+`working:1 unfinished:30 blocked:7 backlog:369 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2769 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
-- `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (29) — parked mid-flight; re-claim, do not duplicate
+## unfinished (30) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -40,6 +39,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-type-helpers` [A]
 - `feature-rust-option-type` [R]
 - `feature-signal-siginfo-ucontext` [A]
+- `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `feature-threadsafe-heap-optimize` [A]
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
