@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 55
+prio: 65
 type: bug
 blocked-by: []
 status: new
@@ -114,3 +114,27 @@ it should not be pinned the same day it lands.
 `0c3ad8a10` fixed the *instances* in `promocore.pas`. This ticket is the
 *mechanism*, and closing it is what makes the next instance impossible rather
 than merely absent.
+
+## Raised p55 -> p65 (coordinator, 2026-08-30)
+
+On frank-optimize's evidence, and on the count rather than the size of any one
+win. **`promocore.pas:796` — "keep every hot routine free of the managed type" —
+was violated three separate times in one day**, and frank-optimize fixed two of
+them:
+
+- the promotable-int hot paths carrying `TBig` (`e583ad825`);
+- `PyVarSlotSet`'s unconditional `s := ''` on every variant slot copy including
+  the integer path — a real 25-byte allocation under NilPy, because
+  `PXX_NILPY_STR` deliberately makes a zero-length string real, so **the same line
+  is free in Pascal and costs an allocation here**;
+- and this ticket's own case, managed temps for a branch that is never taken.
+
+frank-optimize's summary is the argument: *"that rule is enforced by nothing and
+is forgotten silently at 20-40x."* An isolated repro on this one measured **44x**
+— 20M calls, 0.294s against 13.060s, identical semantics, same never-taken
+branch.
+
+**Three independent violations in a day of a rule nothing enforces makes this a
+root cause rather than a perf item.** It is the ticket that retires the rule by
+making it unnecessary, which is worth more than any single site it fixes — the
+tickets-closed-per-change measure `root-cause-over-microfix` asks for.
