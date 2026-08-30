@@ -85,4 +85,4 @@ nobody diffed against an oracle.
 `make compiler/pascal26` + the program above matching FPC on all four lines.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d79ee7c95.
