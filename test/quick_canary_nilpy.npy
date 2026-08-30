@@ -135,6 +135,11 @@ chk(23, w == 6)
 # literal-handle bug reaches the pin shadow before anything sees it. It cost 24
 # red jobs on 2026-08-30 (`x = "a" * 3` gave 285, reverted in 72b4c47a7), and
 # the failing line was two characters long.
+# Checks 24-27 have been VERIFIED TO FAIL on the bug they were written for, not
+# merely observed to pass: a compiler built at 9588c8535 (the reverted
+# string-literal marshalling opt, real fixedpoint fe797c461687, 2 rounds) prints
+# `total ok 26 / 27` here, failing 24 and ONLY 24. A canary nobody has watched
+# fail is indistinguishable from one that is not measuring.
 chk(24, len("a" * 3) == 3)              # the exact 24-job repro
 lit_v = "a"
 chk(25, len(lit_v * 3) == 3)            # ...and via a variable, which stayed correct
