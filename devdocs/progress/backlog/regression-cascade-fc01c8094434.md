@@ -83,3 +83,43 @@ and blaming are different questions and this line answers the first.)
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+## 2026-08-30 (coordinator) — READ THE BASELINE BEFORE READING THE CASCADE
+
+**38 jobs over an 87-commit range is not evidence of a cascade event.** Measured
+here before triaging:
+
+| | |
+| --- | --- |
+| host | **plexus**, not seven |
+| plexus's newest report | `20260830T043320Z-0f0a561-plexus.md`, **04:33Z**, native, GREEN |
+| this filing | 09:59Z — **five and a half hours later** |
+| range | `5dbcc861e3fc`..`fc01c8094434`, **87 commits** |
+| overlap with seven's standing set | `test-asm#…rv32`, `test-core#…store_reload` are in BOTH |
+
+**The likely reading is accumulation, not an event.** plexus had not swept for
+hours; when it did, everything that broke anywhere in 87 commits appeared at once,
+relative to a stale last-good. A cascade filing counts *jobs that changed state
+since this box last looked*, which over a long gap is a very different quantity
+from *jobs one commit broke*. The ticket's own header is careful about this —
+*"nothing in this filing looked at the build, the box or the range"* — and that
+disclaimer is the thing to act on.
+
+**Two of the 38 already have exact causes**, which is the strongest evidence for
+the accumulation reading:
+
+- `test-core#src:test/test_opt_store_reload.pas` — **bisected on seven to
+  `10c869750675`, 1 commit in range** (`b347147c9`).
+- `test-asm#src:test/test_asm_emit_rv32.pas` — `undefined variable (AIntToStr)` in
+  `compiler/rv32enc.inc`, an include-order fault in a reduced build.
+
+Neither has anything to do with the other, and both predate this filing. **Triage
+by subtracting what is already attributed before treating the remainder as one
+root cause** — the "treat as ONE root cause until triage proves otherwise" rule is
+right for a genuine cascade and wrong for a catch-up sweep, and the two are
+indistinguishable in the filing.
+
+**Do not fan out per-job tickets** (the filing is right about that). Do check
+whether plexus's gap has a cause of its own — a box that stops sweeping for six
+hours is its own finding, and it is the one nobody files because the reports it
+did not write are not in `tstate/` to be counted.

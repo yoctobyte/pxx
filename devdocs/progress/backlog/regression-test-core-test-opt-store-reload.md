@@ -69,3 +69,40 @@ Standing, not flaky: STILL-RED on every native report from 06:57Z to 08:45Z. The
 attributing sha `c951ec710b33` is a `diag(N)` commit and the earlier one is a
 `tstate-ticket` commit — **neither can be the cause**; a tstate red attributes to
 the sha it swept.
+
+## 2026-08-30 (coordinator) — BISECTED by Track T: `10c869750675`, which also WROTE this test
+
+`b347147c9`: bad `10c869750675`, last good `08cbfa20a11d`, **1 commit in range** —
+so the attribution is exact, not a range.
+
+```
+10c869750 07:48 fix(O): -O3 store->reload elimination elided a load the emitter had reordered
+```
+
+**That commit added 45 lines to `test/test_opt_store_reload.pas` itself**, and the
+entire mismatch is the two `WriteLn`s it added at `:153`/`:161`:
+
+```
++reord 635218
++reord2 635317
+```
+
+So the two candidate causes I wrote above are now **one commit apart**, and both
+are still live because the bisect cannot separate them — the same commit changed
+the optimizer AND grew the test:
+
+- **the expectation was never regenerated** — a test-authoring miss, no compiler
+  defect, fix by regenerating; or
+- **the two new `WriteLn`s expose a real difference** between the levels
+  `expect_same.sh` compares (the failing label is `test_opt_sr_O0.4`), in which
+  case the commit's own fix is incomplete and the test is doing its job.
+
+**Do not assume the first because it is cheaper.** `tools/expect_same.sh` is a
+generic three-argument assert (`<label> <actual> <expected>`), so *what* is being
+compared lives in the Makefile recipe, not in the script — read that recipe first.
+If the two operands are the same program at two `-O` levels, then a difference is
+a codegen finding and regenerating the expectation would **delete the detector**
+(face 195). If the expectation is a recorded file, regeneration is correct.
+
+**One commit, one test, one recipe — this is a ten-minute triage and it has been
+red since 07:48.**
