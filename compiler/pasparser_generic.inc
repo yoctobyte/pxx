@@ -1280,6 +1280,249 @@ begin
   Next;
 end;
 
+{ ===== Generic type-parameter CONSTRAINTS =====
+
+  `TFoo<T: class>` / `<T: record>` / `<T: constructor>` / `<T: TBase>` /
+  `<T: IThing>`, combinable per parameter (`<T: class, IThing, constructor>`)
+  and shared across a comma group -- `<T1, T2: IThing>` constrains BOTH.
+
+  These used to be parsed and thrown away: a `while ... do Next` consumed the
+  list to keep the parse moving and recorded nothing, so there was nothing for
+  a specialization to be checked against and every constraint in the language
+  meant exactly nothing. All 35 FAIL-marked fpc-testsuite tgenconstraint tests
+  were wrongly ACCEPTED
+  (bug-p-generic-type-constraints-are-parsed-and-discarded).
+
+  Stored per (template, parameter) as a flag word plus a short list of named
+  type constraints, keyed on the same flat ti*MAX_TEMPLATE_PARAMS+k layout as
+  TemplateParamNames. Names go through TokChars rather than AnsiString slots,
+  following SpecBoundName* above: the table is MAX_TEMPLATES*MAX_TEMPLATE_PARAMS
+  wide and defs.inc keeps these integer-only for fixedpoint safety.
+
+  CHECKED at specialization, not at template declaration, because pxx generics
+  are token substitution: the template body has no concrete types to check, and
+  the argument only exists once ParseSpecialization holds it. That is also the
+  single choke point for BOTH spellings -- DelphiRewriteGenericUses rewrites a
+  mode-Delphi `TFoo<TBar>` into a `specialize` alias declaration that lands
+  right back here, so mode-objfpc and mode-delphi share one check. }
+const
+  TPC_CLASS  = 1;   { T: class       -- must be a class type }
+  TPC_RECORD = 2;   { T: record      -- must be a value type }
+  TPC_CTOR   = 4;   { T: constructor -- must be a class; see CheckTemplateConstraint }
+  TPC_OPAQUE = 8;   { a constraint FORM this parser does not model: check nothing
+                      for that parameter rather than enforce a partial reading }
+  MAX_TPC_TYPES = 4;  { named class/interface constraints per parameter --
+                        tgenconstraint27's TTest15 uses three plus `constructor` }
+var
+  TPConFlags   : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS-1] of Integer;
+  TPConNTypes  : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS-1] of Integer;
+  TPConTypeOff : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS*MAX_TPC_TYPES-1] of Integer;
+  TPConTypeLen : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS*MAX_TPC_TYPES-1] of Integer;
+
+function GCIsDescOrSelf(c, target: Integer): Boolean;
+{ `c` is `target` or descends from it. Local rather than ir.inc's
+  IsClassDescOrSelf, which is included AFTER this file. }
+var guard: Integer;
+begin
+  Result := False;
+  guard := 0;
+  while (c >= 0) and (guard < MAX_UCLASS) do
+  begin
+    if c = target then
+    begin
+      Result := True;
+      Exit;
+    end;
+    c := UClsParent[c];
+    Inc(guard);
+  end;
+end;
+
+function GCIntfDescends(dsc, anc: Integer): Boolean;
+{ Interface `dsc` is `anc` or descends from it, walking UClsParent. }
+var c, guard: Integer;
+begin
+  Result := False;
+  c := dsc;
+  guard := 0;
+  while (c >= 0) and (guard < MAX_UCLASS) do
+  begin
+    if c = anc then
+    begin
+      Result := True;
+      Exit;
+    end;
+    c := UClsParent[c];
+    Inc(guard);
+  end;
+end;
+
+function GCSupportsIntf(ci, intfCi: Integer): Boolean;
+{ Does class `ci`, or an ancestor CLASS of it, DECLARE intfCi?
+
+  "Declare" is the whole difficulty. The (class, interface) pairs live in the
+  IMT rows, but pasparser_decl.inc does not store the declared list as written:
+  having collected it, it appends every ANCESTOR of each declared interface so
+  that `is`/`as`/`Supports` and base-interface assignment work
+  (pasparser_decl.inc, "A class implementing a derived interface also
+  implements every ancestor interface"). The IMT is therefore the CLOSURE, and
+  the constraint rule needs the generating set: a class listing only ITest2
+  (= interface(ITest1)) does NOT satisfy `T: ITest1`. The corpus pins that from
+  three sides -- tgenconstraint18, 23 and 25 are all FAIL-marked and all accept
+  under the closure.
+
+  The generating set is recoverable without touching pasparser_decl.inc,
+  because that flattening appends: `implOrig` freezes the declared count before
+  the ancestor walk runs, and IMT rows are emitted in implIntf order. So the
+  declared interfaces are a PREFIX, and a row is flattened-in exactly when some
+  EARLIER row of the same class descends from it. That reconstruction is exact
+  for every shape here; its one blind spot is a class that redundantly lists
+  both a derived interface and its ancestor in that order
+  (`class(TFoo, ITest2, ITest1)`), where the second is read as flattened. No
+  test in the corpus writes that, and the effect is a refusal rather than a
+  wrong acceptance. Recording implOrig in defs.inc would make it exact -- see
+  the note filed with the ticket.
+
+  ANCESTOR CLASSES are walked: a descendant really does implement what its base
+  declares, and tgenconstraint1's TTest15<TTestClass8> needs it (TTestClass8
+  declares only ITest2; its ITest1 comes from the base class TTestClass7). }
+var c, i, j, guard: Integer;
+    flattened: Boolean;
+begin
+  Result := False;
+  c := ci;
+  guard := 0;
+  while (c >= 0) and (guard < MAX_UCLASS) do
+  begin
+    for i := 0 to IMTCount - 1 do
+      if (IMTClass[i] = c) and (IMTIntf[i] = intfCi) then
+      begin
+        flattened := False;
+        for j := 0 to i - 1 do
+          if (IMTClass[j] = c) and (IMTIntf[j] <> intfCi) and
+             GCIntfDescends(IMTIntf[j], intfCi) then
+            flattened := True;
+        if not flattened then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+    c := UClsParent[c];
+    Inc(guard);
+  end;
+end;
+
+procedure CheckTemplateConstraint(ti, k: Integer; const specArg: AnsiString;
+                                  specArgKind: TTokenKind);
+{ Check one specialization argument against the constraint recorded for
+  parameter k of template ti. Errors name the constraint that was violated --
+  the point of the exercise is a diagnostic about the CONSTRAINT, not about
+  whatever the argument later fails to do. }
+var
+  base, flags, nT, j, argCi, conCi: Integer;
+  isClass, isIntf, conOk: Boolean;
+  conName, pfx, what: AnsiString;
+begin
+  base := ti * MAX_TEMPLATE_PARAMS + k;
+  flags := TPConFlags[base];
+  nT := TPConNTypes[base];
+  { Unconstrained, or a form this parser chose not to model: nothing to check.
+    Every generic in lib/, examples/ and the compiler's own source takes this
+    exit -- not one of them constrains a parameter -- so everything below is
+    reachable only from code that actually wrote a constraint. }
+  if ((flags and TPC_OPAQUE) <> 0) or ((flags = 0) and (nT = 0)) then Exit;
+
+  argCi := -1;
+  if specArgKind = tkIdent then argCi := FindUClass(specArg);
+  isClass := (argCi >= 0) and (not UClsIsRecord[argCi]) and (not UClsIsInterface[argCi]);
+  isIntf := (argCi >= 0) and UClsIsInterface[argCi];
+
+  { ONLY a fully declared class type is judged here. Everything else -- a name
+    not in the class table, or a forward stub whose real declaration is still
+    ahead -- is left alone, because at THIS point in the parse "not a class" and
+    "not declared yet" are the same observation, and refusing on it rejects
+    ordinary code:
+
+      type TInner<T: class> = class end;
+           TC = class end;              { declared BEFORE the use, and still
+           TA = TInner<TC>;               unknown when the check runs }
+
+    DelphiRewriteGenericUses desugars `TInner<TC>` by inserting an alias
+    declaration at insertAt -- immediately after the TEMPLATE -- so the
+    specialization is parsed AHEAD of TC, and TC is not in the table yet. The
+    objfpc spelling has the same hazard through a forward `TC = class;`, whose
+    stub carries no parent link, so a `T: TObject` constraint sees no ancestor
+    chain to walk. Both were measured as false rejections before this guard.
+
+    The cost is that a constraint is not enforced against an argument the parse
+    has not reached: tgenconstraint4 (`LongInt`) and 5 (`TClass`) name types
+    that are not classes and never will be, and both are still accepted. Fixing
+    those means checking constraints AFTER the type section closes rather than
+    mid-parse, which is where this check belongs -- see the ticket. It is a
+    missed rejection, never a wrong one, which is the right way round. }
+  if argCi < 0 then Exit;
+  if UClsForward[argCi] then Exit;
+
+  pfx := 'generic constraint violated: ' + Templates[ti].Name + '<' +
+         TemplateParamNames[base] + '> ';
+  { argCi >= 0 past the guard above, so these three are the whole space:
+    `object` and `record` both arrive as UClsIsRecord and read as a value type. }
+  if isClass then what := 'a class type'
+  else if isIntf then what := 'an interface type'
+  else what := 'a value type';
+
+  if ((flags and TPC_CLASS) <> 0) and (not isClass) then
+    Error(pfx + 'is constrained to `class`, but ' + specArg + ' is ' + what);
+
+  { `record` is the VALUE-type constraint: a class or an interface fails it and
+    everything else passes. `object` reaches here as UClsIsRecord (it lowers as
+    an advanced record since d23f52948), which is the right answer for it. }
+  if ((flags and TPC_RECORD) <> 0) and (isClass or isIntf) then
+    Error(pfx + 'is constrained to `record`, but ' + specArg + ' is ' + what);
+
+  { `constructor` is enforced only as far as "must be a class". The corpus
+    pins exactly that much -- tgenconstraint13/34/35/36 all pass a non-class --
+    and no test anywhere requires a CLASS to be refused for lacking a
+    parameterless constructor, so the second half would be an unverified
+    rejection path over real code. Left deliberately, and noted in the ticket. }
+  if ((flags and TPC_CTOR) <> 0) and (not isClass) then
+    Error(pfx + 'is constrained to `constructor`, but ' + specArg + ' is ' +
+          what + ' and only a class can have one');
+
+  for j := 0 to nT - 1 do
+  begin
+    conName := GetTokenStrFromRaw(TPConTypeOff[base * MAX_TPC_TYPES + j],
+                                  TPConTypeLen[base * MAX_TPC_TYPES + j]);
+    conCi := FindUClass(conName);
+    { The constraint names a type we cannot resolve here -- unchecked, for the
+      same reason an unresolved argument is. }
+    if conCi < 0 then Continue;
+    if UClsIsInterface[conCi] then
+    begin
+      { Satisfied by a CLASS that declares the interface, or by an INTERFACE
+        that is it or descends from it -- tgenconstraint1 accepts
+        TTest5<IInterface>, TTest5<ITest1> and TTest5<ITest2> against
+        `T: IInterface`, while tgenconstraint17 rejects TTest7<IInterface>
+        against `T: ITest1` because IInterface is the ancestor, not a
+        descendant. The direction is the whole distinction. }
+      if isIntf then
+        conOk := GCIntfDescends(argCi, conCi)
+      else
+        conOk := isClass and GCSupportsIntf(argCi, conCi);
+      if not conOk then
+        Error(pfx + 'is constrained to `' + conName + '`, but ' + specArg +
+              ' does not implement or descend from it');
+    end
+    else
+    begin
+      if not (isClass and GCIsDescOrSelf(argCi, conCi)) then
+        Error(pfx + 'is constrained to `' + conName + '`, but ' + specArg +
+              ' is not ' + conName + ' or a descendant of it');
+    end;
+  end;
+end;
+
 procedure ParseGenericTemplate;
 begin
   Next; { consume 'generic' }
@@ -1294,6 +1537,13 @@ var
   dgenAt, dgenRounds, dgenBefore, dgenAtBefore, dgenT: Integer;   { the nested-specialize fixed point }
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   isOpener, doneParams, bodyless: Boolean;
+  { per-parameter constraints, flushed into TPCon* with the names below }
+  pconFlags   : array[0..MAX_TEMPLATE_PARAMS-1] of Integer;
+  pconNTypes  : array[0..MAX_TEMPLATE_PARAMS-1] of Integer;
+  pconTypeOff : array[0..MAX_TEMPLATE_PARAMS*MAX_TPC_TYPES-1] of Integer;
+  pconTypeLen : array[0..MAX_TEMPLATE_PARAMS*MAX_TPC_TYPES-1] of Integer;
+  cFlags, cNTypes, groupStart, cgi, cj: Integer;
+  cTypeOff, cTypeLen: array[0..MAX_TPC_TYPES-1] of Integer;
 begin
   { Copy BEFORE Next: callers pass CurTok.SVal, and a const AnsiString param
     aliases it by reference — Next would mutate the name out from under us. }
@@ -1303,22 +1553,76 @@ begin
   { <T> / <TKey, TData> / <T: TObject> / <TKey; TData: TObject> — groups of
     comma-separated names, each group with an optional `: constraint` (the
     constraint list runs to the next `;` or `>`), groups separated by `;`.
-    Constraints are parse-and-ignore: pxx generics are token-substitution, so
-    the constraint has no checked meaning here (FPC enforces it at compile of
-    the generic itself, which substitution defers to the specialization). }
+    Constraints are RECORDED here and checked at each specialization: pxx
+    generics are token substitution, so the template body has nothing concrete
+    to check against and the argument is the only place the question can be
+    asked. They used to be skipped outright, which meant no constraint was ever
+    enforced at all -- see the TPCon* block above. }
   Expect(tkLt, '<');
   np := 0;
   doneParams := False;
+  for cj := 0 to MAX_TEMPLATE_PARAMS - 1 do
+  begin
+    pconFlags[cj] := 0;
+    pconNTypes[cj] := 0;
+  end;
   repeat
+    groupStart := np;
     repeat
       if CurTok.Kind <> tkIdent then Error('expected generic parameter name');
       if np >= MAX_TEMPLATE_PARAMS then Error('too many generic parameters (MAX_TEMPLATE_PARAMS)');
       pnames[np] := CurTok.SVal; Inc(np); Next;
     until not Eat(tkComma);
     if Eat(tkColon) then
-      while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkGt) and
-            (CurTok.Kind <> tkEOF) do
-        Next;   { skip the constraint list }
+    begin
+      { The constraint list belongs to the whole comma group just parsed:
+        `<T1, T2: ITest1>` constrains BOTH parameters (tgenconstraint31-33). }
+      cFlags := 0;
+      cNTypes := 0;
+      repeat
+        if CurTok.Kind = tkClass then cFlags := cFlags or TPC_CLASS
+        else if CurTok.Kind = tkRecord then cFlags := cFlags or TPC_RECORD
+        else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor') then
+          cFlags := cFlags or TPC_CTOR
+        else if CurTok.Kind = tkIdent then
+        begin
+          { a named class or interface constraint }
+          if cNTypes >= MAX_TPC_TYPES then cFlags := cFlags or TPC_OPAQUE
+          else
+          begin
+            cTypeOff[cNTypes] := TokCharsAppend(CurTok.SVal);
+            cTypeLen[cNTypes] := Length(CurTok.SVal);
+            Inc(cNTypes);
+          end;
+        end
+        else
+          { a form this parser does not model (a qualified name, a nested
+            specialization): enforce NOTHING for these parameters rather than
+            act on half a reading }
+          cFlags := cFlags or TPC_OPAQUE;
+        Next;
+      until not Eat(tkComma);
+      { Anything still standing before the `;`/`>` is a shape we did not model
+        either -- skip it exactly as this loop always did, and mark it opaque so
+        the partial reading above is never enforced. }
+      if (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkGt) then
+      begin
+        cFlags := cFlags or TPC_OPAQUE;
+        while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkGt) and
+              (CurTok.Kind <> tkEOF) do
+          Next;
+      end;
+      for cgi := groupStart to np - 1 do
+      begin
+        pconFlags[cgi] := cFlags;
+        pconNTypes[cgi] := cNTypes;
+        for cj := 0 to cNTypes - 1 do
+        begin
+          pconTypeOff[cgi * MAX_TPC_TYPES + cj] := cTypeOff[cj];
+          pconTypeLen[cgi * MAX_TPC_TYPES + cj] := cTypeLen[cj];
+        end;
+      end;
+    end;
     if not Eat(tkSemicolon) then doneParams := True;
   until doneParams;
   Expect(tkGt, '>');
@@ -1480,7 +1784,18 @@ begin
   if TemplateCount >= MAX_TEMPLATES then Error('too many generic templates');
   Templates[TemplateCount].Name := templateName;
   for gi := 0 to np - 1 do
+  begin
     TemplateParamNames[TemplateCount * MAX_TEMPLATE_PARAMS + gi] := pnames[gi];
+    TPConFlags[TemplateCount * MAX_TEMPLATE_PARAMS + gi] := pconFlags[gi];
+    TPConNTypes[TemplateCount * MAX_TEMPLATE_PARAMS + gi] := pconNTypes[gi];
+    for cj := 0 to pconNTypes[gi] - 1 do
+    begin
+      TPConTypeOff[(TemplateCount * MAX_TEMPLATE_PARAMS + gi) * MAX_TPC_TYPES + cj] :=
+        pconTypeOff[gi * MAX_TPC_TYPES + cj];
+      TPConTypeLen[(TemplateCount * MAX_TEMPLATE_PARAMS + gi) * MAX_TPC_TYPES + cj] :=
+        pconTypeLen[gi * MAX_TPC_TYPES + cj];
+    end;
+  end;
   TemplateNParams[TemplateCount] := np;
   TemplateIsDelphi[TemplateCount] := delphiForm;
   Templates[TemplateCount].TokStart := TemplateTokenCount;
@@ -2177,6 +2492,13 @@ begin
   if ti < 0 then Error('generic template ' + templateName + ' not found');
   if nc <> TemplateNParams[ti] then
     Error('specialize ' + templateName + ': wrong number of type arguments');
+
+  { Every constraint the template declared, against the arguments it actually
+    got. Here because this is the one point both spellings reach: mode-delphi
+    `TFoo<TBar>` is rewritten into a `specialize` alias by
+    DelphiRewriteGenericUses and arrives back through this function. }
+  for i := 0 to nc - 1 do
+    CheckTemplateConstraint(ti, i, cNames[i], cKinds[i]);
 
   { The substitution set is established HERE, before anything is registered,
     because the prerequisite scan below decides whether this declaration gets

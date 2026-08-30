@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:31 blocked:7 backlog:386 backlog_new:27 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2830 rejected:58`
+`working:1 unfinished:31 blocked:7 backlog:386 backlog_new:27 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2831 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -60,7 +60,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [P]` bug-p-generic-type-constraints-are-parsed-and-discarded
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-fc01c8094434
@@ -87,5 +86,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [A]` bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array (unblocks 1)
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
 _397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
