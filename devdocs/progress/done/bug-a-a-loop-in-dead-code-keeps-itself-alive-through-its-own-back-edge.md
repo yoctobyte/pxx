@@ -151,4 +151,4 @@ it falls out of the worklist for free and needed no case of its own.
 Gate: fixedpoint converged; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f370bb085.
