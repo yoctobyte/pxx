@@ -268,3 +268,74 @@ Both probes are small and self-contained; the tables above were produced by
 `fpc -O2` on the two programs quoted in this section plus a `gcc -O2` one-liner
 for the C column. Re-measure rather than trusting this page if FPC's version
 moves — `SUPPORT_EXTENDED` is version-conditional by construction.
+
+---
+
+## DIRECTION 2026-08-30 (owner) — soft_extended, and why it changes the shape
+
+> *"a 'correct' way to solve it would be to _emulate_ extended type
+> (soft_extended), for the cases where the programmer needs/expects this
+> precision, at a (severe) performance cost. for example, planetary or satellite
+> orbit simulations etc.. on the other hand, i seen programmers use 'extended'
+> because 'it had more precision', even if that was insignificant for the task
+> and just lead to a performance penalty."*
+
+Not a footnote — it **reverses which workstream is the foundation**, and it is
+the first proposal in this cluster that makes the hard parts go away instead of
+distributing them.
+
+### What a software 80-bit type dissolves
+
+Everything measured in the section above that made this expensive was a
+consequence of binding `Extended` to *hardware*:
+
+| problem | with x87 as the foundation | with soft_extended |
+| --- | --- | --- |
+| aarch64/arm32/riscv32/xtensa/wasm32 have no 80-bit format | `Extended` means something different per target; `SizeOf` becomes target-dependent | **gone** — one format, every target, 10 bytes everywhere |
+| x86-64 **Windows** has no legacy FPU (`FPC_HAS_TYPE_EXTENDED` off for win64) | the same CPU needs two answers; a Track M landmine | **gone** |
+| the SSE2 path cannot express 80-bit, so workstream 2 is a second register file, its own control word and rounding story | **prerequisite** — nothing else can start | **optional** — a fast path for x86-64, added later or never |
+| `Str`/`Val`/`FloatToStr`/`WriteLn` need 20-digit output from a hardware format | coupled to x87 register moves | plain code over a struct we own |
+
+The cross-target question that this ticket calls *"the question that has no good
+answer and must be decided rather than discovered"* **stops being a question.**
+Software emulation is uniform by construction, which is precisely the property
+the original filing said mattered more than matching FPC: *pxx's own targets
+disagreeing with each other is worse than pxx disagreeing with FPC.*
+
+So the workstream order inverts. Old: **x87 first**, everything else on top of
+it. New: **the soft type first** (format, arithmetic, `Str`/`Val`, math
+overloads) — portable, testable against FPC on x86-64 as the oracle, no backend
+work at all — and x87 becomes an **optimisation of an already-correct
+implementation** on the one family that has the hardware. That also means the
+whole thing can be built and gated without touching `ir_codegen.inc`, which
+moves the bulk of it out of Track A's shared ground.
+
+Cost is the stated one: severe, and paid only by code that asked for it by name.
+
+### The other half — why this stays deferred, sharpened
+
+> *"i seen programmers use 'extended' because 'it had more precision', even if
+> that was insignificant for the task and just lead to a performance penalty ...
+> we support floats, and we are chasing ancient windmills."*
+
+This is the strongest version of the F charter's argument, and it is specifically
+an argument about **who the feature is for**:
+
+- The population that genuinely needs 64 mantissa bits — orbital mechanics,
+  long-horizon iterative refinement, ill-conditioned accumulation — is **small,
+  knows it needs it, and will accept a severe performance cost** to get it.
+  Software emulation serves them completely.
+- The population that writes `Extended` because it sounds more precise is
+  **large, does not need it, and is paying for it today under FPC** — where it
+  is x87 and slow. Under pxx's alias they silently get Double and are, by
+  accident, better off.
+
+Hardware x87 serves the second group at great implementation cost and serves the
+first group no better than software does. That is the whole case for deferral in
+one line: **the expensive half of this feature exists to make a cargo-cult
+idiom fast.**
+
+Which is also why the cluster stays parked rather than rejected. The real use
+case is real; it is just rare, and it is best served by the cheap-to-build,
+portable half. If this is ever picked up, **start with soft_extended and stop
+there** until something measured asks for more.
