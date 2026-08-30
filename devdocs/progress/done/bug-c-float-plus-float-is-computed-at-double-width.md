@@ -56,4 +56,4 @@ this row is not in its test — it is out of scope there on purpose, so that one
 red does not stand for two mechanisms.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 60ab63fc9.
