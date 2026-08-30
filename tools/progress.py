@@ -2044,7 +2044,7 @@ pre code{background:none;padding:0}
         # is not worth doing.
         SHORT_SHA = re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{9,11}(?![0-9a-fA-F])")
         SHA_CTX = re.compile(r"land|commit|push|\bsha\b|resolve|bisect|revert", re.I)
-        sha_hits: "dict[str, tuple]" = {}
+        sha_hits: "dict[tuple, int]" = {}  # (ticket, tok) -> first line
         for t in self.tickets:
             if t.status in ("done", "rejected", "decided"):
                 continue
@@ -2057,7 +2057,7 @@ pre code{background:none;padding:0}
                     tok = m.group(0)
                     if not (any(c.isdigit() for c in tok) and any(c.isalpha() for c in tok)):
                         continue
-                    sha_hits.setdefault(tok, (t, lineno))
+                    sha_hits.setdefault((t.slug, tok), (t, lineno))
         if sha_hits:
             # `git cat-file -e` IS NOT THE TEST, and it is the test a careful
             # person reaches for. b4, 2026-08-30: it answered LIVE for both of
@@ -2086,7 +2086,7 @@ pre code{background:none;padding:0}
                 except Exception:
                     reach = None
             if reach is not None:
-                for tok, (t, lineno) in sha_hits.items():
+                for (_slug, tok), (t, lineno) in sha_hits.items():
                     if tok in reach[len(tok)]:
                         continue
                     warning_count += 1
