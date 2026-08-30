@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (377)
+## backlog (380)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -390,6 +390,7 @@ _none_
 | grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm | A | 55 | grant | GRANT: `ir_codegen_riscv32.inc` → frankS (Track S), scoped to the `SPECIAL_IN` arm | — |
 | grant-ir-codegen-xtensa-cleanup-arm-to-franks-b4-verified-off | A+S | 55 | grant | Discharges grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s. frankS may edit the `if TargetArch = TARGET_XTENSA then` block inside EmitManagedLocalCleanupForTarget at ir_codegen.inc:10680 and nothing else in that file. b4's release verified three independent ways, not relayed from its word alone. | — |
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
+| grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break | A+P | 50 | grant | frankwasm holds compiler/defs.inc, compiler/pasparser_lval.inc and compiler/rtti_emit.inc for feature-unicodestring-model. symtab.inc is QUEUED behind frank-optimize. DO NOT CLAIM these files — this ticket is a lock record, not work. | — |
 | idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 5 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
 | idea-a-fold-the-asm-emit-harness-mock-preludes-into-one | A | 35 | idea | Fold the five asm-emit harnesses' mock preludes into one shared include | — |
 | idea-adaptive-heap-growth | A | 5 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
@@ -427,8 +428,10 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
+| regression-size-canary-size-canary | T | 40 | regression | advisory: size-canary#src:tools/size_canary.py red at 83fb0ef72419 (auto-filed by twatch) | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-x64-2 | P | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 94492d162332 (auto-filed by twatch) | — |
+| regression-test-core-test-warn-ignored-directives | P | 70 | regression | regression: test-core#src:test/test_warn_ignored_directives.pas red at 83fb0ef72419 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
@@ -780,6 +783,7 @@ _none_
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-asm-test-asm-emit-x64-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-core-test-warn-ignored-directives [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
@@ -892,6 +896,7 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] grant-elf-writer-and-object-writers-to-b4
 - [p 50] [A+S] grant-ir-codegen-call0-cleanup-frame-to-franks
+- [p 50] [A+P] grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
@@ -995,6 +1000,7 @@ _none_
 - [p 40] [A] refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 40] [P] refactor-p-the-char-array-is-not-a-string-rule-is-spelled-five-times
+- [p 40] [T] regression-size-canary-size-canary
 - [p 40] [A] task-a-a-fix-on-one-backend-should-name-what-it-checked-on-the-others
 - [p 40] [A] task-a-add-fu-to-the-compiler-usage-line
 - [p 40] [A] task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale
