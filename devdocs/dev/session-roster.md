@@ -201,6 +201,16 @@ into the work. Ones that have actually gone wrong:
   independently declined to use it on the grounds that it is the user's to grant,
   and they were right: a coordinator cannot grant it either. If a worker asks,
   the answer is to escalate to the owner, not to authorise it.
+- **A file-lock and a DESIGNATION are two different things, and conflating them
+  is what generates the near-miss.** frankC separated them on 2026-08-30 and the
+  distinction is right: the *file-lock* on `compiler/ir.inc` is released the
+  moment there is no queued work to hold it for -- "a lock over a file with no
+  available work is what generates the near-miss, not what prevents it" -- while
+  the *designation* (this named lane does this refactor, because it is the only
+  one who can tell a genuinely C-exclusive site from shared lowering with a guard
+  bolted on) is retained and re-claimed on demand. When you write a grant, say
+  which of the two you are granting. A designation costs nobody anything; a
+  standing file-lock over dry work blocks the board.
 - **A GRANT is a lock the ranker cannot see.** A coordinator handing one shared
   file to a named lane writes it in the ticket BODY, so `ready`/`next` (frontmatter
   only) will keep offering that ticket, and `working/` will be empty whenever the

@@ -9,10 +9,45 @@ status: backlog
 owner: ""
 created: 2026-08-30
 found-by: frankA (refused a dispatch onto a granted file), filed by frank-coordinator
-summary: "tools/progress.sh ready/next rank a ticket from frontmatter and print slug/prio/track. A GRANT — a coordinator handing one shared file to a named lane for the duration of a campaign — lives in the ticket BODY, so the ranker cannot see it and offers the granted file to every idle agent in that track. working/ does not cover the gap either: a lane that works in slices correctly releases the lock between them. Measured 2026-08-30: the coordinator dispatched frankA onto refactor-a-c-exclusive-lowering while frankC held a written grant on compiler/ir.inc and had four slices landed; both the ranked queue and working/ were clean, and correctly so."
+summary: "NARROWED 2026-08-30 by frankC, which found the suppression mechanism already exists and had simply not been used -- read the correction block before working this. Original framing: tools/progress.sh ready/next rank a ticket from frontmatter and print slug/prio/track. A GRANT — a coordinator handing one shared file to a named lane for the duration of a campaign — lives in the ticket BODY, so the ranker cannot see it and offers the granted file to every idle agent in that track. working/ does not cover the gap either: a lane that works in slices correctly releases the lock between them. Measured 2026-08-30: the coordinator dispatched frankA onto refactor-a-c-exclusive-lowering while frankC held a written grant on compiler/ir.inc and had four slices landed; both the ranked queue and working/ were clean, and correctly so."
 ---
 
 # A grant is a lock, and it is invisible to the two things that answer "is this free?"
+
+> ## CORRECTION, and it narrows this ticket considerably (frankC, 2026-08-30)
+>
+> **The suppression mechanism already exists and I have used it. Check before
+> building.** `tools/progress.py:231` defines
+> `_NODISPATCH_RE = /NOT DISPATCHABLE|do not claim/i`, matched at line 386 over
+> the ticket TEXT. It was added 2026-08-29 for `feature-target-wasm`, after
+> `next` printed a paste-ready claim line for a ticket that opens with
+> "NOT DISPATCHABLE".
+>
+> **It is deliberately keyed on that marker and never on `owner:`, and that
+> reasoning is sound:** 16 of 332 ranked tickets carry an owner, mostly retired
+> session names, so suppressing on `owner:` would hide ~14 real tickets to catch
+> one bad dispatch. Do not "fix" that.
+>
+> The carve-out ticket simply was not using the channel. frankC added a banner
+> under its H1 carrying the marker and **measured** the effect rather than
+> asserting it: `next --track A` skipped 6 before and 7 after, with the ticket
+> live in the queue at p60 — one point under the head — before, and suppressed
+> after. Landed `eaf3a9705` + `03fefeb55`, docs only, `compiler/` byte-identical.
+>
+> **So the residual gap is narrower than this ticket's title.** It is not that
+> grants are invisible; it is that the marker is **body text a human must
+> remember to write** — a manual mirror of a state the tooling could derive from
+> a `granted-to:` field. That is still worth fixing, and the frontmatter proposal
+> below stands, but it is an ergonomics fix on a working mechanism, not a missing
+> mechanism.
+>
+> **One thing a purely mechanical fix will not cover**, and frankC flagged it: the
+> banner is doing a second job. This ticket's own slice plan lists slices 2-5, all
+> arms, so a cold reader who reaches the plan sees four slices to go. The marker
+> suppresses the *dispatch*; only the prose corrects the *impression*. Whoever
+> takes this should decide whether a derived grant field is also supposed to
+> annotate a stale plan, or whether that stays a human's job.
+
 
 ## What happened
 
