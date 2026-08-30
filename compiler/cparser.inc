@@ -12070,6 +12070,74 @@ end;
   pointers (any depth -> Pointer, element type/record recorded for deref),
   fixed arrays `T x[N]`, and nested struct-by-value. Bitfields (`x : n`) and
   inline anonymous struct definitions are skipped, not laid out. }
+procedure CEndCMember;
+(* A struct or union MEMBER declaration ends at a semicolon. If it does not, and
+   what follows is an opening brace, the declaration is a FUNCTION DEFINITION and
+   a closing brace is missing above it.
+
+   This was silent, and the silence was the expensive part. Open a struct,
+   declare a member, never close the brace, then define a function -- and it
+   compiled CLEAN. The function was consumed as a member and VANISHED; the only
+   diagnostic came later and elsewhere, "call to undeclared function" at the CALL
+   site, pointing away from the missing brace by however many lines the header
+   is. A program that never called the swallowed function built and ran with it
+   simply absent. gcc refuses such source outright, naming the brace that opens
+   the body.
+
+   Deliberately narrow. Everywhere else the member parser stays exactly as
+   lenient as it was -- a missing semicolon before anything OTHER than an opening
+   brace still just continues, because that leniency is what carries the odd
+   system header. Only the brace is refused, because only the brace means a body,
+   and a body is never a member.
+
+   Written with (* *) and no brace characters on purpose: pxx and FPC both NEST
+   comments, so a literal brace in the prose terminates the comment early and
+   surfaces as `unexpected character` a hundred lines below. Four builds paid for
+   that tonight before the habit stuck. *)
+var j, depth: Integer;
+begin
+  if Eat(tkSemicolon) then Exit;
+  if CurTok.Kind = tkBegin then
+  begin
+    ErrorIdent := '';
+    ErrorAt(CurTok.Line,
+            'a struct member cannot have a body: a closing brace is missing above this line');
+  end;
+  (* The far commoner spelling reaches here with the cursor on the parameter
+     list, not the body: `void f(void) BODY` leaves an opening paren where the
+     semicolon belongs. A paren alone is NOT enough to refuse -- the member
+     parser's leniency past a missing semicolon is what carries the odd system
+     header -- so skip the balanced parens and look at what follows. Only a
+     brace after them is refused, because only that is a function DEFINITION;
+     `void f(void);` after a missing semicolon still just continues, as before.
+     Note the real function-pointer member spelling -- return type, then a
+     parenthesised star-name, then the parameter list -- never reaches here:
+     ParseCDeclType consumes it whole and its own arm calls this with the cursor
+     already past the declarator. Spelled out in words because a literal
+     star-paren pair NESTS inside this comment style, exactly as a brace does in
+     the other one. *)
+  if CurTok.Kind = tkLParen then
+  begin
+    j := TokPos - 1; depth := 0;
+    while j < TokCount do
+    begin
+      if Tokens[j].Kind = tkLParen then Inc(depth)
+      else if Tokens[j].Kind = tkRParen then
+      begin
+        Dec(depth);
+        if depth = 0 then begin Inc(j); Break; end;
+      end;
+      Inc(j);
+    end;
+    if (j < TokCount) and (Tokens[j].Kind = tkBegin) then
+    begin
+      ErrorIdent := '';
+      ErrorAt(Tokens[j].Line,
+              'a struct member cannot have a body: a closing brace is missing above this line');
+    end;
+  end;
+end;
+
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
 var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
@@ -12292,7 +12360,7 @@ begin
         else curOff := thisOff + totalSz;
         if al > maxAlign then maxAlign := al;
       until not Eat(tkComma);
-      Eat(tkSemicolon);
+      CEndCMember;
     end
     else if IsCTypeTok then
     begin
@@ -12327,7 +12395,7 @@ begin
         if isUnion then begin if TARGET_PTR_SIZE > curOff then curOff := TARGET_PTR_SIZE; end
         else curOff := thisOff + TARGET_PTR_SIZE;
         if TARGET_PTR_SIZE > maxAlign then maxAlign := TARGET_PTR_SIZE;
-        Eat(tkSemicolon);
+        CEndCMember;
       end
       else
       begin
@@ -12653,7 +12721,7 @@ begin
 
         firstDecl := False;
       until not Eat(tkComma);
-      Eat(tkSemicolon);
+      CEndCMember;
       end;  { close the non-fn-pointer-member else }
     end
     else

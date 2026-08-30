@@ -6544,6 +6544,23 @@ test-core: $(COMPILER)
 	 echo "$$out" | grep -qi 'builtinheap\|unit \|\.pas' \
 	  && { echo 'cnomain: FAIL - the missing-main error must not quote Pascal RTL source'; echo "$$out"; exit 1; }; \
 	 echo 'ok: cnomain reports a C error without a Pascal context window'
+	# A missing closing brace on a struct used to SWALLOW the function defined
+	# after it -- silently. `struct S { int a;` then `void f(void) { }` COMPILED
+	# CLEAN on the pinned compiler, with f simply absent; the only diagnostic came
+	# later and elsewhere, `call to undeclared function: f` at the call site,
+	# pointing away from the missing brace by however many lines the header is.
+	# gcc names the `{` that opens the body, and so do we now. The SECOND row is
+	# the one that keeps this honest: the member parser's leniency past a missing
+	# semicolon is what carries the odd system header, so only a BODY is refused.
+	@printf 'struct S { int a;\nvoid f(void) { }\n};\nint main(void){ return 0; }\n' > $(TESTTMP)/cmember_body.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cmember_body.c $(TESTTMP)/cmember_body26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:2: error: a struct member cannot have a body' \
+	  || { echo 'cmember_body: FAIL - a function definition after an unclosed struct must be refused at its own line'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cmember_body refuses the swallowed definition'
+	@printf 'struct S { int a; int (*fp)(void); int b, c; };\nstruct T { int x\n};\nint main(void){ struct S s; s.a = 1; return s.a - 1; }\n' > $(TESTTMP)/cmember_lenient.c
+	@./$(COMPILER) $(TESTTMP)/cmember_lenient.c $(TESTTMP)/cmember_lenient26
+	@$(TESTTMP)/cmember_lenient26 || { echo 'cmember_lenient: FAIL - a real fn-pointer member and a missing semicolon before the closing brace must both still compile and run'; exit 1; }
+	@echo 'ok: cmember_lenient keeps the leniency the refusal must not widen into'
 	# Include nesting: the depth limit must be REPORTED, never silently applied.
 	# The preprocessor has sixteen include buffers, dispatched by a hand-written
 	# `case depth of 0..15`; MAX_CPREP_INCLUDES said 128, so 16..127 fell through
