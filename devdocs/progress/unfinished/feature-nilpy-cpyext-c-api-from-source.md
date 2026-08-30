@@ -148,7 +148,7 @@ doesn't collide (`hello_ext.c` → `hello_ext_module.c`).
 Next: M2 (arguments/errors — more `PyArg_ParseTuple` formats,
 `Py_BuildValue`, `PyErr_SetString` → NilPy `except`).
 
-## 2026-08-01 — M2 "arguments and errors" landed (commit `22515d725`)
+## 2026-08-01 — M2 "arguments and errors" landed (commit `d9decab9d`)
 
 `PyArg_ParseTuple`/`Py_BuildValue` widened to `i l d s s# O`;
 `PyErr_SetString`/`PyErr_Occurred`/`PyErr_Clear` propagate into a NilPy

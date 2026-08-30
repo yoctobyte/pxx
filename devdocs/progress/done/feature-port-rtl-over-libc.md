@@ -500,7 +500,7 @@ merely empirical even though the failure is unexplained. **If anyone touches
 external registration order, this is a latent trap: it fails at LOAD with a
 plausible-looking library name, not at compile time.**
 
-## Increment 3 — done (`c4db6474f`), and its own scope was wrong twice
+## Increment 3 — done (`3a0ed43fb`), and its own scope was wrong twice
 
 Landed. Residual kernel entries **73 → 1**, the one remaining being deliberate
 (below). The paragraph this section replaces was wrong in both of its claims,

@@ -9776,7 +9776,7 @@ went to the thing it had doubts about.
 
 ## 203 — A NUMBER THAT LOOKS *FINISHED*, OVER A BUILD THAT SEGFAULTS ON THE FIRST SIGNAL
 
-*(frankA, 2026-08-30, increment 3 of `--rtl-libc`, `c4db6474f` — the sharpest instance of 191b
+*(frankA, 2026-08-30, increment 3 of `--rtl-libc`, `3a0ed43fb` — the sharpest instance of 191b
 this index will get.)*
 
 `rt_sigreturn` nearly shipped through the out-of-line thunk. It takes **no arguments** and

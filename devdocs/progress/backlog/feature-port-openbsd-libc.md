@@ -52,7 +52,7 @@ clone.
 
 ## Update 2026-08-30 — the lowering this depends on now exists
 
-`feature-port-rtl-over-libc` landed (`c4db6474f`). On x86-64 Linux, `--rtl-libc`
+`feature-port-rtl-over-libc` landed (`3a0ed43fb`). On x86-64 Linux, `--rtl-libc`
 routes compiler-generated kernel entries through an out-of-line thunk that calls
 libc's `syscall()`, taking a Pascal binary from **73 raw kernel-entry
 instructions to 1**. That is the mechanism this ticket's acceptance criterion

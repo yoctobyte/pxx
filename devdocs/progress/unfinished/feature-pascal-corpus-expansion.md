@@ -7,7 +7,7 @@ prio: 75
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** working
+- **Status:** unfinished (parked 2026-08-30 — rung 6 blocked on decide-revisit-object-types-rtl-generics-fired-the-trigger)
   neglected by comparison — user call).
 - **Owner:** frankA
 
@@ -496,12 +496,12 @@ thing that will tell the truth.
 
 ## Rung 6 — `rtl-generics`: the one-shot diagnostic (2026-08-28)
 
-Fetcher entry landed as `4f380892c` (`fetch_rtl_generics`, same pinned
+Fetcher entry landed as `4bb5fd66f` (`fetch_rtl_generics`, same pinned
 `$FPC_COMMIT` as the other FPC-sourced corpora). **`CORPUS_EXPECTED` in
 `twatch.py` is deliberately untouched** — this rung is a one-shot diagnostic,
 not a gated job. Gate what can be green; diagnose what cannot.
 
-**Binary:** `2c4e727d4b63`, verified self-host fixedpoint at `4f380892c`. Every
+**Binary:** `2c4e727d4b63`, verified self-host fixedpoint at `4bb5fd66f`. Every
 number below came from that binary; both new defects reproduce on **pinned**
 too, so none of them is fallout from the nested-type fixes.
 
@@ -1112,3 +1112,89 @@ non-goal recorded in the section above. Do not read that as blocked.
 **Next holder: read the section above before the LIVE STATUS table.** That table
 has now been stale three times on the same field, and the two corrections above
 it are dated. The re-derivation recipe is four commands and is the reliable part.
+
+## 2026-08-30 (frankA) — re-measured; rung 6's remaining wall is a Track U decision, not a bug
+
+**Did what this ticket tells its next holder to do: re-measured before reading
+any note as a plan.** Every prior park note was stale again, in the same
+direction — the corpus had advanced past what they describe.
+
+| the notes said | measured on HEAD today |
+| --- | --- |
+| rung 9 = `bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized`, open | **done** |
+| wall 6 Delphi half, open | **done** |
+| wall 7 resourcestring, open | **done** |
+| `generics.collections` wall = `unknown type: TKey` | **not reproducible** — a different wall now |
+| `bug-p-two-different-nested-specializations-of-one-template-collide` | still open, `backlog/` |
+
+**Four of the five referenced defects are closed.** The one open item is
+unchanged.
+
+### How to re-measure (nobody had written this down)
+
+pxx has no standalone-unit output, so a unit needs a driver:
+
+```
+S=library_candidates/rtl-generics/packages/rtl-generics/src
+printf 'program d;\nuses Generics.Collections;\nbegin\nend.\n' > /tmp/d.pas
+./compiler/pascal26 -Fu$S -Fi$S/inc /tmp/d.pas /tmp/d.bin
+```
+
+(`--check-only` does not exist; compiling the `.pas` directly gives *"this file
+is a unit, not a program"*, which is easy to misread as a corpus failure. Two
+minutes lost to each, recorded so the next holder loses none.)
+
+### Current rung 6 state
+
+| unit | result |
+| --- | --- |
+| `generics.strings` | **compiles** |
+| `generics.defaults` | **compiles end to end** (confirms the 2026-08-29 note) |
+| `generics.collections` | wall at `:146` |
+
+```
+pascal26:146: error: generic templates must be class, record, interface, array
+                     or procedure declarations
+```
+
+### The wall is `object`, and it is NOT a whitelist omission
+
+`TCustomPointersCollection<T, PT> = object` — the legacy value-`object`. The
+whitelist in `pasparser_generic.inc:1130` omits it, but widening it would be
+wrong: **there is no `tkObject` token, and `object` is already claimed by an
+unrelated meaning** — the rooted object *reference* type
+([[feature-object-reference-type]], `pasparser_decl.inc:492`), whose comment
+states outright that value-`object` "was never supported here".
+
+So this is a known absence with a standing decision behind it:
+[[decide-old-style-object-types]] chose **option A, do not implement**, in
+`decided/`.
+
+### The decision's own revisit trigger has fired — filed, not decided
+
+That decision named its trigger: *"Option B, in full, the moment actual source
+someone wants to build needs it. Not an FPC test — a program."* rtl-generics is
+that source, and this rung is prio 75.
+
+Filed as [[decide-revisit-object-types-rtl-generics-fired-the-trigger]] rather
+than acted on, because the cost case has changed and the call is the user's.
+Measured, and this is the part worth carrying:
+
+- the corpus contains **exactly one** `= object`, across all six units;
+- it has **no fields, no inheritance, no virtual methods, no constructor** — none
+  of the cost drivers the decision priced (storage, lifetime, assignment, VMT);
+- the **equivalent generic record-with-methods compiles and runs on HEAD today**,
+  including `strict private type` and pointer-to-specialization access.
+
+The two deltas are the keyword and a `protected` that nothing inherits from.
+
+**Rung 6 is therefore blocked on a decision, not on a bug**, and no amount of
+frontend work moves it until that is answered. That is a different kind of stop
+from every previous wall on this ticket, all of which were defects — so do not
+go looking for the next ordering bug behind it.
+
+### Still open, unchanged
+
+[[bug-p-two-different-nested-specializations-of-one-template-collide]] (p65) —
+independent of everything above, and its "where to start" remains a hypothesis
+from the error's shape, not a measurement.
