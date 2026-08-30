@@ -57,7 +57,13 @@ assembler, linker, or C compiler invoked during the build.
 - **Six code-generating targets, one compiler.** x86-64, i386, aarch64, and
   arm32 self-host byte-identical. riscv32 covers both bare-metal ESP32-C3 and
   hosted 32-bit RISC-V Linux, whose binaries run under `qemu-riscv32`; xtensa
-  targets the ESP32-S2/S3. `--target=` selects the backend, and
+  targets the ESP32-S2/S3. The three cross self-hosts are proved by a
+  triple-stage check — cross-compile the compiler, run *that* binary under QEMU
+  to compile the compiler again, `cmp` the two — and are run in the
+  managed-string build, which the `cross-bootstrap` rule states is required for
+  them; the native fixedpoint passes no build flags at all. Same property, two
+  configurations, worth naming because "all four self-host" reads as one gate
+  and is two. `--target=` selects the backend, and
   [Targets](../targets/index.md) is the table that stays current.
 - **Multiple frontends.** The same backend also compiles a C frontend
   (tested against real-world C, including SQLite and Lua sources), a

@@ -24,7 +24,11 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
   symbol table, and import resolver, so `import`/`uses` resolves a C header, a
   Pascal unit, or a Nil Python module through the same chain — no FFI blocks,
   IDL, or generated bindings. See [Cross languages](../targets/cross-languages.md).
-- Byte-identical fixedpoint builds are part of the development gate.
+- Byte-identical fixedpoint builds are part of the development gate: the
+  compiler rebuilds itself and the two binaries must match to the byte, at the
+  default optimisation level. This is the compiler reproducing **its own**
+  output — a different claim from the output parity against gcc- and FPC-built
+  references described in [Compatibility status](../reference/status.md).
 - DWARF debug info with `-g` on Linux targets.
 
 ## Language

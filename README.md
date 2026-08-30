@@ -37,7 +37,8 @@ choose to ignore this, you do so entirely at your own risk.
 ## Highlights
 
 - **Self-hosting:** `make` rebuilds the compiler through the checked-in PXX
-  seed and requires a byte-identical fixedpoint before replacing it.
+  seed and requires a byte-identical fixedpoint — at the **default optimisation
+  level** — before replacing it.
 - **Small direct ELF output:** benchmarks report Pascal Hello World in both the
   managed-default string mode and the frozen `-uPXX_MANAGED_STRING`
   compatibility mode; see the newest run in the
@@ -93,7 +94,9 @@ make fpc-check
 ```
 
 The bootstrap path reseats `compiler/pascal26` only after the self-built
-compiler reaches byte-identical fixedpoint.
+compiler reaches byte-identical fixedpoint. That build passes no `-O` flag, so
+the property proved is "it reproduces itself at the default optimisation level"
+— a narrower and more accurate claim than "it reproduces itself".
 
 A release is a git tag plus a prebuilt tarball (full source + RTL/PCL + host
 binaries + docs in one archive). Tags mark the stable points; the tarballs exist

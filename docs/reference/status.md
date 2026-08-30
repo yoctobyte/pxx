@@ -27,7 +27,10 @@ matches a reference. Two distinct kinds of "identical" appear below, and they ar
 
 - **Self-host reproducibility** — the PXX compiler, rebuilt by the previous PXX
   binary, reproduces that binary **byte for byte**. This is about the compiler's
-  own output being deterministic.
+  own output being deterministic. It is proved **at the default optimisation
+  level**: the rebuild passes no `-O` flag, and nothing in the per-change gate
+  self-compiles at another one, so this says the compiler reproduces itself at
+  one optimisation level rather than at every level.
 - **Behavioural (output) parity** — a program compiled with PXX produces the same
   **output** as the same program compiled with the reference toolchain. For
   example, zlib built with PXX emits a compressed stream **byte for byte identical

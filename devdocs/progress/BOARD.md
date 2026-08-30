@@ -168,6 +168,7 @@ _none_
 | bug-p-two-different-nested-specializations-of-one-template-collide | P | 65 | bug | Two different nested specializations of ONE template, in one generic, collide | — |
 | bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does | A+S | 35 | bug | `ir_codegen_xtensa.inc` has no IR_SET_SIGNAL case, so any program installing a signal handler dies with `unsupported node in IR codegen: unknown`. riscv32 has the arm; xtensa is the only hosted backend without it. The op is also one of the seven IROpName does not name, which is why the message says `unknown` instead of naming it. | — |
 | bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in | T | 45 | bug | A container ticket for an active campaign has nowhere correct to live. working/ is a per-agent live LOCK, and an umbrella held there for the length of a campaign is a lock that never clears; every other status ready/next scans is claimable, so parking it invites a second agent onto files the campaign owns. The status vocabulary has no term for 'this is a container, not a unit of work'. | — |
+| bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference | T | 25 | bug | test-core's language-skeleton loop runs the plain compile with a bare ';' while the very next compile has '\|\| exit 1'. A failing plain compile does not stop the loop -- it falls through to comparing an empty 'plain' against 'ts' and still fails, but reports '--threadsafe changes the output' for a defect that has nothing to do with --threadsafe. Not a status hole; a diagnosis-quality one. | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | A+T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
 | bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets | T | 50 | bug | 117 $(TESTTMP) binary names are written from more than one TARGET, and testmgr runs different targets' jobs concurrently in one scratch root — so two compiles race on one path, which is the ETXTBSY/half-written-binary window the self-host chain already solved with compile-to-unique-name + rename. 15 names are written by two different SOURCES, 6 of those from two targets, where the loser's assertion runs the winner's program. Not a backlog to clean by sweep: the fix is per-recipe and the population is frozen by a devtest so it cannot grow. | — |
@@ -402,7 +403,6 @@ _none_
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
-| task-d-audit-public-copy-for-the-two-byte-identical-claims | D | 55 | task | CLAUDE.md's claims-discipline section names two DIFFERENT byte-identical claims -- the self-host fixedpoint (our BINARY reproduces itself, at the default -O only) and the corpus oracle (a pxx-built zlib's OUTPUT matches a gcc-built zlib's). Conflating them implies we emit gcc's machine code, which we do not. Nobody has audited docs/** or the README for the conflation, and terse styles drop the qualifying words first. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
 ## backlog_new (13)
@@ -653,9 +653,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2729)
+## done (2730)
 
-2729 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2730 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -814,7 +814,6 @@ _none_
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 55] [A+S] ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired
-- [p 55] [D] task-d-audit-public-copy-for-the-two-byte-identical-claims
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
@@ -1009,6 +1008,7 @@ _none_
 - [p 25] [N] bug-n-an-import-inside-exec-is-silently-skipped-and-execution-continues
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
 - [p 25] [P] bug-p-set-membership-item-constant-truncated-to-32-bits
+- [p 25] [T] bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [T] chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it
 - [p 25] [T] chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at
