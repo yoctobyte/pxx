@@ -43,3 +43,6 @@ test-fgl: FAILURES: objectlist.pas(compile)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-30 — auto-closed by the seven watcher: `test-fgl#src:compiler/.pascal26.fixedpoint` passes at c13654637236 (tier full); it was red at 719bef10ea68. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
