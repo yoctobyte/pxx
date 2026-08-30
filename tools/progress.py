@@ -2059,34 +2059,53 @@ pre code{background:none;padding:0}
                         continue
                     sha_hits.setdefault(tok, (t, lineno))
         if sha_hits:
-            toks = list(sha_hits)
-            missing = []
-            for i in range(0, len(toks), 400):
-                chunk = toks[i:i + 400]
+            # `git cat-file -e` IS NOT THE TEST, and it is the test a careful
+            # person reaches for. b4, 2026-08-30: it answered LIVE for both of
+            # its dangling citations, because the pre-rebase objects were still
+            # in its own object store. The question is not "does this object
+            # exist" but "is it reachable from origin/master" -- so build the
+            # reachable set once and match short prefixes against it.
+            ref = None
+            for cand in ("origin/master", "origin/HEAD", "master", "HEAD"):
+                r = subprocess.run(["git", "rev-parse", "--verify", "--quiet", cand],
+                                   capture_output=True, text=True, cwd=str(ROOT))
+                if r.returncode == 0:
+                    ref = cand
+                    break
+            reach = None
+            if ref:
                 try:
-                    proc = subprocess.run(
-                        ["git", "cat-file", "--batch-check=%(objectname) %(objecttype)"],
-                        input="\n".join(chunk), capture_output=True, text=True,
-                        cwd=str(ROOT), timeout=30)
+                    r = subprocess.run(["git", "rev-list", ref], capture_output=True,
+                                       text=True, cwd=str(ROOT), timeout=120)
+                    if r.returncode == 0:
+                        reach = {9: set(), 10: set(), 11: set()}
+                        for full in r.stdout.split():
+                            reach[9].add(full[:9])
+                            reach[10].add(full[:10])
+                            reach[11].add(full[:11])
                 except Exception:
-                    proc = None
-                if proc is None or proc.returncode not in (0, 1):
-                    break  # no git, or it failed -- say nothing rather than guess
-                for tok, out in zip(chunk, proc.stdout.splitlines()):
-                    if "missing" in out:
-                        missing.append(tok)
-            for tok in missing:
-                t, lineno = sha_hits[tok]
-                warning_count += 1
-                lines.append(
-                    f"DANGLING-SHA: {t.slug} [{t.track} p{t.prio}] cites `{tok}` "
-                    f"at line {lineno} and no such object exists. Almost always a "
-                    f"PRE-REBASE sha copied from a local reflog after a verified "
-                    f"push — `git show` works in the author's tree and nowhere "
-                    f"else. Re-read the sha from origin/master and correct it in "
-                    f"place. If the ticket quotes a dead sha ON PURPOSE, add the "
-                    f"line 'DANGLING SHAS BY DESIGN' to its body"
-                )
+                    reach = None
+            if reach is not None:
+                for tok, (t, lineno) in sha_hits.items():
+                    if tok in reach[len(tok)]:
+                        continue
+                    warning_count += 1
+                    lines.append(
+                        f"DANGLING-SHA: {t.slug} [{t.track} p{t.prio}] cites "
+                        f"`{tok}` at line {lineno}, which is NOT reachable from "
+                        f"{ref}. Almost always a PRE-REBASE sha copied from a "
+                        f"local reflog after a verified push. Do NOT check it "
+                        f"with `git cat-file -e` — that answers LIVE in the "
+                        f"author's own tree, because the pre-rebase object is "
+                        f"still in the local store, so it is exactly the check "
+                        f"that cannot tell these apart. Use `git merge-base "
+                        f"--is-ancestor {tok} {ref}`. Re-read the sha from "
+                        f"{ref} and correct it in place; a binary sha256 "
+                        f"prefix is not a commit and should be written "
+                        f"'sha256 `…`' so it reads as one. If the ticket "
+                        f"quotes a dead sha ON PURPOSE, add the line "
+                        f"'DANGLING SHAS BY DESIGN' to its body"
+                    )
 
         # THE APERTURE, printed with every verdict including a clean one.
         #
