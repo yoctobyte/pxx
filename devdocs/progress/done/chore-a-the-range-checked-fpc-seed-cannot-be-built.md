@@ -181,4 +181,4 @@ then reports a fixedpoint mismatch that looks like a miscompile. It is not — i
 is the procedure. Rebuild before gating after any stash A/B.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 9d2272bbe.
