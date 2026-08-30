@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 
-## unfinished (30)
+## unfinished (31)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -48,8 +48,9 @@ _none_
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
+| regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload | N | 50→70 | regression | regression: a LITERAL str receiver with `key=` reaches no keyed overload | — |
 
-## blocked (7)
+## blocked (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,8 +61,9 @@ _none_
 | feature-esp-gpio-and-adc-callback-slices | B+S | 30 | feature | ESP peripheral callback API — GPIO (slice 2) and ADC (slice 3) | — |
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
+| regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload |
 
-## backlog (370)
+## backlog (367)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -423,12 +425,9 @@ _none_
 | refactor-p-the-overload-probe-cannot-see-the-argument-match-channels | P | 45 | refactor | The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
-| regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload | N | 50 | regression | regression: a LITERAL str receiver with `key=` reaches no keyed overload | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-rv32 | P | 70 | regression | regression: test-asm#src:test/test_asm_emit_rv32.pas red at 108ac182bed6 (auto-filed by twatch) | — |
 | regression-test-core-test-opt-store-reload | P | 70 | regression | regression: test-core#src:test/test_opt_store_reload.pas red at c951ec710b33 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-min-max-key-in-a-variable | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy red at 0200df7eabcd (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-a-fix-on-one-backend-should-name-what-it-checked-on-the-others | A | 40 | task | Three fixed-on-one-target-left-on-the-others defects surfaced in one night, all by the same mechanism: a fix is written where the bug was observed, and the sibling backends have no observer. normalise-dont-special-case.md already says to grep for the sibling before closing; it is not being followed, and one of the three shows why -- the unfixed sibling's own comment ADMITTED the gap and nothing routed a reader to it. | — |
@@ -684,9 +683,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2772)
+## done (2773)
 
-2772 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2773 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (57)
 
@@ -756,13 +755,12 @@ _none_
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- [p 70] [N] regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 70] [U] decide-revisit-object-types-rtl-generics-fired-the-trigger
 - [p 70] [A+O] feature-opt-o3-register-pressure [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-asm-test-asm-emit-rv32 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-opt-store-reload [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-in-a-variable [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [N] regression-test-nilpy-test-nilpy-min-max-key-none [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
@@ -877,7 +875,6 @@ _none_
 - [p 50] [A] grant-elf-writer-and-object-writers-to-b4
 - [p 50] [A+S] grant-ir-codegen-call0-cleanup-frame-to-franks
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
-- [p 50] [N] regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
@@ -1174,3 +1171,4 @@ _none_
 - **1** — feature-port-freebsd-native
 - **1** — feature-t-freebsd-image-and-runner
 - **1** — feature-tls13-from-scratch
+- **1** — regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload

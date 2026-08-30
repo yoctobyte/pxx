@@ -2689,6 +2689,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-lowercase-name-vs-class | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lowercase_name_vs_class.npy red at 99f1dc81a039 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-max-min-iterables-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_max_min_iterables.npy red at d8fae80063b0 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-max-min-iterables | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_max_min_iterables.npy red at 0200df7eabcd (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-min-max-key-in-a-variable | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-parent-call-after-instantiation | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy red at b898d0543fc8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy red at 57b9b7148d32 (auto-filed by twatch) | — |

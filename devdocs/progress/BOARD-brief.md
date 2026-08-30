@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:30 blocked:7 backlog:370 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:117 done:2772 rejected:57`
+`working:1 unfinished:31 blocked:8 backlog:367 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:117 done:2773 rejected:57`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 
-## unfinished (30) — parked mid-flight; re-claim, do not duplicate
+## unfinished (31) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -43,8 +43,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
+- `regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload` [N]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (8) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
@@ -53,20 +54,20 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
+- `regression-test-nilpy-test-nilpy-min-max-key-none` [N] — blocked-by: regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload
 
-## Ready — top 30 of 393, ranked
+## Ready — top 30 of 391, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- `[p 70] [N]` regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload (unblocks 1)
 - `[p 70] [U]` decide-revisit-object-types-rtl-generics-fired-the-trigger
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [P]` regression-test-asm-test-asm-emit-rv32
 - `[p 70] [P]` regression-test-core-test-opt-store-reload
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-in-a-variable
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -86,5 +87,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [A+S]` bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
+- `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 
-_363 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
