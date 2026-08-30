@@ -791,6 +791,27 @@ begin
   { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
     prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
   Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_XTENSA)}
+  { hosted linux (qemu-user). TWO numbers differ from every arm above and BOTH
+    were measured under qemu-xtensa 10.2.1, not read off a table:
+
+      mmap2 = 80.  Xtensa has its OWN syscall numbering, the same one that puts
+      read at 12 and write at 13 rather than the generic 63/64. Generic 222 --
+      the number the riscv32 arm three lines up uses -- is `Unknown syscall 222`
+      here; qemu names 80 as mmap2.
+
+      MAP_ANONYMOUS = $800, so flags = MAP_PRIVATE|MAP_ANONYMOUS = $802 = 2050,
+      NOT the 34 every other arm passes. Xtensa is one of the architectures with
+      non-standard MAP_* values. This is the half that fails QUIETLY-ish: with
+      34 the kernel sees MAP_PRIVATE|0x20 with no ANONYMOUS bit, tries to map
+      fd -1, and returns EBADF -- a negative errno that PXXAlloc deliberately
+      does not check, so it becomes the heap base and faults later.
+
+    Until this arm existed xtensa fell through to the terminal `Result := -1`
+    below, which is exactly what it looks like: SIGBUS at $FFFFFFFF on the first
+    allocation. No hosted xtensa program that allocated anything had ever run.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Result := __pxxrawsyscall(80, 0, len, 3, 2050, -1, 0);
 {$else}
   { No arm for this target. -1, not 0: every caller reaches this through
     PXXAlloc, which does NOT check the result (deliberately -- on a hosted
@@ -1607,12 +1628,15 @@ begin
 {$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(63, fd, buf, count);   { hosted linux (qemu-user) }
 {$elseif defined(CPU_XTENSA)}
-  { Was the PRE-CHAIN DEFAULT, inherited by every unnamed target rather than
-    chosen for this one; kept byte-for-byte so this restructure changes no
-    target's behaviour, but 0 means "read 0 bytes, no error" — EOF — and if
-    xtensa ever reaches here that is a silent lie, not a dead stub. Deciding
-    that is Track S's call, not this ticket's. }
-  Result := 0;   { xtensa (bare-only): no read syscall — dead stub there }
+  { Track S's call, made 2026-08-29: 12 is __NR_read in XTENSA'S OWN table,
+    measured under qemu-xtensa — not the generic numbering riscv32 uses two
+    arms up, where read is 63. The previous `Result := 0` was the pre-chain
+    default inherited by every unnamed target, and as that comment warned, 0
+    here reads as EOF: a hosted xtensa program saw every file as empty and no
+    error was raised. Bare/IDF xtensa never reaches this — the ESP PAL owns
+    file I/O there.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Result := __pxxrawsyscall(12, fd, buf, count);
 {$else}
   { No arm. -1 is the POSIX failure value; a fall-through 0 would report EOF. }
   Result := -1;
@@ -1655,9 +1679,12 @@ begin
 {$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(64, fd, buf, count);   { hosted linux (qemu-user) }
 {$elseif defined(CPU_XTENSA)}
-  { As in PXXSysRead: this was the pre-chain default, not a choice made for
-    xtensa. Preserved exactly. 0 means "wrote nothing, successfully". }
-  Result := 0;
+  { As in PXXSysRead, and the same call: 13 is __NR_write in xtensa's own
+    table (measured), NOT the 64 riscv32 uses two arms up. The previous
+    `Result := 0` meant "wrote nothing, successfully", which is why a hosted
+    WriteLn emitted its string through the inline syscall in codegen and then
+    silently dropped the newline PXXWriteNL sends through here. }
+  Result := __pxxrawsyscall(13, fd, buf, count);
 {$else}
   { No arm. See PXXSysOpenRO. }
   Result := -1;
@@ -2036,9 +2063,16 @@ end;
 
 { Managed-string refcount retain/release for targets without the hand-emitted
   atomic blob (i386 and other cross targets). p = data pointer; refcount lives
-  at [p-16], length at [p-8]. NON-atomic — threadsafe mode is x86-64 only and
-  keeps its lock-prefixed inline version. PXXStrDecRef frees the block (base =
-  p-16) when the count reaches zero. nil is ignored. }
+  at [p-16], length at [p-8]. PXXStrDecRef frees the block (base = p-16) when
+  the count reaches zero. nil is ignored.
+
+  Non-atomic in the DEFAULT build; under --threadsafe (PXX_TS_SOFTLOCK) the
+  increments below use __pxxatomic_add. Corrected 2026-08-30: this said
+  "NON-atomic — threadsafe mode is x86-64 only", and both halves had stopped
+  being true — the ifdef'd body twelve lines down is atomic, and --threadsafe
+  covers more than x86-64. For WHICH targets, see the gate in compiler.pas
+  (the ThreadSafeMode target check); that condition is the authority and this
+  comment deliberately does not repeat the list. }
 procedure PXXStrIncRef(p: Pointer);
 var rcAddr: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
@@ -2598,10 +2632,30 @@ begin
   { Whichever path runs, the caller is about to WRITE bytes through the handle
     we return, so any cached ASCII answer stops being true. rc<=1 hands back the
     same block (mutated in place); the COW path copies through PXXStrFromLit,
-    which stamps the flag from the OLD bytes. Both must forget it — this is the
-    single choke point for byte mutation, which is what makes the cache sound.
-    PXXStrSetLen needs no such call: it always allocates a fresh block and
-    PXXHdrInit zeroes its meta. }
+    which stamps the flag from the OLD bytes. Both must forget it.
+
+    This is ONE of several sites that mutate bytes, not the only one — the
+    sentence that used to stand here said "the single choke point for byte
+    mutation, which is what makes the cache sound", and on 2026-08-29 three
+    separate bugs were fixed that had all been caused by believing it
+    (8be3c6d06, df19c72a7, b71690c40). The invariant is per-site, so state it
+    that way: EVERY site that mutates bytes in place must forget the answer.
+    The current list is `grep PXXStrForgetAscii` plus the two hand-emitted
+    x86-64 paths in ir_codegen.inc — the AnsiStrUniqueAddr blob, and the
+    in-place SetLength resize that clears both bits itself. Run the grep; do not
+    trust a count in a comment, this one's included.
+
+    A note on the clause that also used to stand here, because it is the subtler
+    trap: "PXXStrSetLen needs no such call: it always allocates a fresh block."
+    That is TRUE of this Pascal routine — every non-collapsing path really does
+    PXXAlloc + PXXHdrInit — and it was still the premise of a real bug, because
+    x86-64 does not CALL PXXStrSetLen: it inlines the symbol-target resize, and
+    that inline has an in-place arm (df19c72a7). A reader who checked the claim
+    against PXXStrSetLen confirmed it and stopped. **The thing that gets checked
+    was not the thing that was load-bearing** — so when a comment justifies an
+    invariant by naming a routine, check the OPERATION's other implementations,
+    not the routine.
+    bug-a-the-comment-that-caused-three-bugs-survived-all-three-fixes }
   rc := PWord(oldHandle - 16)^;
   if rc <= 1 then
   begin
@@ -2648,12 +2702,23 @@ end;
   (length, data) operand shape so managed handles and inline strings share it.
   Returns -1, 0 or +1.
 
-  It exists because the four cross backends had NO ordered-string arm at all:
-  only `=` / `<>` were special-cased, so `a < b` fell through to the ordinary
-  integer compare and compared the two heap HANDLES. That is a silent wrong
-  answer — `'zzz' < 'aaa'` reported by allocation order — on i386, arm32,
-  aarch64 and riscv32 alike.
+  It exists because the cross backends that do not call it have NO
+  ordered-string arm at all: only `=` / `<>` were special-cased, so `a < b`
+  fell through to the ordinary integer compare and compared the two heap
+  HANDLES — a silent wrong answer, `'zzz' < 'aaa'` reported by allocation
+  order.
   bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+
+  THE COUNT USED TO BE IN THIS SENTENCE AND THE COUNT WAS WRONG. It said "the
+  four cross backends", meaning i386, arm32, aarch64 and riscv32 — and there
+  were five. **Xtensa was never visited**, kept the bug for months, and was
+  found only once a hosted xtensa profile could run a program and print the
+  wrong answer. The count is deliberately gone rather than corrected to five:
+  a number in a comment is a claim that goes stale silently, and the next
+  target to land would have made "five" wrong the same way. Say which backends
+  by the property that matters — whether they call this helper — so the
+  sentence stays true as the set changes.
+  bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle
 
   Bytes are compared UNSIGNED (x86-64's inline sequence uses repe cmpsb + the
   unsigned setcc family), and the shorter string sorts first when one is a
