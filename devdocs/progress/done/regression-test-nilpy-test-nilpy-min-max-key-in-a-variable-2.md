@@ -60,4 +60,4 @@ Cause, fix and the full receiver x key matrix are in
 `regression-test-nilpy-test-nilpy-min-max-key-in-a-variable` (done/). The sibling
 `...-key-none` stays BLOCKED on the literal-receiver defect and is deliberately
 not closed by this.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 33148f64d.
