@@ -75,8 +75,27 @@ Cardinal width (rows 4 and 5 agree today and must keep agreeing).
 `Assert(False)` raises `EAssertionFailed` in pxx and is a no-op in FPC unless
 `-Sa`. With `-Sa` the two agree line for line, so this is purely a default.
 
-**Status: NOT yet decided** — `decide-assertion-default-vs-fpc` is open. Listed
-here so a differential run recognises the shape, not because it is settled.
+**Status: DECIDED 2026-08-25, NOT implemented.**
+[[decide-assertion-default-vs-fpc]] resolved to **option 3 — implement
+`{$ASSERTIONS}` / `{$C±}` / `-Sa`, default ON** — derived from the dialect
+contract rather than chosen: an extension must be available by default *and*
+disabled under the strict family, and only option 3 keeps both clauses.
+
+The behaviour above is therefore still exactly what a differential run sees —
+nothing in `lexer.inc` implements the directive yet — but the open work is
+**implementation, not decision**, and it is claimable now:
+[[feature-p-assertions-directive-and-position]] and
+[[feature-p-assertions-switch-and-strict-default]], both in `backlog/`. The
+message format was settled separately in
+[[decide-assertions-directive-and-message-format]].
+
+> Corrected 2026-08-30 (frankD). This read *"NOT yet decided —
+> `decide-assertion-default-vs-fpc` is open"* five days after it was decided. The
+> observable had not changed, which is exactly why nobody noticed: the sentence
+> was right about what a differential run sees and wrong about what anyone needs
+> to do next. **A question recorded as open when it has been answered is a
+> decision that cannot be made** — the reader routes it to Track U instead of to
+> the two feature tickets that are sitting claimable in the backlog.
 
 ## `Abs` / `Sqr` of a 32-bit Integer: native width, same as shifts
 
@@ -112,10 +131,19 @@ So this is the shift decision's rule applied to two more operators, and here it
 is also the arithmetically correct answer rather than merely the convenient one.
 Not a bug — do not "fix" it toward FPC in the default dialect.
 
-**`--strict-fpc` does NOT yet cover these two.** That gap mirrors the one
-`bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` closed for shifts, and is
-filed as `compat-pascal-strict-fpc-abs-and-sqr-widths`. Until it lands, a port
-of FPC bit-twiddling can pin shift width with the flag but not `Abs`/`Sqr`.
+**`--strict-fpc` does NOT yet cover these two** — still true, verified
+2026-08-30. That gap mirrors the one
+[[bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths]] closed for shifts, and
+is filed as **[[compat-pascal-the-strict-fpc-flag-family-is-incomplete]]**
+(`backlog/`), which carries `Abs`/`Sqr` widths as its first row alongside
+pointer difference and `TypeInfo` name. Until it lands, a port of FPC
+bit-twiddling can pin shift width with the flag but not `Abs`/`Sqr`.
+
+> Corrected 2026-08-30 (frankD): this cited `compat-pascal-strict-fpc-abs-and-sqr-widths`,
+> a slug that exists nowhere in `devdocs/progress/`. The *claim* was right and
+> the work *is* filed — only the pointer was dead, which is the worse half:
+> following it finds nothing, and "no such ticket" reads as **unfiled**, so the
+> next reader either drops it or files a duplicate.
 
 ## `High`/`Low` of a SHORTSTRING expression
 

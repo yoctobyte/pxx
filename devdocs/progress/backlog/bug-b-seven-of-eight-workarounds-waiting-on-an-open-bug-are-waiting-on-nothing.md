@@ -95,6 +95,20 @@ answered seven weeks earlier; and now a revert queue whose items are all
 unblocked. Each reads as conservative — *not done yet*, *not found*, *still
 open* — and pessimism is the direction nobody double-checks.
 
+## A second, smaller ask: the heading is creating the reading problem
+
+Separable from the four reverts and probably cheaper. **Rows 3, 4 and 7 are not
+waiting on an open bug either** — they are deliberate keeps with a written
+reason, and two of them will still be keeps after every bug in this file is
+closed. They belong under a heading that says so.
+
+The reason to bother: **a section that is 7/8 wrong stops being read as a
+queue.** The four live reverts did not sit there because anyone decided against
+them; they sat there because the section they are in stopped rewarding a read.
+Splitting the deliberate keeps out leaves a short list where every row is a
+claim someone can check in a minute, which is the only version of this file that
+survives its own lifecycle rule.
+
 ## Not in scope
 
 The **Cleanup backlog** section (line 93) and the several **Reverted** sections
