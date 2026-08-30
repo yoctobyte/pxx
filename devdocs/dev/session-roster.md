@@ -21737,3 +21737,36 @@ write and expensive to retract, because the worker then has to argue against
 their own coordinator to correct themselves. Endorse the *method*, not the
 *conclusion* — the method here was genuinely good and the conclusion it produced
 was wrong.
+
+## A double case can have a THIRD arm — grep the concept, not the two you found
+
+frankC, 2026-08-30. `devdocs/dev/normalise-dont-special-case.md` says: fix a bug
+on one arm of a double case, grep for the sibling before closing the ticket. This
+is the failure that survives following that rule.
+
+One concept — *a `Single` must widen to `double` by conversion, not by retag* —
+reached through **three** shapes, found one at a time over months:
+
+| arm | when found |
+| --- | --- |
+| the narrowing round-trip cast | fixed months ago |
+| the **widening** cast, `(double)someSingle` via `AN_PTR_CAST`'s reinterpret-retag | fixed 2026-08-30 (`1c0e8b8c1`) |
+| the `f` **literal suffix** — `16777217.0f` keeps its double value where C requires `16777216.0`, all five targets | filed 2026-08-30, unfixed |
+
+Whoever fixed the first arm grepped for a sibling and found none, because they
+grepped for the *cast*. The third arm has no cast in it at all.
+
+**The rule, sharpened:** grep for the **concept** — every syntax that can produce
+the same conversion — not for the construct you just edited. "Two is a smell,
+three is a design flaw" cuts the other way too: if you have found two arms, assume
+a third until you have enumerated the ways the language can reach that concept.
+
+**And why the widening arm hid so well, which is the reusable part:** it was free
+on x86-64 and aarch64, whose value model already carries a single as double bits
+in a register, so it was invisible on the two targets anyone tests first. Of eight
+shapes across five targets, **exactly one was red** — the direct-into-variadic
+form — because every other consumer converts on the way past. The implicit
+`printf("%.2f", f)` was always correct: default argument promotion widens a
+`tySingle` node, and **the explicit cast hid the single from that promotion.**
+A cast that makes a value *more* correct-looking removed the mechanism that was
+saving it.
