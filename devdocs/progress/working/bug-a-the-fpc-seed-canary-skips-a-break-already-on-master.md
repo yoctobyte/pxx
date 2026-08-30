@@ -1,3 +1,26 @@
+---
+slug: bug-a-the-fpc-seed-canary-skips-a-break-already-on-master
+track: A
+prio: 45
+status: working
+---
+
+<!-- COORDINATOR NOTE 2026-08-30: this ticket had NO frontmatter at all, which is
+why it was invisible to every ownership scan while sitting in working/ -- a live
+lock nobody could attribute. Frontmatter added so the ranker and `progress check`
+can see it; the FOLDER is deliberately left alone, because a lock is not mine to
+release on inference.
+
+Owning session, from the Claude-Session trailer on its fix commit `49a21b84d`:
+  session_01GxBTsUxqQoxjTF7Hafn9nG
+frankA disclaimed it explicitly (its own session is session_01WHtwEmBLfifGPtMtHgErvU).
+That trailer is the only field that discriminates on this fleet -- %an is constant,
+every agent commits as the owner.
+
+The fix commit landed ~4h before this note, so the likeliest reading is work that
+finished and a ticket nobody moved, rather than work in flight. WHOEVER OWNS THAT
+SESSION: please `resolve` it or say it is still live. Anyone else: do not take it. -->
+
 
 ---
 
