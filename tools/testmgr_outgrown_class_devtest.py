@@ -97,11 +97,28 @@ def main():
           "keeps the tightened hang budget, %.0fs" % job.timeout)
     check("outgrew" not in out, "says nothing — nothing outgrew anything")
 
+    # SUPERSEDED, deliberately, by the one-off unproven grant. This case used
+    # to assert "an untrusted EWMA raises nothing", and that was right until
+    # `bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget`
+    # (013948195): a job that has never passed here could only earn trust by
+    # passing, only pass with a bigger budget, and only get a bigger budget by
+    # earning trust. It now gets ONE grant of dur * OUTGROWN_MARGIN and then
+    # the class figure forever, which is what makes the raise unable to
+    # compound. The grant, its refusal on the second ask, and the reset on a
+    # pass are guarded in tools/testmgr_unproven_budget_devtest.py; what
+    # belongs HERE is only that the two rules do not fight -- an untrusted
+    # EWMA no longer stops at the class budget, and an untrusted job with a
+    # SPENT grant still does.
     print("a job with too few samples to trust")
     job, out = build({sel: {"dur": 107.54, "mem": 1 << 20, "cpu": 1.0, "n": 1}})
+    check(abs(job.timeout - 107.54 * testmgr.OUTGROWN_MARGIN) < 0.01,
+          "one unproven grant, %.0fs — not the %.0fs class budget"
+          % (job.timeout, unit))
+    job, out = build({sel: {"dur": 107.54, "mem": 1 << 20, "cpu": 1.0, "n": 1,
+                            "esc": testmgr.UNPROVEN_ESCALATIONS}})
     check(abs(job.timeout - unit) < 0.01,
-          "plain class budget %.0fs — an untrusted EWMA raises nothing"
-          % job.timeout)
+          "and once that grant is SPENT, the plain class budget %.0fs — the "
+          "raise cannot compound" % job.timeout)
 
     print("the same job on a box calibrated slower (scale 2)")
     job, out = build({sel: {"dur": 107.54, "mem": 1 << 20, "cpu": 1.0, "n": 13}},

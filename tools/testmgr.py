@@ -1619,6 +1619,10 @@ class Job:
         # because a skipped job is not merely undecided -- it is scored as fine.
         self.skip_reason = ""
         self.logpath = None
+        # Index into self.lines of the recipe line the job was executing when
+        # it stopped -- see script(). None until read back from the marker
+        # file, and None forever for a job that never launched.
+        self.step_i = None
         self.requeued = False
         self.attempts = 0         # launch count; retriable classes may re-run
         self.flaky = False        # failed at least once, then passed on retry
@@ -1671,9 +1675,25 @@ class Job:
         # '/tmp/lib*.so'` variant this was originally written for.)
         pinned = pinned_tmp_paths(self.lines)
         parts = ["cd %s || exit 1" % shlex.quote(REPO)]
-        for ln in self.lines:
+        # WHICH LINE the job was on when it died. A job is one shell script of
+        # up to ~200 recipe lines spanning several lanes' files (lib-test#00 is
+        # 198 lines and 39 sources), and everything downstream -- the stub slug,
+        # the `track:` guess, the human reading it -- was derived from the
+        # job's FIRST source, which is related to the failure only by ordering.
+        # bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step.
+        #
+        # A marker file rather than a marker printed into the log: the log is
+        # what job_reason() and diagnostic_lines() read, and salting it with
+        # harness output would put our own lines in front of the error we
+        # spent two tickets learning to surface. The write happens BEFORE each
+        # line, not on failure, so it also names the line a TIMEOUT was
+        # sitting in -- the case where the log says least.
+        stepf = (self.logpath + ".step") if self.logpath else None
+        for i, ln in enumerate(self.lines):
             if ln.strip().startswith("#"):
                 continue                      # recipe comment: shell no-op
+            if stepf:
+                parts.append("echo %d > %s" % (i, shlex.quote(stepf)))
             body = TMP_RE.sub(
                 lambda m: m.group(0) if m.group(0) in pinned
                 else RUN_TMP + m.group(0)[len(TESTTMP):], ln)
@@ -1707,6 +1727,7 @@ SRC_RE = re.compile(r"\b(?:test|lib|examples|tools|compiler)/[A-Za-z0-9_./+-]*"
 # the job, and if the cause was environmental or has since been fixed, the
 # re-run answers a different question than the one that was asked.
 REASON_MAX = 400          # chars kept per red job. tstate is committed to git.
+STEP_LINE_MAX = 300       # ...and the failing recipe line, same reason
 REASON_TAIL_BYTES = 8192  # of the log read to find them
 REASON_LINES = 6          # substantive lines, at most
 
@@ -1792,6 +1813,8 @@ def report_job(j):
     thing about a run that OUTLIVES the run, so its shape deserves a test that
     does not need a full tier to reach it.
     """
+    step_i, step_line = (failed_step(j) if j.status in ("fail", "timeout")
+                         else (None, ""))
     return {"name": j.name, "cls": j.cls, "src": j.src,
             "sel": j.sel or j.name,
             # Does this job build EXCLUSIVELY with the pinned binary? testmgr is
@@ -1806,6 +1829,20 @@ def report_job(j):
             # Only for reds -- see job_subject(). "" for everything else, which
             # reads as "undeclared", never as "not float".
             "subject": job_subject(j) if j.status in ("fail", "timeout") else "",
+            # WHICH recipe line went red, and what IT names -- not what the job
+            # names. Present on every job so a consumer tests a field rather
+            # than inferring from absence, but only FILLED for a red: a passing
+            # job has no failing step, and `step_i: null` says exactly that.
+            #
+            # `step_src` is the routing evidence. It is the failing line's own
+            # sources and nothing else -- deliberately "" rather than the job's
+            # `src` when the line names no file, because falling back to the
+            # job's sources is the bug this exists to fix, not a safety net.
+            "step_i": step_i,
+            "step_line": " ".join(step_line.split())[:STEP_LINE_MAX],
+            "step_src": step_sources(step_line),
+            "step_n": sum(1 for l in (getattr(j, "lines", None) or [])
+                          if not l.strip().startswith("#")),
             "flaky": j.flaky,
             "attempts": j.attempts,
             # `is not None`, not truthiness: the unset sentinel is None
@@ -2007,6 +2044,57 @@ def job_subject(job):
         if m:
             return m.group(1).lower()
     return ""
+
+
+# --- which STEP of the job went red ---------------------------------------
+#
+# A job is a script, not a test. `lib-test#00` is 198 recipe lines touching 39
+# source files across Tracks A, B, C and T; `test-threads#src:...@2` compiles
+# the same Pascal file for four targets and compares four outputs. The job's
+# NAME is its first source, and its `src` is every file it mentions -- so both
+# describe the job's SUBJECT and neither describes the failure. Three tickets
+# were routed to the C lane off `test/crtl_reachability.c` while the red was a
+# GTK3 guard in lib/pcl, twenty lines further down the same script.
+#
+# script() writes the line index to a marker file before running each line, so
+# this is a read, not an inference. The index is into `job.lines` verbatim
+# (comments included), which is what a reader needs to find it in `make -n`.
+def failed_step(job):
+    """(index into job.lines, that line's text) — (None, "") if unknown.
+
+    Never raises, for job_subject()'s reason: this runs on the path that
+    REPORTS a failure, so an exception here turns one red job into no report
+    at all. Unknown is the honest answer for a job that never launched, a
+    marker the OS reaped, and a report from a watcher predating this field.
+    """
+    path = getattr(job, "logpath", None)
+    if not path:
+        return None, ""
+    try:
+        with open(path + ".step", errors="replace") as f:
+            i = int(f.read(32).strip())
+    except (OSError, ValueError):
+        return None, ""
+    lines = getattr(job, "lines", None) or []
+    if not 0 <= i < len(lines):
+        return None, ""
+    return i, lines[i]
+
+
+def step_sources(line):
+    """Repo-relative sources a single recipe line names, space-joined.
+
+    "" when the line names none -- a `readelf` assertion, a bare binary run.
+    That is a real answer and must not fall back to the job's other sources:
+    the fallback IS the defect, because the job's other sources are what sent
+    three tickets to the wrong lane.
+    """
+    seen, out = set(), []
+    for m in SRC_RE.findall(line or ""):
+        if m not in seen:
+            seen.add(m)
+            out.append(m)
+    return " ".join(out[:4])
 
 
 # A skip whose cause is "this box lacks the corpus" is a COVERAGE HOLE: the job

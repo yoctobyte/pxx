@@ -4207,6 +4207,30 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         # timeout is Track T's until someone shows otherwise, and leaving the
         # track unset does exactly that.
         track, track_note = stub_track(j)
+        # THE H1 IS THE BOARD LINE. A stub carries no `summary:` frontmatter,
+        # and progress.py falls back to the first `# ` heading -- so this
+        # sentence is literally what `ready`/`next` print and what a dispatcher
+        # routes on. Two of the four things it could not say are free here.
+        #
+        # `first-ever red`, not `regression`: a job whose first run is red is
+        # not a regression from anything, and range_note() has said so in the
+        # body for a while -- in a paragraph three sections down that a board
+        # reader never reaches. The SLUG still begins `regression-` and must:
+        # it is the dedupe key (stub_slug_for_filing) AND the close key
+        # (close_stub_tickets recomputes it from the job alone), and
+        # progress.py derives a ticket's `type` from that same prefix. So the
+        # heading is where the correction can live, and the disagreement
+        # between it and the slug is the honest state of affairs.
+        head_kind = ("advisory red" if job in advisory
+                     else "first-ever red" if reg.get("first_seen")
+                     else "regression")
+        # NOT `st` -- that is this function's state-dict parameter, and
+        # shadowing it here would crash the SECOND job of the batch on
+        # `st["open_regressions"]`.
+        hstep = step_fields(j)
+        head_step = ((" in step %d/%d, `%s`"
+                      % (hstep[0] + 1, hstep[1], (hstep[2][:56] or "?")))
+                     if hstep else "")
         refusals = refusal_markers(clone, j.get("src"))
         immune = pin_immune(clone, dict(reg or {}, pin_built=j.get("pin_built")))
         body = ("""---
@@ -4214,11 +4238,11 @@ prio: %d
 %s---
 
 %s%s
-# %s: %s red at %s (auto-filed by twatch)
+# %s: %s at %s%s (auto-filed by twatch)
 
 - **Type:** %s (auto-filed by Track T watcher, host %s). Untriaged.
 - **Found:** %s
-- **Test source:** %s
+- **Test source:** %s%s
 
 ## Repro
 `tools/testmgr.py --tier %s --job '%s'` at %s
@@ -4250,9 +4274,9 @@ takes it from the repro line.*
                     "verdict; the tool cannot decide this one.\n\n"
                     % ", ".join(sorted(refusals)[:4])) if refusals else ""),
                 staleness_note(clone, sha, parent),
-                "advisory" if job in advisory else "regression",
-                job, sha[:12], kind, host, utcnow(),
+                head_kind, job, sha[:12], head_step, kind, host, utcnow(),
                 j.get("src") or "unknown (see repro commands)",
+                step_note(j),
                 report["tier"], job, sha,
                 range_note(reg), tail))
         write_ticket(os.path.join(clone.path, rel), body)
@@ -4355,6 +4379,17 @@ def stub_track(j):
         # timed-out job did not fail in any of its sources — it ran out of
         # budget. Guessing a lane from the path is the wrong turn
         # bug-t-a-timeout-bisects-to-an-innocent-commit was filed to stop.
+        #
+        # The lane stays T; what changes is that the ticket can now say WHERE
+        # it was when the budget ran out. A timeout is the case where the log
+        # says LEAST -- the job was still running, so there is no error line at
+        # all -- and script() writes the step marker before each line rather
+        # than on failure precisely so this arm has an answer.
+        st = step_fields(j)
+        hung = ("\n>\n> It was executing line %d of %d when the budget ran "
+                "out: `%s`. That is where to look; it is not an accusation "
+                "against that line." % (st[0] + 1, st[1], st[2][:120] or "?")
+                ) if st else ""
         return "T", (
             "> **Track T by default, because this job TIMED OUT.** The source "
             "path says what a job compiles, not what went wrong, and a timeout "
@@ -4362,13 +4397,69 @@ def stub_track(j):
             "Guessing a lane from the path is the wrong turn "
             "`bug-t-a-timeout-bisects-to-an-innocent-commit` was filed to stop, "
             "so a timeout stays T's until someone shows otherwise. Re-lane it "
-            "if the budget was not the problem.\n\n")
+            "if the budget was not the problem.%s\n\n" % hung)
+    # THE FAILING STEP FIRST, and it is not the same evidence as the job's
+    # `src`. A job is one script of up to ~200 recipe lines; `src` is every
+    # file the whole script mentions, truncated to the first two. So `src`
+    # describes the job's SUBJECT and the guess built on it answers "what is
+    # this job about", never "what broke". `lib-test#00` names 39 sources
+    # across four lanes, and its first is `tools/crtl_reachability.py` -- so
+    # three separate reds in that one job were filed `track: C` and worked by
+    # the C lane while the red was a GTK3 guard in lib/pcl (Track B) twenty
+    # lines further down.
+    # bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step.
+    st = step_fields(j)
+    if st:
+        i, n, line, ssrc = st
+        guessed = guess_track(ssrc)
+        if guessed:
+            return guessed, (
+                "> **Track guessed as %s from the FAILING STEP** — line %d of "
+                "%d, `%s`, which names `%s`. Not from the job's name or its "
+                "`src`: those describe what the job is ABOUT, and this job's "
+                "recipe spans %d source file(s). The ranker reads frontmatter, "
+                "so this line — not the body — decides who works it; correct "
+                "it if the guess is wrong.\n\n"
+                % (guessed, i + 1, n, (line[:120] or "?"), ssrc.split()[0],
+                   job_source_count(j.get("src"))))
+        # The step named no lane. Falling back to the job's `src` is exactly
+        # the move this ticket exists to stop -- BUT only where it is actually
+        # a guess about somebody else's file. A job that names ONE source has
+        # no "first source" problem: the first and the only are the same file,
+        # and no other lane is in frame. So the refusal is bounded to the
+        # multi-source case rather than applied to every job, which would have
+        # sent the whole single-test majority (`compile foo.pas` then `diff -u
+        # foo.expected -`, whose failing step names only the .expected) to T.
+        if job_source_count(j.get("src")) <= 1:
+            guessed = guess_track(j.get("src"))
+            if guessed:
+                return guessed, (
+                    "> **Track guessed as %s** from the test source. The "
+                    "failing step (line %d of %d) named no source of its own, "
+                    "but this job has only ONE source — so first-source and "
+                    "only-source are the same file here and there is no other "
+                    "lane in frame. The ranker reads frontmatter, so this "
+                    "line — not the body — decides who works it; correct it "
+                    "if the guess is wrong.\n\n" % (guessed, i + 1, n))
+        return "T", (
+            "> **Track T by default: the FAILING STEP named no owner.** Line "
+            "%d of %d is `%s`. The job's own `src` (`%s`, %d file(s)) is NOT "
+            "used here on purpose: it is what the job compiles, not what "
+            "broke, and guessing a lane from it is what sent three reds in one "
+            "job to the wrong lane. This is a FALLBACK, not a finding — "
+            "nothing says the defect is Track T's. Re-lane it before working "
+            "it.\n\n" % (i + 1, n, (line[:120] or "?"),
+                          str(j.get("src") or "none").split()[0],
+                          job_source_count(j.get("src"))))
     guessed = guess_track(j.get("src"))
     if guessed:
         return guessed, (
-            "> **Track guessed as %s** from the test source. The ranker reads "
-            "frontmatter, so this line — not the body — decides who works it; "
-            "correct it if the guess is wrong.\n\n" % guessed)
+            "> **Track guessed as %s** from the test source, because the "
+            "failing step was not recorded (an older watcher clone). The job's "
+            "`src` is what it COMPILES, not what broke — for a multi-step job "
+            "the two are unrelated. The ranker reads frontmatter, so this "
+            "line — not the body — decides who works it; correct it if the "
+            "guess is wrong.\n\n" % guessed)
     where = (" (the job reported no test source)" if not j.get("src")
              else " from `%s`" % str(j.get("src")).split()[0])
     return "T", (
@@ -4387,6 +4478,58 @@ def guess_track(src):
         if needle in first:
             return track
     return None
+
+
+def job_source_count(src):
+    """How many sources the job's `src` field accounts for.
+
+    `src` is TRUNCATED by testmgr's extract_src(): two paths, then `+N` for the
+    rest. So the count is not len(split()) -- it is the paths plus whatever the
+    `+N` stands for, and `lib-test#00` reads `a.py b.py +37`, i.e. 39.
+    """
+    n = 0
+    for tok in (src or "").split():
+        n += int(tok[1:]) if tok.startswith("+") and tok[1:].isdigit() else 1
+    return n
+
+
+def step_fields(j):
+    """(i, n, line, src) for the recipe line that went red, or None.
+
+    None means the reporting testmgr did not record one -- an older watcher
+    clone, or a job that never launched. Never an exception and never a guess:
+    a consumer that cannot tell "step 3 of 198" from "we do not know" would
+    write the first when it means the second.
+    """
+    i = j.get("step_i")
+    if i is None:
+        return None
+    return (int(i), int(j.get("step_n") or 0),
+            (j.get("step_line") or "").strip(), (j.get("step_src") or "").strip())
+
+
+def step_note(j):
+    """The stub's `- **Failing step:**` bullet, or "" when unrecorded.
+
+    Deliberately a SEPARATE bullet from `Test source:` rather than a
+    replacement for it. The two answer different questions -- what the job
+    compiles, and where it stopped -- and a reader who has only ever seen the
+    first has no way to know the second exists. Keeping both, adjacent, is
+    also what makes the gap visible when they disagree, which is the whole
+    finding: `test/crtl_reachability.c` sitting one line above a GTK3 guard in
+    `lib/pcl` says more than either line alone.
+    """
+    st = step_fields(j)
+    if not st:
+        return ""
+    i, n, line, src = st
+    where = ("it names `%s`" % src) if src else \
+        ("it names no source file of its own — so it is the JOB's sources, "
+         "one line up, that are unproven here, not this step's")
+    return ("\n- **Failing step:** line %d of %d of the job's recipe; %s.%s"
+            % (i + 1, n, where,
+               ("\n  ```\n  %s\n  ```" % line) if line
+               else " (the line text was not recorded)"))
 
 
 STUB_MARKER = "auto-filed by twatch"

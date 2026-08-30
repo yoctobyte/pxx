@@ -405,7 +405,7 @@ _none_
 | task-d-verify-the-published-status-urls-docs-now-delegates-all-numbers-to | D | 30 | task | docs/reference/status.md deliberately carries NO figures any more -- it delegates every number to six pxxc.org/status/* URLs. Nothing in this repo checks those URLs resolve or say what the page promises they say, and tools/ has no link checker at all. The page's failure mode moved from 'numbers go stale' (visible, self-correcting) to 'the page promises current numbers and delivers a 404' (invisible from this checkout). Spun out of idea-public-status-page, whose own gap is otherwise discharged. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (13)
+## backlog_new (12)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -414,7 +414,6 @@ _none_
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
-| bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step | T | 45 | bug | A test job takes its name from its FIRST source file, but the red is usually a later step -- so the auto-filed regression stub's `track:` guess is derived from a filename that has nothing to do with the failure. Wrong three times on one job: crtl-reachability -1 (red was crtl-map), -3, and -4 (red was lib/pcl's GTK3 guard, Track B). The stub says `track GUESSED from the test path` but the path is not evidence about the defect at all. | — |
 | bug-t-concurrent-sync-runs-can-squash-two-commits-into-one | T | 45 | bug | With several checkouts syncing at once, tools/sync.sh's rebase-and-retry loop squashed two separate commits into one: the second commit's content survived, its message and its `resolves:` line did not. Silent — the tree is clean, the push succeeds, and the only tell is a `git log` one shorter than expected. | — |
 | chore-t-board-html-render-is-13s-of-every-ticket-move | T | 40 | chore | tools/progress.sh board-md takes 18.7s, of which ~87% is BOARD.html — a 26MB render every lane pays on every ticket move. Hoisting six re.sub pattern literals out of the inline() hot loop is measured at 18.66s -> 12.99s with byte-identical output. Not landed: progress.py is shared tooling, not Track T's. | — |
 | chore-t-make-every-cross-target-row-assert-the-exit-code | T | 45 | chore | 536 cross-target differential rows compare stdout only; 5 capture the exit code. Both operands are runs of the same program, so the exit code is free to add — but run_target.sh returns the EMULATOR's status and signal deaths do not encode identically under qemu-user and a native shell, so a blanket rollout can manufacture diffs on exactly the rows most worth checking. Wants a piloted rollout, one arch at a time, verified against Track T's matrix. | — |
@@ -653,9 +652,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2722)
+## done (2723)
 
-2722 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2723 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -851,7 +850,6 @@ _none_
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [P] bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name
 - [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 45] [T] bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
 - [p 45] [T] bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident
 - [p 45] [T] bug-t-concurrent-sync-runs-can-squash-two-commits-into-one
