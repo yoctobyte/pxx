@@ -2309,14 +2309,14 @@ begin
     end;
     if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) and
        (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyPointer) and
-       (SymPtrDepth[ASTIVal[ASTLeft[node]]] >= 2) then
+       (SymTR[ASTIVal[ASTLeft[node]]].PtrDepth >= 2) then
     begin
-      if SymPtrDepth[ASTIVal[ASTLeft[node]]] > 2 then
+      if SymTR[ASTIVal[ASTLeft[node]]].PtrDepth > 2 then
         elemTk := tyPointer
       else
       begin
-        elemTk := IntToTypeKind(SymPtrBaseTk[ASTIVal[ASTLeft[node]]]);
-        recId := SymPtrBaseRec[ASTIVal[ASTLeft[node]]];
+        elemTk := IntToTypeKind(SymTR[ASTIVal[ASTLeft[node]]].PtrBaseTk);
+        recId := SymTR[ASTIVal[ASTLeft[node]]].PtrBaseRec;
       end;
     end;
   end
@@ -2543,10 +2543,10 @@ begin
       here to read, so it goes to the symbol: depth 2 over a char base. }
     symId := ASTIVal[ASTLeft[node]];
     if (symId >= 0) and (symId < SymCount) and
-       (Syms[symId].TypeKind = tyPointer) and (SymPtrDepth[symId] = 2) and
-       ((SymPtrBaseTk[symId] = Ord(tyChar)) or
-        (SymPtrBaseTk[symId] = Ord(tyUInt8)) or
-        (SymPtrBaseTk[symId] = Ord(tyInt8))) then
+       (Syms[symId].TypeKind = tyPointer) and (SymTR[symId].PtrDepth = 2) and
+       ((SymTR[symId].PtrBaseTk = Ord(tyChar)) or
+        (SymTR[symId].PtrBaseTk = Ord(tyUInt8)) or
+        (SymTR[symId].PtrBaseTk = Ord(tyInt8))) then
     begin
       Result := True;
       Exit;
