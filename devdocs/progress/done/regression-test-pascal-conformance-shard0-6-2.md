@@ -364,4 +364,4 @@ this change: the whitelist fixes *what may enter* the set, not the fact that the
 set is file-scoped and unscoped. Left open deliberately.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 8b85e4881.
