@@ -4,7 +4,7 @@ track: A+C
 prio: 50
 type: grant
 blocked-by: []
-status: backlog
+status: rejected
 found: 2026-08-30
 found-by: frank-coordinator
 owner: frankC
@@ -62,3 +62,30 @@ An authorisation is a finding about what is permitted, and an unfiled grant does
 not read as missing — it reads as **covered**, because a neighbouring ticket
 covers the same file. The tooling makes an unfiled ticket unrepresentable and
 cannot see an unfiled grant.
+
+## RELEASED UNUSED, 2026-08-30 — the shared-file edit was never needed
+
+frankC did not touch `compiler/compiler.pas`. Verified here rather than accepted:
+the assignment landed at **`clexer.inc:868`** (`46110bf37`, *"the C token stream
+now HAS an end — one line in CLexAll, both guards deleted"*), and `compiler.pas`
+has not changed since `e1fed35b1`, which is Track A's seed forward.
+
+**And `clexer.inc` is the better home, not merely the permitted one.** `CLexAll`
+has exactly one caller, so setting `MainProgramTokCount := TokCount` at its end
+is equivalent to setting it in the driver — but **the lexer is what KNOWS it has
+finished the main source**, whereas the driver knows it only by having called the
+lexer. The grant would have authorised the worse placement.
+
+**The sequence is worth recording, because it inverts the usual worry about
+grants.** frankC had already written the line in its own file before the grant
+arrived: *"the placement question resolved itself on the way to the fix."* A
+grant is priced when the design is least known — at the moment someone asks — and
+**the estimate that justified it was superseded by the work it was meant to
+enable.** This is the second collapse on the same ticket in one session: the
+costing had already gone from *a planted sentinel plus an index shift across
+`CModRange*` / `PasSrcRange*` / `DbgRange*`* down to *one line*, once frankC
+found that the sentinel already existed and was being deleted.
+
+So: **an unexercised grant is not a near miss, it is a mis-estimate that did no
+damage.** Released rather than left open — an open grant on a shared file reads
+as a standing exception to anyone greping for who may edit `compiler.pas`.
