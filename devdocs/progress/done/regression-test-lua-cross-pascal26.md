@@ -106,3 +106,6 @@ fix and rebuilding at that sha rather than by reasoning — and says so itself:
 So: **Track T re-runs these jobs against current HEAD and that verdict closes them.** A fixed
 cause plus an unrun job is exactly the shape that produced today's other findings; do not
 substitute one for the other.
+
+## Log
+- 2026-08-30 — auto-closed by the seven watcher: `test-lua-cross#src:compiler/.pascal26.fixedpoint` passes at ff0a06d75946 (tier full); it was red at b695bcb4b192. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
