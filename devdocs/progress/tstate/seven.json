@@ -11112,7 +11112,7 @@
    "src": ""
   },
   {
-   "bad": "c951ec710b33da734e7141394258135689c3e5fa",
+   "bad": "10c869750675e18283773a862e694a96cf39ae13",
    "bad_untestable": true,
    "first_seen": false,
    "good": "08cbfa20a11d955174d893f73154d9d10b1c9e13",
@@ -11124,9 +11124,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "10c869750675e18283773a862e694a96cf39ae13",
-    "a13e52b218dfe4ea30c3d016d2efc47d2d409653",
-    "f633f8a8cd4ae9fd1ce3130e83b9dab10b617e64"
+    "10c869750675e18283773a862e694a96cf39ae13"
    ],
    "src": "test/test_opt_store_reload.pas tools/expect_same.sh",
    "status": "fail"

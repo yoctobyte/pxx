@@ -33,7 +33,7 @@
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
-- **test-core#src:test/test_opt_store_reload.pas** — test/test_opt_store_reload.pas tools/expect_same.sh (seven): bad `c951ec710b33`, last good `08cbfa20a11d`, 3 commit(s) in range
+- **test-core#src:test/test_opt_store_reload.pas** — test/test_opt_store_reload.pas tools/expect_same.sh (seven): bad `10c869750675`, last good `08cbfa20a11d`, 1 commit(s) in range
 - **test-asm#src:test/test_asm_emit_rv32.pas** — test/test_asm_emit_rv32.pas tools/expect_same.sh (seven): bad `108ac182bed6`, last good `c951ec710b33`, 2 commit(s) in range
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard1/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
