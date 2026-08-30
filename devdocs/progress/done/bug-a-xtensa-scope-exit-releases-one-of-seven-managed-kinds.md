@@ -134,4 +134,4 @@ is inside `if TargetArch = TARGET_XTENSA`, so no other target can reach it;
 `gate.sh quick` GREEN and the fixedpoint converged in one round.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit b5f69f396.
