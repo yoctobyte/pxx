@@ -453,7 +453,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (26)
+## backlog_new (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -471,6 +471,7 @@ _none_
 | bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values | N | 65 | bug | `a, b = X(), Y()` binds EVERY target to the whole right-hand list instead of unpacking it, when the values' type defines __iter__ or __getitem__. The swap idiom `p, q = q, p` is hit. A NAMED right-hand side (`a, b = tup`), a call (`a, b = f()`) and for-loop targets are all correct, and so is any class without __iter__/__getitem__ -- so it takes a container-ish class AND an inline tuple display to trigger. Silent: downstream sees a list, and a longer program segfaults. | — |
 | bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file | P | 30 | bug | `{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
+| bug-t-a-verify-verdict-is-rendered-with-a-reason-from-a-different-run | T | 55 | bug | A verify verdict is rendered with a reason from a different run | — |
 | bug-t-concurrent-sync-runs-can-squash-two-commits-into-one | T | 45 | bug | With several checkouts syncing at once, tools/sync.sh's rebase-and-retry loop squashed two separate commits into one: the second commit's content survived, its message and its `resolves:` line did not. Silent — the tree is clean, the push succeeds, and the only tell is a `git log` one shorter than expected. | — |
 | bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test | T | 55 | bug | npy_cross_target_expectation_devtest.py ratchets duplicated expectations for .npy sources only, though its own COMPILE_RE already matches .pas and .c. The very next divergence was a .pas test duplicated into the SAME two targets the guard was written about, and it cost a p70 regression ticket and a live red on master. Widening the filter naively does not work — the natural population is full of legitimate cross-target asymmetry — but a keyed sub-population of 137 native identical-invocation sources has 15 deliberate exceptions and would have caught this one. | — |
 | chore-t-board-html-render-is-13s-of-every-ticket-move | T | 40 | chore | tools/progress.sh board-md takes 18.7s, of which ~87% is BOARD.html — a 26MB render every lane pays on every ticket move. Hoisting six re.sub pattern literals out of the inline() hot loop is measured at 18.66s -> 12.99s with byte-identical output. Not landed: progress.py is shared tooling, not Track T's. | — |
@@ -879,6 +880,7 @@ _none_
 - [p 55] [N] bug-nilpy-calling-a-duplicated-ordinary-method-segfaults
 - [p 55] [P] bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
+- [p 55] [T] bug-t-a-verify-verdict-is-rendered-with-a-reason-from-a-different-run
 - [p 55] [T] bug-t-test-fgl-skips-silently-when-the-corpus-is-absent-so-its-gate-row-passes-by-not-running
 - [p 55] [T] bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test
 - [p 55] [U] decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable
