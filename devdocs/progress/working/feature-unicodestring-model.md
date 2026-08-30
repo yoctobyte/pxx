@@ -1015,7 +1015,7 @@ the `IsArray` split `defs.inc:2502` already documents.
 for symbols with `IsArray`; the same split has to be made deliberately at each
 new site rather than assumed.
 
-## 6c-returns — enumerated, not started
+## 6c-returns — landed
 
 `ir.inc` is back (frankC released it unedited — its signature change turned out
 unnecessary, both bitfield bodies overwrite `storageTk` before use). Sites, read-verified:
@@ -1035,3 +1035,54 @@ Two notes for whoever takes it:
 - **`ProcRetStrCap` does not exist.** There is no frozen-string return carrier at
   all, so `function f: string[20]` has no durable capacity either. Pre-existing,
   out of scope here, and not yet checked for whether any program can observe it.
+
+### 6c-returns as built — seven sites, not three
+
+The enumeration grew a fourth time, exactly where predicted. `pasparser_decl.inc`
+has **four** method-return durable writes across **three** routines:
+
+| routine | site | width source |
+| --- | --- | --- |
+| `ParseRecordMethodDecl` | :3407 | new local `retStrElemTk` |
+| `ParseProcTypeSignature` | :4040 | `LastTypeStrElemTk` read **directly** — no captured local |
+| `ParseTypeSection` (twin A) | :4402 | new local `mRetStrElemTk` |
+| `ParseTypeSection` (twin B) | :5057 | same local, second site |
+
+`mRetPtrElemTk` — the obvious local to grep — covers only the last two. Half the
+sites were reachable only by listing the `ProcRetPtrElemTk[mpi]` writes and
+reading each one's enclosing routine.
+
+### The array/element ambiguity, applied rather than rediscovered
+
+The result side has the same trap as 6c-params, and it is now guarded rather than
+measured: `pasparser_proc.inc` sets `retElemTk := retType` (:1031), so `function
+F: array of AnsiString` reaches the harvest spelled **exactly** as `function F:
+AnsiString`. Excluded with `(retArrAi >= 0) or retIsDynArr`, under the rule the
+`retEnumId` arm states four lines above in the same words — *"an ARRAY result
+reaches here with retType = the ELEMENT kind"*.
+
+The `pasparser_decl.inc` method paths track **no** array returns at all (no
+`retIsDynArr`/`retArrAi` anywhere in the file), so a `tyAnsiString` there is
+unambiguously a scalar result. That negative is stated at the site, so the next
+person does not re-derive it — and so that adding array returns to those paths
+brings the guard with it.
+
+### Two things stated as negatives, deliberately
+
+- **The return family has no `external` hole.** All three registration paths
+  already wrote their durable columns before this change. The fail-open filed as
+  `49b6936c3` is specific to the *param* column. Saying so explicitly is what
+  stops someone auditing it a second time.
+- **`ASTStrElemTk` has no writers.** `ast_arena.inc:80`'s zero-init is the only
+  assignment in the tree, so the AN_INDEX arm's "an explicitly stamped expression
+  still wins" describes a rule that is currently **vacuous**. The new AN_CALL arm
+  therefore shadows nothing. If an expression-level stamp is ever added, that
+  precedence question becomes real and both arms need revisiting together.
+
+### Still unmeasured
+
+`ProcRetStrCap` does not exist, so `function f: string[20]` has no durable
+return capacity. **Not filed**: I have not checked whether any compiling program
+can observe it, and CLAUDE.md's table says an observable no program can reach is
+a `rejected/` ticket rather than a low-prio one. If a repro turns up, it is a bug
+ticket with that repro; if none can, this note is its permanent home.
