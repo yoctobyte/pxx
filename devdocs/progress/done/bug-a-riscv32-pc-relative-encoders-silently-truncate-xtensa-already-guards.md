@@ -6,7 +6,7 @@ type: bug
 found: 2026-08-30
 found-by: frankS
 owner: frankS
-status: working
+status: done
 ---
 
 > **prio 50 → 60 by the coordinator, 2026-08-30.** Not a disagreement with the filer's
@@ -115,3 +115,41 @@ and `ir_codegen_xtensa.inc`). Filed rather than widened.
 `make compiler/pascal26` to fixedpoint, then the 129-source cross differential on
 riscv32 for programs that newly refuse to compile — each one is a real find and
 wants its own ticket or a veneer, not a relaxed bound.
+
+## Log
+
+- 2026-08-30 — **fixed.** `RISCVRelCheck` in `rv32enc.inc`, mirroring
+  `XtensaRelCheck`: `jal` (`EmitJType` + `EncodeRISCVJAL`, ±1 MiB) and the
+  conditional branches (`EmitBType`, `EncodeRISCVBEQ`, `EncodeRISCVBNE`,
+  ±4 KiB). Signed-range test, not "did the mask change the value" — the trap the
+  ticket warned about. Also checks the low bit, because J/B immediates encode
+  bits [20:1] and [12:1] and DROP bit 0 rather than rejecting it.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
+
+### The prediction was right, and it was measured both ways
+
+The ticket said to expect silent miscompiles to become compile errors. On a
+generated 200-procedure program, same HEAD, same source:
+
+| | result |
+| --- | --- |
+| with the guard | `error: target riscv32: jal displacement 11315580 is outside the encodable range -1048576..1048574` |
+| without it | `ok: [code=11315212B]` — and the binary **segfaults**, exit 139, no output, where the x86-64 oracle prints `early=41 / acc=-6` |
+
+### The corpus does not test this guard, and that is worth saying out loud
+
+The 129-source differential is unchanged (111 MATCH / 3 DIFF / 14 CFAIL,
+lost=0 gained=0). Nothing in it is near ±1 MiB — which is the expected result
+and also means **the corpus proves only that the guard does not misfire**. What
+it does prove is the half that is easy to get wrong: every backward branch in
+111 programs went through the signed-range test without a false refusal. The
+generated program above is what proves the guard fires.
+
+### Scope note
+
+PC-relative forms only, matching `xtensaenc.inc`, which also guards only its
+PC-relative forms. The 12-bit I-type and S-type immediates (frame offsets on
+loads/stores) mask the same way and are a real sibling of this defect, but they
+are a different failure (a wrong ADDRESS, not a wrong PC) with a much larger
+blast radius if a legitimate large frame trips it. Not widened here.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
