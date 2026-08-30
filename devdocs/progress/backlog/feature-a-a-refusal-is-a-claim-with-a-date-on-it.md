@@ -8756,3 +8756,107 @@ rename the two tools** to match the grep's pattern, because *"their names are ci
 resolved tickets, and a citation that stops resolving is a worse defect than a grep that
 needs an exception."* Making the artefact fit the instrument is always available and is
 almost always the wrong direction.
+
+### 189 — I ASSERTED AN ANCESTRY FACT THAT ONE COMMAND WOULD HAVE SETTLED
+
+Coordinator, 2026-08-30. frankA suspected its own `MatchParamCompatible` narrowing was the
+cause of the alias bug, and worried that this conflicted with frankB's measurement that the
+same-unit arm fails on **both** pins. I resolved the tension by writing:
+
+> *"Your narrowing is not in v393 — v393 predates tonight's work. So `same-unit fails on
+> v393` cannot be your narrowing… two independent causes producing one error string."*
+
+**Every clause of that is false, and the command that settles it is one line:**
+
+```
+8b75fcabd  08-28 00:46  fix(pfront): a class instance no longer binds a pointer-to-record parameter
+d3f9dee6c  08-29 22:29  chore(stable): pin v393
+$ git merge-base --is-ancestor 8b75fcabd d3f9dee6c   →  YES
+```
+
+The narrowing landed **a day and a half before** v393 and is in it. The pinned v393 binary
+reproduces the same-unit repro with the identical error text. **There was never a second
+cause to look for.**
+
+**Third instance tonight of 138 on the coordinator's side, and the worst-shaped.** The
+*conclusion* was right — both arms, and frankA fixed both — but it was reached by a false
+argument, so it did not self-correct; it got broadcast to two lanes as settled reasoning,
+with "third instance of face 178a tonight" attached to make it more convincing. **A wrong
+premise decorated with a correct pattern is more durable than a wrong premise alone.**
+
+The failure is not carelessness about git. It is that **"predates tonight's work" felt like
+context I already had** rather than a claim needing a check — the same profile as every
+unchecked relay in this index: plausible, load-bearing, and adjacent to something I
+genuinely knew.
+
+### 189a — ONE CAUSE, TWO ERAS: A FIX THAT MADE A GARBAGE CHANNEL DETERMINISTIC
+
+The real mechanism, and it is worth more than the bug. `RegisterGeneralAlias` recorded
+`AliasElemTk := tk` — conflating *"what kind is T?"* with *"what does T point AT?"*.
+Invisible for non-pointer aliases because nothing reads the element; for pointer aliases
+every general alias recorded a `tyPointer` element regardless of target:
+
+| alias | recorded | correct |
+| --- | ---: | ---: |
+| `= Pointer` | 17 | 0 |
+| `= PChar` | 17 | 3 |
+| `= PRec` | 17 | 5 |
+| `^Pointer` | 17 | **17 — right by coincidence** |
+
+On v393 the overload symptom was **position-dependent**: alias formal at parameter index 0
+accepted, at index 1 or 2 rejected, cross-unit accepted regardless. That is the signature of
+a recycled-symbol read — the matcher reading a slot `SymRollbackTo` had handed back, which on
+some paths happened to hold the untyped sentinel.
+
+> **The p65 fix did not introduce this defect; it made a garbage channel DETERMINISTIC.** A
+> shape-dependent wrong answer became a consistent one, so Synapse went from *accidentally
+> passing* to *reliably failing.*
+
+**A determinism fix converts intermittent passes into consistent failures and is
+indistinguishable from a regression** — including to the person who wrote it, and including
+to a bisect, which will land on it every time. The coordinator's "two causes" and frankB's
+"cross-unit used to lose the alias" were **the same event described from opposite ends**,
+and frankB's end was the closer one.
+
+### 189b — THE THIRD SYMPTOM WAS THE SILENT ONE, AND THE LOUD TWO WERE MASKING IT
+
+Three symptoms of the single conflation. Two were loud: `p^.field` through an alias of
+pointer-to-record did not compile, and the overload rejection took Track B's gate red. The
+third had no ticket and nobody had seen it:
+
+> **`c[i]` through a `PChar` alias printed `378951523` instead of `pxx`** — on **v393**,
+> silently, for the entire life of the defect.
+
+Found only by varying the spelling across the boundary, which is 187's lesson paying out
+directly and within the hour. The loud symptoms were not merely louder; they were **drawing
+all the attention to a compile-time story about overload resolution**, while the same wrong
+element type was quietly producing wrong *values* at runtime.
+
+**Two controls that could have failed and did not**, both aimed at the vacuity trap:
+`^Pointer` must **stay** 17 (an over-propagating fix would have made it the untyped
+sentinel), and the `atpos` arm exists because a fix verified only at parameter index 0 would
+have been tested exclusively on the shape that was **already green on the broken binary** —
+the interned-literal vacuity of 187, recognised in advance this time.
+
+### 189c — AN AGGRAVATOR IS NOT A CAUSE, AND THE FINDER SAID SO AGAINST ITS OWN INTEREST
+
+`bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage` [A p40] was frankA's own
+ticket, and the coordinator had offered to re-price it as a live cause. frankA **declined
+the promotion and narrowed its own claim**:
+
+> *"The dual meaning is not why the alias was wrong. But it is why the stale read **failed
+> open**: a recycled slot reading 0 means 'untyped pointer, permit', so the garbage was
+> silently permissive rather than noisy. So the honest edge is 'made a wrong read
+> undetectable', not 'caused the rejection'. I would not want it filed as the parent of
+> this one."*
+
+**That distinction is the whole value.** A dependency edge asserting cause where the truth
+is *aggravation* inflates the parent's priority on false grounds and — worse — tells the
+next reader the mechanism has been explained when it has not. The aggravator claim is still
+serious: **failing open is why a wrong read survived two days and a pin.**
+
+Process note from the same fix, same direction: frankA's first test header asserted each arm
+had been individually verified on v393; on actually running them, the single-param overload
+arm **passed** there. It corrected the header to the measurement rather than keeping the
+tidier claim — **and that overclaim is what led to the position dependence**, so making it
+visible was worth more than dropping it quietly.
