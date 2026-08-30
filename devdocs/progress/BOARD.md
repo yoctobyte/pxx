@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (337)
+## backlog (338)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -225,6 +225,7 @@ _none_
 | decide-t-per-assertion-subjects-or-accept-the-file-level-label | U | 25→50 | decide | The float-red labelling mechanism is live but has zero adopters, and structurally cannot gain any: it labels a whole JOB, while every file that motivated it mixes last-digit accuracy with a NaN fault, a missing name, an 84-ulp regression or a formatting bug. The only remaining shape is per-assertion subjects -- real machinery in T's tooling plus a pass through N's files, entirely in service of the subject the owner has called low prio by definition four times, and whose motivating reds have not appeared in 259 runs. Recommendation: accept the file-level label as future-only, build nothing more. | — |
 | decide-t-refuse-unscoped-pattern-kills-in-a-hook | U | 45 | decide | Layer 2 of the pattern-pkill ticket is a PreToolUse hook refusing `pkill -f <toolname>` / `killall` with a bare pattern. It is a .claude/ config change binding every agent on this box, so it is the owner's call, not a track agent's or a peer's. Layers 1 and 3 landed without it; this is the only part left. | — |
 | decide-t-should-a-skip-close-an-open-regression | U | 25 | decide | reg_open counts red -> skip as FIXED, so a regression closes when a box merely STOPS RUNNING the job — the mirror of the skip-as-last-good bug, pointing the other way. It is a deliberate existing trade (the alternative pins a regression open forever on a box that cannot run the job), so it is a policy call, not a defect. Split out of 0dec0194a rather than bundled, because a policy change smuggled in behind a bug fix is how the trade would have been lost without anyone deciding it. | — |
+| decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one | U | 60 | decide | DECIDE: `licensing-concerns.md` says "No License Yet"; the repo root carries LICENSE | — |
 | decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop | U | 70 | decide | The ticket lock is too heavy for the loop it sits in — 607 commits, 3 locks | — |
 | decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation | U | 30 | decide | devdocs/dev/ (50 files) and devdocs/developer/ (58 files) both hold internal developer docs. A grep in the wrong one returns silence, which reads like a refuted citation rather than a mislocated file. Decide whether to consolidate, and if so which name wins, given 631 citations point at dev/ and 40 at developer/. | — |
 | decide-two-threading-docs-disagreed-for-seven-weeks | U | 40 | decide | Two threading docs, one subject: consolidate, or make the split explicit? | — |
@@ -751,6 +752,7 @@ _none_
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane
+- [p 60] [U] decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application

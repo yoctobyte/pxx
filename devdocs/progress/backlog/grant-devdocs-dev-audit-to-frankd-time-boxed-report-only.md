@@ -56,3 +56,53 @@ broken on the very grant it later contradicted. The coordinator's context is des
 rebuilt continuously while the work it tracks continues, so this is the standing condition
 of the seat rather than a lapse — which is exactly why the remedy is a file and not a
 resolution to remember.
+
+
+## AMENDED 2026-08-30 — the grant named the wrong tree, and is extended to four files
+
+**`devdocs/dev/` and `devdocs/developer/` are two different trees** — 53 and 58 top-level
+pages respectively. This grant said `devdocs/dev/*.md`. frankD's sweep covered
+`devdocs/developer/`, which was outside it.
+
+**Nothing was violated**: the sweep was audit-only and frankD edited nothing there, filing a
+ticket for the lane instead. Reading is not gated. But the grant was wrong on its face and
+is corrected here rather than left to be discovered — a grant that names the wrong scope is
+the same defect class as a hold enforced by a number.
+
+### Extended, narrowly, to four named files
+
+`devdocs/developer/` is not named anywhere in CLAUDE.md — `docs/**` is Track D's, and
+`devdocs/dev/**` is called out as A/B's. `devdocs/developer/**` falls to A/B by the same
+logic and is, in practice, **unowned**. That is precisely the condition frankD's own finding
+predicts rot in.
+
+**frankD may edit these four files, for this one purpose:**
+
+| file | line | what it prescribes |
+| --- | --- | --- |
+| `todo-dynamic-arrays.md` | 219 | *"## Verification Gate — Run:"* → `make test`, then the nilpy suite |
+| `threads-todo.md` | 198 | *"## 7. Exit Gate — Each phase must pass:"* → *"1. Default `make test`."* |
+| `nil-python.md` | 83 | *"## Regression Tests"* → the nilpy suite |
+| `esp32-support.md` | 86 | *"Run + validate"* → `make test-esp-bare` |
+
+**Why these four and not the sweep:** they are the live supply of the exact behaviour
+`.claude/hooks/no-full-suite.sh` was built to stop. The hook's own header comment records
+that an agent *"reached for [the nilpy suite] twice in one session"* — **these pages are
+where that instruction still lives.** An agent following them hits REFUSED with no idea
+why, because nothing on the page knows the rule changed. The hook is in `.claude/` and is
+owned; the instruction is in an unowned tree; nobody connected them.
+
+**This is not a documentation-tidiness item. It is a live defect with a measured victim.**
+
+Scope of the edit: replace the denied command with the per-fix loop from CLAUDE.md and a
+pointer to it. **Do not touch `.claude/**` or the hook** — that boundary does not move, and
+the fix is on the docs side by construction. `threads-todo.md` needs care: items 2 and 3 of
+its ladder (self-host fixedpoint; the same path under `--threadsafe`) are **still correct**
+and only item 1 is superseded, so annotate rather than delete the section.
+
+**Not extended to anything else in that tree.** The ~40 unclassifiable pages stay
+untouched: frankD is right that correcting a record falsifies history, that it cannot tell
+record from live reference without the git log, and that classification must come first.
+Its own scoping holds — 24 of 58 pages *mention* a denied command and only these four
+*prescribe* one; `project-state.md:155` looks prescriptive to a grep and is a past-tense
+record. **The grep overstates by 6x and the sweep must not be run on the grep.**
