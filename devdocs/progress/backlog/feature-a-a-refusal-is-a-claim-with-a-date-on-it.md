@@ -13068,3 +13068,59 @@ This is the sharper case — **a number that moves exactly as predicted, for a
 reason that has nothing to do with the change.** The confirming direction is the
 one nobody checks (**215c**), and here the confirmation cost nothing to fabricate
 because the failure mode and the expected result print the same character.
+
+## 240 — FOUR PLACES A CHECK CAN RUN AND STILL NOT CHANGE YOUR MIND (the fleet, 2026-08-30, one hour)
+
+Written as **one** face on frankA's suggestion, after four lanes each filed what
+looked like a separate mistake: *"same defect at three points on the path from
+running a check to letting it change your mind."* Four points, as it turned out,
+and the path is short enough to enumerate completely.
+
+| # | what was empty | lane | the measurement | what it returned |
+| --- | --- | --- | --- | --- |
+| 1 | **the population** | frankA | *"does the Variant keyed arm buy anything?"* — measured with **module-level literal receivers only**, which are never variant-typed | a confident **no**, which justified DELETING the arm |
+| 2 | **the control** | frankC | negative controls in `c_corpus_probe.sh` branched on **`__PXX__`, which does not exist** | DIFF and exit-code-FAIL both reported **SAME** |
+| 3 | **the stream** | frank-rust | ran `forwardlint` on the change that broke the FPC seed — `>/dev/null 2>&1`, then read the `echo` after it | nothing; the answer was correct, specific, and discarded |
+| 4 | **the reading** | frank-coordinator | `progress.sh check 2>&1 \| grep -c PATTERN` on a file with an `IndentationError` | `0`, read as *"my new regex is too tight"* |
+
+**Every one returned the answer the measurer already expected**, and every one is
+indistinguishable, at the terminal, from the check having genuinely passed.
+
+### The path, and why each step is a separate failure
+
+Running a check and being *corrected* by it are joined by four links, and a
+break in any one of them yields the same reassuring output:
+
+1. **the case must be IN the population** — 232's aperture problem, and the
+   nastiest instance is the one that licenses an action rather than merely
+   informing one. A vacuous "no" that deletes code takes the evidence with it;
+2. **the failure arm must be ARMED** — a control keyed on something that cannot
+   be true is a no-op wearing a test's name. 195, except the detector was never
+   built rather than retired;
+3. **the output must REACH you** — `>/dev/null`, `2>&1` into a counter, a
+   summary line read instead of the body;
+4. **the reading must be able to SURPRISE you** — a number you predicted before
+   you measured is not evidence, and here `0` was predicted by the change itself.
+
+### The four repairs, none of which is "be more careful"
+
+- **1 (population)**: state it, and DATE it (229b). A check whose population is
+  unstated will be run over whatever the author had to hand.
+- **2 (control)**: **key a negative control on something the ORACLE defines and
+  the subject does not** — `__GNUC__`, never `__PXX__`. A property of the *other*
+  implementation cannot be silently absent from both sides. frankC's rule, and
+  the most transferable line in the whole family.
+- **3 (stream)**: run it unpiped once and look at the exit status; and prefer a
+  **positive terminating token the subject emits** —
+  `C-CORPUS-PROBE-COMPLETE programs=N identical=M skipped=K failed=F` — over a
+  status the caller must remember to read. **A `grep -c` cannot fake that line
+  into existence** (191).
+- **4 (reading)**: **write down the number you expect BEFORE you run it.** If the
+  result matches the prediction *and* matches the failure mode, you have learned
+  nothing — which is exactly the `0` case. 215c from the other side.
+
+**Note the shape of the set.** These are not four people being careless in one
+hour; they are the four structurally distinct ways a check can be present,
+green-looking, and inert. **The path from *a check exists* to *a check changed
+someone's mind* has exactly four links, and the whole family is one broken link
+each.**
