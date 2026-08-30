@@ -11713,3 +11713,85 @@ since" does not.
 
 Cost here was two wrong answers and a wrong diagnosis in the middle of fixing an
 unrelated crash. Cheap only because the log happened to exist.
+
+## 225 — THE INHERITED ASSUMPTION NEVER PRESENTED AS A CHOICE
+
+*(frankD, 2026-08-30, from two defects in one check on one night. 220's neighbour, and the
+distinction between them is the whole entry.)*
+
+220 says the strong check was available and looked unavailable. This is the case where
+**nothing looked any way at all**, because the thing that was wrong arrived already decided
+and so was never a decision anyone made.
+
+Both instances are `progress.sh check`'s `DANGLING-LINK` rule, and they failed by different
+routes.
+
+**Instance 1 — an assumption that survived a calibration.** The rule flagged 40 dangling
+wikilinks. 29 were `project_*`, which is not a dangling ticket link at all: it is the
+**agent-memory namespace** — 270 references, 129 distinct names, zero such files ever in
+this repo. The exclusion was already written, in the fix sketch of the very ticket the check
+implements, and so was the reason: its author had measured **252** with a wide match and
+narrowed deliberately. The check implemented one half of the two-part exclusion.
+
+A calibration *was* run before landing, and it caught a real false positive — `[[ir-as-substrate]]`,
+a devdocs reference. That is what makes this instance instructive rather than careless:
+
+> **A calibration is a test of the hypothesis that produced it.** It found the class its
+> author had already thought of and returned clean on the class he had not, and a clean
+> calibration reads as a sound instrument.
+
+Same family as 214 (a hand-built minimal case cannot falsify the hypothesis it was built
+from) — but note the difference, because it is the reason this needs its own number: 214 is
+about a *case* built to match a belief. This is about a *check* built to match a belief, and
+a check keeps returning clean afterwards, indefinitely, in everyone's terminal.
+
+**Instance 2 — an assumption nobody ever looked at.** After that fix the rule reported **0**
+findings, which was true and useless: `progress.py:1672` skips every ticket whose status is
+not `unfinished`/`blocked`/`working`. The rule had been written inside the STALE-PARK family,
+where a park's resume condition is load-bearing and that aperture is correct, and it
+**inherited the family's folder filter** — even though its own defect is not about parks at
+all, which is exactly why the scan *inside* that loop had already been deliberately widened
+to read the whole body rather than the neighbourhood of a blocking phrase. **The inner
+aperture was widened on purpose; the outer one came along unexamined.** Widening it took 0
+findings to 3, on the same tree, with the park family unchanged.
+
+### The two are not the same failure and the tells are different
+
+| | how it got in | what it looks like | the tell |
+| --- | --- | --- | --- |
+| **survived a calibration** | you looked, with an instrument that could not see it | a clean check | the calibration only contains classes you named |
+| **never looked at** | it arrived attached to something that worked | a passing extension of a working loop | **you cannot point at where you chose it** |
+
+The second is the harder one, and it is the entry's title:
+
+> **The inherited assumption is invisible precisely because it is doing its job somewhere
+> else.** Copying a working loop imports its scope silently, and nothing in the diff says
+> "scope" — a diff shows the lines you wrote, never the constraints you kept.
+
+There is no moment of doubt to catch, because doubt requires having considered it. The
+usable tell is the absence, not a feeling: **when you extend an existing mechanism, ask
+which of its constraints you inherited, and whether each one is true of the NEW purpose.**
+Aperture, folder set, namespace, prefix, severity threshold — every one of those was chosen
+for the original job and none of them is annotated as a choice.
+
+### Why this belongs beside 220 rather than inside it
+
+220's repair is *ask what else can read this artefact*. This one's repair is *ask what your
+mechanism already believes*. 220 is about reaching for the wrong instrument; 225 is about
+reaching for the right instrument and getting its assumptions thrown in. The first is
+solved by widening the search for tools. The second is not solved by searching at all — only
+by re-deriving the constraints of the thing you are standing on.
+
+### 225a — the second-order case, which is the reason to write this down
+
+Neither defect was a reasoning error, and both were found by someone who had not inherited
+the context — an outsider re-deriving from scratch, whose ignorance of "how this loop works"
+was the qualification rather than the handicap. **The person holding the context is the
+person least able to see what came with it.** That is an argument for cross-lane review of
+*checks* specifically, more than of code: a check's assumptions are invisible in its output
+by construction, and its output is what everyone else will read forever.
+
+**Cost here: zero.** Both were caught the night they landed, because the check's findings
+were audited by hand instead of trusted — the remedy line, followed as written, would have
+deleted 270 cross-namespace references. That is the real bill this entry is warning about,
+and it was not paid.

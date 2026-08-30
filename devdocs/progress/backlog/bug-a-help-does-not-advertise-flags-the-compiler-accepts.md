@@ -82,3 +82,127 @@ exact slug the decision names after confirming the arm really is missing
 (`TypeInfo` of a plain `Integer` reports `Integer` under default, `--mimic-fpc`,
 `--strict-case` **and** `--strict-fpc`; FPC 3.2.2 says `LongInt`). That is a
 separate, low-prio compat item. **This ticket is only about the help text.**
+
+---
+
+## 2026-08-30 (frankD) — the SET, measured. `--help` advertises 20 of 65.
+
+You asked for the set enumerated **from the parser, not from a grep of the 67 files**, and
+the enumeration is one step stronger than that: **the binary is the oracle.** A flag is
+accepted if `pascal26 <flag> t.pas` does not answer `unknown option`. No source reading, no
+rebuild, and it cannot drift from the parser the way a source grep can.
+
+Method: candidate universe = every `'--x'` string literal in `compiler/**` ∪ every flag
+`--help` prints ∪ every `--x` token appearing in `docs/**` and `devdocs/dev/**` (180
+candidates, deliberately over-wide — a false candidate costs one run, a missing one costs
+the finding). Each run against `$(PXX_STABLE)`, no rebuild.
+
+| | |
+| --- | --- |
+| candidates probed | 180 |
+| **accepted** | **64** |
+| rejected | 116 |
+| advertised by `--help` | 20 |
+| **accepted and NOT advertised** | **45** |
+
+**Negative controls, because "accepted" must not mean "swallowed".** A one-character
+mutation of each of `--strict-fpc`, `--no-dce`, `--werror` is rejected —
+`--strict-fpcx`, `--no-dcex`, `--werrorr` all answer `unknown option`, as does
+`--nonsense`. So acceptance is exact-match against a real table, not a permissive prefix
+or a silent shrug. That is the control the whole measurement rests on.
+
+**The inverse gap is clean.** Nothing `--help` prints is rejected. `--target` appears to
+be, and is not: `--help` spells it `--target=<t>`, and it works in that form — my bare-flag
+probe was the thing that was wrong. Recorded because it is the one row a reader would
+otherwise check and find alarming.
+
+### The 45
+
+- `--auto-locals`
+- `--compact-classes`
+- `--dce`
+- `--dce-report`
+- `--experimental-ir-codegen`
+- `--fpc-float-errors`
+- `--fpc-mem-errors`
+- `--lax-decl-order`
+- `--map`
+- `--measure-inline`
+- `--measure-regcall`
+- `--mimic-fpc-compiler`
+- `--no-auto-var`
+- `--no-compact-classes`
+- `--no-dce`
+- `--no-default-rtl`
+- `--no-div-check`
+- `--no-lazy-var`
+- `--no-map`
+- `--no-nil-check`
+- `--no-shims`
+- `--no-signals`
+- `--no-strict-ir`
+- `--no-strict-uses`
+- `--no-unhandled-handler`
+- `--no-warn-self-result`
+- `--nostdinc`
+- `--permissive-overload`
+- `--proc-map`
+- `--require-forward`
+- `--strict`
+- `--strict-fpc`
+- `--strict-ir`
+- `--strict-overload-width`
+- `--strict-uses`
+- `--strict-visibility`
+- `--system-libs`
+- `--warn-ignored-directives`
+- `--warn-missed-fold`
+- `--warn-self-result`
+- `--warn-uses-leak`
+- `--werror`
+- `--xtensa-fpu`
+- `--xtensa-soft-divide`
+- `--xtensa-soft-mulhigh`
+
+### Reading it
+
+- **`--strict-fpc` is not an outlier, it is the visible member of a group.** The whole
+  strictness family is unadvertised: `--strict`, `--strict-fpc`, `--strict-ir`,
+  `--strict-uses`, `--strict-visibility`, `--strict-overload-width`, plus the `--no-strict-*`
+  inverses. `--help` shows four `--strict-*` flags and hides seven.
+- **Every `--no-*` inverse is hidden.** Sixteen of the 45 are negations
+  (`--no-dce`, `--no-map`, `--no-nil-check`, `--no-signals`, …). A user can discover a
+  behaviour is on and not that it can be turned off, which is the shape most likely to end
+  in someone working around a default rather than disabling it.
+- **Three diagnostic families are entirely invisible**: `--warn-*` (five),
+  `--measure-*` (two), `--*-map` / `--dce-report` — tooling whose only discovery path is
+  reading source or a ticket.
+- **`--mimic-fpc-compiler` is hidden while `--mimic-fpc` is advertised**, so the pair reads
+  as one flag from `--help` alone.
+
+### And this is the ticket's own thesis, in a place the ticket did not look
+
+The premise here is that `--help` does not say *"I am not sure"*, it says *"that flag does
+not exist"*. Note where the 67 citing files came from: **agents reading source and tickets,
+because `--help` never told them.** So the documentation drift this ticket describes is not
+carelessness downstream of `--help` — it is what people do INSTEAD of `--help`, and the 45
+is the size of the thing they had to route around. Fixing `--help` retires a workaround
+that 67 files are currently implementing by hand.
+
+**Do not fix this by adding these 45 lines.** That is the instruction already in this
+ticket and the measurement supports it: a hand-maintained list that fell 45 behind once will
+fall behind again, and the next reader has no way to know which era they are holding.
+`--help` should be **generated from the same table the parser dispatches on**, so the two
+cannot disagree — and the negative-control property above is what makes that testable:
+every flag the table names must be accepted, and every one-character mutation rejected.
+
+**Re-measure command**, so this number can be checked rather than trusted:
+
+```sh
+# accepted-but-unadvertised, from the binary
+for f in $(grep -ohE "'--[a-z0-9-]+'" compiler/*.pas compiler/*.inc | tr -d "'" | sort -u); do
+  stable_linux_amd64/default/pinned "$f" t.pas 2>&1 | grep -q 'unknown option' || echo "$f"
+done | sort -u > /tmp/acc
+stable_linux_amd64/default/pinned --help | grep -oE -- '--[a-z0-9-]+' | sort -u > /tmp/adv
+comm -23 /tmp/acc /tmp/adv | wc -l
+```
