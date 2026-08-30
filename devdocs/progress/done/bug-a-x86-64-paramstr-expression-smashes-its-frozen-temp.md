@@ -187,4 +187,4 @@ compiler bootstraps. Forward added beside its five siblings.
   Noted in that ticket rather than pretended away.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 777903180.
