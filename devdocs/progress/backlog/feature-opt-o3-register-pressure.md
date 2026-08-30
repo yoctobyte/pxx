@@ -1,11 +1,25 @@
 ---
 prio: 70
 track: A
-status: working
+status: backlog
 owner: ""
 ---
 
-> **RE-CLAIMED 2026-08-30 by frank-optimize-b4** (session
+> **RELEASED FROM working/ 2026-08-30 by frank-optimize-b4**, same day it was
+> re-claimed. The W1 slices are landed and resolved
+> ([[feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen]]),
+> and the session moved to a different ticket. Holding an umbrella's lock while
+> working something else is the mirror of the failure recorded below: there the
+> folder said `backlog` while the file was being edited, here it would say
+> `working` while nobody was on it. Both make the folder a claim about the past.
+>
+> Note the lane's real protection did not lapse: this session still holds
+> `ir_codegen.inc` under
+> [[bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython]], which is
+> in `working/` and is a Track A file lock in its own right. The umbrella was
+> never what was protecting the file.
+>
+> > **RE-CLAIMED 2026-08-30 by frank-optimize-b4** (session
 > `c1d9983f-88e9-4fba-a00a-88b3be8ff1c8`). The coordinator's DO-NOT-CLAIM note
 > below is preserved because its *reasoning* outlives the stopgap — the folder is
 > the lock now, so the note is no longer load-bearing, but what it records is.

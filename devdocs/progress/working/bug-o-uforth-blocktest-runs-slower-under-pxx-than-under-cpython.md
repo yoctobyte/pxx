@@ -582,3 +582,123 @@ Two facts that make the eventual implementation safe, both checked here:
   "reserved, unused") and is the natural stamp for "never freed, always COW".
 
 Parked to `unfinished/` with follow-up 2 landed and follow-up 1 sized.
+
+## 2026-08-30 — FOLLOW-UP 1 LANDED behind -O3 (x86-64). A literal is an address now
+
+`e3055e7a5`, measured at HEAD `823f1c85bdb9`, binary `6a078478d137`.
+
+The sizing above said the tempting implementation — interning inside
+`PXXStrFromLit`, keyed on `(src, len)` — is unsound, and it is. But the "second
+shim" it recommended instead is not the smallest correct answer either. **The
+literal does not need a shim at all: it needs a header.**
+
+`InternStr` now lays a managed-string header down in FRONT of every pooled
+literal, so the block already IS a managed string. The three words go in
+*before* `Strs[].Offset` is taken, and that is the whole trick:
+
+```
+[allocsize=0][meta][rc=2^30]  [len]  [chars...][nul]
+                              ^Offset (unchanged)
+                                     ^Offset+8 = the managed handle
+```
+
+`Offset` still points at the length prefix, which is exactly what every
+existing consumer of the frozen inline form already reads — and that same
+prefix IS the handle's `len` word at `handle-8`. **No call site changed.** The
+header lives at negative offsets nobody has to know about unless they want the
+handle.
+
+x86-64 codegen then loads that address instead of calling
+`AnsiStrFromLiteralAddr`: the two literal-assignment sites and the six
+inline-string conversions (call args, virtual-call args, variant boxing). No
+`PXXStrFromLit`, no `PXXAlloc`, no copy of bytes that are already in the image,
+and no `PXXFree` when the reference dies.
+
+### Two things it had to get right
+
+**It has to TAKE A REFERENCE.** Every site replaced used to receive a fresh
+block at `rc=1` and take ownership of it — no retain on the store, a release
+when the reference dies. Handing the static block back without the increment
+keeps that release, so each store/overwrite cycle walks the static refcount
+permanently DOWN by one. 2^30 sounds out of reach until you price it against
+this ticket's own subject: ~400s of runtime, and 2.5M literal stores a second
+is an ordinary rate. So `inc qword [rax-16]` — four bytes, no call — and the
+saturated start goes back to doing only the job it was chosen for, keeping
+`PXXStrDecRef`'s `rc = 0` test false.
+
+**The empty literal is not just an address.** Pascal collapses `''` to nil and
+NilPy deliberately does not, so the emitter makes the same split the runtime
+makes.
+
+Every in-place mutation path was read rather than assumed, and each already
+refuses a shared block for its own reasons: `PXXStrUnique` and the inlined
+SetLength fast path both gate on `rc <= 1`; `PXXStrAppend` additionally requires
+`PXX_FLAG_APPENDABLE`, which a static block never carries; `PXXStrDecRef`'s free
+is behind `rc = 0`. The allocator's size word is written as an explicit zero
+anyway — it is unreachable today, and a garbage capacity that only a future flag
+change could reach is the shape this runtime has already been bitten by.
+
+### Measured — and the first reading was the WRONG A/B
+
+The obvious comparison is `-O2` against `-O3`, and it is wrong: `-O3` carries
+every other `-O3`-gated pass too (the whole W1 register-residency set, the
+last-argument collapse). That measures the tier, not the change — the same
+family as the exit-status warning going round the fleet today, a layer between
+the value and the reading of it, quietly answering a different question.
+
+So the A/B is `-O3` against `-O3` **with only this pass's gate raised out of
+reach**, same HEAD, same everything else. Interleaved A/B/A/B against drift,
+min of the reps, on a contended box:
+
+| subject | -O3, pass off | -O3, pass on | wall | workload only |
+| --- | --- | --- | --- | --- |
+| stringtest.fth | 2.215s | 1.915s | -13.5% | **-21.6%** |
+| memorytest.fth | 2.016s | 1.717s | -14.8% | **-26.9%** |
+| coreexttest.fth | 3.217s | 2.817s | -12.4% | **-15.7%** |
+| core.fr | 5.434s | 4.927s | -9.3% | **-10.0%** |
+
+"Workload only" subtracts the fixed prelude, measured separately with a driver
+that INCLUDEs the four harness files and no word set: 1.236s → 1.147s. That
+subtraction is not cosmetic — the raw deltas were suspiciously CONSTANT at
+~0.3s across three subjects of different length, which is the signature of a
+cost that does not scale with the thing you think causes it. It turned out the
+prelude is a large shared fixed chunk and the workload gain is real underneath
+it, but the constant-delta reading had to be chased before it could be trusted.
+
+Absolute times drift run to run here (coreexttest measured 2.514s and 2.817s
+for the *same binary* twenty minutes apart); the deltas are consistent in sign
+and size across four subjects and two independent sittings, and that is what
+the table is for.
+
+### Correctness
+
+- `test_static_string_literals` at -O3 with -O0 as the control, one expectation
+  for both. Every row reads the literal AGAIN after mutating a copy of it, so a
+  mutated static block shows up as the SECOND read being wrong. Wired into the
+  Makefile and the rows were proven to run and to fail (extracted into a scratch
+  makefile so real `make` did the expansion, then broken on purpose).
+- Non-vacuity: `MSTR_STATIC_RC = 0` makes -O3 print `b=Zbcdef` — the static
+  block edited in place — while -O0 stays correct **and the compiler still
+  self-hosts byte-identically**, because it builds at the default -O level. The
+  fixedpoint gate cannot see an -O3-only defect; that is stated in CLAUDE.md and
+  this is another instance of it.
+- Three real uforth word sets (stringtest, memorytest, coreexttest) run
+  differentially at -O3: byte-identical to CPython, and identical to -O2.
+- NilPy literal micro-subject byte-identical to CPython at -O0/-O2/-O3.
+- A compiler built entirely through this path emits a byte-identical compiler.
+
+### Still open
+
+- **Promotion to -O2 is not taken here.** Per the lane rule a new pass promotes
+  only after the full gate, which is Track T's sweep of this sha and not mine to
+  run. The evidence for promoting is strong (a 9.5 MB self-hosting compiler
+  built through the path reproduces itself byte for byte, and three differential
+  corpora agree with CPython) — but it is a separate, deliberate step.
+- **Five backends still call the shim.** i386, aarch64, arm32, xtensa, riscv32
+  are untouched; the pool header is emitted for them too and simply unread. The
+  aarch64 port is the one worth doing per the per-backend rule.
+- **The ticket's own subject is not re-measured.** `blocktest` is ~240s under
+  pxx plus ~80s of CPython oracle on a workstation that is somebody's desk;
+  the small subjects are the proxy the ticket already established for exactly
+  this reason. A blocktest number should come from T's sweep, not from here.
+- `SLOW_SHARDS` still should NOT be dismantled.

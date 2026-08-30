@@ -5,14 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:28 blocked:7 backlog:338 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2730 rejected:56`
+`working:6 unfinished:28 blocked:7 backlog:339 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2730 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts` [P] — owner: frankA
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — owner: frankB
-- `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A] — owner: frankA
@@ -58,12 +57,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 359, ranked
+## Ready — top 30 of 360, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [U]` decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
+- `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-max-min-iterables
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-in-a-variable
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none
@@ -89,6 +89,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
-- `[p 60] [U]` decide-does-track-r-work-on-master-like-every-other-lane
 
-_329 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_330 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
