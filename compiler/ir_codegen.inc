@@ -1131,6 +1131,82 @@ begin
   end
   else if TargetArch = TARGET_AARCH64 then
   begin
+    if ProcCdecl[procIdx] then
+    begin
+      { GENUINE AAPCS64 prologue for a proc that declared the C convention.
+        int/pointer params take x0..x7 and float params take d0..d7, with the
+        two banks counted INDEPENDENTLY -- the same split SysV uses, so
+        f(i1,d1,i2,d2) receives i1,i2 in x0,x1 and d1,d2 in d0,d1, not
+        positionally in x0..x3.
+        bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
+
+        The positional arm below is what a bodied proc got before, and it is
+        still right for every non-cdecl proc: pxx's internal aarch64 convention
+        IS positional, and the direct-call path matches it. The two arms are not
+        a preference, they are two different ABIs.
+
+        MIRRORED FROM ir_codegen_aarch64.inc's external-call marshalling, which
+        is the proven AAPCS classification on this target (it is how pxx calls
+        libc with float args). NOT mirrored from cparser.inc's aarch64 spill --
+        that one is POSITIONAL and says so ("mirrors the Pascal aarch64 spill"),
+        so unlike the x86-64 case there was no C-frontend AAPCS prologue to
+        copy. Caller and callee must agree; the caller is the authority here.
+
+        A by-REF param is a POINTER and belongs to the INT bank whatever its
+        declared type. Getting that wrong on x86-64 was a segfault, not a wrong
+        number (bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse).
+
+        A by-value SINGLE arrives as a RAW single in s[n]: the caller does
+        `fmov d[hi], x9` then `fcvt s[hi], d[hi]`. So the callee stores it with
+        `str s[n]` and does NOT convert. A DOUBLE arrives in d[n] and is stored
+        with `str d[n]` -- the positional arm below stores from x[i] instead,
+        because there a double arrives as bits in a GPR.
+
+        >8 of either bank is REFUSED, matching the caller, which errors on the
+        same condition rather than spilling to the stack. An honest refusal on
+        both sides beats a prologue that reads stack slots the caller never
+        wrote. }
+      intIdx := 0; sseIdx := 0;
+      for i := 0 to nparams-1 do
+      begin
+        idx := Procs[procIdx].Params[i].SymIdx;
+        if TypeIsFloat(Syms[idx].TypeKind) and
+           (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+          Inc(sseIdx)
+        else
+          Inc(intIdx);
+      end;
+      if (intIdx > 8) or (sseIdx > 8) then
+        Error('target aarch64: a cdecl routine with more than 8 integer or 8 '
+            + 'floating-point parameters is not supported yet (the AAPCS stack '
+            + 'argument area is not implemented on either side of the call)');
+      intIdx := 0; sseIdx := 0;
+      for i := 0 to nparams-1 do
+      begin
+        idx := Procs[procIdx].Params[i].SymIdx;
+        sz := ParamSize(idx);
+        EmitLoadImmA64(9, Syms[idx].Offset);
+        EmitI32($8B0903A8);                       { add x8, x29, x9 (slot addr) }
+        if TypeIsFloat(Syms[idx].TypeKind) and
+           (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+        begin
+          if Syms[idx].TypeKind = tySingle then
+            EmitI32($BD000100 + sseIdx)           { str s[n], [x8] }
+          else
+            EmitI32($FD000100 + sseIdx);          { str d[n], [x8] }
+          Inc(sseIdx);
+        end
+        else
+        begin
+          if sz = 1 then EmitI32($39000100 + intIdx)        { strb w[n], [x8] }
+          else if sz = 2 then EmitI32($79000100 + intIdx)   { strh w[n], [x8] }
+          else if sz = 4 then EmitI32($B9000100 + intIdx)   { str w[n], [x8] }
+          else EmitI32($F9000100 + intIdx);                 { str x[n], [x8] }
+          Inc(intIdx);
+        end;
+      end;
+    end
+    else
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;

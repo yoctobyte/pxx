@@ -2982,7 +2982,15 @@ begin
           else
             Error('target aarch64: builtin/special call not yet supported');
         end;
-        if ProcExternal[procIdx] then
+        { A bodied `cdecl` proc joins this path: it now has a genuine AAPCS64
+          prologue (the ProcCdecl arm of EmitParamSpillsForTarget), so its
+          direct call sites must marshal AAPCS too or the two disagree. Only the
+          CALL INSTRUCTION differs -- an external goes through its GOT slot, a
+          bodied proc through EmitCallProc. Sharing the marshalling rather than
+          copying it is the whole point; the classification below is the proven
+          one on this target.
+          bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
+        if ProcExternal[procIdx] or ProcCdecl[procIdx] then
         begin
           { External C call (AAPCS): integer/pointer args in x0..x7, FP args in
             v0..v7 (the two classes are allocated independently, mirroring the
@@ -2997,8 +3005,14 @@ begin
             Error('target aarch64: external call with more than 8 parameters not supported');
           { Independent class counts: AAPCS has 8 of each register class. }
           lo := 0; hi := 0;   { lo = int param count, hi = fp param count }
+          { A by-REF param is a POINTER whatever its declared type -> int bank.
+            The x86-64 twin of this line put `var d: Double` in xmm while the
+            callee read a pointer from a GP register: segfault, not a wrong
+            number (bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse).
+            Corrected here at the same time so aarch64 never ships that state. }
           for i := 0 to Procs[procIdx].ParamCount - 1 do
-            if TypeIsFloat(Procs[procIdx].Params[i].TypeKind) then Inc(hi) else Inc(lo);
+            if TypeIsFloat(Procs[procIdx].Params[i].TypeKind) and
+               (not Procs[procIdx].Params[i].IsRef) then Inc(hi) else Inc(lo);
           if (lo > 8) or (hi > 8) then
             Error('target aarch64: external call exceeds 8 int or 8 fp argument registers');
           argNode := IRB[node];
@@ -3031,9 +3045,11 @@ begin
             { Count preceding same-class params to get this arg's register slot. }
             lo := 0; hi := 0;
             for j := 0 to i - 1 do
-              if TypeIsFloat(Procs[procIdx].Params[j].TypeKind) then Inc(hi) else Inc(lo);
+              if TypeIsFloat(Procs[procIdx].Params[j].TypeKind) and
+                 (not Procs[procIdx].Params[j].IsRef) then Inc(hi) else Inc(lo);
             EmitI32($F84107E9);                  { ldr x9, [sp], #16 }
-            if TypeIsFloat(Procs[procIdx].Params[i].TypeKind) then
+            if TypeIsFloat(Procs[procIdx].Params[i].TypeKind) and
+               (not Procs[procIdx].Params[i].IsRef) then
             begin
               EmitI32($9E670120 + hi);           { fmov d[hi], x9 }
               if Procs[procIdx].Params[i].TypeKind = tySingle then
@@ -3042,7 +3058,10 @@ begin
             else
               EmitI32($AA0903E0 + lo);           { mov x[lo], x9 }
           end;
-          EmitExternalCallA64(RegisterExternal(procIdx));
+          if ProcExternal[procIdx] then
+            EmitExternalCallA64(RegisterExternal(procIdx))
+          else
+            EmitCallProc(procIdx);   { bodied cdecl proc: no GOT slot to go through }
           if TypeIsFloat(Procs[procIdx].RetType) then
           begin
             if Procs[procIdx].RetType = tySingle then
@@ -3194,15 +3213,18 @@ begin
             for j := 0 to i - 1 do
               if (j >= Integer(IRC[node])) and
                  ((j - Integer(IRC[node])) < Procs[procIdx].ParamCount) and
-                 TypeIsFloat(Procs[procIdx].Params[j - Integer(IRC[node])].TypeKind) then
+                 TypeIsFloat(Procs[procIdx].Params[j - Integer(IRC[node])].TypeKind) and
+                 (not Procs[procIdx].Params[j - Integer(IRC[node])].IsRef) then
                 Inc(hi)
               else
                 Inc(lo);
             EmitI32($F84107E9);                      { ldr x9, [sp], #16 }
             if (i >= Integer(IRC[node])) and
                ((i - Integer(IRC[node])) < Procs[procIdx].ParamCount) and
-               TypeIsFloat(Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind) then
+               TypeIsFloat(Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind) and
+               (not Procs[procIdx].Params[i - Integer(IRC[node])].IsRef) then
             begin
+              { by-REF float = pointer -> int bank; see the direct path above. }
               EmitI32($9E670120 + hi);               { fmov d[hi], x9 }
               if Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind = tySingle then
                 EmitI32($1E624000 + (hi shl 5) + hi); { fcvt s[hi], d[hi] }

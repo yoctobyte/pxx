@@ -1702,14 +1702,22 @@ begin
     @-taking it as a `cdecl` function pointer is sound.
     feature-cdecl-bodied-sysv-prologue
 
-    x86-64 ONLY, deliberately, and not out of caution -- setting it elsewhere
-    would be actively wrong. On i386/arm32/aarch64/riscv32/xtensa the direct
-    IR_CALL path never consults ProcCdecl (every read on those targets is on
-    IR_CALL_IND, against the fnptr SIGNATURE's proc index, never a bodied
-    proc), so they keep internal prologue + internal direct call, which is
-    self-consistent. The flag would give them no SysV prologue; it would only
-    stop inline_expand from inlining the proc. }
-  if sawCdecl and (TargetArch = TARGET_X86_64) then
+    ONLY the targets that actually HAVE a C-convention prologue arm, which is
+    x86-64 and now aarch64. This list grows one target at a time and the order
+    matters: the arm lands and is proven FIRST, and only then does that target
+    join this condition. Setting the flag on a target with no arm would be
+    actively wrong -- i386/arm32/riscv32/xtensa keep internal prologue plus
+    internal direct call, which is self-consistent; the flag would give them no
+    C prologue, it would only make their direct calls marshal a convention
+    their prologue does not read.
+    Note aarch64 needed MORE than x86-64 did, so do not assume the next target
+    is free either: x86-64's direct-call site already switched on
+    `ProcExternal or ProcCdecl`, so its call side came matched for nothing,
+    while aarch64 needed that switch added at ir_codegen_aarch64.inc's IR_CALL
+    and needed a prologue arm written from the external path's classification
+    (cparser.inc's aarch64 spill is POSITIONAL and was no use as a model).
+    bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
+  if sawCdecl and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)) then
     ProcCdecl[procIdx] := True;
   if isInterrupt and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
     Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) and xtensa Call0 (esp32s3) only. Use `iram;` for an IDF-registered ISR.');

@@ -4856,6 +4856,23 @@ test-core: $(COMPILER)
 	# bug-a-a-cdecl-procaddr-passed-as-an-argument-escapes-the-sysv-soundness-reject
 	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_sysv.pas $(TESTTMP)/test_cdecl_bodied_sysv26
 	tools/expect_same.sh test_cdecl_bodied_sysv26 "$$($(TESTTMP)/test_cdecl_bodied_sysv26)" "CDECL-SYSV OK checks=14"
+	# THE CROSS-TARGET HALF. Separate file because the x86-64 one passes NINE
+	# arguments in its overflow case and aarch64's indirect path refuses more
+	# than eight -- an honest refusal, but a file that cannot COMPILE for a
+	# target asserts nothing about it. Argument shape only: the assignment
+	# shape is still refused on targets without a C-convention prologue.
+	# Against a pre-arm binary on aarch64 this gives three wrong values and
+	# then segfaults on the by-ref case.
+	# Targets join this list as they get their arm: x86-64, aarch64.
+	# bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
+	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_cross.pas $(TESTTMP)/test_cdecl_cross26
+	tools/expect_same.sh test_cdecl_cross26 "$$($(TESTTMP)/test_cdecl_cross26)" "CDECL-CROSS OK checks=8"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/test_cdecl_bodied_cross.pas $(TESTTMP)/test_cdecl_cross_a64 && \
+	  tools/expect_same.sh aarch64/test_cdecl_cross "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cdecl_cross_a64)" "CDECL-CROSS OK checks=8"; \
+	else \
+	  echo "=== test_cdecl_bodied_cross: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
 	# AN AGGREGATE RESULT FROM A FUNCTION WITH MORE THAN 8 PARAMETERS.
 	#
 	# aarch64 refused this outright until the x8 load and the matching stack
