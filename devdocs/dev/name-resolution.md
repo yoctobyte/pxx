@@ -258,5 +258,15 @@ to the normal quick-only loop, and it is written into the tickets.
 | qualified reference bypasses hiding | yes | yes (routines); classes fixed on the exception branch |
 
 The user-facing half of this — "your own language wins, and an explicit import
-overrides it" belongs in the language reference — is **not** written yet and is a
-Track D job; this page is the internal map.
+overrides it" — **is written**: `docs/language/name-resolution.md`, 303 lines,
+landed 2026-08-14 in `6ae11f9fc` ("the cross-language name-resolution page,
+measured not re-derived"), with `docs/language/name-collisions.md` beside it.
+This page is the internal map; that one is the programmer's.
+
+> **Corrected 2026-08-30 (frankD).** This said the page was *"not written yet and
+> is a Track D job"*. It was written on the day the fork was decided — the same
+> 2026-08-14 — and the sentence outlived it by sixteen days. It is the fourth
+> claim on this page that read as outstanding work and was finished, and the only
+> one that would have **created** work: a Track D reader following it writes a
+> document that already exists, and the duplicate is discovered by whoever
+> reviews it, not by whoever writes it.
