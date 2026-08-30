@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:29 blocked:7 backlog:386 backlog_new:18 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2815 rejected:58`
+`urgent:1 working:4 unfinished:29 blocked:7 backlog:386 backlog_new:18 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2815 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,6 +13,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings` [A] — owner: frank-optimize
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S] — owner: frankS
 - `feature-unicodestring-model` [A] — owner: frankwasm
+
+## urgent (1) — jump the queue
+
+- `bug-a-record-field-array-of-string-n-drops-the-element-capacity-and-corrupts-the-next-field` [A]
 
 ## unfinished (29) — parked mid-flight; re-claim, do not duplicate
 
@@ -56,8 +60,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 417, ranked
+## Ready — top 30 of 418, ranked
 
+- `[p 72] [A]` bug-a-record-field-array-of-string-n-drops-the-element-capacity-and-corrupts-the-next-field
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -87,6 +92,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 65] [P]` feature-pascal-corpus-generics
 
-_387 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_388 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
