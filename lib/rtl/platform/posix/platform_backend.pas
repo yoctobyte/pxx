@@ -197,9 +197,25 @@ const
 {$endif}
 {$ifdef CPU_RISCV32}
   { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
-    lseek is llseek(62) with a split 64-bit offset — PalSeek below only passes
-    small offsets, and qemu-user tolerates the plain form for them; the
-    time-related calls keep the legacy generic numbers qemu implements. }
+    62 is _llseek(fd, off_hi, off_lo, loff_t *result, whence), NOT plain lseek —
+    rv32 has no plain lseek at all. A 3-arg call leaves the result pointer NULL,
+    the kernel returns EINVAL, and the -1 flows onward as a size. So a caller
+    must split the 64-bit offset and pass the address of a local to receive the
+    new position: see PalBackendSeek below, and the identical arm in PXXSysLseek
+    (compiler/builtin/builtinheap.pas) — the two must not drift.
+
+    This sentence previously said qemu-user tolerated the plain form for small
+    offsets. It does not, and the correction is a measurement rather than a
+    reading — qemu-riscv32 -strace, 2026-08-30:
+
+      openat(AT_FDCWD,"test/hello.pas",O_RDONLY) = 3
+      llseek(3,0,2,NULL,UNKNOWN)                 = -1 errno=22 (Invalid argument)
+      read(3,0x2b2ad050,-22)                     = -1 errno=14 (Bad address)
+
+    The stale claim cost a debugging cycle: a new caller was written to it and
+    produced a LoadFile returning an empty string with no error anywhere.
+
+    The time-related calls keep the legacy generic numbers qemu implements. }
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
