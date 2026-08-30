@@ -2833,18 +2833,45 @@ function Eat(k: TTokenKind): Boolean;
 begin Result := CurTok.Kind = k; if Result then Next; end;
 
 procedure Expect(k: TTokenKind; const name: AnsiString);
-var s2, ctx: AnsiString; ei: Integer;
+{ ONE diagnostic, on the path every other diagnostic already uses. This used to
+  writeln a raw dump -- `Expected: <close-brace>, but got:  (Kind: 57,
+  Line: 2)` -- and THEN
+  call Error, so a failed Expect printed two lines: an unprefixed one carrying
+  the information and a prefixed one carrying none. Anything keying on `error:`
+  (a build script, a test recipe, a harness classifying a run) saw only the half
+  that does not say what was expected. Error already prints the `pascal26:<line>:
+  error:` prefix, the `in:` path for an include or a used unit, and the `near:`
+  window -- the raw line was a second output path that skipped the first one.
+
+  The offending token is named only when the lexer actually HAS its text. It
+  stores text for tkIdent and tkString and nothing else, so a keyword, an
+  operator or a number has none -- which is why the old line's `but got: ` came
+  out empty in precisely the cases where a reader could not identify the token
+  themselves. An omitted clause says "not recorded"; an empty one reads as
+  "nothing there". Recovering the missing spellings (and with them every `near:`
+  window in the compiler) is
+  bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings.
+
+  Do NOT answer that by mapping the kind to a spelling: kinds are shared across
+  frontends and their words are not. `Expect(tkEnd, <close-brace>)` in cparser.inc
+  against `Expect(tkEnd, 'end')` in pasparser_stmt.inc is one kind, two spellings,
+  so a table would confidently print the other language's keyword. That is what
+  the `name` parameter is for -- only the caller knows the language.
+
+  The ordinal moves behind PXXDBG=a.expect. It is meaningful only against
+  TTokenKind's declaration order and it shifts whenever a token is added, so it
+  is a debugging aid and never a user-facing one.
+  bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path }
 begin
   if CurTok.Kind <> k then
   begin
-    s2 := CurTok.SVal;
-    writeln('Expected: ', name, ', but got: ', s2, ' (Kind: ', Ord(CurTok.Kind),
-            ', Line: ', CurTok.Line, ')');
-    { Readable source context around the OFFENDING token (its own source offset —
-      the precise parse point; the lexer's SrcPos runs ahead of it). The `>>><<<`
-      brackets mark exactly where the parser tripped. }
-    { Error prints the same window now (WriteTokenContext), so do not duplicate it. }
-    Error('unexpected token');
+    if PxxDbgWants('a.expect', '*') then
+      writeln('PXXDBG a.expect want=', Ord(k), ' got=', Ord(CurTok.Kind),
+              ' line=', CurTok.Line);
+    if CurTok.SVal <> '' then
+      Error('expected ''' + name + ''' before ''' + CurTok.SVal + '''')
+    else
+      Error('expected ''' + name + '''');
   end;
   Next;
 end;
