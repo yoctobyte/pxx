@@ -371,7 +371,15 @@ said that.
   two do — and several agents share this box. `tools/gui_shot.sh:52` carries the
   same rule, learned when one agent's pattern-kill took down another's live Xvfb
   mid-capture; a `pgrep` waiter has the mirror-image bug, because it matches
-  *itself* and never returns.
+  *itself* and never returns. **And `pkill` has that same self-match**: the shell
+  running `pkill -f "reduce.py"` has `reduce.py` in its own command line, so it
+  kills itself and the call returns 143/144 — measured 2026-08-30, and read as a
+  crashed tool rather than as the documented trap, because the entry above named
+  `pgrep`'s presentation and not the mechanism. The general form: **a `-f`
+  pattern match runs inside a process whose command line contains the pattern**,
+  and the three victims (a sibling's process, the waiter, the asker) look like
+  three unrelated faults. Bracket one character — `pkill -f "[r]educe\.py"` — or
+  kill the pid you started.
 - **Lost stdout.** SIGTERM discards buffered stdout, so "the marker never fired"
   and "it fired and the output died" look identical. Give tests a clean exit.
 
