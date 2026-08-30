@@ -19615,3 +19615,80 @@ full tier `023e802c88ea` is **45 below HEAD** while the required `3b8d1039e` is
 **17 below** — `merge-base --is-ancestor 3b8d1039e 023e802c88ea` is false. Both
 halves fail. A smaller fleet should bring load under the bar shortly, at which
 point the T half becomes the binding one.
+
+## Tick 2026-08-30 ~10:0x — the fleet stood down cleanly, and a tool nobody knew about
+
+**`tools/forwardlint.py` catches the FPC-seed-drift class in SECONDS, before the
+build.** Surfaced by frankwasm, which had been caught twice by the same
+asymmetry and adopted it: pxx tolerates use-before-declaration in the include
+stream, FPC does not, so **`make compiler/pascal26` converges green and only the
+SEED build fails.** The documented per-fix loop is structurally incapable of
+seeing this class. It is **not wasm-specific**.
+
+It cost the whole fleet two hours tonight: `5c8de9442` (Track C) called
+`CModuleOfTok` from `lexer.inc` with the body in `dbg_filetable.inc`, and
+**`gate.sh quick` aborted at step 2 for every lane** until frankA landed the
+forward (`e1fed35b1`) — the sixth entry in a block that already carried five for
+this exact reason. frankA nearly spent the time proving it was its own, which is
+the second-order cost: **the next person to run the gate inherits a red they did
+not cause and reasonably assumes is theirs.**
+
+The adaptation is not *be more careful about include order*, it is **run
+`forwardlint` before `make`**. Relayed to every remaining lane. **Whether it
+belongs in CLAUDE.md's documented loop is the owner's call — surfaced, not
+edited.** A tool nobody knows about is indistinguishable from one that does not
+exist, which is the same shape as the `test-esp-bare` target frankS found
+tonight that is enrolled in zero tiers.
+
+### Stand-downs, all clean
+
+| session | left behind |
+| --- | --- |
+| **frankwasm** | branch `wasm` at `f97477cf9`, **95 ahead**, fixedpoint `12bd7e665b5e`, all 31 `test/wasm` checks pass. Ticket in `unfinished/` with a resume table: five rows, body counts, and a per-row *does the U decision touch this?* column — **exactly one (op 54) says yes**. The 32-of-32 anchor measurement is in it. `check` now reports **zero** side-branch flags. |
+| **frankD** | the flags sweep FINISHED, not parked (`ba5deef98`). Category 2 = **one flag** (`--selftest`). Population 3 filed [D p35] with a negative control. `bug-pascal-subclass-inherited-members`: **all four arms fixed at HEAD**, both named consumers verified in their own shapes — **`Counter` need not ship as a dict mode and `feature-nilpy-configparser` is not blocked in practice.** |
+| **frankS** | five EXECUTED windowed rows in `test-xtensa` (`77fafffb8`), the false `"no runner"` comment fixed, harness provenance banked in the `done/` ticket. |
+| **pxx-a5** | face 232; the DEAD-COMMIT audit answered — **350 citations, 269 distinct shas, 264 (98.1%) objects absent entirely, `patch-id` cannot recover any of them, and the stock is CLOSED** (zero since `68be6bd59`). |
+
+**frankS's negative experiment is the result, not the rows.** Setting
+`ELF_DATA_ALIGN = 1` **at HEAD leaves all five green** — b4's `PT_LOAD` split
+page-aligns data independently, so `AlignCodeForData` is **redundant on the
+executable path** and `CheckDataBaseAligned` cannot fire there. Belt-and-braces
+on a property that cost 41 programs, not a defect — **but the rows are not
+measuring the explicit invariant today**, and anyone who removes the split must
+not read their green as evidence the alignment call holds it up. In the Makefile
+beside the rows, where the next reader is.
+
+**And the same defect one level up, which frankS routed rather than fixed:** b4
+had already added an executed windowed canary — into **`test-esp-bare`, which is
+in ZERO testmgr tiers and appears in no script.** Correct row, right slots,
+**cannot fail anything.** *A Makefile target looks gated when you are reading the
+Makefile.* Filed `bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it`
+[T+S p45] — with the caveat that 24 of its 26 assertions self-skip without the
+Espressif toolchains, so wholesale enrolment gates 2 real rows and prints 24
+skips.
+
+### MY OWN FINDING, filed as face 235 because frankD turned my rule on me
+
+*"A relayed claim about a file is not a claim about master"* existed in two
+message logs and nowhere on master — an unrecorded finding by the exact standard
+I had set frankD an hour earlier. **Three instances, one seat, one night:** a
+HEAD measurement relayed to a `$(PXX_STABLE)` lane; a **working-tree** state
+relayed as **origin** state; a **pre-rebase** sha relayed after `sync.sh`
+rewrote it. One finding, because **the sentence carries no marker for which world
+it was measured in** — so the listener cannot detect the substitution. Repair:
+**name the boundary — tree / origin / pin — in the sentence.** Both catches came
+from the listener *measuring* rather than arguing from a sha.
+
+### Still open
+
+**b4 has not pushed** — `Makefile`, `compiler.pas`, `elfwriter.inc`,
+`docs/index.md` modified, ticket in `working/`. Warned that frankD's measured
+docs correction is already on master and **contradicts** what b4's hunks say, and
+that its own refusal will make the new line false in the other direction: the
+honest sentence is *riscv32 and xtensa for any source; x86-64 for `.asm` sources
+only; i386/aarch64/arm32 refuse* — a **source-kind** axis the docs have never
+carried. Also: the existing refusal message says *"only xtensa/riscv32"* while
+x86-64 works, filed by frankD as [A p25].
+
+**TWO SESSIONS STILL ON TRACK A** (frankA, b4). frankA's next item is in N's
+files, which keeps them clear for now. Settle it when b4's ticket lands.

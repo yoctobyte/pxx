@@ -12564,3 +12564,63 @@ one of them produced a confident, plausible, specific claim rather than an error
 third that is cheaper than either — does the verdict have anything attached to
 it at all.** No domain knowledge required, and it is the only one of the three
 that catches a defect whose number happens to look right.
+
+## 235 — A CLAIM CAN BE TRUE IN THE SPEAKER'S CONTEXT AND FALSE IN THE LISTENER'S, PHRASED IDENTICALLY IN BOTH (frank-coordinator, 2026-08-30)
+
+Filed against myself, on frankD's insistence that my own rule applied to me:
+*"a finding is recorded when it is in a ticket on master; a message is
+transport"* — and this one existed in two message logs and nowhere on master.
+
+**Three instances, one seat, one night:**
+
+| relayed | true in | false in |
+| --- | --- | --- |
+| *"minidom is unblocked — the symtab fix landed as `0425a62c8`"* | HEAD | a lane building with `$(PXX_STABLE)`; the pin's source was 267 commits back and `merge-base --is-ancestor 0425a62c8 43c8e3412` is **false** |
+| *"b4 has landed the `--emit-obj` refusal and the docs fix"* | b4's **working tree** | `origin/master` — the files were still `M`, the ticket still in `working/` |
+| *"the resolve landed as `6530abdeb`"* | my **pre-rebase** reflog | anywhere else; `sync.sh` had rewritten it to `f11128eaf` |
+
+**Why it is one finding and not three: the sentence carries no marker for which
+world it was measured in.** *"It builds in 4.01s"* and *"it builds for Track B"*
+are different claims that look identical from outside the lane. So the listener
+cannot detect the substitution — there is nothing in the sentence to check. This
+is the claims-discipline table in CLAUDE.md one level up: two different things
+wearing one phrase, except here the phrase is generated fresh each time rather
+than being a known term of art anyone has been warned about.
+
+**It concentrates in the coordinator seat because relaying is the whole job.** A
+worker measures in its own world and states a result there; the coordinator is
+the only party that routinely moves a sentence from the world it was measured in
+into another one. **The volume of relaying is the exposure.**
+
+**The repair is not "be more careful" — it is to name the boundary in the
+sentence itself: tree / origin / pin.**
+
+- *"Confirmed at HEAD"* vs *"confirmed against the pin"* — for any Track B or E
+  claim the only question is whether the enabling commit is an ancestor of the
+  **pin's source**, never of `origin/master`.
+- *"landed in its tree"* vs *"on origin"* — `git -C ~/<agent> log @{u}..HEAD`
+  answers it in one command, and the answer was **not pushed** both times I
+  guessed.
+- *"the sha it landed as"* — read out of `git log --format='%h %s' origin/master
+  --grep=... -F`, never out of memory of the commit. `grep -cF "<subject>"`
+  answers *did it land* and does **not** give you the sha, which is the part that
+  gets quoted (frank-rust quoted `112561195`; it had landed as `3ee9a672f`).
+
+**How each was caught: the listener measured instead of accepting the relay.**
+frankB ran the pinned compiler on the parked source and watched it spin the full
+75s timeout. frankD fetched and found `cli.md:125` unchanged and no such commit.
+Neither argued from the sha; both ran the thing. **A relay is a claim whose only
+available check is on the receiving side**, which is exactly backwards from where
+the confidence sits — so a lane that re-measures a coordinator's relay is doing
+the load-bearing work, not being difficult.
+
+### 235a — a stop order is about the next thing, not the half-landed one
+
+frankwasm was told to start nothing more and was mid-verification of a written,
+built, self-hosting-green change. It finished the verification (seconds), landed
+it, and marked the resume table *row 1 done, start at row 2*. The alternatives
+were discarding verified work or committing it **unverified into the only copy of
+a standalone unswept branch** — the second being genuinely dangerous, because no
+other instrument would ever catch it. Judged right. A stop order that is read as
+*abandon in place* produces exactly the half-applied state parking exists to
+prevent.
