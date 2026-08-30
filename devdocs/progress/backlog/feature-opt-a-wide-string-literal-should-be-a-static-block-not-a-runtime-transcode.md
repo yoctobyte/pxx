@@ -87,3 +87,28 @@ prove the collision unreachable and say so.
 `make test` + self-host byte-identical, `test_widestring_lowering` and
 `test_widestring_surrogate_pair` unchanged, `test_static_string_literals`
 extended to the wide block, and a loop benchmark showing the allocation gone.
+
+## READ FIRST — this introduces a THIRD value kind at seven unguarded sites
+
+Raised by frankwasm, 2026-08-30, so the next agent here does not rediscover it.
+
+`ir.inc` decides *"does this parameter want an owning managed-string temp?"* at
+**seven sites, with zero guards** — one concept, seven copies, no shared
+predicate. See
+[[bug-a-managed-string-arg-temp-predicate-is-duplicated-seven-times-and-guarded-nowhere]]
+[A p20], which carries the full site list (four `argIsManagedTemp` predicates at
+11060 / 11305 / 11813 / 12931, seven `AllocVar('', tyAnsiString)` at 11069 /
+11360 / 11532 / 11704 / 11831 / 12825 / 12951) and the condition that the five
+call paths be **measured** before anything is edited.
+
+**Why it lands on this ticket specifically:** a static block is neither a
+normally-refcounted heap handle nor the existing static literal — a *third* kind
+of value reaching all seven. The neighbouring safety argument for leaving
+`ParamWantsManagedStrTemp` alone (frankB, with the literal-argument fast path,
+849 → 84 ms) is *"managed→managed on a saturated refcount is a no-op"* — and
+**saturated is a property of the object, not of the path.** So the duplication is
+latent only until this ticket or that fast path widens.
+
+That is a **note, not a `blocked-by:`** — it does not gate this work, it changes
+what you must read before starting it. The p20 on the sibling is about reach
+today, not about difficulty or importance.

@@ -30,6 +30,28 @@
 #     git config merge.ours.driver true
 devdocs/progress/BOARD*.md merge=ours
 
+# LOGBOOK.md is APPEND-ONLY by construction, so every conflict on it is two
+# agents appending different entries at the same end of the file -- and the
+# resolution is always "keep both". `union` does exactly that automatically.
+#
+# MEASURED 2026-08-30, the file's first 58 minutes of life (frankB): six appends
+# across at least five lanes, the last two landing ten seconds apart, on a file
+# nine entries long. One single-commit push took TWO consecutive rebase
+# conflicts here, and each resolution rewrote its sha.
+#
+# That is why this is not mere conflict noise. The ticket-economy rule asks
+# eleven agents to append here on every trivial fix, so it raises rebase
+# frequency precisely where sha-citation discipline is load-bearing -- and a sha
+# read before a push is a ghost. Three of the day's ghost shas came out of
+# hand-finished conflicts, one of them this file's.
+#
+# Unlike `ours` above, `union` is a BUILT-IN git driver: no `git config` line, no
+# per-checkout registration, and it cannot sit silently inert the way that one
+# did for weeks. The cost is interleaved ordering inside a contended hunk, which
+# for a log nobody reads in strict order is nothing; entries stay intact
+# individually, and each already carries its own date and agent.
+devdocs/progress/LOGBOOK.md merge=union
+
 agents/               export-ignore
 thesises/             export-ignore
 library_candidates/   export-ignore

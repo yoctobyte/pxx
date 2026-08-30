@@ -251,7 +251,11 @@ would not have fooled anyone. And the deeper mechanism is neither: **he was
 appending to a ticket he had just claimed.** The agent most likely to bolt a
 diagnosis onto a long ticket is the one under the most pressure to produce
 something — so the guard is to re-read the summary *at claim time*, before you
-add to it. The essay format is for something that
+add to it. **A finding whose value IS its length goes in the reference doc, with a one-line
+pointer in the logbook** (frankB) — the one-screen rule and the logbook pull
+against each other otherwise, and the next agent will resolve that by truncating.
+A chain worth reading end to end belongs in `debugging-playbook.md`; the logbook
+says where it is. The essay format is for something that
 genuinely changed a design decision — not for a bug. If the body is longer than
 the diff it describes, ask whether you are filing because it needs filing or
 because filing is the habit.
@@ -635,6 +639,13 @@ fix the doc, not the loop.
   first does not cover the second** — `sync.sh`'s *"all verified on origin"* is
   true of the **content** and says nothing about an id you wrote down beforehand.
   An agent who did verify, at the wrong moment, still published a ghost.
+  **Four routes produced ghosts in one evening, and the fourth is the worst:** a
+  pre-push `log -1`; a hand-finished conflict; a `--continue` that rewrote the
+  commit; and `sync.sh` printing *"push raced another writer — rebasing and
+  retrying"*, which then **succeeds and reports success**. Nothing anywhere looks
+  like an error. Recovery, when it happens anyway: match the commit **subject**
+  on origin/master — the only handle a ghost leaves, and the practical reason to
+  write a real subject line.
 - **Cold start — "continue on tickets" (no track named):** self-dispatch,
   auto-pick the global top.
   1. `git pull --rebase` (origin is truth).
