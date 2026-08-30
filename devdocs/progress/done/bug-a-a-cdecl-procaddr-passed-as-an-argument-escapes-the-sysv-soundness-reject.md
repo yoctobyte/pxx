@@ -70,13 +70,26 @@ source spelling is a real piece of work someone should eventually do.
 ## Fix
 
 Subsumed by `feature-cdecl-bodied-sysv-prologue`: give bodied `cdecl` procs a
-genuine SysV prologue on x86-64, after which both shapes are sound and the
-reject is obsolete rather than incomplete. Filed separately because a silent
+genuine SysV prologue on x86-64, after which both shapes are sound **on x86-64**
+and the reject is obsolete there rather than incomplete.
+
+**SCOPE CORRECTION, made when the fix landed.** The sentence above originally
+read "both shapes are sound", unqualified, and that was an overclaim. The fix is
+x86-64 only, because only x86-64 got the prologue arm. On
+i386/arm32/aarch64/riscv32 the argument-shaped door is exactly as open as it was
+— measured on aarch64 after slice 1: `p := @MyCb` is refused while `Take(@MyCb)`
+on the same source compiles clean and prints `0` where 9 is correct.
+
+That remainder is `bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets`,
+and this ticket is closed against its x86-64 repro only. A closed ticket whose
+claim is broader than its fix is worse than an open one, because nobody re-reads
+it. Filed separately because a silent
 wrong value needs its own slug for tstate and regression citation, because
 "fixed as a side effect of a feature ticket" is invisible to anyone searching
 the symptom, and because if that feature slips this must not slip with it.
 
-Gate: the repro above prints `9` and `36`.
+Gate: the repro above, **on x86-64**, prints `9` and `36`. Covered by
+`test/test_cdecl_bodied_sysv.pas` (12 checks, in test-core).
 
 ## Log
 - 2026-08-30 — resolved, commit 3af4f6380.

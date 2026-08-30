@@ -2,7 +2,7 @@
 track: A
 prio: 58
 type: feature
-status: working
+status: done
 owner: claude-A
 ---
 
@@ -46,3 +46,6 @@ self-host byte-identical.
 
 Not a bug under the mandate's test: nothing produces a wrong value and the
 unsupported shape is refused at compile time with a reason.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

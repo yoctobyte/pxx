@@ -9240,16 +9240,34 @@ begin
       end;
 
       { @BodiedPascalProc into a `cdecl` proc-type var: the indirect cdecl call
-        arm marshals TRUE SysV (floats in xmm0..7, int/sse classes counted
-        independently, >6 ints spill to stack), but a bodied pxx proc's
-        prologue receives the INTERNAL convention (every param in an integer
-        register by position, >6 all-stack). The two coincide only for <=6
-        integer/pointer params — beyond that the call silently mis-marshals
-        (bug-cdecl-indirect-over-6-integer-args: the old loud reject was lost
-        when stack spill landed for dlsym'd C targets). Reject the unsound
-        binding loudly until bodied cdecl procs get a genuine SysV prologue;
-        external (dlsym/C) values are unaffected. }
+        arm marshals the TRUE C convention (floats in xmm0..7 / d0..d7, int and
+        SSE classes counted independently, overflow to stack), but on these
+        targets a bodied pxx proc's prologue receives the INTERNAL convention
+        (every param in an integer register by position, >6 all-stack). The two
+        coincide only for <=6 integer/pointer params — beyond that the call
+        silently mis-marshals (bug-cdecl-indirect-over-6-integer-args: the old
+        loud reject was lost when stack spill landed for dlsym'd C targets).
+        Reject the unsound binding loudly; external (dlsym/C) values are
+        unaffected.
+
+        NO LONGER x86-64, as of feature-cdecl-bodied-sysv-prologue: there a
+        bodied `cdecl` proc now gets a genuine SysV prologue (the ProcCdecl arm
+        of EmitParamSpillsForTarget) and every direct call site agrees, so the
+        binding is sound and refusing it would refuse working code. The other
+        four targets have no such arm yet and still need the wall.
+
+        AND THE WALL STILL HAS A DOOR IN IT ON THOSE FOUR. This is keyed on the
+        ASSIGNMENT shape — AN_ASSIGN whose RHS is AN_PROCADDR — so passing the
+        same @proc as a call ARGUMENT is a different AST shape and walks past
+        it. Measured on aarch64 at slice 1: `Take(@MyCb)` prints 0 where 9 is
+        correct, while `p := @MyCb` on the same line numbers is refused. Closing
+        that needs the check to move to wherever an AN_PROCADDR is coerced INTO
+        a cdecl proc-type location — every store shape, not this one — which is
+        a design question rather than a condition edit, and is filed as
+        bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets.
+        Do not read the surviving reject as complete coverage. }
       if (not CProgramMode) and
+         (TargetArch <> TARGET_X86_64) and
          (ASTKind[ASTRight[node]] = AN_PROCADDR) and
          (ASTKind[ASTLeft[node]] = AN_IDENT) and
          { feature-a-typeref-migrate-consumers lane 1: SymProcSig read via
@@ -9263,12 +9281,12 @@ begin
         varIdx := ASTIVal[ASTRight[node]];   { the bodied target proc }
         if Procs[varIdx].ParamCount > 6 then
           ErrorAt(ASTLine[node], '@' + Procs[varIdx].Name +
-            ' as a cdecl function pointer: a Pascal-bodied proc with more than 6 parameters is not SysV-callable yet (bug-cdecl-indirect-over-6-integer-args)');
+            ' as a cdecl function pointer: on ' + TargetArchName(TargetArch) + ' a Pascal-bodied proc with more than 6 parameters is not C-callable yet; x86-64 supports this (feature-cdecl-bodied-sysv-prologue)');
         for varIdx2 := 0 to Procs[varIdx].ParamCount - 1 do
           if TypeIsFloat(Procs[varIdx].Params[varIdx2].TypeKind) and
              (not Procs[varIdx].Params[varIdx2].IsRef) then
             ErrorAt(ASTLine[node], '@' + Procs[varIdx].Name +
-              ' as a cdecl function pointer: a Pascal-bodied proc with a by-value float parameter is not SysV-callable yet (bug-cdecl-indirect-over-6-integer-args)');
+              ' as a cdecl function pointer: on ' + TargetArchName(TargetArch) + ' a Pascal-bodied proc with a by-value float parameter is not C-callable yet; x86-64 supports this (feature-cdecl-bodied-sysv-prologue)');
       end;
 
       { PROMOTABLE INT store. Handled before every other assignment shape so no

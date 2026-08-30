@@ -4818,7 +4818,7 @@ test-core: $(COMPILER)
 	# feature-cdecl-bodied-sysv-prologue
 	# bug-a-a-cdecl-procaddr-passed-as-an-argument-escapes-the-sysv-soundness-reject
 	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_sysv.pas $(TESTTMP)/test_cdecl_bodied_sysv26
-	tools/expect_same.sh test_cdecl_bodied_sysv26 "$$($(TESTTMP)/test_cdecl_bodied_sysv26)" "CDECL-SYSV OK checks=10"
+	tools/expect_same.sh test_cdecl_bodied_sysv26 "$$($(TESTTMP)/test_cdecl_bodied_sysv26)" "CDECL-SYSV OK checks=12"
 	# AN AGGREGATE RESULT FROM A FUNCTION WITH MORE THAN 8 PARAMETERS.
 	#
 	# aarch64 refused this outright until the x8 load and the matching stack

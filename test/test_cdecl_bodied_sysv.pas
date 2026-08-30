@@ -92,6 +92,25 @@ begin Expect(fn(1.5, 4), 7, 'single arg via fnptr'); end;
 procedure TakeOvf(fn: TFnOvf);
 begin Expect(fn(1,2,3,4,5,6,7, 8.0, 9.0), 98028, 'int overflow with floats in regs'); end;
 
+{ The ASSIGNMENT shape, which slice 2 unblocked. Before it, these four lines
+  were a COMPILE ERROR on x86-64 ("@CbMix as a cdecl function pointer: ... not
+  SysV-callable yet"), so this half of the file cannot even build against a
+  pre-slice-2 binary -- that is its "fails on the old binary" proof, and it is a
+  stronger one than a wrong value, not a weaker one.
+
+  It is the shape the ir.inc reject was keyed on, and it is still refused on
+  i386/arm32/aarch64/riscv32, which have no SysV prologue arm. Do not lift this
+  into a cross-target row without giving those targets the prologue first. }
+procedure ViaVariable;
+var fmix: TFnMix;
+    fovf: TFnOvf;
+begin
+  fmix := @CbMix;
+  Expect(fmix(1, 4.0, 2, 5.0, 3, 6.0), 654321, 'mixed via assigned variable');
+  fovf := @CbOverflow;
+  Expect(fovf(1,2,3,4,5,6,7, 8.0, 9.0), 98028, 'overflow via assigned variable');
+end;
+
 begin
   { via a function pointer -- the escaping shape }
   TakeFloat(@CbFloat);
@@ -106,6 +125,8 @@ begin
   Expect(CbMix(1, 4.0, 2, 5.0, 3, 6.0), 654321, 'mixed direct');
   Expect(CbSingle(1.5, 4), 7, 'single direct');
   Expect(CbOverflow(1,2,3,4,5,6,7, 8.0, 9.0), 98028, 'overflow direct');
+
+  ViaVariable;
 
   if failures = 0 then
     writeln('CDECL-SYSV OK checks=', checks)
