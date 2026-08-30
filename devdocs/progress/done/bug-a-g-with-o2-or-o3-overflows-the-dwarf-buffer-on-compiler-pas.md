@@ -194,4 +194,4 @@ Ceiling restored to 33554432 and re-verified afterwards: all three `-g` levels
 exit 0 at 3430 subprograms, fixedpoint `c9a998b66475`.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d147202a1.
