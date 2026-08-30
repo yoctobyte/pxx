@@ -7627,3 +7627,81 @@ Premise verified before acting, not assumed from the report: the hook's rule 1 i
 `make[[:space:]]+(...)*(test|check)([[:space:]]|$|-[a-z0-9-]+)`, so `test-esp-bare` matches on
 the **trailing-hyphen branch**. Without that branch the fourth site would have been a
 near-miss and the fix a report on a non-problem.
+
+### 170 — A LIVE EDGE WHOSE JUSTIFICATION IS UNREACHABLE IN THE CURRENT COMPILER
+
+*frankA, 2026-08-30 — the third polarity of tonight's dependency-record campaign.*
+
+`compat-pascal-four-type-sizes-disagree-with-fpc` is filed `prio: 25` and shows **p70** at the
+head of Track P. All of that comes from one edge: `feature-pascal-typed-and-untyped-files`
+[P p70] declares `blocked-by` on it.
+
+And that ticket's strongest argument for the sizes mattering is a **`file of TRec` round-trip
+against FPC** — while **`file of T` does not exist**, refused outright with *"file types are
+not supported (use TextFile for text I/O)"*. Which is what the blocking ticket is *for*. So
+the two hold each other up: sizes rank high because typed files need them, and typed files
+are the main reason sizes are worth fixing.
+
+**Ruled: the edge stays.** Propagation is the designed behaviour — rate goals, the chain
+follows — so the real question is whether typed files are correctly p70, and they are:
+`file of T` is standard Pascal that real code uses heavily, which is the axis the compat
+table says to rank on. And sequencing layout *before* committing to an on-disk format is
+right, because settling sizes afterwards silently invalidates written data.
+
+**The defect is that none of that is visible.** A reader opens the ticket, sees `prio: 25`
+against a p70 ranking, and the obvious tidy-up is to make one number match the other — which
+either drops it out of the queue or overstates its intrinsic worth. **An effective rank with
+no stated source reads as a mistake**, and the repair is one paragraph naming the edge.
+
+Not a stale edge (163a) and not a live record making a refusal look like the last mile (167),
+but a **live, correct edge whose justification cannot be reached from the current compiler.**
+Not circular reasoning — the sequencing is sound — but a circle a reader can walk without
+finding ground.
+
+**Found by the probe failing to compile.** frankA went to write the `file of TRec` round-trip,
+`file of T` did not exist, and the probe uses `Move` for that reason. Measurement found the
+gap; reasoning would have accepted the justification at face value.
+
+Three probes cut against the author's own prior, all reported: `packed` **is** honoured
+(offsets 0/4/8, `SizeOf` 12, exactly the sum — the subrange fields are simply 4 bytes wide,
+the opposite of the assumption going in); the byte-exact layout **is** expressible today
+(`packed record a: Byte; b: ShortInt; c: Byte` = 3, matching FPC); and `Move` round-trips
+pxx's own bytes. So the cost is **memory footprint and cross-toolchain layout, not a wrong
+answer** — neither the bug row nor the defer row, and `prio: 25` is right on its merits.
+
+### 170a — "THREE LINES" PRICED THE CAPABILITY AND THE BINDING CONSTRAINT WAS THE LOCATION
+
+*frankwasm, same night, disproving its own ticket's note.*
+
+`decide-how-the-sys-intrinsics-reach-wasi` lists `tkArgStr` (ParamCount/ParamStr) under
+**"What does NOT depend on this"**, at *"3 lines"*, marked **Not verified**.
+
+**The capability half is true; the linkage half is false; the linkage half was always
+binding.** `args_sizes_get`/`args_get` genuinely need no preopen and no rights — verified, an
+implementation against them compiles. But "3 lines" assumed the code could live in the WASI
+PAL, and it cannot, for two independently sufficient reasons, both measured:
+
+1. `compiler.pas` links **no PAL at all** — `uses SysUtils, Math, BaseUnix`, and nothing in
+   that chain reaches `platform.pas`.
+2. Even with an explicit `uses platform`, **a PAL routine nothing calls is dead-code
+   eliminated before the backend can ask for it.** Confirmed against `strings` on the module:
+   `PalBackendPlatform` and `PalBackendHasFiles` are present because `platform.pas` calls
+   them. **A routine whose only caller is a call the backend synthesises later has no Pascal
+   caller when DCE runs.**
+
+So the code is removed by a pass that is *correct*, for a reason the estimate had no way to
+anticipate, and writing the three lines would never have worked. **An effort estimate prices
+the work; it does not price the place the work has to live** — and the place was the whole
+problem.
+
+163a from the inside: *"X may be independent"* is a shape claim about our own code, written
+once, never re-read — here on the author's own ticket, which is the hardest place to notice
+one.
+
+**And the half that worked was declined.** A *frozen*-only `ParamStr` would have cleared all
+4 refusals today (all three anchor sites are frozen), but `s := ParamStr(i)` with `s: string`
+is the common spelling, takes the managed path, needs a strlen, and this backend has **no
+hand-emitted loop anywhere**. So it **works in the program we measure and refuses in the
+program a user writes** — the decorator failure wearing a fourth name. The no-loop shortcut
+(`argv[i+1]-argv[i]-1`), which every host satisfies and preview1 does not specify, is recorded
+**REJECTED** so the next reader does not adopt it as a clever find.
