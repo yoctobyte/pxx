@@ -177,3 +177,87 @@ test-pascal-conformance: FAILURES: tgeneric87.pp(compile)
 
 The failing job is `test-pascal-conformance#shard0/6`, a Track T sweep job —
 the 7-line repro above is what a dev lane should work from.
+
+---
+
+## Bisect verification, 2026-08-30 (frankB, Track B — verification only, no fix)
+
+pxx-a5 scoped its own claim: *"attribution is by mechanism, not by a build
+bisect at `f12a62815^` — I did not build the parent."* That check has now been
+run. **The attribution holds, at the exact commit.**
+
+Three compilers built from source in a throwaway worktree, each seeded from
+`stable_pinned` with the seed dated `2000-01-01` so `make` could not no-op.
+Each printed `converged after N round(s)` and each sha differs from the seed —
+both conditions required, because a fresh tree seeded with a copied-in binary
+makes `make compiler/pascal26` a silent success that proves nothing.
+
+| commit | built sha | `a_const` | `b_var` | `c_varconst` | `d_poison` |
+| --- | --- | --- | --- | --- | --- |
+| `be9198402` = `f12a62815^` | `01c38a6304db` | ok | ok | ok | ok |
+| `f12a62815` | `a6bc37164f3d` | **FAIL** | ok | ok | **FAIL** |
+| `3ab056a36` (HEAD) | `1bca19929e04` | **FAIL** | ok | ok | **FAIL** |
+
+Seed for all three: `1d69760deabe` (pin v393). Rounds: 2, 2, 2.
+
+Parent clean and the commit itself red is a **one-commit bisect** — no room for
+a neighbour, and no 400-commit bracket. The diagnostic at HEAD is character-for-
+character the one this ticket recorded (`Expected: =, but got: TTest (Kind: 1,
+Line: 4)`), so nothing in the error path has drifted since filing.
+
+**`d_poison` was also clean at the parent.** The `LongInt`-named-parameter case
+is described above as the cost `f12a62815` knowingly accepted, and that is right
+about intent — but it is a behaviour change introduced by that commit, not a
+pre-existing limitation being documented. Accepted-and-new can be un-accepted by
+whoever fixes the typed const; accepted-and-always-was cannot. Worth knowing
+before someone treats it as out of scope.
+
+### Unexplained rows — data, not a characterization
+
+While the three compilers were on disk, the boundary was probed further. These
+are **observations, not a mechanism**, and they do not fit "any single-argument
+typed const". They are recorded because one of them has a direct consequence for
+the fix's test, below. All run against `f12a62815`; all compile at the parent.
+
+```pascal
+{ the argument's NAME decides, and not in an obvious way }
+const S: ^specialize TSolo<LongInt>  = Nil;   FAIL
+const S: ^specialize TSolo<Int64>    = Nil;   FAIL
+const S: ^specialize TSolo<QWord>    = Nil;   FAIL
+const S: ^specialize TSolo<SmallInt> = Nil;   FAIL
+const S: ^specialize TSolo<Cardinal> = Nil;   FAIL
+const S: ^specialize TSolo<TMyAlias> = Nil;   FAIL   { any user alias, whatever it aliases }
+const S: ^specialize TSolo<Boolean>  = Nil;   ok
+const S: ^specialize TSolo<Integer>  = Nil;   ok
+const S: ^specialize TSolo<Byte>     = Nil;   ok
+const S: ^specialize TSolo<LongWord> = Nil;   ok
+```
+
+```pascal
+{ the poison is file-scoped and reaches declarations that do not themselves
+  match the header shape -- and it reaches BACKWARDS }
+type generic TSolo<A> = record u: A; end;
+     generic TPair<A, B> = record u: A; v: B; end;
+const
+  Q: ^specialize TPair<LongInt, Boolean> = Nil;   { line 6 }
+  S: ^specialize TSolo<LongInt> = Nil;            { line 7 -- the poisoner }
+                          { -> FAIL, reported at LINE 6, on TPair }
+```
+
+Two arguments alone (`TPair` without the `TSolo` line) compiles. The same file
+with `S` as a `var` instead of a `const` compiles — the `=` is required. Put the
+poisoner FIRST and the file compiles. A named instantiation
+(`TInst = specialize TSolo<LongInt>;` then `const K: TInst = ...`) compiles, so
+the inline `^specialize T<Arg>` in the const's type is needed.
+
+### The consequence, and it is the reason these rows are here
+
+**A regression test for this written with `Integer` passes on a broken
+compiler.** Four of the ten type names above compile today. `tgeneric87` uses
+`LongInt` and catches it; a test author reaching for the more idiomatic
+`Integer` would have written a test that is green against the defect. Whatever
+fix lands should be gated on the failing SET, not on one name — and the split
+itself wants explaining, because a mechanism that harvests by token shape has no
+business caring whether the token is `Integer` or `Int64`.
+
+No files touched outside this note; the worktree was removed.
