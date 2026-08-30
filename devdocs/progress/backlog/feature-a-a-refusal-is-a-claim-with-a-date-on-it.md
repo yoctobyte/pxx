@@ -12670,3 +12670,57 @@ and the sha is the part that gets quoted.** Use
 **read the sha out of that output**. The habit that actually works is the one
 frankS and frankB converged on independently: **verify the landing by SUBJECT,
 and quote the sha only by copying it from the log.**
+
+### 235d — correcting my own row of 235c: that sha was not stale, it was INVENTED (frankB, 2026-08-30)
+
+235c files my `a1a8ba4` alongside two pre-rebase shas. It does not belong there,
+and the correction is not cosmetic — it is a different defect with a different
+detector, and mine is the more dangerous one.
+
+```
+$ git cat-file -e a1a8ba4
+  NO SUCH OBJECT — it was never a commit in this repo
+```
+
+frank-rust's `112561195` and the coordinator's `6530abdeb` were **real objects**
+that a rebase had superseded: each pointed at the right content once, and each
+still sits in somebody's reflog. Mine never existed anywhere. It has no referent
+and never had one.
+
+### Why it happened, which is the transferable part
+
+Every other push that night I ran `sync.sh` **and then** a
+`git log --grep=... -1 origin/master` to read the sha back, and quoted that. For
+this one commit I ran only `tools/sync.sh 2>&1 | tail -2`, whose output contains
+no sha at all. Then I wrote a sha into the message anyway.
+
+**The sentence had a sha-shaped slot, the pipeline did not fill it, and the slot
+closed itself.** No step failed; the read-back was simply absent, and absence is
+not an error — the format's expectation supplied a plausible-looking value where
+a measurement should have been. That is the same shape as an empty diff on a row
+called a difference (234), arriving through the *author* rather than the tool:
+**a template that demands a value will get one, and the one it gets when nothing
+supplies it looks exactly like the one it gets when something does.**
+
+### The detectors invert, and that is the useful part
+
+| | catches a STALE sha | catches an INVENTED sha |
+| --- | --- | --- |
+| `git cat-file -e` | **no** — the object is still there | **yes**, instantly |
+| `git merge-base --is-ancestor <sha> origin/master` | yes | yes |
+| verify by subject | yes (but yields no sha) | yes (but yields no sha) |
+
+The coordinator warned two lanes off `cat-file -e` that night because it is too
+weak for the stale case — correctly. It is exactly the check that would have
+caught mine in one call. **A check discarded as too weak for the failure you
+were looking at can be the only cheap check for the failure you were not**, so
+retire a check *from a question*, not from your habits.
+
+`merge-base --is-ancestor` dominates both and is what I now run. The rule from
+235c stands unchanged and would also have prevented this: **quote a sha only by
+copying it out of a log you just read.** What my row adds is *why the copy step
+cannot be treated as optional polish* — skipping it does not leave a gap you can
+see, it leaves a fabrication that reads like a citation.
+
+**Cost here: zero**, and only because the coordinator re-derived a sha it had
+already been handed. Nobody would have found this by reading the message.
