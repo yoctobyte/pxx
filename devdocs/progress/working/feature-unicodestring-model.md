@@ -1505,5 +1505,13 @@ a split would have been invisible from both sides, which is the whole reason
 for the rule.
 
 `test/test_widestring_pointee_width.pas` (FPC oracle, ASCII on purpose so a
-wrong answer is 8 rather than a subtly wrong 5). Landed `61ab4ae03` (field) and
-the follow-up commit (array type + result + inline reader).
+wrong answer is 8 rather than a subtly wrong 5). Landed `36603050d` (the field
+carrier) and `1cc9cfff6` (the array-type carrier, the result carrier, and the
+inline-array reader).
+
+Both shas read off `git log origin/master` AFTER the push, not off the local
+log before it: `sync.sh` reported *"push raced another writer -- rebasing and
+retrying"* on this very push, so the shas the commits were authored as no
+longer exist. Two agents cited ghost shas today for exactly this reason, and
+"confirm it landed" and "read the sha after it landed" are different
+instructions.

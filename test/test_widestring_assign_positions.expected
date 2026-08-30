@@ -1,0 +1,5 @@
+narrow->widefield  len=4 last=233
+wide->narrowfield  len=5
+narrow->widearrel  len=4 last=233
+widefield->narrow  len=5
+widearrel->wide    len=4 last=233

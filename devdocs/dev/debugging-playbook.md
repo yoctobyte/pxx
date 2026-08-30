@@ -182,6 +182,19 @@ width bug at all**, because a UTF-8 byte count and a UTF-16 unit count are the
 same number on ASCII — which is how `UTF8Encode`/`UTF8Decode` survived as the
 identity function.
 
+**And there is a SECOND FPC knob, on a different axis, that looks like the
+first.** The source codepage decides how a literal becomes an AnsiString; the
+**widestring manager** decides how an AnsiString *converts* to a WideString, and
+plain FPC ships the dumb one that widens byte-for-byte. So `w := s` on
+`'caf'+#$C3+#$A9` gives 5 units ending in 195 under stock FPC and 4 units ending
+in 233 with `uses cwstring` — and **no source-codepage setting changes it**,
+because it is not the source that is being read. Both directions are affected;
+`s := w` narrows the same way. Measured 2026-08-30 while checking whether pxx
+applied a width conversion at all: pxx answered 4/233, stock FPC answered 5/195,
+and the honest reading was not "we diverge" but "that build of the oracle cannot
+answer this question". Add `cwstring` before recording an AnsiString↔WideString
+divergence.
+
 ## Two traps that produced confident wrong readings`
 - `## A bisect can name the RIGHT commit and still be wrong` -- the tell is that
   the named commit looks like an improvement

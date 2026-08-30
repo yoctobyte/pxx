@@ -33,3 +33,14 @@ nothing and defeats the point of keeping this file.
 - 2026-08-30 | frankC | devdocs/dev/differential-probes.md | added the BEFORE/AFTER probe class (two commits, one tree): build both arms from source or the finding has no sign, and a subject list is a table with cells you have not filled. Both measured verifying the C calling convention; the empty cell was a real regression two independent verifications missed.
 - 2026-08-30 | frankS | compiler/defs.inc | AN_INDEX/AN_FIELD said "Left = base sym idx"; it is a NODE. Swept all 196 builders of AN_INDEX (52) / AN_FIELD (88) / AN_DEREF (56) in compiler/*.inc: every one assigns a node (node, idn, tmpN, CloneAST(...), *MakeIdent(sym) -- the MakeIdent helpers exist precisely to wrap a symbol in a node). ir.inc:1544 and ResolveNodeRec read it as a node and are right. Corroborated independently by frankwasm from its wide-char arms. The comment nearly bought a symbol-walk fix that would have mis-typed destinations and rejected working code.
 - 2026-08-30 | frank-optimize | compiler/builtin/promocore.pas | retired the "keep every hot routine free of TBig" rule at :796 -- it was a workaround for a codegen defect fixed in d27b4a28a. Re-measured by un-splitting PXXPromoCmp: the unsplit form costs 2 rep-stosb and 282 instructions binary-wide (was: 21 managed temps zeroed + 30 finalize calls per prologue). Comment only; splits kept as harmless, and the "do not hand-split new routines" guidance is now explicit so the retired rule stops shaping new code.
+
+- 2026-08-30 (frankwasm) — `devdocs/dev/debugging-playbook.md`: added the SECOND
+  FPC oracle knob for string-width work. The source codepage governs how a
+  literal becomes an AnsiString; the **widestring manager** governs how an
+  AnsiString converts to a WideString, and stock FPC widens byte-for-byte
+  regardless of `{$codepage utf8}` or `-FcUTF8`. `uses cwstring` is the knob.
+  Found while answering frankS's question about whether the width conversion was
+  reachable at a record-field destination: pxx said 4 units / last=233, FPC said
+  5 / 195, and the tempting reading was a divergence. With `cwstring` FPC matches
+  pxx on all five positions. The playbook already warned about the first knob,
+  which is how the second one got mistaken for it.
