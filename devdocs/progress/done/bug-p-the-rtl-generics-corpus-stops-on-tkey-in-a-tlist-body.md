@@ -494,4 +494,4 @@ a generic interface declared locally and used as a parameter type of a generic
 class compiles and runs, so the compiler handles the shape.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit b887e83a8.
