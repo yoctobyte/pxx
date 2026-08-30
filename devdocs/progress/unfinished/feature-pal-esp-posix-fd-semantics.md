@@ -1,5 +1,6 @@
 ---
 prio: 20
+blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
 ---
 
 # ESP PAL: exact POSIX fd semantics over ESP-IDF VFS
@@ -223,3 +224,46 @@ compiler-supported external alias, that is a **Track A ticket**, not something
 to build around in the PAL.
 
 The baseline now exists to diff that work against, which was the point.
+
+## 2026-08-30 (pxx-b) — parked to unfinished/, blocked on a Track A bug the fork turned out to BE
+
+The `read`/`write` keyword collision in this ticket's body proposes two options:
+"imported C declarations with safe Pascal names, or a compiler-supported
+external symbol alias that preserves the local Pascal identifier".
+
+Checked before filing a decision ticket, and the answer is neither: **the alias
+already exists and does exactly this.** `external name 'sym'` is parsed today,
+and `pasparser_proc.inc` documents precisely the required semantics — the link
+symbol changes, the Pascal identifier does not.
+
+It is **ignored by `--emit-obj`**, which is the only path ESP uses:
+
+```
+$ pxx --target=riscv32 --platform=esp --emit-obj alias_esp.pas alias_esp.o
+$ readelf -sW alias_esp.o | awk '$7=="UND"{print $8}'
+PalSysOpen   PalSysRead   PalSysWrite      <-- wanted: open / read / write
+```
+
+The same source built as a host executable emits a dynamic import named `write`
+and fails with `undefined symbol: write`, so the dynamic path DOES honour the
+clause. One back end applies it, the other silently drops it — and it is not
+ESP-specific; x86-64 and hosted riscv32 `--emit-obj` do the same.
+
+So this is not a language-surface decision for Track U and not a feature request:
+it is [[bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier]],
+filed for Track A with the repro and a regression that fails today.
+
+**Not worked around.** Renaming the C side or routing the PAL past the collision
+is the compiler-appeasement pattern CLAUDE.md forbids, and it would look like
+progress while hiding an object-writer bug that affects every consumer of
+`--emit-obj`, not just this PAL.
+
+### Done and staying done
+
+`examples/esp32/fs-c3` — the on-target baseline, nine rows pinned, C3 only. It
+does not depend on the rewrite and is useful now: it is what the rewrite will be
+diffed against.
+
+### Not done
+
+The rewrite itself. It resumes when the Track A bug lands.
