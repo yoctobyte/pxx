@@ -993,3 +993,57 @@ here so the next sitting does not read a clean ILP32 batch as a vs-gcc result.
   differential needs to compare OFFSETS, not sizes** — comparing sizes reproduces
   this bullet's blind spot.
 - **Brace elision over rows** — pre-existing, unchanged.
+
+## AXIS: `--builtins` — first run, 2026-08-30 (frankC), and it found a hang
+
+This ticket names "csmith flags the defaults leave off" as an untried axis.
+**`--builtins` is off by default**, so every run this campaign has ever done left
+our builtin lowering uncompared against gcc. First run of it:
+
+```
+tools/csmith_fuzz.py --iters 120 --seed-start 700000 "--csmith-args=--builtins"
+  40/120 agreed with the gcc oracle  (77 skipped)
+  PXX_TIMEOUT  3 hit(s), 1 distinct
+```
+
+Compiler `883476f0abaf`. The finding is filed as
+[[bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc]] —
+a program that compiles clean and then hangs at **every** `-O` level while gcc
+runs it. Repro preserved verbatim at `test/csmith/hang_builtins_700082.c`.
+
+**The bug is not in a builtin.** All 15 builtins the program uses agree with gcc
+individually. The axis earned its keep by generating an unusual program *shape*,
+not by exercising broken builtin lowering. Do not re-run that comparison.
+
+### The 64% skip rate is a property of this axis, not a fault
+
+77 of 120 skipped, which looks alarming and is not. csmith's `--builtins`
+emits **x86-specific intrinsics** — `__builtin_ia32_crc32qi` and friends — that
+**gcc itself refuses** without the matching `-msse4.2`/`-march` flags:
+
+```
+error: implicit declaration of function '__builtin_ia32_crc32qi'
+```
+
+The harness skips rather than scoring those, which is its own doctrine working
+correctly (*"never report a comparison it did not make"*). Feeding gcc
+`-march=native` would "fix" the skip rate and make it worse: the programs would
+then compare pxx against SSE4.2 intrinsics we have never claimed to implement,
+turning every one into a `PXX_COMPILE_FAIL` that means nothing.
+
+The real remedy is to restrict generation to the portable builtins
+(`clz`/`ctz`/`popcount`/`parity`/`ffs`/`bswap`), which is what the surviving 43
+exercise. `--disable-builtin-kinds ia32` is **not** the spelling — it does not
+filter — and the kind names are not in `--help` or in `/usr/share/csmith`.
+Finding them (csmith's builtin spec tables) is the one piece of work that would
+make this axis ~3x more efficient per iteration. Left undone deliberately: the
+axis already paid for itself at 36% yield and the tuning is Track T's file.
+
+### `--float`, the other default-off axis, was deliberately NOT taken
+
+Legitimate FP rounding differences would make every divergence ambiguous, and
+disambiguating them is exactly the spend Track F's charter exists to prevent
+(*"float accuracy is LOW PRIO by definition"*). A float **miscompile** is still
+an ordinary bug by the "rank the mechanism, never the datatype" rule — but this
+axis cannot tell the two apart without per-finding adjudication, so it is a poor
+buy at this prio. Recorded so the next person does not re-derive the decision.

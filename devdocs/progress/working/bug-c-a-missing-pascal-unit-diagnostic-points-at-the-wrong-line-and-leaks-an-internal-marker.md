@@ -2,9 +2,9 @@
 track: C
 prio: 30
 type: bug
-status: backlog
+status: working
 blocked-by: []
-owner: ""
+owner: frankC
 summary: "`#include \"nosuch.pas\"` from C reports the line AFTER the include (pointing at innocent code), leaks the internal `__pxx_pascal_unit` marker into the `near:` context, and speaks Pascal (`uses:`) at an author who wrote `#include`. Measured at aa78a7faf63a. CORRECTED 2026-08-30: the raise site is fine; the offset is created by the C-side caller, so the edit needs cparser.inc AND pasparser_proc.inc -- see the measurement section at the end."
 ---
 
