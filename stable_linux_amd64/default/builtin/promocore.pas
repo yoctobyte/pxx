@@ -999,6 +999,16 @@ end;
 { The inline fast path is tried first and only falls back to the bignum tier on
   overflow, so a value that never leaves int64 never touches the heap. }
 
+procedure AddSlowVV(dst, a, b: Pointer);
+begin
+  StoreBig(dst, BAddSigned(SlotBig(a), SlotBig(b)));
+end;
+
+procedure AddOvf(dst: Pointer; x, y: Int64);
+begin
+  StoreBig(dst, BAddSigned(BFromInt(x), BFromInt(y)));
+end;
+
 procedure PXXPromoAdd(dst, a, b: Pointer);
 var x, y, r: Int64;
 begin
@@ -1008,12 +1018,12 @@ begin
     r := x + y;
     { signed overflow: the result's sign disagrees with both operands' }
     if ((x >= 0) = (y >= 0)) and ((r >= 0) <> (x >= 0)) then
-      StoreBig(dst, BAddSigned(BFromInt(x), BFromInt(y)))
+      AddOvf(dst, x, y)
     else
       PXXPromoFromInt(dst, r);
     Exit;
   end;
-  StoreBig(dst, BAddSigned(SlotBig(a), SlotBig(b)));
+  AddSlowVV(dst, a, b);
 end;
 
 { ---- packed-form fast paths for the unsigned-mask idiom -----------------
@@ -1107,19 +1117,14 @@ begin
   else SlotWriteHeap(dst, SlotPackU64(QWord(v)));
 end;
 
-procedure PXXPromoSub(dst, a, b: Pointer);
-var x, y, r: Int64; su: QWord;
+procedure SubOvf(dst: Pointer; x, y: Int64);
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
-  begin
-    x := SlotInt(a); y := SlotInt(b);
-    r := x - y;
-    if ((x >= 0) <> (y >= 0)) and ((r >= 0) <> (x >= 0)) then
-      StoreBig(dst, BSubSigned(BFromInt(x), BFromInt(y)))
-    else
-      PXXPromoFromInt(dst, r);
-    Exit;
-  end;
+  StoreBig(dst, BSubSigned(BFromInt(x), BFromInt(y)));
+end;
+
+procedure SubSlowVV(dst, a, b: Pointer);
+var su: QWord;
+begin
   { fast path: [2^63..2^64) - 2^64 = the two's-complement int64 reading — the
     sign-convert half of the masked-cell idiom, no bignum traffic }
   if (SlotTag(a) = PROMO_TAG_HEAP) and (SlotTag(b) = PROMO_TAG_HEAP) then
@@ -1134,6 +1139,32 @@ begin
         end;
   end;
   StoreBig(dst, BSubSigned(SlotBig(a), SlotBig(b)));
+end;
+
+procedure PXXPromoSub(dst, a, b: Pointer);
+var x, y, r: Int64;
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  begin
+    x := SlotInt(a); y := SlotInt(b);
+    r := x - y;
+    if ((x >= 0) <> (y >= 0)) and ((r >= 0) <> (x >= 0)) then
+      SubOvf(dst, x, y)
+    else
+      PXXPromoFromInt(dst, r);
+    Exit;
+  end;
+  SubSlowVV(dst, a, b);
+end;
+
+procedure MulSlowVV(dst, a, b: Pointer);
+begin
+  StoreBig(dst, BMul(SlotBig(a), SlotBig(b)));
+end;
+
+procedure MulOvf(dst: Pointer; x, y: Int64);
+begin
+  StoreBig(dst, BMul(BFromInt(x), BFromInt(y)));
 end;
 
 procedure PXXPromoMul(dst, a, b: Pointer);
@@ -1160,14 +1191,14 @@ begin
     if ((x = -1) and (y = Low(Int64))) or ((y = -1) and (x = Low(Int64))) then
       { the true product is 2^63, which does not fit — and probing it with the
         oracle below would be the very division that traps }
-      StoreBig(dst, BMul(BFromInt(x), BFromInt(y)))
+      MulOvf(dst, x, y)
     else if r div y = x then
       PXXPromoFromInt(dst, r)
     else
-      StoreBig(dst, BMul(BFromInt(x), BFromInt(y)));
+      MulOvf(dst, x, y);
     Exit;
   end;
-  StoreBig(dst, BMul(SlotBig(a), SlotBig(b)));
+  MulSlowVV(dst, a, b);
 end;
 
 { ---- mixed promo-with-machine-int fast forms ----------------------------
@@ -1249,8 +1280,14 @@ begin
   MulIntSlow(dst, a, b);
 end;
 
-procedure PXXPromoDiv(dst, a, b: Pointer);
+procedure DivSlow(dst, a, b: Pointer);
 var q, r: TBig;
+begin
+  BDivMod(SlotBig(a), SlotBig(b), q, r);
+  StoreBig(dst, q);
+end;
+
+procedure PXXPromoDiv(dst, a, b: Pointer);
 begin
   { Low(Int64) div -1 is the one inline pair the HARDWARE refuses: the true
     quotient is 2^63, which does not fit the register, and x86 raises SIGFPE
@@ -1263,8 +1300,7 @@ begin
     PXXPromoFromInt(dst, SlotInt(a) div SlotInt(b));
     Exit;
   end;
-  BDivMod(SlotBig(a), SlotBig(b), q, r);
-  StoreBig(dst, q);
+  DivSlow(dst, a, b);
 end;
 
 procedure PXXPromoMod(dst, a, b: Pointer);
@@ -1282,6 +1318,11 @@ begin
   StoreBig(dst, r);
 end;
 
+function CmpSlow(a, b: Pointer): Integer;
+begin
+  CmpSlow := BCmp(SlotBig(a), SlotBig(b));
+end;
+
 function PXXPromoCmp(a, b: Pointer): Integer;
 var x, y: Int64;
 begin
@@ -1293,7 +1334,7 @@ begin
     else PXXPromoCmp := 0;
     Exit;
   end;
-  PXXPromoCmp := BCmp(SlotBig(a), SlotBig(b));
+  PXXPromoCmp := CmpSlow(a, b);
 end;
 
 { A shift count as an Int64. Always small in practice; an inline slot is the

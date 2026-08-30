@@ -5366,22 +5366,40 @@ begin
   dst^.Payload := 0;
 end;
 
-procedure PyVarSlotSet(dst: PPyVarRec; src: PPyVarRec);
-{ dst must already be a valid (owned or cleared) slot. Retains BEFORE it
-  releases, so slot := itself and aliasing slots are safe. }
+procedure PyVarSlotSetStr(dst: PPyVarRec; src: PPyVarRec);
+{ The MANAGED-STRING half of PyVarSlotSet, in its own routine on purpose.
+
+  Naming an AnsiString in the hot body costs an allocation PER CALL, not per
+  managed value: `s := ''` was executed unconditionally, and it is a real
+  string assignment (24-byte header + NUL, measured at 25 bytes) rather than a
+  cleared pointer. Every list subscript went through it, so `x = b[2]` on a
+  list of ints heap-allocated and freed an empty string it never read.
+  Measured: 1.0 allocations per list subscript, 2.0 per dict subscript, 0
+  after this split. Same lesson as promocore.pas:796 -- keep the hot routine
+  free of the managed type. }
 var
   s: AnsiString;
 begin
-  if dst = src then Exit;
-  s := '';
-  if PyVarSlotManaged(src^.VType) then s := PPyAnsiString(@src^.Payload)^
-  else if PyVarSlotIsObj(src^.VType) then PXXObjRetain(Pointer(NativeInt(src^.Payload)));
+  s := PPyAnsiString(@src^.Payload)^;   { retain BEFORE the release below }
   PyVarSlotClear(dst);
   dst^.VType := src^.VType;
+  PPyAnsiString(@dst^.Payload)^ := s;
+end;
+
+procedure PyVarSlotSet(dst: PPyVarRec; src: PPyVarRec);
+{ dst must already be a valid (owned or cleared) slot. Retains BEFORE it
+  releases, so slot := itself and aliasing slots are safe. }
+begin
+  if dst = src then Exit;
   if PyVarSlotManaged(src^.VType) then
-    PPyAnsiString(@dst^.Payload)^ := s
-  else
-    dst^.Payload := src^.Payload;
+  begin
+    PyVarSlotSetStr(dst, src);
+    Exit;
+  end;
+  if PyVarSlotIsObj(src^.VType) then PXXObjRetain(Pointer(NativeInt(src^.Payload)));
+  PyVarSlotClear(dst);
+  dst^.VType := src^.VType;
+  dst^.Payload := src^.Payload;
 end;
 
 procedure PyVarSlotInit(dst: PPyVarRec; src: PPyVarRec);
