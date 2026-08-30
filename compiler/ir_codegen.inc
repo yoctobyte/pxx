@@ -11266,6 +11266,34 @@ begin
           EmitLoadDataRefXtensa(XtensaArgRegN(1),
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
           EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        begin
+          { LOCAL DYNAMIC ARRAY — the seventh kind, and it was held back one
+            commit rather than skipped. The rule (riscv32's arm below states it
+            at length): a scope-exit release is safe only once EVERY store that
+            can publish a handle into this local RETAINS it, and there are two —
+            `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
+            (IR_STORE_DYN). Xtensa had NEITHER until
+            feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45,
+            and releasing before the retains land turns a silent leak into a
+            double free (measured as a SIGSEGV on aarch64 when it was tried
+            there). Both arms exist now, so this one is safe.
+
+            UNLOCKED on purpose, as on the other cross backends:
+            EmitAcquireHeapLock is the x86-64 codegen BSS spinlock and does not
+            exist here, so ManagedElemKindLocked's --threadsafe refusal has
+            nothing to protect.
+            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          { Pointer-width load by hand: EmitLoadVarXtensa sizes by the symbol's
+            TypeKind, which for an array is its ELEMENT kind. }
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+          xtensa_l32i(XtensaArgRegN(0), XtensaArgRegN(0), 0);   { arg0 = handle }
+          EmitLoadDataRefXtensa(XtensaArgRegN(1), GetOrAllocSymRTTI(i));
+          EmitCallProc(procIdx);
         end;
     Exit;
   end;

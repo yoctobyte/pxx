@@ -12698,10 +12698,19 @@ test-riscv32: $(COMPILER)
 #
 # 55/21 at the first sweep on 2026-08-30, then 57/19 (the shared ABI-predicate
 # fix), 63/13 (IR_STORE_MEM gaining the typed stores it never had) and 64/12
-# (IR_INDEX gaining the two managed-string base shapes it never had). No sweep
-# has regressed a program. Every one of those three fixes was a MISSING ROW of
-# a rule the other five backends already carried — see
+# (IR_INDEX gaining the two managed-string base shapes it never had), then
+# 69/7 (Track A's pointer-aligned array frame slot, 599000083 — not an xtensa
+# change at all) and 84/6 (the dyn-array + managed-record IR ops, the whole-array
+# store arm they unmasked, and Halt(n)). No sweep has regressed a program.
+# Every one of those fixes was a MISSING ROW of a rule the other five backends
+# already carried — see
 # bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element.
+#
+# The list is the MEASURED matching set, and the counting is against a
+# reconstructed source list: the union of what `test-riscv32` and this target
+# compile, 129 sources. Earlier notes here said 142 and that figure cannot be
+# reproduced from this Makefile — treat the partition as N/matching, not as a
+# fixed denominator.
 test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/hello.pas $(TESTTMP)/test_xtensa_hello
 	./$(COMPILER) test/hello.pas $(TESTTMP)/test_xtensa_hello_x64
@@ -12829,7 +12838,11 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_frozen_string_cross_b305 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_frozen_string_cross_b305)" "$$($(TESTTMP)/test_xtensa_test_frozen_string_cross_b305_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_halt_exit_code.pas $(TESTTMP)/test_xtensa_test_halt_exit_code
 	./$(COMPILER) test/test_halt_exit_code.pas $(TESTTMP)/test_xtensa_test_halt_exit_code_x64
-	tools/expect_same.sh xtensa/test_halt_exit_code "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_halt_exit_code)" "$$($(TESTTMP)/test_xtensa_test_halt_exit_code_x64)"
+	# EXIT CODE asserted, not just stdout. This row was green for a day while
+	# Halt(5) exited 0 on xtensa, because it compared output only and the output
+	# was right -- bug-a-halt-n-exits-zero-on-hosted-xtensa. riscv32's row had
+	# the `echo "exit=$$?"` all along; xtensa's was written without it.
+	tools/expect_same.sh xtensa/test_halt_exit_code "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_halt_exit_code; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_halt_exit_code_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_arith.pas $(TESTTMP)/test_xtensa_test_i386_arith
 	./$(COMPILER) test/test_i386_arith.pas $(TESTTMP)/test_xtensa_test_i386_arith_x64
 	tools/expect_same.sh xtensa/test_i386_arith "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_arith)" "$$($(TESTTMP)/test_xtensa_test_i386_arith_x64)"
@@ -12902,7 +12915,69 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op
 	./$(COMPILER) test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64
 	tools/expect_same.sh xtensa/test_variant_self_assign_is_a_no_op "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op)" "$$($(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64)"
-	@echo "hosted xtensa: 64 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	# +19 on 2026-08-30: five from the pointer-aligned array frame slot (Track A,
+	# 599000083) and fourteen from the dyn-array/managed-record IR ops this
+	# backend never had. test_dynarray_whole_assign is the one to read: it did
+	# not COMPILE for xtensa, and the `b := a` store arm it asserts was ALSO
+	# missing -- a missing op hides every bug in the programs it stops compiling.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_array_of_const_types.pas $(TESTTMP)/test_xtensa_test_array_of_const_types
+	./$(COMPILER) test/test_array_of_const_types.pas $(TESTTMP)/test_xtensa_test_array_of_const_types_x64
+	tools/expect_same.sh xtensa/test_array_of_const_types "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_array_of_const_types)" "$$($(TESTTMP)/test_xtensa_test_array_of_const_types_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_call_result_member.pas $(TESTTMP)/test_xtensa_test_call_result_member
+	./$(COMPILER) test/test_call_result_member.pas $(TESTTMP)/test_xtensa_test_call_result_member_x64
+	tools/expect_same.sh xtensa/test_call_result_member "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_call_result_member)" "$$($(TESTTMP)/test_xtensa_test_call_result_member_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_collections.pas $(TESTTMP)/test_xtensa_test_collections
+	./$(COMPILER) test/test_collections.pas $(TESTTMP)/test_xtensa_test_collections_x64
+	tools/expect_same.sh xtensa/test_collections "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_collections)" "$$($(TESTTMP)/test_xtensa_test_collections_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_conformance_2.pas $(TESTTMP)/test_xtensa_test_conformance_2
+	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_xtensa_test_conformance_2_x64
+	tools/expect_same.sh xtensa/test_conformance_2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_conformance_2)" "$$($(TESTTMP)/test_xtensa_test_conformance_2_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_const_record_temp_managed.pas $(TESTTMP)/test_xtensa_test_const_record_temp_managed
+	./$(COMPILER) test/test_const_record_temp_managed.pas $(TESTTMP)/test_xtensa_test_const_record_temp_managed_x64
+	tools/expect_same.sh xtensa/test_const_record_temp_managed "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_const_record_temp_managed)" "$$($(TESTTMP)/test_xtensa_test_const_record_temp_managed_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_xtensa_test_cross_aggregate_stackargs
+	./$(COMPILER) test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_xtensa_test_cross_aggregate_stackargs_x64
+	tools/expect_same.sh xtensa/test_cross_aggregate_stackargs "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_aggregate_stackargs)" "$$($(TESTTMP)/test_xtensa_test_cross_aggregate_stackargs_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_float_return.pas $(TESTTMP)/test_xtensa_test_cross_float_return
+	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_xtensa_test_cross_float_return_x64
+	tools/expect_same.sh xtensa/test_cross_float_return "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_float_return)" "$$($(TESTTMP)/test_xtensa_test_cross_float_return_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_record.pas $(TESTTMP)/test_xtensa_test_cross_record
+	./$(COMPILER) test/test_cross_record.pas $(TESTTMP)/test_xtensa_test_cross_record_x64
+	tools/expect_same.sh xtensa/test_cross_record "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_record)" "$$($(TESTTMP)/test_xtensa_test_cross_record_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_record_array_store.pas $(TESTTMP)/test_xtensa_test_cross_record_array_store
+	./$(COMPILER) test/test_cross_record_array_store.pas $(TESTTMP)/test_xtensa_test_cross_record_array_store_x64
+	tools/expect_same.sh xtensa/test_cross_record_array_store "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_record_array_store)" "$$($(TESTTMP)/test_xtensa_test_cross_record_array_store_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_copy_nested.pas $(TESTTMP)/test_xtensa_test_dynarray_copy_nested
+	./$(COMPILER) test/test_dynarray_copy_nested.pas $(TESTTMP)/test_xtensa_test_dynarray_copy_nested_x64
+	tools/expect_same.sh xtensa/test_dynarray_copy_nested "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_copy_nested)" "$$($(TESTTMP)/test_xtensa_test_dynarray_copy_nested_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_field.pas $(TESTTMP)/test_xtensa_test_dynarray_field
+	./$(COMPILER) test/test_dynarray_field.pas $(TESTTMP)/test_xtensa_test_dynarray_field_x64
+	tools/expect_same.sh xtensa/test_dynarray_field "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_field)" "$$($(TESTTMP)/test_xtensa_test_dynarray_field_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_whole_assign.pas $(TESTTMP)/test_xtensa_test_dynarray_whole_assign
+	./$(COMPILER) test/test_dynarray_whole_assign.pas $(TESTTMP)/test_xtensa_test_dynarray_whole_assign_x64
+	tools/expect_same.sh xtensa/test_dynarray_whole_assign "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_whole_assign)" "$$($(TESTTMP)/test_xtensa_test_dynarray_whole_assign_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_forin_implicit_field.pas $(TESTTMP)/test_xtensa_test_forin_implicit_field
+	./$(COMPILER) test/test_forin_implicit_field.pas $(TESTTMP)/test_xtensa_test_forin_implicit_field_x64
+	tools/expect_same.sh xtensa/test_forin_implicit_field "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_forin_implicit_field)" "$$($(TESTTMP)/test_xtensa_test_forin_implicit_field_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_forin_member_access.pas $(TESTTMP)/test_xtensa_test_forin_member_access
+	./$(COMPILER) test/test_forin_member_access.pas $(TESTTMP)/test_xtensa_test_forin_member_access_x64
+	tools/expect_same.sh xtensa/test_forin_member_access "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_forin_member_access)" "$$($(TESTTMP)/test_xtensa_test_forin_member_access_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_xtensa_test_forin_member_temp_zeroinit
+	./$(COMPILER) test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_xtensa_test_forin_member_temp_zeroinit_x64
+	tools/expect_same.sh xtensa/test_forin_member_temp_zeroinit "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_forin_member_temp_zeroinit)" "$$($(TESTTMP)/test_xtensa_test_forin_member_temp_zeroinit_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interface_arc.pas $(TESTTMP)/test_xtensa_test_interface_arc
+	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_xtensa_test_interface_arc_x64
+	tools/expect_same.sh xtensa/test_interface_arc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interface_arc)" "$$($(TESTTMP)/test_xtensa_test_interface_arc_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_record_temp_init.pas $(TESTTMP)/test_xtensa_test_managed_record_temp_init
+	./$(COMPILER) test/test_managed_record_temp_init.pas $(TESTTMP)/test_xtensa_test_managed_record_temp_init_x64
+	tools/expect_same.sh xtensa/test_managed_record_temp_init "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_managed_record_temp_init)" "$$($(TESTTMP)/test_xtensa_test_managed_record_temp_init_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_method_implicit_field.pas $(TESTTMP)/test_xtensa_test_method_implicit_field
+	./$(COMPILER) test/test_method_implicit_field.pas $(TESTTMP)/test_xtensa_test_method_implicit_field_x64
+	tools/expect_same.sh xtensa/test_method_implicit_field "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_method_implicit_field)" "$$($(TESTTMP)/test_xtensa_test_method_implicit_field_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_single_in_aggregate.pas $(TESTTMP)/test_xtensa_test_single_in_aggregate
+	./$(COMPILER) test/test_single_in_aggregate.pas $(TESTTMP)/test_xtensa_test_single_in_aggregate_x64
+	tools/expect_same.sh xtensa/test_single_in_aggregate "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_single_in_aggregate)" "$$($(TESTTMP)/test_xtensa_test_single_in_aggregate_x64)"
+	@echo "hosted xtensa: 84 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

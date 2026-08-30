@@ -1384,6 +1384,57 @@ begin
     IR_STORE_SYM:
       begin
         si := IRA[node];
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        begin
+          { Whole DYNAMIC-array assignment (`b := a`). Xtensa was the last
+            backend without this arm, so the store fell through to the scalar
+            path and published the wrong one of IR_LEA's read/write results;
+            `Length(b)` then dereferenced garbage and SEGFAULTED. Same gap
+            arm32 and riscv32 each had
+            (bug-a-arm32-dynamic-array-assignment-has-no-store-arm).
+
+            It was invisible here rather than absent: test_dynarray_whole_assign
+            is the program that asserts it, and it did not COMPILE for xtensa
+            until IR_SETLEN_DYN landed in this same commit. A missing op hides
+            every bug in the programs it stops from compiling.
+
+            Retain the new handle, publish it, release the old one — element
+            aware via the symbol's layout descriptor. Must precede the
+            tyAnsiString arm: for `array of string` the symbol's TypeKind names
+            the ELEMENT and would wrongly claim the array. }
+          IREmitNodeXtensa(IRB[node]);                { a2 = new data pointer }
+          { Move semantics: a fresh user-function result already carries the +1
+            for this owner; intrinsics (IRA < 0) keep the conservative retain. }
+          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+          begin
+            procIdx := FindProc('PXXDynArrayIncRef');
+            if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
+            XtensaPushA2;
+            if XtensaABI = XTENSA_ABI_WINDOWED then
+              xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+            EmitCallProc(procIdx);
+            XtensaPopA2;                              { a2 = new handle again }
+          end;
+          argBase := XtSpillDepth;
+          XtensaPushA2;                               { slot 0 = new handle }
+          EmitSlotAddrXtensa(reg_xtensa_a5, si);
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            xtensa_l32i(reg_xtensa_a5, reg_xtensa_a5, 0);   { a5 = &caller_slot }
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a5, 0);     { a2 = old handle }
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 1));
+          xtensa_s32i(reg_xtensa_a3, reg_xtensa_a5, 0);     { publish new }
+          EmitLoadDataRefXtensa(reg_xtensa_a3, GetOrAllocSymRTTI(si));
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+          begin
+            xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+            xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);
+          end;
+          EmitCallProc(procIdx);                      { release(old, desc) }
+          XtensaPopA2;                                { a2 = new handle (value) }
+          Exit;
+        end;
         if TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray then
         begin
           { `f := 'hello'` where f is string[N]: xtensa had NO frozen store, so
@@ -1622,6 +1673,60 @@ begin
         end
         else
           EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a2, sz, sgn);
+      end;
+
+    IR_STORE_DYN:
+      begin
+        { ARC-correct whole dyn-array store into a slot ADDRESS (record/class
+          field or nested sub-array). Ported from riscv32, which ported it from
+          x86-64; xtensa was the last backend still taking the bare IR_STORE_MEM
+          handle share here, which does not retain.
+
+          That is not a missing optimisation, it is a use-after-free waiting for
+          a second owner to go away:
+
+              var m: array of array of Integer; r: array of Integer;
+              SetLength(r, 3); r[0] := 7;
+              SetLength(m, 2);
+              m[0] := r;              { shares r's block WITHOUT retaining }
+              SetLength(m, 3, 5);     { releases row 0 -> frees r's block }
+
+          It is also the arm that gates the dyn-array row of xtensa's scope-exit
+          release (EmitManagedLocalCleanupForTarget in ir_codegen.inc): releasing
+          a local is only safe once EVERY store that publishes a handle retains.
+          bug-a-xtensa-scope-exit-releases-one-of-seven-managed-kinds
+
+          Retain the new handle (unless it is a fresh user-function result
+          already carrying the +1), publish it into the slot, then element-aware
+          release the old one through the node-derived descriptor. }
+        IREmitNodeXtensa(IRB[node]);              { a2 = new handle }
+        if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+        begin
+          procIdx := FindProc('PXXDynArrayIncRef');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
+          XtensaPushA2;
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+          EmitCallProc(procIdx);
+          XtensaPopA2;                            { a2 = new handle again }
+        end;
+        argBase := XtSpillDepth;
+        XtensaPushA2;                             { slot 0 = new handle }
+        IREmitNodeXtensa(IRA[node]);              { a2 = slot address }
+        xtensa_mov(reg_xtensa_a5, reg_xtensa_a2);         { a5 = slot }
+        xtensa_l32i(reg_xtensa_a2, reg_xtensa_a5, 0);     { a2 = old handle }
+        xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 1));
+        xtensa_s32i(reg_xtensa_a3, reg_xtensa_a5, 0);     { publish new }
+        EmitLoadDataRefXtensa(reg_xtensa_a3, GetOrAllocNodeDynDesc(node));
+        procIdx := FindProc('PXXDynArrayRelease');
+        if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+          xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);
+        end;
+        EmitCallProc(procIdx);                    { release(old, desc) — nil-safe }
+        XtensaPopA2;                              { a2 = new handle (the value) }
       end;
 
     IR_STORE_MEM:
@@ -2574,7 +2679,31 @@ begin
     IR_TERMINATE:
       begin
         if IRIVal[node] = AN_HALT then
-          EmitExit(0)                            { bare-metal: park in a self-loop }
+        begin
+          { Halt(n) must EXIT WITH n. This arm emitted EmitExit(0)
+            unconditionally, with a comment claiming "bare-metal: park in a
+            self-loop" -- true for ESP bare, and simply wrong for hosted xtensa
+            Linux, which is the same arch. The argument was evaluated nowhere
+            and discarded, so `Halt(5)` returned 0 while every other target and
+            FPC returned 5. Character for character the riscv32 bug
+            (bug-a-halt-n-exits-zero-on-hosted-riscv32) -- including the
+            misleading comment, which is the tell that this is a COPY of the
+            pre-fix riscv32 arm rather than an independent oversight.
+
+            It was invisible for a different reason than the rest of tonight's
+            finds: test_halt_exit_code is IN the test-xtensa target and PASSES,
+            because that row compared stdout only. riscv32's row appends
+            `echo "exit=$?"`; xtensa's did not. A green differential row that
+            does not assert the thing the program exists to assert.
+            bug-a-halt-n-exits-zero-on-hosted-xtensa }
+          if (IRA[node] <> -1) and (TargetPlatform <> PLATFORM_ESP) then
+          begin
+            IREmitNodeXtensa(IRA[node]);         { a2 = the exit code }
+            EmitExitReg;
+          end
+          else
+            EmitExit(0);                         { no argument, or ESP bare: park }
+        end
         else if CurProc >= 0 then
           EmitProcEpilog(Procs[CurProc].RetSymIdx) { early Exit: jump out via epilogue }
         else
@@ -2616,6 +2745,116 @@ begin
         end
         else
           EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[node]));   { a2=dest, a3=src, a4=count }
+        EmitCallProc(procIdx);
+      end;
+
+    IR_SETLEN_DYN:
+      begin
+        { Nested / record-or-class-field SetLength via the portable
+          PXXDynSetLen(slotAddr, n, desc). IRA = slot-address node, IRB =
+          length; descriptor from the node metadata. Ported from riscv32; was an
+          "unsupported node" error on xtensa, the single largest cause in the 66
+          programs that would not compile for this target.
+
+          A plain dyn-array SYMBOL target has to bypass IR_LEA, which
+          dereferences a dynamic array's slot in every position — that would
+          hand PXXDynSetLen the CURRENT handle instead of the slot address, and
+          for a fresh (nil) array the helper's `arrSlot = nil` early exit makes
+          `SetLength(a, 2)` silently do nothing.
+          bug-a-riscv32-nested-dynamic-array-element-write-segfaults }
+        savedLVW := InLValueWrite;
+        InLValueWrite := True;
+        if (IRKind[IRA[node]] = IR_LEA) and Syms[IRA[IRA[node]]].IsArray and
+           (Syms[IRA[IRA[node]]].ArrLen = -1) then
+        begin
+          si := IRA[IRA[node]];
+          EmitSlotAddrXtensa(reg_xtensa_a2, si);
+          { var-array param: the frame slot holds the CALLER's slot address }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+        end
+        else
+          IREmitNodeXtensa(IRA[node]);            { a2 = slot addr }
+        InLValueWrite := savedLVW;
+        argBase := XtSpillDepth;
+        XtensaPushA2;                             { slot 0 = slotAddr }
+        IREmitNodeXtensa(IRB[node]);              { a2 = n }
+        XtensaPushA2;                             { slot 1 = n }
+        EmitLoadDataRefXtensa(reg_xtensa_a2, GetOrAllocNodeDynDesc(node));
+        XtensaPushA2;                             { slot 2 = desc }
+        procIdx := FindProc('PXXDynSetLen');
+        if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
+        xtensa_l32i(XtensaArgRegN(0), reg_xtensa_sp, XtensaSlotOff(argBase, 0, 3));
+        xtensa_l32i(XtensaArgRegN(1), reg_xtensa_sp, XtensaSlotOff(argBase, 1, 3));
+        xtensa_l32i(XtensaArgRegN(2), reg_xtensa_sp, XtensaSlotOff(argBase, 2, 3));
+        XtensaDropSlots(argBase, 3);
+        EmitCallProc(procIdx);
+      end;
+
+    IR_DYNUNIQUE:
+      begin
+        { Load this level's data pointer. IRA = slot-address node, so one deref,
+          in read AND write mode alike — a dynamic array is an FPC reference type
+          at every depth, so there is no nested copy-on-write. Full note in
+          ir_codegen.inc's IR_DYNUNIQUE
+          (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing).
+          Ported from riscv32; was an "unsupported node" error on xtensa. }
+        IREmitNodeXtensa(IRA[node]);              { a2 = slot addr }
+        xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);   { a2 = data pointer }
+      end;
+
+    IR_COPY_REC_MANAGED:
+      begin
+        { ARC record copy: retain src's managed fields, release dest's, then
+          move the bytes. Ported from riscv32; was an "unsupported node" error
+          on xtensa, which is what blocks any record with a managed field from
+          being copied by value on this target. }
+        argBase := XtSpillDepth;
+        IREmitNodeXtensa(IRB[node]);              { a2 = src }
+        XtensaPushA2;                             { slot 0 = src }
+        IREmitNodeXtensa(IRA[node]);              { a2 = dest }
+        XtensaPushA2;                             { slot 1 = dest }
+        { COM interface members: their own pass, source retained before the
+          destination is released so `a := a` nets zero (see the x86-64 arm).
+          Absent on the ESP profile, where FindProc simply answers -1.
+          bug-a-a-record-copy-does-not-retain-an-interface-field }
+        if RecordHasComIntfFields(IRC[node]) then
+        begin
+          procIdx := FindProc('PXXRecordRetainIntf');
+          if procIdx >= 0 then
+          begin
+            xtensa_l32i(XtensaArgRegN(0), reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
+            EmitLoadDataRefXtensa(XtensaArgRegN(1),
+              -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+          end;
+          procIdx := FindProc('PXXRecordReleaseIntf');
+          if procIdx >= 0 then
+          begin
+            xtensa_l32i(XtensaArgRegN(0), reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
+            EmitLoadDataRefXtensa(XtensaArgRegN(1),
+              -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+          end;
+        end;
+        procIdx := FindProc('PXXRecordRetain');
+        if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
+        xtensa_l32i(XtensaArgRegN(0), reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
+        EmitLoadDataRefXtensa(XtensaArgRegN(1),
+          -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+        EmitCallProc(procIdx);
+        procIdx := FindProc('PXXRecordRelease');
+        if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+        xtensa_l32i(XtensaArgRegN(0), reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
+        EmitLoadDataRefXtensa(XtensaArgRegN(1),
+          -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+        EmitCallProc(procIdx);
+        procIdx := FindProc('PXXMemMove');
+        if procIdx < 0 then Error('compiler error: PXXMemMove not found');
+        xtensa_l32i(XtensaArgRegN(0), reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
+        xtensa_l32i(XtensaArgRegN(1), reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
+        EmitLoadConstXtensa(XtensaArgRegN(2), Integer(IRIVal[node]));
+        XtensaDropSlots(argBase, 2);
         EmitCallProc(procIdx);
       end;
 

@@ -7,6 +7,7 @@ procedure EmitLoadImmA64(rd: Integer; v: Int64); forward;
 procedure EmitwriteSyscallArm32(dataOff, len: Integer); forward;
 procedure xtensa_j(offset: Integer); forward;
 procedure xtensa_movi(t, imm12: Integer); forward;
+procedure xtensa_mov(dst, src: Integer); forward;
 procedure xtensa_syscall; forward;
 procedure XtensaEmitLitHeader; forward;
 
@@ -467,8 +468,26 @@ procedure EmitExitReg;
 begin
   if TargetArch = TARGET_XTENSA then
   begin
-    { Bare metal: no exit syscall, and no status to report it with. }
-    xtensa_j(0);
+    if TargetPlatform = PLATFORM_ESP then
+      { Bare metal / IDF: no kernel, so no exit syscall and no status to report
+        it with -- park in a self-loop. }
+      xtensa_j(0)
+    else
+    begin
+      { Hosted linux (qemu-xtensa user mode). This arm used to park
+        UNCONDITIONALLY, treating xtensa as bare metal in a routine whose
+        sibling EmitExit had already learnt the difference twenty lines up --
+        the same shape as the riscv32 bug this whole routine was extracted to
+        stop (bug-a-halt-n-exits-zero-on-hosted-riscv32), one target later.
+
+        a2 holds the code (xtensa's natural result register). Move it to a6
+        FIRST: the xtensa syscall map is nr->a2 and arg0->a6, so loading the
+        number before the move would overwrite the code with 119.
+        bug-a-halt-n-exits-zero-on-hosted-xtensa }
+      xtensa_mov(6, 2);                              { a6 = arg0 = the code }
+      xtensa_movi(2, 119);                           { a2 = __NR_exit_group }
+      xtensa_syscall;
+    end;
     Exit;
   end;
   if TargetArch = TARGET_RISCV32 then
