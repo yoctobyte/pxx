@@ -787,3 +787,56 @@ something other than the subject; a token the subject prints cannot.
 `IRBitMask`, which is the deliberate non-move. There is no further driven
 extraction available without a decision about the arms, and slice 2 stays ruled
 off pending that.
+
+## SLOT RELEASED — frankC, 2026-08-30
+
+`compiler/ir.inc` is released back to the coordinator, which has held it on my
+behalf since the grant. Grant condition 5 (*tell the coordinator on release*) is
+met by this section and the message that cites it.
+
+**Verified, not asserted:** my tree is clean and has been since `06c3cd966`
+(09:08). Nothing of this campaign is uncommitted in this checkout, and no slice
+is half-applied — every one of 1, 1b and 1c landed complete with its own
+differential gate.
+
+**Released because the driven phase is DONE, not because it was interrupted.**
+The whole-routine census is dry (slice 1c). Every candidate satisfying *both*
+halves of the charter — reached only from C **and** C in subject — has moved.
+`IRBitMask` is the one remaining reached-only-from-C row and is a deliberate
+non-move, recorded above.
+
+### What the next holder must NOT do with this ticket
+
+**Do not dispatch this as "continue the carve-out."** There is no next slice to
+pick up, and the shape of the ticket hides that: it reads as an in-flight
+campaign with slices 1→5 sketched, and slices 2-5 are all arms.
+
+What remains is the seventeen arms, and the coordinator's own disposition
+(2026-08-29, above) governs them: *extract per-arm, **on demand**, driven by a
+queued ticket — never as a sweep*, with the general question left open until two
+or three real extractions exist so it can be settled from a diff rather than a
+sketch. An agent handed this ticket cold finds a dry census and a deferred
+decision — which is precisely the state that produces the sweep nobody asked
+for, at seventeen sites, in the shared dispatchers of five live lanes.
+
+**The ticket's next move is a queued C lowering ticket reaching an arm, not an
+agent reaching for this ticket.** It sits at prio 60 for the lane it unblocks,
+not because it has runnable work in it today.
+
+### The trap is LIVE for the next census, not historical
+
+Flagged by frankA, 2026-08-30, on the right grounds — *commits are not where the
+next holder looks first* — so it is restated here as a standing hazard rather
+than left as slice 1c's war story:
+
+`callers.py` counted **mentions, not calls**, and Pascal keeps prose in the same
+files as code. A *comment* naming a routine from outside `ir.inc`/`cir.inc`
+therefore fails the reached-only-from-C test and **silently removes that routine
+from the candidate list**. `IRBitStorageTk` was hidden this way by
+`cparser.inc:12547` — a sentence explaining the routine disqualified it — through
+two consecutive censuses.
+
+`fe78e0cb9` is the only thing disarming it. **A census re-implemented from
+scratch re-arms it**, and the failure is invisible in the expensive direction:
+there is no wrong row to be suspicious of, only a routine that is not there.
+Anyone running the census again should start from that fix, not from the rule.
