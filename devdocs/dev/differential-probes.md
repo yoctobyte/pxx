@@ -396,6 +396,24 @@ directions on different lines**
 The x86-64 half had been reachable on every run of the suite since the test was
 written, and was invisible to it for the whole of that time.
 
+**A second instance, and it is the stronger one, because the reference arm was
+wrong for a documented stretch of time rather than for one measurement.**
+`Int()` of a large double was broken on the 32-bit targets *and* on x86-64, in
+different ways, and the two halves were fixed months apart:
+
+| | i386 / arm32 | x86-64 |
+| --- | --- | --- |
+| `Int(1.0e300)` | saturated to 32 bits | `INT64_MIN` |
+| fixed in | [[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]] | [[bug-a-int-of-a-large-double-is-int64-min-on-x86-64]], later |
+
+The second ticket states the window in its own summary: *"the i386/arm32 half of
+this was fixed under [the other]; **x86-64 was never in scope and is still
+wrong**."* So there was a real period in which the **cross targets were correct
+and the reference was not** — and a cross-target red in that window, read by the
+rule above, would have been attributed exactly backwards. Note also that the
+x86-64 defect was found by **Track B, from a library**, not by the cross sweep
+that ran over it the whole time.
+
 **So: a red self-differential is a signal to add a THIRD arm, not to blame the
 non-reference side.** For a Pascal cross-target red, FPC is that arm and it is
 one `fpc -o` away; for C it is gcc. Reach for it *before* writing a cause into
