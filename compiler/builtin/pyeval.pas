@@ -126,6 +126,20 @@ function sorted(const v: Variant; key: Pointer = nil; reverse: Boolean = False):
   FIRST — so the scan keeps a strict > / < and never replaces on equality. }
 function min(l: TPyList; key: Pointer = nil): Variant; overload;
 function max(l: TPyList; key: Pointer = nil): Variant; overload;
+{ ...and over a DICT or a STR, which sorted() has carried since
+  bug-nilpy-sorted-over-a-string-segfaults and min/max never grew. Without them
+  the dict/str HANDLE bound to the TPyList overload above and was walked as a
+  list — `max(d, key=len)` answered "expected a number, got object" and
+  `max(s, key=f)` answered a bogus '>' TypeError. Latent until 7b73a385d moved
+  the callable->Pointer coercion into PyBindKwArgs, which made the `key:
+  Pointer` candidates VIABLE for a keyword call and so newly reachable for
+  receivers they cannot walk; before that these calls fell through to the
+  variant arm, which normalises through pylist_v.
+  regression-test-nilpy-test-nilpy-max-min-iterables }
+function min(d: TPyDict; key: Pointer = nil): Variant; overload;
+function max(d: TPyDict; key: Pointer = nil): Variant; overload;
+function min(const s: AnsiString; key: Pointer = nil): Variant; overload;
+function max(const s: AnsiString; key: Pointer = nil): Variant; overload;
 { ...and over a CURSOR: drain, then the routine that already exists. Declared
   AFTER the others on purpose — declaration order decides which class overload
   a VARIANT argument unwraps into, and putting these first made sum(v)/min(v)
@@ -5366,6 +5380,34 @@ begin
       Result := l.at(i);
     end;
   end;
+end;
+
+{ A dict yields its KEYS, as it does for `for`, list() and sorted() — the same
+  normalisation bug-nilpy-max-and-min-do-not-iterate-a-dict established for the
+  plain arms. Delegating to the TPyList routine rather than re-walking keeps the
+  empty-sequence ValueError and the first-wins tie rule in ONE place. }
+function min(d: TPyDict; key: Pointer): Variant; overload;
+begin
+  if d = nil then raise ValueError.Create('min() iterable argument is empty');
+  Result := min(d.keylist, key);
+end;
+
+function max(d: TPyDict; key: Pointer): Variant; overload;
+begin
+  if d = nil then raise ValueError.Create('max() iterable argument is empty');
+  Result := max(d.keylist, key);
+end;
+
+{ pystr_charlist, not a private byte walk: it is the one exploder, so a
+  non-ASCII string cannot answer per-byte here and per-character in sorted(). }
+function min(const s: AnsiString; key: Pointer): Variant; overload;
+begin
+  Result := min(pystr_charlist(s), key);
+end;
+
+function max(const s: AnsiString; key: Pointer): Variant; overload;
+begin
+  Result := max(pystr_charlist(s), key);
 end;
 
 function sorted(d: TPyDict; key: Pointer; reverse: Boolean): TPyList; overload;

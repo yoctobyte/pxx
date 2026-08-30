@@ -30,3 +30,24 @@ try:
     max([])
 except ValueError as e:
     print("ValueError:", e)
+
+# key= over every receiver SHAPE. 7b73a385d moved the callable->Pointer coercion
+# into PyBindKwArgs, which made the `key: Pointer` overloads VIABLE for a keyword
+# call and so newly reachable for receivers they cannot walk — a dict and a str
+# were then walked as a TPyList. min/max now carry the dict and str receivers sorted()
+# has, so these bind to a routine that can actually walk them.
+#
+# NOTE the deliberate gap: a LITERAL str or tuple receiver with key= is NOT here,
+# because it still fails — the keyword promoter re-targets on the argument's
+# STATIC type and a literal reaches no keyed overload
+# (bug-nilpy-keyword-arg-vs-overload-set). Named receivers only below; do not
+# read this test as covering literals.
+s = "bca"
+t = ("b", "a")
+print(max(d, key=len), min(d, key=len))
+print(max(s, key=len), min(s, key=len))
+print(max(t, key=len), min(t, key=len))
+g1 = (c for c in "bca")
+g2 = (c for c in "zya")
+print(max(g1, key=len), min(g2, key=len))
+print(max([[1, 2], [3]], key=len), min([[1, 2], [3]], key=len))
