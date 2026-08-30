@@ -137,12 +137,22 @@ classification decision is *for*.
 Four sections in unowned pages are headed as gates and open with a command that
 `.claude/hooks/no-full-suite.sh` now **denies**:
 
-| page | heading | first instruction |
-| --- | --- | --- |
-| `todo-dynamic-arrays.md:219` | **## Verification Gate** — "Run:" | `make test` then `make test-nilpy` |
-| `threads-todo.md:198` | **## 7. Exit Gate** — "Each phase must pass:" | "1. Default `make test`." |
-| `nil-python.md:83` | **## Regression Tests** | `make test-nilpy` |
-| `esp32-support.md:86` | "Run + validate" | `make test-esp-bare` |
+| page | heading | first instruction | |
+| --- | --- | --- | --- |
+| `todo-dynamic-arrays.md:219` | **## Verification Gate** — "Run:" | `make test` then `make test-nilpy` | **fixed** |
+| `threads-todo.md:198` | **## 7. Exit Gate** — "Each phase must pass:" | "1. Default `make test`." | **fixed** |
+| `nil-python.md:83` | **## Regression Tests** | `make test-nilpy` | **fixed** |
+| `esp32-support.md:86` | "Run + validate" | `make test-esp-bare` | **fixed** |
+
+> **All four repaired 2026-08-30 by frankD**, under a grant extended to exactly
+> these files and no others. Each now carries the per-fix loop and a pointer to
+> CLAUDE.md as the authority, with a dated `Superseded` note saying what the
+> instruction used to be. `threads-todo.md` was **annotated, not cut**: items 2-4
+> of its ladder are still correct and only item 1 moved, so deleting the item
+> would have destroyed the information that the rest still stands.
+> `esp32-support.md` keeps the `make test-esp-bare` sentence as a *description*
+> of what the target does — only the prescription went.
+> **Nothing else in the tree was touched, and the rest still waits on step 1.**
 
 The hook's own header comment names the reason it exists: an agent *"reached for
 `make test-nilpy` twice in one session."* **These pages are where that
@@ -232,9 +242,14 @@ the work, and roughly forty pages need one line each.
 
 Step 1 of the ask stands, and gets cheaper and more urgent:
 
-- **The four gate prescriptions above are separable and should not wait** for the
-  classification. They are actively harmful, they are four edits, and three of
-  the four pages are plainly live documents rather than records.
+- **The four gate prescriptions above were separable and did not wait** for the
+  classification — they are done, see the note under that table.
+- **Scope check for whoever picks this up.** The grep that finds those four
+  overstates by 6x: 24 of 58 pages *mention* a denied command and only four
+  *prescribed* one. Do not run the sweep on the grep. And the grep itself
+  **trips the hook**, which scans command text and does not care that the
+  command sits inside a search pattern — a `REFUSED` there is an artefact of the
+  search, not a finding.
 - The `licensing-concerns.md` heading is a **Track U** call, not a docs edit.
 - Everything else waits on classification, and the cheapest sufficient
   classification is one `**Status:**` line per page — not a rewrite.

@@ -221,7 +221,14 @@ pointers only.
 Run:
 
 ```sh
-make test
-make test-nilpy
+make compiler/pascal26     # the build -- and the byte-identical self-host fixedpoint
+<the phase's own repro>
 git diff --check
 ```
+
+**Superseded 2026-08-30.** This gate opened with `make test` and `make
+test-nilpy`. Both are now refused by `.claude/hooks/no-full-suite.sh`: breadth is
+Track T's sweep against the pushed sha, not something a lane hand-runs, and a
+hand-run delays the push that makes the work visible to the sweep at all.
+`tools/gate.sh quick` (~30s) is optional per fix and required before a pin.
+**CLAUDE.md's "THE PER-FIX LOOP" is the authority on gating**; this page is not.

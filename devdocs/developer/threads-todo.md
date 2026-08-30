@@ -198,7 +198,12 @@ output does not serialize allocation.
 
 Each phase must pass:
 
-1. Default `make test`.
+1. ~~Default `make test`.~~ **Superseded 2026-08-30** -- refused by
+   `.claude/hooks/no-full-suite.sh`, because breadth is Track T's sweep against
+   the pushed sha. The per-fix substitute is `make compiler/pascal26` plus the
+   phase's own repro, and that command *is* item 2 below, so item 2 already
+   covers it. `tools/gate.sh quick` before a pin. **Items 2-4 are unchanged and
+   still correct** -- only this one moved.
 2. Self-host bootstrap and binary fixedpoint.
 3. The same bootstrap and fixedpoint path compiled with `--threadsafe`.
 4. Focused pthread stress tests for the phase's shared runtime operations.
