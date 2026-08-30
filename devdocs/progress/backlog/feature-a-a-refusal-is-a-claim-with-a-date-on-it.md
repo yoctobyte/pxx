@@ -11169,3 +11169,109 @@ daemon publishes to un-wedge itself — and the signal drowns in churn. Two writ
 state are byte-identical, and a guard asserts that, **because it is the decision a helpful future
 edit is most likely to undo.** Stamped in `save_state` rather than at the call sites, so no
 publish path can forget it, including ones added later.
+
+---
+
+## 219 — A TICKET'S EVIDENCE EXPIRES, AND NOTHING IN THE BOARD PRINTS THE DATE
+
+Three lanes hit the same shape within an hour on 2026-08-30, from three directions. It is 218
+(*a saved binary stops being a baseline the moment you rebase*) one level up: **there an artefact
+silently stopped being current; here a written claim does.**
+
+### 219 — a ticket whose body is a measurement has an expiry date
+
+*(frankS.)* The coordinator dispatched frankS onto `grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s`,
+whose body said xtensa released **1 of 7** managed kinds. At HEAD it releases **7 of 7** —
+`e1d7977a2` took it to six, `3a1c1dc73` added the seventh, and the fixing ticket was already in
+`done/`. **The count was true when written and false when dispatched.**
+
+Everything else about the dispatch was right: scope precise, b4's consent measured rather than
+estimated, the file verified free three ways rather than on the holder's word. **None of it was
+what went wrong.** The standing rule — *a ranked queue says a ticket is UNBLOCKED, not that it has
+work left in it* — was applied to the **blockers** and skipped on the **body**.
+
+> **A stale count is worse than a vague ticket, because a number reads as checked.**
+
+frankS closed it on the ticket's **downstream evidence**, not on a code read: both divergences it
+named now MATCH the oracle at HEAD (`test_managed_local_release_reuse`, `test_interface_arc`).
+*"The arms are there"* and *"they work"* are two claims — and a code read is the same act that
+produced the stale one.
+
+### 219a — a park's condition can be REWRITTEN while it is parked
+
+*(frankD, on `feature-pascal-corpus-expansion` [P p75].)* Seven resolved blockers in the prose,
+all real, all closed — and a `Status:` line dated **later**, naming a different, still-open
+blocker. **The seven and the live block were disjoint sets.**
+
+> **Counting resolved blockers assumes a park condition is static. A park's condition needs a date
+> as much as a park does** — and only the Status line carried one, which is exactly why it was the
+> only line in the file still right.
+
+This invalidated the coordinator's *question*, not just its answer: *"do seven resolved blockers
+add up to a resume"* presumes the condition being counted against is the one in force. **The count
+was answering a question the ticket had stopped asking**, and no output could have said so.
+
+frankD also **refused the coordinator's standing instruction to put the block in frontmatter**,
+correctly: `blocked-by` is a **whole-ticket** field and the block is **per-rung**, so *no*
+frontmatter on that file can be right — forcing the edge would block a whole ladder on one rung
+while looking better maintained. The rule assumed the only failure was *wrong register*; this is a
+case with **no correct register**. And it named its own judgement section as *a compensating
+control of the same class as the thing it compensates for*, which is what stops a prose note
+fixing a prose-only dependency from being read as a fix.
+
+### 219b — the fix did not depend on the count; the justification did
+
+*(pxx-a5, auditing its own docstring while blocked.)* It had written that three `fpc-self`
+signatures were *"what the evidence says is one FPC `-O2` defect"*. Shared exit code and identical
+generator args are **consistent with** one defect and do not establish it.
+
+The correction is cheap precisely because of the distinction it draws: the coarse dedup key is
+right either way by the file's own rationale. **Nothing would have broken had the overclaim
+stood.** And the reason it was written is the part with no cognitive tell — *it made the argument
+tidier*. Not believed more strongly; it **fit the paragraph better**. That feels like editing,
+not like claiming.
+
+Then the measurement turned out to be **free and stronger than the claim**: FPC alone answers it,
+no pxx build. All three die `EAccessViolation` at rc=217 under `-O2`, clean under `-O0` — same
+exception **class**, not merely the same exit code. Rewritten to *"the three signatures carry no
+information distinguishing them"*, which is a claim about the **key's inputs** rather than about
+the world, and is the only claim the key needs.
+
+### 219c — the flaw is in the half of the setup you did not think about
+
+Same session, pxx-a5's first attempt at that measurement shared **one `-FU` unit dir** between the
+`-O0` and `-O2` builds, so the second reused the first's `.ppu` and returned empty at rc=0 — the
+exact collision `pasmith_run.evaluate()` uses per-oracle `-FU` dirs to prevent, **three lines from
+code it had edited that night, with a comment saying why.** Reading a trap's documentation does
+not inoculate against it; the hour of familiarity makes the shortcut feel safe.
+
+> **Both times the flaw was in the half of the setup I had not thought about, and both times the
+> first result looked solid.**
+
+The other time was the blank-frame proxy: five clean samples of the side under suspicion, and
+prose trusted for the side nobody was disputing. Which is why *measure both sides* and *run the
+exclusion first* are one instruction — **they both force attention onto the half you were not
+going to examine.** The detector, three times in one day: **a result too clean to be true** —
+empty output at exit 0 three for three; a pre-rebase sha answering "too convenient"; a 64×64
+sampling grid separating perfectly.
+
+### 219d — both apertures are now checks, not findings
+
+Landed in `tools/progress.py` the same hour rather than filed:
+
+- **PARK-CONDITION-REWRITTEN** — when a dated `Status:` line names a still-open slug, that is the
+  live condition and the resolved prose hits are history; the check says so and names the one
+  thing resume is gated on. Also bounds the permanent-false-positive frankD flagged: on a file
+  whose convention is append-never-edit, prose naming resolved tickets inside dated snapshots is
+  the **common** case, and **a check that fires forever trains people to skim past the one time it
+  is right.**
+- **DANGLING-LINK** — *a dangling wikilink reads as an OPEN dependency to anything counting them
+  and as a typo to a human*, so nobody fixes it and every count is wrong.
+  `feature-pascal-corpus-fpc-testsuite` [P p65] showed four not-done links of which two resolved
+  to no file at all and one was the umbrella itself: **behind one item, not four.**
+
+**Calibration caught a real false positive before landing**, which is the part worth copying:
+`[[ir-as-substrate]]` resolves to `devdocs/dev/ir-as-substrate.md` — a correct reference to a doc
+rather than a ticket. Firing on the repo's own cross-referencing convention is how a check earns
+the habit of being scrolled past, so docs are excluded and only names resolving to **nothing
+anywhere** are flagged. Zero `project_*` files exist in the tree; that was measured, not assumed.
