@@ -1976,7 +1976,16 @@ pre code{background:none;padding:0}
         # because both greps were written by reading the file's recent tail
         # where every entry uses a dash. A pattern derived from the current
         # convention cannot see the convention it replaced.
-        face_hdr = re.compile(r"^(#{2,4})\s+(?:FACE\s+)?(\d{1,3}[a-z]?)\s*[\u2014\-\u2013.]")
+        # The suffix may be a WORD, not just a letter: frankB filed
+        # `235d-control` as the control experiment for `235d`, and with a
+        # letter-only suffix the `-control` was eaten by the separator
+        # class, so the two parsed as ONE number and DUP-FACE-NUMBER cried
+        # wolf on a deliberate naming. A check that flags a correct
+        # convention earns the habit of being scrolled past, which is the
+        # failure this check exists to prevent. True duplicates are still
+        # caught: `235d` twice collides, and so does `235d-control` twice.
+        face_hdr = re.compile(
+            r"^(#{2,4})\s+(?:FACE\s+)?(\d{1,3}[a-z]?(?:-[a-z]+)?)\s*[\u2014\-\u2013.]")
         for t in self.tickets:
             seen_faces: dict = {}
             for n, line in enumerate(t.text.splitlines(), 1):
