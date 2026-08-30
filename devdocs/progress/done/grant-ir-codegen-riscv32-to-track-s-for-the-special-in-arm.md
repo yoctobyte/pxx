@@ -49,4 +49,4 @@ reason the gap was invisible there. Fixing the arm does not fix the message; tha
 `bug-a-iropname-has-no-entry-for-seven-ir-ops` territory and stays A's.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f843a8366.

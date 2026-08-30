@@ -71,4 +71,4 @@ re-priced: p25's argument (needs a raise crossing a frame that owns a managed lo
 by which blocker remains.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f843a8366.

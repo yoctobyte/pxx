@@ -52,4 +52,4 @@ entering it must state their routine, not just the file — the collisions that 
 been **semantic adjacencies with zero textual overlap**, which no diff-based check can see.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f843a8366.
