@@ -6,7 +6,7 @@
     tools/docaudit.py cites        only the citation check (hard findings)
     tools/docaudit.py limits       only the stated-limit scan (advisory)
     tools/docaudit.py --dir docs   audit a different tree (e.g. Track D's docs/**)
-    tools/docaudit.py targets  compiler/ir.inc ...
+    tools/docaudit.py targets [--all] compiler/ir.inc ...
                                DERIVED, not matched: for each comment naming
                                targets, diff the set it names against the
                                TARGET_* constants the code right below it
@@ -284,7 +284,7 @@ def check_comments(paths):
 
 
 TARGET_WORDS = {
-    'TARGET_X86_64': ('x86-64', 'x86_64', 'x86-64'),
+    'TARGET_X86_64': ('x86-64', 'x86_64'),
     'TARGET_I386': ('i386',),
     'TARGET_AARCH64': ('aarch64', 'arm64'),
     'TARGET_ARM32': ('arm32',),
@@ -293,29 +293,53 @@ TARGET_WORDS = {
     'TARGET_WASM32': ('wasm32', 'wasm'),
 }
 CODE_LOOKAHEAD = 6
+CODE_LOOKBEHIND = 3
 
 
-def check_targets(paths):
+def _targets_in(text, words=False):
+    if words:
+        return {k for k, ws in TARGET_WORDS.items()
+                if any(re.search(r'\b' + re.escape(w) + r'\b', text, re.I) for w in ws)}
+    return {k for k in TARGET_WORDS if re.search(r'\b' + k + r'\b', text)}
+
+
+def _short(k):
+    return k[7:].lower()
+
+
+def check_targets(paths, show_all=False):
     """Comments that name targets, diffed against the targets the code tests.
 
-    This is the only check here with an ORACLE rather than a pattern. It does
-    not ask whether a sentence looks like a limit; it asks whether the set of
-    targets the prose names equals the set of `TARGET_*` constants the
-    condition immediately below it actually tests. A widening that edits the
-    condition and not the comment is exactly the shape this catches, and it is
-    the shape with no sibling arm to grep for -- one edit invalidates every
-    sentence that stated the old scope, in files nobody touched.
+    The only check here with an ORACLE rather than a pattern: it does not ask
+    whether a sentence looks like a limit, it asks whether the set of targets
+    the prose names equals the set of `TARGET_*` constants the condition beside
+    it tests. A widening that edits the condition and not the comment is the
+    shape with no sibling arm to grep for -- one edit invalidates every sentence
+    that stated the old scope, in files nobody touched.
 
-    Worked example it reproduces: `ir.inc`'s AN_WRITE lowering says *"x86-64
-    only -- --threadsafe atomics are x86-64-only today"* on the line directly
-    above a condition testing four targets.
+    RANKING, and it is the whole precision story (frank-optimize-b4, over all of
+    compiler/**: 58 mismatches, 2 real, both from the smallest bucket):
 
-    Reports a comment/code MISMATCH, which is not automatically a defect: a
-    comment may name a target for a reason unrelated to the test below it.
-    Every hit needs a reader. But unlike `limits`, a hit here is a measured
-    disagreement between two things in the same file, not a guess about tone.
+      comment SUBSET of code   the widening shape. BOTH real findings were here.
+      partial overlap          possible, needs a read
+      comment SUPERSET of code often an over-broad comment; occasionally real
+      DISJOINT                 almost always an artefact, NOT a strong signal
+
+    Disjointness reads as the loudest hit and is the reliable signature of the
+    false positive, which is exactly backwards from how it looks. Its source is
+    a per-target ARM CHAIN, where the comment sits INSIDE its own arm and the
+    next condition down belongs to the next arm:
+
+        if TargetArch = TARGET_I386 then
+          { i386 carries the hidden destination pointer in ecx... }   <-- governed by the line ABOVE
+          ...
+        else if TargetArch = TARGET_AARCH64 then                      <-- what a forward-only window sees
+
+    So the window now looks BEHIND as well: a comment whose targets intersect a
+    condition just above it is governed by that condition and is not reported.
+    That removes the chain artefacts at the root instead of ranking them down.
     """
-    findings = 0
+    buckets = {'subset': [], 'partial': [], 'superset': [], 'disjoint': []}
     for path in paths:
         full = path if os.path.isabs(path) else os.path.join(ROOT, path)
         if not os.path.exists(full):
@@ -335,30 +359,56 @@ def check_targets(paths):
                     depth -= 1
                     if depth == 0 and start is not None:
                         body = ' '.join(' '.join(lines[start:i + 1]).split())
-                        code = ' '.join(lines[i + 1:i + 1 + CODE_LOOKAHEAD])
-                        said = {k for k, ws in TARGET_WORDS.items()
-                                if any(re.search(r'\b' + re.escape(w) + r'\b', body, re.I)
-                                       for w in ws)}
-                        tested = {k for k in TARGET_WORDS
-                                  if re.search(r'\b' + k + r'\b', code)}
-                        if said and tested and said != tested:
-                            findings += 1
-                            short = body if len(body) <= 300 else body[:297] + '...'
-                            print("   [%s:%d]" % (rel, start + 1))
-                            print("     comment names : %s" %
-                                  ', '.join(sorted(x[7:].lower() for x in said)))
-                            print("     code tests    : %s" %
-                                  ', '.join(sorted(x[7:].lower() for x in tested)))
-                            print("     %s\n" % short)
+                        said = _targets_in(body, words=True)
+                        if said:
+                            behind = ' '.join(lines[max(0, start - CODE_LOOKBEHIND):start])
+                            ahead = ' '.join(lines[i + 1:i + 1 + CODE_LOOKAHEAD])
+                            gov = _targets_in(behind)
+                            tested = _targets_in(ahead)
+                            # governed by the condition ABOVE -> its own arm, not a mismatch
+                            if not (gov and (said & gov)) and tested and said != tested:
+                                if said < tested:
+                                    b = 'subset'
+                                elif tested < said:
+                                    b = 'superset'
+                                elif said & tested:
+                                    b = 'partial'
+                                else:
+                                    b = 'disjoint'
+                                buckets[b].append((rel, start + 1, said, tested, body))
                         start = None
 
-    print("== comment/code target MISMATCHES: %d ==" % findings)
-    print("   The comment names one set of targets; the condition within %d lines"
-          % CODE_LOOKAHEAD)
-    print("   below it tests another. Not automatically a defect -- a comment can")
-    print("   name a target for an unrelated reason -- but it is a measured")
-    print("   disagreement between two things in the same file, not a guess.")
-    return findings
+    order = ['subset', 'partial', 'superset', 'disjoint']
+    total = sum(len(buckets[b]) for b in order)
+    label = {
+        'subset': 'comment SUBSET of code -- the widening shape, READ THESE FIRST',
+        'partial': 'partial overlap',
+        'superset': 'comment SUPERSET of code -- often an over-broad comment',
+        'disjoint': 'DISJOINT -- usually an artefact, not a strong signal',
+    }
+    for b in order:
+        rows = buckets[b]
+        if not rows:
+            continue
+        if b == 'disjoint' and not show_all:
+            print("\n== %s: %d (suppressed, pass --all) ==" % (label[b], len(rows)))
+            continue
+        print("\n== %s: %d ==" % (label[b], len(rows)))
+        for rel, ln, said, tested, body in rows:
+            print("   [%s:%d]" % (rel, ln))
+            print("     comment names : %s" % ', '.join(sorted(_short(x) for x in said)))
+            print("     code tests    : %s" % ', '.join(sorted(_short(x) for x in tested)))
+            print("     %s\n" % (body if len(body) <= 300 else body[:297] + '...'))
+
+    print("\n== comment/code target mismatches: %d ==" % total)
+    print("   A hit is a measured disagreement between two things in the same")
+    print("   file, not a guess about tone -- but it is not automatically a")
+    print("   defect. And a clean run is NOT coverage: the code beside a comment")
+    print("   is an oracle for what that condition tests, never for the whole")
+    print("   set. Measured case: a corrected DWARF comment read against its own")
+    print("   condition gives 'two targets' and the true answer is four, because")
+    print("   the 32-bit writer's identical gate is 190 lines away.")
+    return len(buckets['subset']) + len(buckets['partial'])
 
 
 def main():
@@ -373,7 +423,9 @@ def main():
     if what == 'targets':
         if len(argv) < 2:
             sys.exit("docaudit targets: name at least one source file")
-        sys.exit(1 if check_targets(argv[1:]) else 0)
+        show_all = '--all' in argv
+        files = [a for a in argv[1:] if a != '--all']
+        sys.exit(1 if check_targets(files, show_all) else 0)
 
     if what == 'comments':
         if len(argv) < 2:
