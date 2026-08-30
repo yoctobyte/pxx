@@ -142,4 +142,4 @@ the whole -50/-52 family is gone. The remaining ten are nine `LoadFile` and one
 `sysgetdents64`, which this decision does not gate.
 
 ## Log
-- 2026-08-30 — decided, commit PENDING-COMMIT.
+- 2026-08-30 — decided, commit d996319ab.
