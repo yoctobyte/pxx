@@ -2477,6 +2477,42 @@ begin
           rv32_lw(reg_a0, reg_a0, -8);
           Exit;
         end;
+        if procIdx = -100 then
+        begin
+          { LoadFile(path, dst): read the whole file named by `path` into the
+            managed-string `dst` through the portable PXXStrLoadFile helper,
+            then publish the new handle and release dst's old one. Managed dst
+            only. The file I/O is entirely in the helper -- what a backend owns
+            here is the refcount dance, which is why this is a call and not a
+            syscall, and it is the same publish-then-DecRef order IR_STORE_SYM
+            uses a thousand lines up rather than a second spelling of it.
+
+            Landed WITH the riscv32/xtensa arms of PXXSysOpenRO/PXXSysLseek/
+            PXXSysClose, never before them: those three had arms for four
+            targets and none for these two, and their {$else} returns -1, so
+            this arm on its own compiles a LoadFile that hands back an empty
+            string in place of a diagnostic. }
+          argNode := IRB[node];
+          left := IRA[argNode];            { arg1 = path }
+          valNode := IRB[argNode];
+          right := IRA[valNode];           { arg2 = dst }
+          if not ((IRKind[right] = IR_LOAD_SYM) and
+                  (Syms[IRA[right]].TypeKind = tyAnsiString)) then
+            Error('target riscv32: LoadFile expects a managed-string destination');
+          si := IRA[right];
+          IREmitNodeRISCV32(left);         { a0 = path handle (nul-terminated) }
+          procIdx := FindProc('PXXStrLoadFile');
+          if procIdx < 0 then Error('compiler error: PXXStrLoadFile not found');
+          EmitCallProc(procIdx);           { a0 = new handle (refcount 1) }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
+          EmitLoadVarRISCV32(si);          { a0 = dst's OLD handle }
+          procIdx := FindProc('PXXStrDecRef');
+          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(procIdx);
+          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);    { pop new }
+          EmitStoreVarRISCV32(si);
+          Exit;
+        end;
         if procIdx < 0 then
         begin
           { Type-pun passthroughs: Ord/Chr/Integer()/LongWord() are identity on

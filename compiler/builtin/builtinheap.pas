@@ -2199,6 +2199,18 @@ begin
   Result := __pxxrawsyscall(5, Int64(path), 0, 0);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$elseif defined(CPU_RISCV32)}
+  { asm-generic, like aarch64 above: there is NO plain `open` in that table, so
+    this is openat(AT_FDCWD = -100, path, O_RDONLY, 0). }
+  Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$elseif defined(CPU_XTENSA)}
+  { xtensa's OWN table, measured under qemu-xtensa -strace: openat is 288, not
+    the 56 riscv32 and aarch64 use. xtensa DOES still carry a legacy open (8),
+    and this deliberately does not use it -- openat is what the other generic
+    targets here issue, and the matching SysOpen builtin in
+    ir_codegen_xtensa.inc lowers to openat for the same reason, so the two
+    routes to a file descriptor on this target cannot drift apart. }
+  Result := __pxxrawsyscall(288, -100, Int64(path), 0, 0);
 {$else}
   { NO ARM FOR THIS TARGET — see the group comment above. Returning the POSIX
     failure value is the whole point: before this was one chain it was four
@@ -2211,6 +2223,10 @@ begin
 end;
 
 function PXXSysLseek(fd, offset, whence: NativeInt): Int64;
+{$if defined(CPU_RISCV32)}
+var res, r: Int64;   { STACK locals -- this group runs under the heap lock and
+                       must allocate nothing (see the group comment). }
+{$endif}
 begin
 {$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(8, fd, offset, whence);
@@ -2220,6 +2236,32 @@ begin
   Result := __pxxrawsyscall(19, fd, offset, whence);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(62, fd, offset, whence);
+{$elseif defined(CPU_RISCV32)}
+  { rv32's 62 is _llseek(fd, off_hi, off_lo, loff_t *result, whence), NOT plain
+    lseek -- rv32 has no plain lseek at all. The 3-arg form leaves the result
+    pointer NULL and the kernel returns EINVAL, which is not a hypothesis:
+    qemu-riscv32 -strace on test_cross_loadfile printed
+
+      openat(AT_FDCWD,"test/hello.pas",O_RDONLY) = 3
+      llseek(3,0,2,NULL,UNKNOWN)                 = -1 errno=22
+      read(3,0x2b2ad050,-22)                     = -1 errno=14
+
+    -- a size of -1 flowing into read as a count, and LoadFile publishing an
+    EMPTY string with no error anywhere. This mirrors PalBackendSeek in
+    lib/rtl/platform/posix/platform_backend.pas, which already carries the
+    identical split and the identical reason; the two must not drift.
+
+    NOTE the sibling comment in that same file's rv32 block still says the plain
+    form is tolerated by qemu-user for small offsets. The strace above falsifies
+    that for the RETURN VALUE case, which is the one this helper needs.
+    bug-b-platform-backend-rv32-comment-claims-plain-lseek-is-tolerated }
+  res := 0;
+  r := __pxxrawsyscall(62, fd, (offset shr 32) and $FFFFFFFF,
+                       offset and $FFFFFFFF, Int64(@res), whence);
+  if r < 0 then Result := r else Result := res;
+{$elseif defined(CPU_XTENSA)}
+  { xtensa's own table again: lseek is 15. Same small-offset caveat as rv32. }
+  Result := __pxxrawsyscall(15, fd, offset, whence);
 {$else}
   { No arm — see PXXSysOpenRO. A garbage size here is the worse half of the
     defect: PXXStrLoadFile feeds it straight to PXXAlloc(size + hdr + 1). }
@@ -2237,6 +2279,10 @@ begin
   Result := __pxxrawsyscall(6, fd);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(57, fd);
+{$elseif defined(CPU_RISCV32)}
+  Result := __pxxrawsyscall(57, fd);                { asm-generic }
+{$elseif defined(CPU_XTENSA)}
+  Result := __pxxrawsyscall(9, fd);                 { xtensa's own table }
 {$else}
   { No arm — see PXXSysOpenRO. }
   Result := -1;

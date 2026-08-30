@@ -2511,6 +2511,31 @@ begin
                          'addi a2, a2, -8', 'l32i a2, a2, 0', '.lzero:']);
           Exit;
         end;
+        if procIdx = -100 then
+        begin
+          { LoadFile(path, dst): read the whole file named by `path` into the
+            managed-string `dst` through the portable PXXStrLoadFile helper,
+            then publish the new handle and release dst's old one. Managed dst
+            only. Same shape as arm32/i386/aarch64 -- the FILE I/O is entirely
+            in the helper, so what a backend owns here is the refcount dance
+            and nothing else, which is why this is a call and not a syscall. }
+          argNode := IRB[node];
+          left := IRA[argNode];            { arg1 = path }
+          valNode := IRB[argNode];
+          right := IRA[valNode];           { arg2 = dst }
+          if not ((IRKind[right] = IR_LOAD_SYM) and
+                  (Syms[IRA[right]].TypeKind = tyAnsiString)) then
+            Error('target xtensa: LoadFile expects a managed-string destination');
+          si := IRA[right];
+          IREmitNodeXtensa(left);          { a2 = path handle (nul-terminated) }
+          EmitXtensaHelperCall(XtensaHelperProc('PXXStrLoadFile'), 1);
+          XtensaPushA2;                    { save the new handle (refcount 1) }
+          EmitLoadVarXtensa(si);           { a2 = dst's OLD handle }
+          EmitStrRefCallXtensa('PXXStrDecRef');
+          XtensaPopA2;                     { a2 = the new handle }
+          EmitStoreVarXtensa(si);
+          Exit;
+        end;
         if procIdx < 0 then
         begin
           { Type-pun passthroughs: Ord/Chr/Integer()/LongWord() are identity on

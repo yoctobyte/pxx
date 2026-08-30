@@ -12828,13 +12828,15 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in_x64
 	tools/expect_same.sh riscv32/test_rv32_in "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_in)" "$$($(TESTTMP)/test_rv32_in_x64)"
 	# SKIP test/test_cross_managed_aggregate_locals.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_cross_loadfile.pas on riscv32: the CODEGEN arm is written and
-	#      banked, but PXXSysOpenRO/PXXSysLseek/PXXSysClose in
-	#      compiler/builtin/builtinheap.pas have no riscv32 or xtensa arm and
-	#      their {$else} returns -1, so LoadFile would compile and hand back an
-	#      EMPTY string. That is strictly worse than this block: the block is
-	#      the safety property here, and it stays until the runtime lands.
-	#      bug-a-loadfile-runtime-wrappers-have-no-riscv32-or-xtensa-arm
+	# LoadFile: the codegen arm AND the three runtime wrappers landed together --
+	# PXXSysOpenRO/PXXSysLseek/PXXSysClose had arms for four targets and none for
+	# these two. rv32's syscall 62 is _llseek(fd,hi,lo,*result,whence), not plain
+	# lseek: the 3-arg form returns EINVAL, the size comes back -1 and LoadFile
+	# publishes an EMPTY string with no error. Measured under qemu-riscv32
+	# -strace, not inferred.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile_x64
+	tools/expect_same.sh riscv32/test_rv32_loadfile "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_loadfile)" "$$($(TESTTMP)/test_rv32_loadfile_x64)"
 	# by-value SysOpen/SysRead/SysWrite/SysClose/SysFchmod: the family had no arm
 	# on either 32-bit generic backend. rv32 is asm-generic and has NO plain
 	# open, so SysOpen lowers to openat(AT_FDCWD, path, flags, 0).
@@ -13461,6 +13463,12 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_sysopen_family.pas $(TESTTMP)/test_xtensa_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_xtensa_sysopen_family_x64
 	tools/expect_same.sh xtensa/test_xtensa_sysopen_family "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sysopen_family)" "$$($(TESTTMP)/test_xtensa_sysopen_family_x64)"
+	# LoadFile. xtensa has BOTH plain lseek(15) and _llseek(17), so unlike rv32
+	# the ordinary 3-arg path is correct here -- same helper, different call
+	# shape per target, which is exactly why the wrappers are per-arch.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile_x64
+	tools/expect_same.sh xtensa/test_xtensa_loadfile "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_loadfile)" "$$($(TESTTMP)/test_xtensa_loadfile_x64)"
 	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
 	# which answered FALSE while b printed BBBB with Length 4 -- the equality
 	# guard was gated on tyAnsiString only, so both-frozen fell through to the
