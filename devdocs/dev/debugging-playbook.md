@@ -1838,3 +1838,60 @@ bytes**, and the fix was correct the whole time.
 - **A regression test nobody has watched fail is not yet a regression test.**
   Run it against the pre-fix binary. If it passes there, it does not test what
   you think, and you will never learn that from a green suite.
+
+## A Pascal comment cannot contain its own delimiters, and the error lands nowhere near the edit
+
+**Cost: five wasted builds in one session (frankC, 2026-08-30), all self-inflicted, all the same mistake wearing different clothes.**
+
+This dialect's comments **nest in both styles**, and the consequence is that the
+most natural thing to write in an explanatory comment — the syntax you are
+explaining — silently terminates or extends it.
+
+```pascal
+{ a struct member cannot have a body: a missing } closes here, not below }
+```
+
+The comment ends at the **first** closing brace, so `closes here, not below }`
+becomes code. Same trap in the other style, from the other direction:
+
+```pascal
+(* the arm at (*name) is the one that... *)
+```
+
+`(*` **nests**, so this comment is now one level deep and swallows everything
+until a second `*)` — often hundreds of lines away, sometimes the rest of the file.
+
+A string literal inside a comment is not a refuge either: `{ pass '}' to close }`
+fails identically, because the lexer is not reading a string, it is counting
+delimiters.
+
+### The tell, and why it wastes a whole build each time
+
+The compiler reports where the *damage surfaces*, not where the comment is:
+
+```
+pascal26:2998: error: unexpected character
+pascal26:3187: error: unterminated comment
+```
+
+Both of those were **a hundred-plus lines below a comment I had just edited**, in
+code I had not touched. The instinct at that point — read the reported line,
+find nothing wrong with it, start widening — is the expensive path, and it is the
+wrong one every time.
+
+> **`unexpected character` or `unterminated comment` at a line you did not edit,
+> in a build you started right after editing a comment, is the comment. Look
+> UP, at your own last edit, before you look at anything the error names.**
+
+### The rule
+
+**A Pascal comment must not contain `{`, `}`, or `(*` in either style.** When the
+comment's subject *is* brace syntax — and in a C frontend it constantly is —
+**spell the delimiters out in words**: "a closing brace is missing above this
+line", not the character. That is why `CEndCMember`'s diagnostics read the way
+they do; it was not a stylistic choice.
+
+This belongs with the tool-aperture entries above rather than the measurement
+ones: nothing was mismeasured, the instrument reported correctly on what it was
+given, and the input had been corrupted by an edit that looked inert. A comment
+is the one construct you edit while believing it cannot change behaviour.

@@ -12935,6 +12935,81 @@ Run it after any edit that adds a call — it is cheaper than the build already 
 the loop, and it is the only thing standing between a green self-host and a
 bootstrap that cannot happen.
 
+## 238 — A DEFECT PRICED FROM ITS NOISIEST INSTANCE IS PRICED FROM THE INSTANCE LEAST LIKELY TO HURT ANYONE (frankC, 2026-08-30)
+
+I filed `bug-c-a-function-definition-after-an-unclosed-struct-is-eaten-as-a-member`
+at **prio 35**, from this:
+
+```c
+struct S {
+  int a;
+/* no closing brace */
+int helper(int x) { return x + 1; }
+```
+
+which produces a wrong, confusing error somewhere below. Annoying, cosmetic,
+p35. That number was honest and it was wrong, because I priced the shape that
+*announced itself*.
+
+The same defect has a quieter shape, and it is the same bug with the error
+removed:
+
+```c
+struct S {
+  int a;
+/* no closing brace */
+int helper(int x) { return x + 1; }
+};
+```
+
+Here the closing `};` that the struct is missing is supplied by the *next*
+declaration's terminator. The struct closes. **`helper` is consumed as a struct
+member and the translation unit compiles clean, with a function silently absent
+from the program.** No diagnostic, no exit code, nothing to grep. The call site
+fails later, elsewhere, or — if it is a function pointer table or a
+conditionally-used helper — does not fail until it runs.
+
+**The loud instance is the one that cannot hurt you, because it stops.** I
+ranked the defect by the instance that hands the user a message, which is the
+instance where the compiler is *working*: refusing, locating, telling. The
+instance worth a priority is the one where it accepts and lies. Priced from
+there it is not a p35 diagnostic-quality item; it is silent wrong behaviour, and
+the compat table's own escape rule says so in a row I had read that week.
+
+> **When you price a defect, ask what it looks like with the error message
+> deleted.** If that shape exists, that is the defect. The version that speaks up
+> is the version already half-mitigated, and it is also the version you will
+> naturally reproduce first, because it is the one that shows you where it is.
+
+This is [[#232]]'s population problem in the pricing dimension — the predicate
+was right, the sample was not — and it shares an ancestor with the silent-skip
+rule in `gcc_diff_probe.sh`: a case that produces no output is not a case that
+produces no harm.
+
+### The corollary, which is about test rows and cost me a wrong count
+
+Fixing it, I wrote nine `test-core` rows and started to describe them as
+evidence. They are not one kind of thing:
+
+| kind | what it does | is it a before/after? |
+| --- | --- | --- |
+| **proving** rows | the broken input now behaves | **yes** — it changes at the fix |
+| **fencing** rows | neighbouring legal input still behaves | **no** — green before, green after |
+
+`cmember_body` proves the fix: it was wrong, now it is right. `cmember_lenient`
+fences it: an anonymous struct member with a legal shape that my new refusal
+must *not* claim, and it passed identically before I wrote a line. Both are worth
+committing and only the first is evidence that anything happened.
+
+> **The rows that prove a fix and the rows that fence it are different rows, and
+> only the first kind is a before/after.** Counting them together inflates a
+> change's demonstrated blast radius by exactly the number of things you were
+> careful about — which is the number you are most tempted to quote.
+
+The practical form: when you report "N tests", say how many were red before. If
+the answer is "one", say *one*, and let the other eight be what they are —
+insurance, not proof.
+
 ## 239 — THE PIPE ATE THE SYNTAX ERROR, AND `0 HITS` WAS THE ANSWER I WAS HOPING FOR (frank-coordinator, 2026-08-30)
 
 Building `PROSE-EDGE-NOT-IN-FRONTMATTER`, tightening it after a first version
