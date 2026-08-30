@@ -1,7 +1,8 @@
 ---
 prio: 55
 track: P
-owner: unassigned
+owner: frank-rust
+status: done
 ---
 
 # The address of a virtual class method cannot be lowered (`AN_CLASS_VIRTUAL_CALL`, kind 88)
@@ -79,3 +80,53 @@ type-checked against the stub, so clearing one wall can expose another. This is
 the first instance. Update the count in [[feature-pascal-corpus-expansion]]
 rather than treating the earlier partition as wrong: it listed what must be
 built, not a prediction of first-try success.
+
+---
+
+## RESOLVED — already fixed, and fixed BEFORE the current pin
+
+The ticket's own 18-line repro compiles and runs on HEAD `a9a4818ab6c8`, and it
+also compiles on `pinned` `faf762981c3c`, so this was closed by someone else's
+work between `e82c2f63a242` (the binary the ticket was filed against) and the
+current pin. No `IR_UNSUPPORTED (kind 88)` anywhere.
+
+Verified against FPC on more than "it compiles" — the pointer is **called
+through**, for a base and an overriding descendant, so a statically-resolved and
+a vmt-resolved answer are distinguishable:
+
+| observable | pxx | FPC 3.2.2 |
+| --- | --- | --- |
+| `nonnil1` / `nonnil2` | TRUE / TRUE | TRUE / TRUE |
+| `distinct` (base vs override differ) | TRUE | TRUE |
+| `call1` through the taken address | 42 | 42 |
+| `call2` through the taken address | 210 | 210 |
+
+**The corpus site is unblocked.** All 24 initialisers in
+`generics.defaults.pas:2381-2404` use the `THashService<T>.SelectX` spelling,
+and that spelling compiles — confirmed directly, with the generic, on both
+binaries.
+
+## But two sibling receiver spellings are still broken — filed separately
+
+`TryParseParenlessMethodRef` (`pasparser_call.inc:723`) is the single place that
+reads `obj.M` with no `@` and no argument list as a method REFERENCE. It handles
+**two** receiver spellings and there are **four**:
+
+| arm | receiver | pxx | FPC |
+| --- | --- | --- | --- |
+| B | a class NAME — `TSvc.Pick`, `THashService<T>.Select` | works | works |
+| D | an instance VARIABLE — `s.Pick` | works | works |
+| A | **bare name** inside the class's own method — `TSel(Pick)` | `wrong number of parameters in call to TSvc.Pick` | works |
+| C | **metaclass VARIABLE** — `mc: class of TSvc; TSel(mc.Pick)` | same error | works |
+
+Same on `pinned` and on HEAD, so A and C never worked; they are not a
+regression.
+
+They are out of this ticket's scope — its defect, its repro and its corpus site
+are all the B arm — but they are the same concept reached by two more spellings,
+which is the sibling check `normalise-dont-special-case.md` asks for before
+closing. Filed as
+[[bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings]].
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
