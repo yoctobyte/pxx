@@ -354,7 +354,15 @@ def oracle_pas(limit=None):
         src, cline = b2s[b]
         cmd = ['fpc', '-Mobjfpc', '-vw', '-FU' + units, '-o' + os.path.join(tmp, b)]
         for d in re.findall(r'-(?:Fu|I)([A-Za-z0-9_./-]+)', cline):
-            if os.path.isdir(d):
+            # ONLY test/ companion dirs. lib/rtl holds sysutils.pas, math.pas,
+            # classes.pas, strings.pas, dateutils.pas and strutils.pas, every one
+            # of which SHADOWS the FPC unit of the same name -- so passing
+            # -Fulib/rtl makes fpc compile OUR rtl and the oracle stops being
+            # independent: our implementation, built by fpc, agreeing with our
+            # implementation built by pxx. A row "confirmed" that way is
+            # circular, and it would inflate DERIVED, which is the direction
+            # this audit must never be wrong in.
+            if os.path.isdir(d) and (d == 'test' or d.startswith('test/')):
                 cmd += ['-Fu' + d, '-Fi' + d]
         cmd.append(src)
         try:
@@ -501,7 +509,10 @@ def _rank(rows, b2s, buildable, E2, limit):
             # run's entire hit=0.00 band turned out to be that artefact, not signal.
             txt = open(src, errors='replace').read()
             for d in re.findall(r'-(?:I|Fu)([A-Za-z0-9_./-]+)', cline):
-                if os.path.isdir(d):
+                # test/ companions only -- scanning lib/rtl would find almost any
+                # token somewhere in a large RTL and drive every hit toward 1.0,
+                # which destroys the metric rather than widening it.
+                if os.path.isdir(d) and (d == 'test' or d.startswith('test/')):
                     for fn in sorted(os.listdir(d)):
                         if fn.endswith(('.pas', '.inc', '.h', '.c')):
                             txt += open(os.path.join(d, fn), errors='replace').read()
