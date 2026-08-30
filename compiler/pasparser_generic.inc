@@ -1175,6 +1175,22 @@ begin
     else
     begin
       scan := cur;
+      { `class abstract;` / `class sealed(TBase);` -- the Delphi modifiers sit
+        between `class` and the heritage list or the `;`. Unskipped, the
+        bodyless test below looks at `abstract` rather than at the `;`, decides
+        the declaration HAS a body, and hands it to the depth loop -- which has
+        no `end` to count down to and swallows every following declaration
+        until it finds one. That is what walled rtl-generics at
+        `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);`
+        and reported the damage 24 lines EARLIER, on a line that was fine.
+        Needs all three of generic + modifier + bodyless: the non-generic path
+        consumes the modifiers itself (pasparser_decl.inc ~4449) and a real
+        body ends at its own `end`.
+        This is the sibling of the same omission in CollectNestedTypeNames
+        above -- one decision, two hand-rolled copies. }
+      while (scan < TokCount) and (Tokens[scan].Kind = tkIdent) and
+            (CaseEqual(GetTokenStr(scan), 'abstract') or
+             CaseEqual(GetTokenStr(scan), 'sealed')) do Inc(scan);
       if (scan < TokCount) and (Tokens[scan].Kind = tkLParen) then
       begin
         depth := 0;

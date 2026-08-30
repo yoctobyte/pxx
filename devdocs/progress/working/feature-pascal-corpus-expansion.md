@@ -948,3 +948,124 @@ Do not start from the include hypothesis and do not reuse the shadowing repro �
 that is a different bug. Start by asking why `generics.defaults` parses cleanly
 alone and fails when reached through `generics.collections`, and get a
 reduction before believing any mechanism, including this paragraph's framing.
+
+---
+
+## 2026-08-30 (frankA) — the wall is REDUCED, and the reported line was never the defect
+
+**Read this section instead of the "LIVE STATUS" table above.** That table's
+wall (`unknown type: TKey` in `generics.defaults.pas`) is **gone**, and the
+CORRECTION section above it — which says the wall is unreduced and warns against
+the include hypothesis — is now itself stale. Third time this ticket has gone
+stale on the same field. See the note at the end about recording the *recipe*
+rather than the answer.
+
+### Census, and the attribution is deliberately unlocated
+
+| binary | first error | total |
+| --- | --- | --- |
+| `pinned` | `defaults:46 unknown type: TKey` | 20 |
+| `a60f92ba830a` (HEAD minus the shard0-6-2 whitelist) | `collections:120 unknown type: PT` | 4 |
+| `22c67e5ea61e` (HEAD, shard0-6-2 landed) | `collections:120 unknown type: PT` | 4 |
+| `3309b9ba6609` (HEAD + the fix below) | `collections:146` (a new wall, see below) | **1** |
+
+Rows two and three are identical, so **the `TKey` wall did not move because of
+tonight's whitelist** — consistent with the bound-name harvest being unchanged
+at `names=293 cap=512 overflow=0`. It moved for something already in HEAD that I
+have not identified. Recorded as unattributed on purpose: a fix landing shortly
+before an improvement is the cheapest wrong attribution available, and one extra
+A/B run against the pre-fix binary was the whole cost of not making it. **There
+is something in HEAD nobody has accounted for.**
+
+### Root cause of the 4-error wall — and it is 24 lines away from where it is reported
+
+`generics.collections.pas:144`:
+
+```pascal
+TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);
+```
+
+A **generic** class, declared **bodyless**, carrying a **modifier**.
+`ParseGenericTemplateNamed` detects bodyless forms up front because there is no
+`end` for its depth loop to count down to — but its test looked at the token
+right after `class` for `(` or `;` and never skipped `abstract` / `sealed`. It
+saw `abstract`, concluded the declaration had a body, and let the depth loop
+swallow the following declarations until it found somebody else's `end`.
+
+**The damage was reported at line 120**, on `function DoGetCurrent: T` — a line
+with nothing wrong with it, in a class that compiles fine alone. That is why
+every reduction aimed at line 120's text failed, including the four this ticket
+already records and one more I wrote tonight. **The reported line was not the
+defect and never had been.**
+
+Confirmed by truncation at real declaration boundaries:
+
+| cut | verdict |
+| --- | --- |
+| `cut@125` (TEnumerator only) | clean |
+| `cut@141` (adds TEnumerable, `PT = ^T`, `TEnumerator<PT>`) | clean |
+| `cut@144` (adds the bodyless generic) | **fails** |
+
+Ruled out first, by measurement rather than argument: the Delphi rewrite (`p.dgen`
+shows injections on the *uses* at 133/137/139/144/152 and **none** at 120 or
+135), and harvest overflow (`names=293 cap=512 overflow=0`).
+
+### Fix, and it is a sibling I should have found last commit
+
+`compiler/pasparser_generic.inc` — skip `abstract`/`sealed` before the bodyless
+test. **The identical omission was fixed in `CollectNestedTypeNames` earlier
+tonight, in this same file, and I did not grep for the second copy.**
+`devdocs/dev/normalise-dont-special-case.md` says in as many words: *if you fix a
+bug on one arm of a double case, grep for the sibling before closing the
+ticket.* One decision, two hand-rolled copies, one of them fixed.
+
+Needs all three of generic + modifier + bodyless, which is why it survived: the
+non-generic path consumes the modifiers itself (`pasparser_decl.inc` ~4449) and
+was always right, and a real body ends at its own `end`.
+
+Regression test `test/test_generic_bodiless_class_modifier.pas`, in `test-core`,
+asserting `bodiless 7 3 1`. Per-form, one form per program, against
+`22c67e5ea61e`:
+
+| form | before | after |
+| --- | --- | --- |
+| `TAbs<T> = class abstract;` | FAIL | ok |
+| `TDerived<T> = class abstract(TBase<T>);` | FAIL | ok |
+| `TSealedB<T> = class sealed(TBase<T>);` | FAIL | ok |
+| `TFwd<T> = class;` (no modifier — the control) | ok | ok |
+
+The control is what isolates the modifier as the variable. It is **not** in the
+test program: FPC rejects `TFwd<T> = class;` as *"Type TFwd$1 is not completely
+defined"*, so including it would have cost the oracle — pxx accepting it is the
+ordinary accept-more divergence, not a defect. I found that by running FPC on
+the finished file, which is the only reason the header does not now carry a
+false "FPC agrees" claim.
+
+### The new wall, one error
+
+```
+generics.collections.pas:146: generic templates must be class, record,
+interface, array or procedure declarations
+  near: T PT >>> object strict private
+```
+
+`TCustomPointersCollection<T, PT> = object` — a generic **object** type, which
+`ParseGenericTemplateNamed` does not accept. Distinct from everything above; not
+started.
+
+### For the next holder — and for this ticket's own health
+
+This ticket has now gone stale three times on the same field, each time because
+it recorded **what the wall was** rather than **how to re-derive it**. The wall
+is a function of the whole compiler and moves faster than the ticket is read.
+The re-derivation is four commands:
+
+```sh
+R=library_candidates/rtl-generics/packages/rtl-generics/src
+printf 'program d;\nuses generics.collections;\nbegin\nend.\n' > /tmp/d.pas
+./compiler/pascal26 -Fu$R -Fi$R /tmp/d.pas /tmp/d 2>&1 | grep -c 'error'
+# then: truncate at declaration boundaries to find the FIRST bad line,
+# because the reported line has twice now not been the defect.
+```
+
+**Do not trust any error line in this unit without a truncation bisect.**

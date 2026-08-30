@@ -5568,6 +5568,17 @@ test-core: $(COMPILER)
 	@# / 7 pass before the fix) is recorded in the file header. Oracle: FPC.
 	./$(COMPILER) test/test_generic_bound_name_harvest.pas $(TESTTMP)/test_genboundharvest26
 	test "$$($(TESTTMP)/test_genboundharvest26)" = "boundharvest 45 A 1111111111"
+	@# A GENERIC class declared bodyless WITH a Delphi modifier (`class abstract;`,
+	@# `class sealed(TBase);`) was mis-parsed: the bodyless test in
+	@# ParseGenericTemplateNamed looked at the token after `class` without
+	@# skipping `abstract`/`sealed`, so it decided the declaration had a body and
+	@# the depth loop -- which has no `end` to find -- swallowed the following
+	@# declarations. Needs all three of generic + modifier + bodyless. Reported
+	@# the damage on an EARLIER, innocent line, which is why reductions aimed at
+	@# the reported line never reproduced. Per-form before/after split and the
+	@# FPC divergence on the fourth form are in the file header. Oracle: FPC.
+	./$(COMPILER) test/test_generic_bodiless_class_modifier.pas $(TESTTMP)/test_genbodiless26
+	test "$$($(TESTTMP)/test_genbodiless26)" = "bodiless 7 3 1"
 	@out=$$(PXXDBG=p.dgen ./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26 2>&1); \
 	 decl=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TBox'); \
 	 real=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TPairU'); \
