@@ -95,7 +95,15 @@ def recent(path, minutes):
             cand = bl.split(":", 1)[1].split("(")[0].strip()
             if _LANE_OK.match(cand):
                 sess = cand[:18]
-                break
+            else:
+                # PRESENT BUT REJECTED is not ABSENT, and printing them the same
+                # is the night's own failure one turn further in: not a wrong
+                # thing that looks checked, but a FIX THAT LOOKS APPLIED. A lane
+                # that wrote a trailer, reasoned about it, and had it silently
+                # rejected goes on believing it is attributable. Name it so the
+                # remedy is "fix the value", not "add the field".
+                sess = "!bad"
+            break
         if not sess:
             for tok in body.split():
                 if tok.startswith("session_"):
@@ -133,9 +141,14 @@ def report(paths, minutes):
         print(f"\n{p}")
         print(f"  {len(rows)} commit(s) / {count} in {minutes}m — {who}")
         print(f"  most recent: {age}m ago  session={s}  {subj[:78]}")
+        bad = sess.get("!bad", 0)
         if unknown:
-            print(f"  !! {unknown} of them carry NO session trailer — '?' means "
+            print(f"  !! {unknown} carry NO Lane:/session trailer — '?' means "
                   f"unidentified, not unowned. You cannot tell who to ask.")
+        if bad:
+            print(f"  !! {bad} carry a Lane: line whose VALUE does not parse "
+                  f"(spaces, punctuation) — the field is present and doing "
+                  f"nothing. Fix the value, not the absence.")
         if age <= 30:
             print(f"  !! HOT — last write {age}m ago. Ask before opening it.")
 
