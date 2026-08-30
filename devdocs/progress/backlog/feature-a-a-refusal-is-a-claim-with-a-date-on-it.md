@@ -10778,3 +10778,108 @@ Renaming the one local would have landed minidom the same day and buried a compi
 Platonic-code rule, executed including the part most sessions skip: the parked implementation was
 proven **inert** rather than assumed inert — compiled the weakref test with the `.parked` file
 present, 11 checks OK, confirming the glob and the import-time read both ignore it.
+
+---
+
+## 215 — AN INSTRUMENT CAN ONLY EXPRESS THE STALENESS IT WAS BUILT TO EXPRESS
+
+*(pxx-a5, 2026-08-30, correcting the coordinator's diagnosis of the mis-laned `test-asm` cluster.
+Three corrections; the coordinator's half-right mechanism is the dangerous one.)*
+
+### 215a — a half-right diagnosis whose fix would have LOOKED like it worked
+
+I diagnosed the five `track: P` mis-filings as: the failing step was unrecorded, so twatch fell
+back to `guess_track(src)` on a `.pas` path. Real, and **not sufficient**. pxx-a5 ran the step's
+own sources through `guess_track` before building anything:
+
+```
+test/test_asm_emit_x64.pas -> P
+test/test_x64enc.pas       -> P
+compiler/compiler.pas      -> P
+compiler/x64enc.inc        -> None
+```
+
+`TRACK_BY_SRC` ends in a `.pas` catch-all, so **with the step recorded, all five still land on
+P.** The step names the right file; the file names the wrong lane.
+
+> *"Had I taken the diagnosis as given, I would have shipped a name table, watched the daemon
+> restart, and found the same tickets still filed as P — with the table looking like it worked
+> because two of five would have moved."*
+
+That is the shape to keep. **A partial fix built on a half-right cause does not fail cleanly — it
+moves some of the population and validates the wrong model with the movement.** Two of five is a
+better result than zero and a worse outcome, because zero would have sent someone back to the
+cause. The half I had right is exactly what would have made the half I had wrong invisible.
+
+### 215b — the daemon was stale, and no report can say so
+
+I suggested checking whether the watcher **clone** was behind. It was not: the step code landed at
+`ae26693a3` (05:06) and **is** an ancestor of the tested sha `97c5fba007f9`; the tickets were
+filed at 05:28. The clone had the code. The **running process** did not — a Python daemon holds
+its code from start. Third instance of `a-success-message-is-not-a-verdict.md`: *daemon up,
+healthy, publishing — running the old binary.*
+
+> **A tstate report carries the sha it TESTED but nothing about the code that produced it.**
+> `seven.json` has no version field and `twatch.py` stamps none. Those two shas diverge at exactly
+> one moment: when a watcher fix lands — which is the one moment you need to tell them apart.
+
+And the reason both of us went to the clone: **clone-staleness is the only staleness the reports
+can express.** Neither of us chose it over the alternative; the vocabulary had one word in it.
+This is the general form and it is worth more than the instance —
+
+> **You will reason inside the failure modes your instrument can name, and the one it cannot name
+> will not feel like an omission. It will feel like it did not happen.**
+
+Live consequence, recorded because nothing else will announce it: **the routing fix takes effect
+only on daemon restart, and no report will say when.** Tickets filed before that restart keep
+arriving mis-laned.
+
+### 215c — a pre-rebase sha that nearly became the premise, four hours after flagging the trap
+
+pxx-a5's first ancestry check used `75d66c356` — the local sha from before `sync.sh` rebased it —
+and returned **NOT an ancestor**, which would have *confirmed* the clone-is-behind story. It had
+landed as `ae26693a3`. This is the trap it identified in the coordinator's own `DANGLING-SHA`
+check four hours earlier.
+
+> *"Found it only because the answer was too convenient."*
+
+That is the whole detector, and it is the only one available: **a wrong answer that confirms your
+hypothesis is the one you do not check.** The rebase trap is not rare or subtle here — it is
+documented, tooled, and was described by this same session the same night. It still landed,
+because the wrong answer arrived in agreement.
+
+### 215d — an entry overrides evidence; a guess announces itself
+
+The fix is `TRACK_BY_JOB` for job names that are **mechanisms** rather than **subjects**
+(`test-asm`, `test-emit-obj`, `test-debug-g`, `test-opt`, `test-selfcompile-odiff`, the five
+cross-target backends, T's `tools-devtest*`), plus `("compiler/", "A")` in `TRACK_BY_SRC`. Two
+ordering constraints carry the entire correctness argument, and the comment says not to sort the
+tuple:
+
+- `TRACK_BY_JOB` sits **after the timeout arm** — *a timeout is a budget fact, and nothing about a
+  mechanism's name says the budget is that mechanism's fault.*
+- `("compiler/", "A")` sits **behind** carve-outs for `pasparser*` / `pylexer` / `pyparser` /
+  `clexer` / `cparser` / `cpreproc`, which live under `compiler/` and are not A's.
+
+And the reason the table was kept deliberately short, omitting names whose source already answers
+correctly (`test-nilpy`, `test-c-conformance`):
+
+> **An entry overrides evidence, so a wrong one is silent and permanent** — where a path guess at
+> least prints "guessed" for a human to correct.
+
+That is a real asymmetry between an authority and a heuristic, and it argues for fewer entries
+rather than more, which is the opposite of the instinct.
+
+### 215e — a table that matches nothing is indistinguishable from coverage
+
+One of the ten guards checks every `TRACK_BY_JOB` key against testmgr's `TIERS`, because **a
+typo'd key never matches, and a table matching nothing looks exactly like a table matching
+everything correctly.** Same shape as 187's population floor: the failure mode of a lookup is
+silence, and silence is what success also sounds like.
+
+The control turns 4 red and reproduces the historical banner verbatim; restore is sha-identical at
+0 red. And one guard **failed correctly on its first run** — it asserted the hedge must not
+contain the word "guessed", while the new note legitimately uses that word in a sentence
+explaining why guessing from the source would be wrong. **The guard was cruder than the property
+it defended**; it now checks the exact `**Track guessed as` opener the other arms use. A guard
+whose first failure is its own over-breadth is the cheapest possible way to discover it.
