@@ -3680,6 +3680,37 @@ test-nilpy: $(COMPILER)
 	# callable-as-identity and usable as an annotation for free.
 	./$(COMPILER) test/test_nilpy_typevar_and_newtype.npy $(TESTTMP)/test_nilpy_tvnt26
 	$(TESTTMP)/test_nilpy_tvnt26 | diff -u test/test_nilpy_typevar_and_newtype.expected -
+	# --- chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring
+	# Three .npy subjects that no rule referenced. They exist, they have an
+	# .expected beside them, they pass at HEAD -- and none of that made them
+	# covered: `test-nilpy` and `test-core` ENUMERATE their tests, so a file is
+	# gated only if someone also edited this Makefile, and for these three nobody
+	# did. They are wired HERE ONLY, never also into test-core: a second copy is
+	# a second expectation to keep in sync, which is what the ratchet in
+	# tools/npy_cross_target_expectation_devtest.py exists to stop growing.
+	#
+	# ORACLES, and two of the three have NONE -- say so rather than let a reader
+	# assume CPython agreement was checked. NilPy is upward-compatible with
+	# CPython in ONE direction, so CPython is an oracle only for source it can
+	# parse; `import 'file.pas' as x` it cannot, and rejects with a SyntaxError.
+	#
+	#   str_method_return_type_on_a_variable   CPython 3, byte for byte
+	#   keyword_call_tuple_on_a_skipped_default   none -- pxx-only import form
+	#   str_method_vs_pascal_string_helper        none -- pxx-only import form
+	#
+	# For the two with no oracle the .expected is the AUTHOR'S, committed with
+	# the test; it is not today's output recorded and relabelled. That is the
+	# same call the eleven above made for test_pyexec_trampoline_abi.
+	./$(COMPILER) test/test_nilpy_str_method_return_type_on_a_variable.npy $(TESTTMP)/test_nilpy_strmretvar26
+	$(TESTTMP)/test_nilpy_strmretvar26 | diff -u test/test_nilpy_str_method_return_type_on_a_variable.expected -
+	# a keyword argument that lands past a SKIPPED default, through a Pascal
+	# procedure imported into NilPy (test/kwpadprobe.pas)
+	./$(COMPILER) test/test_nilpy_keyword_call_tuple_on_a_skipped_default.npy $(TESTTMP)/test_nilpy_kwpaddef26
+	$(TESTTMP)/test_nilpy_kwpaddef26 | diff -u test/test_nilpy_keyword_call_tuple_on_a_skipped_default.expected -
+	# a str METHOD must win over a Pascal string helper of the same name that an
+	# imported unit brings into scope (test/strhelperprobe.pas)
+	./$(COMPILER) test/test_nilpy_str_method_vs_pascal_string_helper.npy $(TESTTMP)/test_nilpy_strmhelper26
+	$(TESTTMP)/test_nilpy_strmhelper26 | diff -u test/test_nilpy_str_method_vs_pascal_string_helper.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
@@ -10029,7 +10060,11 @@ test-core: $(COMPILER)
 	# the two extra o3_* probes landed the DAY AFTER that list was taken, which
 	# is the ticket's own argument in miniature -- the orphan population grows
 	# faster than it drains, so twenty-one was a snapshot and never a census.
-	# The check_test_wiring gate below is what turns it into one.
+	# tools/test_wiring_gate_devtest.py is what turns it into one -- it runs
+	# tools/check_test_wiring.py and fails, and `tools-devtest` collects it
+	# into testmgr's quick and limited tiers. This line used to say "the
+	# check_test_wiring gate below", and there was no gate below it or
+	# anywhere; three more subjects accumulated behind that sentence.
 	#
 	# EVERY expectation here is an oracle, not a recording. Eight of the eleven
 	# were compiled and run under FPC 3.2.2 (-Mobjfpc) and match byte for byte;

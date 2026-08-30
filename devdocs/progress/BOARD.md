@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (325)
+## backlog (324)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -180,7 +180,6 @@ _none_
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 20 | chore | PAUSED 2026-08-21 after batch 4 with 15 of the original 98 files left, and all 15 are in lanes the user has DEFERRED (13 Track N pyeval/pyexec, 2 Track F softfloat) — resume when either is un-deferred; nothing is half-applied. DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-a-typesize-answers-8-for-a-record-and-the-warning-is-where-no-caller-looks | A | 45 | chore | TypeSize(tyRecord) returns 8, and the warning that a caller must use RecSize() for the full size lives on the return-value line INSIDE symtab.inc, where no caller reads it. One confirmed misuse cost a SIGSEGV and a silently-wrong value in the Rust frontend. There are 319 TypeSize call sites across compiler/**; most are legitimate. This is a classification problem, not a defect list — do not file 319 tickets. | — |
-| chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring | A | 40 | chore | Wire the nine that pass, then gate the checker | chore-t-six-orphan-gui-tests-the-blanket-was-hiding |
 | chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run | B | 20 | chore | The dlopen loader is unverified by an actual RUN on arm32/aarch64 because this host has no cross ld-linux or cross libc — /usr/arm-linux-gnueabihf/lib and /usr/aarch64-linux-gnu/lib do not exist at all. Host provisioning, not code: no ticket resolving will make a cross libc appear. Split out of feature-real-dynlib-loader so that feature stops resurfacing at p45 with nothing actionable in it. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness | T | 35 | chore | twatch's auto-filed note tells the reader 'this commit CANNOT be the cause ... look at flakiness or box load' whenever a $(PXX_STABLE)-gated job goes red. The deduction is right and the conclusion is wrong: unchanged stable bytes rule out the COMMIT, not the PINNED BINARY, which is stale relative to any compiler fix landed since the last pin. That third branch is missing and it is the common case — the watcher re-files the same already-fixed finding every sweep until the pin moves. | — |
@@ -638,9 +637,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2715)
+## done (2716)
 
-2715 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2716 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -879,7 +878,6 @@ _none_
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [T] bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable
 - [p 40] [A] chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping
-- [p 40] [A] chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring
 - [p 40] [T] chore-t-board-html-render-is-13s-of-every-ticket-move
 - [p 40] [T] chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code

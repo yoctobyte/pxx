@@ -4,7 +4,7 @@ title: "Wire the nine orphan tests that already pass at HEAD, then gate tools/ch
 track: A
 type: chore
 prio: 40
-status: backlog
+status: done
 found: 2026-08-29
 found-by: pxx-a5 (Track T)
 owner: pxx-a5
@@ -277,3 +277,106 @@ noisy and gets triaged within the hour, a wrong green is silent and waits years.
 **Unblocks when:** the six in `chore-t-six-orphan-gui-tests-the-blanket-was-hiding`
 are wired or exempted. Nothing else stands in the way; the checker itself is
 fixed and its devtest carries 17 guards.
+
+---
+
+## 2026-08-30 — the gate LANDED. Unblocked, wired, gated, and the comment that
+## claimed a gate is now true.
+
+`chore-t-six-orphan-gui-tests-the-blanket-was-hiding` is in `done/`, so the
+block above cleared. `check_test_wiring` then read **6**, not 0 — the population
+had grown again while the ticket waited, which is the third time this ticket has
+recorded that and the last time it will have to.
+
+### The six, and they were three different things
+
+| file | disposition |
+| --- | --- |
+| `test_nilpy_str_method_return_type_on_a_variable.npy` | **wired** into `test-nilpy` |
+| `test_nilpy_keyword_call_tuple_on_a_skipped_default.npy` | **wired** |
+| `test_nilpy_str_method_vs_pascal_string_helper.npy` | **wired** |
+| `kwpadprobe.pas` | **exempted** — a Pascal unit the first of those imports |
+| `strhelperprobe.pas` | **exempted** — same, for the third |
+| `test_generic_nested_type_as_argument.pas` | **exempted** — see below |
+
+Triaged by running them, not by reading them. All three `.npy` subjects pass at
+HEAD; the two `.pas` files are helper units, matching the `kwarg_overload_unit`
+/ `qualified_default_unit` precedent already in `UNWIRED.txt`.
+
+`test_generic_nested_type_as_argument.pas` **does not compile at HEAD** —
+`unknown type: PT` — and it is not a test at all: it is the 5-row reduction for
+[[bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument]],
+which is `unfinished/`. Exempted with a reason that names the ticket and says to
+delete the line in the commit that closes it, so the exemption is
+self-liquidating rather than permanent. (That ticket is the same unscoped
+blacklist behind tonight's tgeneric87 regression, so the two will likely close
+together.)
+
+### Oracles, including the two that have none
+
+Stated plainly because a future reader would otherwise assume CPython agreement
+was checked, and for two of the three it cannot be:
+
+| file | oracle |
+| --- | --- |
+| `str_method_return_type_on_a_variable` | **CPython 3**, byte for byte |
+| `keyword_call_tuple_on_a_skipped_default` | **none** — `import 'kwpadprobe.pas' as kw` is a NilPy extension CPython rejects with a SyntaxError |
+| `str_method_vs_pascal_string_helper` | **none** — same, `import 'strhelperprobe.pas' as probe` |
+
+NilPy is upward-compatible with CPython in ONE direction, so CPython is an
+oracle only for source it can parse. For the two without one, the `.expected` is
+the AUTHOR'S, committed with the test — not today's output recorded and
+relabelled. Same call the eleven above made for `test_pyexec_trampoline_abi`.
+
+**Wired into `test-nilpy` only, never also into `test-core`.** A second copy is
+a second expectation to keep in sync, thousands of lines away, which is exactly
+what [[bug-t-89-nilpy-expectations-are-duplicated-across-two-targets-with-nothing-keeping-them-in-sync]]
+ratchets. Adding to both would have grown the population that ticket just froze.
+
+### The gate: `tools/test_wiring_gate_devtest.py`
+
+**Not `make test`, which this ticket suggested.** `make test` is not run by the
+per-fix loop — CLAUDE.md's hook denies it — so a gate there fires only in Track
+T's sweep, many commits after the edit that broke it, and that latency IS the
+defect being fixed. `tools-devtest` globs `tools/*devtest*.py` and testmgr runs
+it in both the `quick` and `limited` tiers, so this fires about when the file
+lands. It is a runner for the incumbent, not a second checker: the advisory NOTE
+lines the checker prints on a PASS are passed through rather than swallowed,
+because those are its report on the quality of the exemption list.
+
+### The comment that claimed a gate is now true
+
+`Makefile` said, in this ticket's own earlier block:
+
+> `# The check_test_wiring gate below is what turns it into one.`
+
+There was no gate below it or anywhere; `grep -rn check_test_wiring` returned
+two comments and one mention in `gui_suite.sh`. That is a closing note asserting
+a property the tree lacks — the same shape as the comment behind tonight's
+`regression-test-pascal-conformance-shard0-6-2` — and unlike most of that family
+its cost is measurable: **six subjects accumulated behind that sentence** while
+it claimed the population was bounded. The line now names the file that does the
+work and records what it used to say, so the correction is legible rather than
+silent.
+
+### Verified
+
+- The three new rules run clean, and each was then **deliberately corrupted** (a
+  sentinel appended to its `.expected`) and re-run: **3 of 3 went red**, each
+  `.expected` restored and the restore confirmed by `cmp`. A rule that cannot
+  fail is not a test.
+- The gate's own negative control: one exemption removed from `UNWIRED.txt` →
+  RED, exit 1, naming `test/kwpadprobe.pas`. File restored and the restore
+  confirmed by sha.
+- `tools/npy_cross_target_expectation_devtest.py` still 3 green — the three new
+  rules are single-target, as intended.
+- `make compiler/pascal26`: `converged after 1 round(s)`, self-host fixedpoint
+  verified, `837193ea839c`.
+
+The checker now exits 0, and the only thing it says is its standing advisory
+about one exemption whose sole references are two tools/ scripts naming the path.
+
+**This ticket is done, and so is its parent's last step.**
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
