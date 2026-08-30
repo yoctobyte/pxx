@@ -770,7 +770,16 @@ var
   ins: array[0..MAX_TEMPLATE_PARAMS*2+8] of TRawToken;
   ok, isParamForm, specB: Boolean;
   si: Integer;
+  { qualified arguments minted by THIS rewrite, emitted at insertAt below.
+    Local, not the QNeed* set ParseSpecialization uses: this runs at rewrite
+    time and that runs later, and sharing one pending list would let whichever
+    ran second clear the other's. }
+  dgQName: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
+  dgQPath: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
+  dgQCount: Integer;
+  qPath, qMint: AnsiString;
 begin
+  dgQCount := 0;
   tname := Templates[ti].Name;
   np := TemplateNParams[ti];
   seenCnt := 0;
@@ -815,7 +824,39 @@ begin
         if (j < TokCount) and (na < MAX_TEMPLATE_PARAMS) and
            IsConcreteTypeArgKind(Tokens[j].Kind) then
         begin
-          argTok[na] := Tokens[j]; Inc(na); Inc(j);
+          { A QUALIFIED argument -- `TBox<TOuter.TPair>` -- is normalised to the
+            same minted single identifier the objfpc arm uses, and its alias
+            declaration is emitted at insertAt below, ahead of the tuple
+            declarations that name it. Without this the group simply failed to
+            match, the rewrite left it alone, and the parser reported `unknown
+            type: TBox`.
+            bug-p-a-qualified-type-name-cannot-be-a-generic-argument }
+          if (Tokens[j].Kind = tkIdent) and (j + 1 < TokCount) and
+             (Tokens[j + 1].Kind = tkDot) then
+          begin
+            qPath := GetTokenStr(j);
+            while (j + 2 < TokCount) and (Tokens[j + 1].Kind = tkDot) and
+                  (Tokens[j + 2].Kind = tkIdent) do
+            begin
+              qPath := qPath + '.' + GetTokenStr(j + 2);
+              j := j + 2;
+            end;
+            qMint := QualArgAliasName(qPath);
+            argTok[na].Kind := tkIdent;
+            argTok[na].IVal := 0;
+            argTok[na].Line := Tokens[j].Line;
+            argTok[na].SOffset := TokCharsAppend(qMint);
+            argTok[na].SLen := Length(qMint);
+            if dgQCount < MAX_DGEN_TUPLES then
+            begin
+              dgQName[dgQCount] := qMint;
+              dgQPath[dgQCount] := qPath;
+              Inc(dgQCount);
+            end;
+          end
+          else
+            argTok[na] := Tokens[j];
+          Inc(na); Inc(j);
           if (j < TokCount) and (Tokens[j].Kind = tkComma) then Inc(j)
           else Break;
         end
@@ -971,6 +1012,19 @@ begin
       end;
     end;
     Inc(i);
+  end;
+
+  { qualified-argument aliases FIRST -- a tuple declaration below names one }
+  if dgQCount > 0 then
+  begin
+    NSpecInsCnt := 0;
+    for k := 0 to dgQCount - 1 do
+      EmitQualAliasDecl(dgQName[k], dgQPath[k]);
+    if NSpecInsCnt > 0 then
+    begin
+      InsertTokens(insertAt, NSpecIns, NSpecInsCnt);
+      insertAt := insertAt + NSpecInsCnt;
+    end;
   end;
 
   { one alias declaration per distinct tuple, inserted in first-seen order }
@@ -1376,6 +1430,128 @@ begin
   end;
 end;
 
+{ ---- QUALIFIED generic arguments, normalised to one token ------------------
+
+  `specialize TEnum<TOuter.TPair>` is legal Pascal and FPC compiles it. Every
+  mechanism here reads an argument as exactly ONE TOKEN -- five
+  IsConcreteTypeArgKind tests, NestedSpecAlias, NestedSpecArg, the SpecSub*
+  substitution set, and the storage type NSpecArg: array of TRawToken. A
+  qualified name is three tokens and fits none of them.
+
+  So it is NORMALISED, not special-cased: the dotted form is rewritten at the
+  one place it is read into a single minted identifier naming an ordinary type
+  alias, and the alias declaration is emitted through the prerequisite path that
+  already exists for nested specializations. Nothing downstream ever sees a dot.
+  The alternative -- teach all five tests and the storage type about token
+  RANGES -- adds a second argument shape to six places, and per
+  devdocs/dev/normalise-dont-special-case.md the second path is the one that
+  stays broken.
+
+  The target form is measured, not assumed: `TAlias = TOuter.TPair;` followed by
+  `specialize TEnum<TAlias>` compiles and runs identically on pxx and FPC.
+
+  NAME SPELLING, and why it carries a leading `$`. The specialization minter
+  produces `Name$Arg1$Arg2`, so a plain `TOuter$TPair` here would be exactly what
+  `TOuter<TPair>` mints -- a real collision between two different types under
+  arity overloading, which is the failure that is silent. A leading `$` cannot be
+  produced by that minter and cannot be written in source, so `$qual$TOuter$TPair`
+  collides with nothing by construction. It is a synthetic tkIdent and is only
+  ever compared as a string, so the character never has to be lexable.
+
+  DECLARED ONCE PER COMPILATION. Two specializations naming the same qualified
+  type would otherwise emit the alias twice and get a duplicate-type error, so a
+  mint is recorded in QualAliasName the moment its declaration is emitted and is
+  never emitted again. }
+
+const MAX_QUAL_ARG_ALIASES = 128;
+var
+  QualAliasName : array[0..MAX_QUAL_ARG_ALIASES-1] of AnsiString;
+  QualAliasCount: Integer;
+  { pending for the specialization currently being parsed }
+  QNeedName : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  QNeedPath : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  QNeedCount: Integer;
+
+{ The mint for one dotted path: `TOuter.TPair` -> `$qual$TOuter$TPair`. }
+function QualArgAliasName(const path: AnsiString): AnsiString;
+var i: Integer; r: AnsiString;
+begin
+  r := '$qual$';
+  for i := 1 to Length(path) do
+    if path[i] = '.' then r := r + '$' else r := r + path[i];
+  QualArgAliasName := r;
+end;
+
+{ Record that this specialization needs `aliasNm = path;` declared ahead of it.
+  Silent no-op when the alias already exists -- that is the common case once a
+  program names the same qualified type twice. }
+procedure NoteQualArgNeed(const aliasNm, path: AnsiString);
+var k: Integer;
+begin
+  for k := 0 to QualAliasCount - 1 do
+    if CaseEqual(QualAliasName[k], aliasNm) then Exit;
+  for k := 0 to QNeedCount - 1 do
+    if CaseEqual(QNeedName[k], aliasNm) then Exit;
+  if QNeedCount >= MAX_TEMPLATE_PARAMS then Exit;
+  QNeedName[QNeedCount] := aliasNm;
+  QNeedPath[QNeedCount] := path;
+  Inc(QNeedCount);
+end;
+
+{ One token into NSpecIns. Flat, not nested inside EmitQualAliasDecl: nested
+  routines appear nowhere else in this file. }
+procedure QualPush(k: TTokenKind; const txt: AnsiString; ln: Integer);
+begin
+  if NSpecInsCnt >= MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS) then
+    Error('nested specialization token buffer overflow');
+  NSpecIns[NSpecInsCnt].Kind := k;
+  NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln;
+  if txt = '' then
+  begin
+    NSpecIns[NSpecInsCnt].SOffset := 0;
+    NSpecIns[NSpecInsCnt].SLen := 0;
+  end
+  else
+  begin
+    NSpecIns[NSpecInsCnt].SOffset := TokCharsAppend(txt);
+    NSpecIns[NSpecInsCnt].SLen := Length(txt);
+  end;
+  Inc(NSpecInsCnt);
+end;
+
+{ Emit `alias = A.B.C;` into NSpecIns, and mark the alias as declared so no
+  later specialization emits it a second time. }
+procedure EmitQualAliasDecl(const aliasNm, path: AnsiString);
+var ln, i, start: Integer;
+begin
+  { Declared once per compilation, and the check lives HERE rather than in each
+    caller: the Delphi rewrite reaches this with duplicates by construction (one
+    entry per OCCURRENCE of the group, and it runs to a fixed point), while the
+    objfpc path filters in NoteQualArgNeed. Two filters for one rule is how the
+    second one goes stale, so there is one, and it is the one nothing can skip. }
+  for i := 0 to QualAliasCount - 1 do
+    if CaseEqual(QualAliasName[i], aliasNm) then Exit;
+  ln := 0;
+  if TokPos > 0 then ln := Tokens[TokPos - 1].Line;
+  QualPush(tkIdent, aliasNm, ln);
+  QualPush(tkEq, '', ln);
+  start := 1;
+  for i := 1 to Length(path) + 1 do
+    if (i > Length(path)) or (path[i] = '.') then
+    begin
+      if start > 1 then QualPush(tkDot, '', ln);
+      QualPush(tkIdent, Copy(path, start, i - start), ln);
+      start := i + 1;
+    end;
+  QualPush(tkSemicolon, '', ln);
+  if QualAliasCount < MAX_QUAL_ARG_ALIASES then
+  begin
+    QualAliasName[QualAliasCount] := aliasNm;
+    Inc(QualAliasCount);
+  end;
+end;
+
 { Emit one `alias = specialize NAME<args>;` declaration into NSpecIns, reading
   the argument tokens from NSpecArg[base..base+nArgs-1]. }
 procedure EmitSpecDecl(const aliasNm, tmplNm: AnsiString; base, nArgs: Integer);
@@ -1608,6 +1784,7 @@ var
   gmScan: Integer;   { -1 = the class body, >= 0 = a buffered method body }
   nDeclEdges: Integer;   { NSpec entries below this came from the CLASS BODY }
   dup: Boolean;
+  qPath: AnsiString;     { non-empty while the current argument is a dotted name }
 begin
   Result := False;
   Next; { consume 'specialize' }
@@ -1617,20 +1794,54 @@ begin
   Expect(tkLt, '<');
   nc := 0;
   NSpecCount := 0;
+  QNeedCount := 0;
   repeat
     if not IsConcreteTypeArgKind(CurTok.Kind) then
       Error('expected concrete type name');
     if nc >= MAX_TEMPLATE_PARAMS then Error('too many specialization arguments (MAX_TEMPLATE_PARAMS)');
-    { GetTokenStr, not SVal: a builtin type spelled as a KEYWORD token carries an
-      EMPTY SVal (see IsMethodNameTok's note), so every keyword-spelled argument
-      recorded the same empty name — which is what the duplicate-specialization
-      check below compares, so `TA = specialize TBox<Integer>` and a later
-      `TA = specialize TBox<Double>` read as the same declaration. }
-    if CurTok.SVal <> '' then cNames[nc] := CurTok.SVal
-    else cNames[nc] := GetTokenStr(TokPos - 1);
-    cKinds[nc] := CurTok.Kind;
-    { keep the raw token too — a deferral re-emits this declaration verbatim }
-    NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc] := Tokens[TokPos - 1];
+    { A QUALIFIED argument -- `specialize TEnum<TOuter.TPair>` -- is consumed
+      whole here and replaced by the single minted identifier of an ordinary
+      alias, so every mechanism below this loop keeps seeing one token per
+      argument. See the QualArgAliasName block above for why it is normalised
+      here rather than taught to the six places that read an argument. }
+    qPath := '';
+    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkDot) then
+    begin
+      qPath := GetTokenStr(TokPos - 1);
+      while (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) do
+      begin
+        Next;   { the '.' }
+        Next;   { the name after it }
+        if CurTok.Kind <> tkIdent then
+          Error('expected a type name after "." in a generic argument');
+        qPath := qPath + '.' + GetTokenStr(TokPos - 1);
+      end;
+    end;
+    if qPath <> '' then
+    begin
+      cNames[nc] := QualArgAliasName(qPath);
+      cKinds[nc] := tkIdent;
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].Kind := tkIdent;
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].IVal := 0;
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].Line := Tokens[TokPos - 1].Line;
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].SOffset := TokCharsAppend(cNames[nc]);
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].SLen := Length(cNames[nc]);
+      NoteQualArgNeed(cNames[nc], qPath);
+    end
+    else
+    begin
+      { GetTokenStr, not SVal: a builtin type spelled as a KEYWORD token carries an
+        EMPTY SVal (see IsMethodNameTok's note), so every keyword-spelled argument
+        recorded the same empty name — which is what the duplicate-specialization
+        check below compares, so `TA = specialize TBox<Integer>` and a later
+        `TA = specialize TBox<Double>` read as the same declaration. }
+      if CurTok.SVal <> '' then cNames[nc] := CurTok.SVal
+      else cNames[nc] := GetTokenStr(TokPos - 1);
+      cKinds[nc] := CurTok.Kind;
+      { keep the raw token too — a deferral re-emits this declaration verbatim }
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc] := Tokens[TokPos - 1];
+    end;
     Inc(nc);
     Next;
   until not Eat(tkComma);
@@ -1750,6 +1961,7 @@ begin
     begin
       if DebugTrace then writeln('SPEC ', specName, ' = ', templateName, ' (already declared)');
       NSpecCount := 0;
+      QNeedCount := 0;
       Next;
       Result := True;
       Exit;
@@ -1778,7 +1990,7 @@ begin
     A genuine cycle is unaffected: both its edges are declaration-time, so
     nDeclEdges > 0 on at least one side and the deferral path below still runs.
     test/test_generic_cycle_fail.pas is the control and must keep failing. }
-  if (NSpecCount > 0) and (nDeclEdges = 0) then
+  if (NSpecCount > 0) and (nDeclEdges = 0) and (QNeedCount = 0) then
   begin
     NSpecInsCnt := 0;
     for k := 0 to NSpecCount - 1 do
@@ -1787,7 +1999,15 @@ begin
     NSpecCount := 0;
   end;
 
-  if NSpecCount > 0 then
+  { A pending qualified-argument alias forces the DEFERRAL path and cannot use
+    the fast one above. The fast path leaves this declaration registered and puts
+    the prerequisites AFTER it, which is right for a materialisation-time nested
+    spec and wrong here: the alias is a DECLARATION-time dependency -- the
+    argument is substituted into the class body that gets streamed immediately,
+    so the alias has to be a type before this declaration is parsed at all, not
+    after. Deferring re-emits the declaration behind the alias, and the re-parse
+    sees the minted identifier and takes the ordinary single-token path. }
+  if (NSpecCount > 0) or (QNeedCount > 0) then
   begin
     { Defer. CurTok is this declaration's trailing ';', so TokPos is exactly
       where the type-section loop reads next: put the prerequisites there,
@@ -1812,9 +2032,17 @@ begin
       of both declarations into the token stream every round with no diagnostic
       and no end. Name both sides: the cycle is what the author has to break. }
     if SpecDeferRound[dfIdx] > MAX_SPECIALIZATIONS then
-      Error('circular generic specialization: ' + specName + ' requires ' +
-            NSpecName[0] + ', which requires ' + specName + ' back');
+      if NSpecCount > 0 then
+        Error('circular generic specialization: ' + specName + ' requires ' +
+              NSpecName[0] + ', which requires ' + specName + ' back')
+      else
+        Error('circular generic specialization: ' + specName);
     NSpecInsCnt := 0;
+    { qualified-argument aliases FIRST: a nested prerequisite emitted below may
+      name one of them as its own argument. }
+    for k := 0 to QNeedCount - 1 do
+      EmitQualAliasDecl(QNeedName[k], QNeedPath[k]);
+    QNeedCount := 0;
     for k := 0 to NSpecCount - 1 do
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
     EmitSpecDecl(specName, templateName, (MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS, nc);

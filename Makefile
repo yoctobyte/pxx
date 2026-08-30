@@ -7311,6 +7311,16 @@ test-core: $(COMPILER)
 	# ...and the objfpc spelling of it, which goes through the same isParamForm test
 	./$(COMPILER) test/test_generic_arg_is_enclosing_template_param_objfpc.pas $(TESTTMP)/test_generic_encl_param_objfpc26
 	tools/expect_same.sh test_generic_encl_param_objfpc26 "$$($(TESTTMP)/test_generic_encl_param_objfpc26 | tail -1)" "total ok 1 / 1"
+	# a QUALIFIED type name as a generic argument: `specialize TBox<TOuter.TPair>`.
+	# An argument was modelled as exactly one token everywhere in the frontend and a
+	# qualified name is three, so the objfpc arm errored `Expected: >, but got: .`
+	# and the delphi arm silently failed to match the group at all. Both arms are
+	# wired because they reach the rewrite through different procedures.
+	# bug-p-a-qualified-type-name-cannot-be-a-generic-argument
+	./$(COMPILER) test/test_generic_qualified_arg.pas $(TESTTMP)/test_generic_qualified_arg26
+	tools/expect_same.sh test_generic_qualified_arg26 "$$($(TESTTMP)/test_generic_qualified_arg26 | tail -1)" "total ok 5 / 5"
+	./$(COMPILER) test/test_generic_qualified_arg_delphi.pas $(TESTTMP)/test_generic_qualified_arg_delphi26
+	tools/expect_same.sh test_generic_qualified_arg_delphi26 "$$($(TESTTMP)/test_generic_qualified_arg_delphi26 | tail -1)" "total ok 5 / 5"
 	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
 	./$(COMPILER) test/test_impl_static_and_pchar_index.pas $(TESTTMP)/test_impl_static_and_pchar_index26
 	tools/expect_same.sh test_impl_static_and_pchar_index26 "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" "total ok 5 / 5"
