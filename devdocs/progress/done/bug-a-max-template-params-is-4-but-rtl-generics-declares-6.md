@@ -182,4 +182,4 @@ anything new. Relayed to frankB, who can tell.
 GREEN + the corpus probe above, re-run at 6.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 0fc18aad6.

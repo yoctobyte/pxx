@@ -113,4 +113,4 @@ because a 24-job cascade with "no idle bisect will happen" reads as expensive
 and was two commands.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 7613b72d3.
