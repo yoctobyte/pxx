@@ -29,3 +29,6 @@ ok: /tmp/testmgr-scratch-1633264/test_object_reference26  [code=65304B  data=427
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-30 — auto-closed by the seven watcher: `test-core#src:test/test_object_reference.pas` passes at 5c3c0b74bf2c (tier native); it was red at f9bfcca97409. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
