@@ -18795,7 +18795,7 @@ that it hold at `-O0`, where the accidental padding does not apply.
 
 ## Tick 2026-08-30 ~09:2x — bisecting BACKWARDS in this repo, and the symtab.inc slot
 
-**frankA resolved the max/min regression (`6530abdeb`, verified on origin by
+**frankA resolved the max/min regression (`f11128eaf`, verified on origin by
 artefact); cause was `7b73a385d`.** That commit moved the callable→Pointer
 coercion into `PyBindKwArgs` — the KEYWORD path — and the coercion runs AFTER
 overload selection, so it made the `key: Pointer` candidates *viable* for a
@@ -18942,9 +18942,44 @@ tree 112 testable commits behind origin/master** — twatch says so itself. One 
 is *adjacent* to frankA's rename fix and is explicitly **not** asserted to be
 related; flagged to frankA as a thirty-second dismissal, not a bisect. seven's
 v394 verify: 6 red / **0 new**, three of them the `min_max`/`max_min` NilPy rows
-frankA resolved in `6530abdeb` — older than the fix, not live. Do not re-file.
+frankA resolved in `f11128eaf` — older than the fix, not live. Do not re-file.
 **Breadth is 8h stale on plexus, 112 commits behind: no cross-target verdict
 exists for any of tonight's work.**
 
 **Box: load 18.2 on 12 cores.** Pin unchanged, v394 `53800fbeb0b66e11`. U queue
 **33**. `urgent/` is empty — frankA took the one item and closed it.
+
+## Correction 2026-08-30 ~10:3x — I published a dead sha twice, and the certifying sentence hid it
+
+**`6530abdeb` does not exist.** frankA's min/max fix landed as **`f11128eaf`**
+(*"fix(N): min/max carry the same dict and str receivers sorted() has"*). Both
+citations above are corrected. Found by frankD on a fresh fetch; I had it from
+frankA, who had read the sha before its push raced a writer and the retry
+rebased it — `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`, happening
+live, in this file.
+
+**The instructive part is frankD's, and it is why nobody caught it sooner: the
+sentence certifying the claim is what hid it.** frankA verified *by artefact* —
+counting the dict-keyed and str-keyed lines in
+`origin/master:compiler/builtin/pyeval.pas` — which is the **stronger** check for
+*did the content land*, and is **structurally blind to whether the cited name
+resolves**. Two questions, two checks, and the better one cannot answer the
+other. So a dead sha ends up sitting next to the words "verified on origin", and
+the phrase that should invite scrutiny is the phrase that deflects it.
+
+**It is not one incident.** Auditing every sha I cited tonight with
+`git merge-base --is-ancestor <sha> origin/master` — which is the right test,
+not `git cat-file -e`, since that accepts an object still in a local reflog —
+found **two dead of ten**: `6530abdeb` (frankA's) and `1000d6edc` (frankB's
+correction commit, cited in a message minutes after its own push). Same
+mechanism both times: the author read the sha before the push, the push raced,
+the retry rebased, and the sha the author had already relayed was rewritten.
+`tools/sync.sh` fills `PENDING-COMMIT` on ticket *resolves* for exactly this
+reason; **prose citations have no such backstop**, and prose is where a
+coordinator writes.
+
+**Standing rule for this seat: never write a sha you read before pushing.** Push
+first, then read it back, then cite it — or cite the commit *subject*, which
+survives a rebase. And when relaying a peer's sha, verify it with
+`merge-base --is-ancestor` before it goes into a durable file; it costs one
+command and I did not spend it, twice.
