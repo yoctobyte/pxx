@@ -81,7 +81,7 @@ knowing before you quote anything it prints:
 | Commits | 17,349 | `git rev-list --count HEAD` |
 | Elapsed | 2026-05-24 → 2026-08-30, ~14 weeks | `git log --reverse --format=%ad --date=short \| head -1` |
 | Commits with an agent co-author trailer | 7,793 | `git log --format=%b \| grep -ci "Co-Authored-By: Claude"` |
-| Pinned stable versions | 393 (`v1`…`v393`) | `cat stable_linux_amd64/default/VERSION`; the log is `stable_linux_amd64/default/history.log` |
+| Pinned stable versions **in force** | 394 | `cat stable_linux_amd64/default/VERSION`; the log is `stable_linux_amd64/default/history.log`. **Not the number blessed** — a withdrawn pin is removed and its number reused, so this counter undercounts; see the qualifier below |
 | Tickets resolved | 2,726 | `ls devdocs/progress/done/*.md \| wc -l` |
 | Tickets **rejected** | 56 | `ls devdocs/progress/rejected/*.md \| wc -l` |
 | Decisions recorded | 117 | `ls devdocs/progress/decided/*.md devdocs/progress/done/decide-*.md \| wc -l` — **not** `decided/` alone |
@@ -116,11 +116,50 @@ sentence:
   error, they are 35% of the finished work and they are the *early* months, so
   any per-track story told from this table is a story about the second half of
   the project.
-- **393 pins is not 393 releases.** A pin blesses a self-host-verified binary
-  that other tracks then build against; it is an internal checkpoint. The
-  interesting property is that all 393 are in git with their sha256 and their
-  landing commit, so the trajectory is reconstructible — that is the claim
-  worth making, not the count.
+- **A pin is not a release.** A pin blesses a self-host-verified binary that
+  other tracks then build against; it is an internal checkpoint. The interesting
+  property is the trajectory, not the count — every pin in force is recorded in
+  `stable_linux_amd64/default/history.log` with its sha256, its source commit and
+  a timestamp, and the file is in git.
+
+  **State the reconstructibility claim with its "from what", because the ledger
+  and git answer different questions.** This bullet read *"all 393 are in git
+  with their sha256 and their landing commit, so the trajectory is
+  reconstructible"* until 2026-08-30, and that is false by omission — which is
+  the worst way for launch copy to be wrong, because every word of it is true.
+
+  What is actually true, and it is still a strong claim:
+
+  > **The ledger is a record of the pins in force, not of the pins blessed.** A
+  > pin that is withdrawn is *removed* from `history.log` rather than annotated,
+  > and the version counter is *reused* by the next pin. The withdrawn row
+  > survives in git history and nowhere else.
+
+  Measured the day it was written, because it had just happened:
+
+  | | |
+  | --- | --- |
+  | `cc5e02d6c` 05:27:09 | pin **v394** `e2ea9034a65ea8b6` |
+  | `b8fd07377` 05:37:35 | revert — diffstat `history.log \| 1 -`, `pin.log \| 1 -` |
+  | `d58eb5d92` 06:13 | pin **v394** `53800fbeb0b66e11` — the counter reused |
+
+  So `v394` names two different binaries in this repo's history. The first was in
+  force for **ten minutes**, other lanes built and measured against it, and
+  tickets cite it by name — one recorded a fix as *"v394 carries the fix"*. Today
+  `grep e2ea9034 history.log` returns nothing; `git show cc5e02d6c --
+  stable_linux_amd64/default/history.log` returns the row.
+
+  **Why this belongs in the essay rather than in an erratum.** Nobody
+  reconstructs a pin trajectory by running `git log -p` on a log file — they read
+  the log file. A reader who checks `history.log` finds one v394 row and has no
+  way to learn a different one existed. **"Reconstructible" compressed away "from
+  what"**, which is this section's own thesis landing on this section: the
+  qualifying words carry the entire distinction and terse styles drop them first.
+
+  If the ledger's behaviour changes — the open Track U fork is *erase vs
+  annotate* and *reuse vs burn the counter* — **this paragraph changes with it,
+  and not before.** A draft that describes an intended future state is the same
+  defect one level up.
 
 ### The claims-discipline landmine
 

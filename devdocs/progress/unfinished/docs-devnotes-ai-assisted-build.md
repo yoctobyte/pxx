@@ -48,11 +48,17 @@ Nearly every "I built X with AI" account is reconstructed from memory afterwards
   parity — see CLAUDE.md. Never blur. And do not drop the `-O` scope: `PXXFLAGS` is empty in
   the Makefile, so the fixedpoint proves self-compilation at ONE level, and a `-O0`-only
   self-compile failure passed the whole gate on 2026-08-19.)
-- **Every pinned stable version** — the whole trajectory, not a snapshot. Do not
-  write the count here: it was "200+" when this ticket was filed and the ledger
-  said 393 by 2026-08-30. `tools/factsheet.sh` prints it with the sha it measured
-  at. A stale number in the list of *receipts* is the most expensive place in
-  this document for one to sit.
+- **Every pinned stable version *in force*** — the whole trajectory, not a
+  snapshot. Do not write the count here: it was "200+" when this ticket was filed
+  and the ledger said 394 by 2026-08-30. `tools/factsheet.sh` prints it with the
+  sha it measured at. A stale number in the list of *receipts* is the most
+  expensive place in this document for one to sit.
+  **And "every" needed the qualifier, added 2026-08-30.** `history.log` records
+  the pins **in force**, not the pins **blessed**: a withdrawn pin is removed
+  from it rather than annotated, and its version number is reused by the next
+  one. It happened the same day — `v394` names two different binaries ten minutes
+  apart. The row survives in git history and nowhere else. A receipts list is the
+  last place an unqualified "every" belongs.
 - **The ticket board** — with `Log` sections recording what was tried, what failed, what was
   abandoned, written *at decision time* rather than in hindsight.
 - **tstate regression reports** tied to exact SHAs; a cross-target test matrix.
@@ -176,3 +182,29 @@ the project already runs.
   **Still nothing here moves the ticket off the user** — Part 1 is fact-checking,
   which is the agent's half of scope item 2. The four questions in Part 3 and
   every user-voice section remain untouched. Stays in `unfinished/`.
+- 2026-08-30, fourth pass (frankD) — **the receipts list claimed more than the
+  ledger delivers. Still parked on the user.**
+  The draft said pins are *"all in git with their sha256 and their landing commit,
+  so the trajectory is reconstructible"*, and this ticket's receipt bullet said
+  *"every pinned stable version"*. **Both are false by omission**, which is the
+  worst way for launch copy to be wrong, because every word is true.
+  `history.log` is a record of the pins **in force**, not the pins **blessed**.
+  Measured, on the day it happened: `cc5e02d6c` 05:27:09 pinned v394
+  `e2ea9034a65ea8b6`; `b8fd07377` 05:37:35 reverted it with diffstat
+  `history.log | 1 -` — **removing the row rather than appending a withdrawal**;
+  `d58eb5d92` 06:13 pinned v394 `53800fbeb0b66e11`, **reusing the counter**. So
+  `v394` names two different binaries, the first was in force ten minutes, other
+  lanes built against it, and one ticket recorded a fix as *"v394 carries the
+  fix"*. `grep e2ea9034 history.log` returns nothing today;
+  `git show cc5e02d6c -- …/history.log` returns the row.
+  **The distinction is the deliverable, not the retraction.** "The claim is
+  false" tells a reader less than the truth does: the row *is* in git — but nobody
+  reconstructs a pin trajectory by running `git log -p` on a log file, they read
+  the log file. **"Reconstructible" compressed away "from what"**, which is the
+  claims-discipline section's own thesis landing on the section next to it.
+  Both places corrected, plus the fact-sheet row, which now reads *"pinned stable
+  versions **in force**"* and says the counter undercounts.
+  Deliberately describes the ledger **as it is**, not as the open Track U fork
+  (erase vs annotate, reuse vs burn) might leave it. A draft describing an
+  intended future state is the same defect one level up.
+  **Still nothing here moves the ticket off the user.** Stays in `unfinished/`.

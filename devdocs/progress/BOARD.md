@@ -65,7 +65,7 @@ lives in git, not in a timestamp._
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (358)
+## backlog (359)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -217,6 +217,7 @@ lives in git, not in a timestamp._
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
+| decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused | U | 60 | decide | make revert DELETES the row from history.log and pin.log, and the next pin REUSES the counter -- so v394 names two different binaries and the withdrawn one appears nowhere in the ledger. Two forks: erase vs annotate, and reuse vs burn. It touches a public claim: the launch fact sheet says pins are in git with their sha256 and landing commit 'so the trajectory is reconstructible', which is true of git and false of the ledger a reader would actually check. | — |
 | decide-does-nilpy-random-seed-itself-at-import | U | 60 | decide | CPython's `random` seeds from entropy at import; NilPy's starts from a fixed constant, deliberately, so a failing run reproduces. That is a real trade-off and it collides with the upward-compatibility rule. Recommendation: seed by default, keep determinism behind an explicit opt-in. | — |
 | decide-does-the-legacy-gtk-alias-still-point-at-gtk-2 | U | 50 | decide | `uses gtk` maps to stem gtk-x11-2.0 (GTK 2) while everything else in the tree targets GTK 3 — lib/pcl/gtk3.pas, gtk3widgets.pas and gtk3gl.pas all bind libgtk-3.so.0, and `uses gtk3_c` maps to stem gtk-3. The four test_c_gtk*.pas tests use the legacy alias, so a box must install GTK 2 to make them green. Fork: retarget the alias, rename the tests, or keep GTK 2 deliberately. | — |
 | decide-does-track-r-work-on-master-like-every-other-lane | U | 60 | decide | Collapses two tickets that asked one question, both priced off a divergence that has moved. origin/rust is 136 ahead of master and master is 418 ahead -- but git cherry reports 122 of the 136 already have patch-equivalents on master, and 14 is an upper bound (two spot-checks of the 14 are demonstrably present). So the fork is not 'what do we do with 136 stranded commits'; it is 'does Track R work on master, and do we merge or drop at most 14 mostly-paperwork commits'. Prior recommendation, unchanged: retire the branch. | — |
@@ -779,6 +780,7 @@ lives in git, not in a timestamp._
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
+- [p 60] [U] decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane
 - [p 60] [U] decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
 - [p 60] [U] decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one
