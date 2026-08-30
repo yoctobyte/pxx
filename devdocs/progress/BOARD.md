@@ -62,7 +62,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (365)
+## backlog (366)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -83,6 +83,7 @@ _none_
 | bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array | A | 40 | bug | The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A. | — |
 | bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only | A | 35 | bug | Storing a `char` into a `string[N]` through a pointer compiles on x86-64 only | — |
 | bug-a-defs-inc-vt-promo-comment-describes-the-slot-not-the-variant | A | 20 | bug | compiler/defs.inc:1150-1151 annotates the VT_PROMO_INT32/INT64 VARIANT tags with `payload = inline Int64, or a bignum ref` — which is the SLOT storage discriminator's semantics, the very thing the paragraph four lines above says the variant tags are distinct from. In a variant the payload is a managed STRING holding the exact decimal, per pylib.pas, which defs.inc itself names as the authority. No compiled behaviour is wrong; the cost is that a reader trusting the comment concludes a correct tool is broken. Measured: it sent the Track T agent to suspect pxx-gdb.py:109 of silently decoding a number as an address. tools/pxx-gdb.py is CORRECT and must not be 'fixed'. | — |
+| bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations | A | 40 | bug | `--emit-obj` on x86-64 emits an object that exports nothing | — |
 | bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard | A | 45 | bug | EIGHT unguarded chain walks in symtab.inc across TWO chain structures -- and one is live, not latent: FindSym is where the urgent two-definitions hang spins. Four walk curr := UClsParent[curr] with no cycle guard -- FindUField:1225, FindUMeth:1275, IsSubclassOf:1308, FindUProp:1366. A parent cycle spins in any of them forever, silently, with flat RSS: no OOM, no crash, no output, no exit status. The 2026-08-15 fix for bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler put its guard on the DECLARATION path in pyparser.inc, closing one route to a cycle and leaving every walk that a second route would hang in. Latent -- no current repro reaches it. | — |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
 | bug-a-help-does-not-advertise-flags-the-compiler-accepts | A | 35 | bug | `--strict-fpc` is accepted, documented at defs.inc:2189-2191, and demonstrably changes behaviour -- and does not appear in `--help`. 67 markdown files name flags `--help` does not advertise. The failure mode is not a missing line of text: an agent reasoning from `--help` concludes the flag DOES NOT EXIST and that whatever cites it named a fiction, which is a wrong conclusion reached by consulting the tool's own self-description. | — |
@@ -362,7 +363,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall, feature-a-rdrand-cpuid-compiler-builtins |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-libc-frontend-sites-and-thread-errno | A | 40 | feature | Finish --rtl-libc: convert the C/Rust/Zig frontend syscall sites, and test the thread errno hazard the raw clone stub creates | — |
-| feature-t-a-second-oracle-dimension-section-alignment | T | 55 | feature | The differential oracle is blind to layout, and layout is where xtensa dies | — |
+| feature-t-a-second-oracle-dimension-section-alignment | T | 25 | feature | An external alignment oracle: what is left after `df98fea47`, measured | — |
 | feature-t-audit-tests-that-pass-with-the-implementation-removed | T | 40 | feature | frankB wrote a regression test for bug-b-resolver-sends-localhost-to-the-wire, got eight green rows, then reverted the fix to control it — and the test still passed, every row. This box's systemd-resolved is itself RFC 6761 compliant and synthesises the localhost subtree, so the broken code returned the right ANSWER and merely emitted 20 DNS queries to get it. A value assertion was testing systemd-resolved. Three instances of this shape landed in one night. This ticket is the sweep for others. | — |
 | feature-t-lint-token-text-compared-against-a-keyword | T | 35 | feature | Make the never-true guard a lint instead of an audit | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -842,7 +843,6 @@ _none_
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
-- [p 55] [T] feature-t-a-second-oracle-dimension-section-alignment
 - [p 55] [A] grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm
 - [p 55] [A+S] grant-ir-codegen-xtensa-cleanup-arm-to-franks-b4-verified-off
 - [p 55] [A+O] perf-o-promote-constant-divisor-strength-reduction-to-o2
@@ -923,6 +923,7 @@ _none_
 - [p 45] [P] refactor-p-the-overload-probe-cannot-see-the-argument-match-channels
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
+- [p 40] [A] bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations
 - [p 40] [A] bug-a-function-result-assignment-does-not-narrow-to-the-result-type
 - [p 40] [A+S] bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
@@ -1073,6 +1074,7 @@ _none_
 - [p 25] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 25] [N] feature-nilpy-match-statement
 - [p 25] [A+O] feature-opt-arch-level-and-dispatch
+- [p 25] [T] feature-t-a-second-oracle-dimension-section-alignment
 - [p 25] [T] feature-t-uforth-bench-on-the-watcher-idle-phase
 - [p 25] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [A] refactor-a-backend-machine-code-lives-in-six-shared-files

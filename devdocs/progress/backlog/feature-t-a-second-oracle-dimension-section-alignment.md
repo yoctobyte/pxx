@@ -1,96 +1,96 @@
 ---
 track: T
-prio: 55
+prio: 25
 type: feature
-status: open
+status: done
 found: 2026-08-30
 found-by: claude-T
 ---
 
-# The differential oracle is blind to layout, and layout is where xtensa dies
+# An external alignment oracle: what is left after `df98fea47`, measured
 
-## The blind spot, with a live example
+**Filed at 35, raised to 55, now 25 — and the scope is a tenth of what it was.**
+The re-price is not a change of mind; it is the result of running the exclusion
+before building, which is what the ticket itself told the implementer to do.
 
-`pasmith_run.py` decides everything by comparing a program's **output** across
-oracles. That is a strong oracle for one class of defect and structurally
-incapable of seeing another: **a program whose values are right and whose
-layout is wrong runs perfectly on every target the fuzzer can execute.**
+## What I set out to build, and why it does not exist as specified
 
-Track S found the case that makes this concrete (relayed 2026-08-30): the ELF
-writer has **never aligned the data section on any target**. x86-64 and riscv32
-tolerate unaligned word loads, so they compute the right answers and say
-nothing. Xtensa faults. 41 xtensa programs are currently green only because an
-unrelated performance commit's page padding happens to 4-align the section by
-accident — a correctness property held up by a coincidence in an optimisation.
+The original proposal was `sh_addr % sh_addralign == 0` over the section header
+table of every emitted binary. Four measurements at `46316ba8b`, binary
+`1ff8acbe123b`:
 
-No amount of fuzzing on the current oracle set finds that. Native never faults,
-so there is nothing to disagree about. Same structural blindness as the bitfield
-`sizeof` finding: the comparison is over the wrong observable.
+1. **PXX executables have no section header table at all.** `readelf -S` says
+   *"There are no sections in this file"* — one `PT_LOAD` covering everything,
+   and the code/data boundary is internal to it and described nowhere. The
+   `.map` file beside the binary is a symbol map: it carries `Base Address` and
+   `Code Offset`, not the data base. **The subject of the invariant is not
+   observable in the default artifact.**
+2. **With `-g` it is.** The debug path writes a real table — `.text`, `.data`,
+   `.bss`, with correct addresses and `sh_addralign = 8`. So the check is
+   implementable, but only on a `-g` build.
+3. **And there it is vacuous.** On all four Linux targets `.data` lands
+   page-aligned — `0x414000`, `0x0805F000`, `0x424000`, `0x0807D000` — because
+   `PadCodeToPageBoundary` runs unconditionally for executables. Page-aligned
+   implies 8-aligned, so the check passes whether or not the fix is present.
+4. **The compiler already asserts it, and better than an external oracle could.**
+   `AlignCodeForData` establishes the invariant at 3 sites and
+   `CheckDataBaseAligned` verifies it at 3 sites — one immediately after each of
+   the three `dataBase :=` computations. Coverage is exact, and it is checked
+   **where the value is used, not where it is established**, which is precisely
+   the case an external oracle was wanted for (*"a writer that computes dataBase
+   without calling AlignCodeForData"* — its own comment).
 
-## Priced at 35, raised to 55 once the evidence landed
+### The `-O0` clause was directionally right and named the wrong concealer
 
-Filed the same night at prio 35 on a relayed summary. Four hours later Track A
-finished the investigation and every number moved the wrong way:
+The original ticket said to check with padding-producing passes off, because
+the concealer was *"an optimisation's padding"*. Measurement says the concealer
+is `PadCodeToPageBoundary`, which is **not** an optimisation and is
+**unconditional** for Linux executables. So `-O0` does not remove it, and a
+`-O0` check would have been just as vacuous. The principle survives — check
+where the concealer is absent — but the concealer had to be identified, not
+assumed. It is a page pad, not a `-O` pass.
 
-- The misalignment was **universal**, not a property of the faulting target.
-  Every sampled program in BOTH groups was ≡3 (mod 4) — so the 53 that passed
-  were never safe, only **untested**. A pass rate was reporting tolerance, not
-  correctness.
-- The 41 green xtensa programs were green because an unrelated **performance**
-  commit's page padding word-aligned the section by accident. A correctness
-  property was resting on a coincidence in an optimisation, and had been for
-  as long as anyone had been looking at the number.
-- Finding it cost a bisect, two throwaway worktrees and most of a night, on the
-  single architecture whose hardware is intolerant enough to report it.
+## What is actually left
 
-One ELF header table would have shown all of it on every target at once, in an
-instant. That is the argument for the prio, and it is now a measurement rather
-than a prediction. (Track A has since landed an explicit invariant and tested
-it the right way — by DELETING the accidental pad and confirming the canary
-stays green.)
+One thing, and it is narrow: **ESP bare-metal images**, where the page pad is
+skipped outright (`elfwriter.inc`'s own note lists this among the four routes
+that take the pad away, and says such images *"have been misaligned all
+along"*). That is also the one target family whose hardware faults rather than
+absorbing it.
 
-## What to add
+So the residual check is:
 
-A second oracle **dimension**, not a second oracle: assert properties of the
-emitted artifact, alongside the existing assertions about its behaviour.
+- for an ESP bare image, assert the data base ≡ 0 (mod 8) — compared against
+  **`ELF_DATA_ALIGN`, not against the file's own `sh_addralign`**, because a
+  value checked against its own claim is checked against nothing;
+- run it where the pad is absent (`--platform=esp --esp-profile=bare`), which
+  is the only configuration where it can go red;
+- and **make it fail once before trusting it**: revert `AlignCodeForData` in a
+  throwaway worktree and confirm the check declines. A check that has never
+  declined is a check nobody has evidence about.
 
-Cheapest first cut, in rough order of value per line:
+The remaining argument for an external check, and it is real but small: the
+in-compiler assert is three lines in a self-hosting compiler, compiled by
+itself. A codegen bug that broke the assert would break it silently. An external
+reader is immune to that. That is worth 25, not 55.
 
-1. **Section alignment.** For each emitted section, `sh_addr % sh_addralign == 0`
-   and `sh_addralign` is at least the target's natural word size. This is a
-   property of one ELF header table — no execution, no QEMU, no oracle to
-   disagree with, and it would have caught the live bug above on every target
-   at once rather than on the one that faults.
-2. **The alignment is INTENDED, not incidental.** The bug above was green by
-   accident, so the check must tell "aligned because the writer aligned it"
-   from "aligned because something else padded". Assert it with the
-   padding-producing passes OFF (`-O0`), where the accident does not apply.
+## What it is NOT worth doing
 
-   This requirement is sharper than it reads, and it is the half most likely to
-   be dropped as fussiness. **The thing that hid the bug was a perf pass.** A
-   check that runs only where optimisation is on measures a tree in which the
-   concealer is present, and would have returned clean for months while the
-   defect sat there. Generally: *check a property where the thing that would
-   hide it is absent* — otherwise you are measuring the concealer's reach, not
-   the property.
-3. Later, if it earns it: section overlap, `p_align` on the program headers,
-   entry point alignment.
+- **Do not** build the general `sh_addr % sh_addralign` sweep. It is vacuous on
+  every artifact PXX currently emits, for the reasons measured above.
+- **Do not** answer it by running everything under xtensa. That makes the one
+  faulting target the oracle for a property all targets share. (This anti-goal
+  survives the re-scope intact; it was the ticket's best line.)
 
-## Why it belongs to T and not to A
+## Found on the way
 
-The **bug** is Track A's — the ELF writer is core. This ticket is the **tool**:
-a dimension in the fuzz oracle that makes that class of defect findable at all.
-T owns the tool, never the bug. Anything it finds gets filed into the owning
-lane like any other tstate red.
+[[bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations]]
+— looking for objects with real sections turned up that `--emit-obj` on x86-64
+emits `.text` and nothing else: no `.data`, no `.bss`, zero relocations, and
+four symbols of which none is defined. Filed to Track A.
 
-## Scope note
+Gate: `tools/pasmith_*_devtest.py` green; the negative control above is
+mandatory, not optional.
 
-Do NOT reach for "run everything under xtensa" as the answer. That makes the
-one target that faults the oracle for a property all targets share, which is
-slow, needs hardware or an emulator that does not currently run in the fuzz
-loop, and still only catches alignment bugs that happen to be exercised by a
-generated program. Checking the header is exact, instant, and total.
-
-Gate: `tools/pasmith_*_devtest.py` green, pure guards, plus one deliberate
-negative control — an artifact with a knowingly misaligned section must turn the
-check red.
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
