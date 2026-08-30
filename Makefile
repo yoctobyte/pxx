@@ -14818,6 +14818,32 @@ test-chess-perft: $(COMPILER)
 # Host-only checks via binutils readelf; if the ESP cross toolchains are
 # installed (~/.espressif), also proves each .o links against a C shim.
 test-emit-obj: $(COMPILER)
+	# THE x86-64 ROWS COME FIRST because for a year this rule had none, and the
+	# flag it is named for was broken on the DEFAULT target the whole time:
+	# every assertion below targeted riscv32 or xtensa. A Pascal program asked
+	# for an object and got `ok: [... data=2864B bss=42332B procs=132]` over a
+	# file with 4 symbols, none defined, no .data, no .bss and a zero-size
+	# .rela.text -- nothing could link it and nothing said so.
+	# bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations
+	#
+	# 1. It must REFUSE, and the refusal must REPLACE the success line, not
+	#    accompany it. Both halves asserted: non-zero status AND no `ok:`.
+	#    No `|| true` before the capture: that is the face-229 defect itself,
+	#    `$$?` would be TRUE's status and the row would pass on a success.
+	#    `;` is enough -- make sees echo's 0 and the line does not abort.
+	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64.o > $(TESTTMP)/test_emit_obj_x64.log 2>&1; echo "rc=$$?" > $(TESTTMP)/test_emit_obj_x64.rc
+	! grep -q '^rc=0$$' $(TESTTMP)/test_emit_obj_x64.rc
+	grep -q 'emit-obj' $(TESTTMP)/test_emit_obj_x64.log
+	! grep -q '^ok: ' $(TESTTMP)/test_emit_obj_x64.log
+	# 2. ...and it must not leave a half-written object behind for a build
+	#    system to pick up and link.
+	! test -f $(TESTTMP)/test_emit_obj_x64.o
+	# 3. The .asm frontend, which is whose writer that is, keeps working: a
+	#    source needing only text, global labels and extern calls is exactly
+	#    what it can express, so the guard must not fire on it.
+	./$(COMPILER) --emit-obj test/test_asm_obj.asm $(TESTTMP)/test_emit_obj_asm.o
+	readelf -h $(TESTTMP)/test_emit_obj_asm.o | grep -q 'REL (Relocatable file)'
+	readelf -sW $(TESTTMP)/test_emit_obj_asm.o | grep -q 'GLOBAL DEFAULT    1 asm_obj_add'
 	./$(COMPILER) --target=riscv32 test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_rv.o
 	readelf -h $(TESTTMP)/test_emit_obj_rv.o | grep -q 'REL (Relocatable file)'
 	readelf -h $(TESTTMP)/test_emit_obj_rv.o | grep -q 'RISC-V'

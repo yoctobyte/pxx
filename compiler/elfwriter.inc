@@ -2583,8 +2583,17 @@ var
   f: Integer;
 {$endif}
 begin
+  { Name the WHOLE truth, not this writer's half of it. This message said
+    "only xtensa/riscv32" while x86-64 had a writer of its own, so the
+    diagnostic and the docs were both wrong about the same flag in opposite
+    directions -- the docs said "any target", this said three fewer than there
+    are, and the truth was in neither.
+    bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 }
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
-    Error('--emit-obj: only xtensa/riscv32 targets are supported');
+    Error('--emit-obj: a general relocatable object (code, data, bss, '
+        + 'relocations, exported symbols) is emitted for --target=xtensa and '
+        + '--target=riscv32; x86-64 emits objects for .asm sources only; '
+        + 'i386, arm32 and aarch64 have no object writer');
   { Programs with `iram;` procedures need the two-text-section writer, which also
     handles @proc (ProcAddrFix) relocs — dispatch BEFORE the guard below. }
   for i := 0 to ProcCount-1 do
@@ -2776,6 +2785,46 @@ var
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('--emit-obj: .asm frontend object output is x86-64 only');
+
+  { THIS WRITER IS THE .asm FRONTEND'S, AND THE DISPATCH SENDS IT EVERYTHING.
+
+    Read what it emits below: `.text`, a symbol per `global <label>` from the
+    .asm frontend (AsmGlobalSym*), the UND externs, and one relocation per
+    `call <extern>` (AsmObjCall*). There is no `.data`, no `.bss`, and no
+    relocation kind for anything a compiler BACKEND produces. That is correct
+    for a .asm source, where data is appended into Code[] and addressed as part
+    of .text (`dataBase := CodeLen`, asmfront.inc) -- and it is why the guard
+    below is about the program, not about the frontend.
+
+    compiler.pas dispatches `--emit-obj` by ARCHITECTURE: x86-64 comes here,
+    everything else to writeELF32Rel, which is the GENERAL object writer (procs
+    as symbols, .data, .bss, .rela.data) and refuses anything but xtensa and
+    riscv32. So a Pascal, C or NilPy program on x86-64 -- the DEFAULT target --
+    landed here and this writer faithfully wrote everything it knew, which was
+    nothing: 4 symbols, none of them defined, a zero-size .rela.text, no data
+    and no bss, for a program with 132 procedures. The `ok:` line downstream
+    then reported `data=2864B bss=42332B procs=132` about a file containing
+    none of it.
+
+    There is no general x86-64 relocatable writer to route those programs to.
+    Until there is (feature-a-a-general-x86-64-relocatable-object-writer), REFUSE
+    -- an unlinkable object reported as success is strictly worse than an error,
+    because the failure surfaces at someone else's link step with no cause
+    attached. The test is what the object would have to CARRY, so a .asm source
+    that only needs text, globals and extern calls still works exactly as before.
+    bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations }
+  if (BSSSize > 0) or (FixCount > 0) or (GlobFixCount > 0) or
+     (DataPtrFixCount > 0) or (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
+    Error('--emit-obj: this program needs a general relocatable object (data, '
+        + 'bss or backend relocations) and the x86-64 object writer only '
+        + 'handles .asm-frontend output (text, global labels, extern calls). '
+        + 'Emitting one would silently drop them. Build an executable instead, '
+        + 'or use --target=xtensa/riscv32 --platform=esp for object output');
+  if (AsmGlobalSymCount = 0) and (ProcCount > 0) then
+    Error('--emit-obj: the x86-64 object writer exports symbols only for .asm '
+        + '`global` labels, so this object would define nothing and could not '
+        + 'be linked against');
+
   machine := 62;   { EM_X86_64 }
 
   { .strtab layout: 0 = empty, then global-label names, then extern names }

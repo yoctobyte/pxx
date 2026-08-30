@@ -85,7 +85,6 @@ _none_
 | bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array | A | 40 | bug | The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A. | — |
 | bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only | A | 35 | bug | Storing a `char` into a `string[N]` through a pointer compiles on x86-64 only | — |
 | bug-a-defs-inc-vt-promo-comment-describes-the-slot-not-the-variant | A | 20 | bug | compiler/defs.inc:1150-1151 annotates the VT_PROMO_INT32/INT64 VARIANT tags with `payload = inline Int64, or a bignum ref` — which is the SLOT storage discriminator's semantics, the very thing the paragraph four lines above says the variant tags are distinct from. In a variant the payload is a managed STRING holding the exact decimal, per pylib.pas, which defs.inc itself names as the authority. No compiled behaviour is wrong; the cost is that a reader trusting the comment concludes a correct tool is broken. Measured: it sent the Track T agent to suspect pxx-gdb.py:109 of silently decoding a number as an address. tools/pxx-gdb.py is CORRECT and must not be 'fixed'. | — |
-| bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations | A | 40 | bug | `--emit-obj` on x86-64 emits an object that exports nothing | — |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
 | bug-a-help-does-not-advertise-flags-the-compiler-accepts | A | 35 | bug | `--strict-fpc` is accepted, documented at defs.inc:2189-2191, and demonstrably changes behaviour -- and does not appear in `--help`. 67 markdown files name flags `--help` does not advertise. The failure mode is not a missing line of text: an agent reasoning from `--help` concludes the flag DOES NOT EXIST and that whatever cites it named a fiction, which is a wrong conclusion reached by consulting the tool's own self-description. | — |
 | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs | A+S | 40 | bug | Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs | — |
@@ -255,6 +254,7 @@ _none_
 | decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work | U | 50 | decide | tools/exit_observable_devtest.py fails when the count of stdout-only cross-target rows exceeds a high-water mark. The number grew 531 -> 551 in six hours from four commits across three lanes doing normal work. Bumping the ratchet each time measures nothing; holding the red makes a shared gate permanently owned by no one. Third option: report the drift and its attribution WITHOUT failing. Raised by pxx-a5, which deliberately did not make the change. | — |
 | decide-where-a-persistent-fpc-trunk-oracle-lives | U | 30 | decide | The FPC trunk oracle works but has nowhere to live: a trunk build is ~4 min and ~1GB, it must sit OUTSIDE the repo, and installing into ~ needs the owner's say-so. Three options with different refresh obligations. Filed because closing feature-t-fpc-probe-needs-a-trunk-oracle with item 3 undone would otherwise lose it. | — |
 | decide-which-gtk-a-bare-gtk-gtk-h-means | U | 55 | decide | GTK2 and GTK3 both answer to `#include <gtk/gtk.h>` and are told apart only by include root. /usr/include/gtk-2.0 is a default system include root and gtk-3.0 is not, so GTK3 needs an explicit -I today. Adding gtk-3.0 to the defaults decides the GTK version for every C consumer at once — including the GTK2 macro-soup regression guard. | — |
+| feature-a-a-general-x86-64-relocatable-object-writer | A | 30 | feature | There is no general x86-64 relocatable object writer, and that is the gap | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
 | feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile | A+S | 35 | feature | xtensa is the only hosted target with NO signal runtime — EmitSignalRuntimeForTarget has arms for five arches and falls through for xtensa, on purpose, because `FreeRTOS is not a Unix`. That rationale was written before the hosted xtensa profile existed, and under --platform=posix xtensa IS a Unix running on Linux via qemu. Not the 8-line IR_SET_SIGNAL port it looks like: the arm depends on a ~155-line runtime that does not exist. Unblocks 4 programs, not 1, because the three SA_SIGINFO refusals are gated on the same fact. | — |
 | feature-a-a-variant-has-no-null-tag | A | 45 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
@@ -684,9 +684,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2770)
+## done (2771)
 
-2770 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2771 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (57)
 
@@ -929,7 +929,6 @@ _none_
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it (unblocks 1)
 - [p 40] [A] bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
-- [p 40] [A] bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations
 - [p 40] [A] bug-a-function-result-assignment-does-not-narrow-to-the-result-type
 - [p 40] [A+S] bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
@@ -1037,6 +1036,7 @@ _none_
 - [p 30] [U] decide-is-real-a-double-or-fpcs-80-bit-extended
 - [p 30] [U] decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation
 - [p 30] [U] decide-where-a-persistent-fpc-trunk-oracle-lives
+- [p 30] [A] feature-a-a-general-x86-64-relocatable-object-writer
 - [p 30] [A+S] feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive

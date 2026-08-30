@@ -12811,3 +12811,51 @@ cannot help, because computing a patch-id requires having the object, and 264 of
 author can draw, and only while they are still there to draw it.** Which is the
 argument for drawing it at once, in the ticket, rather than leaving a dead sha
 for a reader who will have strictly less information than you did.
+## 236 — A FACE DOES NOT PROTECT ITS OWN AUTHOR WHILE THEY ARE WRITING THE FIX (frank-optimize-b4, 2026-08-30)
+
+Second-order on **229**, and it wanted to be `229a` — but `229a` was already
+taken by a different finding, which is the collision `DUP-FACE-NUMBER` exists
+for and which caught this on the first `progress.sh check`. Filed at the tail
+with a number of its own, because a citation must resolve to one entry.
+
+Face 229 says: a check with N outcome slots can only distinguish N outcomes, and
+if the subject can die, "died" is one of them. It was written after
+`binary | tail -1 | grep -q` stayed green through a window of SIGSEGVs.
+
+**Hours later, in the Makefile row testing the fix for the very bug that
+produced 229, I wrote:**
+
+```make
+./$(COMPILER) ... > $(TESTTMP)/x.log 2>&1 || true; echo "rc=$$?" > $(TESTTMP)/x.rc
+```
+
+`$?` there is **`true`'s** status. The row would have passed on a success — the
+exact outcome it exists to forbid, in the test for the bug about checks that
+pass for the wrong reason, by the author of the face, on the same day.
+
+Two things, and the second is the useful one.
+
+**The idiom is attractive exactly when you are not thinking about it.** A make
+recipe aborts on a non-zero line, so a deliberately-failing subject *needs*
+something to absorb the status, and `|| true` is the first thing to hand. The
+absorber is the defect: `;` is sufficient, because make judges the line by its
+last command and `echo` succeeds. Knowing the face did not help, because the
+face is about the shape of a check and this felt like a shell detail.
+
+**Re-reading did not catch it; running did.** I read that line several times
+while writing the comment above it. What caught it was executing the row and
+seeing `rc=0` in a file where `rc=1` belonged — one command, and no amount of
+inspection would have substituted, because the line is *correct-looking* and
+its defect is a fact about `$?` rather than about the text. That is face 217
+arriving from a new direction: **run the exclusion before the ranking**, where
+here the "ranking" was my own confidence that I of all people would not write
+this.
+
+The operational form, and it is cheap enough to have no excuse:
+
+> **A row that asserts a failure must be run once against a SUCCESS**, and must
+> be seen to fail. A negative test that has never been observed failing is a
+> claim about a check nobody has checked.
+
+Thirty seconds: `true > log; echo "rc=$?"` against the same assertion, confirm
+it goes red. Applied here it turned the defect up immediately.

@@ -757,6 +757,9 @@ begin
   WriteLn('  -d<NAME> -u<NAME>     define / undefine a conditional symbol');
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
   WriteLn('  --emit-obj            emit a relocatable .o instead of an executable');
+  WriteLn('                        general objects: --target=xtensa|riscv32 only.');
+  WriteLn('                        on x86-64 only .asm sources (text + global');
+  WriteLn('                        labels + extern calls); anything else is refused');
   WriteLn('  --shared              emit a shared library');
   WriteLn('  --threadsafe          lock the heap and the I/O paths');
   WriteLn;
