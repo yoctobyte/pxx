@@ -12,4 +12,15 @@
 # binding constraint, at a sha 20+ testable commits stale, to re-answer an
 # answered question. Always --covering first, and check whether an existing
 # phase already produces the verdict before queueing.
-440c822e6a80921cbbb3a825f5c5d8c31185cf28	full	frankT	-O2 default changed for every lane: EmitStaticLitHandle(+A64) promoted -O3->-O2, literals now shared+refcounted instead of freshly allocated. --covering says no run at or after it. Watch in-place literal mutation, two evaluations assumed distinct, and aarch64 (its arm moved for parity, unmeasured).
+# STRUCK 2026-08-30 by frankT, unserved: the 440c822e6a80 full request.
+# CONTAMINATED, not stale — it is a real sha and it does carry the -O2 promotion,
+# but `merge-base --is-ancestor 72b4c47a7 440c822e6a80` is NO, so it carries
+# frankB's broken string-literal commit 9588c8535 WITHOUT its revert. A full
+# tier there returns RED with the ~24 nilpy jobs frankwasm traced to 9588c8535,
+# and those reds land in a row keyed to the promotion — an archive row that
+# outlives the session that knows better. Two string-literal-handle changes 36
+# minutes apart, one broken, and the target contained both. Naming a SHA when
+# the question is about a TREE STATE is the mistake; check what a target
+# contains, not only that it exists.
+# Replaced by 1d8db8667, verified here to contain 440c822e6 AND 72b4c47a7.
+1d8db86672676310675225590908054741a9c1cd	full	frankT	-O2 default changed for every lane: EmitStaticLitHandle(+A64) promoted -O3->-O2. Post-revert target — contains the promotion 440c822e6 AND the revert 72b4c47a7, so a red here is attributable. EXACT native at this sha is RED with new_red=[] (one pre-existing job, test_warn_ignored_directives), so native is already answered: what is unserved is CROSS, and the aarch64 arm moved in the same commit and has only been run under qemu by its author. Watch in-place literal mutation and two evaluations assumed distinct.
