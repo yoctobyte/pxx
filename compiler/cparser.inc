@@ -10586,7 +10586,27 @@ begin
             (CurTok.Kind <> tkEOF) do Next;
       isDefinition := CurTok.Kind = tkBegin;
       TokPos := defPeekPos - 1; Next;   { rewind; the real scan runs below }
-      if isDefinition then procIdx := -1;
+      { §6 EXPERIMENT (feature-c-import-a-pascal-unit-under-a-mangled-name):
+        was `if isDefinition then procIdx := -1`. The bind now drops for a
+        DECLARATION too, not only a definition -- i.e. a differently-cased
+        Pascal twin no longer answers a C prototype at all, now that
+        `<unit>_pas_<Name>` is a real spelling for what the implicit bind was
+        the only way to reach.
+
+        This is the deletion §6 specifies, and it is deliberately the WHOLE
+        remaining bind rather than another narrowing rung: the two rungs below
+        (arity mismatch, float-class mismatch) are subsumed, since both only
+        ever fire when Name <> name, which now never binds.
+
+        Identical spellings are untouched and must stay so -- crtl redefines
+        Pascal builtins it spells the same (malloc/memcpy/strtod and dozens
+        more) and those must keep overwriting the one entry, or a C malloc and
+        a Pascal malloc would be two allocators in one program. This branch
+        only ever sees a twin Pascal spells DIFFERENTLY.
+
+        REVERT THIS ONE TOKEN if the corpus goes red -- and read the failures
+        as the spec before reverting: per §6, what breaks IS what must stay. }
+      procIdx := -1;
     end;
     { a C DECLARATION landing on a Pascal routine of another arity -- the
       shape `time_t time(time_t *)` against `function Time: TDateTime`. The

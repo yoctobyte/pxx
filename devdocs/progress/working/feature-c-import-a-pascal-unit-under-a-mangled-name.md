@@ -461,3 +461,109 @@ breaks, those failures ARE the spec for what must stay"*), so there is no
 defensible way to close §6 from the armchair, and no way to run it without the
 grant. Ticket stays in `working/` only while that question is live; if the answer
 is "not now", it goes back to `unfinished/` with §6 as its sole open item.
+
+## §6 ANSWERED BY THE USER, 2026-08-30 — and the answer re-reads the experiment
+
+> *"we deliberately split math and do **not** want to fall back to pascal
+> functions. because some make different assumptions. iirc, like round()
+> returning int or float, or other details. hence we said — we totally
+> re-implement math for both languages, there is no fallback. PAL stays a shared
+> layer though."*
+
+**This is not the experiment's result; it is a prior design decision the
+experiment did not know about, and it OUTRANKS the experiment.**
+
+### What it changes — the meaning of a red corpus, which is the whole point
+
+§6 as written says: *"If something breaks, those failures ARE the spec for what
+must stay."* That instruction assumed the bind was value-neutral plumbing, so a
+breakage would be evidence the bind was load-bearing. **Under the user's ruling
+it is not, and the reading inverts:**
+
+| corpus result | §6's original reading | the reading now |
+| --- | --- | --- |
+| nothing breaks | the bind was never load-bearing; delete it | same — delete it |
+| something breaks | **that failure is the spec; restore the bind for it** | **crtl is MISSING a C implementation; write it.** The bind does not come back. |
+
+A C program reaching a Pascal math routine is the defect, not the feature — the
+two are deliberately separate implementations with different assumptions
+(`round()`'s return type is the user's example), so a silent fallback is a
+silent *wrong value*, not a convenience. Restoring the bind to fix a breakage
+would re-introduce exactly the coupling the split exists to prevent.
+
+**Recorded because a future agent reading a red tstate would otherwise do the
+wrong thing with it**, and would be able to cite §6's own words while doing it.
+
+**Scope of the ruling: math, not everything.** The user's words are about the
+math split. The deletion below is broader — it drops the cross-namespace bind for
+*any* differently-cased Pascal twin. Nothing in the ruling contradicts that (and
+§6 already specified the broader deletion), but if the corpus reds land somewhere
+that is *not* math, that is a case the user has not ruled on and it goes back to
+Track U rather than being decided from this paragraph.
+
+**PAL stays shared** — explicitly unaffected. This change touches
+`CParseCDeclOrDef`'s name binding only.
+
+## §6 LANDED — the deletion, and what it does NOT prove
+
+One token: `if isDefinition then procIdx := -1` → `procIdx := -1`, in
+`cparser.inc`'s RUNG 0. The branch only ever runs when
+`Procs[procIdx].Name <> name`, i.e. a Pascal twin spelled *differently*, so
+identical spellings are untouched — crtl's deliberate redefinitions
+(`malloc`/`memcpy`/`strtod` and dozens more) must keep overwriting the one entry
+or a C `malloc` and a Pascal `malloc` would be two allocators in one program.
+
+It subsumes the two rungs below it (arity mismatch, float-class mismatch): both
+only fire when `Name <> name`, which now never binds. They are left in place
+rather than deleted — dead by construction, but deleting them is a second change
+and this one must stay revertible as a single token.
+
+### The differential, and it is a NEGATIVE result worth more than a green tick
+
+Both arms built at **one HEAD**, stash → build → measure → pop → build → measure,
+per the provenance discipline slice 1c paid for:
+
+```
+pre  aa78a7faf63a (deletion stashed)     post fd1bd8abae8a (deletion applied)
+sqrt sin cos exp log atan round(2.5) round(-2.5) floor(-2.5) ceil(2.1)
+pre vs post: IDENTICAL      post vs gcc oracle: MATCHES-GCC
+MATH-BIND-DIFFERENTIAL-COMPLETE
+```
+
+**So the bind was already dormant for math, and the deletion fixes no live wrong
+value.** `CPullCrtlForPrototypes` pulls crtl's C implementations — `math.c`
+defines `sqrt` (:965), `exp` (:282), `log` (:341), `sin` (:644), `cos` (:656),
+`atan` (:724) — and those win before the fallback is ever consulted. The user's
+`round()` hazard is real but **latent**: it bites only for a routine crtl does
+not define in C.
+
+That makes this a guard against future drift rather than a bug fix, and saying so
+matters. The tempting write-up — *"deleted the fallback, math now correct"* —
+would be a wrong root cause of the flattering kind, claiming a fix for a
+behaviour that was already correct.
+
+### Gate
+
+`make compiler/pascal26` **converged after 1 round**, `fd1bd8abae8a`, distinct
+from `pinned`. `tools/gate.sh quick` **GREEN** (read from the log's own
+`gate: GREEN` line, not a wrapper's exit code — slice 1b's lesson). The 11
+`c_pasunit` rungs plus `quick_canary_c`: **12/12 PASS**. Ten C math calls
+byte-equal to the gcc oracle.
+
+**The corpus verdict is Seven's, not mine** — the user's call, and it is the
+repo's own division of labour: breadth is Track T's, run against the exact sha.
+The previous park recorded §6 as blocked on a `PXX_ALLOW_FULL_SUITE=1` grant;
+that was wrong, and inherited rather than checked. `test-lua`, `test-zlib` and
+`test-cjson` are in T's `limited` and `full` tiers already.
+
+**But the corpus §6 names is not the corpus that will run.** Of `lua, tcc,
+quickjs, zlib`, only lua and zlib are in any tier: `test-quickjs` exists and is
+enrolled nowhere, and `test-tcc` does not exist at all. Filed as
+`task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass`
+[T p45], which also carries the sharper finding — `test-quickjs` self-skips
+`exit 0` when its tree is absent, so enrolling it alone would report green
+coverage on every box that has not fetched the tree.
+
+**So §6 is landed but not yet fully measured, and the gap is named.** Lua and
+zlib will answer for themselves on the next sweep of this sha; quickjs and tcc
+cannot answer until T's ticket lands.
