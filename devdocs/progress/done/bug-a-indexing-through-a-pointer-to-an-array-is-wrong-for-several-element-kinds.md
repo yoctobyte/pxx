@@ -526,4 +526,4 @@ green". A NilPy canary and `gate.sh quick` are green. Everything else is Track
 T's sweep.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 47eaf847c.

@@ -77,4 +77,4 @@ ELEMENT kind. Asking what the base IS has to come first.
 
 `test/test_pointer_to_array_indexing.pas` carries a `array[1..4] of PChar` row
 for exactly this, beside the `array[0..3]` rows that cannot catch it.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 47eaf847c.
