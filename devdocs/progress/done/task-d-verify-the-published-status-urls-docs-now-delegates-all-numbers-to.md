@@ -2,11 +2,12 @@
 track: D
 prio: 30
 type: task
-status: backlog
+status: done
 found: 2026-08-30
 found-by: frankD
 blocked-by: []
 summary: "docs/reference/status.md deliberately carries NO figures any more -- it delegates every number to six pxxc.org/status/* URLs. Nothing in this repo checks those URLs resolve or say what the page promises they say, and tools/ has no link checker at all. The page's failure mode moved from 'numbers go stale' (visible, self-correcting) to 'the page promises current numbers and delivers a 404' (invisible from this checkout). Spun out of idea-public-status-page, whose own gap is otherwise discharged."
+owner: frankD
 ---
 
 # The public status page delegates all its numbers off-site, and nothing checks the destination
@@ -120,6 +121,68 @@ checkers already shipped for this lane, and deliberately no larger:
 The checker runs, reports the six status URLs and the GitHub links, and skips
 cleanly with no network. No compiler build, no `lib/**`.
 
+## Done — `tools/doclinks.py`, 2026-08-30
+
+**Every URL was verified by fetching it, not by reading what the doc says it
+links to.** All eight distinct external links in `docs/**` resolve, and all five
+content-marker assertions pass:
+
+```
+docs: 13 external link(s), 8 distinct
+  ok   https://github.com/yoctobyte/pxx
+  ok   https://github.com/yoctobyte/pxx/blob/master/LICENSE.md
+  ok   https://pxxc.org
+  ok   https://pxxc.org/status/              [backlog resolved]
+  ok   https://pxxc.org/status/benchmarks/   [fib sieve]
+  ok   https://pxxc.org/status/conformance/  [pass fail]
+  ok   https://pxxc.org/status/flow/         [filed closed]
+  ok   https://pxxc.org/status/tests/        [GREEN RED]
+checked 8, BROKEN 0
+```
+
+**So the feared failure is not occurring** — `status.md`'s delegation is honest
+today. `/status/conformance/` carries real per-category pass/fail/skip counts
+across 25 `t*` categories, `/status/tests/` the four watcher hosts with SHAs and
+GREEN/RED verdicts, `/status/benchmarks/` per-`-O`-level timings against FPC,
+`/status/flow/` the filed-vs-closed curves. That does not retire the check; it
+establishes the baseline the check defends.
+
+### All four paths were exercised, not just the green one
+
+Publishing an untested failure path would repeat the defect found the same
+morning in the fact sheet — a command nobody ran reads as verification.
+
+| path | how | result |
+| --- | --- | --- |
+| green | the real `docs/**` | 8 ok, exit 0 |
+| 404 | a fabricated `/status/definitely-not-a-page/` | `BROKEN … HTTP 404`, exit 1 |
+| **200-but-wrong** | marker overridden to an impossible word | `BROKEN … reachable but missing …`, exit 1 |
+| offline | unreachable-probe timeout | `SKIP … this is not a failure`, exit 0 |
+
+The third row is the one the tool exists for and the one a plain status check
+cannot see. The fourth is why it will still be here in a month.
+
+Also confirmed ignored, both of which would otherwise be reported forever: the
+two `example.com` placeholders, and the ``https://`` fragment a naive regex
+lifts out of an inline code fence.
+
+### One divergence, reported not fixed
+
+The published dashboard says **338 backlog**; `tools/factsheet.sh` says **351**.
+Both are defensible — factsheet adds `backlog_new/` (13), the dashboard appears
+to break those out separately alongside "20 experimental". Not a defect, and not
+D's call, but two public surfaces answer "how big is the backlog" differently and
+whoever owns the generator (T/W) should decide which is meant. Filed here rather
+than as its own ticket because it is one sentence and may be intentional.
+
+### Not done, deliberately
+Not wired into a gate. It is the only check in this lane needing the network, it
+takes ~8 round trips, and its value is weekly rather than per-commit — running it
+from `docs/` work is what the ticket asked for and what the exit codes support.
+
+**Resolves** the spin-out. The parent `idea-public-status-page` is separately
+discharged (see this ticket's opening section) and is a `resolve`, not work.
+
 ## Provenance
 Spun out of `idea-public-status-page` [D p25] on 2026-08-30. Every claim above
 about `status.md`'s current content is from the file at `HEAD`, and the
@@ -127,3 +190,6 @@ about `status.md`'s current content is from the file at `HEAD`, and the
 `tools/twatch_web.py` and `tools/testmgr.py` directly — not from the parent
 ticket's description, which is two rewrites out of date and is the reason this
 spin-out reads the way it does.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -62,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (338)
+## backlog (337)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -402,7 +402,6 @@ _none_
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
-| task-d-verify-the-published-status-urls-docs-now-delegates-all-numbers-to | D | 30 | task | docs/reference/status.md deliberately carries NO figures any more -- it delegates every number to six pxxc.org/status/* URLs. Nothing in this repo checks those URLs resolve or say what the page promises they say, and tools/ has no link checker at all. The page's failure mode moved from 'numbers go stale' (visible, self-correcting) to 'the page promises current numbers and delivers a 404' (invisible from this checkout). Spun out of idea-public-status-page, whose own gap is otherwise discharged. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
 ## backlog_new (13)
@@ -653,9 +652,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2727)
+## done (2728)
 
-2727 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2728 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -996,7 +995,6 @@ _none_
 - [p 30] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 30] [A] refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
-- [p 30] [D] task-d-verify-the-published-status-urls-docs-now-delegates-all-numbers-to
 - [p 25] [U] decide-posix-master-vs-fpc-named-master-for-the-socket-facades (unblocks 1)
 - [p 25] [A] bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted
 - [p 25] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
