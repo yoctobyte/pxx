@@ -207,3 +207,36 @@ generator against a brand-new dead-code eliminator. **It is not a substitute for
 the queued full tier** — different question, different matrix — but it was not
 commissioned for it, which is worth stating plainly rather than letting it be
 read as coverage it is not.
+
+### RESULT — aarch64 `-O3` differential coverage, the first there has ever been
+
+```
+tools/csmith_fuzz.py --target aarch64 --opts 0,2,3 --iters 150 --seed-start 330000
+```
+
+**129 agreed with the gcc oracle, 21 skipped, ZERO findings.** No
+`MISCOMPILE_OPT`, no `MISCOMPILE_VS_GCC`, no `PXX_CRASH`, no
+`PXX_COMPILE_FAIL`, no `PXX_TIMEOUT`. Compiler `ba3d1a18edf6` (provenance
+above). Seeds **330000-330149**, previously unused.
+
+**Stating the scope, since that is this ticket's whole subject:**
+
+- **`-O3` WAS built** — the run header reads `pxx -O{0,2,3} --target=aarch64`,
+  which is the line the T ticket asks the harness to always print.
+- **21 skips = 14%**, every one *"the native validity filter could not build/run
+  it"* — csmith programs gcc itself would not take, so they never reached pxx.
+  Comparable to D1's 9%. **A skip is scored passlike**, so 129 is the
+  denominator that means anything, not 150.
+- **The slow ratio is NOT CHECKED**, and the harness says so itself: the oracle
+  matched aarch64's *data model*, not its ISA, and ran natively. Timing across
+  an emulation boundary is not a comparison anyone should make.
+- The pass-level reach is the section above: W2 fires 105 times per program,
+  residency 2280; the two slices this session landed have no probe and are
+  therefore not covered by any claim here.
+
+**What this closes and what it does not.** Item 3 is done for aarch64: the
+backend that carries 10 `-O3` gate sites now has oracle-free differential
+coverage at that tier, where it had none. It does not close arm32 / riscv32 /
+i386 — those are ILP32 and belong to the D3 class, a different evidentiary
+question — and it does not make the tier proven; 129 dry programs narrow the
+space, they do not clear it.
