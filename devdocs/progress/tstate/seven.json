@@ -11049,6 +11049,10 @@
   "verdict": "RED",
   "wall": 548.4
  },
+ "last_opt": {
+  "date": "2026-08-30T10:05:03Z",
+  "sha": "be6dbd7fba7e8428c6ffb2b64161af755559d910"
+ },
  "last_slow": {
   "date": "2026-08-30T09:59:41Z",
   "sha": "be6dbd7fba7e8428c6ffb2b64161af755559d910"
