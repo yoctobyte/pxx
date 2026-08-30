@@ -215,7 +215,13 @@ def main():
 
     def drive(jobs):
         """verify_pin against a stubbed gate; returns the recorded red list."""
+        # `tier` and `scale` are in every report testmgr writes (see the two
+        # `rep = {...}` sites in testmgr.py) and were missing here. A stub
+        # thinner than the real thing lets a path be "tested" against a report
+        # shape that cannot occur — which is how the pin verify's report write
+        # looked fine and raised KeyError the first time it ran for real.
         tw.run_gate = lambda *a, **k: ({"verdict": "RED", "wall": 1.0,
+                                        "tier": "full", "scale": 1.0,
                                         "jobs": jobs}, 0)
         tw.set_phase = lambda *a, **k: None
         tw.clone_head_back = lambda *a, **k: None
@@ -286,6 +292,23 @@ def main():
     check('"pin_baseline"' in row,
           "the row says whether a baseline existed",
           "without it an honest empty new_red is still ambiguous")
+
+    # ...and the RED verify above must have left a report behind. The publish
+    # contract promises one for any RED verdict; write_report_md had a single
+    # call site, in the ordinary run path, so no pin verify ever wrote one --
+    # 35 of the 40 pin verify rows in the archive have none, 26 of them RED.
+    # The run was attested and its BINARY was not: only the report carries the
+    # per-job reasons and compiler_sha256, which is exactly what was wanted and
+    # missing when v398's RED had to be adjudicated.
+    reports = os.path.join(clone_path, "devdocs", "progress", "tstate", "reports")
+    got = sorted(os.listdir(reports)) if os.path.isdir(reports) else []
+    check(bool(got), "a RED pin verify writes a report",
+          got[0] if got else "no report — the verdict is unfalsifiable again")
+    if got:
+        body = open(os.path.join(reports, got[-1])).read()
+        check("compiler_sha256" in body or "sha:" in body,
+              "the report carries the provenance the row cannot",
+              "which binary produced this verdict")
 
     print("\n%s" % ("FAILED: " + ", ".join(fails) if fails else "all pass"))
     return 1 if fails else 0

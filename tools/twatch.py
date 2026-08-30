@@ -6059,6 +6059,40 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
     if why:
         st["pin_verify"]["why"] = why
     save_state(clone, host, st)
+    pin_fixed = sorted(base_reds - set(reds))
+    # The publish contract at the top of this file promises a full report
+    # "ONLY when something CHANGED (NEW-RED / FIXED) or verdict RED" -- and the
+    # pin verify never wrote one. write_report_md had exactly one call site, in
+    # the ordinary run path. Measured over the whole archive on 2026-08-30:
+    # **35 of 40 pin verify rows have no report**, and the five that do are
+    # coincidences where a NORMAL run at the same sha happened to produce one.
+    # 26 of the 35 are RED, which the contract says must have a report.
+    #
+    # This is the verdict with the least evidence behind it and the most riding
+    # on it: it decides whether the binary every other track builds on gets
+    # reverted. The run row attests that the run HAPPENED -- wall, verdict,
+    # transitions -- but only the report carries the per-job reasons and the
+    # `compiler_sha256`, so the run was attested and its BINARY was not. That
+    # is precisely what was wanted and missing when v398's RED had to be
+    # adjudicated, and it cost two sessions and a defended pin to work around.
+    #
+    # Same condition as the ordinary path, deliberately: this closes the gap
+    # between the contract and the code rather than inventing a second rule.
+    #
+    # Non-fatal by construction: a report is DIAGNOSTIC and the verify is not.
+    # Losing the verdict because the thing that explains it could not be
+    # written would trade the load-bearing half for the helpful half, and this
+    # runs in a daemon where the failure would be a crash rather than a
+    # message. Say so on stderr and carry on.
+    if new_red or pin_fixed or verdict in ("RED", "TIMEOUT"):
+        try:
+            write_report_md(clone, host, sha, None, report,
+                            sorted(new_red), pin_fixed,
+                            sorted(set(reds) & base_reds), st)
+        except Exception as e:                       # noqa: BLE001 - see above
+            print("twatch: pin verify report not written (%s: %s) — the "
+                  "verdict below still stands" % (type(e).__name__, e),
+                  flush=True)
     with open(os.path.join(clone.path, TSTATE_REL,
                            "runs-%s.ndjson" % host), "a") as f:
         # `new_red` and `fixed` were LITERAL [] here while the real new_red was
@@ -6081,7 +6115,7 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
                             "full": True, "verdict": verdict,
                             "wall": report["wall"],
                             "new_red": sorted(new_red),
-                            "fixed": sorted(base_reds - set(reds)),
+                            "fixed": sorted(pin_fixed),
                             "pin_baseline": bool(base_reds),
                             "pin": ver}, sort_keys=True) + "\n")
     regen_index(clone)
