@@ -206,7 +206,7 @@ procedure EnsureTokCapacity(need: Integer);
 { Grow the token parallel arrays so index `need-1` is in bounds. Called after every
   Inc(TokCount) append (across all frontend lexers) and once at startup, so the
   invariant TokCapacity > TokCount holds before every write. Doubling from 65536;
-  capacity never shrinks across a per-source TokCount reset. ALL 8 token arrays grow
+  capacity never shrinks across a per-source TokCount reset. ALL 11 token arrays grow
   in lockstep — a missed one is a silent out-of-bounds. See
   feature-dynamic-compiler-tables. }
 var n: Integer;
@@ -217,6 +217,7 @@ begin
   SetLength(Tokens, n);          SetLength(TokPackRecords, n);  SetLength(TokQChecks, n);
   SetLength(TokRChecks, n);      SetLength(TokIChecks, n);      SetLength(TokScopedEnums, n);
   SetLength(TokNChecks, n);
+  SetLength(TokSrcOff, n);       SetLength(TokSrcLen, n);
   SetLength(CAttrFlags, n);      SetLength(CAttrAlignValues, n);
   TokCapacity := n;
 end;
@@ -582,7 +583,18 @@ begin
     if (ei >= 1) and (ei <= TokCount) then
     begin
       if ei = TokPos then ctx := ctx + '>>> ';
-      ctx := ctx + GetTokenStrFromRaw(Tokens[ei-1].SOffset, Tokens[ei-1].SLen) + ' ';
+      { TokSrcOff/TokSrcLen -- the token's SOURCE SPELLING, not SOffset/SLen.
+        The latter holds text only for identifiers and strings, so this window
+        used to print a line's identifiers and silently drop its syntax:
+        `x := (1 ;` rendered as `begin x    >>>  end`, losing ':=', '(', '1'
+        and ';' -- precisely the characters a syntax error is about. Falls back
+        to SOffset/SLen for the frontends whose lexers do not fill the new
+        channel yet (TokSrcLen is 0 there), so their output is unchanged rather
+        than blank. }
+      if TokSrcLen[ei-1] > 0 then
+        ctx := ctx + GetTokenStrFromRaw(TokSrcOff[ei-1], TokSrcLen[ei-1]) + ' '
+      else
+        ctx := ctx + GetTokenStrFromRaw(Tokens[ei-1].SOffset, Tokens[ei-1].SLen) + ' ';
     end;
   writeln('  near: ', ctx);
 end;
@@ -2375,7 +2387,13 @@ begin
   else DbgMarkTokFile(TokCount, DbgFileId(path));
 end;
 
-procedure LexOne;
+procedure LexOne(var tokStart: Integer);
+{ `tokStart` is where the token's SOURCE TEXT begins -- SrcPos once whitespace,
+  comments, directives and include markers are behind us. With SrcPos on return
+  that gives the token's exact span, which for a keyword, operator, punctuation
+  mark or ordinary number is the ONLY place its text exists: the lexer sets
+  CurTok.SVal for identifiers, strings and over-wide decimals and nothing else.
+  bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
 var
 {$ifdef FPC}
   c: Char;
@@ -2396,6 +2414,7 @@ begin
     PasLexLineMarker;
     SkipSpace;
   end;
+  tokStart := SrcPos;
   CurTok.Line := SrcLine; CurTok.SVal := '';
   if SrcPos > Length(Source) then
   begin
@@ -2660,7 +2679,7 @@ begin
 end;
 
 procedure LexAll;
-var len, i: Integer; sval: AnsiString;
+var len, i, tokStart, srcLen: Integer; sval: AnsiString; reuse: Boolean;
 begin
   TokCharLen := 0;
   TokCount   := 0;
@@ -2670,7 +2689,7 @@ begin
   LexMarkDbgLines := True;
   Lexing := True;
   repeat
-    LexOne;
+    LexOne(tokStart);
     EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount].Kind    := CurTok.Kind;
     Tokens[TokCount].IVal    := CurTok.IVal;
@@ -2693,16 +2712,75 @@ begin
       Inc(TokCharLen);
       Inc(i);
     end;
+    { and the SOURCE SPELLING, for every token, in its own channel — see
+      TokSrcOff/TokSrcLen in defs.inc for why it cannot share SOffset/SLen.
+
+      SHARES the SVal bytes when the two are the same text, which for an
+      identifier they almost always are. Storing both unconditionally more than
+      doubled the pool -- measured on compiler.pas at 3,219,348 existing bytes
+      plus 4,001,848 of spellings, i.e. 86% of a FIXED 8 MB STRING_CAP whose
+      overflow is a hard error. Sharing gives the identifiers back. }
+    srcLen := SrcPos - tokStart;
+    if srcLen < 0 then srcLen := 0;
+    if tokStart + srcLen - 1 > Length(Source) then srcLen := Length(Source) - tokStart + 1;
+    if srcLen < 0 then srcLen := 0;
+    reuse := (srcLen = len) and (srcLen > 0);
+    if reuse then
+    begin
+      i := 1;
+      while i <= len do
+      begin
+        if TokChars[Tokens[TokCount].SOffset + i - 1] <> Source[tokStart + i - 1] then
+        begin
+          reuse := False;
+          i := len;
+        end;
+        Inc(i);
+      end;
+    end;
+    if reuse then
+    begin
+      TokSrcOff[TokCount] := Tokens[TokCount].SOffset;
+      TokSrcLen[TokCount] := len;
+    end
+    else
+    begin
+      if TokCharLen + srcLen > STRING_CAP then Error('token char pool overflow');
+      TokSrcOff[TokCount] := TokCharLen;
+      TokSrcLen[TokCount] := srcLen;
+      i := 1;
+      while i <= srcLen do
+      begin
+        TokChars[TokCharLen] := Source[tokStart + i - 1];
+        Inc(TokCharLen);
+        Inc(i);
+      end;
+    end;
     Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until CurTok.Kind = tkEOF;
+  { PXXDBG=a.tokpool — what the token char pool actually holds, against its cap.
+    STRING_CAP is FIXED and overflowing it is a hard Error, so anyone sizing a
+    change against it needs the real number. Sizing this feature from SOURCE
+    bytes gave 7.52 MiB (94% of cap) and would have killed it; the quantity that
+    matters is TOKEN bytes, and comments are ~68% of this repo's source. Measure
+    with the instrument, not with a proxy.
+    bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
+  if PxxDbgWants('a.tokpool', '*') then
+  begin
+    len := 0;
+    for i := 0 to TokCount - 1 do len := len + TokSrcLen[i];
+    writeln('PXXDBG a.tokpool bytes=', TokCharLen, ' cap=', STRING_CAP,
+            ' tokens=', TokCount, ' spellings=', len,
+            ' other=', TokCharLen - len);
+  end;
   Lexing := False;
 end;
 
 function LexAppend(const srcText: AnsiString): Integer;
 var
   savedSrcPos, savedSrcLine: Integer;
-  len, i, unitStart: Integer;
-  savedMarkDbg, savedLexing: Boolean;
+  len, i, unitStart, tokStart, srcLen: Integer;
+  savedMarkDbg, savedLexing, reuse: Boolean;
   sval: AnsiString;
 begin
   SavedLexSource := Source;
@@ -2729,7 +2807,7 @@ begin
     unitStart := TokCount;
 
   repeat
-    LexOne;
+    LexOne(tokStart);
     EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount].Kind    := CurTok.Kind;
     Tokens[TokCount].IVal    := CurTok.IVal;
@@ -2751,6 +2829,50 @@ begin
       TokChars[TokCharLen] := sval[i];
       Inc(TokCharLen);
       Inc(i);
+    end;
+    { and the SOURCE SPELLING, for every token, in its own channel — see
+      TokSrcOff/TokSrcLen in defs.inc for why it cannot share SOffset/SLen.
+
+      SHARES the SVal bytes when the two are the same text, which for an
+      identifier they almost always are. Storing both unconditionally more than
+      doubled the pool -- measured on compiler.pas at 3,219,348 existing bytes
+      plus 4,001,848 of spellings, i.e. 86% of a FIXED 8 MB STRING_CAP whose
+      overflow is a hard error. Sharing gives the identifiers back. }
+    srcLen := SrcPos - tokStart;
+    if srcLen < 0 then srcLen := 0;
+    if tokStart + srcLen - 1 > Length(Source) then srcLen := Length(Source) - tokStart + 1;
+    if srcLen < 0 then srcLen := 0;
+    reuse := (srcLen = len) and (srcLen > 0);
+    if reuse then
+    begin
+      i := 1;
+      while i <= len do
+      begin
+        if TokChars[Tokens[TokCount].SOffset + i - 1] <> Source[tokStart + i - 1] then
+        begin
+          reuse := False;
+          i := len;
+        end;
+        Inc(i);
+      end;
+    end;
+    if reuse then
+    begin
+      TokSrcOff[TokCount] := Tokens[TokCount].SOffset;
+      TokSrcLen[TokCount] := len;
+    end
+    else
+    begin
+      if TokCharLen + srcLen > STRING_CAP then Error('token char pool overflow');
+      TokSrcOff[TokCount] := TokCharLen;
+      TokSrcLen[TokCount] := srcLen;
+      i := 1;
+      while i <= srcLen do
+      begin
+        TokChars[TokCharLen] := Source[tokStart + i - 1];
+        Inc(TokCharLen);
+        Inc(i);
+      end;
     end;
     Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until CurTok.Kind = tkEOF;
@@ -2862,14 +2984,23 @@ procedure Expect(k: TTokenKind; const name: AnsiString);
   TTokenKind's declaration order and it shifts whenever a token is added, so it
   is a debugging aid and never a user-facing one.
   bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path }
+var spell: AnsiString;
 begin
   if CurTok.Kind <> k then
   begin
     if PxxDbgWants('a.expect', '*') then
       writeln('PXXDBG a.expect want=', Ord(k), ' got=', Ord(CurTok.Kind),
               ' line=', CurTok.Line);
-    if CurTok.SVal <> '' then
-      Error('expected ''' + name + ''' before ''' + CurTok.SVal + '''')
+    { The token's SOURCE SPELLING where the lexer records one (TokSrcOff/
+      TokSrcLen), else its SVal. That order matters: SVal is a NAME or a decoded
+      VALUE, and it is empty for exactly the tokens a reader cannot identify --
+      keywords and punctuation. The spelling is what was typed, so `;` and `end`
+      can finally be named instead of omitted. }
+    spell := CurTok.SVal;
+    if (TokPos >= 1) and (TokPos <= TokCount) and (TokSrcLen[TokPos - 1] > 0) then
+      spell := GetTokenStrFromRaw(TokSrcOff[TokPos - 1], TokSrcLen[TokPos - 1]);
+    if spell <> '' then
+      Error('expected ''' + name + ''' before ''' + spell + '''')
     else
       Error('expected ''' + name + '''');
   end;

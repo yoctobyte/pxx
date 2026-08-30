@@ -3975,6 +3975,20 @@ var
   TokRChecks : array of Boolean; { {$R+}/{$RANGECHECKS ON} state at this token — read at AN_ASSIGN creation (AllocNode), lexically scoped like TokQChecks (feature-pascal-range-checks-r-plus) }
   TokIChecks : array of Boolean; { {$I+}/{$IOCHECKS ON} state at this token — opt-in Text-I/O failure raising (feature-pascal-io-checks-i-plus; the FPC-DEFAULT flip is a user dialect call, see the ticket) }
   TokScopedEnums : array of Boolean;  { {$SCOPEDENUMS} state at each token }
+  { The token's SOURCE SPELLING -- offset and length into TokChars, exactly like
+    SOffset/SLen but populated for EVERY token, and carrying no other meaning.
+    A SEPARATE channel on purpose: SOffset/SLen is not a text field, it is a
+    per-kind channel where emptiness is a flag. On tkInteger `SLen > 0` MEANS
+    "wider than Int64" (asserted in pasparser_expr.inc, not in the lexer), on
+    tkString empty is a legitimate '', and on tkIdent it is the NAME rather
+    than the span (`&String` stores the bare name). Writing spellings into it
+    makes every integer literal a promotable wide int and `writeln(42)` stops
+    compiling -- measured.
+    These two are read ONLY by diagnostics (the `near:` window, Expect's
+    "before X"), so nothing can come to depend on their emptiness.
+    bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
+  TokSrcOff : array of Integer;
+  TokSrcLen : array of Integer;
   CAttrFlags : array of Byte;
   CAttrAlignValues : array of Integer;
   TokCount   : Integer;

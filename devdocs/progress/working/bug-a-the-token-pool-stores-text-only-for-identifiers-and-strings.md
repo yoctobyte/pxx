@@ -3,8 +3,8 @@ track: A
 prio: 60
 type: bug
 blocked-by: []
-status: backlog_new
-owner: ""
+status: working
+owner: frank-optimize
 found: 2026-08-30
 found-by: frank-optimize, doing bug-a-a-failed-expect-prints-a-raw-dump-with-no-error-prefix-and-no-source-path
 summary: "RE-SCOPED 2026-08-30 after an attempt: this is NOT eleven mechanical lexer edits. SOffset/SLen is an OVERLOADED channel, not a text field -- for tkInteger, SLen>0 MEANS 'wider than Int64', so giving ordinary tokens their text makes every integer literal promotable and `writeln(42)` fails to compile. A correct fix needs a SEPARATE span channel, i.e. new parallel arrays in defs.inc, before any lexer is touched. Original finding stands: every lexer stores token text for tkIdent and tkString only; keywords, punctuation, operators and numbers get SOffset := 0. That if/else is hand-copied across eleven lexers. So the `near:` window under EVERY diagnostic in the compiler prints the identifiers and silently discards the syntax -- `near: begin x >>> end` for `x := (1 ;` -- and no diagnostic can name an offending keyword. Sized: 3.24 MiB of token text against a fixed 8 MiB STRING_CAP, 40.5%, so this is a mechanical change to eleven files, not a pool redesign."
@@ -257,3 +257,86 @@ during:  near: ; begin x := ( 1 >>> ; end .        <- and Expect gained
 
 That is the payoff, measured. It just cannot be bought at the price of the
 integer-literal sentinel.
+
+## Slice 1 of 12 landed: `defs.inc` channel + the Pascal lexer (2026-08-30, frank-optimize)
+
+```
+before:  pascal26:17: error: expected ')'
+           near:  begin x    >>>  end
+after:   pascal26:17: error: expected ')' before ';'
+           near: ; begin x := ( 1 >>> ; end .
+```
+
+`TokSrcOff`/`TokSrcLen` in `defs.inc` (beside the other parallel token arrays,
+grown in lockstep by `EnsureTokCapacity`), filled by the Pascal lexer, read by
+`WriteTokenContext` and `Expect`. Sentinels untouched — which is the whole point,
+and is asserted rather than asserted-to-be-true: **twelve programs across
+generics, properties, wide literals and nil-checks compile to byte-identical
+binaries** against a control built from the same HEAD without the change. The
+generics corpus is in there deliberately, because it is what moved under the
+rejected approach.
+
+Other frontends are unchanged, on purpose: `TokSrcLen` is 0 for tokens their
+lexers append, and both consumers fall back to `SOffset`/`SLen`, so C still
+renders `near:    a  b >>>  main` until its slice lands. Ten lexers to go.
+
+### The observable is a test now, and it was shown to fail first
+
+`test/test_diag_near_window_fail.pas` + two rows in `test-core` assert the exact
+`near:` text and that `Expect` names `';'`. Run against the pre-change binary
+both fail, and the guard prints the difference itself:
+
+```
+expect_same: MISMATCH [test_diagnear26]
+-  near: ; begin x := ( 1 >>> ; end .
++  near:  begin x    >>>  end
+```
+
+### The pool nearly ate its own cap, and the first number was a proxy again
+
+`STRING_CAP` is a FIXED 8 MB and overflowing it is a hard `Error`. Storing every
+spelling unconditionally measured **7,221,196 bytes — 86% of cap**, leaving 1.1 MB
+of headroom on the largest Pascal TU in the repo. My earlier sizing said 3.24 MiB
+and 40%; it was counting *spans* and forgetting the pool already holds SVal, so
+the true cost was the sum of both. Same failure as the 7.52 MiB row above, one
+level down: **I sized the addition instead of the total.**
+
+Fixed by sharing rather than by raising the cap: when a token's spelling is
+byte-equal to the SVal already written — which for an identifier it almost always
+is — `TokSrcOff`/`TokSrcLen` point at those same bytes instead of a copy.
+
+| | bytes | % of cap |
+| --- | ---: | ---: |
+| before this feature | 3,219,348 | 38.4% |
+| naive, every spelling copied | 7,221,196 | 86.1% |
+| **sharing identical bytes** | **4,261,414** | **50.8%** |
+
+Net cost ~1.0 MB, headroom 3.9 MB. Measured with `PXXDBG=a.tokpool:*`, added in
+the same commit precisely so the next person sizing against `STRING_CAP` reads
+the pool instead of counting source bytes — twice now that proxy has pointed the
+opposite way.
+
+### Warning for the C slice specifically
+
+`defs.inc` records that a FIXED cap is what sqlite's 257k-line amalgamation broke
+before. C spellings on a TU that size are the case most likely to exhaust the
+pool even with sharing, so **the C slice must measure `a.tokpool` on the
+amalgamation before it lands**, and may need `STRING_CAP` to become dynamic
+(the `DbgBuf` treatment from
+`bug-a-g-with-o2-or-o3-overflows-the-dwarf-buffer-on-compiler-pas`) as its own
+prerequisite. Do not assume Pascal's 50.8% generalises.
+
+### Provenance correction
+
+frankC and I independently found the same false premise and the same
+`clexer.inc:834` — and then independently proposed the **same wrong fix**, because
+we were both reading the pool as a text field. Two agents agreeing was evidence
+the *problem* was real; it was not evidence the *solution* was, and it could not
+have been: agreement cannot detect a shared premise. What separated them was an
+attempt costing twelve seconds of build.
+
+### Gate
+
+`make compiler/pascal26` -> converged after 1 round(s), `379ffffc4151`;
+`tools/gate.sh quick` GREEN 7/7; twelve-program emitted-code A/B identical; both
+new assertions shown to fail on the pre-change binary.

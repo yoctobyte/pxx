@@ -5525,6 +5525,21 @@ test-core: $(COMPILER)
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
 	./$(COMPILER) --mimic-fpc test/test_virtual_call_string_args.pas $(TESTTMP)/test_virtual_call_string26
 	tools/expect_same.sh test_virtual_call_string26 "$$($(TESTTMP)/test_virtual_call_string26)" "$$(printf 'v-len=6 d1=112\nv-len=2 d1=120\ni-len=5 d1=97')"
+	# The `near:` window must carry a line's SYNTAX, not only its identifiers.
+	# lexer.inc calls that window "the difference between a findable error and an
+	# unfindable one", and for the life of the code it printed the identifiers and
+	# silently dropped ':=', '(', '1' and ';' -- the characters a syntax error is
+	# actually about. Nothing failed when it degraded, and there was NO test
+	# anywhere on near: content, which is how it survived. This asserts the exact
+	# text, because that is the only instrument that can tell a complete fix from
+	# a convincing one: the failure mode is output that still looks like output.
+	# bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings
+	! ./$(COMPILER) test/test_diag_near_window_fail.pas $(TESTTMP)/test_diagnear26 > $(TESTTMP)/test_diagnear.log 2>&1
+	tools/expect_same.sh test_diagnear26 "$$(grep '  near:' $(TESTTMP)/test_diagnear.log | sed 's/ *$$//')" "  near: ; begin x := ( 1 >>> ; end ."
+	# ...and Expect names the offending token by its SPELLING. ';' has no SVal --
+	# only identifiers and strings do -- so before the source-span channel this
+	# read "expected ')'" with the culprit omitted.
+	tools/expect_same.sh test_diagnear_msg26 "$$(grep -c "error: expected ')' before ';'" $(TESTTMP)/test_diagnear.log)" "1"
 	# generic record/array/procvar templates (feature-pascal-generic-nonclass-templates)
 	./$(COMPILER) test/test_generic_nonclass.pas $(TESTTMP)/test_generic_nonclass26
 	tools/expect_same.sh test_generic_nonclass26 "$$($(TESTTMP)/test_generic_nonclass26)" "$$(printf '7\n20\n42')"
