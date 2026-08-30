@@ -205,6 +205,28 @@ tools/progress.sh board-md          # regen BOARD.md/.html; commit with the move
 tools/sync.sh                       # push, then record the sha it LANDED as
 ```
 
+### `pull --rebase` before FILING, not only before writing
+
+`near "<title>"` asks whether the ticket already exists. It cannot ask whether the
+**work** already exists — and a stale checkout answers that question wrong without
+saying so.
+
+**A ticket is a measurement too.** Its body is a present-tense claim about the repo,
+usually read straight out of the filer's working tree. If that tree is behind, the
+claim describes a repo that no longer exists, and nothing downstream re-derives it:
+the resolver reads the ticket, believes it, and starts work.
+
+Measured 2026-08-30: an agent read `symtab.inc` in its own checkout, filed a
+refactor for a predicate that "does not exist yet", and the work had landed
+**forty minutes earlier** in `d5fd2a6ca`. It caught this itself and rejected the
+ticket. Had it not, the resolver would have written a predicate already three call
+sites deep.
+
+**A wrong ticket is worse than a wrong note, because it directs labour.** A stale
+note is read once; a stale ticket is executed. So `git pull --rebase` immediately
+before you file, and state what you actually verified — separate *"I ran this"* from
+*"I read this in a tree of unknown age"*.
+
 `resolve` takes an optional sha, and you normally omit it: it writes
 `PENDING-COMMIT` and `sync.sh` replaces that with the sha the resolve commit
 landed as. The sha you could name at resolve time is the pre-rebase one, and
