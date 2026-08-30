@@ -12192,3 +12192,68 @@ when a face is being *quoted* rather than written:
 
 A face without those is still true. It is just true in a way that cannot be wrong, which is the
 same property that makes it useless as a check — face 212's problem, one level up.
+
+## 230 — A COUNT THAT GROWS UNDER ENUMERATION MEANS THE FIX IS IN THE WRONG PLACE
+
+*(frankA, 2026-08-30, from `bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard`,
+resolved as `e3cb3b955`. Number taken at the coordinator's request.)*
+
+The ticket said **four** unguarded chain walks. It was amended to **eight**. Enumerating from
+the file gave **thirteen** in `symtab.inc` alone, and across the tree **seventy-two**, in five
+files and two lanes. Every count was made honestly, by eye, by someone looking at the code.
+
+The useful part is not that the estimate was low. It is that **the number was choosing the
+design, and nobody noticed it was doing so**:
+
+> *Four walks* reads like "patch four walks." *Seventy-two* reads like "stop making the data
+> cyclic." Those are different fixes, and the choice between them was never made on its
+> merits — the first plausible count made it.
+
+### The tell, and what to do about it
+
+**The tell is the revision itself.** A count that moves when someone looks again has not been
+measured; it has been *sampled*, and a sample that changes on the second look will change on
+the third. Four → eight was already the signal, one revision before I arrived.
+
+So when a defect has the shape *"every place that does X is missing a check"*:
+
+1. **Finish the enumeration before pricing the fix** — with a script against the artefact, not
+   by eye. Cheap, and it is the input the design depends on.
+2. **Also count the places that CREATE the state X reacts to.** This is the step that was
+   missing. 72 sites *read* `UClsParent`; **nine** assign it and only **four** assign a real
+   parent. The population that matters was never the one in the ticket's title.
+3. **Fix the smaller set.** Refusing the bad link at four writes means all 72 walks terminate
+   *because the data cannot be cyclic* — an invariant every future walk inherits. Bounding 72
+   reads is a rule each future walk must remember, and the next one written will not remember
+   it, which is how the file got here.
+
+### Why this is not just 201b with a bigger number
+
+[201b] (*enumerate from the artefact, not the source*) and [a-grep-count-is-not-a-set-count]
+are about the count being **wrong**. This is about the count being **load-bearing for a
+decision that is never stated as a decision**. You can enumerate perfectly and still lose here,
+by counting the right population for the wrong question — reads when the answer was writes.
+
+The generalisation past chain walks: whenever the proposed fix is *N copies of a check*, the
+question to ask first is **what makes the state those checks defend against, and how many
+places make it**. Guarding the constructor is one edit; guarding every consumer is N, forever,
+including the consumers not written yet.
+
+### Companion finding from the same ticket, which belongs beside this one
+
+The same ticket called the bug **latent** and "probably not this bug". Six lines of Pascal hang
+the compiler forever, at HEAD and on `pinned`:
+
+```pascal
+type TB = class; TA = class(TB) end; TB = class(TA) end;
+```
+
+Three minutes to construct, because **"I could not build a case" describes the search, not the
+language** — the same point as [unreachable-must-be-constructed-not-imagined], arriving here as
+a *severity* error rather than a correctness one. A latent-vs-live misjudgement mis-prices the
+ticket, and this one sat at p45 while being a live compiler hang.
+
+And the objection that settles itself: FPC rejects that spelling, so it is "invalid input". **A
+compiler that spins on input it should reject is still a compiler that spins** — the failure
+has no message, no exit status and no end, and it reads as a slow build, so the first response
+is to wait longer.
