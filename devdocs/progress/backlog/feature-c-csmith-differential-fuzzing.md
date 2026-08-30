@@ -114,6 +114,45 @@ failures are crashes (still one dominant class — see below).
   exercise aarch64/arm32/i386/riscv32 codegen against the same oracle. High value, cheap:
   the harness only needs a `--target` pass-through and `tools/run_target.sh`.
 
+## Two "still open" bullets are DONE, and one prereq note is stale — frankC, 2026-08-30
+
+Checked before running, because the list above is what a resuming sitting plans
+from and three of my dispatches this week turned out already-fixed.
+
+**1. `--target` is IMPLEMENTED.** The bullet says *"the harness only needs a
+`--target` pass-through and `tools/run_target.sh`"*. Track T built it in
+`764e98048` (*csmith --target, and never report a comparison it did not make*),
+and then went further than the bullet asked:
+
+- `174186b5d` keys the oracle on the **data model**, not the ISA, with a layout
+  classifier — because a csmith checksum depends on whether `long` is 64-bit, so
+  a native x86-64 gcc against an ILP32 target disagrees for reasons that are not
+  miscompiles. The harness now looks for a cross gcc whose data model matches,
+  falls back to a native one, and if it finds neither it **drops the vs-gcc
+  comparison and says so** rather than filing `MISCOMPILE_VS_GCC` on a `long`
+  width.
+- `21117f415` marks riscv64 as a target with no backend.
+- The pxx-vs-pxx `-O` comparison is unaffected by any of that — it compares one
+  target against itself, and is the finding we own outright.
+
+`bug-t-csmith-harness-reports-slow-as-a-timeout`, which this axis was bundled
+with, is in `done/`. **So the cross-target axis is not blocked on T; it is ready
+to run.** Nobody updated the bullet.
+
+**2. The `--opts 0,2,3` bullet is actionable right now** and I am running it this
+sitting. Nothing was needed: `--opts` has always been a flag.
+
+**3. The prereq note is stale in a harmless direction.** It says
+`tools/install_lib_candidates.sh csmith` vendors the headers into
+`library_candidates/csmith/include`. That directory **does not exist on this box**
+and nothing needed it: `find_csmith_include()` checks the vendored path, then
+`/usr/include/csmith`, then `/usr/local/include/csmith`, and the apt install
+supplies `/usr/include/csmith/csmith.h`. The generator is at `/usr/bin/csmith`.
+
+Recorded because "prereqs are already satisfied on this box" plus a named
+install command reads as *run this first*, and running it would have been a
+no-op download for a resuming sitting that had no other reason to doubt the line.
+
 ## Reduction recipe (no creduce on this box — these work without it)
 
 1. **Name the guilty variable in seconds.** csmith programs take an argv flag that prints a
