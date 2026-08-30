@@ -63,7 +63,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (383)
+## backlog (384)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -79,6 +79,7 @@ _none_
 | bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets | A | 50 | bug | x86-64's argv->frozen-string copy is now clamped and riscv32/xtensa clamp via PXXCStrToFrozen, but aarch64, arm32 and i386 were never checked — the parent ticket listed them and I did not close that gap. Also: the clamp is duplicated per path rather than shared, so a new target gets a new copy. | — |
 | bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area | A | 45 | bug | arm32 cdecl refuses any argument block over 4 core registers — so arm32 only HALF-joins the cdecl campaign | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
+| bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out | A+S | 50 | bug | `builtin.pas:1702` calls `PxxSciDigits17` unconditionally, but its forward declaration in `builtinheap.pas` sits inside `{$ifndef PXX_ESP}` (407-441) while its BODY at :5148 is unguarded. So on a bare ESP target the body compiles and nothing can reach it, and `builtin.pas` fails with `undefined variable (PxxSciDigits17)`. This is why `builtin.pas` does not compile on bare xtensa or bare riscv32 at all -- and why 22 arms of `needsBuiltin` carry `(not TargetIsEspClass)` to route around it. | — |
 | bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it | A | 40 | bug | A C diagnostic can now print `in: <the .c module>` (CModRange*, ungated), but an error inside an INCLUDED HEADER prints nothing: the header-accurate per-token file table is DbgRange*, which returns early without -g. Pascal has an ungated twin for exactly this reason (PasMarkTokFile); C does not. | — |
 | bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull | A | 50→55 | bug | CModuleOfTok is STICKY: CMarkTokModule is only called for a path ending in `.c`, so returning from a crtl `.c` pull back into the enclosing `.h` never resets the attribution and every following token still reports that `.c` as its module. Blocks the remaining half of bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead: a bodied static after `#include <stdio.h>` cannot be told apart from one inside crtl's stdio.c. Filed by Track C -- the table lives in dbg_filetable.inc, which is Track A. | — |
 | bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array | A | 40→60 | bug | The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A. | — |
@@ -901,6 +902,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
+- [p 50] [A+S] bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
 - [p 50] [A] bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit
 - [p 50] [C] bug-c-a-long-long-bitfield-after-a-smaller-one-puts-later-members-at-the-wrong-offset
