@@ -275,6 +275,31 @@ different first wall. **Not written in on report**, because adopting an unverifi
 corpus number is the exact error this correction exists to fix, one level up.
 Whoever records the corpus figure should state the probe, the sha AND the binary.
 
+**Followed up, and the mode explanation is dead two ways** (2026-08-30, frankP):
+
+1. `generics.collections.pas:29` is `{$MODE DELPHI}{$H+}` — **the unit sets its
+   own mode** and inherits nothing from whoever compiles it. That is in the
+   source; no run was needed to kill it.
+2. **The invocation recorded alongside the `:120` figure does not run.** On BOTH
+   binaries — HEAD `6319b892f517` and `pinned` `53800fbeb0b66e11`, with and
+   without `-Fu`:
+
+   ```
+   $ pascal26 .../generics.collections.pas
+   pascal26:27: error: this file is a unit, not a program — compile a program
+                       that uses it (pxx has no standalone-unit output)
+   ```
+
+   pxx refuses standalone units at `:27`, before any generic is examined, so that
+   command cannot emit `:120`/`:123`/`:135`. Something else produced them and it
+   is for the lane that ran it to say what.
+
+So the only corpus stops with a reproducible invocation attached are the two in
+the table above. **A recorded command that nobody re-executes is not evidence —
+it is a claim with a `$` in front of it**, and that check is free. It is the same
+missing-value defect as "masked" one level out: the verdict field could not say
+*unreproducible*, so an unrunnable command sat in two tickets looking like data.
+
 **What is unchanged:** the wall was long-standing rather than a regression from
 this session's generics work; running `pinned` alongside HEAD is what made any of
 this visible; and **this change moved the corpus not at all** — that conclusion
