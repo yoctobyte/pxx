@@ -327,7 +327,7 @@ order. "Was my change in that tree?" is answerable directly —
 and reading the code out of the tested tree **cannot be asked backwards**. Prefer
 an instrument with no orientation to remembering which way round to point one.
 
-### The four shapes
+### The five shapes
 
 1. **Wrong scope** — the answer is about your tree, your object store, your
    checkout. Staleness is the commonest, and *the tell is a partial result*: crash
@@ -343,11 +343,20 @@ an instrument with no orientation to remembering which way round to point one.
    rest. A green here is *no measurement*, not a null.
 4. **Missing input scored as a result** — no `.expected`, an empty archive, a
    truncated log tail. Absence enters the arithmetic as data.
+5. **Argument order** — the `merge-base` row above, and it is the purest of the
+   five: no stale tree, no missing file, no wrong grep, no unreached code. The
+   right tool, the right two objects, asked in the wrong direction. An ancestry
+   query is a question with a *direction*, so it can be asked backwards and will
+   answer, cleanly, about the reverse relation.
+   **The guard is not "be careful with the argument order" — it is to ask a
+   question that has no direction to get wrong.** `git show <sha>:<file>` and
+   read whether the code is in it. Ancestry infers; the artifact states.
 
-### The habit that defeats all four
+### The habit that defeats all five
 
 **Say out loud what question the instrument actually answers, then check it is
 the one you asked.** "Verify it" does not help — every agent above *did* verify.
+And where an ARTIFACT can answer instead of an inference, read the artifact.
 
 Then: **pair every green with a row that would have gone red.** Not a second
 test — a specific row you can point at and say *this one fails if the bug is
