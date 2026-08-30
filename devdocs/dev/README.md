@@ -58,6 +58,77 @@ both directions.
 `session-roster.md` is also live, and is the one file here that is *supposed* to
 be rewritten continuously: it is the coordinator's durable state.
 
+## 4. Obligations parked in prose — where this directory rots
+
+From a full audit of the 42 live references, 2026-08-30 (frankD). Two findings,
+and the second is the surprising one.
+
+### The rare failure: an obligation nobody owns
+
+An **obligation** here means a sentence saying the repo owes something — *"to fix
+when someone is in there"*, *"should be moved"*, *"not yet written"*. A wide
+sweep found 37 obligation-shaped sentences across the live set (excluding
+`session-roster.md`, which is a running log). Read individually, **only four are
+real**; the rest are prose *about* obligations, correction notes, or conditional
+hedges that carry their own escape.
+
+| where | the obligation | why it cannot be discharged |
+| --- | --- | --- |
+| `autonomy.md` | H1/H2 concurrency hypotheses, *"adopt as a safe default until `claudecap` confirms"* | **`claudecap` is not reachable from this repo** — not in `tools/`, not on `PATH`, one copy under `/data/borg-rescue/`. The named instrument does not exist here, so the deferral is permanent. Annotated in place. |
+| `track-b-workarounds.md` | *"Re-check each session against the latest pin … verify the bug ticket is still in `backlog`/`blocked` before assuming the workaround is still needed"* | addressed to **every** session, therefore owned by none. Measured: 7 of its 8 rows wait on bugs already closed. Filed as [[bug-b-seven-of-eight-workarounds-waiting-on-an-open-bug-are-waiting-on-nothing]]. |
+| `c-linking-and-crtl-autopull.md` | *"(A future refinement could skip compiling a module whose symbols are never referenced.)"* | a real optimisation idea with no ticket, so the ranker cannot see it and no lane owns it. |
+| `vicarius.md` | *"(Filed as a keep-around note; revisit and refine the term later.)"* | no owner and no done-criterion. Low stakes, structurally identical. |
+
+`differential-probes.md`'s *"pick an area nobody has covered and write ten
+cases"* is the **healthy** form and is deliberately not in the table: it is
+addressed to whoever is reading, needs no state, and cannot go stale.
+
+### The common failure: an obligation already discharged
+
+Far more of this directory rots the *other* way — work that is **finished** and
+still described as outstanding. Every one of these was corrected on 2026-08-30
+and each had been wrong for weeks:
+
+- `fpc-lcl-compile-probe.md` — all three ranked blockers resolved, one of them
+  marked FIXED inside the doc's own text while the closing section still called
+  it the *"highest-leverage move"*.
+- `name-resolution.md` — **four** claims of open work, all finished. One of them
+  assigned Track D a page that had already existed for sixteen days.
+- `math-implemented-twice.md` — a three-item *"stale docs to fix"* list with all
+  three items discharged, one of them already discharged when the list was last
+  edited.
+- `eliah-m4-m5-prompt.md` — a section headed `TODO` naming five tickets, all five
+  in `done/`.
+- `nilpy-object-reclamation.md` — a five-slice plan with no marker that four
+  slices landed the night it was written.
+
+**Why this direction and not the other:** a stale obligation is *pessimistic*,
+and pessimism is never contradicted by use. An over-tight rule costs its reader
+ten wasted minutes and produces nothing wrong, so nobody files a bug about it —
+whereas a doc claiming a capability it lacks fails the first time someone tries.
+The same asymmetry made `autonomy.md`'s superseded gate ladder survive four
+weeks: it demanded a full suite the repo now refuses outright, which is a denial,
+not a wrong answer.
+
+### What actually prevents it — not checkability
+
+The tempting rule is *"an obligation must come with a command that answers it."*
+That is **not sufficient**, and this directory contains the counter-example:
+`name-resolution.md` wrote down its own acceptance test — *"those ten going back
+to their real names, with the `#define`s deleted"* — in a form one `grep` settles,
+and still went stale for two weeks. **A checkable obligation is cheaper to
+recover, but it is not self-executing.** Nothing scheduled the grep.
+
+So, for a new obligation, in order of what actually works:
+
+1. **File a ticket.** The ranker re-reads it; prose does not.
+2. Failing that, **name a lane and a trigger** — not "someone", not "when someone
+   is in there".
+3. A command is worth adding either way, because it makes the *audit* cheap even
+   when it does not make the discharge automatic.
+4. If it is a standing invitation rather than a debt, phrase it as one — see
+   `differential-probes.md` above.
+
 ## Adding a file
 
 New session record → prefix `handover-` or `next-session-` **and add it to the
