@@ -19860,3 +19860,86 @@ note. **All three pin conditions still fail.**
 - *"past FACE 231"* — now past **237**; b4 holds 236 and 237, frankC is writing
   238. I gave frankC 237 from a stale tail read, which is the same append-only
   race I had warned it about, made by me.
+
+## Tick 2026-08-30 ~11:2x — seed GREEN, and three vacuous measurements in one hour
+
+**`origin/master`'s FPC seed is green.** `forwardlint` exit 0. The forwards
+landed as `301905d6c`, and **I cannot say which session did it**: every fleet
+commit is authored `yoctobyte`, so git records the human and not the seat, and
+the `Claude-Session` trailer names an id I have no mapping for. That is a live
+instance of what `feature-t-commit-trailer-hook` [T p60] exists for — **422 of
+1262 agent commits carry a trailer at all** — and the cost is precisely that the
+coordinator cannot answer *who did this* without asking.
+
+**frankA filed `decide-forwardlint-in-the-per-fix-loop` [U p60]** rather than
+widening CLAUDE.md itself. That is the durable form of what I had only been
+raising in conversation — **transport, not a record** — and it now carries six
+instances across five lanes behind it.
+
+### THREE VACUOUS MEASUREMENTS, ONE HOUR, THREE LANES
+
+Each ran, each returned a confident answer, each answer was about a population
+or a stream that could not contain the thing being asked about.
+
+| lane | the measurement | why it could not answer |
+| --- | --- | --- |
+| **frankA** | removed the Variant keyed arm because a check said it "buys nothing" | the check used only **module-level literal receivers**, which are never variant-typed. *A vacuous check nearly cost the fix* — and in the direction that DELETES code, where the evidence goes with it |
+| **frank-rust** | ran `forwardlint` on the change that broke the seed | `>/dev/null 2>&1`, then read the `echo` after it. **The tool told it, at the right moment, in its own terminal, and the pipeline discarded the answer** |
+| **me** | `progress.sh check 2>&1 \| grep -c PATTERN` → `0`, read as "regex too tight" | **the file did not parse.** The pipe ate the exit status, `2>&1` made the traceback countable content, and `0` was the number I expected after tightening a predicate |
+
+**All three confirmed what the measurer already believed.** Filed as face
+**239** with 239a — *run the subject unpiped once and look at its exit status
+before piping it to anything that counts*, and **end every scripted Python edit
+with `ast.parse`**: an asserted string replacement checks that the text was
+found, never that the result is valid.
+
+**frank-rust's refusal of my generous framing is the part to keep.** I had twice
+written *"you could not have seen this"*. True of the class, **false of its
+instance** — and the two want different fixes (the structural gap wants
+forwardlint in the loop; its instance wants *read the output*). Filing the second
+under the first would have made the sentence more comfortable and the record less
+useful. So the rule ships with one word added: **unconditionally, and read the
+output.**
+
+### New check: PROSE-EDGE-NOT-IN-FRONTMATTER (`ab2671d2f`)
+
+The complement of `STALE-PARK`. That one finds a prose edge whose named ticket
+has **closed**; this finds one that was **never wired up** — and the ranker reads
+frontmatter and nothing else, so no priority propagates. Found by frank-user and
+me on `feature-pascal-corpus-expansion` [P p75], whose Status line says *"rung 6
+blocked on decide-revisit-object-types..."* one line above frontmatter reading
+only `prio: 75`. **The decide item sat at 40 while a 75 waited on it.**
+
+**Calibrated, and the first version was not shippable: 18 hits with two
+systematic false-positive families.** `until`/`resume` are too loose for a
+same-line test (the face index tripped on *"off `PATH` until …"*), and **a slug
+scanner cannot tell "X is blocked on Y" from "Y blocks X"** — a ticket quoting
+someone else's status read as its own edge. Fixed with a phrase set that means an
+edge and nothing else, plus a direction rule: **only slugs AFTER the phrase, and
+only when nothing slug-shaped precedes it.** 18 → 6, all six genuine.
+
+### Track P is now TWO lanes, split by file
+
+**frank-user has taken Track P** (`bug-p-object-value-types-standard-meaning`,
+`pasparser_decl.inc`) alongside frank-rust in `pasparser_generic.inc`. Do not
+dispatch anyone into either file.
+
+And the correction frank-rust made that I should have made myself: **a grant is a
+coordination intent; the file's history is the fact, and where they disagree the
+history wins.** I told b4 that `pasparser_generic.inc` was exclusively
+frank-rust's, based on the roster rather than on `git log` — and `301905d6c` was
+already in it.
+
+**Two owner decisions landed via frank-user:** the ticket lock is KEPT (file
+locks and hot-file exemptions **rejected, not deferred** — measured harm over
+1262 commits was 1 revert, 1 naming commit, 2 build fixes; *revisit on outcome
+numbers, never exposure*), and `object` gets its standard Object Pascal value-type
+meaning with the rooted-reference form **retired**. U queue **32**.
+
+**frank-user's finding, which is mine to act on: a workaround has no expiry date
+and nothing re-checks whether the thing it worked around still exists.** The
+rooted-reference `object` was filed 2026-06-16 as *"a lightweight root, like
+TObject without a unit"* — **true then**; builtin TObject landed 2026-07-12, nine
+days later, **in the same file**, and nothing revisited it. Usage today is 4
+lines, all inside its own two regression tests. Worth a sweep for other stopgaps
+whose justification has since been fixed properly.
