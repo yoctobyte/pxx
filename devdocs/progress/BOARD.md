@@ -128,7 +128,7 @@ _none_
 | bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 40 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. | — |
 | bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp | A+S | 45 | bug | Every windowed xtensa prologue emits `entry a1, 32` then moves sp again with a plain addi/addmi. The windowed ABI requires MOVSP for that, because the caller's 16-byte register save area sits at [a1-16] and a plain add relocates sp while leaving the area behind. Ten executed entry sites, all immediate 32. NOT known to cause a fault -- the obvious mechanism was tested and falsified. | — |
 | bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled | A+S | 45 | bug | Under the xtensa windowed ABI, IR_RAISE and the unwind path refuse. The cause is a RUNTIME gap, not a prologue gap: a longjmp-style unwind must spill the register windows first and bare-metal has no handler for that. Filed to keep it OUT of the four-target cdecl prologue change, which would appear to fix it and would not. | — |
-| bug-c-a-float-parameter-and-return-are-wrong-in-pure-c-on-three-targets | C | 45 | bug | A plain C function taking a `float` and returning a `float` gives 0.00 on arm32 and riscv32 and -7.55e307 on i386, in a pure C program, today. Nothing to do with the calling-convention work -- riscv32 is untouched by it and still fails. Found while baselining the control for that ticket. | — |
+| bug-c-the-f-suffix-on-a-float-literal-is-ignored | C | 40 | bug | `16777217.0f` keeps its double value where C requires the single-precision 16777216.0, and `0.1f` prints 0.100000000 instead of 0.100000001. The explicit `(float)` cast rounds correctly and a store into a float lvalue rounds correctly -- only the literal SUFFIX is ignored. All five targets, so it is a frontend defect, not an ABI or backend one. | — |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 | bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
@@ -732,9 +732,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2843)
+## done (2844)
 
-2843 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2844 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (59)
 
@@ -947,7 +947,6 @@ _none_
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
 - [p 45] [A+S] bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp
 - [p 45] [A+S] bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled
-- [p 45] [C] bug-c-a-float-parameter-and-return-are-wrong-in-pure-c-on-three-targets
 - [p 45] [D] bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
@@ -1012,6 +1011,7 @@ _none_
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
 - [p 40] [A] bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage
 - [p 40] [A+S] bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build
+- [p 40] [C] bug-c-the-f-suffix-on-a-float-literal-is-ignored
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
 - [p 40] [N] bug-n-from-package-import-submodule-binds-the-parent-package
 - [p 40] [N] bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers

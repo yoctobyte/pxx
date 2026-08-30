@@ -3406,6 +3406,41 @@ begin
       Result := node;
       Exit;
     end;
+    { THE MIRROR, and a real conversion for the same reason. `(double)someSingle`
+      was an AN_PTR_CAST retag: the node claimed tyDouble while the value was
+      still four single bytes. On x86-64 and aarch64 that is harmless -- their
+      value model already carries a single as double bits in a register -- which
+      is why it survived everywhere those two targets look.
+
+      On arm32, riscv32 and i386 a single sits in its slot as four raw bytes, and
+      the one consumer that trusts the tag without forcing a conversion of its
+      own is a VARIADIC argument: `printf("%.2f", (double)f)` read eight bytes
+      where four were pushed and printed 0.00. The same value through an
+      assignment, a prototyped parameter, arithmetic, or a prototyped call all
+      came out right, because each of those converts on the way past -- so the
+      defect was reachable through exactly one shape out of eight.
+
+      The IMPLICIT form `printf("%.2f", f)` was always correct: default argument
+      promotion sees a tySingle node and widens it. The explicit cast HID the
+      single from that promotion. Two paths to "this argument is a double", one
+      of which lies -- normalise-dont-special-case.md, so the fix is to stop it
+      lying rather than to teach the variadic path about casts.
+      bug-c-a-float-to-double-cast-is-a-retag-not-a-conversion }
+    if (castDepth = 0) and (castTk = tyDouble) and (opTk = tySingle) then
+    begin
+      frTmp := AllocVar('', tyDouble);
+      frIdn := AllocNode(AN_IDENT); ASTIVal[frIdn] := frTmp; ASTTk[frIdn] := Ord(tyDouble);
+      frAsn := AllocNode(AN_ASSIGN); ASTLeft[frAsn] := frIdn; ASTRight[frAsn] := operand;
+      ASTTk[frAsn] := Ord(tyDouble);
+      frSeq := AllocNode(AN_SEQ); ASTLeft[frSeq] := frAsn; ASTRight[frSeq] := -1;
+      node := AllocNode(AN_COMPOUND_LITERAL);
+      ASTIVal[node] := frTmp; ASTLeft[node] := frSeq; ASTTk[node] := Ord(tyDouble);
+      operand := node;
+      node := AllocNode(AN_DEREF);   { COMPOUND_LITERAL yields the ADDRESS }
+      ASTLeft[node] := operand; ASTTk[node] := Ord(tyDouble);
+      Result := node;
+      Exit;
+    end;
     { The cast operand is promoted before it is converted, so a plain char on a
       signed-char target reaches the conversion as its NEGATIVE int value:
       `(int)(char)0xFF` is -1, not 255, and `(unsigned char)c` re-truncates that

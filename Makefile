@@ -11008,16 +11008,31 @@ test-core: $(COMPILER)
 	# `make test-c-abi-cross`, deliberately NOT wired into this target while they
 	# are red.
 	# The pure-C control beside it is the regression half: the same functions
-	# called from C, wired on x86-64 ONLY because `flt` is already broken on
-	# arm32, riscv32 and i386 before any of this work (riscv32 is the tell -- the
-	# convention work does not touch it). Measured paired, both halves applied,
-	# it goes from clean to a flt failure on aarch64 and to a COMPILE failure on
-	# arm32 and i386: the shared arm cannot yet do the job it would be given.
+	# called from C, GREEN ON ALL FIVE and asserted on all five by
+	# test-c-abi-cross. It took a fix to make that true -- `flt` was red on
+	# arm32/riscv32/i386 until
+	# bug-c-a-float-to-double-cast-is-a-retag-not-a-conversion landed. Measured
+	# paired, with both halves of the convention fix applied, this file goes
+	# from clean to a flt failure on aarch64 and a COMPILE failure on arm32 and
+	# i386: the shared arm cannot yet do the job it would be given.
 	# bug-c-a-c-function-s-calling-convention-depends-on-the-target
 	./$(COMPILER) -Futest test/test_c_abi_pascal_caller.pas $(TESTTMP)/test_c_abi_pascal_caller26
 	tools/expect_same.sh test_c_abi_pascal_caller26 "$$($(TESTTMP)/test_c_abi_pascal_caller26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"
 	./$(COMPILER) test/c_abi_pure_c_control.c $(TESTTMP)/c_abi_pure_c_control26
 	tools/expect_same.sh c_abi_pure_c_control26 "$$($(TESTTMP)/c_abi_pure_c_control26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"
+	# `(double)someFloat` was a RETAG, not a conversion -- the node claimed
+	# tyDouble while the value was still four single bytes. Free on x86-64 and
+	# aarch64 (a single already rides as double bits in a register), wrong on
+	# arm32/riscv32/i386 through exactly one consumer: a VARIADIC argument, the
+	# only one that trusts the tag instead of converting on the way past. Row 5
+	# is that consumer; row 6 is why it hid, since the IMPLICIT form was always
+	# right (default argument promotion widens a tySingle node, and the explicit
+	# cast hid the single from it). Rows 9-11 are the narrowing mirror, which
+	# must keep working and now composes with the widening.
+	# Cross-target rows live in the test-c-abi-cross target.
+	# bug-c-a-float-to-double-cast-is-a-retag-not-a-conversion
+	./$(COMPILER) test/c_float_to_double_cast_variadic.c $(TESTTMP)/c_f2d_cast26
+	tools/expect_same.sh c_f2d_cast26 "$$($(TESTTMP)/c_f2d_cast26)" "$$(printf '1 2.50\n2 2.50\n3 250\n4 250\n5 2.50\n6 2.50\n7 5.00\n8 2.50\n9 16777216.0\n10 16777216.0\n11 0.100000001')"
 	# feature-c-import-a-pascal-unit-under-a-mangled-name: `#include "x.pas"` is
 	# an IMPORT SITE, not textual inclusion -- the unit's routines arrive as
 	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
@@ -14924,6 +14939,13 @@ test-c-abi-cross: $(COMPILER)
 	  got="$$(tools/run_target.sh $$t $(TESTTMP)/test_c_abi_$$t 2>&1)"; \
 	  if [ "$$got" = "$$exp" ]; then echo "test-c-abi-cross: PASS $$t"; \
 	  else echo "test-c-abi-cross: FAIL $$t"; printf '%s\n' "$$got" | sed 's/^/    /'; overall=1; fi; \
+	  if ! ./$(COMPILER) --target=$$t test/c_abi_pure_c_control.c $(TESTTMP)/c_abi_ctl_$$t >$(TESTTMP)/c_abi_ctl_$$t.err 2>&1; then \
+	    echo "test-c-abi-cross: CONTROL COMPILE FAIL $$t (a REGRESSION -- the control is green on all five)"; tail -2 $(TESTTMP)/c_abi_ctl_$$t.err; overall=1; \
+	  else \
+	    cgot="$$(tools/run_target.sh $$t $(TESTTMP)/c_abi_ctl_$$t 2>&1)"; \
+	    if [ "$$cgot" = "$$exp" ]; then echo "test-c-abi-cross: PASS $$t (control)"; \
+	    else echo "test-c-abi-cross: CONTROL FAIL $$t (a REGRESSION)"; printf '%s\n' "$$cgot" | sed 's/^/    /'; overall=1; fi; \
+	  fi; \
 	done; \
 	test "$$overall" = "0" || { echo "test-c-abi-cross: RED (expected until bug-c-a-c-function-s-calling-convention-depends-on-the-target lands)"; exit 1; }
 

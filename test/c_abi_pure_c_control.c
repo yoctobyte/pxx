@@ -3,35 +3,24 @@
 
    It is the control that makes a convention change honest. Fixing the
    Pascal-caller path by giving a C function the C ABI is only correct if this
-   file does not move -- and MEASURED 2026-08-30, paired on identical source
-   (8a42f93ffe74 -> 7d91463cbbfc), routing the C prologue through
-   EmitParamSpillsForTarget plus deleting the seven `not CProgramMode` guards
-   takes the Pascal-caller test from 3 failures to 1 on aarch64, from red to
-   GREEN on arm32, and fixes i386's argument order -- while taking THIS file
-   from clean to a flt failure on aarch64 and from a value failure to a COMPILE
-   FAILURE on arm32 and i386. The shared arm cannot yet do the job it would be
-   given; see the prerequisite ticket named below.
+   file does not move -- and MEASURED 2026-08-30, paired on identical source,
+   routing the C prologue through EmitParamSpillsForTarget plus deleting the
+   seven `not CProgramMode` guards takes the Pascal-caller test from 3 failures
+   to 1 on aarch64, from red to GREEN on arm32, and fixes i386's argument order,
+   while taking THIS file from clean to a flt failure on aarch64 and to a
+   COMPILE FAILURE on arm32 and i386. The shared arm cannot yet do the job it
+   would be given -- see
+   bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given.
 
-   WIRED ON x86-64 ONLY, and that is not laziness -- `flt` is ALREADY broken on
-   three cross targets before any of this work, so the cross rows cannot be
-   asserted as green:
-
-     x86-64   clean
-     aarch64  clean
-     arm32    flt 0.00
-     riscv32  flt 0.00
-     i386     flt -7.55e307
-
-   riscv32 is the tell that this is a SEPARATE, pre-existing defect rather than
-   anything to do with the calling convention: nothing about riscv32 changes in
-   that work, and it fails `flt` today. A `float` parameter and `float` return
-   in a plain C program are wrong on three targets right now.
-   bug-c-a-float-parameter-and-return-are-wrong-in-pure-c-on-three-targets
-
-   I asserted "green on all five today" in the first cut of this file having
-   verified only x86-64. It was false on three targets. Recorded rather than
-   quietly corrected, because an unmeasured baseline in a CONTROL is the one
-   place it does the most damage.
+   GREEN ON ALL FIVE, and it took a fix to make that true. The first cut of this
+   file asserted it on x86-64 evidence alone and was wrong on three targets:
+   `flt` was 0.00 on arm32 and riscv32 and garbage on i386, because
+   `printf("%.2f", (double)f)` handed a variadic argument four single bytes
+   where eight were expected. That was a real, separate defect
+   (bug-c-a-float-to-double-cast-is-a-retag-not-a-conversion), now fixed, so the
+   cross rows are asserted rather than skipped -- which is the whole point of a
+   control: an unmeasured baseline in one does not merely weaken the comparison,
+   it inverts the sign of every finding drawn from it.
    bug-c-a-c-function-s-calling-convention-depends-on-the-target */
 
 #include <stdio.h>
