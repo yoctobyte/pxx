@@ -2303,10 +2303,16 @@ begin
           si := IRA[left];
           if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
             Error('target xtensa: SetLength only supports dynamic arrays yet');
-          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
-            Error('target xtensa: SetLength on a var-array parameter not yet supported');
           argBase := XtSpillDepth;
           EmitSlotAddrXtensa(reg_xtensa_a2, si); { a2 = slot address (not the handle) }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            { var-array param: the frame slot holds the CALLER's slot address,
+              so one more deref gets the slot PXXDynSetLen must write back
+              through. This was an outright refusal
+              ("SetLength on a var-array parameter not yet supported"), which is
+              the honest failure mode — but riscv32 has carried the two-line
+              answer for a while and there was nothing to invent. }
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
           XtensaPushA2;
           IREmitNodeXtensa(IRA[valNode]);       { a2 = n }
           XtensaPushA2;

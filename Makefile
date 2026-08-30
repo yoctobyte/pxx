@@ -13037,7 +13037,15 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_classref.pas $(TESTTMP)/test_xtensa_test_classref
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_xtensa_test_classref_x64
 	tools/expect_same.sh xtensa/test_classref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_classref)" "$$($(TESTTMP)/test_xtensa_test_classref_x64)"
-	@echo "hosted xtensa: 93 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	# +2: SetLength on a var-array PARAMETER — one extra deref, refused outright
+	# until now while riscv32 had carried the two-line answer for a while.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_setlen_varparam.pas $(TESTTMP)/test_xtensa_test_cross_setlen_varparam
+	./$(COMPILER) test/test_cross_setlen_varparam.pas $(TESTTMP)/test_xtensa_test_cross_setlen_varparam_x64
+	tools/expect_same.sh xtensa/test_cross_setlen_varparam "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_setlen_varparam)" "$$($(TESTTMP)/test_xtensa_test_cross_setlen_varparam_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen
+	./$(COMPILER) test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64
+	tools/expect_same.sh xtensa/test_nested_dynarray_setlen "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen)" "$$($(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64)"
+	@echo "hosted xtensa: 95 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
@@ -14121,7 +14129,21 @@ test-emit-obj: $(COMPILER)
 	readelf -h $(TESTTMP)/test_emit_obj_xt_windowed.o | grep -q 'Xtensa'
 	readelf -s $(TESTTMP)/test_emit_obj_xt_windowed.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
 	readelf -r $(TESTTMP)/test_emit_obj_xt_windowed.o | grep -q 'R_XTENSA_32'
-	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nextern void app_main(void);\nint main(void) { app_main(); return captured; }\n' > $(TESTTMP)/test_emit_obj_shim.c
+	# ext_aliased_link is REQUIRED here, and its absence is what this recipe's
+	# two halves disagreed about. The readelf assertions 20 lines up demand the
+	# object leave `ext_aliased_link` undefined (that is the whole subject of
+	# bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier), and
+	# then this shim linked without providing it, so the link step could only
+	# fail once the compiler started getting it right. The test contradicted
+	# itself inside one target, and the contradiction arrived with the commit
+	# that made the test correct (1a7658326).
+	#
+	# It read as riscv32-specific and is not: all three objects carry
+	# `UND ext_aliased_link` identically, and _xt.o fails the same way against
+	# the old shim at a different .text offset. Only the riscv32 line appeared
+	# in the log because make ABORTS there and never reaches the xtensa links.
+	# regression-test-emit-obj-test-emit-obj
+	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nvoid ext_aliased_link(int v) { (void)v; }\nextern void app_main(void);\nint main(void) { app_main(); return captured; }\n' > $(TESTTMP)/test_emit_obj_shim.c
 	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
 	if [ -n "$$RV" ]; then \
 	  $$RV -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim.c $(TESTTMP)/test_emit_obj_rv.o -o $(TESTTMP)/test_emit_obj_rv.elf && echo "riscv32 .o links ok"; \
