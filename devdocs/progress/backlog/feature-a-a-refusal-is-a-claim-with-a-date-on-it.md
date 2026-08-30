@@ -8243,3 +8243,126 @@ its counter-examples and states them is worth more than one that has not**, and 
 author is the only person positioned to notice when the ratio moves. Left uncorrected, a
 measurement decays into a slogan of exactly the kind 173 describes: more quotable than
 accurate, and quoted.
+
+### 181 — A GUARD THAT HAS ALREADY BEEN HARDENED ONCE IS MORE DANGEROUS THAN ONE THAT HAS NOT
+
+pxx-a5, 2026-08-30, refusing a flake story the coordinator had handed it.
+`tools/bench_timing_devtest.py` is load-dependent — green three runs at load 3.8, red
+at ~9.5 — and the coordinator's diagnosis was *"a correct measurement of the wrong
+subject; change what it measures."* **That is one abstraction level above the defect**,
+and it would have sent the repair to the wrong place. a5 read the captured red instead.
+
+The guard **had already been hardened for exactly this**. `c194b01e9` replaced a spread
+with an on-grid count, on this stated reasoning: *"a scheduling stall can only push a
+sample to a LATER poll wakeup, never off the schedule."* **That sentence is false, and
+it is the sentence that failed** — the stall lands in the **parent**, between the poll
+wakeup and the clock read after it, and nothing quantizes that delay.
+
+    old [169.4, 119.0, 115.8, 119.1, 117.1] -> 2/5 within 4ms of a grid point  FAIL
+    min(old) = 115.8, i.e. +2.3 from 113.5
+
+**The claim the guard is named for was true and the guard said FAIL.**
+
+> **A count of contaminated samples and a spread are both properties of the box, one
+> abstraction apart.** The hardening changed the guard's abstraction level without
+> changing its subject, so it bought nothing and looked like progress.
+
+And the general form is worth more than the file: **a previously-hardened guard reads
+as evidence the question was settled**, so the *stated reason* for the hardening is
+precisely the thing nobody re-reads. Same family as 137 (a stated danger deserves the
+scepticism of a stated limitation) and the standing rule that a false limit is quieter
+than a false fix.
+
+The fix (`8c592615d`) argues from a property rather than a threshold: **scheduling noise
+is one-sided and additive, so the minimum is the least-contaminated estimate and the
+only statistic here that does not degrade as the box gets busier** — more samples improve
+a minimum and make a count and a spread worse. Verified three ways, and the middle one
+is the one almost nobody writes: replay of the recorded load-red data (v2 fails, v3
+passes), a **vacuity check** (a continuous 70ms path scores `near_grid=False`, so v3
+cannot be satisfied by what it must reject), and a negative control reddening both halves.
+
+### 181a — A TICKET OUTLIVES THE ARGUMENT IT CITES, AND NOTHING CHECKS THE CITATION
+
+Immediate consequence, caught only because a5 kept reading. `chore-a-re-include-bench-timing-in-tools-devtest`
+[A p30] tells Track A the guard is now load-invariant and to delete the one-line skip —
+**citing `c194b01e9`, the argument just refuted.** Taken as written, Track A would have
+re-armed a load-sensitive guard into the limited and full tiers, and the resulting reds
+would have read as new breakage in whichever lane happened to be pushing.
+
+Correction written into the ticket (`e2182cf2a`) rather than relayed. The ticket is still
+actionable — **for a different reason**, and it stays A's.
+
+Pairs with 178a: a ticket's stated range and a ticket's cited justification are both
+claims with dates on them, and the board checks neither.
+
+### 182 — A CORRECTLY-FORMED INVARIANT OVER THE WRONG POPULATION
+
+frankA, 2026-08-30, correcting a gate the coordinator had just praised. The coordinator
+endorsed *"same key ⇒ same bytes, different key ⇒ a miss"* as the invariant for a
+compiled-unit-image cache. As a **single-program** check it would pass a serialiser that
+forgot 170 of its 176 arrays, because **a missed array is only observable if some
+program's output depends on it.**
+
+The logic was right and the population was wrong. Real gate: cold-vs-cached byte-identity
+over a corpus, with Track T's 719 NilPy jobs as the instrument.
+
+> The same defect as 178 wearing different clothes — there the assertion's *direction*
+> was wrong, here its *range* is. **Both are the control failing to be a control while
+> reading as one.**
+
+Found against praise, which is the hardest direction to find anything in. Same rule as
+172b from a third arrival: this feature's subject is performance and its control's
+subject must be correctness.
+
+### 182a — THE HAZARD IS THE TENSE, NOT THE COUNT
+
+Same survey. The design names five things to serialise; frankA counted **176 parallel
+arrays** (100 proc-indexed, 44 sym-indexed, 32 field-indexed) before `Code[]`, the string
+pool, RTTI and fixups, against 242 `array of` globals in `defs.inc`.
+
+176 is not the finding. **Every array any future Track A commit adds must be added to the
+serialiser, or the cache silently emits stale code** — a permanent tax on every future
+commit in the lane, paid by people who will not know they owe it. `symtab.inc:3932`
+already names this class (*"the 'one of six parallel arrays not written' class"*) with a
+measured instance behind it.
+
+> A cache converts a **known recurring bug class** into a **maintenance obligation with
+> no by-construction defence.** That is a different kind of cost from "a big job", and it
+> is the half a scoping estimate never contains.
+
+Note which half the coordinator had called the sharp edge: the **key** — which turns out
+to have a by-construction fix (hash the whole normalised argv plus the compiler build
+sha; an unrecognised flag changes the hash, so there is no allowlist to forget). *The
+scary-sounding half had a mechanical answer and the dull-sounding half did not.*
+
+Recorded with it, and the reason the 60%-dead-bodies measurement is trustworthy: three
+qualifications attached **to the number itself** — live bodies average larger (653 live =
+749KB vs 998 dead = 510KB, so 60% by count is 40% by size), the measured program does
+nothing so it is a best case, and interface parsing is untouched and unavoidable. Face
+164 is the failure this avoids: the bare number is what gets quoted downstream.
+
+### 183 — THE GATE NAMED THE STALE BINARY INSTEAD OF REPORTING A MISCOMPILE
+
+Coordinator, 2026-08-30, attempting the pin that unblocks the grid-pad answer.
+`gate.sh quick` failed the self-host fixedpoint with *"the fixedpoint reached from PINNED
+differs from compiler/pascal26"* — two distinct self-reproducing fixedpoints, which reads
+as the worst thing in the repo. It then said:
+
+> `compiler/pascal26 is OLDER than the last commit touching compiler/`
+> `That is a STALE BINARY, not a miscompile — a sibling landed a compiler change and this`
+> `checkout has not rebuilt.`
+
+Correct, and nothing was blessed. **This is the exact inverse of the fresh-tree trap** —
+there, `make compiler/pascal26` is a silent no-op that exits 0 because a copied-in seed is
+newer than the sources, and the absence of `converged after N round(s)` is the only tell.
+Here the same mtime relation runs the other way and the gate is loud about it.
+
+> The pair is the lesson: **the same clock skew produces a silent pass in one direction
+> and an alarming-but-wrong failure in the other.** The alarming one is safe. The quiet
+> one is the one that ships.
+
+Worth keeping because the diagnosis is *not* derivable from the failure text alone — two
+divergent fixedpoints and a stale checkout are indistinguishable at the point of failure,
+and the gate distinguishes them only because someone thought to compare the binary's
+mtime against the last `compiler/` commit. A guard that explains which of two very
+different causes it hit is rarer than one that fires.
