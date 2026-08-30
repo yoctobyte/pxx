@@ -137,6 +137,18 @@ r14/r15 param residency ([[feature-callconv-register-args]]) already bought
 far from exhausted. Killing the 37% is where the next multiplier lives.
 
 ## Target scope — per-backend effort = x86-64 + aarch64 only
+
+> **MEASURED 2026-08-30, and the scope was not being met.** This section states
+> aarch64 is in scope; nothing checked whether it was. Parsed `OptLevel >= 3`
+> gate sites: **x86-64 15, aarch64 4**, the other four backends 0 (correct — they
+> are out of scope by this very section). aarch64 has the W2 residency keystone
+> and two operand folds; it has none of the W1 slice 5-8 family. Filed as
+> `feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen`.
+>
+> "aarch64 is in scope" and "aarch64 got 4 of 15" are consistent statements,
+> which is why a stated scope needs a recurring count rather than a comment.
+> **From now on, each W1/W2 slice records its per-backend gate count here** —
+> one command, and the only thing that would have caught this.
 Optimization splits by home (see `optimization-architecture.md` §3): **shared-IR
 passes (§3a) help all six targets for free** — one implementation, keep those
 target-agnostic. **Per-backend work (§3b: emitter peepholes, the operand
