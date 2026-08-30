@@ -117,4 +117,4 @@ error text in it.**
 - Every earlier guard still green: `boundharvest 45 A 10 1111111111`,
   `shadow 12 10`, `ptrspec 7 1`, `bodiless 7 3 1`.
 - Oracle: FPC prints the same line for the harvest test.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit aadd83621.
