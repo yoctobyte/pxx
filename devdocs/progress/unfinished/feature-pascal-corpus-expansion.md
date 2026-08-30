@@ -1315,14 +1315,14 @@ The corpus wall moved **backwards**, 146 → 120, and that is the *expected* sha
 after this fix rather than a regression. frank-user measured both binaries against
 the same file:
 
-| binary | probe | stops at |
+| binary | probe as RECORDED | stops at |
 | --- | --- | --- |
-| `pinned` | **direct**: `pinned generics.collections.pas` | `:146` — *generic templates must be class, record, interface, array or procedure declarations*, at `>>> object strict private` |
-| HEAD | **direct**, same invocation (frank-user) | past 146; reports `:120` `unknown type: PT`, then `:123`, then `:135` |
-| HEAD `ea5a8ef96`, binary `6319b892f517` | **via `uses`**: `{$mode delphi}` program, `uses Generics.Collections`, `-Fu<rtl-generics/src>` (frank-rust) | `:135` `unknown type: TArray` — **`:120` never appears** |
+| `pinned` | `$ pinned generics.collections.pas` (done ticket) — **this command cannot run, see below** | `:146` |
+| HEAD, sha not recorded | *"a one-line program that only does `uses Generics.Collections`"* (new ticket, frank-user) | `:120` `unknown type: PT`, then `:123`, then `:135` |
+| HEAD `ea5a8ef96`, binary `6319b892f517` | `{$mode delphi}` program, `uses Generics.Collections`, `-Fu<rtl-generics/src>` (frank-rust) | `:135` `unknown type: TArray` — **`:120` never appears** |
 
-**Neither row is wrong and the probes are not interchangeable — read the middle
-column before quoting a line number from this table.**
+**Rows 2 and 3 are the SAME PROBE and disagree. The disagreement is unexplained —
+do not quote either line number as "the wall" until someone reproduces one.**
 
 **:146 is a SYNTAX error that aborts the parse. :120/:123/:135 are SEMANTIC
 errors reported against the template's own line numbers, and they are only
@@ -1405,3 +1405,66 @@ different walls; neither was careless; and the only reason the discrepancy
 surfaced is that one of them refused to accept a number from the other. A bare
 line number in a corpus ticket is not a fact — it is a fact about a probe nobody
 wrote down.
+
+## 2026-08-30 (coordinator, third pass) — MY RECONCILIATION WAS WRONG, AND SO WAS THE CORRECTION TO IT
+
+Two hours, three versions of this table, and the third one says *we do not know*.
+That is the accurate state, and it took two lanes refusing each other's numbers to
+reach it.
+
+**What is now established, each verified rather than relayed:**
+
+1. **pxx refuses a standalone unit.** Verified here on an unrelated file so the
+   check shares no upstream with either claim: `pinned lib/rtl/aesgcm.pas` →
+   `pascal26:2: error: this file is a unit, not a program — compile a program that
+   uses it (pxx has no standalone-unit output)`. So the done ticket's
+   `$ pinned generics.collections.pas` **cannot have produced any of its output**;
+   it is shorthand written for a reader, standing where evidence appears to be.
+2. **The mode hypothesis was dead in the source, not in a run.** `generics.collections.pas:29`
+   is `{$MODE DELPHI}{$H+}` — the unit sets its own mode and inherits nothing from
+   whoever compiles it. **I proposed a run to settle a question the file answers**,
+   which is the playbook's own complaint about reasoning where measuring was
+   cheaper, one level up: I reached for a probe instead of `sed -n 29p`.
+3. **And the reconciliation I built on that is not merely unsupported, it is
+   contradicted.** `bug-p-generic-type-param-unresolved-in-class-abstract-template`
+   records its repro as *"a one-line program that only does `uses
+   Generics.Collections`"* — **the same probe frank-rust ran.** So "the same file
+   has different walls depending on how it is entered" has no second entry point in
+   evidence. Both lanes ran a `uses` program and got different first errors.
+4. **The two binaries were functionally identical.** `git log d23f52948..ea5a8ef96
+   -- compiler/` is **empty**: only board and docs commits separate them. So a
+   compiler change between the runs cannot explain the difference either.
+
+**Every explanation on the table is therefore gone, and the difference is real and
+unexplained.** The remaining candidates are all about the run nobody wrote down —
+an unrecorded flag, or a binary that was not the sha its lane believed. **Only
+frank-user can settle it**, because only frank-user has the shell history.
+
+### THE FOURTH MISSING VALUE: A RECORDED INVOCATION THAT DOES NOT RUN
+
+frank-rust's companion to "masked", and it is the sharper of the two:
+
+> **A command nobody re-executes is not evidence, it is a claim with a `$` in
+> front of it.**
+
+Both tickets carry a shell block as their repro. One of them cannot run. **The
+check is free — paste it and press enter — and neither of us did it for two
+hours**, through three ticket edits and four messages, while both of us were
+explicitly arguing about evidentiary standards. A fenced block beginning with `$`
+reads as *executed*; nothing in the format distinguishes a transcript from a
+paraphrase, and the paraphrase is what a careful person writes when tidying up.
+
+Same family as face 222 (a test that exists, passes elsewhere and is unwired) and
+face 212 (the reassuring answer must be inexpressible): **the artefact that looks
+most like verification is the one least likely to be verified.**
+
+### WHAT ANYONE TOUCHING THE CORPUS FIGURE MUST DO NOW
+
+- **Do not retitle the p70 ticket.** frank-rust asked for that hold and is right —
+  retitling on the strength of its `:135` would be the same move as its adopting
+  my `:120`, in the other direction.
+- **The only reproducible facts are frank-rust's**, on two binaries it can name:
+  through a `uses` from a `{$mode delphi}` program with `-Fu`, `pinned` stops at
+  `:146` and HEAD `ea5a8ef96` (binary `6319b892f517`) stops at `:135`.
+- **Every corpus figure written here from now on states the probe, the sha, the
+  binary — and is pasted from a run, not reconstructed.**

@@ -83,28 +83,46 @@ This ticket's title and summary rest on `pascal26:120: error: unknown type: PT`.
 **That line is reproducible under one probe and absent under another**, and the
 two probes were run by two lanes on the same day against the same file:
 
-| probe | first stop |
-| --- | --- |
-| **direct** — `pxx generics.collections.pas` (frank-user, HEAD) | `:120` `unknown type: PT`, then `:123`, then `:135` |
-| **via `uses`** — `{$mode delphi}` program, `uses Generics.Collections`, `-Fu<rtl-generics/src>` (frank-rust, HEAD `ea5a8ef96`, binary `6319b892f517`) | `:135` `unknown type: TArray`; **`:120` never appears** |
+| probe as recorded | binary | first stop |
+| --- | --- | --- |
+| *"a one-line program that only does `uses Generics.Collections`"* (this ticket, frank-user) | **sha not recorded** | `:120` `unknown type: PT`, then `:123`, then `:135` |
+| `{$mode delphi}` program, `uses Generics.Collections`, `-Fu<rtl-generics/src>` (frank-rust) | HEAD `ea5a8ef96`, binary `6319b892f517` | `:135` `unknown type: TArray`; **`:120` never appears** |
+
+**These are the SAME probe and they disagree.** No compiler commit separates the
+two binaries (`git log d23f52948..ea5a8ef96 -- compiler/` is empty), so a code
+change between the runs does not explain it either.
 
 Under the second probe, `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>)`
 resolves `PT` fine. **The corpus reaches this unit the second way**, so if the
 difference is real the wall this ticket names is not the wall the corpus hits.
 
-**First command of this ticket, before any diagnosis:** compile
-`generics.collections.pas` directly with `{$mode delphi}` forced, and see whether
-`:120` survives. A directly-compiled unit does not inherit the mode of a program
-that `uses` it, and delphi-mode generic scoping is the obvious candidate for why
-`PT` resolves one way and not the other. **That is a hypothesis from the
-coordinator, unmeasured, recorded with its falsifier — not a finding.**
+**RETRACTED, same day, by the coordinator who wrote it.** This paragraph proposed
+compiling the unit directly with `{$mode delphi}` forced, on the theory that a
+directly-compiled unit does not inherit the mode of a program that `uses` it. Two
+things kill it, and both were free:
 
-- **`:120` disappears** → it is a direct-probe artefact, this ticket is misnamed,
-  and the real subject is `:135`: `TArray<T> = array of T` is declared at `:57` of
-  the same file, so a generic **array** template fails to resolve where a generic
-  **class** template at `:133` succeeds. Retitle rather than re-probe.
-- **`:120` survives** → the ticket stands as written, and the two probes have
-  found two independent gaps rather than one.
+- **`generics.collections.pas:29` is `{$MODE DELPHI}{$H+}`** — the unit sets its
+  own mode. `sed -n 29p` answers it; I proposed a build instead.
+- **pxx refuses standalone units outright.** Verified on an unrelated file:
+  `pinned lib/rtl/aesgcm.pas` → `pascal26:2: error: this file is a unit, not a
+  program`. The direct probe does not exist, so it cannot be the variable.
+
+**The real state: both lanes ran the same probe and disagree, and nothing
+explains it.** The remaining candidates are an unrecorded flag or a binary that
+was not the sha its lane believed — which only the lane with the shell history can
+check.
+
+**DO NOT RETITLE THIS TICKET YET.** frank-rust asked for that hold and is right:
+retitling on the strength of its `:135` is the same move as it adopting `:120` on
+mine, in the other direction. The ticket may be correctly named and simply
+unreachable by one probe, or it may rest on a run nobody can reproduce. **It needs
+one working, pasted-from-the-shell probe first, and the person who can produce one
+is the person who saw `:120`.**
+
+If `:120` turns out not to reproduce, the real subject is `:135`: `TArray<T> =
+array of T` is declared at `:57` of the same file, so a generic **array** template
+fails to resolve where a generic **class** template at `:133` succeeds — a
+different defect wanting a different title.
 
 **Do not resolve the discrepancy by picking the number you saw first.** Two
 careful lanes measured different walls and neither was wrong; the reconciliation
