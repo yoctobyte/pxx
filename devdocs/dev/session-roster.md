@@ -22294,3 +22294,92 @@ structural argument rather than another instance: the wall names `TDictionaryPai
 and `PDictionaryPair`, nested **types**, not parameters, so a whole set is leaking
 together. That is the shape of one failed consultation, not of a name-by-name
 collection gap.
+
+## I verified every CLAIM and no IDENTIFIER — and broadcast a sha that never existed
+
+2026-08-30. frank-user relayed the CLAUDE.md cut as `16f740d56`; I broadcast it to
+eight agents. `git log -1 16f740d56` → **"unknown revision"**. It is a pre-push
+ghost — read off `git log -1` right after committing, then rebased away by
+`sync.sh`. Four of the eight shas in that briefing were ghosts; only the two that
+happened not to be rebased survived. Real set: `aa28134a0`, `91380f04b`,
+`9e751ad54`, `36ef733bd`, `6b755fa49`, `9119b6f8f`, `5732d66fe`, `516f14cba`.
+
+**The instructive part is what I DID verify.** I refused the relay's summary and
+read CLAUDE.md myself — line count, the Ticket-economy section, the coordinator
+section — precisely because a broadcast to eight agents amplifies a bad reading
+past the point of correction. Then I passed the citation through untouched.
+**I checked every claim and none of the identifiers**, because "is this true?"
+felt like the whole job and "does this resolve?" did not feel like a question at
+all. A citation nobody can resolve is indistinguishable from a fabricated one, and
+it discredits the true content it was attached to.
+
+`bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` documented this for `resolve`.
+It is now general (`516f14cba`): **read a landed sha off `git log origin/master
+--grep='<subject>' -1` AFTER the push**, for every sha you quote, not just the one
+`resolve` writes. Two agents had named the habit in their survey answers before it
+was demonstrated failing.
+
+**Three faces of one failure inside an hour, which is why the rule generalised:**
+
+| who | what |
+| --- | --- |
+| me | propagated a **field I never verified**, having verified every claim around it |
+| frank-rust | nearly believed a **null from a fresh probe** with no control |
+| frankT | read **two verified facts that contradicted each other** and flagged neither |
+
+frankT's is the one with no obvious guard: it read CLAUDE.md's header ("lanes are
+hints, not locks") and then every per-track one-liner still saying "file a Track A
+ticket, do not edit it under Track C", and did not treat the disagreement as a
+finding — each part was individually real and individually checkable. **A document
+can be internally inconsistent with every passage verifiable.** frank-rust read the
+same half-applied file and *did* flag it, which is why `36ef733bd` exists.
+
+## "Track T sweeps your exact SHA" is false, and I had been dispatching on it
+
+frankT, measured over the 2140 commits since 2026-08-29T18:00: **10.9% of shas get
+any tstate run, 2.9% a full tier, 0% limited.** Sampler ~18 commits behind tip,
+median gap 8, max 340. Fixed in CLAUDE.md at `516f14cba`.
+
+**The design is sound and the promise was simply misstated.** Sample the tip,
+bisect backwards: the true guarantee is *"a persistent regression is caught within
+~8 commits and bisected"*, not *"your sha is tested"*. Those are both good
+promises; only one of them is the one I had been offering workers as reassurance
+for pushing.
+
+**I decided NOT to broadcast it**, and the reasoning is the part to keep: it
+changes no worker's action, CLAUDE.md now carries the corrected wording, and a
+message saying *"the guarantee you relied on is weaker than stated, but change
+nothing"* invites the gate-widening frankT explicitly warns against — while every
+widened gate spends the box whose contention *sets* the sweep rate. Publishing it
+would make the number worse. Where it does change behaviour is here: stop saying
+"T sweeps your sha", and **treat a single uncorroborated full-tier verdict as
+genuinely single** — at 2.9% coverage, a second run on v398 is not a formality.
+
+frankT is exempt from the hook it defended (`PXX_TRACK=T`), measured the claim its
+own lane rests on, and argued against cutting the constraint that binds everyone
+but itself. Evidence produced against the producer's interest needs no discount.
+
+## When a probe cannot distinguish your candidates, EXTEND it before re-running
+
+frank-rust's rule, and the general form of two instances one hour apart. Both
+times the candidates produced a **byte-identical symptom**, so re-running was
+guaranteed to return the same undecidable output:
+
+- `p.specbound` occupancy (294/512) could never separate *"TKey was never
+  collected"* from *"collected but never consulted"*.
+- `p.dgen` without the sweep **window** could never separate *"the use falls
+  outside the forward-only sweep"* from *"inside it and classified concrete"* —
+  both mint an alias under a name that is really a parameter.
+
+Extending an instrument is cheap and bounded; inferring across an
+indistinguishability is neither, and it is exactly how a plausible wrong root
+cause gets written into a ticket. The extended probe killed **both** remaining
+arms at once: 674 groups, 674 × `paramform=1`, at `dictionariesh.inc:56/:82/:83`.
+`DelphiRewriteGenericUses` classifies correctly end to end; the defect is in what
+the **deferred path** (`ParseSpecialization`'s nested-specialization handling) does
+with a correctly-classified group — a region nobody had looked at.
+
+**Five mechanisms eliminated by measurement, and the first three were each the
+obvious story at the time.** A campaign that kills the obvious story three times
+running is not going badly; it is one where the obvious story would have been
+*asserted* three times under any cheaper method.
