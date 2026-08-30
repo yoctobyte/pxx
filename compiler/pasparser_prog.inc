@@ -741,8 +741,17 @@ begin
   if TargetArch = TARGET_WASM32 then
   begin
     for i := 0 to TokCount - 1 do
+    begin
       if (Tokens[i].Kind >= tkSysOpen) and (Tokens[i].Kind <= tkSysFchmod) then
       begin needsWasiFile := True; Break; end;
+      { LoadFile is a builtin spelled as an identifier, not a token, so it needs
+        the `math`-style name scan. Require the '(' for the same reason `math`
+        does -- a variable named `loadfile` must not pull a unit. }
+      if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 8) and
+         (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
+         CaseEqual(GetTokenStr(i), 'LoadFile') then
+      begin needsWasiFile := True; Break; end;
+    end;
   end;
   { FPC's LOW-LEVEL thread API lives in the System unit, so portable sources call
     BeginThread / EndThread / WaitForThreadTerminate / CloseThread and declare a

@@ -2848,7 +2848,18 @@ end;
 {$ifndef FPC}
 function sysgetdents64(fd: Integer; var buf; count: Integer): Integer;
 begin
+{$ifdef CPU_WASM32}
+  { wasm has no syscall instruction, so __pxxrawsyscall (IR op 54) is the one
+    node this target can never lower -- it was the LAST unlowerable body in
+    compiler.pas. WASI spells the same operation fd_readdir, in a different
+    record and with the walk position handed back to the caller as a cookie;
+    PXXWasiGetDents translates both. The unit is in scope here because the
+    demand scan pulls it for any wasm32 compilation containing a sys*
+    intrinsic, which this file is full of. }
+  Result := PXXWasiGetDents(fd, @buf, count);
+{$else}
   Result := Integer(__pxxrawsyscall(217, fd, Int64(@buf), count, 0, 0, 0));
+{$endif}
 end;
 {$endif}
 

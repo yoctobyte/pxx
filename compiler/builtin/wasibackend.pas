@@ -22,7 +22,8 @@ unit wasibackend;
 
   NOT AMBIENT. builtinheap is injected into every program on every target;
   this one is injected only when a wasm32 compilation actually uses a sys*
-  intrinsic (pasparser_proc.inc, on the precedent of
+  intrinsic, or calls the LoadFile builtin (pasparser_prog.inc, on the
+  precedent of
   `if cWantsSoftFloat then ParseUsesUnitAmbient('softfloat')`). An ambient
   wasm-only unit would be parsed by every lane's next build, including by the
   older pinned compiler they are using, and a construct it could not read would
@@ -45,7 +46,33 @@ function PXXWasiWrite(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PXXWasiClose(handle: Integer): Integer;
 function PXXWasiFchmod(handle, mode: Integer): Integer;
 
+{ LoadFile(path, dst) -- the pxx builtin, which every other target lowers to
+  builtinheap's PXXStrLoadFile. That body is unreachable here: it is written
+  over PXXSysOpenRO / PXXSysLseek / PXXSysRead / PXXSysClose, whose {$if} chain
+  has no wasm arm and correctly answers -1 rather than inventing an fd. Giving
+  it one would mean either a THIRD copy of the preopen model inside
+  builtinheap, or making builtinheap `uses wasibackend` -- and the second is
+  what forces every wasm32 program that merely allocates a string to import
+  fd_prestat_get, which is the exact regression the on-demand injection exists
+  to prevent. So the wasm arm of that one algorithm lives here instead, and the
+  backend picks the callee by target. }
+function PXXWasiLoadFile(path: Pointer): Pointer;
+
+{ sysgetdents64(fd, buf, count) -- the Linux directory-read syscall that
+  elfwriter.inc's PxxListDir walks. It is NOT one of the tkSys* intrinsics: it
+  is an ordinary function over __pxxrawsyscall, which is IR op 54 and the one
+  node wasm can never lower, there being no syscall instruction to lower it to.
+  So the wasm arm of sysgetdents64 calls this instead. }
+function PXXWasiGetDents(handle: Integer; buf: Pointer; len: Integer): Integer;
+
 implementation
+
+{ For PXXAlloc / PXXFree / PXXStrFromLit, used by PXXWasiLoadFile below. The
+  dependency runs this way and only this way: builtinheap must not know about
+  this unit (see PXXWasiLoadFile's note), and it is injected ahead of this one
+  in pasparser_prog.inc, so naming it here adds no cycle and no ordering
+  hazard. Every other entry point in this unit is free of it. }
+uses builtinheap;
 
 { POSIX open(2) flag bits, as the sys* intrinsics pass them -- `sysopen(p, 577)`
   is O_WRONLY|O_CREAT|O_TRUNC. Redeclared here rather than imported: this unit
@@ -132,6 +159,9 @@ function wasi_fd_seek(fd: Integer; offset: Int64; whence: Integer;
   external 'wasi_snapshot_preview1' name 'fd_seek';
 function wasi_fd_close(fd: Integer): Integer;
   external 'wasi_snapshot_preview1' name 'fd_close';
+function wasi_fd_readdir(fd: Integer; buf: Pointer; bufLen: Integer;
+                         cookie: Int64; bufused: Pointer): Integer;
+  external 'wasi_snapshot_preview1' name 'fd_readdir';
 function wasi_fd_sync(fd: Integer): Integer;
   external 'wasi_snapshot_preview1' name 'fd_sync';
 function wasi_path_open(dirfd, dirflags: Integer; path: Pointer;
@@ -176,6 +206,16 @@ var
   WasiPreName    : array[0..WASI_PREOPEN_MAX * WASI_PREOPEN_NAMEMAX - 1] of Byte;
   WasiIov        : array[0..1] of Integer;   { one iovec: [ptr, len] }
   WasiScratch    : array[0..15] of Byte;     { prestat / nread / newoffset }
+  { fd_readdir staging. The COOKIE is the whole reason there is state here:
+    getdents64 is a resumable walk whose position the kernel keeps in the fd,
+    and WASI moved that position into the caller. One slot, not a table,
+    because PxxListDir -- the only caller in this tree -- opens a directory,
+    walks it to exhaustion and closes it before opening another. The fd is
+    stored alongside so that interleaving two walks RESETS rather than silently
+    continuing one from the other's position. }
+  WasiDirBuf     : array[0..4095] of Byte;
+  WasiDirFd      : Integer;
+  WasiDirCookie  : Int64;
 {$endif}
 
 { WASI errno -> the negative Linux-ish value PAL callers compare against.
@@ -493,6 +533,161 @@ function PXXWasiFchmod(handle, mode: Integer): Integer;
 begin
 {$ifdef CPU_WASM32}
   Result := 0;
+{$else}
+  Result := PAL_ERR_UNSUPPORTED;
+{$endif}
+end;
+
+{ Read a whole file into a fresh managed string. Returns the handle (refcount 1,
+  nul-terminated) or nil if the file cannot be opened -- the SAME contract as
+  builtinheap's PXXStrLoadFile, because the pxx `LoadFile` builtin's callers
+  test `Length(dst) = 0` and nothing else.
+
+  Sized with fd_seek rather than fd_filestat_get: PXXWasiOpen already requests
+  WR_SEEK for every mode, so this needs no change to the rights mask, and a
+  right that is requested but never used is the one that silently stops being
+  requested later.
+
+  It reads into a staging block and then copies through PXXStrFromLit rather
+  than allocating the managed header itself. That is one memcpy of the file, and
+  it buys not having a second place in the tree that knows the layout of a
+  managed string -- PXXHdrInit and the header offsets are builtinheap's
+  business, and PXXStrFromLit is the interface it publishes for exactly this.
+
+  A zero-length file is a real case (an empty include), and it must come back as
+  an EMPTY STRING rather than nil: nil is how this reports "could not open", and
+  the two are different answers to the caller. }
+function PXXWasiLoadFile(path: Pointer): Pointer;
+{$ifdef CPU_WASM32}
+var fd: Integer; size, n: Int64; buf: Pointer;
+{$endif}
+begin
+{$ifdef CPU_WASM32}
+  Result := nil;
+  if path = nil then Exit;
+  fd := PXXWasiOpen(PChar(path), O_RDONLY, 0);
+  if fd < 0 then Exit;
+
+  size := 0;
+  WasiScratch[0] := 0; WasiScratch[1] := 0;
+  WasiScratch[2] := 0; WasiScratch[3] := 0;
+  if wasi_fd_seek(fd, 0, 2, @WasiScratch[0]) = 0 then      { WHENCE_END }
+    size := Integer(WasiScratch[0]) or (Integer(WasiScratch[1]) shl 8)
+            or (Integer(WasiScratch[2]) shl 16)
+            or (Integer(WasiScratch[3]) shl 24);
+  WasiScratch[0] := 0; WasiScratch[1] := 0;
+  WasiScratch[2] := 0; WasiScratch[3] := 0;
+  if wasi_fd_seek(fd, 0, 0, @WasiScratch[0]) <> 0 then     { WHENCE_SET }
+    size := 0;
+
+  if size <= 0 then
+  begin
+    { Opened but empty (or unseekable): an empty string, NOT nil. }
+    PXXWasiClose(fd);
+    Result := PXXStrFromLit(0, path);
+    Exit;
+  end;
+
+  buf := PXXAlloc(size + 1, 8);
+  n := PXXWasiRead(fd, buf, Integer(size));
+  PXXWasiClose(fd);
+  if n < 0 then n := 0;
+  Result := PXXStrFromLit(n, buf);
+  PXXFree(buf);
+{$else}
+  Result := nil;
+{$endif}
+end;
+
+{ WASI's fd_readdir and Linux's getdents64 carry the SAME INFORMATION in two
+  different records, so this is a translation, not a wrapper.
+
+    WASI dirent -- 24 bytes, then the name, NOT nul-terminated:
+      d_next:u64 @0   d_ino:u64 @8   d_namlen:u32 @16   d_type:u8 @20
+    Linux dirent64, as PxxListDir reads it:
+      d_ino:u64 @0    d_off:u64 @8   d_reclen:u16 @16   d_type:u8 @18
+      d_name @19, NUL-TERMINATED
+
+  d_ino and d_off are written as ZERO. The caller reads d_reclen and d_name and
+  nothing else, and inventing plausible values for fields nobody reads is how a
+  later reader comes to believe they mean something.
+
+  The output record is never larger than the input that produced it -- 19+n+1
+  rounded up to 8 is <= 24+n for every n -- so a staging buffer the size of the
+  caller's cannot overflow it. The bound is checked anyway: that is an argument,
+  not a guarantee.
+
+  A TRUNCATED TAIL is normal rather than an error. fd_readdir fills the buffer
+  and may cut the last entry's name; such an entry is dropped WITHOUT advancing
+  the cookie, so the next call re-reads it whole. Advancing past it would lose a
+  directory entry silently -- and a lost entry is exactly what makes
+  ResolveCaseInsensitivePath answer "no such file" for a file that is there.
+
+  Byte-at-a-time stores rather than PWord: PWord is a MACHINE word, four bytes
+  on this target, so the 8-byte d_ino/d_off fields are not one store here even
+  though they are on x86-64. }
+function PXXWasiGetDents(handle: Integer; buf: Pointer; len: Integer): Integer;
+{$ifdef CPU_WASM32}
+var used, off, outOff, namlen, reclen, i, rc: Integer;
+    nxt: Int64;
+    dtype: Byte;
+    dst: Int64;
+{$endif}
+begin
+{$ifdef CPU_WASM32}
+  Result := 0;
+  if (buf = nil) or (len <= 0) then Exit;
+  if handle <> WasiDirFd then
+  begin
+    WasiDirFd := handle;
+    WasiDirCookie := 0;
+  end;
+
+  WasiScratch[0] := 0; WasiScratch[1] := 0;
+  WasiScratch[2] := 0; WasiScratch[3] := 0;
+  rc := wasi_fd_readdir(handle, @WasiDirBuf[0], 4096, WasiDirCookie,
+                        @WasiScratch[0]);
+  if rc <> 0 then begin Result := Integer(WasiErr(rc)); Exit; end;
+  used := Integer(WasiScratch[0]) or (Integer(WasiScratch[1]) shl 8)
+          or (Integer(WasiScratch[2]) shl 16)
+          or (Integer(WasiScratch[3]) shl 24);
+  if used > 4096 then used := 4096;
+
+  dst := Int64(buf);
+  outOff := 0;
+  off := 0;
+  while off + 24 <= used do
+  begin
+    nxt := Int64(WasiDirBuf[off]) or (Int64(WasiDirBuf[off + 1]) shl 8)
+           or (Int64(WasiDirBuf[off + 2]) shl 16)
+           or (Int64(WasiDirBuf[off + 3]) shl 24)
+           or (Int64(WasiDirBuf[off + 4]) shl 32)
+           or (Int64(WasiDirBuf[off + 5]) shl 40)
+           or (Int64(WasiDirBuf[off + 6]) shl 48)
+           or (Int64(WasiDirBuf[off + 7]) shl 56);
+    namlen := Integer(WasiDirBuf[off + 16])
+              or (Integer(WasiDirBuf[off + 17]) shl 8)
+              or (Integer(WasiDirBuf[off + 18]) shl 16)
+              or (Integer(WasiDirBuf[off + 19]) shl 24);
+    dtype := WasiDirBuf[off + 20];
+    if (namlen < 0) or (off + 24 + namlen > used) then Break;   { truncated }
+
+    reclen := (19 + namlen + 1 + 7) and (not 7);
+    if outOff + reclen > len then Break;
+
+    for i := 0 to 17 do PByte(dst + outOff + i)^ := 0;   { d_ino, d_off }
+    PByte(dst + outOff + 16)^ := Byte(reclen and $FF);
+    PByte(dst + outOff + 17)^ := Byte((reclen shr 8) and $FF);
+    PByte(dst + outOff + 18)^ := dtype;
+    for i := 0 to namlen - 1 do
+      PByte(dst + outOff + 19 + i)^ := WasiDirBuf[off + 24 + i];
+    PByte(dst + outOff + 19 + namlen)^ := 0;
+
+    WasiDirCookie := nxt;
+    outOff := outOff + reclen;
+    off := off + 24 + namlen;
+  end;
+  Result := outOff;
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}

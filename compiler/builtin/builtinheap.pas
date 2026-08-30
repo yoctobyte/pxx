@@ -694,14 +694,56 @@ var
 {$endif}
 
 {$ifdef CPU_WASM32}
-{ The wasm arena's base, as one named thing. HeapMmap's wasm arm calls this
-  instead of inlining @WasmArena[0] so the eventual memory.grow arm replaces a
-  single expression rather than a use site buried in a conditional chain.
-  Defined ABOVE its caller, not merely somewhere in the file: FPC resolves in
-  source order and the bootstrap seed build is the only thing that checks. }
-function WasmArenaBase: Int64;
+{ `external 'wasm'` is not a host module -- the wasm32 backend reads that
+  reserved module name as THIS MACHINE and emits the instruction inline instead
+  of declaring an import (ir_codegen_wasm32.inc, WasmInstrExtern). So this
+  declaration costs no import, and a host that supplies nothing still runs it.
+
+  memory.grow takes a PAGE count and returns the previous SIZE IN PAGES, or -1
+  if it could not grow -- not the new size, and not a byte address. Getting
+  that backwards yields a heap based inside the memory that was already in use,
+  which is the failure this comment exists to prevent. }
+function WasmMemoryGrow(pages: Integer): Integer;
+  external 'wasm' name 'memory.grow';
+
+{ The wasm arena's base, as one named thing -- the single expression HeapMmap's
+  arm goes through. Defined ABOVE its caller, not merely somewhere in the file:
+  FPC resolves in source order and the bootstrap seed build is the only thing
+  that checks.
+
+  It now grows linear memory rather than handing out the fixed BSS arena. The
+  arena stays as the FIRST block, so a program that allocates less than a
+  megabyte still never calls memory.grow -- and, more to the point, a host or a
+  toolchain that refuses to grow keeps exactly the behaviour it had. Past that,
+  each call takes fresh pages.
+
+  Pages are 64 KiB and memory.grow returns the previous size in pages, so the
+  base of what it just added is prev * 65536. New pages are ZERO by
+  specification, which is what lets PXXAlloc's bump path keep its zero-init
+  contract with no memset -- the same reasoning the BSS arena relied on, for
+  the same reason.
+
+  -1 on failure is passed straight through, because it is out of bounds on the
+  first touch. Returning 0 here would be the bug the note below describes:
+  address 0 is legal in linear memory, reads as zero, and has no page
+  protection, so an out-of-memory heap would silently overwrite the globals and
+  only trap thousands of allocations later. }
+function WasmArenaBase(len: Int64): Int64;
+var pages, prev: Integer;
 begin
-  Result := Int64(@WasmArena[0]);
+  if WasmArenaUsed = 0 then
+  begin
+    WasmArenaUsed := 1;
+    if len <= 1048576 then
+    begin
+      Result := Int64(@WasmArena[0]);
+      Exit;
+    end;
+  end;
+  pages := Integer((len + 65535) div 65536);
+  prev := WasmMemoryGrow(pages);
+  if prev < 0 then Result := -1
+  else Result := Int64(prev) * 65536;
 end;
 {$endif}
 
@@ -766,19 +808,15 @@ begin
     pointer leaves the declared memory. -1 is out of bounds on the first touch,
     which is the loud failure this target has no other way to produce.
 
-    WasmArenaBase is a named expression rather than @WasmArena[0] inlined at
-    the use site so that the eventual memory.grow arm replaces ONE thing.
-    Growth is not blocked by the module declaration -- the backend already
-    writes the no-maximum limits form, so memory.grow is legal on these modules
-    today; the only missing piece is an intrinsic to reach it from Pascal, which
-    is the wasm32 lane's half and deliberately NOT this ticket. }
-  if WasmArenaUsed <> 0 then
-    Result := -1
-  else
-  begin
-    WasmArenaUsed := 1;
-    Result := WasmArenaBase;
-  end;
+    IT GROWS. WasmArenaBase hands out the fixed BSS arena for the first request
+    that fits in it and calls memory.grow for everything after, so this arm is
+    no longer a one-megabyte ceiling. That was the half this note reserved for
+    the wasm32 lane: the module declaration never blocked growth (the backend
+    already writes the no-maximum limits form), only the lack of a way to reach
+    memory.grow from Pascal did, and `external 'wasm' name 'memory.grow'` is
+    that way. Measured: compiler.pas under WASI trapped in PXXAlloc, three
+    frames under EnsureTokCapacity, before this. }
+  Result := WasmArenaBase(len);
 {$elseif defined(CPUX86_64)}
   Result := __pxxrawsyscall(9, 0, len, 3, 34, -1, 0);
 {$elseif defined(CPUAARCH64)}

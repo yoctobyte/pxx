@@ -606,6 +606,9 @@ procedure WasmStrScratchPop(scr: Integer); forward;
 procedure WasmEmitClassRef(node: Integer); forward;
 { The sys* intrinsic family, defined below the builtin dispatch that calls it. }
 function WasmEmitSysCallFam(node, p: Integer; isStmt: Boolean): Boolean; forward;
+function WasmEmitLoadFile(node: Integer): Boolean; forward;
+function WasmEmitPathArg(valNode: Integer): Boolean; forward;
+function WasmWriteHelper(const nm: AnsiString): Integer; forward;
 procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
@@ -2594,6 +2597,73 @@ begin
   WasmEmitArgStr := True;
 end;
 
+{ LoadFile(path, dst) -- builtin -100. Reads the whole file named by `path` into
+  the managed string `dst`, releasing dst's old handle.
+
+  The register targets call builtinheap's PXXStrLoadFile. This one calls
+  PXXWasiLoadFile in compiler/builtin/wasibackend.pas instead, for the reason
+  stated at that function: PXXStrLoadFile is written over PXXSysOpenRO /
+  PXXSysLseek / PXXSysRead / PXXSysClose, and giving THOSE a wasm arm means
+  either a third copy of the preopen model or a builtinheap -> wasibackend
+  dependency that would drag the WASI preopen imports into every wasm32 module
+  that merely allocates a string.
+
+  The path operand goes through WasmEmitPathArg, the same helper the sys*
+  family uses, so a managed and a frozen path behave identically here and
+  there -- a second path-shape classifier is exactly the double case
+  normalise-dont-special-case warns about, and the frozen arm is the one that
+  would have stayed broken.
+
+  The store is WasmEmitManagedStore's sequence written out, not a call to it:
+  that procedure takes an IR node for the value, and the value here is a call
+  result already on the operand stack. Same four steps, same order, and the
+  release is LAST for the same reason -- `LoadFile(p, s)` where s is also the
+  only holder of the old handle must not free the bytes before the new handle
+  is stored. }
+function WasmEmitLoadFile(node: Integer): Boolean;
+var argNode, pathNode, dstNode, si, hp, dp: Integer;
+begin
+  WasmEmitLoadFile := False;
+  argNode := IRB[node];
+  if argNode = -1 then Exit;
+  pathNode := IRA[argNode];
+  if IRB[argNode] = -1 then Exit;
+  dstNode := IRA[IRB[argNode]];
+  if (IRKind[dstNode] <> IR_LOAD_SYM) or
+     (Syms[IRA[dstNode]].TypeKind <> tyAnsiString) then Exit;
+  si := IRA[dstNode];
+
+  dp := WasmWriteHelper('PXXWasiLoadFile');
+  if dp < 0 then Exit;
+  hp := WasmWriteHelper('PXXStrDecRef');
+  if hp < 0 then Exit;
+
+  if WasmStrLocN < 0 then WasmStrLocN := WasmAddLocal(WT_I32, 'msnew');
+  if WasmStrLocS < 0 then WasmStrLocS := WasmAddLocal(WT_I32, 'msslot');
+  if WasmStrLocO < 0 then WasmStrLocO := WasmAddLocal(WT_I32, 'msold');
+
+  if not WasmEmitPathArg(pathNode) then Exit;
+  WasmCall(WasmSlotForProc(dp), Procs[dp].Name);
+  WasmLocalSet(WasmStrLocN);
+
+  WasmLValueAddr(si);
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(WasmStrLocS);
+
+  WasmLocalGet(WasmStrLocS);
+  WasmMemOp($28, 'i32.load', 2, 0);
+  WasmLocalSet(WasmStrLocO);
+
+  WasmLocalGet(WasmStrLocS);
+  WasmLocalGet(WasmStrLocN);
+  WasmMemOp($36, 'i32.store', 2, 0);
+
+  WasmLocalGet(WasmStrLocO);
+  WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
+
+  WasmEmitLoadFile := True;
+end;
+
 function WasmEmitBuiltin(node, p: Integer; isStmt: Boolean): Boolean;
 var argNode: Integer; ctk: TTypeKind; atk: TTypeKind; want: Byte; wide: Boolean;
     fl: Integer;
@@ -2622,6 +2692,12 @@ begin
      or (p = -Ord(tkSysClose)) or (p = -Ord(tkSysFchmod)) then
   begin
     WasmEmitBuiltin := WasmEmitSysCallFam(node, p, isStmt);
+    Exit;
+  end;
+
+  if p = -100 then
+  begin
+    WasmEmitBuiltin := WasmEmitLoadFile(node);
     Exit;
   end;
 
@@ -2935,8 +3011,50 @@ begin
   WasmDataAddr(Strs[si].Offset);
 end;
 
+{ `external 'wasm' name '<instr>'` — the module name `wasm` is not a host
+  module, it is THIS MACHINE, and the declaration lowers to the instruction
+  inline rather than to an import.
+
+  The alternative was a new intrinsic token, which means editing the shared
+  lexer and defs.inc for something only one target can ever emit — and the
+  point of a wasm instruction that Pascal cannot otherwise reach is that there
+  will be a handful of them (memory.grow today, memory.size, memory.copy and
+  the atomics later), not one. `external` already carries a module and a field
+  and already means "this call is not an ordinary call"; the only thing being
+  added is a reserved module name that resolves to the instruction set.
+
+  It cannot collide with a real import: `wasm` is not a legal WASI module and a
+  host that exported one would be answering for the machine it runs on.
+
+  The memidx operand is written explicitly (0 — the single memory of an MVP
+  module) rather than omitted: it is part of the ENCODING, not a default the
+  reader can infer, and multi-memory would make it meaningful. }
+function WasmInstrExtern(p: Integer; var op: Byte): Boolean;
+var fld: AnsiString;
+begin
+  WasmInstrExtern := False;
+  if (p < 0) or (p >= MAX_PROCS) then Exit;
+  if ProcLibrary[p] < 0 then Exit;
+  if Strs[ProcLibrary[p]].Text <> 'wasm' then Exit;
+  if ProcExtName[p] >= 0 then fld := Strs[ProcExtName[p]].Text
+  else fld := Procs[p].Name;
+  if fld = 'memory.grow' then op := $40
+  else if fld = 'memory.size' then op := $3F
+  else
+  begin
+    { A typo here would otherwise become an import named `memory.gorw` that no
+      host supplies, i.e. a module that fails to INSTANTIATE with no mention of
+      the declaration that caused it. }
+    WasmUnsupported('external ''wasm'' name ''' + fld + ''' — not a wasm '
+                    + 'instruction this backend emits');
+    Exit;
+  end;
+  WasmInstrExtern := True;
+end;
+
 procedure WasmEmitCall(node: Integer; isStmt: Boolean);
 var p, argNode, i, nParams, impIdx: Integer; pvt: Byte;
+    isInstr: Boolean; instrOp: Byte;
 begin
   p := IRA[node];
   if p < 0 then
@@ -2947,10 +3065,17 @@ begin
     Exit;
   end;
   impIdx := -1;
+  instrOp := 0;
+  isInstr := False;
   if (p < Length(ProcExternal)) and ProcExternal[p] then
   begin
-    impIdx := WasmImportIndex(p);
-    if impIdx < 0 then Exit;
+    isInstr := WasmInstrExtern(p, instrOp);
+    if WasmBodyBroken then Exit;
+    if not isInstr then
+    begin
+      impIdx := WasmImportIndex(p);
+      if impIdx < 0 then Exit;
+    end;
   end;
   nParams := Procs[p].ParamCount;
   argNode := IRB[node];
@@ -2999,7 +3124,18 @@ begin
     WasmEmitValueAs(IRC[node], WT_I32, 'hidden destination for ' + Procs[p].Name);
     if WasmBodyBroken then Exit;
   end;
-  if impIdx >= 0 then WasmCallImport(impIdx, Procs[p].Name)
+  if isInstr then
+  begin
+    { The memidx byte is written to the BINARY and left off the TEXT, which is
+      the one place these two legitimately differ. wat2wasm rejects an explicit
+      memory operand outside multi-memory ("Specifying memory variable is not
+      allowed"), while the binary encoding requires the byte unconditionally --
+      so the bare mnemonic is what assembles back to exactly these two bytes,
+      and the .wat stays a faithful oracle rather than an unassemblable one. }
+    WasmBodyB(instrOp); WasmBodyB(0);
+    if instrOp = $40 then WasmText('memory.grow') else WasmText('memory.size');
+  end
+  else if impIdx >= 0 then WasmCallImport(impIdx, Procs[p].Name)
   else WasmCall(WasmSlotForProc(p), Procs[p].Name);
   { A function called for its side effect leaves its result on the operand
     stack, and wasm requires the stack to be empty at the end of a statement.
