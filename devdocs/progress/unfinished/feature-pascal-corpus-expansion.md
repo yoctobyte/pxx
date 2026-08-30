@@ -827,3 +827,93 @@ restructuring might close both. It does not: wall 6 was closed on 2026-08-28 by
 extending the prerequisite SCAN, leaving this arm untouched, and this arm was
 then closed by moving the SWEEP to the uses clause. The question was worth
 asking; the answer is no.
+
+---
+
+## 2026-08-30 (frankA) — re-probed at HEAD `66b068019`. Rung 9 is CLEAR; the wall MOVED
+
+Re-measured rather than read. Six `rtl-generics` src units, each through a
+driver program, `-Fu`/`-Fi` at the src root:
+
+| unit | at HEAD |
+| --- | --- |
+| `generics.defaults` | **OK** |
+| `generics.hashes` | **OK** |
+| `generics.helpers` | **OK** |
+| `generics.memoryexpanders` | **OK** |
+| `generics.strings` | **OK** |
+| `generics.collections` | `unknown type: TKey` |
+
+**Five of six now compile.** `generics.defaults` compiling standalone is rung 6
+holding. Rung 9's blocker
+([[bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized]]) closed
+at `625991d20` and its own repro no longer fails.
+
+### The remaining wall is NOT rung 9's, despite wearing its error text
+
+`unknown type: TKey` is the string rung 9 was originally filed under and then
+explicitly re-diagnosed away from. Reading it as "rung 9 is still open" would be
+wrong. Two facts separate them:
+
+- The error is raised **while parsing `generics.defaults.pas`**, at
+  `IComparer<T>`'s `Compare(constref Left, Right: T)` — a unit that compiles
+  perfectly on its own. It only fails when reached *through*
+  `generics.collections`, which specializes `IComparer<TKey>` with a name that
+  is itself still a type parameter.
+- The **pinned** binary produces the identical message, so this is not a
+  regression from anything that landed tonight.
+
+### Narrowed by bisection to one include, and four hypotheses died first
+
+Truncating the interface at declaration boundaries: `cut@438` **clean**,
+`cut@474` **reproduces**. The only thing in between is
+
+```
+{$I inc\generics.dictionariesh.inc}
+```
+
+which declares `TPair<TKey, TValue>` and specializes `IEqualityComparer<TKey>`
+across the unit boundary.
+
+**Recorded because they cost the time and would otherwise be re-tried:** four
+hand-built reductions did **not** reproduce — plain cross-unit
+`IComparer<TKey>`; plus `constref`; plus a method implementation taking it;
+plus a macro-supplied parameter list (`{$DEFINE MAP_CONSTRAINTS := TKey,
+TValue}`); plus a nested `public type`/`private var` section. All five compile
+clean. The obvious mechanism ("specializing a cross-unit generic with a
+still-generic argument") is therefore **not** sufficient, and anyone starting
+from it will burn the same hour.
+
+### Moving those declarations into an `{$I}` include DOES break — differently
+
+Eleven lines, and it separates the two binaries:
+
+```
+PINNED : pascal26:6: error: unknown type: TKey
+HEAD   : pascal26:1: error: unexpected token
+         near: interface uses u_tmpl type specialize >>> TPair TKey
+```
+
+`specialize` has been **injected before a generic DECLARATION**, which is the
+Delphi rewrite treating `TPair<TKey, TValue> = record` as a *use*. That is the
+sweep `625991d20` moved to the uses clause. Both binaries fail, so this is a
+**changed failure mode on already-failing code, not a working case broken** —
+but the wall was re-walled one layer down, exactly the shape this ladder keeps
+producing. Filed as
+[[bug-p-the-delphi-generic-rewrite-injects-specialize-before-a-declaration-in-an-include]].
+
+**Next holder:** the remaining corpus wall is the include, not the
+specialization. Start from the bisection above, not from the error text.
+
+### PARKED 2026-08-30 (frankA) — released from `working/`, probe complete
+
+The re-probe above is finished and the ladder's next step is blocked on
+[[bug-p-the-delphi-generic-rewrite-injects-specialize-before-a-declaration-in-an-include]].
+Released from `working/` rather than held, because a lock held by a session
+that is not working the ticket reads as "someone is on it" while nothing
+happens — which is the exact failure measured fleet-wide tonight and filed as
+`decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop`.
+
+Everything is pushed. Nothing is half-applied. **Re-measure before trusting the
+table above** — that is the rule this ladder keeps re-teaching, and this
+section is now itself a snapshot.
