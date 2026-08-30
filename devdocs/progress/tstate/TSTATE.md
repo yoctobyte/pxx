@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `75d70ca4831d` | 2026-08-30T01:28:15Z | RED (native) | 366.9s | `e46dbffaa80d` RED |
+| plexus | `0c722047d131` | 2026-08-30T02:03:52Z | GREEN (native) | 371.3s | `e46dbffaa80d` RED |
 | seven | `3f854c927aac` | 2026-08-30T02:01:33Z | RED (full) | 889.0s | `3f854c927aac` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
@@ -11,11 +11,6 @@
 - **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
 - **demos#00** (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 135 commit(s) in range
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 217 commit(s) in range
-- **test-core#src:test/test_c_gtk.pas** — test/test_c_gtk.pas tools/expect_same.sh (plexus): bad `eefa85d70c64`, last good `0f717d761392`, 6 commit(s) in range
-- **test-core#src:test/test_c_gtk3_stock.pas** — test/test_c_gtk3_stock.pas test/gtk3stock/gtk3_c.h +1 (plexus): bad `eefa85d70c64`, last good `0f717d761392`, 6 commit(s) in range
-- **test-core#src:test/test_c_gtk_call.pas** — test/test_c_gtk_call.pas (plexus): bad `eefa85d70c64`, last good `0f717d761392`, 6 commit(s) in range
-- **test-core#src:test/test_c_gtk_types.pas** — test/test_c_gtk_types.pas (plexus): bad `eefa85d70c64`, last good `0f717d761392`, 6 commit(s) in range
-- **test-core#src:test/test_c_gtk_window.pas** — test/test_c_gtk_window.pas lib/pcl/gtk3_c.h (plexus): bad `eefa85d70c64`, last good `0f717d761392`, 6 commit(s) in range
 - **CASCADE 18 jobs** (seven): bad `154d1aa3fba6`, last good `e417731e9007`, 12 commit(s) in range
   <details><summary>jobs</summary>
 
