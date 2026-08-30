@@ -110,6 +110,45 @@ begin
   EmitI32($F84107E0);             { ldr x0, [sp], #16 (restore handle) }
 end;
 
+{ ---- static string literals, the aarch64 half ------------------------------
+  Every pooled literal is preceded by a ready-made managed-string header
+  (InternStr, emit.inc), so a literal that has to become an AnsiString already
+  IS one and the address is the whole conversion — no PXXStrFromLit, no
+  PXXAlloc, no copy of bytes that are already in the image, and no PXXFree when
+  the reference dies. The x86-64 half carries the full note; this is the same
+  pass through the same shared representation, which is the point of putting
+  the header in the POOL rather than in a per-backend shim.
+
+  One difference worth stating: x86-64 takes its reference with a four-byte
+  `inc qword [rax-16]`, and this calls PXXStrIncRef instead. A hand-emitted
+  aarch64 retain would have to reproduce the threadsafe arm too (LSE or an
+  ldxr/stxr pair), and EmitStrIncRefA64 is the primitive that already gets that
+  right. A call is still a fraction of what it replaces, and if it ever shows
+  up in a profile the inline form is a separate, testable change.
+
+  Decides AND emits, for the reason spelled out on the x86-64 twin: a caller
+  that checks its own predicate can disagree with the emitter, and the way that
+  fails here is a destination register never loaded — a wrong value, not a
+  crash.
+  bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+function EmitStaticLitHandleA64(node: Integer): Boolean;
+var si: Integer;
+begin
+  EmitStaticLitHandleA64 := False;
+  if OptLevel < 3 then Exit;
+  if node < 0 then Exit;
+  if IRKind[node] <> IR_CONST_STR then Exit;
+  si := InternStr(GetTokenStrFromRaw(IRA[node], IRB[node]));
+  if (Strs[si].Len = 0) and (not isNilPy) then
+    EmitI32($AA1F03E0)                          { mov x0, xzr — Pascal '' is nil }
+  else
+  begin
+    EmitLoadDataRefA64(0, Strs[si].Offset + 8); { x0 = the handle }
+    EmitStrIncRefA64;                           { and take the reference }
+  end;
+  EmitStaticLitHandleA64 := True;
+end;
+
 procedure EmitObjRetainA64;
 { x0 = class instance pointer. Retain; x0 preserved. PXXObjRetain no-ops on an
   instance that carries no refcount header, so a Pascal-created object is safe. }
@@ -340,6 +379,7 @@ var sVal: AnsiString; si, procIdx: Integer; tk: TTypeKind;
 begin
   if IRKind[valNode] = IR_CONST_STR then
   begin
+    if EmitStaticLitHandleA64(valNode) then Exit;
     sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
     si := InternStr(sVal);
     EmitLoadImmA64(0, Strs[si].Len);
@@ -4115,13 +4155,16 @@ begin
 
           if tk = tyString then
           begin
-            IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
-            EmitI32($AA0003E2);             { mov x2, x0 }
-            EmitI32($F9400040);             { ldr x0, [x2] (len) }
-            EmitI32($91002041);             { add x1, x2, #8 (src) }
-            procIdx := FindProc('PXXStrFromLit');
-            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-            EmitCallProc(procIdx);               { x0 = new AnsiString }
+            if not EmitStaticLitHandleA64(IRB[node]) then
+            begin
+              IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
+              EmitI32($AA0003E2);             { mov x2, x0 }
+              EmitI32($F9400040);             { ldr x0, [x2] (len) }
+              EmitI32($91002041);             { add x1, x2, #8 (src) }
+              procIdx := FindProc('PXXStrFromLit');
+              if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+              EmitCallProc(procIdx);               { x0 = new AnsiString }
+            end;
           end
           else if tk = tyAnsiString then
           begin
@@ -4177,13 +4220,16 @@ begin
 
         if tk = tyString then
         begin
-          IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
-          EmitI32($AA0003E2);             { mov x2, x0 }
-          EmitI32($F9400040);             { ldr x0, [x2] (len) }
-          EmitI32($91002041);             { add x1, x2, #8 (src) }
-          procIdx := FindProc('PXXStrFromLit');
-          if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-          EmitCallProc(procIdx);               { x0 = new AnsiString }
+          if not EmitStaticLitHandleA64(IRB[node]) then
+          begin
+            IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
+            EmitI32($AA0003E2);             { mov x2, x0 }
+            EmitI32($F9400040);             { ldr x0, [x2] (len) }
+            EmitI32($91002041);             { add x1, x2, #8 (src) }
+            procIdx := FindProc('PXXStrFromLit');
+            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(procIdx);               { x0 = new AnsiString }
+          end;
         end
         else if tk = tyAnsiString then
         begin

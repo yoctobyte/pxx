@@ -4120,6 +4120,22 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_ssl326 "$$($(TESTTMP)/test_ssl326)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
 	./$(COMPILER) -O0 test/test_static_string_literals.pas $(TESTTMP)/test_ssl026
 	tools/expect_same.sh test_ssl026 "$$($(TESTTMP)/test_ssl026)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
+	# aarch64 carries the same pass through the same shared representation --
+	# the header is in the POOL, so the port is one predicate and three emit
+	# sites, not a second shim. It takes its reference with a call to
+	# PXXStrIncRef where x86-64 uses a four-byte `inc qword [rax-16]`: a
+	# hand-emitted aarch64 retain would have to reproduce the threadsafe arm
+	# too, and EmitStrIncRefA64 already gets that right.
+	# Same deliberate break confirms it fires: MSTR_STATIC_RC=0 makes aarch64
+	# -O3 print `b=Zbcdef` while aarch64 -O0 stays correct.
+	@if command -v qemu-aarch64 > /dev/null 2>&1; then \
+	  for o in 0 3; do \
+	    ./$(COMPILER) --target=aarch64 -O$$o test/test_static_string_literals.pas $(TESTTMP)/test_ssl_a64_$$o >/dev/null || { echo "ssl aarch64 -O$$o compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh aarch64/test_ssl_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_ssl_a64_$$o)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')" || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_static_string_literals: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
 	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
 	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
 	# "evaluate both bounds before assigning the control variable"; eliding it

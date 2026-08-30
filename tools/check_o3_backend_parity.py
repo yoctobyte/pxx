@@ -102,8 +102,8 @@ def strip_comments(src):
 # out of scope, and the zeros are the scope statement made executable:
 #   386 / arm32 / riscv32 / xtensa
 EXPECTED = {
-    "ir_codegen.inc": 22,
-    "ir_codegen_aarch64.inc": 10,
+    "ir_codegen.inc": 23,
+    "ir_codegen_aarch64.inc": 11,
     "ir_codegen386.inc": 0,
     "ir_codegen_arm32.inc": 0,
     "ir_codegen_riscv32.inc": 0,
