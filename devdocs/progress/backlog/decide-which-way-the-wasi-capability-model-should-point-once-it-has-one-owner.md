@@ -4,13 +4,63 @@ title: "The WASI capability model exists twice. Unifying it means a layering cal
 track: U
 prio: 50
 type: decide
+status-note: "DECIDED 2026-08-30 by the owner's standing constraint, derived by the coordinator and confirmed by measurement. Answer: C -- keep both copies deliberately, guard the drift with a differential test. Do NOT invert the layering."
 blocked-by: []
-status: backlog
+status: decided
 owner: ""
 created: 2026-08-30
 found-by: frankwasm (measured the options), filed by frank-coordinator (escalating the fork)
 summary: "compiler/builtin/wasibackend.pas and lib/rtl/platform/wasi/platform_backend.pas each carry their own preopen table and rights logic. Both work, so nothing is red -- and a duplicated CAPABILITY model fails silently, as one path opening files the other refuses with ENOTCAPABLE. De-duplicating is not a typing job: a shared include double-defines when both units co-occur in one program, wasibackend cannot use the PAL by design, and the remaining direction points a lib/rtl unit at compiler/builtin, backwards from every other dependency in the tree. That is a layering call, not an implementation detail."
 ---
+
+> ## RESOLUTION, 2026-08-30 — **C. Keep both copies; guard the drift with a test.**
+>
+> **The owner's constraint settles the direction, and it was already on the
+> record:** *"we don't want any PAL in our compiler source — since it's not
+> needed. Instead we concluded to move some essentials to builtin."* That is a
+> standing architectural call, not a preference, and it is the same one
+> `decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`
+> already acted on. Nothing in this ticket may reintroduce a PAL dependency into
+> `compiler/**`.
+>
+> **The owner also scoped it — "it only affects a few basic file open/read/close
+> primitives" — and that is measurably right**, which is what turns the fork from
+> a hard call into an easy one. Measured at HEAD:
+>
+> | | `compiler/builtin/wasibackend.pas` | `lib/rtl/platform/wasi/platform_backend.pas` |
+> | --- | --- | --- |
+> | lines | 696 | 1120 |
+> | duplicated logic | `WasiScanPreopens`, `WasiFindPreopen`, the rights computation, errno mapping | same |
+> | what it backs | `PXXWasiOpen/Read/Write/Close/Fchmod/LoadFile/GetDents` | the full PAL surface |
+>
+> So the shared part is a preopen table, a rights computation and an errno map,
+> behind roughly seven primitives. The PAL is a superset and does much more.
+>
+> **Why that scope decides it.** Options A and B each pay a permanent structural
+> price — A inverts the tree's one consistent layering rule by pointing a
+> `lib/rtl` unit at `compiler/builtin`; B invents a third home and must then
+> answer what that home may depend on, inheriting wasibackend's constraints
+> anyway. Both prices are worth paying for a large shared subsystem. Neither is
+> worth paying for ~150 lines of preopen/rights logic behind seven primitives.
+>
+> **What the duplication actually costs is the silence, not the copying**, and a
+> test removes exactly that. So:
+>
+> 1. Add a **differential test** asserting both implementations resolve the same
+>    path to the same preopen and the same rights, including the refusal cases —
+>    an `ENOTCAPABLE` one path returns and the other does not is the failure this
+>    exists to catch.
+> 2. **Mark the duplication as deliberate in both files**, replacing
+>    `wasibackend.pas`'s header comment that currently says the follow-up
+>    de-duplication is owed. That comment was right to self-report and is what
+>    caught this at all; it is now wrong about the remedy.
+> 3. **Do not de-duplicate.** If the shared surface ever grows well beyond these
+>    primitives, reopen this ticket — that growth, not the duplication itself, is
+>    the trigger.
+>
+> Derived rather than escalated a second time, per the coordinator's remit: the
+> owner supplied the constraint and the scope, and together they settle it without
+> a further judgement call.
 
 # What is being asked
 

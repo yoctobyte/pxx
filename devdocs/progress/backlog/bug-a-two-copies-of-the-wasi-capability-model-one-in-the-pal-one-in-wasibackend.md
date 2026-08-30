@@ -11,7 +11,24 @@ found-by: frankwasm (closing feature-a-wasm32-sys-intrinsics-and-ir-syscall-lowe
 summary: "compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it."
 ---
 
-> **Blocked on a Track U decision, filed 2026-08-30 by the coordinator.** The fix
+> ## UNBLOCKED AND RESCOPED, 2026-08-30 — the answer is a TEST, not a de-duplication.
+>
+> The owner's standing constraint (*no PAL in the compiler source*) plus the
+> measured scope (~150 lines of preopen/rights logic behind seven primitives;
+> 696 lines vs the PAL's 1120) settled
+> `decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner`
+> as **keep both copies, guard the drift**. Neither layering option is worth its
+> permanent structural price at this size.
+>
+> **So this ticket's job is now:** (1) a differential test asserting both
+> implementations resolve the same path to the same preopen and the same rights,
+> refusal cases included — an `ENOTCAPABLE` from one and not the other is the
+> whole point; (2) replace `wasibackend.pas`'s header comment, which currently
+> says a de-duplication is owed, with a note that the duplication is deliberate
+> and what the test is. **Do not merge the two implementations.** If the shared
+> surface grows well past these primitives, reopen the decide ticket.
+>
+> Original filing note, superseded: **Blocked on a Track U decision, filed 2026-08-30 by the coordinator.** The fix
 > direction is a layering call: a shared include double-defines when both units
 > co-occur, wasibackend cannot use the PAL by design, and what remains points a
 > `lib/rtl` unit at `compiler/builtin` — backwards from every other dependency in
