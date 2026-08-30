@@ -49,8 +49,14 @@ Give the four targets a real C-convention prologue arm, the way x86-64 now has
 one (`EmitParamSpillsForTarget`'s `ProcCdecl` arm). Then the reject is obsolete
 everywhere and gets deleted rather than repaired, and no shape enumeration is
 needed at all. AAPCS64 and AAPCS32 both count integer and FP registers
-independently, so the shape of the x86-64 arm carries over; riscv32's ILP32D
-does too.
+independently, so the shape of the x86-64 arm carries over.
+
+> **The riscv32 half of that sentence was wrong and is corrected below** (see
+> "riscv32 is ILP32 SOFT-float"). It originally read "riscv32's ILP32D does
+> too". pxx's riscv32 has no FP register bank at all, so the x86-64 arm's shape
+> carries over to riscv32 *not at all* — and by the time this was caught the
+> claim had already been repeated back to me by the coordinator, which is how a
+> premise in a ticket becomes a premise in a design.
 
 **This is the root-cause option and it closes the ticket by deletion.** Measure
 tickets-closed-per-change, not lines touched: repairing the guard leaves the
@@ -143,3 +149,63 @@ gives 7). Treat any grep count of this predicate as a lower bound.
 So: **read i386's and riscv32's classification line by line; do not grep for it.**
 The per-target slicing forces exactly that, which is why the remaining two will
 surface their own instances regardless of who is paying attention.
+
+
+## riscv32 is ILP32 SOFT-float, and its divergence is at TEN words (2026-08-30)
+
+**The ILP32D premise above is wrong, measured three independent ways.** pxx's
+riscv32 has no floating-point register bank in the parameter path at all:
+
+- a riscv32 binary carries `e_flags = 0x0` = `EF_RISCV_FLOAT_ABI_SOFT` (`0x4`
+  would be double);
+- there is not one f-register anywhere in `ir_codegen_riscv32.inc`, and float
+  conversion goes through `FindProc('__pxx_i2s')` — a *call* into soft-float
+  emulation;
+- every multilib of the installed `riscv32-esp-elf-gcc` 15.2.0 is `mabi=ilp32`.
+
+A by-value `Double` is therefore **two integer words** in `a0..a7`, exactly as
+`EmitParamSpillsForTarget`'s riscv32 arm counts it.
+
+**So riscv32 passes all 12 narrow checks HONESTLY, not by luck, and the green
+means something after all — just not what it looked like.** All three earlier
+mechanisms are genuinely absent here. There are no independent banks to
+desynchronise (x86-64/aarch64). There is no even-register alignment rule: the
+RISC-V psABI deliberately does *not* require it, unlike AAPCS32, so `f(Integer,
+Double)` packs into `a0`, `a1:a2` — verified against gcc, which emits exactly
+that. And word *k* goes to `a[k]` leftmost-first, so there is no order flip
+(i386). For everything that fits in the eight argument registers, pxx's riscv32
+convention already **is** the C convention.
+
+**The divergence is the stack tail, and it starts at TEN words.** pxx places
+overflow word *k* at `[entry_sp + (pnWords-1-k)*4]` — *descending*. The psABI
+puts the first overflow word at `sp+0` and counts up. Measured against
+`riscv32-esp-elf-gcc` 15.2.0, `-march=rv32imc_zicsr_zifencei -mabi=ilp32`, from
+both sides so the reading is not one interpretation twice:
+
+| ten int params | word 8 (`i`) | word 9 (`j`) |
+| --- | --- | --- |
+| gcc caller places | `0(sp)` | `4(sp)` |
+| gcc callee reads (`-O1`) | `0(sp)` | `4(sp)` |
+| **pxx callee reads** | **`20(s0)` = entry_sp+4** | **`16(s0)` = entry_sp+0** |
+
+Reversed. pxx's *caller* is reversed to match — not separately disassembled, but
+forced: the callee provably reads word 8 from entry_sp+4, and pxx↔pxx returns
+the right answer, so pxx's caller must write it there. Hence C interop is broken
+in **both** directions on riscv32 at ten or more words, while Pascal↔Pascal is
+fine because both ends share the mistake.
+
+**NINE words is a trap, and it is the probe I would naturally have written.** At
+exactly nine words there is a single overflow word and `(pnWords-1-k)*4` =
+`(9-1-8)*4` = `0` — the descending formula and the ascending psABI *coincide*.
+A nine-argument probe returns a clean green. I ran that probe first and it
+passed; the bug is only visible from ten. Same shape as the split-double corner
+(seven ints then a `Double`: low half in `a7`, high half at entry_sp+0, which
+gcc does and pxx's formula also produces — nine words again, so again a
+coincidence rather than agreement).
+
+**The consumer is real.** `--emit-obj` exists for `--target=riscv32|xtensa`
+specifically so ESP-IDF C can call pxx-emitted code, which is the whole point of
+Track S. This is not a hypothetical observable.
+
+**xtensa was NOT measured** and must not be assumed to share this. It has the
+same zero-oracle-adoption property and no case has been built for it.
