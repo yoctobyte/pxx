@@ -67,6 +67,13 @@ container and the mode differ.
 
 ## Why the `var`/`const` split is the interesting part
 
+> **SUPERSEDED 2026-08-30 by the boundary measurement below.** The paragraph
+> that follows read the split as "the `const`-array argument path specifically".
+> That is **wrong**, and measurably so: by-value and open-array arguments fail
+> too, so it is not about `const`. It is about which modes may form a COPY.
+> Kept as written because it was the routing note whoever picked this up would
+> have acted on, and a superseded guess is more useful visible than deleted.
+
 `var` on a row works and `const` on the same row does not, which points at the
 `const`-array argument path specifically rather than at address-of for
 aggregate members in general — that path is evidently right, because the `var`
@@ -135,3 +142,106 @@ Two details to add to the routing note:
   narrows it toward what the *caller* passes for a const aggregate member versus what
   it passes for a var one. `var` on the same row, same type, same call site shape,
   is fine.
+
+---
+
+## Boundary measured, 2026-08-30 (frankB — probes only, no fix)
+
+24 probes at pin v393 (`1d69760deabe`), one program per cell so a crash cannot
+mask a sibling. **The routing note above is wrong in a way that matters**, and
+the corrected statement is narrower on one axis and wider on the other.
+
+### It is not `const`. It is every mode that may COPY.
+
+| mode | 2D array row `p[0]` |
+| --- | --- |
+| `const` | **SIGSEGV** |
+| by value | **SIGSEGV** |
+| `const g: array of Int64` (open array) | **SIGSEGV** |
+| `var` | ok |
+| `out` | ok |
+
+`var` and `out` are the two modes that *must* pass an address. Every mode that
+is free to hand the callee a copy fails. So the defect is not in the `const`
+path; it is in forming the argument for a copying mode.
+
+### It is not aggregate members. It is an array-typed ARRAY ELEMENT.
+
+| container | `const` | `var` | by value |
+| --- | --- | --- | --- |
+| standalone `s: TG` | ok | ok | ok |
+| record field `r.a` | ok | ok | ok |
+| record field inside an array element `q[0].a` | **ok** | — | — |
+| **array row `p[0]`** | **SIGSEGV** | ok | **SIGSEGV** |
+| **array row through a record `r2.rows[0]`** | **SIGSEGV** | — | — |
+
+Irrelevant, all measured: element type (`Int64` vs `Byte`), element count (4 vs
+64), literal vs variable subscript, and `array[0..2] of TG` vs
+`array[0..2, 0..3] of Int64`.
+
+`q[0].a` is the control the routing note needed and did not have. It has an
+array subscript in its access path, it is an aggregate member, it is passed
+`const`, and it **works** — so "an array subscript anywhere in the path"
+is not the trigger. What matters is that the *final* step yields an array-typed
+value by subscripting. Its partner control is `r.a` by value: a copying mode
+over an aggregate member, also fine.
+
+### The mechanism, measured rather than guessed
+
+`const` of a fixed array in pxx **does** pass a copy — the callee's `@g` is a
+different, non-zero address from the caller's. That part works everywhere. What
+breaks is the address the copy is made FROM:
+
+```
+standalone     @s          = 4301824    const arg addr = 4302184
+record field   @r.a        = 4301856    const arg addr = 4302224
+rec-in-array   @q[0].a     = 4302080    const arg addr = 4302264
+array row      @p[0]       = 4301888    const arg addr = 0      <-- NULL
+row via record @r2.rows[0] = 4301984    const arg addr = 0      <-- NULL
+```
+
+**The argument arrives as NULL, not as a wrong address.** `@p[0]` is correct at
+the call site (4301888, and `@p[1]` is 4301880+32 as it should be) — the value
+is lost between there and the callee.
+
+And it faults on entry, not on extent: a callee that prints before touching the
+parameter prints, then dies on the **first** element read.
+
+```
+before call
+sum=  entered callee
+  about to read g[0]
+Segmentation fault
+```
+
+A callee that takes `@g` and never dereferences does not crash at all, which is
+how the address table above was obtainable.
+
+### An adjacent defect, offered as a lead and not a claim
+
+The same shape one level deeper fails at COMPILE time instead, with a
+diagnostic that is untrue:
+
+```pascal
+type TG = array[0..3] of Int64; TPa = array[0..2] of TG; TPb = array[0..1] of TPa;
+var b: TPb;
+  b[0][0][1] := 5;          { ok }
+  x := PtrUInt(@b[0][0][1]) { ok — fully subscripted }
+  x := PtrUInt(@b[0]);      { ok — one level }
+  x := PtrUInt(@b[0][0]);   { error: wrong number of array subscripts }
+  SumC(b[0][0]);            { same error — cannot even be called }
+```
+
+Triple subscripting itself is fine; what is rejected is forming a REFERENCE to a
+partially-subscripted 3-level array. That is the same operation the 2D case gets
+wrong, failing in a different way — so they may share a root, and a fix for one
+is worth testing against the other. **Stated as a lead: two symptoms of one
+operation is a hypothesis, not a measurement, and I did not read the lowering
+code.** It is also why the 3D row could not be added to the tables above.
+
+### What a fix must assert
+
+Every cell of both tables, plus: the `q[0].a` and `r.a`-by-value controls stay
+green (a fix that repairs the row by making every aggregate member take the
+slow path would pass a test that only watches the failing cells), and the 3D
+`@b[0][0]` diagnostic either goes away or is shown to be a separate bug.
