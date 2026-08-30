@@ -11275,23 +11275,28 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-30T04:47:16Z",
+  "date": "2026-08-30T12:29:51Z",
   "red": [
-   "test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy",
-   "test-nilpy#src:test/test_nilpy_max_min_iterables.npy",
-   "test-nilpy#src:test/test_nilpy_min_max_key_none.npy",
-   "test-aarch64#src:test/test_parallel_reduction.pas",
    "test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint",
-   "tools-devtest#00"
+   "tools-devtest#00",
+   "test-pascal-conformance#shard0/6",
+   "test-pascal-conformance#shard1/6",
+   "test-pascal-conformance#shard2/6",
+   "test-pascal-conformance#shard3/6",
+   "test-pascal-conformance#shard4/6",
+   "test-pascal-conformance#shard5/6"
   ],
-  "sha": "43c8e341204989508a12734ad437c0c4d63ff5c3",
+  "sha": "acec6c192f14ec77db34453c7d9eb658e3fb0e1d",
   "tier": "full",
-  "ver": "v394",
+  "ver": "v395",
   "verdict": "RED",
   "why": {
-   "test-nilpy#src:test/test_nilpy_max_min_iterables.npy": "-99 97 | -6 2 | -9 2 | -[1, 2] [3] | -7 3 2.5 a | -ValueError: max() iterable argument is empty",
-   "test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy": "inline-bound 3 1 | -variant-container 3 1 | -sorted [3, 2, 1] | -plain 1 3 1 3 1.5 | -strings a b | -bylen a ccc",
-   "test-nilpy#src:test/test_nilpy_min_max_key_none.npy": "-a c | -0 2 | -3 1 | -1 2 1 2 | -1.5 b | -(1, 9) [2]"
+   "test-pascal-conformance#shard0/6": "SKIP tover1.pp \u2014 gap: overload resolution across shortstring/ansistring/widestring/pchar params | SKIP tprocvar3.pp \u2014 gap: delphi-mode procvar of object, @-less proc assignment, codepointer method add",
+   "test-pascal-conformance#shard1/6": "SKIP tprop1.pp \u2014 gap: global `property` section in a program (FPC-mode global properties) | SKIP tset2b.pp \u2014 gap: explicit enum ordinal values (dA:=8) + {$packset 2} packed-set semantics | SKIP tstati",
+   "test-pascal-conformance#shard2/6": "SKIP toperator94.pp \u2014 gap: objfpc `class operator :=` implicit conversion to shortstring types \u2014 the duplicate-conversion check (parser.inc ~1860) falsely collides distinct frozen-string result kinds;",
+   "test-pascal-conformance#shard3/6": "SKIP tpropdef.pp \u2014 wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault) | SKIP trange5.pp \u2014 gap: `with` over a record typecast (int64rec(q)) plus 64-bit {$R+",
+   "test-pascal-conformance#shard4/6": "SKIP tgeneric7.pp \u2014 gap: generics across units + $R range-check state per unit (expects runtime error 201) | SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the ",
+   "test-pascal-conformance#shard5/6": "SKIP tprocvar2.pp \u2014 gap: typed const procvar initialized with bare proc name (TP mode), procvar via move() | SKIP tsetsize.pp \u2014 wontfix: asserts FPC's exact set-size/packing layout (SizeOf(set of subr"
   }
  }
 }
