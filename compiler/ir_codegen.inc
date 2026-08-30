@@ -2431,6 +2431,57 @@ begin
   EmitI32(off);
 end;
 
+{ -O3 W1 slice 10: does the shift arm OPEN with a `cdqe` on the left operand?
+  That leading widen is the one place in the binop emitter where a resident
+  4-byte read fuses -- `mov rax, rN` + `cdqe` (5 bytes, 2 instructions) is
+  `movsxd rax, rNd` (3 bytes, 1). Both the pre-decision that SKIPS the left
+  load and the emit site that replaces the cdqe call THIS function, so they
+  cannot drift apart: a skip the widen site then failed to honour would leave
+  rax never loaded at all, which is a silently wrong value rather than a
+  crash. One condition, two readers.
+  Deliberately NOT the trailing re-sign in the same arm (that one narrows the
+  RESULT, and its `size(node) < 8` is disjoint from this `= 8`), and not
+  `shl`, which has no leading widen. }
+function W1LeadingCdqe(node, left: Integer; op: TTokenKind): Boolean;
+begin
+  W1LeadingCdqe := False;
+  if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
+  if op = tkIdent then                                        { Pascal `shr` }
+    W1LeadingCdqe := (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+                     TypeSigned(IntToTypeKind(IRTk[left]))
+  else if op = tkShr then                                     { C `>>` }
+    W1LeadingCdqe := True;
+end;
+
+{ -O3 W1 slice 10: can the left operand's load be skipped and carried by the
+  widen? Returns its home register, or 0 for "emit the load normally".
+  WHY NOT the tempting version -- just DELETE the cdqe. It is provably a no-op
+  today, because every write to a 4-byte resident re-normalises the register
+  (the residency init and each store emit their own movsxd). That is an
+  elision resting on an invariant maintained in another file, whose failure
+  mode is a silently wrong value; slice 8 refused the same shape. `movsxd rax,
+  rNd` sign-extends the low 32 bits BY CONSTRUCTION and is correct whatever
+  the upper half holds, for the same instruction count.
+  Exactly-4 is required: a 1- or 2-byte symbol's own load is a movsx from the
+  low 8/16 bits, which movsxd is not. }
+function W1WidenLeftEligible(node, left: Integer; op: TTokenKind): Integer;
+begin
+  W1WidenLeftEligible := 0;
+  if OptLevel < 3 then Exit;
+  if not W1LeadingCdqe(node, left, op) then Exit;
+  if not LeafSymRcxLoadable(left) then Exit;
+  if TypeSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
+  W1WidenLeftEligible := ResidentRegOf(IRA[left]);
+end;
+
+{ movsxd rax, rNd -- REX.W[+B] 63 /r with mod=11, reg=000 (rax), rm=N. }
+procedure EmitMovsxdRaxReg(reg: Integer);
+begin
+  if reg >= 8 then EmitB($49) else EmitB($48);
+  EmitB($63);
+  EmitB($C0 or (reg and 7));
+end;
+
 function CmpFusible(node: Integer): Boolean;
 var opTk: Integer; lt, rt: TTypeKind;
 begin
@@ -4620,6 +4671,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
     shiftImmCnt: Integer;  { -O1 W1: >= 0 = a constant shift count NOT materialised into rcx }
     w1LeftReg: Integer;    { -O3 W1 slice 5: 0 = left is in rax, else r12..r15 read in place }
+    w1WidenLeftReg: Integer;  { -O3 W1 slice 10: 0 = left load emitted, else the resident reg the widen must read }
     w1CmpRightKind, w1CmpRightReg, w1CmpRightOff: Integer;  { -O3 W1 slice 7 }
     strCmpRel: Boolean;    { this comparison releases an owned string operand }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
@@ -6015,6 +6067,7 @@ begin
         w1RightReg := 0;
         shiftImmCnt := -1;
         w1LeftReg := 0;
+        w1WidenLeftReg := 0;
         w1CmpRightKind := W1CMP_NONE; w1CmpRightReg := 0; w1CmpRightOff := 0;
 
         { PXXDBG=a.w1left -- REPORT ONLY, prices the LEFT half of the operand
@@ -6254,7 +6307,18 @@ begin
           if (OptLevel >= 3) and W1CmpLeftEligible(node, left, right) then
             w1LeftReg := ResidentRegOf(IRA[left])
           else
-            IREmitNode(left);
+          begin
+            { -O3 W1 slice 10: a 4-byte resident left feeding a shift's LEADING
+              cdqe needs no load of its own -- `movsxd rax, rNd` at the widen
+              site IS the read and the widen, one instruction instead of two.
+              Safe to defer across the right operand's setup: in both of these
+              arms the right is a constant (no code, or `mov rcx, imm`) or a
+              leaf sym (EmitLoadVarRcx, which writes rcx and nothing else), so
+              nothing between here and the widen touches rax, and nothing can
+              mutate the symbol out from under the deferred read. }
+            w1WidenLeftReg := W1WidenLeftEligible(node, left, op);
+            if w1WidenLeftReg = 0 then IREmitNode(left);
+          end;
           { A SHIFT by a constant count does not want the count in rcx at all —
             x86 has an immediate form. The imm-fold arm above deliberately
             excludes shifts because they carry width fixups it does not
@@ -6303,7 +6367,18 @@ begin
           if (OptLevel >= 3) and W1CmpLeftEligible(node, left, right) then
             w1LeftReg := ResidentRegOf(IRA[left])
           else
-            IREmitNode(left);
+          begin
+            { -O3 W1 slice 10: a 4-byte resident left feeding a shift's LEADING
+              cdqe needs no load of its own -- `movsxd rax, rNd` at the widen
+              site IS the read and the widen, one instruction instead of two.
+              Safe to defer across the right operand's setup: in both of these
+              arms the right is a constant (no code, or `mov rcx, imm`) or a
+              leaf sym (EmitLoadVarRcx, which writes rcx and nothing else), so
+              nothing between here and the widen touches rax, and nothing can
+              mutate the symbol out from under the deferred read. }
+            w1WidenLeftReg := W1WidenLeftEligible(node, left, op);
+            if w1WidenLeftReg = 0 then IREmitNode(left);
+          end;
           { -O3 W1 slice 4: if that right operand is REGISTER-RESIDENT, the load
             EmitLoadVarRcx would emit is `mov rcx, r12..r15` — a move whose only
             purpose is to satisfy the rcx contract. The ALU can read r12..r15
@@ -6771,9 +6846,15 @@ begin
                   result (C, and any dialect that keeps the operand's width)
                   still zero-extends, which is this emitter's original job.
                   bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
-                if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
-                   TypeSigned(IntToTypeKind(IRTk[left])) then
-                  begin EmitB($48); EmitB($98); end           { cdqe (sign-extend) }
+                if W1LeadingCdqe(node, left, op) then
+                begin
+                  { -O3 W1 slice 10: when the left load was skipped above, the
+                    read and the widen collapse into one movsxd. }
+                  if w1WidenLeftReg <> 0 then
+                    EmitMovsxdRaxReg(w1WidenLeftReg)          { movsxd rax, rNd }
+                  else
+                    begin EmitB($48); EmitB($98); end         { cdqe (sign-extend) }
+                end
                 else
                   begin EmitB($89); EmitB($C0); end;          { mov eax, eax (zero-extend) }
               end;
@@ -6796,8 +6877,13 @@ begin
             operand, and `sar` instead of `shr` (ModRM /7 vs /5). }
           tkShr:
             begin
-              if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
-                begin EmitB($48); EmitB($98); end;            { cdqe (sign-extend) }
+              if W1LeadingCdqe(node, left, op) then
+              begin
+                if w1WidenLeftReg <> 0 then                   { -O3 W1 slice 10 }
+                  EmitMovsxdRaxReg(w1WidenLeftReg)            { movsxd rax, rNd }
+                else
+                  begin EmitB($48); EmitB($98); end;          { cdqe (sign-extend) }
+              end;
               EmitShiftRax($F8, True, shiftImmCnt);          { sar rax, cl|imm }
             end;
           { `shl` in a 64-bit register on a <8-byte operand leaves a value shifted

@@ -2176,6 +2176,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-opt-float-intree-xmm-fusion | O | 40 | feature | Keep float binop-tree intermediates in xmm (no push/pop/GPR-transit) within one expression — most of the 4.2x float gap, small blast radius | — |
 | feature-opt-heap-size-class-allocator | O | 52 | feature | Heap: segregated free lists (size classes) — kill the O(n) free-list walk | — |
 | feature-opt-imm-fold-binop | O | 50 | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
+| feature-opt-o3-fuse-resident-read-and-widen-into-movsxd | A+O | 60 | feature | -O3: fuse `mov rax, rN` + `cdqe` into a single `movsxd rax, rNd` | — |
 | feature-opt-o3-operand-order-for-non-commutative-binops | A+O | 65 | feature | -O3: evaluate a non-commutative binop's operands right-first when the right is pure | — |
 | feature-opt-pxx-internal-abi-unified-residency | O | 58 | feature | pxx internal calling convention + unified int/float residency allocator | — |
 | feature-opt-store-reload-elimination | A+O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |

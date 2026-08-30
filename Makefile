@@ -3947,6 +3947,29 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_binoporder326 "$$($(TESTTMP)/test_binoporder326)" "$$(printf 'pure=957\nleftimp=51 log=L\nbothimp=-3 log=ab\ndone')"
 	./$(COMPILER) -O0 test/test_binop_operand_order.pas $(TESTTMP)/test_binoporder026
 	tools/expect_same.sh test_binoporder026 "$$($(TESTTMP)/test_binoporder026)" "$$(printf 'pure=957\nleftimp=51 log=L\nbothimp=-3 log=ab\ndone')"
+	# a 4-byte SIGNED resident feeding a shift's LEADING sign-extend is read and
+	# widened by ONE `movsxd rax, rNd` instead of `mov rax, rN` + `cdqe` -- 3 bytes
+	# and 1 instruction instead of 5 and 2. NOT by deleting the cdqe: that is a
+	# provable no-op today only because every write to a 4-byte resident
+	# re-normalises the register, an invariant maintained in another file whose
+	# failure mode is a silently wrong value. movsxd sign-extends by construction.
+	# a/b/c are a BAND (standing rule 4) -- adjacent values whose shifted results
+	# differ by exactly 1 -- carrying distinct weights, so naming the wrong
+	# resident is a specific wrong total. Values are NEGATIVE, so a dropped
+	# extension gives a number near 2^31 where the right answer is near 2^63.
+	# Three deliberate breaks (wrong rm field, dropped REX.B, widen site ignoring
+	# the deferred load) each move -O3 while -O0 stays correct.
+	# --strict-fpc is the second expectation AND a control: it tags the result 4
+	# bytes, so the fold cannot fire, and it reproduces FPC 3.2.2 exactly.
+	# feature-opt-o3-fuse-resident-read-and-widen-into-movsxd (W1 slice 10)
+	./$(COMPILER) -O3 test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwiden326
+	tools/expect_same.sh test_shrwiden326 "$$($(TESTTMP)/test_shrwiden326)" "$$(printf 'acc=2399488939246\none=799829646330\ndone')"
+	./$(COMPILER) -O0 test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwiden026
+	tools/expect_same.sh test_shrwiden026 "$$($(TESTTMP)/test_shrwiden026)" "$$(printf 'acc=2399488939246\none=799829646330\ndone')"
+	./$(COMPILER) -O3 --strict-fpc test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwidensf326
+	tools/expect_same.sh test_shrwidensf326 "$$($(TESTTMP)/test_shrwidensf326)" "$$(printf 'acc=1121256676948\none=373752225564\ndone')"
+	./$(COMPILER) -O0 --strict-fpc test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwidensf026
+	tools/expect_same.sh test_shrwidensf026 "$$($(TESTTMP)/test_shrwidensf026)" "$$(printf 'acc=1121256676948\none=373752225564\ndone')"
 	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
 	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
 	# "evaluate both bounds before assigning the control variable"; eliding it

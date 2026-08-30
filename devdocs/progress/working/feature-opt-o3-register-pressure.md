@@ -185,6 +185,32 @@ far from exhausted. Killing the 37% is where the next multiplier lives.
 > which is why a stated scope needs a recurring count rather than a comment.
 > **From now on, each W1/W2 slice records its per-backend gate count here** —
 > one command, and the only thing that would have caught this.
+>
+> **CORRECTION, 2026-08-30 (slice 10): the count itself was undercounting, and
+> its own recurrence is what caught it.** The published method greps
+> `OptLevel >= 3`, and roughly a fifth of the gates in this campaign are spelled
+> `if OptLevel < 3 then Exit;` — an early return at the top of a predicate, which
+> is the shape slices 7, 8 and 10 all use. Parsing BOTH spellings:
+>
+> | file | `>= 3` | `< 3` | total |
+> | --- | --- | --- | --- |
+> | `ir_codegen.inc` (x86-64) | 17 | 6 | **23** |
+> | `ir_codegen_aarch64.inc` | 5 | 2 | **7** |
+> | the other four backends | 0 | 0 | 0 |
+>
+> So the ratio is **23 : 7**, not 15 : 4 — the same story (aarch64 has the W2
+> keystone and none of the W1 slice 5-10 family), told by a number that is
+> actually the number. The sibling ticket's slug says "four-of-fifteen"; slugs
+> are cited by resolved commits and are not renamed, so the corrected count is
+> recorded inside it instead.
+>
+> The lesson is the instrument's, not the scope's: **a count is a grep, and a
+> grep is a spelling.** "Count arms by parsing, not by reading" (face 118) buys
+> nothing if the parse matches one of the two ways the arm is written. Slice 10
+> added a gate and the `>= 3` count did not move — 17 before, 17 after — which
+> is the tell, and it is only visible because the count is taken every slice.
+> Command:
+> `grep -cE 'OptLevel *(>=|<) *3' compiler/ir_codegen*.inc`
 Optimization splits by home (see `optimization-architecture.md` §3): **shared-IR
 passes (§3a) help all six targets for free** — one implementation, keep those
 target-agnostic. **Per-backend work (§3b: emitter peepholes, the operand
@@ -3183,3 +3209,72 @@ disassembly carried into each rather than left in this log:
 Together they take this loop **18 -> 15**. Both carry forward the two controls
 this campaign paid for: an ordering change is invisible to a counter (log the
 order), and a guard needs a decline log to be known selective.
+
+## W1 slice 10 — the resident read and the widen are one instruction
+
+`feature-opt-o3-fuse-resident-read-and-widen-into-movsxd`, landed 2026-08-30.
+Baseline compiler `1055347eb44a`, new compiler `c8303ca1f5b2` — **both built at
+the same HEAD, the baseline being HEAD with only this hunk reverted**, so the
+delta is immune to a sibling's commit rebasing in.
+
+A shift's LEADING sign-extend on a 4-byte signed operand was `mov rax, rN` +
+`cdqe`; it is now `movsxd rax, rNd`. Five bytes and two instructions become
+three and one. In `three.pas`'s loop, verbatim:
+
+```
+  base:  4c 89 e0        mov    %r12,%rax
+         48 98           cltq
+         48 c1 e8 01     shr    $0x1,%rax
+  new:   49 63 c4        movslq %r12d,%rax
+         48 c1 e8 01     shr    $0x1,%rax
+```
+
+**Measured, -O0/-O1/-O2 byte-identical on every program tested and -O3 strictly
+smaller, at exactly -2 bytes per firing:** `three.pas` -2 (1), `jsondemo` -10
+(5), the new test -6 (3); `lispdemo` unchanged (no firing). `-O3` runtime output
+identical on all of them. The loop body goes **22 -> 21** instructions.
+
+**That 22 is NOT this campaign's running 18 -> 17, and the chain is not extended
+here.** `three.pas` was a scratch file, never committed, and is gone; the file
+measured above is a RECREATION from the description in this log, and it is a
+bigger program (`j := i xor s` needs a narrowing cast that the original
+evidently did not have, which is four instructions of difference before this
+slice does anything). Two numbers named `three.pas` are two programs. What
+carries across is the *delta* — one firing, one instruction, two bytes, on a
+baseline that is HEAD with only this hunk reverted — and that is the number to
+quote. **A benchmark that lives only in `/tmp` cannot be re-measured, and a
+cumulative chain built on one silently becomes a chain of different programs.**
+The recreation is therefore **committed**, as
+`bench/w1_three_locals.pas`, with that history in its own header — so the next
+slice can re-measure the same file instead of re-deriving it from this prose. It
+is a measuring stick, not a test: nothing in the Makefile runs it.
+
+**Why not the obvious version.** The `cdqe` is a provable no-op *today*: every
+write to a 4-byte resident re-normalises the register. Deleting it would work
+and would be one instruction cheaper still — and it is exactly the
+invariant-dependent elision slice 8 refused, resting on code in another file,
+failing silently, and decaying the moment residency normalisation changes.
+`movsxd` sign-extends the low 32 bits by construction and costs the same.
+
+**One condition, two readers.** The pre-decision that SKIPS the left load and
+the emit site that must honour the skip both call `W1LeadingCdqe`. They cannot
+drift apart, and the reason they must not is asymmetric: a widen site that
+failed to honour a skip would leave rax *never loaded*, holding whatever the
+previous statement left there. That is deliberate break 3 below, and it is a
+wrong number rather than a crash.
+
+**Non-vacuity:** three deliberate breaks — a wrong ModRM rm field (names the
+adjacent resident), a dropped REX.B (reads rsp's encoding instead of r12's), and
+the widen site ignoring the deferred load — each move `-O3` while `-O0` stays
+correct.
+
+**A second oracle, free.** In this dialect `LongInt shr 1` promotes to native
+width, which is *why* the leading cdqe exists; FPC keeps 32 bits and answers
+differently. `--strict-fpc` reproduces FPC 3.2.2 exactly on every row — and is
+simultaneously a CONTROL, because strict mode tags the result 4 bytes, so
+`W1LeadingCdqe` is false and the fold cannot fire. The test therefore carries
+two expectations, both asserted at `-O0` and `-O3`.
+
+**Per-backend gate count (both spellings, per the correction above): x86-64 23,
+aarch64 7.** This slice is one-armed — x86-64 only — so it widens the delta the
+sibling ticket tracks by one, as every one-armed slice does.

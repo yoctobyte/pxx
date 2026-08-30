@@ -1,8 +1,8 @@
 ---
 prio: 60
 track: A
-status: backlog
-owner: ""
+status: done
+owner: frank-optimize-b4
 ---
 
 # -O3: fuse `mov rax, rN` + `cdqe` into a single `movsxd rax, rNd`
@@ -94,3 +94,6 @@ half — a break that is an identity looks exactly like a vacuous test).
 
 - Umbrella: `feature-opt-o3-register-pressure` (W1)
 - Sibling split out at the same time: `feature-opt-o3-operand-order-for-non-commutative-binops` (item C, worth −2)
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

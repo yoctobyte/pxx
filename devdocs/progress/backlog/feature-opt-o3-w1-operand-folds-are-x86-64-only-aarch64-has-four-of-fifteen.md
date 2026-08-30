@@ -30,6 +30,35 @@ The four zeros are **correct and deliberate** — CLAUDE.md scopes per-backend
 effort to x86-64 + aarch64, because 32-bit is perf-irrelevant and ESP/xtensa's
 hot paths are hardware peripherals. This ticket is only about the second row.
 
+### CORRECTION 2026-08-30 (slice 10): the count above undercounts BOTH rows
+
+The grep was `OptLevel >= 3`. Roughly a fifth of this campaign's gates are
+spelled `if OptLevel < 3 then Exit;` — an early return at the top of a
+predicate, which is what slices 7, 8 and 10 all use — and that spelling is
+invisible to it. Parsing **both** spellings:
+
+| backend | `>= 3` | `< 3` | total |
+| --- | --- | --- | --- |
+| `ir_codegen.inc` (x86-64) | 17 | 6 | **23** |
+| `ir_codegen_aarch64.inc` | 5 | 2 | **7** |
+| the other four | 0 | 0 | 0 |
+
+So the real ratio is **23 : 7**, not 15 : 4. The ticket's conclusion is
+unchanged and if anything sharper — the gap is wider, not narrower — but the
+slug now names a number that was never right. Slugs are cited by resolved
+commits and by the board, so it is **not** renamed; this section is the
+correction of record. Command:
+
+```
+grep -cE 'OptLevel *(>=|<) *3' compiler/ir_codegen*.inc
+```
+
+How it surfaced: slice 10 added a gate and the `>= 3` count did not move — 17
+before, 17 after. That only shows up because the umbrella now takes the count
+every slice. **"Count arms by parsing, not by reading" buys nothing when the
+parse matches one of the two ways the arm is written**; the instrument needs the
+same adversarial pass as the finding.
+
 **A gate count is not a pass count**, and this ticket does not claim eleven
 missing passes — several x86-64 sites gate arms of one pass, and some are
 instruction encodings with no one-to-one aarch64 spelling. Counting the
