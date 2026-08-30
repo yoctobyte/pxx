@@ -168,11 +168,22 @@ flag or lands incrementally, never on a long-lived branch.
   where a pass lives while it earns `-O2`, not a staging area that ought to be
   empty.
   **What counts as proof is ruled, and it is exhaustive: self-host + all tests
-  passed.** *"We have no more proof until we have a counterproof."* Nothing
-  stronger is obtainable, so an extra benchmark, tier or approval stacked on a
-  green full gate is ceremony, not rigour — **promote it.** The back edge comes
-  with it and is what makes the bar affordable: a later regression IS the
-  counterproof, and it demotes the pass.
+  passed.** *"We have no more proof until we have a counterproof."* The reasoning
+  is that **the compiler and the target set are themselves complex enough to
+  constitute the proof** — a pass that miscompiles anything real will not survive
+  a compiler that compiles itself plus a corpus of third-party C and Pascal
+  across seven targets. Nothing stronger is obtainable, so an extra benchmark,
+  tier or approval stacked on a green full gate is ceremony, not rigour —
+  **promote it.** The back edge comes with it and is what makes the bar
+  affordable: a later regression IS the counterproof, and it demotes the pass.
+  **The qualifier that rule DEPENDS on, and it is checkable: "all tests passed"
+  means a full-tier run with `skip_holes == 0`.** A skip is scored **passlike**,
+  so a job that never ran is invisible in the verdict — the run report says so in
+  its own banner (*"a RED here speaks for the jobs that ran, not for the
+  suite"*), and the `skip_holes` count is in every `tstate/runs-*.ndjson` row.
+  **Cite a hole-free run, or you are citing a suite that skipped the thing you
+  broke.** Measured 2026-08-30: 1.4% of GREEN runs carry a hole, and the five
+  corpora plexus was missing were invisible until two boxes were diffed by hand.
   **Who runs "all tests" — the existing machinery already answers this, add
   nothing.** The promoting agent cannot: the hook denies it `gate.sh full` and
   `testmgr --tier full|limited`, deliberately. So **land the promotion, then ask
