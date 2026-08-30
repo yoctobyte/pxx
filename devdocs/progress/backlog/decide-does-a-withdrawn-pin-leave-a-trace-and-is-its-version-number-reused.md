@@ -28,7 +28,8 @@ counter**.
 
 Net effect today: `grep e2ea9034 stable_linux_amd64/` returns nothing, `history.log` holds exactly
 one v394 row, and **`v394` names two different binaries** in this repo's history. The withdrawn
-one was in force for 36 minutes, other lanes built against it, and tickets cite it.
+one was **in force for ten minutes** (05:27:09 -> 05:37:35), other lanes built against it,
+and tickets cite it.
 
 # Why this is a decision and not a bug
 
@@ -82,3 +83,36 @@ record. That splits the two questions along the two files that already exist.
 
 Whether `make revert` should also refuse to reuse a counter mechanically, or merely record it, is
 implementation and belongs to Track A once the fork is settled.
+
+# Correction to this ticket's own first draft
+
+It said the withdrawn pin was in force for **36 minutes**. Wrong, and caught by frankD against
+the commit timestamps: `cc5e02d6c` 05:27:09 -> `b8fd07377` 05:37:35 is **ten minutes**. The 36 is
+`b8fd07377` -> `d58eb5d92` 06:13:00, the gap from the revert to the replacement, which is a
+different interval and a less alarming one. **The window in which a lane could have built against
+the withdrawn binary is the ten minutes.** Recorded rather than silently edited because it is a
+number that was headed for launch copy.
+
+# The argument that settles it (frankD)
+
+Reuse is not merely ambiguous going forward. **It retroactively falsifies sentences already
+written, and it does so silently.**
+
+`feature-lib-tkinter-grid-pad-accepts-a-two-tuple` (in `done/`) carries the heading
+**"2026-08-30 — CLOSED against the pin. v394 carries the fix."** That was true when written. It
+is false now. **Nothing in the ticket changed.** The reader has no way to know which v394 the
+sentence meant — which is face 188's shape: *unfalsifiable* rather than merely wrong.
+
+Burning the counter costs a gap in a sequence nobody reads sequentially. Reuse costs the truth
+value of every prior citation.
+
+**The partial mitigation, and it is the argument for a convention rather than only a tool:** that
+same ticket also writes the **sha** — `v394 e2ea9034a65ea8b6` at line 360 — so a careful reader
+can disambiguate. The heading cannot. **A version number alone is the hazard; a version number
+next to its sha is not.** Whatever is decided about the ledger, "cite the sha, never the version
+alone" is worth stating as a rule, because it degrades gracefully under either outcome.
+
+**And a third stale number was found in the same file**, unfixed here deliberately: its banner
+says the pin was blessed *"at ~06:40"*. It was 05:27:09; 06:13:00 is when the *replacement* was
+pinned. It sits in `done/`, and this repo's rule is that a session record is not rewritten — but
+it is evidence of how fast an unanchored time propagates, and Track D should not cite it.
