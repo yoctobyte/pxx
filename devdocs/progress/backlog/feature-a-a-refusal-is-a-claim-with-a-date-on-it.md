@@ -7488,3 +7488,82 @@ variable — so it moved into the header table instead of the program.
 A false oracle citation is the worst kind of stale claim available: it reads as *"someone
 compared this against a reference implementation"*, which is precisely the check nobody
 repeats.
+
+### 167 — REDUCING A WALL MADE THE TRAP MORE ATTRACTIVE, NOT LESS
+
+*frankA, 2026-08-30, after taking rtl-generics from 20 errors to 1.*
+
+The last remaining error is `TCustomPointersCollection<T, PT> = object` — a generic **object**
+type. `feature-p-legacy-value-object-types` [P p15] is `gated-by`
+`decide-old-style-object-types`, **decided 2026-08-25, option A: we do not implement `object`
+types**, on the principle that *a corpus is a measuring instrument, not a dependency.*
+
+> **A one-error corpus is a much stronger invitation to that mistake than a twenty-error one
+> was.**
+
+Twenty errors reads as a campaign nobody finishes tonight. **One error reads as the last
+mile** — and here the last mile is reversing a standing decision at prio 15 to make a
+measuring instrument read zero. So the night's work *increased* the pressure toward the one
+move the project has explicitly refused, and the person most likely to make it is whoever
+next sees a nearly-clean corpus and wants to close it.
+
+frankA also checked the thing that makes the refusal safe rather than assuming it: a plain
+non-generic `type TObj = object F: Integer; end` fails identically (`Expected: begin, but got:
+F`), so **pxx has no `object` type at all** and adding `tkObject` to the generic path buys
+nothing. Without that check the wall looks like a narrow generic-path gap somebody could
+reasonably just fix.
+
+Written into the ticket **in the imperative, ahead of the temptation** — an explanation is
+read after the urge, an instruction before it.
+
+**And the polarity is the new part.** The stale-blocker family is *stale records making
+finished work look open*. This is a **live record making a refused thing look like the last
+mile** — worse, because nothing on the page is stale. Every fact is true.
+
+### 168 — THE FORK DISSOLVES WHEN THE PROPOSED PROCEDURE CANNOT DELIVER THE CONFIDENCE IT IMPLIES
+
+*pxx-a5, same night, on auto-close-on-one-green.* **Both of the ticket's own proposals
+fail**, and establishing that was the decision it asked for.
+
+*"Require N consecutive greens"* cannot work at any affordable N. At the measured ~12%
+failure rate, **three greens still leave a 68% chance the bug is live** (0.88³); reaching 5%
+needs about **24**. No sweep cadence pays that. **Absence of a failure is not evidence for a
+race**, so the answer cannot be a bigger N — the procedure is not underpowered, it is
+measuring the wrong thing.
+
+*"Reuse `RUN_RETRY_CLASSES`"* would **not have caught the incident that produced the
+ticket**: that set is {qemu, corpus, conformance, opt} — variance from the *environment*, not
+a test's own concurrency — and `test_sched_reactor_exhaustion` classes **`unit`**, measured
+through `classify()` rather than assumed. Kept as one arm because it is right about what it
+covers; it is simply not the arm that matters.
+
+**What discriminates was already in the record.** The stub is a **repeat**:
+`stub_slug_for_filing()` opens `-2`/`-3` only when a resolved predecessor exists, so **the
+suffix IS the structural record that this job went red, was closed, and came back.** No new
+state, no tuning, no guessing at test semantics.
+
+**The guard to copy:** its failure message states *why the obvious fix is insufficient*.
+Remove the repeat arm and it says *"the reactor case is NOT covered: it classes `unit`, so
+only the repeat arm can catch it, and that arm is gone."*
+
+> **A ticket's own suggested shape is the thing most likely to be re-adopted later, so the
+> guard that refutes it should say so in its own voice rather than just going red.**
+
+A red teaches "something broke". A red that names the refuted proposal teaches why the
+tempting fix was rejected — to a reader who does not have the ticket open, which is everyone
+who will hit it.
+
+### 168a — A CONTROL THAT DESTROYS ITS SUBJECT PROVES NOTHING, AND FAILS IN THE FLATTERING DIRECTION
+
+Sixth instrument error from that lane in one night, recorded rather than quietly fixed. Its
+negative control deleted a line **range** instead of an exact string, cut into the function,
+and failed all six guards with `no attribute one_green_cannot_close`.
+
+**Six of six red looks exactly like a working guard suite.** That is the whole danger: a
+control that removes the subject reports maximum sensitivity, and the failure mode is
+indistinguishable from success unless you read *why* each guard failed. Redone as an
+exact-string removal, syntax re-validated, sha checked on restore.
+
+Companion fix, same instinct: `twatch` does not import `testmgr`, so `RETRY_CLASSES` is
+duplicated — the copy is now **checked against the original** rather than left to a comment,
+because *"keep these in sync"* is the shape this fleet has been finding all night.
