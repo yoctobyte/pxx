@@ -1593,6 +1593,11 @@ const
 
 procedure PadCodeToPageBoundary(codeOffset: Int64);
 begin
+  { Record where the filler starts so `-S` can stop there -- see CodePadStart
+    in defs.inc. Set unconditionally: when the code already ends on a page
+    boundary no bytes are appended and CodePadStart = CodeLen, which trims
+    nothing. }
+  CodePadStart := CodeLen;
   while ((codeOffset + CodeLen) mod ELF_DATA_PAGE) <> 0 do
     EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note above }
 end;

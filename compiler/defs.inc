@@ -2315,6 +2315,19 @@ var
   Code    : array of Byte;
   CodeLen : Integer;
   CodeCapacity : Integer;   { allocated bytes of Code[] — see GrowCode in emit.inc }
+  { Offset at which the ELF writer's page padding begins, or -1 if the writer
+    has not run / did not pad. The padding is zero bytes appended to Code[] so
+    the data that follows starts on a fresh page (PadCodeToPageBoundary in
+    elfwriter.inc); it is alignment filler, not instructions. `-S` runs AFTER
+    writeELF -- deliberately, so the listing shows displacements the writer has
+    already patched -- and so it would otherwise disassemble the filler and end
+    the file with a `db 00` line. That trips the test-asm-hello-2 /
+    test-asm-compiler-2 assertion `! grep -q "^    db "`, which exists to catch
+    codegen emitting bytes the disassembler cannot decode. Exempting a trailing
+    pad in the ASSERTION would blunt it for every future real case, so the
+    listing stops at the pad instead: the assertion keeps meaning exactly what
+    it says, and the pad is not code, so nothing true is being hidden. }
+  CodePadStart : Integer;
 
   Data    : array[0..MAX_DATA-1] of Byte;
   DataLen      : Integer;
