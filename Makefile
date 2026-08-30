@@ -14899,7 +14899,39 @@ test-xtensa: $(COMPILER)
 	tools/count_bytes.py $(TESTTMP)/xt_backjump_w 908880a00800 --expect 1
 	tools/expect_same.sh xtensa/xt_backjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_backjump)" "$$($(TESTTMP)/xt_backjump_x64)"
 	tools/expect_same.sh xtensa-windowed/xt_backjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_backjump_w)" "$$($(TESTTMP)/xt_backjump_x64)"
-	@echo "hosted xtensa: 108 programs Call0 + 6 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
+	# A FORWARD JUMP PAST J'S +-128 KiB, both ABIs -- the other half of the row
+	# above, and the half that cannot be widened where it is emitted: the slot
+	# was sized before the label existed. IREmitMachineCodeXtensa answers it by
+	# emitting the body AGAIN with that label's slot reserved wide. The pre-fix
+	# compiler refuses this file with `j displacement 276001 is outside the
+	# encodable range`. A single `if` over a generated block is deliberate --
+	# one forward jump, over a body big enough to cross the bound.
+	# bug-a-xtensa-cannot-widen-a-forward-jump-so-the-compiler-still-will-not-build
+	@awk 'BEGIN{print "program fwdjump;"; print "var n, s: Integer;"; \
+	  print "begin"; print "  n := 0; s := 0;"; print "  if n = 0 then"; print "  begin"; \
+	  for(k=0;k<3000;k++) print "    s := s + 1;"; \
+	  print "  end;"; print "  Writeln(\"s=\", s);"; print "end."}' \
+	  | tr '"' "'" > $(TESTTMP)/xt_fwdjump.pas
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_fwdjump.pas $(TESTTMP)/xt_fwdjump
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed $(TESTTMP)/xt_fwdjump.pas $(TESTTMP)/xt_fwdjump_w
+	./$(COMPILER) $(TESTTMP)/xt_fwdjump.pas $(TESTTMP)/xt_fwdjump_x64
+	# THE POSITIVE CONTROL, and it asks the EMITTER rather than counting bytes.
+	# Two instruments were tried first and disagreed with each other on the same
+	# program -- a byte-pattern count and an objdump mnemonic count, each right
+	# for one ABI -- because this backend embeds 4-byte literals in .text and a
+	# disassembler resyncs across them. So neither is an enumeration. PXXDBG
+	# prints once per body that actually relaxed; if the generated block ever
+	# falls back under 128 KiB this goes to 0 and the row fails instead of
+	# quietly testing an ordinary three-byte jump. Note the `:*` -- a bare topic
+	# name reads as empty for a PxxDbgWants channel and can never fire.
+	tools/expect_same.sh xtensa/xt_fwdjump-relaxed "$$(PXXDBG=a.xtrelax:'*' ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_fwdjump.pas $(TESTTMP)/xt_fwdjump 2>&1 | grep -c 'a.xtrelax:')" "1"
+	tools/expect_same.sh xtensa-windowed/xt_fwdjump-relaxed "$$(PXXDBG=a.xtrelax:'*' ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed $(TESTTMP)/xt_fwdjump.pas $(TESTTMP)/xt_fwdjump_w 2>&1 | grep -c 'a.xtrelax:')" "1"
+	# ... and the NEGATIVE half: hello must NOT relax, or the row above is
+	# measuring something that fires everywhere and says nothing about size.
+	tools/expect_same.sh xtensa/xt_fwdjump-hello-unrelaxed "$$(PXXDBG=a.xtrelax:'*' ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/hello.pas $(TESTTMP)/xt_fwdjump_hello 2>&1 | grep -c 'a.xtrelax:')" "0"
+	tools/expect_same.sh xtensa/xt_fwdjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fwdjump)" "$$($(TESTTMP)/xt_fwdjump_x64)"
+	tools/expect_same.sh xtensa-windowed/xt_fwdjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fwdjump_w)" "$$($(TESTTMP)/xt_fwdjump_x64)"
+	@echo "hosted xtensa: 109 programs Call0 + 7 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

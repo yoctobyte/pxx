@@ -12818,8 +12818,20 @@ begin
   Result := (d >= -131072) and (d <= 131071);
 end;
 
-procedure EmitXtensaLongJump(target: Integer);
-var anchorPc, anchorTgt, rTgt, rTmp: Integer;
+function XtRelaxBodyName: AnsiString;
+{ The body being emitted, for a diagnostic. CurProc is -1 in the program's main
+  body, which has no Procs[] entry and no name. }
+begin
+  if CurProc >= 0 then Result := Procs[CurProc].Name else Result := 'main';
+end;
+
+procedure EmitXtensaLongJumpSlot(var litPos, anchorPc: Integer);
+{ The long jump with its .text-offset delta left at zero, reporting the
+  literal's position and the anchor PC the delta is measured from. A caller
+  that already knows the target uses EmitXtensaLongJump below; this entry
+  exists for the one caller that does NOT -- a reserved FORWARD jump slot,
+  which patches Patch32(litPos, target - anchorPc) once the label lands. }
+var anchorTgt, rTgt, rTmp: Integer;
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
@@ -12836,10 +12848,18 @@ begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
     xtensa_mov(reg_xtensa_a0, rTmp);             { restore it }
   XtensaEmitLitHeader;
-  EmitI32(target - anchorPc);                    { pure .text-offset delta }
+  litPos := CodeLen;
+  EmitI32(0);                                    { pure .text-offset delta }
   xtensa_l32r(rTmp, $FFFF);
   xtensa_add(rTgt, rTgt, rTmp);
   xtensa_jx(rTgt);
+end;
+
+procedure EmitXtensaLongJump(target: Integer);
+var litPos, anchorPc: Integer;
+begin
+  EmitXtensaLongJumpSlot(litPos, anchorPc);
+  Patch32(litPos, target - anchorPc);
 end;
 
 procedure EmitXtensaJumpToCode(target: Integer);

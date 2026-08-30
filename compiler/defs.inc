@@ -237,6 +237,11 @@ const
     [INLINE_AST_RESERVE..) and grows the arrays on demand. Was a fixed TOP reserve
     that hard-capped one function's node count (feature-dynamic-compiler-tables). }
   INLINE_AST_RESERVE = 8192;
+  { Xtensa forward-jump relaxation: emit the body, widen the slots that did not
+    reach, emit again. Two passes always suffice (the long form reaches +-2 GB);
+    the cap is a guard against a widening that somehow pushes another jump out,
+    not a tuning knob. See IREmitMachineCodeXtensa. }
+  XT_MAX_RELAX_PASSES = 4;
   MAX_IR      = 262144;   { bumped from 131072: a large single function (generated
                             amalgamations, big checksums) could overflow the fixed IR
                             arrays and be rejected with 'IR overflow'. Byte-identical-safe
@@ -3230,6 +3235,19 @@ var
 
   LabelFixupPos : array[0..MAX_IR-1] of Integer;
   LabelFixupTarget : array[0..MAX_IR-1] of Integer;
+  { Xtensa only. A forward jump reserves its slot before the label exists, so
+    the slot's WIDTH is a guess: -1 here means the guess was the three-byte J
+    and LabelFixupPos points at the J; anything else is the anchor PC of a
+    reserved LONG form, LabelFixupPos points at its 32-bit .text-offset
+    literal, and the patch is Patch32(pos, target - anchor).
+    XtWideLabel carries the guess between attempts -- IREmitMachineCodeXtensa
+    emits the body, and if a three-byte slot turned out not to reach, marks
+    that label wide and emits the body AGAIN. Keyed by label rather than by
+    fixup index because a label id is stable under any traversal, and the
+    retry's whole premise is that the second pass is the same walk at
+    different sizes. }
+  LabelFixupAnchor : array[0..MAX_IR-1] of Integer;
+  XtWideLabel : array[0..MAX_IR-1] of Boolean;
   MaxStackFrameSize : Integer; { effective oversized-stack-frame warn threshold in
                                  bytes (0 = disabled). Init to MAX_STACK_FRAME_SIZE;
                                  overridable via --max-stack-frame=N / {$MAXSTACKFRAME n}. }

@@ -992,6 +992,25 @@ prints every routine but the one you care about. **Wrap the repro in a
 `procedure` first** — if the bug survives that (check, do not assume), you can
 ask for it by name.
 
+**A CHANNEL SPELLED WITHOUT ITS `:` PRINTS NOTHING AND EXITS 0, and there are
+two kinds of channel.** `PxxDbgEnabled` takes a bare topic (`PXXDBG=n.locals`);
+`PxxDbgWants` takes `topic:<name>` or `topic:*` and returns False for a bare
+topic, because `PxxDbgArg` only matches a segment whose next character is `:`.
+So `PXXDBG=a.srcmap` and `PXXDBG=a.xtrelax` are silent — indistinguishable, at
+the terminal, from the code path never running. Measured 2026-08-30: an
+instrument added specifically to answer "did this fire?" reported *did not fire*
+for four programs, two of which provably did, and the reading survived one round
+of debugging the wrong thing. **Establish the channel can speak before you read
+a silence as an answer** — run it once on an input that MUST print. `PXXDBG=help`
+lists the topics; it does not tell you which kind each one is, so the check is
+the positive control, not the listing.
+
+*The main body has no name here either.* `PxxDbgWants(topic, Procs[CurProc].Name)`
+with a `CurProc >= 0` guard cannot fire for a program's top-level block, which is
+exactly where a generated repro puts its code — the same wrinkle as `a.ir:<proc>`
+above, one level down, and it silently costs you the measurement instead of an
+obviously missing routine.
+
 **Before you believe a PXXDBG count, check that the tag has a site and that the
 site is in the backend you are building.** Measured 2026-08-30 by
 frank-optimize: seven readings taken while chasing a residual, of which **four

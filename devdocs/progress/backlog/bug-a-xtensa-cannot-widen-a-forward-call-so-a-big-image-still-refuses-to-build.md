@@ -1,14 +1,14 @@
 ---
 slug: bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build
 track: A+S
-prio: 40
+prio: 55
 type: bug
 blocked-by: []
 status: backlog
 found: 2026-08-30
 found-by: frankS
 owner: unassigned
-summary: "The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program."
+summary: "The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. RE-RANKED 40 -> 55 on 2026-08-31: with the forward JUMP wall closed (bug-a-xtensa-cannot-widen-a-forward-jump-...) this is now the SINGLE remaining wall between xtensa and building the compiler. Measured at that commit: `pascal26 --target=xtensa compiler/compiler.pas` gets past every jump and stops here -- forward call to __pxx_run_finalizers at 144958, body at 24419736."
 ---
 
 # A forward xtensa call over 512 KiB still cannot be built
@@ -114,3 +114,28 @@ both on riscv32 is in `ir_codegen_riscv32.inc`: `Rv32JumpSlotBytes` /
 `EmitRv32JumpToLabel` / `PatchRv32JumpSlot` — reserve the wide slot for a
 forward jump, let the reach test pick the form at patch time, keep the cheap
 form for every backward jump that reaches (80348 of 80399 in a 20 MB image).
+
+## 2026-08-31 — this is now the last wall, and the jump half is a worked example
+
+`pascal26 --target=xtensa --platform=posix --xtensa-soft-mulhigh
+compiler/compiler.pas` no longer fails on a jump. It fails here, and only here:
+
+```
+error: target xtensa: the forward call to __pxx_run_finalizers at code offset
+144958 cannot reach its body at 24419736 (CALL0/CALL8 reach +-512 KiB)
+```
+
+**The jump half was fixed by RELAXATION and the same shape should work here**,
+with one difference that has to be checked before anyone starts. A jump's
+fixups are per-BODY, so re-emitting one body is a bounded operation with an
+enumerable set of counters to restore (`IREmitMachineCodeXtensa` documents it).
+Calls are patched by `ApplyCallFixups` at WHOLE-PROGRAM level, so the analogous
+retry is "emit the whole image again", which is a different cost and a much
+larger state surface — or, more likely, a per-body decision made from a
+conservative estimate of where the target will land.
+
+A **veneer pool** is more attractive here than it was for jumps: `CALL0` reaches
+±512 KiB against `J`'s ±128 KiB, so a trampoline placed at the end of the calling
+body — rather than at the image tail — is within reach of the call site in a way
+the jump case could not manage. Not analysed further; noted so the next person
+does not re-reject it on the jump ticket's reasoning, which does not transfer.

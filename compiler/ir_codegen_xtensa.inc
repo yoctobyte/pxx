@@ -4384,13 +4384,22 @@ begin
     EmitXtensaJumpToCode(LabelPositions[lblId]);
     Exit;
   end;
-  { Forward: three bytes, sized before the label exists, so it cannot be widened
-    later -- the fixup loop names that if it happens. }
+  { Forward: the slot is sized before the label exists, so its width is a GUESS.
+    XtWideLabel carries the guess in from the previous attempt -- three bytes
+    the first time round, the long form once a J has been seen not to reach.
+    Either way the fixup loop below patches it and never has to widen anything
+    in place, which is the thing that cannot be done. }
   if fixCount >= MAX_IR then Error('label fixup overflow');
-  LabelFixupPos[fixCount] := CodeLen;
   LabelFixupTarget[fixCount] := lblId;
+  if XtWideLabel[lblId] then
+    EmitXtensaLongJumpSlot(LabelFixupPos[fixCount], LabelFixupAnchor[fixCount])
+  else
+  begin
+    LabelFixupPos[fixCount] := CodeLen;
+    LabelFixupAnchor[fixCount] := -1;
+    xtensa_j(4);
+  end;
   Inc(fixCount);
-  xtensa_j(4);
 end;
 
 procedure XtensaPatchSkipOver(pos, r, s, t: Integer);
@@ -4401,9 +4410,60 @@ begin
 end;
 
 procedure IREmitMachineCodeXtensa;
+{ RELAXATION. A forward jump reserves its slot before the label exists, so the
+  width is a guess; when the guess is wrong the slot CANNOT be widened in place,
+  because everything after it would move. So the body is emitted AGAIN, with the
+  labels that overflowed marked wide. Two passes settle it in every case that
+  can occur -- the long form reaches +-2 GB, so the only thing a third pass
+  could fix is a jump pushed out of range BY the widening, which the loop
+  handles anyway.
+
+  This costs nothing on any body that fits: the retry fires only when a J was
+  measured not to reach, i.e. only in a body over 128 KiB of code, which is
+  generated or machine-expanded source. `hello` and the compiler's own ordinary
+  procedures emit exactly the bytes they did before.
+
+  RE-EMITTING IS ONLY SAFE BECAUSE OF WHAT THE BODY APPENDS TO, and that was
+  enumerated rather than assumed. Every table an Xtensa body writes -- CodeRef,
+  Fixups, GlobFix, CallFix, DynCall, IramCallFix -- is a pure `T[Count] := x;
+  Inc(Count)` append, so restoring the count makes the second pass overwrite the
+  first's entries in place. RegisterExternal is idempotent (it looks the proc up
+  in ExternalProc and returns the existing index), the Xtensa emitter never
+  touches the data section at all, and LibcSyscallCallCount is x86-64 only.
+  Anything added to this backend that appends to a NEW table must be saved here
+  too, or the discarded pass leaves relocations pointing into overwritten code. }
 var i, lblId, pos, f, procIdx, skipPos: Integer;
     LabelFixupCount: Integer;
+    saveCodeLen, saveCodeRef, saveFix, saveGlobFix: Integer;
+    saveCallFix, saveDynCall, saveIramFix: Integer;
+    saveSpillDepth, saveSpillMax, attempt: Integer;
+    needRetry: Boolean;
 begin
+  saveCodeLen := CodeLen;
+  saveCodeRef := CodeRefCount;
+  saveFix := FixCount;
+  saveGlobFix := GlobFixCount;
+  saveCallFix := CallFixCount;
+  saveDynCall := DynCallCount;
+  saveIramFix := IramCallFixCount;
+  saveSpillDepth := XtSpillDepth;
+  saveSpillMax := XtSpillMax;
+  for i := 0 to IRLabelCount - 1 do
+    XtWideLabel[i] := False;
+  attempt := 0;
+
+  repeat
+  Inc(attempt);
+  CodeLen := saveCodeLen;
+  CodeRefCount := saveCodeRef;
+  FixCount := saveFix;
+  GlobFixCount := saveGlobFix;
+  CallFixCount := saveCallFix;
+  DynCallCount := saveDynCall;
+  IramCallFixCount := saveIramFix;
+  XtSpillDepth := saveSpillDepth;
+  XtSpillMax := saveSpillMax;
+
   { Nil-init hidden owning locals synthesised during IR lowering (see the
     riscv32/x86-64 walkers) — the epilogue's scope-exit DecRef would otherwise
     release stale stack bytes when the temp's own path never ran. }
@@ -4582,23 +4642,60 @@ begin
     end;
   end;
 
+  { Did every three-byte guess hold? A slot that did not reach is not an error
+    any more -- it is the input to the next pass. }
+  needRetry := False;
+  for f := 0 to LabelFixupCount - 1 do
+  begin
+    lblId := LabelFixupTarget[f];
+    if LabelPositions[lblId] = -1 then
+      Error('Unresolved forward jump in Xtensa IR codegen');
+    if (LabelFixupAnchor[f] = -1) and
+       not XtensaJReaches(LabelFixupPos[f], LabelPositions[lblId]) then
+    begin
+      XtWideLabel[lblId] := True;
+      needRetry := True;
+    end;
+  end;
+  if needRetry and (attempt >= XT_MAX_RELAX_PASSES) then
+    Error('target xtensa: forward-jump relaxation did not settle in ' +
+          AIntToStr(XT_MAX_RELAX_PASSES) + ' passes. A forward jump still '
+          + 'cannot reach its label with the long form reserved, which should '
+          + 'not be possible -- the long form reaches +-2 GB');
+  until not needRetry;
+
+  { CurProc is -1 for the program's MAIN body, which is exactly the body a
+    generated far-forward-jump repro puts everything in -- so a `CurProc >= 0`
+    guard here would have made this instrument unable to fire in the one case it
+    exists to report, and it would have printed nothing and read as "it did not
+    fire". Caught by asking it about a program that provably relaxes.
+    The one instrument that answers "did the relaxation fire, and how wide did
+    it end up" without counting instructions in the artifact -- a mnemonic count
+    off a disassembly is NOT an enumeration here, because this backend embeds
+    4-byte literals in .text and objdump resyncs across them. Measured: for the
+    same program a byte-pattern count and an objdump mnemonic count disagreed,
+    and each was right for one ABI. `PXXDBG=a.xtrelax:*` asks the emitter --
+    note the `:*`, without which PxxDbgWants reads the topic as empty and this
+    can never print, which is not distinguishable from "it did not fire". }
+  if (attempt > 1) and
+     PxxDbgWants('a.xtrelax', XtRelaxBodyName) then
+  begin
+    pos := 0;
+    for f := 0 to LabelFixupCount - 1 do
+      if LabelFixupAnchor[f] <> -1 then Inc(pos);
+    writeln('a.xtrelax: ', XtRelaxBodyName, ': ', AIntToStr(attempt),
+            ' passes, ', AIntToStr(pos), ' of ', AIntToStr(LabelFixupCount),
+            ' forward jumps widened, body ', AIntToStr(CodeLen - saveCodeLen),
+            ' bytes');
+  end;
+
   for f := 0 to LabelFixupCount - 1 do
   begin
     lblId := LabelFixupTarget[f];
     pos := LabelFixupPos[f];
-    if LabelPositions[lblId] = -1 then
-      Error('Unresolved forward jump in Xtensa IR codegen');
-    { Name it before the encoder refuses it. A FORWARD jump is the one shape
-      EmitXtensaJumpToLabel cannot widen -- it reserved three bytes before the
-      label existed -- so this is where that hole is felt, and the bare encoder
-      message says nothing about the direction being what makes it unfixable.
-      Same asymmetry, same wording, as ApplyCallFixups' forward-CALL arm. }
-    if not XtensaJReaches(pos, LabelPositions[lblId]) then
-      Error('target xtensa: the forward jump at code offset ' + AIntToStr(pos) +
-            ' cannot reach its label at ' + AIntToStr(LabelPositions[lblId]) +
-            ' (J reaches +-128 KiB). A BACKWARD jump this far is widened '
-            + 'automatically; a forward one cannot be, because the three-byte '
-            + 'slot was sized before the label existed');
-    Patch24(pos, EncodeXtensaJ(LabelPositions[lblId] - pos));
+    if LabelFixupAnchor[f] = -1 then
+      Patch24(pos, EncodeXtensaJ(LabelPositions[lblId] - pos))
+    else
+      Patch32(pos, LabelPositions[lblId] - LabelFixupAnchor[f]);
   end;
 end;

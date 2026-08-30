@@ -68,7 +68,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (391)
+## backlog (390)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -125,8 +125,7 @@ _none_
 | bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 25 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
-| bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 40 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. | — |
-| bug-a-xtensa-cannot-widen-a-forward-jump-so-the-compiler-still-will-not-build | A+S | 55 | bug | The BACKWARD half of the J reach wall is closed (a jump to an already-placed label widens to a long jump automatically, at zero cost to anything in range). A FORWARD one cannot be: EmitXtensaJumpToLabel reserves three bytes before the label exists, so the fixup can only refuse. Measured on the compiler itself: `the forward jump at code offset 4040104 cannot reach its label at 4231481` -- 187 KB against J's 128 KB. This is the LAST wall between xtensa and building the compiler; the other five cross targets already do. | — |
+| bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 55 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. RE-RANKED 40 -> 55 on 2026-08-31: with the forward JUMP wall closed (bug-a-xtensa-cannot-widen-a-forward-jump-...) this is now the SINGLE remaining wall between xtensa and building the compiler. Measured at that commit: `pascal26 --target=xtensa compiler/compiler.pas` gets past every jump and stops here -- forward call to __pxx_run_finalizers at 144958, body at 24419736. | — |
 | bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp | A+S | 45 | bug | Every windowed xtensa prologue emits `entry a1, 32` then moves sp again with a plain addi/addmi. The windowed ABI requires MOVSP for that, because the caller's 16-byte register save area sits at [a1-16] and a plain add relocates sp while leaving the area behind. Ten executed entry sites, all immediate 32. NOT known to cause a fault -- the obvious mechanism was tested and falsified. | — |
 | bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled | A+S | 45 | bug | Under the xtensa windowed ABI, IR_RAISE and the unwind path refuse. The cause is a RUNTIME gap, not a prologue gap: a longjmp-style unwind must spill the register windows first and bare-metal has no handler for that. Filed to keep it OUT of the four-target cdecl prologue change, which would appear to fix it and would not. | — |
 | bug-b-tlist-has-no-list-property | B | 45 | bug | `L.List^[i]` on a TList is `\"List\": no such member on this record/class`. FPC's TList exposes its internal pointer array as `property List: PPointerList read FList` (PPointerList = ^TPointerList = ^array[0..N] of Pointer), the standard way real code iterates a TList without the per-element Get call. Missing in lib/rtl/classes.pas. NOT gated on anything -- it fails in a plain default build, 9 lines. fcl-xml's xmlutils.pp:760 uses it, so it is the current wall on rung 3 of feature-pascal-corpus-oop. | bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults |
@@ -737,9 +736,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2898)
+## done (2899)
 
-2898 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2899 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -871,7 +870,7 @@ _none_
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
-- [p 55] [A+S] bug-a-xtensa-cannot-widen-a-forward-jump-so-the-compiler-still-will-not-build
+- [p 55] [A+S] bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build
 - [p 55] [C] bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead [parked — re-claim, do not duplicate]
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
@@ -1015,7 +1014,6 @@ _none_
 - [p 40] [A] bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
 - [p 40] [A] bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage
-- [p 40] [A+S] bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build
 - [p 40] [C] bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
 - [p 40] [N] bug-n-from-package-import-submodule-binds-the-parent-package
