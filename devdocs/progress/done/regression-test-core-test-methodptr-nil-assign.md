@@ -71,3 +71,57 @@ already documented. Two is a smell, three is a design flaw.
 The two tests in this ticket ARE the regression coverage for the method-pointer
 half; no new test is needed for it.
 - 2026-08-30 — resolved, commit d5fd2a6ca.
+
+---
+
+## Bisect (frank-rust, independent) — kept because it is the reason the predicate exists
+
+Cause located **by building**, not by reading:
+
+| binary | `test_methodptr_nil_assign.pas` |
+| --- | --- |
+| `fa8f2424d^` | **compiles** |
+| `fa8f2424d` | **FAILS**, all three lines |
+
+The only other buildable commit in Track T's range is `9588c8535` (string-literal
+perf) and it is *newer*, so the range collapses to one commit. Both bisect
+binaries were fresh self-host fixedpoints of the named tree, not the seed;
+diagnosis at HEAD `38a9803b7`.
+
+The asymmetry that bisect exposed is the argument for a named predicate rather
+than a second inline pair: the `AN_IDENT` arm carried **two** bails against types
+*spelled* `tyRecord` that are not records —
+
+```pascal
+  if SymProcSig[si] >= 0 then Exit;        { procvar: the kind is the RESULT's }
+  ... UClsIsInterface[...] then Exit;      { an interface is a fat pointer }
+```
+
+— and the three new arms inherited the interface one and not the procvar one.
+`fa8f2424d`'s own note one line down says it: *"the kind is not a reliable
+description here, which is exactly what this function is for."* There were two
+such types; the new arms learned one. That is why `RecIsReferenceShaped` is the
+right shape and "restore the missing bail" was not: writing the pair out a second
+time sets up the identical failure for whoever adds a third reference-shaped type.
+
+## Verified independently at HEAD before closing
+
+Binary `bb3a768b89a2`, a self-host fixedpoint at HEAD in the `frank-rust`
+checkout — a different tree from the one the fix was written in:
+
+```
+hit 1 / var    assigned=FALSE
+hit 2 / field  assigned=FALSE
+hit 3 / elem   assigned=FALSE
+varpar assigned=FALSE
+loop ok
+```
+
+All four shapes re-armed, called, cleared, confirmed clear. Green. Agreed with
+frankS that no new test is needed: this test already re-arms and CALLS each slot
+before clearing it, so it proves the slot was live rather than proving
+`Assigned()` is uniformly false — its red→green transition IS the measurement.
+
+Two sessions reached the same mechanism from opposite ends within the hour and
+the one that landed chose the better shape; recording that here so the diagnosis
+is not lost with the duplicate ticket file.

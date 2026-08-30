@@ -12,7 +12,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| regression-test-core-test-methodptr-nil-assign | P | 70 | regression | regression: test-core#src:test/test_methodptr_nil_assign.pas red at dc798834ba33 (auto-filed by twatch) | — |
+| feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 
 ## unfinished (34)
 
@@ -67,7 +67,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (389)
+## backlog (388)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -368,7 +368,6 @@ _none_
 | feature-p-uses-a-unit-in-an-explicit-file | P | 55 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | decide-tobject-classinfo-blob-or-refusal |
-| feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 30 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-management-operators-copy-and-addref | P | 30 | feature | `class operator Copy` / `AddRef` are recognised but never dispatched | — |
 | feature-pascal-management-operators-nested-and-array | P | 35 | feature | Management operators do not reach an array element or a nested field | — |
@@ -816,7 +815,6 @@ _none_
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 78] [C] feature-c-corpus-busybox-applet [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
-- [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [P] bug-p-generic-constraints-are-checked-before-the-type-section-closes [parked — re-claim, do not duplicate]
 - [p 70] [P] bug-p-generic-type-param-unresolved-in-class-abstract-template [parked — re-claim, do not duplicate]
