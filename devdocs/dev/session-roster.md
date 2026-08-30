@@ -21557,3 +21557,39 @@ agents each landing a half that is a regression on its own.
 with wrong reasoning, frankA's falsification destroyed the reasoning, and frankC
 then found the right reasoning *because* the wrong one was gone. Nobody wasted a
 step. The falsifier worked.
+
+## A second route into CLAUDE.md's seeded-tree hole: same-second mtime, same tell
+
+frankwasm, 2026-08-30. Not a new failure — a new *door* into a documented one,
+and the door matters because the section names only the other door.
+
+CLAUDE.md's per-fix-loop section warns that in a **fresh tree seeded with a
+copied-in binary**, `make compiler/pascal26` is a no-op that exits 0: `cp` stamps
+the seed newer than the sources, so make has nothing to do and prints
+`up to date` where `converged after N round(s)` belongs.
+
+frankwasm hit the same no-op with **no copied-in seed anywhere**. Its first
+default-vs-gated comparison proved nothing because both columns ran on the same
+pre-gate binary: the fixedpoint stamp and the edited source shared an mtime **to
+the second**, so make saw nothing to do. The verification printed a `verified`
+line — for the *old* binary.
+
+**The tell is identical, and it is the part to carry: a success message where a
+rebuild belonged.** There is no error to wait for in either route, and the
+prescription already in that section covers both — **require the binary's sha256
+to change** (here `df36eb4a47f9` → `0e5770fa2d2f`), never accept the absence of an
+error as evidence of a build. What the section does not do is generalise: it
+attributes the hole to `cp`, so an agent that has not copied a seed reads past it.
+
+**Proposed CLAUDE.md amendment, NOT made — this is the user's file.** Widen that
+paragraph from "when you seed a tree from outside" to "whenever a fixedpoint
+verdict is load-bearing", and name same-second mtime beside the `cp` route. I am
+surfacing it rather than editing, because the gating section binds every agent and
+because a peer's suggestion is not the owner's approval. Raised by frankwasm, who
+found the second route.
+
+**Where this bites hardest is exactly where it is hardest to see:** an A/B
+comparison. frankwasm's two columns *agreed*, and agreement is what you expect
+when a gate is working — so the null result looked like the finding. It stopped
+and rebuilt instead of reporting, which is the whole reason this is a note rather
+than a retraction.
