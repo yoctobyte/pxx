@@ -150,4 +150,4 @@ into `lib-test`. Phase 1 of
 [[feature-b-sweep-mimic-shims-against-cpython]] is complete.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 180576230.
