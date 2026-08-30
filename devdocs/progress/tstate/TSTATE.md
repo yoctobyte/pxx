@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `b67f36806d52` | 2026-08-30T21:00:12Z | RED (native) | 102.8s | `ff07990984a0` RED |
+| seven | `5f190a2f7ec1` | 2026-08-30T21:03:02Z | GREEN (native) | 108.9s | `ff07990984a0` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -42,4 +42,3 @@
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +37 (seven): bad `7227f3e0f1f8`, last good `d24df3f09efb`, 27 commit(s) in range
-- **test-core#src:test/test_pointer_to_a_named_fixed_array.pas** — test/test_pointer_to_a_named_fixed_array.pas tools/expect_same.sh +1 (seven): bad `ff07990984a0`, last good `4e883063f292`, 1 commit(s) in range
