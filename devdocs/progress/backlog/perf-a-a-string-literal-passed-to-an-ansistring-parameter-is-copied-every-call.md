@@ -154,7 +154,49 @@ should approach the typed-constant row (~30ms); if it improves but stays well
 above, the literal arm is reaching a *different* cheap path rather than the
 constant arm's, and the diff is not finished.
 
-### Second pair of eyes available (frankB)
+### The harness, inlined so it outlives the session that wrote it
 
-The harness that produced every table here is in scratch (`b3`/`b4`/`b5`) and
-re-times a candidate fix in about a minute. Ask rather than rebuild it.
+It was in a scratch dir, which dies with the session — the exact way a
+"just ask me" offer turns into "rebuild it yourself". Save as `harness.pas`,
+build with the compiler under test:
+
+```pascal
+program harness;
+uses sysutils;
+const S_AW: AnsiString = 'await';
+function PAnsi (const s: AnsiString ): Integer; begin PAnsi  := Length(s); end;
+function PShort(const s: ShortString): Integer; begin PShort := Length(s); end;
+var i, h: Integer; t: array[0..3] of TDateTime;
+begin
+  h := 0;
+  t[0] := Now; for i := 1 to 5000000 do h := h + PAnsi ('await');
+  t[1] := Now; for i := 1 to 5000000 do h := h + PShort('await');
+  t[2] := Now; for i := 1 to 5000000 do h := h + PAnsi (S_AW);
+  t[3] := Now;
+  WriteLn('literal  -> const AnsiString  ms: ', Round((t[1]-t[0])*86400000));
+  WriteLn('literal  -> const ShortString ms: ', Round((t[2]-t[1])*86400000));
+  WriteLn('variable -> const AnsiString  ms: ', Round((t[3]-t[2])*86400000));
+end.
+```
+
+**Report the compiler's sha256 beside the numbers, every time**
+(`sha256sum compiler/pascal26`). Two independent staleness routes make a number
+meaningless without it, and both produce a confident wrong answer with no error:
+`pinned` is a symlink so `git log` on that path reads the wrong history, and
+**a `sync.sh` that pulled `compiler/**` leaves your binary a valid fixedpoint of
+the PREVIOUS sources** — `make` still reports success, because it is not wrong,
+just answering about a tree that has moved. **Rebuild after every sync before
+re-timing**, especially when re-timing someone else's candidate fix, where a
+stale binary produces a confident wrong verdict about THEIR work.
+
+Read the RATIO, not the absolute times: this box runs several compiling sessions
+at once, and a load average of 8 moves every row together. Two readings on the
+same defect, different loads:
+
+| binary | literal | ShortString | variable |
+| --- | --- | --- | --- |
+| `faf762981c3c` (pin v397) | 561 | 32 | 31 |
+| `8adece5977d4` (HEAD `e04d9ae45`) | 849 | 42 | 44 |
+
+Different absolutes, same ~19x. A candidate fix has worked when row 1 approaches
+row 3 **and rows 2 and 3 are unchanged**.
