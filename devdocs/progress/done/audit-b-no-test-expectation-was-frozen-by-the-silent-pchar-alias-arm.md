@@ -124,4 +124,4 @@ the model: its value is reproducible from the source by anyone, in any language,
 without running our compiler at all.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f7e320b17.
