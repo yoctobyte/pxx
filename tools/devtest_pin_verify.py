@@ -260,6 +260,33 @@ def main():
     finally:
         tw.run_gate, tw.set_phase, tw.clone_head_back, tw.regen_index = saved
 
+    # The pin verify's archive row must MEASURE, not assert. `new_red` and
+    # `fixed` were literal [] here while the real new_red was computed three
+    # lines above and discarded — so a pin row answered "were any of these reds
+    # new?" with a constant, in an archive where that field is a measurement on
+    # every other row. Asked of v398 on 2026-08-30, "none were new" and "no
+    # baseline existed so none could be" rendered identically and neither was
+    # true.
+    #
+    # A SOURCE-shape guard on purpose: the defect was invisible to any
+    # behavioural test, because a hardcoded [] is a perfectly well-formed
+    # answer. What must never come back is the literal.
+    print("\nthe pin verify row measures new_red rather than asserting []")
+    src = open(os.path.join(HERE, "twatch.py")).read()
+    i = src.find('"pin": ver')
+    row = src[max(0, i - 900):i] if i >= 0 else ""
+    check(i >= 0, "found the pin verify archive row writer")
+    check('"new_red": []' not in row,
+          "new_red is not a hardcoded empty list",
+          "it was, and the computed value was thrown away")
+    check('"fixed": []' not in row,
+          "fixed is not a hardcoded empty list")
+    check('"new_red": sorted(new_red)' in row,
+          "new_red records what pin_verify_why computed")
+    check('"pin_baseline"' in row,
+          "the row says whether a baseline existed",
+          "without it an honest empty new_red is still ambiguous")
+
     print("\n%s" % ("FAILED: " + ", ".join(fails) if fails else "all pass"))
     return 1 if fails else 0
 

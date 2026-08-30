@@ -6061,9 +6061,28 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
     save_state(clone, host, st)
     with open(os.path.join(clone.path, TSTATE_REL,
                            "runs-%s.ndjson" % host), "a") as f:
+        # `new_red` and `fixed` were LITERAL [] here while the real new_red was
+        # computed three lines up and thrown away. That is worse than omitting
+        # them: on every other row in this archive those fields are a
+        # measurement, so a reader takes the empty list as one, and a pin row
+        # answered "were any of these reds new?" with a constant. Asked of the
+        # v398 row on 2026-08-30, "no reds were new" and "no baseline existed,
+        # so none COULD be" were indistinguishable — and neither was true; the
+        # writer simply never recorded it.
+        #
+        # This function's own pin_verify_why() states the rule it was breaking:
+        # "An empty reason next to a job name reads as 'there was no reason',
+        # which is a claim; absence reads as 'not recorded', which is the
+        # truth." An empty MEASUREMENT is the same claim. So record the real
+        # values, and record whether a baseline existed at all — without that
+        # flag an honest empty new_red is still ambiguous, because "nothing was
+        # new" and "nothing could be" both render as [].
         f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
                             "full": True, "verdict": verdict,
-                            "wall": report["wall"], "new_red": [], "fixed": [],
+                            "wall": report["wall"],
+                            "new_red": sorted(new_red),
+                            "fixed": sorted(base_reds - set(reds)),
+                            "pin_baseline": bool(base_reds),
                             "pin": ver}, sort_keys=True) + "\n")
     regen_index(clone)
     # A RED here is louder than an ordinary red, and says so: every track
