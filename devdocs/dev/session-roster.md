@@ -19746,3 +19746,61 @@ nobody knows it"*) and **restated it as fleet-wide fact in a durable document**.
 A relayed inference is not a measurement, and the roster is exactly where an
 unchecked one hardens. Both the claim and its correction came from the same lane;
 what I contributed was amplification.
+
+### PIN — a third condition, and I would not have thought to look for it
+
+**Do not pin while `python3 tools/forwardlint.py` is red.** Measured ~10:2x:
+`origin/master`'s FPC **seed** build is failing on two missing forwards in
+`pasparser_generic.inc` (`:844` → `QualArgAliasName` at `:1476`, `:1022` →
+`EmitQualAliasDecl` at `:1525`). `stabilize-fast` would very likely pass anyway —
+it proves the compiler reproduces **itself**, via pxx, and pxx resolves across
+the unit. **So the pin gate cannot see this.** Blessing a binary whose source
+cannot bootstrap from nothing is the one property a bad pin poisons for
+everyone, wearing a different hat from the usual one.
+
+Full trigger now: **load < ~13** AND **Track T has swept a sha ≥ `3b8d1039e`**
+(or T proven down) AND **forwardlint clean**. Measured this tick: load 16.1,
+plexus breadth 9h stale / 116 behind, `seven` 20m old but its full tier is below
+the trigger sha, forwardlint **2 FAILs**. Three of three fail.
+
+### Fleet after the stand-downs: four lanes
+
+**frankA (A) · frank-optimize-b4 (A/O) · frankC (C) · frank-rust (P).**
+frankB stood down as well — **Track B's queue is genuinely dry** (a p45 and a p20
+both marked do-not-claim, minidom at p20 pin-blocked, a p12 string-template), and
+its one open ticket unparks on a pin it cannot cause.
+
+**The two p70 min/max regressions went to frankA, not frankB**, because
+confirming the candidate cause needs two compiler builds and frankB is a
+`$(PXX_STABLE)` lane. frankB's triage is the work: **one defect, and the trigger
+is the RECEIVER not the key** — every module-level row passes, and with a
+function parameter only an inline lambda survives; `key=0` fails identically and
+a literal list inside a function works, so it is neither about `None` nor about
+being inside a function, which is what both ticket titles suggest. Each ticket is
+one column of that table. **Visible in `key-none`'s own output: its first two
+lines pass** and it dies at the first `show()` helper, where `xs` becomes a
+parameter. Prior art (`256b21957`) fixed the same family for the static-list
+receiver and its note names both receiver shapes as what `PyMinMaxByKey` was made
+the single meeting point for — **so one arm breaking is the expected shape of a
+break here**, not a mystery. `7b73a385d` recorded as a **candidate, not a cause**,
+with the instruction to build `7b73a385d~1` and `7b73a385d` first.
+
+### frankB's 234-within-the-hour, and the practical detector for it
+
+`cmd && o=$(run) || o="COMPILE FAIL"` attributed the **run's** nonzero exit to
+compilation — *a determinate verdict with nothing behind it, naming the wrong
+stage, inside the harness built to triage a wrong-stage bug*. It was caught not
+by re-reading but because **"compile fails but the pinned compiler built the real
+test fine" was incoherent**. So the detector for 234 is usually a **third** fact
+that neither the verdict nor its evidence mentions.
+
+### frankwasm's park carries the hazard the finding creates
+
+A resumer rebases onto master, the seed goes red, and nothing tells them it is
+not their change — the cost frankA nearly paid, now **likelier for a resumer**
+because master's seed is red and the branch is 95 behind. The park records the
+durable form (*the mandatory gate cannot catch this class; run forwardlint after
+any rebase; check whether a red seed is yours before assuming it is*) with the
+dated red-master fact beside the branch's own green sha, so the two cannot be
+confused in three weeks. **A finding that changes the risk for whoever comes next
+is not finished until it is written where they will be standing.**
