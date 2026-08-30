@@ -102,3 +102,32 @@ level down: the untested axis is the build configuration instead of the target.
 
 sysutils' `WideString`/`UnicodeString` identity functions are **documented** as the identity;
 the moment the alias breaks, that documentation becomes wrong rather than stale. Same commit.
+
+## The measurement that should decide it: **6 findable vs 636 unfindable**
+
+Not "636 versus a 5-call chokepoint" — that names the count, and the count is
+not the property that matters. The decision turns on **findability**:
+
+- Option B's cost is **6 per-backend COW guards**, all spelling
+  `(IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)`. One exact grep, one
+  shape, found in a single command. A miss is impossible to hide.
+- Option A's cost is **636 `tyAnsiString` kind tests** that are NOT mechanically
+  separable into "means any string" (needs a third arm) and "means specifically
+  AnsiString" (must not get one). Each must be judged individually, and a miss
+  is invisible until it produces a wrong value.
+
+**A large mechanically-enumerable set is cheap; a small set that must be judged
+one site at a time is not.**
+
+Evidence that A's unfindable misses are real rather than theoretical, found
+while measuring and from a direction nobody had counted: under A, `Length` on a
+wide string **returns garbage**. Every backend's Length path tests
+`IRTk = tyAnsiString`; under A that test fails for a wide string, so Length
+falls through to the dyn-array catch-all and reads the wrong word. Not a compile
+error, not a leak — a wrong number from the most-called string operation in the
+language. That is the third independent instance of A's silent-failure mode, and
+it was found by accident, which is the point.
+
+Under B that same test still passes and returns the byte count, so the halving
+is a frontend shift and no backend changes at all.
+— frankwasm, 2026-08-30

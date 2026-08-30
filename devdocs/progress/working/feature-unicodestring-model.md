@@ -361,3 +361,33 @@ Not a fork, so not escalating. Starting on the node width array and
 `ir.inc:1794`, then the six COW guards, then Length. `tyWideString` (ordinal 32,
 readers-free) becomes the wide ELEMENT marker rather than a second string kind,
 so nothing landed so far is wasted.
+
+## ORDERING CONSTRAINT — not a plan, and not reorderable
+
+**The alias break is the enabling switch and it goes LAST.** Until `widestring`
+stops resolving to `tyAnsiString`, no program can construct a wide string, so
+`elemSize` is never 2 and every intermediate step below is a no-op on every
+existing program. That is what lets them land one at a time, green, without
+holding every lock at once:
+
+    1. node-level element width (defs.inc + ast_arena.inc)
+    2. ir.inc:1794 — the one site that hardcodes elemSize := 1 / tk := tyChar
+    3. Length — a frontend shift over the existing byte count
+    4. the SIX per-backend COW guards          <- must precede step 5
+    5. break the alias in pasparser_lval.inc:6322/6424  <- LAST
+       (and change sysutils' UTF8Encode/Decode in the SAME commit: they are
+        DOCUMENTED as the identity, so at that moment the documentation stops
+        being merely stale and becomes a lie)
+
+**Why step 4 must precede step 5, stated as a reason so nobody reorders it
+innocently.** Each backend guards copy-on-write with
+`(IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)`. A wide index has
+`elemSize = 2`, so an unguarded backend silently skips COW and mutating a
+SHARED wide string corrupts its aliases. If the alias were broken first, that
+window would exist and **nothing could detect it** — no test can construct a
+wide string to find the bug, because the only thing that constructs one is the
+alias break itself. A hazard that can be neither triggered nor observed is one
+that survives to production. The ordering is the entire mitigation.
+
+Everything before step 5 is inert by construction, which is also why a
+half-finished migration here is safe to park.
