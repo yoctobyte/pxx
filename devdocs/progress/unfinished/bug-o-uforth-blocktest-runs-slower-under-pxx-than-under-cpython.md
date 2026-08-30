@@ -3,7 +3,7 @@ summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython
 type: bug
 track: O
 prio: 65
-status: working
+status: unfinished
 
 owner: frank-optimize
 ---
@@ -905,3 +905,200 @@ interpreter's own work.
 It is ~240 s under pxx plus ~80 s of CPython oracle on somebody's desk. The
 small subjects are the established proxy, for exactly that reason. A `blocktest`
 number should come from Track T's sweep.
+
+---
+
+## Diagnosis, 2026-08-30, frank-optimize
+
+**Everything above this line is from `96b4b40ab` and does not survive
+re-measurement.** What follows was measured at HEAD `0604b414089f`, self-hosted
+fixedpoint binary sha256 `883476f0abaf` (confirmed different from `pinned`
+`abece5150983`), on a box whose 1-minute load is recorded beside every number.
+CPython here is **3.14.4**.
+
+### 1. The ratio moved, and NOT because pxx got faster
+
+| word set | ticket (`96b4b40ab`) | HEAD `0604b414089f` |
+| --- | --- | --- |
+| `blocktest.fth` | 413.3 / 196.0 = **2.1x** | 252.4 / 152.0 = **1.66x** |
+| `core.fr` | 8.1 / 2.5 = 3.2x | 4.48 / 1.85 = 2.42x |
+| `coreexttest.fth` | 6.0 / 1.9 = 3.2x | 3.45 / 1.46 = 2.36x |
+| `coreplustest.fth` | 4.8 / 1.5 = 3.2x | 2.50 / 1.04 = 2.40x |
+| `stringtest.fth` | 4.2 / 1.1 = 3.8x | 2.25 / 1.01 = 2.23x |
+| `memorytest.fth` | 3.7 / 1.3 = 2.8x | 2.20 / 1.05 = 2.10x |
+
+All differentials still `same`. The ratio improved by ~30% — and **the pxx half
+did not move**. The Makefile's own uncontended note is ~240s pxx against ~80s
+CPython; my pxx half (252s) matches that within contention noise, while the
+CPython half nearly doubled (80 → 152). At least one half moved for
+environmental reasons — Python 3.14.4, and a different box from the ticket's
+"12-core plexus".
+
+A ratio is the most attractive kind of stale number because it looks
+self-normalising and is not. **Both halves have to be re-run.**
+
+### 2. Three plausible causes, each eliminated by intervention
+
+Not by argument — by building the change and measuring that it did nothing.
+
+**(a) Integer arithmetic / the promotable-int runtime. Eliminated.**
+NilPy ints are `PXXPromo*` slots and `x = a + b` was costing **1051 ns** per
+operation, against 52 ns for `x = a + 1`. Cause found and fixed (`0c3ad8a10`):
+the promo-with-promo entry points name `TBig` in their own bodies, so every call
+pays managed prologue/epilogue for bignum temps it never builds, while the
+`*Int` forms had that split out years ago. `PXXPromoAdd` 1051 → 62 ns, `Mul`
+1727 → 72 ns, a bare loop 348 → 117 ns/iteration.
+
+**uforth moved 0–5%.** Same binaries, back to back, load 1.69 → 1.93:
+
+| | pxx before | pxx after | CPython |
+| --- | --- | --- | --- |
+| `core.fr` | 4.48 | 4.48 | 1.85 |
+| `coreexttest.fth` | 3.48 | 3.39 | 1.47 |
+| `coreplustest.fth` | 2.50 | 2.52 | 1.04 |
+| `stringtest.fth` | 2.33 | 2.26 | 1.01 |
+| `memorytest.fth` | 2.20 | 2.08 | 1.04 |
+
+A 17x improvement to integer arithmetic buys nothing here. uforth's inner loop
+is not arithmetic-bound. (The fix is still worth having on its own terms.)
+
+**(b) Attribute + subscript traffic in the threading loop. Eliminated.**
+`run_forth_word`'s loop reads `frame.body[frame.ip]` and `len(frame.body)` per
+token, and subscript is pxx's worst measured primitive (below). Hoisting `body`
+and `nbody` into locals in a copy of `uforth.py` changed nothing: 3.45 → 3.53,
+2.12 → 2.14, 2.06 → 2.02 (identical output). Load 3.19 → 4.84, so the noise
+floor here is wider than the effect.
+
+**(c) `exec()` / the pyeval runtime interpreter. Eliminated.**
+uforth implements its Forth primitives as Python source strings that are
+`textwrap.dedent`-ed, wrapped in a `def`, and **`exec`-ed from scratch on every
+single invocation** — 5643 times for `coreexttest.fth` alone. Under pxx that
+runs through `compiler/builtin/pyeval.pas`, a tree-walking interpreter, so this
+looked like the whole answer.
+
+It is not. At uforth's own call count, `exec(wrapper, {}, ns)` plus the call:
+
+| | pxx | CPython 3.14.4 |
+| --- | --- | --- |
+| `dedent` + wrapper build | 20.6 µs/call | 6.8 µs/call |
+| `exec` + call | **68.8 µs/call** | **74.9 µs/call** |
+
+**pxx's `exec` is slightly faster than CPython's.** Caching the wrapper string
+(so `dedent` runs once per distinct body) bought pxx 9% and is the only part
+worth anything. Caching the compiled function — which cuts CPython from 1.46s to
+0.57s, i.e. `exec` is ~60% of *CPython's* runtime — cannot be measured under pxx
+because pyeval hits two limits doing it; see §5.
+
+### 3. Where the time actually is
+
+`perf` is unavailable on this box (`perf_event_paranoid=4`) and I did not ask
+for it to be relaxed. Instead: compile with `-g`, run under `gdb` with
+`startup-with-shell off` and `handle SIGINT stop nopass`, and interrupt the
+inferior on a timer, recording `$pc`. 593 samples across five word sets. `$pc`
+is mapped to a function by taking the greatest call-target address ≤ `$pc` (1075
+entry points recovered from the binary's own disassembly), and to a source line
+via `.debug_line`.
+
+> **4% of samples are in code compiled from `uforth.py`. 96% are in the RTL, and
+> 67% are in the first 130 KB of `.text` — the string, header and heap core.**
+
+Top routines, identified by reading their bodies (the RTL carries no symbols):
+
+| samples | % | cum | routine |
+| ---: | ---: | ---: | --- |
+| 73 | 12.3% | 12.3% | allocator entry — clamps size to ≥8, rounds up to 8 |
+| 45 | 7.6% | 19.9% | free path (`p ≠ nil`, read `[p-8]`, bucket) |
+| 36 | 6.1% | 26.0% | string size/offset computation |
+| 30 | 5.1% | 31.0% | block / ASCII string copy |
+| 30 | 5.1% | 36.1% | **`PXXHighBits`** — see below |
+| 25 | 4.2% | 40.3% | pyeval (`exec`, `uforth.py:1289`) |
+| 20 | 3.4% | 43.7% | managed-slot init (called from every `def` prologue) |
+| 10 | 1.7% | 52.1% | managed release: decref, free at zero |
+
+134 distinct routines were sampled; the tail is long. Walking the hot entries up
+the call graph, their callers are `def …` and `return …` lines spread across the
+whole program — i.e. **function prologues and epilogues**, not any one hot spot.
+
+**`PXXHighBits` deserves its own line.** `builtinheap.pas:1608`:
+
+```pascal
+function PXXHighBits: Int64;
+var i, m: Int64;
+begin
+  m := 0;
+  for i := 0 to SizeOf(NativeInt) - 1 do
+    m := (m shl 8) or $80;
+  PXXHighBits := m;
+end;
+```
+
+It computes the constant `$8080808080808080` with an eight-iteration loop, and
+is called per word of every string scan (`builtinheap.pas:1633`). **5.1% of
+uforth's entire runtime is spent recomputing a compile-time constant.**
+
+### 4. Why the ratio is only ~2.3x when the primitives are 15x apart
+
+This is the part that makes the ticket's framing misleading, and it is why there
+is no single hot spot to point at. Marginal cost of one added statement in a
+NilPy loop, 300k iterations, load 2.05 flat across the run:
+
+| operation | pxx | CPython | ratio |
+| --- | ---: | ---: | ---: |
+| `b[2]` list subscript | 234 ns | 12 ns | **19.2x** |
+| `d['k']` dict subscript | 495 ns | 30 ns | **16.5x** |
+| `f.body[f.ip]` | 492 ns | 33 ns | 15.0x |
+| `s.append` + `s.pop` | 654 ns | 76 ns | 8.6x |
+| call with 8 locals | 511 ns | 120 ns | 4.3x |
+| `tok.word` attribute | 57 ns | 10 ns | 5.5x |
+| call with 1 arg | 129 ns | 40 ns | 3.2x |
+| `vm.push` + `vm.pop` | 780 ns | 237 ns | 3.3x |
+| `exec` + call | 68.8 µs | 74.9 µs | **0.92x** |
+| `isinstance(t, (int, float))` | 62 ns | 158 ns | **0.39x** |
+| `isinstance(t, int)` | 47 ns | 64 ns | 0.73x |
+| `len(b)` | 3 ns | 24 ns | **0.14x** |
+| call, no args, no locals | 3.5 ns | 37 ns | **0.10x** |
+
+pxx is 15-19x slower at container subscript and 2-10x **faster** at `isinstance`,
+`len`, `exec`, and a zero-argument call. From `cProfile` on the same workload,
+`isinstance` is 10% of CPython's time, `len` 5%, `exec` 15% — 30% of the
+reference's runtime sits in operations pxx wins. That is precisely why a program
+built from primitives that are individually 15x apart comes out only 2.3x apart
+overall, and why **no single fix will close this gap**.
+
+The one structural statement that does hold: a call with no arguments and no
+locals costs 3.5 ns, and each argument or local adds 50-130 ns. Every NilPy
+local is a managed slot initialised and finalised per call. That, plus the
+allocator and free paths above, is the shape of the 96%.
+
+### 5. Filed separately
+
+- `bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized` —
+  the codegen cause behind `0c3ad8a10`. Splitting routines by hand is a
+  workaround that `promocore.pas:796` institutionalised; sinking temp init into
+  the branch that uses it fixes every program. Also: a 16-byte managed clear is
+  emitted as `rep stosb`, 21 of them in one prologue.
+- `bug-a-pxxhighbits-recomputes-a-compile-time-constant-in-a-loop` — 5.1% of
+  this workload.
+- `bug-n-a-function-created-by-exec-loses-its-globals-when-it-outlives-the-call`
+  and the `pyeval: no RTTI for attribute vars` refusal — both are CPython
+  programs pxx cannot run, so both are N bugs by the upward-compatibility rule,
+  not compat items.
+
+### 6. What this ticket should become
+
+The measured cause is **not** threading dispatch (pxx beats CPython at it), not
+refcount traffic on stack words, not the arithmetic, and not `exec`. It is
+**per-call managed-slot init/finalize plus allocator and string-header traffic
+in the RTL**, spread thin across 134 routines with no dominant peak, and it is
+partly offset by real wins elsewhere.
+
+That makes this a **campaign, not a bug**: container subscript (19x, the worst
+single primitive and the most clearly fixable), the managed-temp codegen ticket,
+`PXXHighBits`, and the allocator's cost per call. Recommend re-filing as those
+four and closing this one, rather than leaving a p65 "uforth is slow" ticket
+that no single change can resolve.
+
+**Not done here:** `blocktest.fth` itself was not re-run after `0c3ad8a10` — an
+~800s pair, and this box had three other agents gating, csmith running and a
+multi-hour refactor starting. The short word sets are the evidence above; a
+quiet-window `blocktest` pair is worth taking before anyone quotes a new ratio.
