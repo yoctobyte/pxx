@@ -2310,6 +2310,13 @@ Four more from a single day, all different mechanisms, all the same shape:
   and measure one at a time. "All of them" is not a shortcut through "each of
   them" — it is a different experiment with a different answer.
 
+- **"master is broken" vs "my copy is" — `git stash` + rebuild on clean HEAD,
+  2.5 s.** One measurement instead of an argument, and against a 120 s timeout it
+  is free. CLAUDE.md's parking note has the slower form (build with the *pinned*
+  compiler against a clean tree); this is the fast one and it answers the same
+  question. Reach for it the moment a failure looks like someone else's fault —
+  that is precisely when a false accusation is cheapest to make and most
+  expensive to retract.
 - **"Same repo" and "same tree" are different, and `ps` cannot tell them apart —
   `/proc/<pid>/cwd` can.** Every agent's `make compiler/pascal26` has an
   identical command line and builds into `/tmp/pxx-build-*`, so a `pgrep` showing

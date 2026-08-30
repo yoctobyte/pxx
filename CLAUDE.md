@@ -505,6 +505,39 @@ make compiler/pascal26     # ~12s — and it IS the byte-identical self-host fix
 git commit && git push     # tools/sync.sh does the pull --rebase + push for you
 ```
 
+**TWO SCOPE LIMITS ON THE FIXEDPOINT, both found from outside it. The mandatory
+step is unchanged; the SENTENCE is broader than the PROOF.**
+
+1. **It bounds the optimisation level.** The claim holds at the **default `-O`
+   only** — a `-O0`-only self-compile failure passed the entire gate on
+   2026-08-19.
+2. **It bounds the LANGUAGE SURFACE, and this one is sharper.** **The fixedpoint
+   cannot see a construct the compiler itself never writes.** Measured
+   2026-08-30: a duplicated `else if CurTok.Kind = tkProperty` whose first arm
+   had an empty body — a branch that matches and consumes nothing, so the
+   class-member loop **spins forever** — and `make compiler/pascal26` printed
+   `converged after 1 round(s)`, twice, cleanly. `compiler.pas` is written in a
+   deliberately procedural subset and declares **no properties**; the only
+   `property` lines under `compiler/*.inc` are four prose lines inside comments.
+   **Precisely:** `compiler/builtin/pylib.pas` *does* declare six, but the
+   builtins are **data to the fixedpoint build** — parsed only when a user
+   program imports them, which is why a **NilPy canary** caught the hang and the
+   self-host did not. Do not grep `compiler/` for `property`, find those six, and
+   conclude the limit is not real.
+   **For Tracks C, N, R and Z it proves NOTHING about the frontend under edit** —
+   `compiler.pas` is not written in C, Nil-Python, Rust or Zig. It proves the
+   shared internals still compile the Pascal subset. **Track P's coverage is
+   partial, which is more dangerous than none, because it looks total.**
+
+**Neither limit is an argument for a wider gate** — that spends the machine that
+makes anything catchable at all. The operational form is one line, and three
+lanes arrived at it independently the same day: **"my repro passed" is a
+different claim from "the compiler still works", whenever the repro is a
+construct the compiler never writes.** Carry a one-line probe in the affected
+shape, from the population your gate cannot see. Note what caught this one:
+`gate.sh quick`, the step the loop calls OPTIONAL — and it caught it as a
+**timeout**, because a hang has no error text.
+
 **`make compiler/pascal26` stays mandatory, and it is not a test** — it is the
 build. It is also, for free, the byte-identical self-host fixedpoint, so it is
 the one thing that cannot be skipped in the name of speed: a compiler that
