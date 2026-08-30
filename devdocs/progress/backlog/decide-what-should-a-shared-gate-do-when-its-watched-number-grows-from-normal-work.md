@@ -5,7 +5,7 @@ type: decide
 status: backlog
 owner: unassigned
 blocked-by: []
-summary: "tools/exit_observable_devtest.py fails when the count of stdout-only cross-target rows exceeds a high-water mark. AMENDED 2026-08-30 by frankT (904b26bd9) AND THE AMENDMENT CUTS AGAINST THE ORIGINAL RECOMMENDATION -- read the addendum before deciding. The filing measured 531 -> 551 in six hours from three lanes' normal work and leaned toward option 3 (report the drift, stop failing) on the grounds that a standing red nobody owns is the state a red exists to prevent. Re-measured per Makefile commit, the count peaked at 559 and then a lane paid it back to 531 EXACTLY within six hours (d9d166f7e, Track A; bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code is in done/). So the red WAS owned and paid, and the ratchet is what applied the pressure. Residual is 2 rows from one later commit, both exception/unwind subjects on xtensa -- two Makefile lines, Track S/A's to fix, unverified because it needs qemu. The fork is still open and still the owner's: nobody has bumped the mark or resolved it."
+summary: "tools/exit_observable_devtest.py fails when the count of stdout-only cross-target rows exceeds a high-water mark. AMENDED 2026-08-30 by frankT (904b26bd9) AND THE AMENDMENT CUTS AGAINST THE ORIGINAL RECOMMENDATION -- read the addendum before deciding. The filing measured 531 -> 551 in six hours from three lanes' normal work and leaned toward option 3 (report the drift, stop failing) on the grounds that a standing red nobody owns is the state a red exists to prevent. Re-measured per Makefile commit, the count peaked at 559 and then a lane paid it back to 531 EXACTLY within six hours (d9d166f7e, Track A; bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code is in done/). So the red WAS owned and paid, and the ratchet is what applied the pressure. RESIDUAL NOW CLOSED (7d1f9aeb4, A+S, 21:58): the 2 xtensa exception/unwind rows assert the exit code on both sides, the count is back to the 531 mark and tools/exit_observable_devtest.py is GREEN -- so the ratchet has now been paid down twice by the lanes that moved it, which is evidence for option 1 and against the filing's option-3 recommendation. THE FORK IS STILL OPEN AND STILL THE OWNER'S: nobody has bumped the mark or resolved it, and the question -- what a shared gate should do when its watched number grows from other lanes' normal work -- is unchanged by the instance being clean."
 ---
 
 # Decide: what should a shared gate do when the number it watches grows as a side effect of other lanes' normal work?
@@ -128,3 +128,22 @@ One thing I could not check from here and did not guess: whether adding
 so it should be free — but the xtensa side needs qemu, and asserting that a
 change is safe without running it is how the row this whole family came from
 was written in the first place.
+
+## CLOSED 2026-08-30 21:58 by A+S — and the answer to the qemu question above is "it passes"
+
+`7d1f9aeb4` — *"test(A+S): the last two stdout-only cross rows assert the exit
+code too"*. Both rows now carry `; echo "exit=$$?"` on **both** sides
+(`Makefile:14487` and `:14490`), the stdout-only count is back at **531**, and
+`tools/exit_observable_devtest.py` reports **9 guards, 0 FAIL**.
+
+That closes the instance and it does **not** close this ticket. What it does is
+add a second data point to the evidence, in the same direction as the first:
+**the ratchet has now been paid down twice, both times by the lanes that moved
+the number, within hours of it going red.** The filing's case for option 3 was
+that a standing red belonging to three other lanes is a red nobody owns.
+Measured twice, it was owned twice. A drift table would have been read by
+nobody and paid by nobody.
+
+The decision is still the owner's, because the question was never about these
+rows — it is about every ratchet the fleet grows, and a guard that happened to
+get paid is not a proof that the next one will be.
