@@ -20826,3 +20826,155 @@ subtract what is already attributed before treating the remainder as one cause.
 reports plexus did not write are not in `tstate/` to be counted, so its silence is
 invisible to every check that reads `tstate/`. Same shape as `twatch --status`
 reading a local checkout — **absence of evidence is stored as absence.**
+
+## Tick 2026-08-30 ~13:1x — A NATIVE-GREEN REPRO DOES NOT CLOSE A BUG THAT WAS NEVER NATIVE-ONLY
+
+frankA's correction of itself, propagated fleet-wide because the fleet is likelier to
+repeat it than to repeat the original bug.
+
+It resolved the cdecl miscompile ticket in slice 1 with the claim **"both shapes are
+sound"**. The fix is **x86-64 only** — only x86-64 got the prologue arm. It caught this
+by cross-compiling the repro afterwards, unprompted, when the ticket was already
+resolvable and nothing would have contradicted it. On aarch64, `p := @MyCb` is refused
+while `Take(@MyCb)` on the same source compiles clean and prints **0** where 9 is
+correct. The argument-shaped door is exactly as open as it was, on four targets.
+
+**Why this class is worse than an ordinary wrong fix:** the native repro goes green, the
+ticket closes, and **the closed ticket is what the next person reads instead of
+re-testing**. A wrong verdict that leaves no red behind it does not merely fail to be
+found later — it actively prevents the finding. This repo cross-compiles free under
+qemu, so the discriminating check costs one loop.
+
+Fifth member of the day's family and the first where the check that could not fire was
+**the test itself**, not a guard in the compiler. The other four: the `abi.inc` grep,
+`Patch8`'s `Byte` parameter, the cdecl reject keyed on `AN_ASSIGN`, and `rel8.inc`'s doc
+comment matching the grep for the idiom it describes.
+
+### THE COROLLARY FOR DISPATCH, which is mine not frankA's
+
+When I dispatch a cross-target fix, **the acceptance standard is only meaningful against
+a baseline the agent has observed**. I sent frankA at four targets whose cdecl tests
+(`test_cdecl_indirect`, `test_extern_c`, `test_extern_c_float` on aarch64/arm32/i386)
+appear inside seven's 18-job cascade. Bad sha `154d1aa3f`, 2026-08-29 — **before** the
+cdecl work, so not frankA's. But an 18-job cascade also containing `test-nilpy`,
+`lib-test` and `test-emit-obj` entries is a **stale baseline**, not an event (same
+reading as the 38-job plexus cascade, `79b2ed2ff`): it counts jobs that changed state
+since that box last looked. So the honest statement is **"the state of these tests at
+HEAD is unknown"**, and unknown is the problem — a green new repro sitting next to a
+still-red neighbour reads as a closed ticket either way.
+
+Pre-committed the three outcomes so the tempting one is ruled out in advance: green at
+HEAD → proceed and say you checked; red then green → you closed more than the ticket
+claimed, say so; red then still red → **file it, do not absorb it**, and do not widen a
+four-target codegen change to chase an unrelated red, because nobody can bisect that.
+
+### RE-ANCHORING: BYTE-IDENTICAL TEXT AT A MOVED OFFSET IS THE WORST CASE
+
+frankA's grep found its condition at **9253**, +6 from its own survey's 9247, **text
+byte-identical**. A line-numbered patch would have landed in the promotable-int-store
+block below it, and the drift would have been invisible in review because the content at
+the old number still looked plausible. Not "line numbers drift" — *identical* text at a
+moved offset defeats the eyeball check that normally saves a line-numbered patch.
+
+Now standing advice in every grant I write: **name the region by grep anchor, never by
+line number.**
+
+### ONE COPY BECAME TWO, AND THE SECOND COPY ANNOUNCED ITSELF
+
+`cparser.inc:11282` has carried its own SysV classification for its whole life — the C
+frontend needed a prologue before `EmitParamSpillsForTarget` existed. frankA mirrored
+its bytes deliberately rather than reinventing them **and said so in the code and the
+commit**. That is the right way to take the count from one to two: the copy is
+self-documenting, so `refactor-a-collapse-the-c-frontend-sysv-prologue-copy` starts with
+a pointer instead of an archaeology problem. Most second copies do not announce
+themselves.
+
+Its proposed gate is the shape to reuse: **zero emitted-byte change, and if the collapse
+moves a byte the two copies had already drifted and that is a finding in its own right.**
+A gate that cannot fail uninformatively. Whoever picks it up would otherwise reach for
+"the tests still pass", which would not detect the drift at all.
+
+### I SETTLED THE FOLLOW-UP RATHER THAN ESCALATING IT, AND HERE IS THE TEST I USED
+
+frankA offered to re-file its follow-up as a Track U `decide-*`. I declined, and the
+reasoning is the reusable part: **Track U is for a fork I cannot settle from the code,
+the request, or a sane default — not for a fork that is merely consequential.** This one
+settles from the code, because the repo has already answered it twice in writing:
+`normalise-dont-special-case.md` says the second path is the one that stays broken (there
+are five), and `root-cause-over-microfix.md` says three mechanisms for one concept is a
+design flaw. Repairing the guard is the bug's own method applied again — **enumerating
+shapes is what produced the bug**. Escalating would spend the owner's attention on a
+question the owner has already answered.
+
+Told frankA what would make it a genuine fork: if the four-target cost turns out much
+larger than its AAPCS reading suggests, come back and I file it. **A settled call with a
+stated falsifier is not the same as a guess.**
+
+### THE ORDER CONSTRAINT, which is the part I would have got wrong by default
+
+Slices go **aarch64 → arm32 → i386 → riscv32**, and per target **the arm lands before
+that target leaves the reject**. Not caution for its own sake: narrowing the reject
+first opens a window where a target *accepts* a binding it cannot lower. Today's state
+is **sound-by-refusal** on four targets, and trading that for silently-wrong-by-acceptance
+even for one commit is strictly worse. aarch64 first because that is where the measured
+failing repro already exists — slice 1 gets a real red to turn green rather than a
+constructed one.
+
+riscv32 last for a lane reason too: frankS holds `ir_codegen_riscv32.inc` scoped to its
+`SPECIAL_IN` arm. Both agents told; frankA told to stop and ask rather than take it, the
+way frankS correctly declined it on its own read.
+
+### MY FILE LIST FOR THE STRING WORK COULD NOT HAVE WORKED — frankwasm caught it BEFORE editing
+
+I scoped the UTF-16 type half as "`defs.inc` now, `symtab.inc` when frank-optimize
+releases". frankwasm's correction:
+
+> `symtab.inc` makes a `tyWideString` **well-formed**; `pasparser_lval` is what makes one
+> **exist**.
+
+The alias lives in two name→kind resolvers (`pasparser_lval.inc` ~:6322 and ~:6424)
+mapping `widestring`/`unicodestring` to `tyAnsiString`. Without that file nothing ever
+constructs the kind and every symtab case I sent it to write is unreachable. It would
+have landed a well-formed type that no program can name, and found out at test time.
+
+**Second time today I scoped a lane by guessing at parallelism instead of reading**, and
+both times the worker caught it (the first: asserting the `lib/rtl` string units were
+workable in parallel when they are downstream of the alias break). The pattern in my own
+behaviour: I infer a file list from what a change *is about* rather than from where the
+change has to *happen*. Grep the mechanism before naming the files.
+
+Filed the grant at the moment of giving, as
+`grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break`, with `DO NOT
+CLAIM` in the body so `_NODISPATCH_RE` suppresses it — the two existing grant tickets
+lack that marker and consequently appear in `ready --track A` as claimable work, which
+is `bug-t-a-grant-is-a-lock-the-ranker-cannot-see` in the concrete.
+
+### THE HAZARD INSIDE THE ALIAS BREAK: A BUILD DEFINE MAKES ONE ARM UNTESTED
+
+Both resolver sites are guarded by `PasDefineExists('PXX_MANAGED_STRING')`, so
+`widestring` resolves to `tyAnsiString` **or** `tyString` depending on the build.
+**A one-arm test lets the alias break in one configuration and silently persist in the
+other**, and the arm you tested inherits its verdict to the arm you did not. Structurally
+identical to the native-green repro above, one level down: the *configuration* is the
+untested axis instead of the *target*. Gate: the acceptance test must name which arm it
+ran under, and run both.
+
+Also: sysutils' `WideString`/`UnicodeString` identity functions are **documented** as the
+identity, so the moment the alias breaks that documentation becomes wrong rather than
+stale. Same commit.
+
+### frankwasm MADE ONE KIND OF TWO SPELLINGS, AND ARGUED FROM MEASUREMENT NOT TAXONOMY
+
+FPC separates `WideString` from `UnicodeString` because the former is a COM BSTR **on
+Windows**, which the owner has ruled out of scope in those words. On Linux fpc 3.2.2 the
+two are observably identical: same handle size (8), same `Length('héllo')` (5), same
+element size (2), cross-assignable both directions. One kind, and **the measurement is in
+the comment rather than the inference** — a future reader can re-run it; they could not
+have re-run a citation of FPC's docs.
+
+It also checked the two ways a tail enum addition could still bite instead of resting on
+"additive". `ir.inc`'s IR-validity bound is written `Ord(High(TTypeKind))` *specifically
+because* it was once hardcoded to `Ord(tyBool8)` and **silently failed every kind
+appended after it** — and the comment says so. That is what a repaired guard should look
+like: it left a tombstone, so the next appender did not have to rediscover the failure.
+Best in-repo example of a fix documenting its own failure mode.
