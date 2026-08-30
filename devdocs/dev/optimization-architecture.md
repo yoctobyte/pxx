@@ -373,6 +373,22 @@ honor it.
 
 ## 6. Methodology — how every pass is proven
 
+> **Corrected 2026-08-30 (frankD): this rhythm is the PASS-PROMOTION checklist,
+> not the per-edit loop.** Steps 2 and 4 name suite targets the repo now refuses
+> outright — `.claude/hooks/no-full-suite.sh` denies the whole `make test*`
+> family, `make test-opt` included. While you are still changing a pass, the loop
+> is `make compiler/pascal26` plus your repro; Track T sweeps breadth against
+> your pushed sha, and `tools/gate.sh quick` is required before a pin.
+>
+> Run the ladder below when you are about to **promote** a pass from `-O3` to
+> `-O2`, or to bless a binary — which is the moment it was written for, and where
+> its extra thoroughness earns its cost. Step 3 in particular is worth keeping
+> and is **not** covered by the ordinary gate: `make compiler/pascal26` builds
+> `compiler.pas` at the DEFAULT `-O` level, so the standard fixedpoint proves
+> self-compilation at *one* level only. A `-O0`-only self-compile failure passed
+> the entire gate on 2026-08-19 and was found by a benchmark. That is exactly the
+> hole step 3 closes, and nothing else does.
+
 Per-pass rhythm (never skip a step; slow steps run as separate visible
 commands):
 

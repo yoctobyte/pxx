@@ -18,9 +18,17 @@ Track A is the only place two agents can truly collide and the only place the
 self-host contract lives. That's why "give an agent Track A" means "major IR work
 is in play" and is the single assignment that needs the *no-other-agent-holds-A*
 confirmation. Frontends (C/P/R/Z) are mostly disjoint files that merge cleanly;
-the core is the shared ground. Guard it accordingly — land only green, self-host
-byte-identical, `make stabilize` + `make pin` when a downstream track needs the
-new binary.
+the core is the shared ground. Guard it accordingly — self-host byte-identical
+(which `make compiler/pascal26` proves for free, in ~12s), and
+`make stabilize-fast` + `make pin` when a downstream track needs the new binary.
+
+> **Corrected 2026-08-30 (frankD):** this read *"land only green, … `make
+> stabilize` + `make pin`"*. Neither survives. **You may land non-green** — the
+> one contribution of the `dev` branch that outlived its 2026-08-26 collapse; the
+> replacement obligation is to say so in the commit message, since with no
+> sync-back gate left that message is the only warning anyone gets. And a pin is
+> `stabilize-fast` (~35s, holding the repo lock) rather than full `stabilize`
+> (~25 min, same lock), which is for a release.
 
 ## Multiplier
 
