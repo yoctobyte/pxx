@@ -1982,6 +1982,40 @@ pre code{background:none;padding:0}
                 lines.append(f"STALE-BOARD: devdocs/progress/BOARD-{st}.md out of date — run: tools/progress.sh board-md")
                 problems = 1
 
+        # A PLACEHOLDER IN A TICKET THAT WAS NEVER RESOLVED.
+        #
+        # frankC, 2026-08-30: `sync.sh` fills PENDING-COMMIT only for tickets a
+        # push RESOLVES. Park a ticket to unfinished/ after writing a Log line
+        # and the literal placeholder stays, with no warning from anything --
+        # a different aperture from the wrapped-citation case, same outcome,
+        # every tool reporting clean.
+        #
+        # Deliberately a warning and not a failure: a placeholder in a LIVE
+        # ticket is often correct in-flight state (resolve written, push
+        # pending). What is wrong is nobody being able to tell those apart, so
+        # this names them rather than judging them.
+        for t in self.tickets:
+            if t.status in ("done", "rejected", "decided"):
+                continue
+            # MENTION VERSUS USE. A bare substring search returns 2 of 2 FALSE
+            # POSITIVES here: the family index DISCUSSES the placeholder, and
+            # `bug-t-concurrent-sync-runs-can-squash-two-commits-into-one` is
+            # ABOUT it. Fourth instance of that shape in one night -- and I hit
+            # it while building the guard, having banked the other three.
+            # Keyed on the Log-line form `commit PENDING-COMMIT` that
+            # `progress.sh resolve` actually writes, not on the token.
+            if not re.search(r"commit\s+\**PENDING-COMMIT", t.text):
+                continue
+            warning_count += 1
+            lines.append(
+                f"UNFILLED-PLACEHOLDER: {t.slug} [{t.track} p{t.prio}] is in "
+                f"{t.status}/ and still carries a literal PENDING-COMMIT. "
+                f"sync.sh fills these only for tickets a push RESOLVES, so a "
+                f"ticket parked mid-flight keeps it silently. Fill it by hand "
+                f"with the sha the work landed as, or delete the Log line if "
+                f"the work did not land"
+            )
+
         # THE APERTURE, printed with every verdict including a clean one.
         #
         # The stale-edge scan above reads frontmatter. Three instances found on
