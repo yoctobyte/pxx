@@ -6,7 +6,7 @@ type: bug
 status: done
 owner: frankA
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: 48c89fab5
 summary: "FIXED 2026-08-31 on all five cross targets, verified under each runner and against the pre-fix binary. Two defects, not one. (A) an OUT-OF-RANGE ParamStr was unbounded on i386/arm32/aarch64/riscv32/xtensa: `ParamStr(ParamCount+1)` dereferences argv[argc], the vector's own NULL terminator, and a larger index reads envp out as a string -- three targets SIGSEGV'd on the first nil, two printed 62 characters of environment memory first and crashed on the managed path. x86-64 alone compared against argc. (B) the frozen clamp answered 256 on aarch64/arm32/i386 where x86-64, riscv32, xtensa and FPC answer 255. Each backend now bounds the index and yields nil out of range, which `PXXCStrToFrozen` already turns into ''. New test/test_paramstr_out_of_range.pas plus test_paramstr_long_arg wired into all five per-target recipes and into a native row that asserts the oracle. Design half filed separately: only x86-64 still open-codes the filler the other five call."
 ---
 
