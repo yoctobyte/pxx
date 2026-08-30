@@ -4,7 +4,7 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "Pascal corpus rung 2 — real FPC 3.2.2 `fgl.pp` (the reference RTL's generic-container unit) as a wired, oracle-checked corpus target. Landed 2026-08-25: fetcher, runner, 7 drivers, skip list. Baseline 3 pass / 4 known-fail. Replaces a check that had silently printed `SKIP (no fpcsrc)` on every box without a system FPC source tree."
-status: backlog
+status: done
 owner: —
 ---
 
@@ -106,3 +106,6 @@ and [[bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file]].
 ## Links
 Parent: [[feature-pascal-corpus-expansion]] · mechanism copied from
 [[feature-c-corpus-expansion]] / `tools/run_c_conformance.sh`
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

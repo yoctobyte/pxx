@@ -6169,3 +6169,84 @@ work makes the folder's staleness signal unreadable for everyone — the same co
 `bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in` reports from the other end, where
 a live campaign has nowhere to sit. **Both are the status vocabulary answering "is someone
 on this" when the question is "can this move".**
+
+### 147 — a PROSE error the accompanying COMMAND routes around, and why it outlives a broken example
+
+*frankD, 2026-08-30, auditing `valgrind.md`.*
+
+The doc's quick start passed `--proc-map` and its prose said that flag writes `<out>.map`.
+Both false: `<out>.map` is written **by default** (`EmitMapFile := True`; `--no-map`
+suppresses), and `--proc-map` goes to stderr computing `LOAD_ADDR + CODE_OFFSET +
+BodyAddr` with the **static** offset — while the profile the doc prescribes,
+`-dPXX_LIBC_HEAP`, is a **dynamic** build, which the doc itself says two paragraphs up.
+
+| build | `<out>.map` | `--proc-map` stderr |
+| --- | --- | --- |
+| static | `0x40efb0 Foo` | `0040efb0 Foo` — agree |
+| `-dPXX_LIBC_HEAP` | `0x40eb61 Foo` | `0040eaf1 Foo` — **0x70 low** |
+
+0x70 is exactly `DYNAMIC_CODE_OFFSET - CODE_OFFSET`.
+
+**And it does not fail, it lies.** `vgsym.py` resolves with `bisect_right - 1` under a
+0x20000 tolerance, so a shifted address binds to the **preceding** routine whenever 0x70
+crosses a boundary — and most emitted routines are shorter than 0x70.
+
+**The shape: the doc's printed pipeline was always correct.** It fed `vgsym.py` the
+`.map` file, not the stderr. So **anyone who copy-pasted got right answers and anyone who
+read the sentence got a wrong model** — and the flag they were told to add spewed 123
+wrong lines nobody ever looked at.
+
+> **A prose error that the accompanying command silently routes around cannot be caught
+> by running the doc — only by reading it against the code.**
+
+That is the exact inverse of an unrunnable example, and it **survives longer precisely
+because the thing works**. Every use of the doc confirms it. This is why a docs audit
+cannot be replaced by "do the examples still run": the examples running is compatible
+with the prose being wrong in a way that will mislead the next person who reasons instead
+of pasting.
+
+Filed as `bug-a-proc-map-emits-static-addresses-for-a-dynamic-build` [A p30] with the
+one-line fix and a delete-the-flag option, since `<out>.map` already does the job.
+
+### 147a — a FIRST-WALL SURVEY under-counts systematically, and reports the SHALLOWEST remaining gap as the DEEPEST one left
+
+*Same session, `fpc-lcl-compile-probe.md`.*
+
+Its method was compile-until-the-parser-stops. **That instrument cannot see past the
+first wall**, so its output is *the order in which the parser trips* — not a ranking, and
+not a count. The doc read it as both, and ranked three blockers by it.
+
+Measured against reality: `fgl` needed **six or more** fixes across **three layers**, and
+the last was invisible to every parse-level probe — after all syntax walls cleared,
+`ifclist` failed **at runtime** on missing method hiding, storing a VMT word.
+
+> **A first-wall survey under-counts systematically and reports the shallowest remaining
+> gap as the deepest one left.**
+
+Same family as 140 and 108: **the ranking was a property of the instrument, not of the
+work.** And the tell is generic — any survey that stops at the first failure produces an
+*order*, and an order is one `sort` away from looking like a priority list.
+
+Note what did **not** rot: the doc's *conclusion* ("pxx is not blocked on core Pascal
+syntax for real FPC code") was right and stayed right. **Only the ranking decayed.** So
+the disposal was a banner plus an intact body, not a rewrite — the conclusion still has
+its evidence, and the reader is told which half to distrust.
+
+### 147b — and the coordinator's own dispatch hazard, handed over rather than filed
+
+`feature-pascal-corpus-fgl` sat in `backlog/` at **p55** with every item complete. frankD
+deliberately did **not** file a ticket — *"a ticket saying 'resolve this ticket' costs
+more to process than the ~5 minutes of waste it prevents"* — and passed it to dispatch,
+where closing it is one command.
+
+Correct call, and the reason it matters is rule 7: **a ranked queue says a ticket is
+unblocked, not that it has work left in it**, and p55 is high enough to be dispatched to
+a worker who would then have found nothing. Verified before closing rather than taken on
+the report: `test/fgl/pxx.skip` has zero non-comment lines, `fpc-rtl` is in `twatch.py`'s
+`CORPUS_EXPECTED`, `testmgr.py` records the 2026-08-26 enrolment, and the ticket's own
+"Not done here" delegate — `task-t-enrol-the-fgl-corpus-rung` — is in `done/`. Both
+halves of its residue were genuinely closed.
+
+**Not every finding should become a ticket.** The filing threshold is whether processing
+the artefact costs less than the waste it prevents, and for "a done thing is still open"
+handed to whoever runs dispatch, it does not.

@@ -2207,6 +2207,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-class-property | P | 50 | feature | Class properties (and properties backed by a `class var`) | — |
 | feature-pascal-complex-numbers-ucomplex | B | 45 | feature | ucomplex library (complex numbers, FPC-compatible API) — Track B | — |
+| feature-pascal-corpus-fgl | P | 55 | feature | Pascal corpus rung 2 — real FPC 3.2.2 `fgl.pp` (the reference RTL's generic-container unit) as a wired, oracle-checked corpus target. Landed 2026-08-25: fetcher, runner, 7 drivers, skip list. Baseline 3 pass / 4 known-fail. Replaces a check that had silently printed `SKIP (no fpcsrc)` on every box without a system FPC source tree. | — |
 | feature-pascal-corpus-fpcunit | P | 55 | feature | Pascal corpus: fpcunit — OOP + RTTI test framework (and the harness for the rest) | — |
 | feature-pascal-corpus-fpjson | P | 58 | feature | fpjson (fcl-json) — rung 2 of the Pascal OOP corpus | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
