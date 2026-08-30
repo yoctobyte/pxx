@@ -440,6 +440,40 @@ own testmgr step rebuilds as a side effect, so the first run after a sibling's
 commit fails and the re-run passes — which reads as flakiness. It cost two full
 gate runs on consecutive days before anyone saw the pattern.
 
+**THREE causes produce that one message, and the gate's hint can only help with
+one of them.** Measured 2026-08-30, twice in one evening by the same session:
+
+| cause | mtime tell? | is it a defect? |
+| --- | --- | --- |
+| a sibling landed a `compiler/` change and you did not rebuild | **yes** — binary older than the last `compiler/` commit | no |
+| a `git stash`/`checkout` round trip: you built a control binary, restored the sources, never rebuilt | **no** | no |
+| the binary is genuinely contaminated | **no** | **yes, and it is the only one that matters** |
+
+**The second has no tell, and the reason is worth understanding rather than
+memorising: the staleness is against your WORKING TREE, not against history.**
+The heuristic compares the binary's mtime to the last commit touching
+`compiler/` — and in a stash round trip no commit is involved at all, so there
+is nothing for it to compare. The gate has the right answer, states it plainly
+(*"the fixedpoint reached from PINNED differs from `compiler/pascal26`"*), and
+has no way to say which of the three you are in. **The reader does that
+discrimination, and cases two and three look identical.**
+
+**And the repair does not merely erase the evidence — it makes the evidence look
+like a LIE.** `gate.sh:104` says the gate must not rebuild before comparing, and
+then a later step rebuilds anyway. So the sequence you actually experience is:
+RED on a claim about the binary, then `sha256sum compiler/pascal26` showing that
+claim to be *false*, because the gate's own testmgr step repaired it in between.
+That reads as the gate lying to you, and it was one message away from being
+filed as a gate bug. **It is the same artifact as the loud stale seed:** a
+correct instrument, a plausible wrong story, and nothing that errors.
+
+The practical form, and it costs nothing: **after a fixedpoint RED, `make
+compiler/pascal26` and re-run BEFORE concluding anything** — not to fix it, but
+because you cannot tell cause two from cause three without eliminating cause
+two, and eliminating it is twelve seconds. If it goes green, you were stale. If
+it stays red with a freshly built binary, *now* you have the case the
+anti-Thompson check exists for.
+
 ## Match by SYMBOL, never by coordinate
 
 **No line/column field in a diagnostic is trustworthy.** Three independent cases
