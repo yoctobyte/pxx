@@ -1229,6 +1229,48 @@ The general form, which is what makes this more than one bad night:
 > harness, the file names — is part of the instrument, and any of it can quietly
 > answer a different question.**
 
+## A background job's reported exit code is the LAST command's, not the job's
+
+Measured 2026-08-30, six times into a night of the same class.
+
+I launch gates as:
+
+```sh
+tools/gate.sh quick > gateq8.log 2>&1; tail -12 gateq8.log
+```
+
+so that the log is visible when the job returns. The `;` makes **`tail`** the
+last command in the list, so the shell's exit status is `tail`'s — always 0 —
+and the completion notification read:
+
+> `Background command "Gate slice 2a" completed (exit code 0)`
+
+for a gate whose own last line was `gate: RED (exit 1)`.
+
+**A green light reporting on a red run, produced entirely by the shape of my own
+invocation.** Nothing was wrong with the gate, the log, or the notification —
+each reported correctly on what it was actually given. Had I trusted the
+notification instead of reading the log, I would have committed on a red gate
+and had a green summary line to point at.
+
+**The fix**, and prefer the first:
+
+```sh
+tools/gate.sh quick > gateq.log 2>&1              # exit code is the gate's
+tools/gate.sh quick > gateq.log 2>&1; rc=$?; tail -12 gateq.log; exit $rc
+```
+
+**The rule.** In a `;`-list the status belongs to the last command, and a
+convenience appended for readability is a command. Pipelines have the same shape
+(`cmd | tee log` reports `tee`); so does `cmd && echo done` in the other
+direction. **Anything appended after the thing you are measuring becomes the
+thing that reports.**
+
+This is the same family as the formatter section above and the stdout-capture
+one: the instrument was fine and the *plumbing around it* answered a different
+question. It belongs with them because the tell is identical — a result that
+looks clean, arrived at through a layer nobody was examining.
+
 ## `perf` being blocked is not "no profiler" — build the compiler with FPC and `-pg`
 
 `perf` is refused on plexus (`kernel.perf_event_paranoid = 4`) and cannot be
