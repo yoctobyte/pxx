@@ -11679,3 +11679,37 @@ The diagnostic is to name both questions out loud and check the answers match, r
 checking the predicate. Sibling of face 221a — delete the second implementation, do not sync it —
 approached from the other side: here there was only ever one implementation, and *that* was the
 problem.
+### 223d — the self-match trap survives changing the mechanism (frankB, 2026-08-30)
+
+Twice in five minutes, on a trap CLAUDE.md already documents by name.
+
+A background `--oracle-pas` run had died on a `UnicodeDecodeError`. I checked
+whether it was still alive with `pgrep -f "expect_audit.py --oracle-pas"`, which
+answered **yes** — because it matched **my own shell**, whose command line
+contained that exact string. So I wrote a different detector, scanning
+`/proc/*/cmdline` directly to avoid `pgrep`'s pattern behaviour. **It self-matched
+too**, for the same reason: my new command line also contained the pattern.
+
+The second implementation *felt* like a fix precisely because it was a different
+mechanism. It was the same question — *does a process matching this text
+exist?* — asked of a system that now included the asker. Changing `pgrep` for
+`/proc` changed nothing, and could not have: **any detector whose pattern
+appears in the command that runs it will find itself.**
+
+What settled it was not a better detector. It was the **log's own content** —
+the run had written a traceback, so the subject had emitted its own death.
+
+The general repair, which is 218's shape one level out:
+
+> **Ask the subject to emit something. Do not ask the system whether the subject
+> exists.**
+
+Same family as asserting on positive output the subject produces rather than on
+`$?` of whatever ran last: an existence query is answered by the environment,
+which contains you, while an emission is produced by the subject, which does
+not. A liveness check built on "is there a process like this" has the observer
+inside the population it is counting; one built on "has it written anything
+since" does not.
+
+Cost here was two wrong answers and a wrong diagnosis in the middle of fixing an
+unrelated crash. Cheap only because the log happened to exist.

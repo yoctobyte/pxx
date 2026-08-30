@@ -367,6 +367,13 @@ def oracle_pas(limit=None):
             res['timeout'] += 1; continue
         if p.returncode == 0:
             res['DERIVED (fpc reproduces it)'] += 1
+        elif not p.stdout.strip():
+            # FPC BUILT it but the binary produced nothing -- it crashed, or it
+            # needs a runtime this harness does not give it. That is not a
+            # disagreement, it is the absence of an answer, and counting it as a
+            # divergence overstates the candidate list. Found by hand-judging
+            # the candidates: several "differences" were empty FPC output.
+            res['no oracle: fpc built it but it produced no output'] += 1
         else:
             res['candidate: fpc differs (read it)'] += 1
             cand.append((name, ln))

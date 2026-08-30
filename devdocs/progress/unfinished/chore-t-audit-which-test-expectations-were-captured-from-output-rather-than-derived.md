@@ -370,3 +370,65 @@ instrument. Cap removed; it now prints every candidate.
 found.** The one disagreement anywhere is `test_nilpy_math_domain_errors`, which
 is a transcript of an *older CPython*, not of one of our bugs, and is labelled
 rather than fixed because the compat table defers error wording.
+
+
+## The 26 read — verdicts, and the claim bounded properly
+
+All 26 of the "needs reading" candidates were built with FPC and their
+divergences inspected. **None shows the signature of capture** — a value with no
+derivable justification. Every one has an identified reason:
+
+| candidate | why FPC differs | verdict |
+| --- | --- | --- |
+| `test_pascal_at_procvar_d26` | `@procvar` mode semantics — the test's subject | dialect |
+| `test_tsdefine_on26`, `test_tslock_on26` | pxx-only threadsafe defines; FPC sees `plain`/`no-hardlock` | pxx-only feature |
+| `test_widechar_utf8_b31926`, `test_vws26` | our WideChar→UTF-8 handling vs FPC's 1-byte Char | dialect |
+| `test_getinterface_guid_b25726` | `GetInterface` by GUID resolution | impl choice |
+| `test_interface_containers_ts26` | interface refcount lifetime in containers | impl choice |
+| `test_tcs26`, `test_syncobjs26` | our RTL's lock semantics — the test itself prints `BUG:` for the behaviour FPC shows | deliberate |
+| `test_var_litcat26`, `test_aoc_xunit26`, `test_aoc_types26` | variant/`array of const` marshalling | dialect |
+| `test_variant_catchable26` | *"cannot convert string to integer"* vs *"Invalid variant type cast"* | **error wording — deferred by the compat table** |
+| `test_sizeofexpr26` | SizeOf of an expression: width promotion | dialect |
+| `test_anontype26` | anonymous enum/subrange support | pxx extension |
+| `test_freebase_compact26` | free-through-base destructor sequence | impl choice |
+| `test_managed_setlength_growth26`, `test_mlrr26`, `test_freemem26` | our managed-memory accounting | our RTL |
+| `test_byref_lvalue26` | the byref lvalue *rule* — the test's subject | dialect rule |
+| `test_sow_default26` | `--strict-overload` widths — a pxx flag | pxx-only flag |
+| `test_trsat26` | float→int **saturation**, which we define and FPC does not | deliberate |
+| `test_dynlib_stub26` | expects the no-loader stub path on this host | host/config |
+| `test_thread_api_no_uses26`, `test_cast_deref_varparam26` | FPC binary produced **no output at all** | see below |
+| `test_sizeof26` | `SizeOf(Variant)` 16/24, `SizeOf(String)` 8/256 | dialect (worked example above) |
+
+### A limitation of my own instrument, found by reading rather than by running
+
+Three of the 26 were not divergences at all: **FPC built the binary and it
+produced nothing** — it crashed, or wanted a runtime this harness does not give
+it. The tool counted that as `differs`, which **overstates the candidate list**:
+an absent answer is not a disagreement. Fixed — those now report as
+`no oracle: fpc built it but it produced no output`.
+
+Worth noting how it was found. The oracle had already "worked" through two full
+runs; nothing errored, and the count was plausible. It took hand-reading the
+rows to see that some of the evidence was empty. **A plausible count is not
+evidence the classifier is measuring what its labels claim** — the same lesson
+as the C harness, arriving from the opposite direction: there the number was too
+large to be true, here it was small enough to be believed.
+
+### The negative result, stated with its aperture inside the sentence
+
+Not: *"no captured-and-wrong expectation exists."* The true claim is:
+
+> **No captured-and-wrong expectation exists among the rows an oracle could
+> reach — 342/353 NilPy, 333/333 native C, 784/1277 Pascal — and 424 Pascal rows
+> (380 FPC cannot build, 44 cross-target) plus 62 C rows have no oracle at all,
+> where such an expectation would be not merely unfound but unfindable by this
+> instrument.**
+
+The two readings are indistinguishable in any quotation of the shorter form, and
+the shorter form reads as conscientious, so nobody re-checks it. The aperture has
+a size and a work plan — the literal-overlap ranking already orders those 486
+rows — which is what makes it a bounded absence rather than an unbounded one.
+
+The single disagreement anywhere remains `test_nilpy_math_domain_errors`: a
+transcript of an *older CPython*, not of one of our bugs. A stale oracle rather
+than a defect, and fixing it would have been the error.
