@@ -223,3 +223,32 @@ shape. A pointer cannot go stale on a widening — only the authority can, and i
 is the code. The ticket's *"grep for the old scope string before you commit"* is
 still the right habit; not writing the list down six times is what makes the
 habit cheap.
+
+
+### A SEVENTH site, found by `docaudit.py targets` — `lexer.inc`, distance TWO LINES
+
+`compiler/lexer.inc` (grep: `the locked runtime` / `threadsafe` directive arm):
+
+> *"Same target gate as the --threadsafe CLI check: the locked runtime exists on
+> x86-64 (hand-emitted lock blobs) and i386 (Pascal softlock, see
+> PXX_TS_SOFTLOCK); the directive must not silently produce an unlocked
+> 'threadsafe' binary on other targets."*
+
+Two lines below it, the condition tests **four** targets, its error message says
+`x86-64/i386/aarch64/arm32`, and the *next* error message says
+`i386/aarch64/arm32`. So the comment is contradicted three times inside its own
+`if` block. By the table's distance metric it ties site 1 for worst.
+
+This ticket already cited `lexer.inc:1844` as *enforcing* the four and
+`lexer.inc:1012` for `PXX_TS_SOFTLOCK` — the file was read, and the stale comment
+two lines above the cited line was not seen. **A file can be cited as evidence
+for the correct answer and still contain the wrong one**, which is a sharper
+version of this ticket's own lesson than the six sites are.
+
+**NOT fixed — `lexer.inc` is shared between Track A and Track P and CLAUDE.md
+forbids concurrent edits; frankA is in the Pascal frontend right now.** Filed
+rather than touched, like `ir.inc`. It is comment-only, so whoever holds the
+file can take it in seconds.
+
+**Running total: seven false sites, six fixed, two open** (`ir.inc` — frankC;
+`lexer.inc` — A/P shared), plus the xtensa near-miss which is correct in effect.

@@ -728,7 +728,10 @@ end;
   PXX is its own linker, so it writes every .debug_* byte itself. Everything
   below builds the section content into the shared DbgBuf byte buffer (no file
   IO, no $ifdef — pure byte math) so both writeELF variants can append it with
-  their own primitives. x86-64 only for Tier 1. }
+  their own primitives. Tier 1 covers x86-64, aarch64, i386 and arm32 -- the set
+  DbgArchSupported names below; esp xtensa/riscv32 are excluded (windowed /
+  no-frame-pointer ABI, no gdb-over-qemu line path). Corrected 2026-08-30: read
+  "x86-64 only for Tier 1". }
 
 procedure DbgPutB(v: Integer);
 begin
@@ -1696,9 +1699,16 @@ begin
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := (bssBase - LOAD_ADDR) + BSSSize;
 
-  { DWARF -g: Tier 1 is x86-64 only. Build the .debug_* bytes, then place a
-    section-header table after them (the load image is unchanged — debug sections
-    live past p_filesz, unmapped). }
+  { DWARF -g. Build the .debug_* bytes, then place a section-header table after
+    them (the load image is unchanged — debug sections live past p_filesz,
+    unmapped).
+
+    Corrected 2026-08-30: this said "Tier 1 is x86-64 only", ONE LINE above a
+    condition that also tests aarch64, and Tier 1 in fact covers FOUR targets --
+    the 32-bit writer below (~line 1895) gates i386 and arm32 the same way.
+    Measured, not read: `-g` on all four emits 4 .debug sections. Reading only
+    the condition under this comment gives the answer "two", which is what makes
+    this worth a note rather than a silent edit. }
   doDebug := DebugInfo and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64));
   shoff := 0;
   if doDebug then

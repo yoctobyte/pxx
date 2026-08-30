@@ -968,8 +968,11 @@ begin
     end
     else if option = '-g' then
     begin
-      { DWARF Tier 1: emit .debug_line + a minimal CU stub (x86-64 only).
-        Off by default → self-host / bootstrap byte-identical path untouched. }
+      { DWARF Tier 1: emit .debug_line + a minimal CU stub, on x86-64, aarch64,
+        i386 and arm32 (esp xtensa/riscv32 excluded — see DbgArchSupported in
+        elfwriter.inc, whose comment is the correct statement of the set).
+        Off by default → self-host / bootstrap byte-identical path untouched.
+        Corrected 2026-08-30: said "x86-64 only". }
       DebugInfo := True;
       Inc(i);
     end
