@@ -10427,3 +10427,82 @@ suspect and labelled as one** — `(OptLevel >= 3) and (op = tkStar) and (IRKind
 IR_LOAD_SYM)` is exactly the shape of `h * 31`, with 6258/6431 in the same family. Not bisected,
 because frankA held the file and **a temporary diagnostic edit is still a concurrent edit**.
 Second time that line held tonight.
+
+---
+
+## 211 — CORRECT INFORMATION, WRONG REGISTER, NOTHING TO CATCH IT
+
+*(frankA, 2026-08-30, unifying two of its own misses from one session — and it is the better
+statement of both.)*
+
+Two failures, same shape:
+
+- It filed a Track U decision at **prio 40** and stated the block it creates in the umbrella's
+  **prose**, one line above a frontmatter block containing only `prio: 75`. Propagation reads
+  **frontmatter**. So the edge existed, was correct, and was invisible to the one thing that acts
+  on it — a U item gating a 75 sat at 40 in a queue only the owner drains.
+- It verified a push **by artefact**, exactly as its own rule says, then wrote the **pre-rebase**
+  sha into **prose**, where nothing checks it — and by then it had already propagated into a file
+  it did not write.
+
+> **I wrote the information in the register a human reads and not in the register the tool reads
+> — correct information, wrong register, nothing to catch it.**
+
+That is a sharper diagnosis than "was careless", and it is actionable in a way carelessness is
+not: **for every fact you record, ask which register acts on it.** A blocking relationship acts
+through `blocked-by`; a landed sha acts through `merge-base --is-ancestor`; a lock acts through
+the folder. Prose is where all three get *explained*, and explanation is not the register that
+fires. Neither miss was a knowledge failure — both times the author knew the true fact and put it
+somewhere true and inert.
+
+### 211a — an incidentally-fixed defect has nothing protecting it
+
+`bug-p-two-different-nested-specializations-of-one-template-collide` **does not reproduce**:
+`8` / `804`, matching FPC, on **two** binaries chosen so the answer could not depend on one tree
+— the HEAD self-hosted build *and* pin v394. The fix predates the session entirely.
+
+frankA did not just close it. **A defect fixed by accident has nothing guarding it**, and the next
+person into `ParseSpecialization`'s prerequisite scan has no way to know the shape was ever hard.
+Three rows, all verified against FPC:
+
+| row | value | pins |
+| --- | ---: | --- |
+| `TA.Get` | 8 | one nested specialization |
+| `TA.Both` | **804** | two different specializations of one inner template — the bug |
+| `TB.Both` | **401** | a second *outer* specialization |
+
+**The third row is the one that earns its place**, and the reasoning is the transferable part: a
+fix that bound the first outer specialization's arguments everywhere prints `804` twice, and
+**without that row the file passes.** A regression test is not "does the bug reproduce" — it is
+**does this file fail against the plausible wrong fix**, and only a row chosen against a specific
+wrong fix does that work.
+
+**And which commit fixed it was deliberately not named.** The ticket's diagnosis was flagged by
+its own author as a hypothesis from the error's shape, never measured — so naming a plausible
+fixing commit would **stack a second unmeasured claim on the first**, and the sha buys nothing the
+test does not.
+
+Small, and worth copying: frankA nearly justified the third row by saying the two values *"share
+no digits"*. They share **0 and 4**. It caught its own false justification and replaced it with
+the property that is actually true — a justification is a claim, and a decorative one in a test
+header is exactly what a later reader trusts.
+
+### 211b — a stale claim in a TEST HEADER is worse than in a ticket
+
+`test_generic_nested_specialize_in_method_body.pas` told the reader this shape *"still fails"* and
+named the ticket by slug. **True when written; false now.** Fourth instance in one day of the same
+failure — a claim parked in prose that nothing re-derives — and this one is the worst-placed:
+
+> A test header is read as **documentation of current behaviour** by whoever is about to change
+> that behaviour.
+
+A ticket is consulted when someone goes looking; a test header is read by the person already
+holding the file, at the moment they are deciding what is safe to touch. And it carries the
+authority of sitting next to executable code that passes.
+
+**Filing oddity recorded and deliberately not fixed:** the sibling Pascal generics test lives
+inside **`test-nilpy`'s** recipe (Makefile 368→3723), so frankA's new guard sits beside it — the
+guard is real and runs where its sibling runs. But *a Track P frontend regression test inside the
+NilPy suite* is the kind of thing that gets missed when someone reasons about which suite covers
+what. Left as a note at ≤ p15 rather than a change, because the change is larger than the
+finding — which is the right call and the right way to say so.
