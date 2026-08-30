@@ -5,7 +5,7 @@ prio: 45
 type: bug
 status: backlog
 owner:
-blocked-by: []
+blocked-by: [bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults]
 summary: "`L.List^[i]` on a TList is `\"List\": no such member on this record/class`. FPC's TList exposes its internal pointer array as `property List: PPointerList read FList` (PPointerList = ^TPointerList = ^array[0..N] of Pointer), the standard way real code iterates a TList without the per-element Get call. Missing in lib/rtl/classes.pas. NOT gated on anything -- it fails in a plain default build, 9 lines. fcl-xml's xmlutils.pp:760 uses it, so it is the current wall on rung 3 of feature-pascal-corpus-oop."
 ---
 
@@ -70,3 +70,38 @@ after [[bug-p-a-const-array-of-sets-is-rejected-as-too-many-elements]] and
 `AllocMem` (`3decbf0c4`, frankB). Reached there only under
 `PXX_WIDE_PAYLOAD` — because a wall at `xmlutils.pp:285` stops a default build
 first — but the defect itself is unconditional, as the repro above shows.
+
+
+---
+
+## 2026-08-30 (frankB) — the storage is fine; the IDIOM is broken. Blocked.
+
+frank-rust asked me to record it rather than reshape `TList` if the storage was
+not a flat pointer array. **The storage is fine** — measured:
+
+```
+Pointer(a) = 128703384258344      @a[0] = 128703384258344      delta @a[1]-@a[0] = 8
+```
+
+`FItems: array of Pointer` is a dynamic array whose handle **is** the address of
+element 0, with an 8-byte stride, which is exactly the layout `PPointerList`
+expects. So `property List: PPointerList read FItems` is implementable as a cast
+and needs no reshaping at all.
+
+**I have not added it, and that is the finding.** `p^[i]` where the element type
+is pointer-kind **segfaults in a plain default build** — filed as
+[[bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults]], with an
+FPC oracle and an element-type table (`Integer`/`Int64` work; `Pointer`/`PChar`/
+`PInteger` crash, read and write alike). It is not a `TList` problem and not a
+dynamic-array problem: a pointer to a *static* `array[0..3] of Pointer` fails the
+same way.
+
+So adding the property would produce something that **compiles and then crashes
+at the single idiom it exists for**. Today's `"List": no such member` is a
+compile-time error that names the problem; the property would move the failure to
+run time at the call site and make it look like the caller's bug. That trade is
+the wrong way round, and it is the same false-green shape this evening kept
+producing.
+
+Land the property **with or after** the Track A fix, in one change, gated by
+running `L.List^[i]` rather than building it.
