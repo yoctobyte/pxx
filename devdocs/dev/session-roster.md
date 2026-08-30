@@ -7558,7 +7558,7 @@ teaching: *"all walls cleared"* must not be allowed to read as *"rung ready"*.
 ## Two coordinator calls on frankA's asks — one filed already, one dispatched, neither escalated
 
 **(1) The Track B typinfo ask: DO NOT FILE. It exists.**
-`devdocs/progress/backlog/feature-typinfo-facade-unit.md`, prio 72, and its
+`feature-typinfo-facade-unit` (slug, not a path — it is in `done/` now; citing the folder is face 110, and it breaks exactly when the work succeeds), prio 72, and its
 frontmatter already carries `Blocks: feature-pascal-corpus-generics`. The chain
 frankA wanted to create is modelled. frankB has it queued next after the
 workaround-revert batch. Filing it again would have been the day's stale-claim
