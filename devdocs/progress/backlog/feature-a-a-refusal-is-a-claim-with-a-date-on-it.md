@@ -9193,3 +9193,136 @@ rel8 span moves and the landmine is not tripped — and the ~140 bytes exist onc
 **Who needs to know, beyond A:** Track O. O's entire campaign is *changing and growing
 emitters*, which is the exact act that arms this. A peephole that adds four bytes in the wrong
 place is indistinguishable, from the outside, from a miscompile.
+
+---
+
+## 195 — REPAIRING THE VISIBLE DEFECT RETIRES THE ONLY DETECTOR FOR THE INVISIBLE ONE
+
+*(pxx-a5, 2026-08-30, on `tools/progress_stale_edge_devtest.py`. Measured, not supposed — the
+control was run.)*
+
+The devtest was red for a **real, provable** reason: `65a63f0d2` rewrote `check()`'s aperture
+note from *"reads FRONTMATTER only"* to *"reads FRONTMATTER; STALE-PARK reads PROSE …"* and
+left the devtest asserting the old literal. Exact string present at `65a63f0d2~1`, absent at
+`65a63f0d2`. One-line repair.
+
+**Underneath it, a second defect, invisible:** `_board()` set `pg.PROG` to a throwaway tree,
+built the `Board`, and restored `PROG` in a `finally` **before `.check()` ran**. `Board()`
+captures tickets at construction — so every assertion on `self.by_status` read the fixture,
+while the `DUP-SLUG` / `NO-FRONTMATTER` / `NEAR-DUP` half of `check()`, which walks `PROG` on
+disk at call time, read the **live repo**.
+
+**Half the function under test saw the fixture and half saw master — invisible for exactly as
+long as master happens to be clean.** (It carries six near-duplicates right now.)
+
+**The two defects shared a single detector, and it belonged to the visible one only by
+coincidence.** The leak was caught by a dumped `out` in an assertion message — an accident.
+Repair the wording and the accident retires with it. pxx-a5 measured that rather than
+supposing it: leak reinstated, repaired assertion in place, **file reports OK**.
+
+> **A fix that makes a test pass can delete the only reason that test was ever going to fail
+> for a different cause.** Nothing about the repair looks wrong. It looks like tidying.
+
+And the sharpest detail: **the least deliberate line in the file was the load-bearing one.** A
+debug dump nobody designed as a check was the entire detection surface for a fixture leak.
+
+### 195a — the repair that is safe: assert the property directly and state-independently
+
+The new ninth guard does not restore the accident; it makes the property explicit, and both
+halves matter:
+
+- a **synthetic near-dup pair in the fixture IS reported** — so the negative cannot be
+  satisfied by a scan that reads nothing. That is *a control that has failed once*, which is
+  the only kind that counts.
+- on a clean fixture, **no finding names any file outside it** — which holds whether or not
+  master carries near-duplicates, i.e. the assertion no longer depends on the state of a tree
+  it does not own.
+
+Sibling defect found in the same pass, and it is 190a wearing a name badge: the guard called
+*"including on a clean board"* **had never once run against a clean board** — the fixture
+rendered no `BOARD*.md`, so every run produced three `NO-BOARD` findings. **A guard whose name
+asserts the coverage it lacks is worse than an absent one**, because the name is what stops
+anyone writing the missing guard.
+
+### 195b — a failure message can be true about a real thing and unrelated to the failure
+
+The red's message named a `NEAR-DUP` between two **genuine** backlog tickets that had nothing
+to do with the devtest — leaked in from the live repo. Extends 187a: a repro built from a
+failure message inherits that message's error, and here the message was **not wrong**. It was
+accurate, checkable, about real files, and pointed at work nobody needed to do. **A false lead
+that checks out is more expensive than one that does not**, because verifying it confirms it.
+
+---
+
+## 196 — EACH HALF IS FASTER AND THE WHOLE IS 83× SLOWER
+
+*(frank-optimize-b4, 2026-08-30, on `regression-test-threads-test-static-string-literals`,
+auto-filed by T as a timeout.)*
+
+```
+full test, aarch64 -O0:   1.193s
+full test, aarch64 -O3:  99.083s      <- 83x SLOWER at a HIGHER -O level
+```
+
+**Output is correct at both levels.** Nothing but a timeout could ever have fired — no wrong
+value, no crash, no diagnostic. The only instrument that noticed was a clock with a deadline
+on it, which is why this reached the board as a *tier* complaint rather than as a bug.
+
+And the bisect refuses to localise:
+
+| measured alone | −O0 | −O3 |
+|---|---:|---:|
+| the 200,000-iteration loop row | 1.111s | **0.295s** |
+| the other seven rows | 0.039s | **0.019s** |
+| all eight together | 1.193s | **99.083s** |
+
+**Every part is faster; the whole is 83× slower.** So it is an *interaction*, and the standard
+tool — remove things until it goes away — is structurally unable to find it, because removing
+either side removes the interaction. A halving search assumes the defect is *in* a half.
+
+This is the performance twin of 187: **a population that cannot contain the disagreement is
+not weak evidence, it is zero evidence** — and here each individually-faster row reads as
+*exonerating*, which is worse than uninformative. Two greens that jointly produce a red is a
+shape the whole toolkit is blind to.
+
+Recorded before the mechanism is known, deliberately, because the *measurement* is the durable
+part and the story is not; b4 has said it will report the mechanism and not just the fix.
+
+### 196a — b4 withdrew its own promotion recommendation on evidence from a different architecture
+
+b4 had reported the case for promoting this pass to `-O2` as strong. It was — **on x86-64**,
+where the same full test is 0.008s at `-O3`. The aarch64 measurement did not weaken that
+evidence; it revealed the evidence had a **scope nobody had written down**.
+
+> *"I said the case for promoting was strong. That was x86-64 evidence, and this is aarch64.
+> Treat the promotion as withdrawn until this is understood."*
+
+The failure mode this avoided is the expensive one: a recommendation whose supporting numbers
+were all real, all correctly measured, and silently about a **subset** of the population it
+was applied to. Compare the standing rule about surveys that do not name their own scope, and
+190's `-O`-level scope note — three arrivals at one idea from three directions. **A
+measurement carries its configuration or it carries nothing**: architecture, `-O` level,
+build flags, host.
+
+Note also which direction the correction ran. A worker retracting **its own** recommendation
+on evidence it went and found is the strongest correction available in this system, and it is
+the second time in one night (frankA killed its own defer-bodies recommendation with a
+59/28/13 decomposition). Both were *cheaper* than the alternative, because a wrong promotion
+lands in `-O2`, becomes the proven default, and is then measured by everyone as the baseline.
+
+### 196b — the near miss it produced, and the checklist item that follows
+
+Reading frankA's rel8 warning (194), b4 checked its own recent work and found it had come
+close twice: `EmitStaticLitHandle` grows an x86-64 emit site from a 2-instruction setup plus a
+call into a 10-byte `mov rax, imm64` plus a 4-byte `inc`, **at eight sites, several inside
+branchy argument-marshalling code with `Code[p] := Byte(…)` patches around them.**
+
+> *"It did not fire, but I did not check either — I checked the **semantics** of every site
+> and never the **span**."*
+
+That is the whole hazard in one sentence, and it is not carelessness: **span is not a property
+anyone reviews, because it is not a property of the code being changed.** It is a property of
+the *distance between two other things*, and it changes when you are not looking at either.
+Checklist item for any emitter growth, now stated once so it is not re-derived: **when an
+emitter grows, ask what rel8 patches span it** — and the tell if it has already fired is `rip`
+(or `pc`) at a **mid-instruction address**, which cannot arise from linear execution.
