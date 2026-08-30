@@ -12580,7 +12580,12 @@ end;
   call sites it can re-patch; ApplyCallFixups then rewrites displacements that
   were already correct, which costs a pass over an array and changes no byte.
   feature-emission-size-dce }
-procedure RecordInternalCall(procIdx: Integer);
+procedure RecordInternalCallAt(procIdx, pos, anchor: Integer);
+{ `pos` is what ApplyCallFixups patches and `anchor` says how to read it: -1 for
+  the ordinary three-byte CALLn slot, otherwise the anchor PC of a reserved LONG
+  call whose 32-bit .text-offset literal lives at `pos`. One recorder for both
+  shapes on purpose -- the alternative is a second fixup list that DceRun and
+  every future consumer would have to learn about separately. }
 var n: Integer;
 begin
   if CallFixCount >= CallFixCapacity then
@@ -12588,13 +12593,20 @@ begin
     if CallFixCapacity = 0 then n := CALLFIX_BASE else n := CallFixCapacity * 2;
     SetLength(CallFix, n);
     SetLength(CallFixTarget, n);
+    SetLength(CallFixAnchor, n);
     CallFixCapacity := n;
   end;
-  CallFix[CallFixCount].CodePos := CodeLen;
+  CallFix[CallFixCount].CodePos := pos;
   CallFix[CallFixCount].ProcIdx := procIdx;
   { snapshot the body this site is being aimed at — see CallFixTarget }
   CallFixTarget[CallFixCount] := Procs[procIdx].BodyAddr;
+  CallFixAnchor[CallFixCount] := anchor;
   Inc(CallFixCount);
+end;
+
+procedure RecordInternalCall(procIdx: Integer);
+begin
+  RecordInternalCallAt(procIdx, CodeLen, -1);
 end;
 
 function DivZeroCheckProc: Integer;
@@ -12677,8 +12689,12 @@ end;
   unchanged. A register that is free "almost everywhere" is exactly the bug this
   form of call is most likely to have, so it is worth proving rather than
   arguing. }
-procedure EmitXtensaLongCall(target: Integer);
-var anchorPc, anchorTgt, rTgt, rTmp: Integer;
+procedure EmitXtensaLongCallSlot(var litPos, anchorPc: Integer);
+{ The long call with its .text-offset delta left at zero, reporting the
+  literal's position and the anchor PC the delta is measured from -- the same
+  split as EmitXtensaLongJumpSlot, and for the same caller: a FORWARD reference,
+  which reserves the slot before the target exists. }
+var anchorTgt, rTgt, rTmp: Integer;
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
@@ -12700,13 +12716,21 @@ begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
     xtensa_mov(reg_xtensa_a0, rTmp);             { restore it }
   XtensaEmitLitHeader;
-  EmitI32(target - anchorPc);                    { pure .text-offset delta }
+  litPos := CodeLen;
+  EmitI32(0);                                    { pure .text-offset delta }
   xtensa_l32r(rTmp, $FFFF);
   xtensa_add(rTgt, rTgt, rTmp);
   if XtensaABI = XTENSA_ABI_WINDOWED then
     xtensa_callx8(rTgt)
   else
     xtensa_callx0(rTgt);
+end;
+
+procedure EmitXtensaLongCall(target: Integer);
+var litPos, anchorPc: Integer;
+begin
+  EmitXtensaLongCallSlot(litPos, anchorPc);
+  Patch32(litPos, target - anchorPc);
 end;
 
 { --- riscv32: reaching an already-emitted RUNTIME HELPER -------------------
@@ -12871,7 +12895,7 @@ begin
 end;
 
 procedure EmitCallProc(procIdx: Integer);
-var extIdx, rvHi, rvLo: Integer;
+var extIdx, rvHi, rvLo, litPos, anchorPc: Integer;
 begin
   if ProcExternal[procIdx] then
   begin
@@ -13019,6 +13043,16 @@ begin
       EmitXtensaLongCall(Procs[procIdx].BodyAddr);
       Exit;
     end;
+    if (Procs[procIdx].BodyAddr < 0) and XtensaLongCalls then
+    begin
+      { --xtensa-long-calls: reserve the long form so ApplyCallFixups has
+        somewhere to put a displacement CALLn cannot hold. The site goes in the
+        SAME fixup list as every other call, distinguished by its anchor, so
+        nothing downstream needs a second list to walk. }
+      EmitXtensaLongCallSlot(litPos, anchorPc);
+      RecordInternalCallAt(procIdx, litPos, anchorPc);
+      Exit;
+    end;
     RecordInternalCall(procIdx);
     if Procs[procIdx].BodyAddr >= 0 then
     begin
@@ -13028,14 +13062,11 @@ begin
         xtensa_call0(Procs[procIdx].BodyAddr - CodeLen);
     end
     else
-      { A FORWARD call still reserves three bytes, so a forward reference more
-        than 512 KiB ahead remains the honest compile error -- the long form
-        cannot be chosen here, because the target address that decides it does
-        not exist yet. Every failure this ticket reported was BACKWARD (all five
-        displacements negative), so this is a strictly narrower hole than the
-        one being closed, and it fails loudly rather than silently. Closing it
-        too means reserving ~20 bytes at every forward call site in every xtensa
-        program, a real cost paid by programs that do not need it. }
+      { A FORWARD call cannot choose its own form: the target address that would
+        decide it does not exist yet. Three bytes is the right default because
+        the wide slot is a real cost paid by every program including the ones
+        that fit -- and every xtensa program today fits. Past 512 KiB it is the
+        honest compile error, which now names the flag that answers it. }
       xtensa_nop;           { 3 bytes, same as CALLn -- see the note above }
     Exit;
   end;
@@ -13094,13 +13125,22 @@ begin
         encoder message ("displacement N is outside the encodable range") says
         nothing about WHICH call or that the direction is what makes it
         unfixable. bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code }
+      if CallFixAnchor[i] <> -1 then
+      begin
+        { a reserved long call: the whole displacement lives in the literal }
+        Patch32(CallFix[i].CodePos, tgt - CallFixAnchor[i]);
+        Continue;
+      end;
       if not XtensaCallReaches(CallFix[i].CodePos, tgt) then
         Error('target xtensa: the forward call to ' + Procs[procIdx].Name +
               ' at code offset ' + AIntToStr(CallFix[i].CodePos) +
               ' cannot reach its body at ' + AIntToStr(tgt) +
               ' (CALL0/CALL8 reach +-512 KiB). A BACKWARD call this far is '
               + 'widened automatically; a forward one cannot be, because the '
-              + 'call site was sized before the body existed');
+              + 'call site was sized before the body existed. Rebuild with '
+              + '--xtensa-long-calls, which reserves the long form at every '
+              + 'forward call site (bigger and slower, and the only thing that '
+              + 'builds an image this large today)');
       if XtensaABI = XTENSA_ABI_WINDOWED then
         Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, tgt))
       else

@@ -2453,6 +2453,12 @@ var
     test/cstatic_same_module_dup.c went from "2 11" to "11 11" the moment
     already-resolved calls started being recorded here for DCE's sake. }
   CallFixTarget : array of Integer;
+  { …and HOW WIDE the site's reserved slot is. Parallel to CallFix for the same
+    reason CallFixTarget is. -1 is the ordinary three-byte slot and CodePos
+    points at the CALLn to patch; anything else is a reserved LONG call under
+    --xtensa-long-calls, CodePos points at its 32-bit .text-offset literal, and
+    the patch is Patch32(CodePos, target - anchor). Only xtensa ever sets it. }
+  CallFixAnchor : array of Integer;
   CallFixCount : Integer;
   CallFixCapacity : Integer;
 
@@ -3658,6 +3664,11 @@ var
     produced with it set must name the flag.
     feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
   XtensaSoftMulHigh : Boolean;
+  { --xtensa-long-calls: reserve the ~20-byte long form at every FORWARD
+    internal call instead of a three-byte CALLn. Off by default and the default
+    path is byte-identical, because the cost is paid by every program including
+    the ones that fit. See bug-a-xtensa-cannot-widen-a-forward-call-... }
+  XtensaLongCalls : Boolean;
   { Xtensa single-precision hardware FPU. Default False = single-width float ops
     go through the soft kernels (correct on EVERY xtensa part, incl ESP32-S2
     which has NO FPU). True (via --xtensa-fpu) lowers single +,-,* to the

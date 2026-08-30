@@ -14931,7 +14931,35 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/xt_fwdjump-hello-unrelaxed "$$(PXXDBG=a.xtrelax:'*' ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/hello.pas $(TESTTMP)/xt_fwdjump_hello 2>&1 | grep -c 'a.xtrelax:')" "0"
 	tools/expect_same.sh xtensa/xt_fwdjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fwdjump)" "$$($(TESTTMP)/xt_fwdjump_x64)"
 	tools/expect_same.sh xtensa-windowed/xt_fwdjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fwdjump_w)" "$$($(TESTTMP)/xt_fwdjump_x64)"
-	@echo "hosted xtensa: 109 programs Call0 + 7 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
+	# A FORWARD CALL PAST CALL0'S +-512 KiB -- the wall one level up from the two
+	# jump rows above, and the one that stopped `pascal26 --target=xtensa
+	# compiler/compiler.pas`. It cannot be fixed the way the jumps were: a jump's
+	# fixups are per-BODY, so re-emitting one body is bounded, while calls are
+	# patched by ApplyCallFixups at WHOLE-PROGRAM level and the retry would be
+	# "emit the image again". --xtensa-long-calls reserves the long form at every
+	# forward call site instead; it is opt-in because the cost is paid by every
+	# program, and the default path is byte-identical without it.
+	# bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build
+	@awk 'BEGIN{print "program bigcall;"; print "var n, s: Integer;"; \
+	  print "begin"; print "  n := 0; s := 0;"; \
+	  for(k=0;k<5000;k++) print "  s := s + 1;"; \
+	  print "  Writeln(\"s=\", s);"; print "end."}' \
+	  | tr '"' "'" > $(TESTTMP)/xt_bigcall.pas
+	# THE POSITIVE CONTROL, and it asserts the REMEDY as well as the refusal: a
+	# wall nobody can find the flag for is barely better than a wall. If this
+	# ever builds clean the row fails here rather than silently testing a
+	# program that no longer crosses the bound.
+	@out=$$(./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall 2>&1 || true); \
+	  case "$$out" in \
+	    *--xtensa-long-calls*) ;; \
+	    *) echo "xt_bigcall: expected a forward-call refusal naming --xtensa-long-calls, got:"; echo "$$out"; exit 1;; \
+	  esac
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall_w
+	./$(COMPILER) $(TESTTMP)/xt_bigcall.pas $(TESTTMP)/xt_bigcall_x64
+	tools/expect_same.sh xtensa/xt_bigcall "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_bigcall)" "$$($(TESTTMP)/xt_bigcall_x64)"
+	tools/expect_same.sh xtensa-windowed/xt_bigcall "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_bigcall_w)" "$$($(TESTTMP)/xt_bigcall_x64)"
+	@echo "hosted xtensa: 110 programs Call0 + 8 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

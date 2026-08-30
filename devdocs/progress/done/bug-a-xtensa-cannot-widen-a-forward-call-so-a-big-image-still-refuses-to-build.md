@@ -4,11 +4,12 @@ track: A+S
 prio: 55
 type: bug
 blocked-by: []
-status: backlog
+resolved: PENDING-COMMIT
+status: working
 found: 2026-08-30
 found-by: frankS
-owner: unassigned
-summary: "The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. RE-RANKED 40 -> 55 on 2026-08-31: with the forward JUMP wall closed (bug-a-xtensa-cannot-widen-a-forward-jump-...) this is now the SINGLE remaining wall between xtensa and building the compiler. Measured at that commit: `pascal26 --target=xtensa compiler/compiler.pas` gets past every jump and stops here -- forward call to __pxx_run_finalizers at 144958, body at 24419736."
+owner: frankA
+summary: "CLOSED by --xtensa-long-calls (option 2 of this ticket): the flag reserves the ~20-byte long form at every FORWARD internal call, so a callee past CALL0's 512 KiB is reachable. THE RESULT THAT MATTERS: `pascal26 --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls compiler/compiler.pas` now BUILDS -- 24.4 MB, 3842 procs -- and that binary RUNS under qemu-xtensa and compiles test/hello.pas into a working program. Six of six cross targets now build the compiler. Off by default and the default path is proven byte-identical over 13 outputs on both ABIs. Option 1 (relaxation) stays OPEN as the right default and is re-filed as feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image; the per-body relaxation that closed the JUMP wall does NOT transfer, and the body of this ticket says why."
 ---
 
 # A forward xtensa call over 512 KiB still cannot be built
@@ -139,3 +140,77 @@ A **veneer pool** is more attractive here than it was for jumps: `CALL0` reaches
 body — rather than at the image tail — is within reach of the call site in a way
 the jump case could not manage. Not analysed further; noted so the next person
 does not re-reject it on the jump ticket's reasoning, which does not transfer.
+
+## Closed — `--xtensa-long-calls`, 2026-08-31 by frankA
+
+**The goal, measured, and it is the whole point of the ticket:**
+
+```
+$ pascal26 --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+    --xtensa-long-calls compiler/compiler.pas /tmp/pxx_xt
+ok: /tmp/pxx_xt  [code=24465260B  data=463248B  bss=99157812B  procs=3842]
+
+$ qemu-xtensa /tmp/pxx_xt --version
+pxx (pascal26) — self-hosting Pascal-dialect compiler ...
+
+$ qemu-xtensa /tmp/pxx_xt test/hello.pas /tmp/hello_by_xt
+ok: /tmp/hello_by_xt  [code=61208B  data=2760B  bss=42452B  procs=129]
+$ /tmp/hello_by_xt
+Hello, World!
+```
+
+Not just "the image links": the xtensa-built compiler runs and compiles a
+program that runs. **Claims discipline:** this is a cross build of the compiler
+for xtensa, run under emulation. It is NOT an xtensa self-host fixedpoint and
+nothing here claims one.
+
+## Why option 1 (relaxation) was NOT used, and why the jump fix does not transfer
+
+The forward JUMP wall was closed the same night by relaxation
+([[bug-a-xtensa-cannot-widen-a-forward-jump-so-the-compiler-still-will-not-build]]):
+emit the body, mark the labels whose three-byte slot did not reach, emit the
+body again. **That works because a jump's fixups are per-BODY.** Re-emitting one
+body is bounded, and the state it has to restore is a short enumerable list of
+append-with-count arrays.
+
+**A call's fixups are whole-PROGRAM.** `ApplyCallFixups` runs once, after every
+body exists, so the analogous retry is *emit the image again* — and in this
+compiler codegen is driven by the parser, so that is a second parse, not a
+second walk. Different cost, different state surface, different design.
+
+The note this ticket previously carried — that a veneer pool is more attractive
+here than for jumps because CALL0 reaches four times further — still stands and
+is untried.
+
+## What the flag does
+
+`EmitCallProc`'s forward arm reserves `EmitXtensaLongCallSlot` (the existing
+long call, split at the point where it knew its target — same split as the jump
+fix) and records the site in **the same `CallFix` list as every other call**,
+distinguished by a new parallel `CallFixAnchor`: -1 is the ordinary three-byte
+CALLn, anything else is the anchor PC of a long form whose literal is at
+`CodePos`. `ApplyCallFixups` patches one or the other. One list, so `DceRun` and
+any future consumer do not have to learn about a second.
+
+The refusal now **names the flag**. A wall nobody can find the remedy for is
+barely better than a wall, and the test row asserts the message names it.
+
+## Gate, including the one this ticket asked for
+
+- **Default path byte-identical**: 13 xtensa outputs (6 programs x both ABIs,
+  plus a generated one) diffed between a control build with the change reverted
+  and a build with it applied. Identical. The comparison was shown to be able to
+  fail: the same `hello` with the flag ON is 223920 -> 228016 bytes.
+- `make compiler/pascal26` converged 1 round; `tools/gate.sh quick` GREEN.
+- The 13 xtensa jobs frankS's tstate report listed as red under the `a8`
+  regression (`cce4a1ffb`) re-run here: 12 PASS. The 13th, `test_rtti`, prints
+  raw pointer values and a 32-bit `InstanceSize`, so it cannot match an x86-64
+  oracle and does not on `pinned` either — not a differential test, and not a
+  row in `test-xtensa`.
+- New `test-xtensa` row, both ABIs, with the refusal-names-the-flag control.
+
+## Follow-up
+
+`feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` — option 1,
+filed rather than left implicit, because a flag the user must know about is a
+worse default than a compiler that widens what it must.

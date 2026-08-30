@@ -870,6 +870,7 @@ begin
   XtensaABI := XTENSA_ABI_CALL0;
   XtensaSoftDivide := False;
   XtensaSoftMulHigh := False;
+  XtensaLongCalls := False;
   XtensaHasFpu := False;
   XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;
@@ -1170,6 +1171,17 @@ begin
         capability, not a part: the emulator is the only thing it is true of.
         A verdict produced under it must name it. }
       XtensaSoftMulHigh := True;
+      Inc(i);
+    end
+    else if option = '--xtensa-long-calls' then
+    begin
+      { Reserve the ~20-byte long form at every FORWARD internal call, so a
+        callee more than 512 KiB ahead is reachable. OFF by default and the
+        default path stays byte-identical: the cost is paid by every program,
+        and every xtensa program that is not the compiler itself fits inside
+        CALL0's range. This is the answer the forward-call error names.
+        bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build }
+      XtensaLongCalls := True;
       Inc(i);
     end
     else if option = '--xtensa-fpu' then
