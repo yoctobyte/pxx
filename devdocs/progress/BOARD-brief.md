@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:4 unfinished:26 blocked:8 backlog:359 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2742 rejected:56`
+`urgent:1 working:3 unfinished:27 blocked:8 backlog:359 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2742 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
-- `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — owner: frankB
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
@@ -18,7 +17,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever` [N]
 
-## unfinished (26) — parked mid-flight; re-claim, do not duplicate
+## unfinished (27) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -29,6 +28,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument` [P] — blocked-by: bug-p-a-qualified-type-name-cannot-be-a-generic-argument
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
+- `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — blocked-by: bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-dynamic-compiler-tables` [A]
@@ -60,9 +60,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 381, ranked
 
-- `[p 65] [N]` bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
+- `[p 65] [N]` bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever (unblocks 1)
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
+- `[p 70] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 70] [A]` bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code (unblocks 1)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [A]` bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp
@@ -89,6 +90,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
-- `[p 62] [N]` feature-nilpy-enum-class
 
 _351 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

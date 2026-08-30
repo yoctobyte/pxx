@@ -10,16 +10,15 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever | N | 65 | bug | 9-line repro: a class defining the same method twice, whose body assigns a parameter to a SAME-NAMED attribute (`self.prefix = prefix`), plus any later scope holding a local of that name, makes the compiler spin at 100% CPU forever. RSS is flat, so it never OOMs and never self-terminates — it hangs until killed. CPython accepts the source (last definition wins). Any lane running a lib gate over such a file hangs with no output. | — |
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
-| feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 20 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 
-## unfinished (26)
+## unfinished (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -32,6 +31,7 @@ lives in git, not in a timestamp._
 | bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument | P | 65 | bug | `TEnum<TPair>` where TPair is a type nested INSIDE the enclosing template is minted eagerly as `TEnum$TPair`, giving `unknown type: TPair` at TEnum's own line. Same shape as bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type, which is fixed — that one catches PARAMETER names via a token-level scan, and a nested type name is not a parameter, so it slips through. 23-line repro, FPC prints 4. This is the current stop for `uses Generics.Collections` (generics.collections.pas:120, TEnumerator<TDictionaryPair>). Two mechanisms for one concept: read the whitelist analysis below before adding a third. | bug-p-a-qualified-type-name-cannot-be-a-generic-argument |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
+| feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 20 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever |
 | feature-c-gtk3-header-final-wiring | C | 55 | feature | Stock GTK3 headers import, link to libgtk-3.so.0 and run a real window — done and gated by test_c_gtk3_stock. The 2026-06-29 probe failure was a wrong include root, not an importer limit. Parked: dropping the explicit -I needs decide-which-gtk-a-bare-gtk-gtk-h-means, and the PCL migration is a Track B ticket. | decide-which-gtk-a-bare-gtk-gtk-h-means |
 | feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
@@ -221,7 +221,7 @@ lives in git, not in a timestamp._
 | decide-does-nilpy-random-seed-itself-at-import | U | 60 | decide | CPython's `random` seeds from entropy at import; NilPy's starts from a fixed constant, deliberately, so a failing run reproduces. That is a real trade-off and it collides with the upward-compatibility rule. Recommendation: seed by default, keep determinism behind an explicit opt-in. | — |
 | decide-does-the-legacy-gtk-alias-still-point-at-gtk-2 | U | 50 | decide | `uses gtk` maps to stem gtk-x11-2.0 (GTK 2) while everything else in the tree targets GTK 3 — lib/pcl/gtk3.pas, gtk3widgets.pas and gtk3gl.pas all bind libgtk-3.so.0, and `uses gtk3_c` maps to stem gtk-3. The four test_c_gtk*.pas tests use the legacy alias, so a box must install GTK 2 to make them green. Fork: retarget the alias, rename the tests, or keep GTK 2 deliberately. | — |
 | decide-does-track-r-work-on-master-like-every-other-lane | U | 60 | decide | Collapses two tickets that asked one question, both priced off a divergence that has moved. origin/rust is 136 ahead of master and master is 418 ahead -- but git cherry reports 122 of the 136 already have patch-equivalents on master, and 14 is an upper bound (two spot-checks of the 14 are demonstrably present). So the fork is not 'what do we do with 136 stranded commits'; it is 'does Track R work on master, and do we merge or drop at most 14 mostly-paperwork commits'. Prior recommendation, unchanged: retire the branch. | — |
-| decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal | U | 40→60 | decide | 24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrinsics (tkSysOpen 15, tkSyswrite 6, tkArgStr 3), and they collapse to ONE blocked primitive: opening a file under WASI. That needs preopen resolution, rights computation and errno mapping, which exist once in lib/rtl/platform/wasi/platform_backend.pas -- a unit compiler.pas deliberately does not link, because the compiler bootstraps on intrinsics to avoid an RTL dependency. Three ways out, each with a real cost: duplicate the capability model into builtinheap.pas, link the PAL into the compiler, or factor the WASI helpers into a shared include. The choice spans Track A and Track B files, so it is not the wasm lane's to make. | — |
+| decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal | U | 70 | decide | 24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrinsics (tkSysOpen 15, tkSyswrite 6, tkArgStr 3), and they collapse to ONE blocked primitive: opening a file under WASI. That needs preopen resolution, rights computation and errno mapping, which exist once in lib/rtl/platform/wasi/platform_backend.pas -- a unit compiler.pas deliberately does not link, because the compiler bootstraps on intrinsics to avoid an RTL dependency. Three ways out, each with a real cost: duplicate the capability model into builtinheap.pas, link the PAL into the compiler, or factor the WASI helpers into a shared include. The choice spans Track A and Track B files, so it is not the wasm lane's to make. | — |
 | decide-install-qemu-system-and-a-freebsd-image-on-plexus | U | 55 | decide | The FreeBSD port needs a bootable FreeBSD kernel and plexus has none — qemu-user is installed, qemu-system is not, and no VM image exists anywhere on the box. Installing a system emulator and fetching a multi-GB OS image is a change to the owner's workstation, so it is the owner's call. One-line answer unblocks feature-t-freebsd-image-and-runner and, behind it, feature-port-freebsd-native. | — |
 | decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check | U | 30 | decide | decide-nilpy-import-rule-vs-a-cpyext-extension-module ratified `PyInit_<name>` as the extension-module criterion; the implementation substituted 'the unit binds the cpyext runtime' after measuring that PyInit_<name> holds for only 3 of the 6 real units, and flagged the deviation for the owner to overrule. Nobody overruled it either way, and it is now shipped, pinned in v391, and — as of this ticket — documented on the public website. Ratify the substitution or order it changed. | — |
 | decide-is-real-a-double-or-fpcs-80-bit-extended | U | 30 | decide | `writeln(3.14159)` prints ` 3.1415899999999999E+000` in pxx and ` 3.14158999999999999993E+0000` in FPC, because pxx's Real is a 64-bit Double and FPC's is the x87 80-bit Extended. Making them agree means implementing an 80-bit float type; keeping them apart means declaring the difference permanent. Both are defensible and neither is a bug. | — |
@@ -742,9 +742,10 @@ lives in git, not in a timestamp._
 
 ## Ready (no unmet blocker)
 
-- [urgent p 65] [N] bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
+- [urgent p 65] [N] bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever (unblocks 1)
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
+- [p 70] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - [p 70] [A] bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code (unblocks 1)
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [A] bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp
@@ -773,7 +774,6 @@ lives in git, not in a timestamp._
 - [p 62] [A] feature-a-typeref-migrate-consumers
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
 - [p 62] [A] feature-unicodestring-model
-- [p 60] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [A+S] bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
@@ -1132,6 +1132,7 @@ lives in git, not in a timestamp._
 - **1** — bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
 - **1** — bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
+- **1** — bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-p-a-qualified-type-name-cannot-be-a-generic-argument
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees

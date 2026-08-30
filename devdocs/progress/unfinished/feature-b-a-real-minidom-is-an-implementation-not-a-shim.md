@@ -2,9 +2,9 @@
 track: B
 prio: 20
 type: feature
-blocked-by: []
+blocked-by: [bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever]
 summary: "Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims."
-status: working
+status: unfinished
 owner: frankB
 ---
 
@@ -147,3 +147,45 @@ if `proxy` ever becomes a real weak reference.
 The surface list above omits `createAttribute`, which `dom.py` calls. Measured
 off the file rather than copied forward. Minor, but the list is what the next
 piece is sized against.
+
+
+## 2026-08-30 — PARKED. The implementation is written; the compiler cannot build it.
+
+**State: done except for landing.** The DOM is complete (452 lines: `Document`,
+`Element`, `Attr`, `Text`, `Comment`, `DocumentFragment`, `DocumentType`,
+`NamedNodeMap`, `DOMImplementation`, the exception types, namespace-aware
+create/set, deep and shallow `cloneNode`, `normalize`). Its CPython differential
+is written, banked and **passing against the real `xml.dom.minidom`** —
+`test/lib_mimic_xml_dom_minidom.npy`, 34 checks over tree structure, attribute
+storage, text/comment nodes, namespace splitting and cloning.
+
+**Why it is not in `lib/rtl`:** putting it there hangs the compiler forever —
+100% CPU, flat RSS, no output, no exit. Filed as
+[[bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever]]
+with a 9-line repro. Any lane running `make lib-test` with this file present
+would hang and read it as a slow box, so the file stays out until that closes.
+
+The source is parked in-tree at `lib/rtl/mimic_xml_dom_minidom.py.parked` — the
+suffix is deliberate, since only `*.pas` and `*.py` are picked up by the build.
+It is **not** reshaped to dodge the hang: renaming the one local variable that
+triggers it would build today and hide the bug, which the platonic-code rule
+forbids. `blocked-by` now names the hang so the ranker will not dispatch this.
+
+**To finish, once the hang is fixed:** rename `.parked` to `.py`, add the two
+Makefile lines below after the `lib_mimic_weakref.2` entry, and run the
+differential — no code changes are expected, because the test already passes
+against CPython and the module is written to that same contract.
+
+```make
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_dom_minidom.npy $(TESTTMP)/lib_mimic_xml_dom_minidom
+	tools/expect_same.sh lib_mimic_xml_dom_minidom.1 "$($(TESTTMP)/lib_mimic_xml_dom_minidom | grep -c '=ok')" "34"
+	tools/expect_same.sh lib_mimic_xml_dom_minidom.2 "$($(TESTTMP)/lib_mimic_xml_dom_minidom | tail -1)" "MIMIC-MINIDOM OK"
+```
+
+One finding fell out of the import work and is filed separately:
+[[bug-n-from-package-import-submodule-binds-the-parent-package]] — `from xml.dom
+import minidom` binds the parent package, so the differential uses `from
+xml.dom.minidom import ...`, which resolves correctly under both interpreters.
+
+Moved from `working/` to `unfinished/`: `working/` is a live lock, and this
+cannot proceed from any lane until the compiler stops hanging.
