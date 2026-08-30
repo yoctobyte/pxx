@@ -105,4 +105,4 @@ class as the xtensa messages fixed earlier tonight
 Not fixed here — chasing it would widen an A-file grant scoped to one arm.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit df690b519.
