@@ -2,9 +2,10 @@
 track: A+S
 type: feature
 prio: 50
-status: open
+status: working
 found: 2026-08-30
 found-by: frankS
+owner: frankS
 ---
 
 # Xtensa implements 31 IR ops; riscv32 implements 45 and aarch64 53
