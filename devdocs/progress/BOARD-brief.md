@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:32 blocked:9 backlog:390 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2896 rejected:68`
+`working:4 unfinished:32 blocked:9 backlog:390 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2897 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-no-cross-target-can-build-the-compiler-itself` [A] — owner: frankS
-- `bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi` [A+S] — owner: frankA
 - `feature-c-corpus-busybox-applet` [C] — owner: frankC
 - `feature-pascal-corpus-expansion` [P] — owner: frankwasm
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
