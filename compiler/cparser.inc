@@ -48,6 +48,12 @@ end;
 
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
+{ The braced-list loop condition, called from the first such loop ~3200 lines
+  above its body. pxx resolves across the whole unit; FPC resolves in source
+  order, and this file's own body sits after the first caller
+  (bug-a-fpc-seed-drift-emitasmx64-forward, and lexer.inc's CModuleOfTok the
+  same night). }
+function CBlockContinues: Boolean; forward;
 function ParseCStmtExprAST: Integer; forward;
 procedure SkipBraceBlock; forward;
 procedure ParseCSubroutine; forward;
