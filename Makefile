@@ -10987,11 +10987,12 @@ test-core: $(COMPILER)
 	# each by a different mechanism -- see the file's header. The cross rows are
 	# `make test-c-abi-cross`, deliberately NOT wired into this target while they
 	# are red.
-	# The pure-C control beside it is the half that is green on all five TODAY and
-	# must stay green: fixing the Pascal-caller path is only correct if the C-mode
-	# call sites move with the prologue, and changing the prologue alone was
-	# MEASURED to take the control from clean to wrong-on-aarch64,
-	# compile-fail-on-arm32 and segfault-on-i386.
+	# The pure-C control beside it is the regression half: the same functions
+	# called from C, wired on x86-64 ONLY because `flt` is already broken on
+	# arm32, riscv32 and i386 before any of this work (riscv32 is the tell -- the
+	# convention work does not touch it). Measured paired, both halves applied,
+	# it goes from clean to a flt failure on aarch64 and to a COMPILE failure on
+	# arm32 and i386: the shared arm cannot yet do the job it would be given.
 	# bug-c-a-c-function-s-calling-convention-depends-on-the-target
 	./$(COMPILER) -Futest test/test_c_abi_pascal_caller.pas $(TESTTMP)/test_c_abi_pascal_caller26
 	tools/expect_same.sh test_c_abi_pascal_caller26 "$$($(TESTTMP)/test_c_abi_pascal_caller26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"

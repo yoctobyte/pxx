@@ -2,9 +2,9 @@
 track: A+C
 prio: 65
 type: bug
-status: new
-blocked-by: []
-owner: ""
+status: blocked
+blocked-by: [bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given]
+owner: frankC
 summary: "On x86-64 a C function uses the C ABI (SysV); on aarch64 and arm32 it uses pxx's INTERNAL positional convention, because cparser.inc's per-target prologue spills disagree. So `is this proc reached by the C ABI?` has a different answer per target, nothing names that in one place, and the `and (not CProgramMode)` guards on the aarch64/arm32 call arms exist to compensate. Split out of refactor-a-collapse-the-c-frontend-sysv-prologue-copy, whose x86-64 half landed byte-identical; this half is an ABI CHANGE and needs a behavioural gate, not byte-identity."
 ---
 
@@ -256,3 +256,55 @@ Not in scope for the primary commit; file as a follow-on.
   fine today. Distinct from
   [[bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area]]; that ticket owns the
   bridge's four-arg refusal, this is the shared arm regressing pure C.
+
+## BLOCKED on the shared arm, and the order of work inverts (frankC, 2026-08-30)
+
+The gate landed first: `test/test_c_abi_pascal_caller.pas` (the red) and
+`test/c_abi_pure_c_control.c` (the control), plus `make test-c-abi-cross`, as
+`3226a45ff`. Then I applied the whole fix — the three-arm deletion in
+`cparser.inc` **and** the seven guards — and measured it. It does not land yet.
+
+**Paired, identical source, `8a42f93ffe74` → `7d91463cbbfc`:**
+
+| target | Pascal→C bridge | pure C control |
+| --- | --- | --- |
+| x86-64 | PASS → PASS | PASS → PASS |
+| aarch64 | 3 fail → **1 fail (`flt` only)** | PASS → **FAIL (`flt`)** |
+| arm32 | 1 fail → **PASS** | flt-fail → **COMPILE FAIL** |
+| riscv32 | PASS → PASS | flt-fail → unchanged |
+| i386 | 5 fail → **order fixed**, floats Nan | flt-fail → **COMPILE FAIL** |
+
+**The C-side change is right** — arm32's bridge goes fully green, aarch64 drops
+to Single-only, i386's `321` becomes `123`. **It cannot land yet** because
+`EmitParamSpillsForTarget` has three gaps that only surface once something
+routes into it: aarch64 mishandles a by-value Single, i386's arm has no float
+classification at all, and arm32's cannot compile a varargs-using TU. Filed as
+[[bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given]],
+and this ticket is `blocked-by:` it — so its p65 propagates down the edge.
+
+**Both of us were wrong about the ordering, in opposite directions.** I had the
+three residues as follow-ons that surface after the commit; frankA proposed them
+as prerequisites and measured the case that settles it. They are prerequisites:
+the shared arm has to be able to do the job before it can be given the job.
+
+**And "both halves" was necessary but not sufficient.** frankA tested my
+prediction — prologue plus guard deletion should restore pure C — and it does
+not. My reasoning was right about the guards being load-bearing and wrong about
+them being the only missing piece. Three falsifications in a row on this ticket,
+each from the other agent's tree, each correct.
+
+### A correction to the control I committed an hour ago
+
+`c_abi_pure_c_control.c`'s header said it was "green on all five targets TODAY
+and must stay green". **False on three of them**: `flt` — a `float` parameter
+and `float` return — is already broken on arm32 (`0.00`), riscv32 (`0.00`) and
+i386 (`-7.55e307`) with no change applied. I verified only x86-64 before
+committing, which is precisely the unmeasured baseline I had criticised twice
+today. Corrected in the file and in the Makefile, and filed separately as
+[[bug-c-a-float-parameter-and-return-are-wrong-in-pure-c-on-three-targets]] —
+**riscv32 is the tell**: this ticket's fix never touches riscv32, and riscv32
+fails `flt` today, so the two cannot be the same defect.
+
+The cross rows stay wired as `test-c-abi-cross`, RED by design, not a dependency
+of `test`. It is the red that A's prerequisite plus this ticket turn green
+together.
