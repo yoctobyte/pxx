@@ -2768,6 +2768,20 @@ var
     a `{...}` function body is a LOCAL definition (internal), so the pass-1
     signature scan must mark it ProcExternal=False even while skipping the body,
     or a caller compiled before the callee's definition emits an external call. }
+  CUnitOfPascalProgram : Boolean; { the C source in front of us is a UNIT that a
+    PASCAL program uses, not a standalone C program. CProgramMode cannot answer
+    this -- ParseCUnit sets it True exactly as ParseCProgram does, because it
+    means "the source is C", so at a callee prologue it is True in both
+    populations and discriminates nothing (measured with a probe: every function
+    of a C unit reached from a Pascal program reports cprog=1).
+
+    The distinction is a CONVENTION one, and it has to be read on both sides of
+    a call or neither. A C unit's functions are called from Pascal, which
+    marshals the true C ABI; a C program's functions are called from C, which
+    marshals pxx's internal positional convention. Deleting the positional
+    prologue arms without this flag moves only the callee and breaks every
+    intra-C-program call on i386/arm32/aarch64.
+    bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given }
   CHasWideBitfield : Boolean; { the current C translation unit declared a bitfield
     of width 33..63. gcc treats such a field as an integer of EXACT bit-precision
     = width; +,-,*,<< wrap mod 2^width. Gates the CMakeBinop normalize so normal C

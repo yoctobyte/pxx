@@ -11351,6 +11351,44 @@ begin
     begin EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); end; { mov [rbp+off], r10 }
 end;
 
+{ THE one place that answers "is this proc reached by the C ABI?".
+
+  Requirement 3 of bug-c-a-c-function-s-calling-convention-depends-on-the-target
+  is a single such place, and it is the requirement the original defect kept
+  failing: the same idea spelled out at eight sites is how it reached strike
+  three. Both new call sites go through here, so if the answer ever changes --
+  Track U is deciding exactly that in
+  decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
+  -- it changes in one line rather than at eight.
+
+  `CUnitOfPascalProgram`, NOT `not CProgramMode`: ParseCUnit sets CProgramMode
+  True exactly as ParseCProgram does, so inside C source it is True in both
+  populations and discriminates nothing. Measured twice, independently: a probe
+  here reported cprog=1 for every function of a C unit reached from a Pascal
+  program, and frankC got 1000/1000 on all five targets calling a double-taking
+  C function from other C code in such a unit -- which the positional prologue
+  can only do if the flag is True there. }
+function CProcUsesCAbi(procIdx: Integer): Boolean;
+begin
+  Result := (procIdx >= 0) and CUnitOfPascalProgram and ProcCdecl[procIdx];
+end;
+
+{ Does the routine being closed have to leave its float result in the target's
+  FLOAT return register rather than in pxx's GPR value model?
+
+  Only for a C function that a PASCAL program calls -- CProcUsesCAbi above.
+
+  x86-64 and riscv32 are excluded because they are already right: both bridge
+  and control rows are green on them today, and the only change a return-side
+  edit could make there is to break them.
+  bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given }
+function CdeclResultInFpReg(retSymIdx: Integer): Boolean;
+begin
+  Result := (retSymIdx >= 0) and CProcUsesCAbi(CurProc) and
+            TypeIsFloat(Syms[retSymIdx].TypeKind) and
+            (not Syms[retSymIdx].IsArray) and (Syms[retSymIdx].Kind = skLocal);
+end;
+
 procedure EmitProcEpilog(retSymIdx: Integer);
 var sz, i, procIdx, mek: Integer;
 begin
@@ -11465,6 +11503,27 @@ begin
           if sz = 8 then
             begin EmitB($8B); EmitB($95); EmitI32(Syms[retSymIdx].Offset + 4); end;          { mov edx, [ebp+off+4] (Int64 hi) }
         end;
+      end;
+    end;
+    { A C function called from Pascal returns a float in st0, not in eax:edx.
+      The callers already bridge it back (`fstp` then `movsd xmm0`,
+      ir_codegen386.inc:3651) -- see the aarch64 note above; same defect, same
+      shape, different register file. eax holds a Single's RAW 4 bytes and
+      eax:edx a Double's 8, which is what the caller's movss/movsd pair reads,
+      so pushing them and `fld`ing at the declared width is the exact inverse. }
+    if CdeclResultInFpReg(retSymIdx) then
+    begin
+      if Syms[retSymIdx].TypeKind = tySingle then
+      begin
+        EmitB($50);                                            { push eax }
+        EmitB($D9); EmitB($04); EmitB($24);                    { fld dword [esp] }
+        EmitB($83); EmitB($C4); EmitB($04);                    { add esp, 4 }
+      end
+      else
+      begin
+        EmitB($52); EmitB($50);                                { push edx / push eax }
+        EmitB($DD); EmitB($04); EmitB($24);                    { fld qword [esp] }
+        EmitB($83); EmitB($C4); EmitB($08);                    { add esp, 8 }
       end;
     end;
     EmitB($C9); EmitB($C3);                                    { leave; ret }
@@ -11655,6 +11714,20 @@ begin
           return reg). EmitLoadVarA64 loads a Double's 8 bytes / widens a Single
           into x0 already. See feature-cross-float-returns. }
         EmitLoadVarA64(retSymIdx);
+        { ...but a C function called from Pascal returns per AAPCS, in d0/s0.
+          Its callers already bridge the result BACK (`fcvt d0,s0` then
+          `fmov x0,d0`, ir_codegen_aarch64.inc:3074) -- routing the PARAMETERS
+          onto the shared arm without this leaves the return the one half of the
+          convention still spoken positionally, which is `flt` reading 0.00 while
+          every parameter row is green. The inverse of the caller's bridge,
+          exactly: bits -> d0, then narrow if the declared result is a Single.
+          d8..d13 residency restores below do not touch d0. }
+        if CdeclResultInFpReg(retSymIdx) then
+        begin
+          EmitI32($9E670000);                                  { fmov d0, x0 }
+          if Syms[retSymIdx].TypeKind = tySingle then
+            EmitI32($1E624000);                                { fcvt s0, d0 }
+        end;
       end;
     end;
     { -O3 unified residency (aarch64 mirror): restore the caller's x19..x24 /

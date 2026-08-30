@@ -11117,7 +11117,30 @@ begin
     end;
   end;
 
-  if TargetArch = TARGET_I386 then
+  { PASCAL MODE, cdecl: spill by the rule the CALLER marshals by.
+    In Pascal mode a C function's callers take the true SysV/AAPCS marshalling
+    path (the seven `ProcCdecl[procIdx] and (not CProgramMode)` guards in the
+    backends), so its prologue has to read the arguments from where that
+    convention puts them -- EmitParamSpillsForTarget, the same arm x86-64 has
+    always fallen through to.
+
+    The four positional arms below are pxx's INTERNAL convention. They are
+    correct, and load-bearing, for a C PROGRAM, whose own functions are called
+    positionally on both sides; routing those onto the C arm is
+    bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32
+    inverted, and it is not subtle -- measured on c_abi_pure_c_control.c with
+    the arms deleted outright: aarch64 prints a 309-digit double, arm32 fails to
+    compile, i386 segfaults. So the gate is the exact MIRROR of those guards,
+    not a deletion.
+
+    riscv32 keeps its arm: it is the one cross target whose bridge and control
+    rows are both green today, so there is nothing here to fix and a change
+    could only break it. bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given }
+  if CProcUsesCAbi(procIdx) and
+     ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+      (TargetArch = TARGET_AARCH64)) then
+    EmitParamSpillsForTarget(procIdx, nparams)
+  else if TargetArch = TARGET_I386 then
   begin
     { i386: C cdecl args are pushed on the stack (NOT in registers as on x86-64).
       The i386 call site pushes them left-to-right (leftmost ends up deepest), so
@@ -13252,6 +13275,7 @@ end;
 procedure ParseCUnit;
 var firstIdx, savedAgg, savedScal, initIdx, patchPos, savedSC, savedFS: Integer;
     savedProgramMode: Boolean;
+    savedUnitOfPascal: Boolean;
     dummyNames: array[0..0] of AnsiString;
     dummyTypes: array[0..0] of TTypeKind;
 begin
@@ -13314,6 +13338,11 @@ begin
 
   firstIdx := TokPos - 1;
   savedProgramMode := CProgramMode;
+  savedUnitOfPascal := CUnitOfPascalProgram;
+  { A C unit reached from a Pascal program: its callers are Pascal and marshal
+    the true C ABI, so its prologue must read the arguments from where that
+    convention puts them. Nested C units inherit True. }
+  CUnitOfPascalProgram := True;
   CProgramMode := True;
   { The deferred global-initializer lists belong to THIS unit: the program
     driver empties them at the top of `main`, and a unit has no main. Save the
@@ -13359,4 +13388,5 @@ begin
   end;
   CAggInitCount := savedAgg; CScalInitCount := savedScal;
   CProgramMode := savedProgramMode;
+  CUnitOfPascalProgram := savedUnitOfPascal;
 end;

@@ -2,7 +2,7 @@
 track: A
 prio: 65
 type: bug
-status: working
+status: done
 blocked-by: []
 owner: frankA
 summary: "EmitParamSpillsForTarget's ProcCdecl arms have three gaps that only surface once the C frontend routes into them: aarch64 mishandles a by-value Single, i386's arm has no float classification at all, and arm32's cannot compile a varargs-using translation unit. These are PREREQUISITES for bug-c-a-c-function-s-calling-convention-depends-on-the-target, not follow-ons -- routing the C prologue into an arm with these gaps breaks pure C no matter what the call sites do."
@@ -154,3 +154,80 @@ convention at the same time as its parameters, or the two halves will keep
 trading places. Whether that lands as a return-side counterpart to
 `EmitParamSpillsForTarget` or as part of the C-side commit is the open design
 question.
+
+---
+
+## RESOLVED — one defect, two halves, landed together
+
+All eight rows of the `test-c-abi-cross` pair are green, on binary
+`1d879495ffcd` (fixedpoint, 1 round), against baseline `8ebdd42b6322` at
+`1d868b658`:
+
+| target | bridge before | bridge after | control before | control after |
+| --- | --- | --- | --- | --- |
+| aarch64 | FAIL (dbl_first, two_dbl, flt) | **PASS** | PASS | PASS |
+| arm32 | FAIL (int_first) | **PASS** | PASS | PASS |
+| riscv32 | PASS | PASS | PASS | PASS |
+| i386 | FAIL (all five) | **PASS** | PASS | PASS |
+
+Bridge 3 red→green, control unmoved on all five.
+
+### The premise the whole ticket was built on was wrong
+
+**`CProgramMode` does not mean "this is a C program". It means "the source in
+front of me is C".** `ParseCUnit` (`cparser.inc:13340`) sets it exactly as
+`ParseCProgram` (`:10085`) does, so it is True while compiling a C translation
+unit that a **Pascal** program `uses`.
+
+Measured, not read: a probe on the prologue gate printed `cprog=1` for every
+function of a C unit reached from a Pascal program. frankC confirmed it from
+outside the compiler with no source change — a `double`-taking C function called
+from other C code inside a Pascal-used unit is 1000/1000 on all five targets,
+which the positional prologue can only manage if those call sites agree with it.
+
+Two consequences, and they are the content of this ticket:
+
+1. **The four positional prologue arms are load-bearing, not dead.** They are
+   the convention *both sides* of an intra-C call already speak. Deleting them
+   outright — the shape the handoff patch proposed — moves only the callee, and
+   takes the pure-C control from green to a 309-digit double (aarch64), a
+   compile failure (arm32) and a segfault (i386). Both instruments measured that
+   independently and agreed row for row.
+2. **`ProcCdecl and (not CProgramMode)` is a no-op at a callee prologue.** It was
+   the obvious gate and it was tried first: built, measured, and the table came
+   back byte-identical to baseline. That null result is what located the flag's
+   real meaning.
+
+### The fix
+
+A new flag `CUnitOfPascalProgram` (`defs.inc`), saved/set/restored by
+`ParseCUnit`, read through **one** named predicate `CProcUsesCAbi(procIdx)`
+(`symtab.inc`) — requirement 3 of the parent ticket, and the constraint both
+frankC and the coordinator asked for. Two call sites, one spelling.
+
+- **Parameters:** the i386/arm32/aarch64 positional arms in `cparser.inc` are
+  *gated*, not deleted, so a Pascal-used C unit falls through to
+  `EmitParamSpillsForTarget` — the arm x86-64 has always used — while a C
+  program keeps the positional arms.
+- **Return:** `EmitProcEpilog` places a C function's float result in the
+  target's float return register — `fmov d0, x0` (+ `fcvt s0, d0` for a Single)
+  on aarch64, `push`/`fld`/`add esp` on i386. This is the exact inverse of the
+  bridges the callers *already* had (`ir_codegen_aarch64.inc:3074`,
+  `ir_codegen386.inc:3651`). arm32 and riscv32 need nothing: their bridge rows
+  went green on the parameter half alone.
+
+Routing the parameters without the return is what made the two halves trade
+places in the earlier scaffold measurements. They are one defect and had to land
+in one commit.
+
+### Open, and deliberately not settled here
+
+This gate makes a C function's ABI depend on **who included its unit**, which
+re-parameterises the parent ticket's axis rather than removing it. That fork is
+[[decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it]]
+(U, p65) — filed by frankC, scoped by the coordinator as "build the gate, name
+the destination". `CProcUsesCAbi` is that single place: if Track U answers
+"always the C ABI", it changes in one function body.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

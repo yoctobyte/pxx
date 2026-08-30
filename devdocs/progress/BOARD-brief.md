@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:34 blocked:9 backlog:388 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2847 rejected:60`
+`working:2 unfinished:34 blocked:9 backlog:388 backlog_new:26 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2848 rejected:60`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array` [A] — owner: frankS
-- `bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given` [A] — owner: frankA
 - `feature-unicodestring-model` [A] — owner: frankwasm
 
 ## unfinished (34) — parked mid-flight; re-claim, do not duplicate

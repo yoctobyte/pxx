@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array | A | 40→60 | bug | The C preprocessor's include buffers are sixteen separate AnsiString globals in defs.inc, dispatched by two hand-written `case depth of 0..15` ladders in cpreproc.inc. That is one datum wearing sixteen names, it caps include nesting at 16, and until 2026-08-30 the missing `else` on the length ladder returned an UNASSIGNED function Result past the end. The undefined read and the dishonest guard are fixed; making it an array is what actually raises the limit, and the storage is Track A. | — |
-| bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given | A | 65 | bug | EmitParamSpillsForTarget's ProcCdecl arms have three gaps that only surface once the C frontend routes into them: aarch64 mishandles a by-value Single, i386's arm has no float classification at all, and arm32's cannot compile a varargs-using translation unit. These are PREREQUISITES for bug-c-a-c-function-s-calling-convention-depends-on-the-target, not follow-ons -- routing the C prologue into an arm with these gaps breaks pure C no matter what the call sites do. | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
 ## unfinished (34)
@@ -733,9 +732,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2847)
+## done (2848)
 
-2847 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2848 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (60)
 
@@ -1243,7 +1242,6 @@ _none_
 - **1** — bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
 - **1** — bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
-- **1** — bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
