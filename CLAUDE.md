@@ -524,8 +524,27 @@ moved off the critical path, it did not disappear.
 
 **That is the entire gate. Nothing is missing from it.** Breadth — the full
 suites, cross targets, the corpus, regressions elsewhere — is **Track T's job**,
-run against your exact SHA, and it comes back asynchronously as tstate reports
-and tickets. Hear back with `tools/twatch.py --follow`.
+and it comes back asynchronously as tstate reports and tickets. Hear back with
+`tools/twatch.py --follow`.
+
+**This file used to say "run against your exact SHA". That was false, and the
+true version is still enough** (measured by frankT, 2026-08-30, over the 2140
+commits pushed since 2026-08-29T18:00): **10.9%** of shas got any tstate run,
+2.9% a full tier, **0%** limited; the sampler sits ~18 commits behind tip with a
+median gap of **8** commits, p90 19, **max 340**. Track T does not sweep your
+sha — it samples the tip every ~8 commits and **bisects backwards**, which is a
+sound design and is working. So the accurate promise is: *a persistent
+regression is caught within ~8 commits and bisected to one.* What that does NOT
+cover is anything transient, anything a later commit masks, and the long tail —
+plexus currently carries open regressions with bisect ranges of **217 and 231
+commits**, which is what a host falling behind converts a finding into: still
+true, no longer actionable.
+
+**This is not an argument for widening your gate** (frankT's own call, and he is
+exempt from the hook so he has no stake in it): at median-8 sampling the sweep
+rate is already the binding constraint on how fast a regression is localised,
+and that rate is set by contention on the boxes. Every lane that widens its own
+gate spends the machine that produces the 8.
 
 **Do not widen this loop — and the repo now REFUSES to let you.** A PreToolUse
 hook (`.claude/hooks/no-full-suite.sh`, wired in `.claude/settings.json`, both
@@ -667,6 +686,13 @@ fix the doc, not the loop.
   watcher publishes tstate continuously), so it cites a commit that exists only
   in your reflog — `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`. Full
   model: `devdocs/progress/README.md`.
+- **The same trap applies to every sha you QUOTE, not just `resolve`'s.** A sha
+  from `git log -1` straight after `git commit` is pre-rebase and usually dies in
+  the sync. **Read landed shas off `git log origin/master` after the push** —
+  `git log origin/master --grep='<subject>' -1` is the reliable form. Measured
+  2026-08-30: eight of nine shas quoted in one session were ghosts, and nine
+  agents were briefed with one of them. A sha that resolves to nothing is worse
+  than no sha, because the reader cannot tell it is wrong.
 - **Cold start — "continue on tickets" (no track named):** self-dispatch,
   auto-pick the global top.
   1. `git pull --rebase` (origin is truth).
