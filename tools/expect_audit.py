@@ -352,6 +352,15 @@ def oracle_pas(limit=None):
     nbuild = 0
     for b in sorted({r[0] for r in rows}):
         src, cline = b2s[b]
+        # A per-binary unit output dir, NOT one shared across the sweep. Two
+        # different units in test/ share a basename (unitpath/{posix,esp}/
+        # platgreet.pas, and mymod.pas), so a shared -FU lets whichever compiled
+        # first bind for every later row -- test_unitpath_posix26 was reported as
+        # a candidate for exactly that reason and agrees with fpc when built
+        # alone. Contamination between rows of a sweep is indistinguishable from
+        # a finding, and it points whichever way the sweep order happened to go.
+        units = os.path.join(tmp, 'u_' + b)
+        os.makedirs(units, exist_ok=True)
         cmd = ['fpc', '-Mobjfpc', '-vw', '-FU' + units, '-o' + os.path.join(tmp, b)]
         for d in re.findall(r'-(?:Fu|I)([A-Za-z0-9_./-]+)', cline):
             # ONLY test/ companion dirs. lib/rtl holds sysutils.pas, math.pas,
