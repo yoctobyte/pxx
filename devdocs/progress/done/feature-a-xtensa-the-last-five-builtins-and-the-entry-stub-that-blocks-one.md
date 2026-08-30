@@ -2,7 +2,7 @@
 track: A+S
 type: feature
 prio: 40
-status: open
+status: done
 found: 2026-08-30
 found-by: frankS
 ---
@@ -77,3 +77,34 @@ compile per program. Which backends have a `-50` arm is UNCHECKED. The claim
 that the xtensa entry stub does not save the initial sp is from reading
 `EmitProgramEntryForTarget`, not from running a `ParamCount` program — it cannot
 be run, which is the point.
+
+## Log
+
+- 2026-08-30 — **all four resolved.** `-100` LoadFile and the `-50` SysOpen
+  family landed on xtensa and riscv32 together (the rv32 arms were missing too),
+  with the three runtime wrappers in `builtinheap.pas`. `-55` landed last and
+  whole, because it was not a same-file port as this ticket predicted: the entry
+  stub's initial-`sp` save had to come with it, and `tkArgStr` had to come too —
+  `ParamStr` is an expression that desugars to `ArgStr` with a hidden frozen
+  temp, so `ParamCount` alone does not make `test_arm32_arg_runtime` pass.
+  `-999` was NOT an xtensa gap, exactly as this ticket said: it is `SPECIAL_IN`,
+  missing on riscv32 too, closed under
+  [[bug-a-special-in-has-no-arm-in-the-two-32-bit-cross-backends]].
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
+
+### What the four cost, measured
+
+Hosted xtensa 100 → 103 of 129 matching on Call0 and 50 → 53 on windowed;
+riscv32 107 → 111, since three of the four were missing there as well. No
+program regressed at any step.
+
+### The one thing that did NOT come out clean
+
+`test_arm32_arg_runtime` compiles and matches the oracle when given arguments,
+and diverges when given none: `ArgStr(2)` out of range reads past `argv` into
+`envp` on both 32-bit backends, byte-identically, and riscv32 did this before
+any of tonight's work. x86-64 bounds-checks. Filed as
+[[bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa]]
+rather than folded into the `-55` commit — a grant for one defect does not cover
+an adjacent different one.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
