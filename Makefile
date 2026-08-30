@@ -16392,6 +16392,20 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_dom.npy $(TESTTMP)/lib_mimic_xml_dom
 	tools/expect_same.sh lib_mimic_xml_dom.1 "$$($(TESTTMP)/lib_mimic_xml_dom | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_xml_dom.2 "$$($(TESTTMP)/lib_mimic_xml_dom | tail -1)" "MIMIC-XML-DOM OK"
+	# weakref.proxy, and nothing else (feature-b-a-real-minidom-is-an-
+	# implementation-not-a-shim, piece 1). The runtime is refcounted with no weak
+	# references, so `proxy` returns the target itself: identical OUTPUT, and a
+	# strong reference where CPython has a weak one, which leaks one TreeBuilder
+	# per parse in html5lib's dom treebuilder. `ref` and the weak containers are
+	# deliberately ABSENT rather than strong -- `if r() is None:` would take the
+	# wrong branch forever, which is the mimic_xml_dom `0 == 0` failure again.
+	# This differential asserts only what both interpreters AGREE on (forwarding
+	# of reads, writes and calls); the three divergences are in the shim's header
+	# and are deliberately unasserted, so this file still passes unchanged if
+	# proxy ever becomes a real weak reference.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_weakref.npy $(TESTTMP)/lib_mimic_weakref
+	tools/expect_same.sh lib_mimic_weakref.1 "$$($(TESTTMP)/lib_mimic_weakref | grep -c '=ok')" "11"
+	tools/expect_same.sh lib_mimic_weakref.2 "$$($(TESTTMP)/lib_mimic_weakref | tail -1)" "MIMIC-WEAKREF OK"
 	# xml.etree.ElementTree as a TREE MODEL with no XML reader
 	# (feature-b-mimic-xml-etree-elementtree-tree-model). html5lib hands the
 	# module to its treebuilder/treewalker as somewhere to hang a tree and

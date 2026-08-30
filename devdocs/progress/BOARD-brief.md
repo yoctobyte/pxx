@@ -5,17 +5,22 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:338 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2730 rejected:56`
+`urgent:1 working:6 unfinished:26 blocked:7 backlog:338 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2731 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
+- `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — owner: frankB
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A] — owner: frankA
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## urgent (1) — jump the queue
+
+- `bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts` [P]
+
+## unfinished (26) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -29,7 +34,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-dynamic-compiler-tables` [A]
-- `feature-lib-tkinter-grid-pad-accepts-a-two-tuple` [B]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-enum-class` [N]
 - `feature-nilpy-object-reclamation` [A]
@@ -57,6 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 358, ranked
 
+- `[p 75] [P]` bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -86,6 +91,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
-- `[p 60] [U]` decide-does-track-r-work-on-master-like-every-other-lane
 
 _328 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
