@@ -2,7 +2,7 @@
 track: T
 prio: 45
 type: bug
-status: backlog_new
+status: rejected
 blocked-by: []
 found: 2026-08-30
 found-by: claude@plexus (Track T face 2), auditing the PENDING-COMMIT residue
@@ -110,3 +110,70 @@ declined with reasons"* — a real outcome with no code commit behind it. Forcin
 sha onto it would be fabrication, and an `UNCITED-RESOLVE` check must not treat
 this shape as a defect: **some resolutions are not commits.** That is a third
 caution for whoever builds it, alongside warn-never-repair and the date floor.
+
+---
+
+## REJECTED 2026-08-30 — measured before building; it cannot be calibrated
+
+I took this to build it and measured the population first. **The check floods at
+every date floor, and the number I filed it on was wrong.**
+
+### Correcting my own number first
+
+The ticket says **3 of 681**. That used an ad-hoc test — any line containing
+"commit"/"landed as"/"resolved:" *and* a 7–40 hex token counts as cited — which
+also passes a ticket discussing a `commit range 8fb3f776..b3fd1c76`. Under the
+**house** definition (`CITATION_RE`, plus a line-start `commit|resolved|…: <sha>`
+key, which is what `_audit_citations` already uses):
+
+| window (last date in the ticket) | resolved | uncited | |
+| --- | ---: | ---: | ---: |
+| pre-2026-08 | 1123 | 456 | 41% |
+| 2026-08-01..15 | 839 | 161 | 19% |
+| 2026-08-16..25 | 481 | 113 | 23% |
+| **2026-08-26..31** | **328** | **31** | **9%** |
+
+**31 findings in the freshest six days.** A date floor does not rescue it — the
+freshest window *is* the floor, and it still produces 31, of which most cost
+nobody anything. That is the `STALE-EDGE-HIDDEN` calibration argument verbatim
+(*"17 findings of which 12 cost nobody anything, which is how a check earns the
+habit of being scrolled past"*), and it is the failure my own third caution
+predicted, arriving through the door of the first.
+
+### The narrower check I went looking for instead, also rejected
+
+A citation whose value is not a sha is strictly worse than none — it *looks*
+cited. There is exactly one such form in the tree: **`commit HEAD`, 65 tickets.**
+
+Every one is dated **2026-08-03 or earlier. Zero in the last three weeks.**
+The practice stopped on its own. A guard that fires 65 times on history and never
+on anything live is a guard that gets muted before it ever catches something —
+the same verdict, from the other end.
+
+(The other apparent non-sha values are prose: `commit that`, `commit in`,
+`commit range` and friends, 1123 tickets' worth. A check keying on "commit
+followed by a non-sha" is a prose detector.)
+
+### The finding that survives, and it is not a check
+
+**Uncited ⟹ hand-resolved, by construction.** `progress.sh resolve` *always*
+writes a citation — `PENDING-COMMIT` when no sha is given — and `sync.sh` fills
+it. So every ticket in the table above was resolved by typing a Log line
+directly instead of running the tool. The uncited population is precisely the
+population that bypassed the mechanism.
+
+A check that reports them is treating the symptom. The tool already writes a
+placeholder for everyone who goes through it, and the placeholder is exactly the
+loud, greppable, repairable marker this ticket wanted. **Nothing is missing from
+`check`; what is missing is `resolve` being used.**
+
+That is a habit, not a defect, and it is not worth a warning line that will be
+scrolled past. Closing.
+
+### What is left standing from the original filing
+
+- `feature-t-expect-same-...` → `b194ef7ec` and `bug-t-the-breadth-banner-...` →
+  `62dd38d65` are filled; both were verified by unbounded exactly-1 subject match.
+- The convention ruling above (cite the fix, not the close) stands on its own and
+  is the durable part of this ticket.
+- `perf-t-where-the-matrix-actually-spends-its-time` stays uncited, correctly.
