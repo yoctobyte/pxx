@@ -175,4 +175,4 @@ The pre-fix compiler fails the new rows **two** ways: the 1-D row yields
 fixed, the second as a free consequence of the shaped temp.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit a7f5c1409.
