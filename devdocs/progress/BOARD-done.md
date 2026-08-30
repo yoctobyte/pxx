@@ -2481,9 +2481,11 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-arm32-test-timer | T | 70 | regression | regression: test-arm32#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-asm-compiler-2 | A | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
 | regression-test-asm-compiler | T | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at d2172550a236 (auto-filed by twatch) | — |
+| regression-test-asm-hello-2 | A | 70 | regression | regression: test-asm#src:test/hello.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
 | regression-test-asm-hello | T | 70 | regression | regression: test-asm#src:test/hello.pas red at d2172550a236 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-avx | T | 70 | regression | regression: test-asm#src:test/test_asm_avx.pas red at 05f21c126295 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-x64 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 31198d3674df (auto-filed by twatch) | — |
+| regression-test-asm-test-asmcore-x64 | A | 70 | regression | regression: test-asm#src:test/test_asmcore_x64.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
 | regression-test-asm-test-x64enc | A | 70 | regression | regression: test-asm#src:test/test_x64enc.pas red at 31198d3674df (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard0-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at e530da678bc9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard1-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at 96b6bac331d9 (auto-filed by twatch) | — |

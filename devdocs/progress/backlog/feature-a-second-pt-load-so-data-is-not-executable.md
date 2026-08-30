@@ -1,5 +1,5 @@
 ---
-prio: 30
+prio: 50
 track: A
 status: backlog
 owner: ""
@@ -80,3 +80,36 @@ which is the failure mode this repo is worst at noticing.
 Relocating `bss` away from `data`, `PT_GNU_RELRO`, and anything that would make
 `p_vaddr` differ from `LOAD_ADDR + p_offset`. That identity is load-bearing
 across the whole writer and is worth more than the segment split.
+
+## Re-priced 30 → 50 by the coordinator, 2026-08-30
+
+**The reason it sat at 30 was that touching this layout was frightening, and it
+is measurably less frightening than it was four hours ago.**
+
+`df98fea47` landed `AlignCodeForData` plus `CheckDataBaseAligned` as an `Error`
+at each `dataBase :=` site. Before that commit, the data section had **never**
+been aligned on any target — it began wherever code happened to end — and 41
+xtensa windowed programs were green only because `75d2ba662`'s 4096-byte page
+pad word-aligned it as a side effect. A second `PT_LOAD` moves exactly that
+boundary, so this ticket's real cost was never the code: it was that landing it
+could have silently taken 41 programs back to SIGBUS with no diagnostic, and
+nothing in the repo would have noticed.
+
+Two things changed that, both on 2026-08-30:
+
+- **The invariant is explicit and asserted.** This change can no longer take the
+  41 back silently — it either trips `CheckDataBaseAligned` or it passes.
+  b4's own words, and it is the strongest argument for the re-price.
+- **There is now an executed canary.** `test_cross_record` windowed runs in
+  `test-xtensa` with two outcome slots (exit code and output as separate rows),
+  and it is a *measured* canary: it SIGBUSes at `75d2ba662^` and passes after.
+  Before today, `test-xtensa` executed 107 rows, all Call0, and its two windowed
+  rows were compile-only behind a comment claiming there was no runner — which
+  was false, and had been for as long as the hosted profile existed.
+
+**An invariant that converts a silent regression into a loud one is what makes a
+previously-scary change routine.** That is the whole re-price: the work did not
+get more valuable, the risk got legible. Cash it in while the lane that built the
+invariant still holds the context.
+
+Not a claim on anyone; ranked, not assigned.
