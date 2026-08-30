@@ -12,6 +12,58 @@ found-by: frank-coordinator, escalating feature-unicodestring-model rather than 
 summary: "feature-unicodestring-model [A p62] says in its own body that this is a MODEL DECISION, not a function to write -- and its title offers the alternative outright: a real UTF-16 model, or an honest refusal. pxx has one string model (bytes, CP_UTF8 passthrough) and the RTL is already candid about it at the declaration: UTF8Decode/UTF8Encode are the identity, WideChar casts to a 2-byte ordinal. Adopting UTF-16 is a second model in a compiler whose whole design pushes generality DOWN into one substrate. Refusing means fcl-json's \\uXXXX surrogate path stays uncompilable. Neither is derivable from the code or from a sensible default, so it is Track U."
 ---
 
+
+> ## OWNER INPUT, 2026-08-30 — the groundwork exists, and it narrows the fork to ONE question
+>
+> Owner: *"we did do some preparation. We added an extra tagging header to each
+> string — so all (dynamic) strings can use the same ansistring work. But we are
+> free to tag and implement as needed. This also applies to widechar, and all
+> unicode variants. If all is well, we can just tag the type, and the rest should
+> more or less be library/Track B work. So implementing new string types is
+> (almost) free, give or take some conversion helpers."*
+>
+> **Verified, and substantially right.** `compiler/builtin/builtinheap.pas` carries
+> `[kind:8][refcount:8][length:8][data...]` with a META word of
+> `BlockKind(8) | Flags(8) | KindData0(8) | KindData1(8)`, bits 32-63 reserved.
+> Kinds are defined and LIVE: `PXX_KIND_BYTESTR = 1` (*Length counts BYTES,
+> FPC-exact*) and `PXX_KIND_TEXTSTR = 2` (*NilPy str — public positions count
+> CHARACTERS*). And there is a **worked precedent**: `feature-nilpy-text-string-kind`
+> is in `done/` — NilPy `str` already counts characters over the shared byte
+> substrate, with an ASCII flag keeping the common case O(1). A second string
+> SEMANTICS has already been added through this header and it worked.
+>
+> **So the allocation/refcount/lifetime/copy-on-write half — the expensive half —
+> is genuinely already paid.**
+>
+> ### The one thing the tag does not decide: STORAGE WIDTH
+>
+> `TEXTSTR` differs from `BYTESTR` in how positions are INTERPRETED. The data is
+> still bytes, stride 1, UTF-8. That is not the axis UTF-16 needs. So the fork
+> collapses to:
+>
+> | | cost |
+> | --- | --- |
+> | **UTF-8 internally, UTF-16 only at the boundary** | genuinely near-free, exactly as the owner describes: a kind + conversion helpers, reusing TEXTSTR's machinery. Unblocks `jsonscanner`'s `\uXXXX` surrogate path, which is a byte-OUTPUT problem wearing a UTF-16 hat |
+> | **Real 2-byte storage elements (FPC's layout)** | NOT free. Stride 1 is baked into indexing, iteration, comparison and concat in codegen — the backends special-case `tyAnsiString` at `elemSize = 1` (literally, `ir_codegen_xtensa.inc:1677`). Six backends, each needing a second arm: the sibling-arm rule that bit three times on 2026-08-30 alone |
+>
+> ### What decides it is not JSON — it is Track M
+>
+> The cheap branch stops being cheap the moment something needs a **real UTF-16
+> buffer handed to an external API**: `PWideChar` interop, and specifically the
+> Windows `*W` entry points. Track M (MSWindows) is a live campaign. If pxx is
+> going to call Windows wide APIs, a UTF-8-internal `UnicodeString` means
+> converting at every boundary crossing — which is correct, and is what Go and
+> Rust do, but it is a deliberate choice rather than an oversight to discover
+> later.
+>
+> **Revised recommendation: UTF-8 internally + a `UTF16` kind for boundary
+> buffers, decided explicitly now rather than discovered by the Windows lane.**
+> Also worth settling in the same breath: what `Length(s)` returns and what `s[i]`
+> yields for the new kind. BYTESTR/TEXTSTR is a two-way split (bytes vs
+> characters); UTF-16 wants a third answer (code units), and the existing design
+> should be checked for whether it extends to three cleanly before anything is
+> built on it.
+
 # Why this is being escalated rather than worked
 
 `feature-unicodestring-model` is ranked p62 and reads like implementation work. It
