@@ -103,7 +103,7 @@ def main():
         for b, h, n, s, e, ln in sel[:limit]:
             print("  Makefile:%-6s %-34s %-38s hit=%.2f  %s" % (ln, n[:34], s[:38], h, e[:60]))
 
-if not any(f in sys.argv for f in ('--files','--oracle','--oracle-c')):
+if not any(f in sys.argv for f in ('--files','--oracle','--oracle-c','--oracle-pas')):
     main()
 
 # ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ def oracle():
         name = os.path.basename(npy)[:-4]
         want = open(e, errors='replace').read().rstrip('\n')
         try:
-            p = subprocess.run(['python3', npy], capture_output=True, text=True, timeout=15)
+            p = subprocess.run(['python3', npy], capture_output=True, text=True, errors='replace', timeout=15)
         except subprocess.TimeoutExpired:
             disagree[name] = 'cpython timeout'; continue
         if p.returncode != 0:
@@ -265,7 +265,7 @@ def oracle_c(tmp=None):
     built, rej = set(), 0
     for b in sorted({r[0] for r in rows}):
         p = subprocess.run(['gcc', '-w', '-I', 'test', '-o', os.path.join(tmp, b), b2s[b]],
-                           capture_output=True, text=True, timeout=90)
+                           capture_output=True, text=True, errors='replace', timeout=90)
         if p.returncode == 0: built.add(b)
         else: rej += 1
     res = _c.Counter(); bad = []
@@ -281,7 +281,7 @@ def oracle_c(tmp=None):
         sh = recipe.replace('$$', '$').replace('$(TESTTMP)', '$TESTTMP')
         try:
             p = subprocess.run(['bash', '-c', 'export TESTTMP=%s\n%s\n' % (tmp, sh)],
-                               capture_output=True, text=True, timeout=40)
+                               capture_output=True, text=True, errors='replace', timeout=40)
         except subprocess.TimeoutExpired:
             res['timeout'] += 1; continue
         if p.returncode == 0: res['DERIVED (gcc reproduces it)'] += 1
@@ -297,7 +297,96 @@ def oracle_c(tmp=None):
     return 1 if bad else 0
 
 
+# ---------------------------------------------------------------------------
+# --oracle-pas: FPC as the oracle for the Pascal corpus.
+#
+# Weaker than the other two, and the difference is the point. CPython IS the
+# definition of what a .npy should do and gcc IS the definition for portable C,
+# so a disagreement there is a finding. FPC is only the reference for the subset
+# of the dialect pxx shares with it -- a test written for a pxx extension may
+# compile under FPC and legitimately behave differently. So here:
+#
+#   FPC agrees  -> the expectation is DERIVED, full stop. That direction is
+#                  sound: an independent implementation reproduced the value.
+#   FPC differs -> NOT a finding on its own. It is a candidate: either a
+#                  deliberate dialect divergence or a captured expectation, and
+#                  only reading tells them apart.
+#
+# Flags are the project's canonical ones (tools/fpc_diff_probe.sh): -Mobjfpc -vw.
+# ---------------------------------------------------------------------------
+
+def oracle_pas(limit=None):
+    import subprocess, tempfile, collections as _c
+    tmp = tempfile.mkdtemp(prefix='expect_audit_pas_')
+    units = os.path.join(tmp, 'u'); os.makedirs(units, exist_ok=True)
+    mk = open(MAKEFILE, errors='replace').read().split('\n')
+    CMAP = re.compile(r'\$\(COMPILER\)[^\n]*?\b(test/[A-Za-z0-9_./-]+\.pas)\s+\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
+    b2s = {}
+    for l in mk:
+        for m in CMAP.finditer(l):
+            b2s.setdefault(m.group(2), m.group(1))
+    E2 = re.compile(r'expect_same\.sh\s+([A-Za-z0-9_./-]+)\s+(".*")\s*$')
+    BIN = re.compile(r'\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
+    OTHER = re.compile(r'\$\((?!TESTTMP\))[A-Za-z_]+\)')
+    rows = []
+    for i, l in enumerate(mk):
+        if not E2.search(l):
+            continue
+        names = set(BIN.findall(l)) & set(b2s)
+        if len(names) == 1:
+            rows.append((next(iter(names)), E2.search(l).group(1), l, i + 1))
+    if limit:
+        rows = rows[:limit]
+    built = set()
+    nbuild = 0
+    for b in sorted({r[0] for r in rows}):
+        try:
+            p = subprocess.run(['fpc', '-Mobjfpc', '-vw', '-FU' + units,
+                                '-o' + os.path.join(tmp, b), b2s[b]],
+                               capture_output=True, text=True, errors='replace', timeout=90)
+        except subprocess.TimeoutExpired:
+            continue
+        nbuild += 1
+        if p.returncode == 0 and os.path.exists(os.path.join(tmp, b)):
+            built.add(b)
+    res = _c.Counter(); cand = []
+    for b, name, line, ln in rows:
+        if b not in built:
+            res['no oracle: fpc cannot build it'] += 1; continue
+        recipe = line.lstrip('\t').lstrip()
+        while recipe[:1] in ('@', '-', '+'): recipe = recipe[1:]
+        if 'run_target.sh' in recipe:
+            res['no oracle: cross-target row'] += 1; continue
+        if OTHER.search(recipe):
+            res['skipped: other make variable'] += 1; continue
+        sh = recipe.replace('$$', '$').replace('$(TESTTMP)', '$TESTTMP')
+        try:
+            p = subprocess.run(['bash', '-c', 'export TESTTMP=%s\n%s\n' % (tmp, sh)],
+                               capture_output=True, text=True, errors='replace', timeout=40)
+        except subprocess.TimeoutExpired:
+            res['timeout'] += 1; continue
+        if p.returncode == 0:
+            res['DERIVED (fpc reproduces it)'] += 1
+        else:
+            res['candidate: fpc differs (read it)'] += 1
+            cand.append((name, ln))
+    print("Pascal expectations tied to one .pas-built binary: %d rows, fpc built %d of %d binaries"
+          % (len(rows), len(built), nbuild))
+    for k, v in res.most_common():
+        print("  %-38s %d" % (k, v))
+    if cand:
+        print("\n  candidates to read (fpc differs -- dialect divergence OR capture):")
+        for n, ln in cand[:60]:
+            print("    Makefile:%-7d %s" % (ln, n))
+        if len(cand) > 60:
+            print("    ... and %d more" % (len(cand) - 60))
+    return 0
+
+
 if '--oracle' in sys.argv:
     sys.exit(oracle())
 if '--oracle-c' in sys.argv:
     sys.exit(oracle_c())
+if '--oracle-pas' in sys.argv:
+    a = sys.argv
+    sys.exit(oracle_pas(limit=int(a[a.index('--limit')+1]) if '--limit' in a else None))
