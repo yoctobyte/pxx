@@ -840,7 +840,7 @@ Step 7 was "break the alias + change sysutils in the same commit". It is now:
 
     7a. move the four wide functions into compiler/builtin/builtinwide.pas
         and pull it on demand — ParseUsesUnitAmbient, exactly the mechanism
-        `math` uses to keep 35 KB out of programs that never call sqrt
+        `math` uses to keep 35 KB out of programs that never call sqrt  DONE
     7b. break the alias in pasparser_lval.inc:6322/6424
     7c. sysutils UTF8Encode/UTF8Decode, SAME COMMIT as 7b
 
@@ -879,3 +879,55 @@ A bare-ESP program merely naming `widestring` compiles and runs today, because
 the alias is still a byte string. There is no ugly diagnostic to fix now — the
 question of what it *should* do becomes live exactly at 7b, which is when 7a
 removes the reason to care.
+
+
+## 2026-08-30 (frankwasm) — 7a landed AHEAD of 6c, and the canary is GREEN
+
+    size-canary: 5 subject(s) within their allowances
+    x86_64-empty  65304  (+4025)   <- the parent's EXACT number
+
+All of the regression is gone, not most of it. The bare-ESP `{$ifndef}` is
+**replaced** by this rather than kept alongside it: a guard cannot express "this
+program does not use UTF-16", and it left x86_64 paying 4 KB. A unit can, and a
+unit is the granularity the compiler actually has.
+
+### Why 7a jumped 6c, since the ticket argued the other way
+
+The ordering said 7a belongs inside step 7 so the token-scan predicate is
+written once. That argument is real and it lost to a bigger one: **while the
+canary is red, a new x86_64 size regression cannot change its verdict — only its
+number.** The instrument is degraded for everyone until it goes green, and a
+degraded instrument compounds silently, which is the failure family this whole
+campaign kept running into.
+
+The threshold was 6c's size, and 6c is multi-hour: params and returns have **no
+string-capacity precedent at all** (there is no `ptypesStrCap`), and the pointer
+family they must mirror — `ptypesPtrElemTk`, `ProcRetPtrElemTk`, `retPtrElemTk`,
+`mRetPtrElemTk` — has ~72 references across two files and every proc shape
+(plain, method, class method, interface method, default values, lifted
+captures, Self insertion). A short red window would have been worth one rewritten
+predicate; a multi-hour one is not.
+
+### The two-trigger predicate, and the half that would have been missed
+
+    a program NAMING widestring/unicodestring        <- the obvious half
+    a DIRECT call to any of the four by name         <- the half that matters
+
+`test_widestring_transcode.pas` calls them directly, because it was written
+before the type existed. **A predicate catching only the type name passes every
+test that USES widestring and breaks the one test that tests the runtime.**
+Verified: it still links and still matches its FPC oracle.
+
+Deliberately no `'('` requirement, unlike `math`'s scan: `widestring` and
+`PXXWideFromUtf8` are not plausible variable names the way `ln` is, so the false
+positive that rule prevents cannot arise. A false positive costs 4 KB in a
+program that mentioned the word; a false negative is a link failure.
+
+### The number that proves it
+
+`var s: widestring` now compiles to **69,400 B** — which is exactly what the
+EMPTY program cost before this commit. The cost did not shrink; it moved onto
+the programs that ask for it.
+
+Remaining: **6c** (param/return carriers), then **6d** (`^WideString`, blocks
+7b), then **7b/7c** (the alias break + sysutils, one commit).
