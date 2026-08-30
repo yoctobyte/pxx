@@ -221,9 +221,35 @@ bootstrap-managed: bootstrap-check
 # that is deliberate, and it is what ends the second half of the bug: a gate
 # whose pass and whose skip print the same thing is not a gate. The recipe never
 # touches the binary, so nothing downstream rebuilds.
+# The seed-missing message names the SELF-SEED, not `make bootstrap`. It used to
+# say "Run: make bootstrap", which is the FPC cold-start path and is almost never
+# what the reader needs -- the committed stable binary seeds this build with no
+# FPC involved (devdocs/dev/track-t.md: "No FPC needed: the compiler self-seeds
+# from the committed stable binary"). An agent followed that message into an FPC
+# bootstrap on 2026-08-30, hit a pre-existing seed break that had nothing to do
+# with its work, and spent the detour before the owner pointed out the binary was
+# sitting right there. `make bootstrap` is for a tree with no trusted binary at
+# all; it is named last, and as what it is.
+#
+# Deliberately NO `touch` in the advice. The stamp above already closed the
+# copied-in-seed no-op: the recipe keys off $(COMPILER_STAMP), which a `cp`
+# cannot create, so a seed newer than every source still builds. Verified
+# 2026-08-30 -- cp pinned over the binary, rm the stamp, `make compiler/pascal26`
+# reports `converged after 2 round(s)`. Telling people to touch would be cargo
+# from before that fix, and it would print a $(COMPILER_INC) expansion that runs
+# to 200 file names.
 $(COMPILER_STAMP): $(COMPILER_SRC) $(COMPILER_INC)
-	@test -x $(COMPILER) || \
-	  (echo "self-hosted compiler seed missing. Run: make bootstrap"; exit 1)
+	@test -x $(COMPILER) || ( \
+	  echo "self-hosted compiler seed missing: $(COMPILER)"; \
+	  echo ""; \
+	  echo "  Seed it from the committed stable binary -- no FPC needed:"; \
+	  echo "      cp $(PXX_STABLE) $(COMPILER) && make $(COMPILER)"; \
+	  echo ""; \
+	  echo "  Accept the result only once you have seen 'converged after N round(s)'."; \
+	  echo ""; \
+	  echo "  make bootstrap is the FPC cold start, for a tree with NO trusted"; \
+	  echo "  binary at all. You almost certainly do not need it."; \
+	  exit 1)
 	@cur="./$(COMPILER)"; max=4; \
 	for r in $$(seq 1 $$max); do \
 	  a="$(BUILD_COMPILER)-r$$r"; b="$(VERIFY_COMPILER)-r$$r"; \

@@ -217,7 +217,11 @@ fi
 # INVOKED IT -- so it caught both and told no one. A trigger nobody is assigned
 # to watch is not a trigger; that, not the missing check, was the defect.
 #
-# Costs ~1s: it reads the include stream, it does not build anything.
+# Costs ~5.5s: it reads the include stream, it does not build anything. (Was
+# documented as ~1s until 2026-08-30 -- stale by 5x, and it was the figure three
+# decide tickets inherited and argued the cost from. Measured three runs on
+# plexus: 5.71 / 5.48 / 5.23. It grows with the include stream, so re-measure
+# rather than trusting this line.)
 if [ -f tools/forwardlint.py ] && [ -f compiler/compiler.pas ]; then
   step "fpc seed compiles (forward decls)" "$LOGDIR/forwardlint.log" \
        python3 tools/forwardlint.py                                   || RC=1
