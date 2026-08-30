@@ -678,8 +678,11 @@ if [ "$PUSH" = "1" ]; then
         #
         # `verify_manifest_landed` above already PROVED each subject is on
         # origin. It just threw the id away. Resolving it here turns "read the
-        # sha off origin/master after the push" from a rule people must remember
-        # into a line they have already been shown.
+        # sha off origin/master after the push" from a rule every AGENT must
+        # remember into a line it has already been shown. (Agents, specifically:
+        # this rule lives in CLAUDE.md, which no human reads, and all four of the
+        # ghosts it failed to prevent were agents. The lines above about needing
+        # "a human" mean the owner, and are correct as written.)
         #
         # WINDOWED, unlike the check above, and the asymmetry is deliberate: a
         # miss there manufactures a false MISSING whose advice is `cherry-pick`,

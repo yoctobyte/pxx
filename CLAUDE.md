@@ -268,7 +268,7 @@ comment rewrite is not.
   `board-md`, nothing to resolve, never linked as a dependency. Batch freely.
 
 **2. The frontmatter `summary` MUST be true.** It is the only part everyone
-reads, and a stale one actively misroutes people — that happened three times in
+reads, and a stale one actively misroutes the agent who reads it — that happened three times in
 one day while the correction sat eighty lines down the body. If your work
 changes what a ticket is about, **fix the summary in the same commit.**
 Everything below the summary is **append-only history that nobody is obliged to
