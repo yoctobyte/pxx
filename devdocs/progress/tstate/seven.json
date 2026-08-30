@@ -11131,7 +11131,7 @@
   },
   {
    "bad": "2f81d8008a9b6b7e0fb9fdb87d31a8d6f743f10e",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "c951ec710b33da734e7141394258135689c3e5fa",
    "job": "test-asm#src:test/test_asm_emit_rv32.pas",
