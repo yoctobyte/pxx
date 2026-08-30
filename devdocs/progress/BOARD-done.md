@@ -2397,6 +2397,7 @@ should not read it to find out what to do. Grep it freely._
 | grant-devdocs-dev-audit-to-frankd-time-boxed-report-only | D | 50 | grant | GRANT: `devdocs/dev/*.md` → frankD, audit-only, time-boxed | — |
 | grant-pasparser-lval-to-the-wasm-lane-for-the-nilpy-str-helper-collision | A | 55 | grant | GRANT: `compiler/pasparser_lval.inc` → the wasm lane, for the NilPy str/helper collision | — |
 | grant-progress-py-to-pxx-a5-for-the-uncited-resolve-check | T | 45 | grant | GRANT: `tools/progress.py` → pxx-a5, scoped to the `UNCITED-RESOLVE` check | — |
+| grant-pyparser-xtensa-refusal-site-to-franks | N+S | 50 | grant | Bounded cross-lane grant: frankS (Track S) may edit ONE site in Track N's pyparser.inc -- the `TargetArch = TARGET_XTENSA` refusal and its justifying comment at ~line 45973 -- as part of the arch-vs-platform ruling. Nothing else in the file. Granted because leaving the fifth site unedited recreates, in NilPy, the exact refusal the ruling retires. | — |
 | grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s | A+S | 55 | grant | GRANT: the xtensa arm of `EmitManagedLocalCleanupForTarget` → Track S | — |
 | idea-progress-board-md | B | 50 | idea | On-demand `BOARD.md` kanban grid | — |
 | idea-public-status-page | D | 25 | idea | Publish a live compatibility/corpus status report on the website — the static docs/reference/status.md page exists; wire it to the already-generated tstate reports (twatch_web conformance.html/bench.html/dashboard.html) so public numbers stay current instead of hand-maintained | — |

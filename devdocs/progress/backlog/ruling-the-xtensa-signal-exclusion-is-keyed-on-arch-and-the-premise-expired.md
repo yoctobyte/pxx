@@ -132,3 +132,32 @@ The cheap sweep for the rest is the grep above plus `EspBareBoot` (26 sites) vs
 the second is the one that expires. **This addendum does not claim the remaining
 sites are wrong**; several arch checks are genuinely about the instruction set.
 It claims only that the axis is worth checking per site, and that nothing has.
+
+## Addendum 2 (frankS, 2026-08-30): the NilPy site is corrected, and the AXIS DID NOT MOVE
+
+Under `grant-pyparser-xtensa-refusal-site-to-franks` [N p50], `pyparser.inc`'s
+copy of the refusal now states the live reason instead of the expired one. **The
+guard is unchanged**, and that is deliberate — it is the one thing about this
+ruling that is easy to get backwards.
+
+Step 2 of the derivation is right: the comment reasons arch→platform and expired
+when the profile split those axes. But re-keying the guard on `not EspBareBoot`
+**today**, ahead of the runtime, does not correct a wrong axis — it opens a hole.
+`EmitSignalRuntimeForTarget` has **no xtensa arm at all** (measured: x86-64,
+aarch64, arm32, i386 unconditional; riscv32 gated `not EspBareBoot`; xtensa
+absent), so hosted xtensa has no handler either. Flipping the axis first would
+accept `__pxxSig*` on hosted xtensa and answer out of a handler that was never
+installed — a plausible wrong value in code that dispatches on it, which is what
+the refusal exists to prevent.
+
+**So the axis moves in the same commit as `EmitSignalRuntimeXtensa`, in all five
+sites at once, and not before.** Whoever takes the runtime inherits both parser
+sites as part of it; `pasparser_expr.inc` is untouched here because it is
+frankA's file and the contention this ruling gates on is exactly that.
+
+The generalisation is worth keeping separate from this ticket: **an expired
+premise does not imply the guard it justifies is wrong.** Here the true reason
+was *broader* than the stated one, so the stale comment was hiding a refusal that
+is correct on both platforms rather than one that is wrong on one. The cheap
+check is the one above — ask what the guard protects and whether it exists yet,
+not just whether the sentence beside it still parses.

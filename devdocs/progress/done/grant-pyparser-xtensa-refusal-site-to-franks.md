@@ -4,7 +4,8 @@ prio: 50
 type: grant
 blocked-by: []
 summary: "Bounded cross-lane grant: frankS (Track S) may edit ONE site in Track N's pyparser.inc -- the `TargetArch = TARGET_XTENSA` refusal and its justifying comment at ~line 45973 -- as part of the arch-vs-platform ruling. Nothing else in the file. Granted because leaving the fifth site unedited recreates, in NilPy, the exact refusal the ruling retires."
-status: backlog
+status: done
+owner: frankS
 ---
 
 # Grant: the xtensa refusal site in `pyparser.inc`, to frankS, bounded
@@ -70,3 +71,48 @@ the coordinator flagged an **adjacency** between two expired xtensa premises and
 explicitly declined to assert it was one mechanism. It is one mechanism, and the
 grep rather than the adjacency is what says so. The ruling's own file list names
 four sites; this is the fifth, and the ruling has been amended.
+
+## Consumed 2026-08-30 by frankS — and the GUARD DID NOT MOVE. Read this before assuming it did.
+
+One site, comment only. `compiler/pyparser.inc` ~45972: the three-line
+justification was replaced; `if TargetArch = TARGET_XTENSA then Error(...)`
+is byte-for-byte what it was. Nothing else in the file, nothing else in Track N.
+
+**Why the refusal stays, when the ruling says the axis is wrong.** Both are true
+and they are not in tension. Measured, not assumed —
+`grep -rn "EmitSignalRuntime" compiler/*.inc`:
+
+| target | signal-runtime arm in `EmitSignalRuntimeForTarget` |
+| --- | --- |
+| x86-64, aarch64, arm32, i386 | present |
+| riscv32 | present, gated `if not EspBareBoot then` — the model the ruling cites |
+| **xtensa** | **absent — no arm at any platform** |
+
+So the *stated* reason expired exactly as the ruling derives (it reasons from
+arch to platform, and the hosted profile split those). The *live* reason is
+**broader, not narrower**: there is no xtensa signal runtime for ESP **or** for
+hosted, so refusing is correct on both today. Re-keying this on `not
+EspBareBoot` right now would not fix a wrong axis — it would **open a hole**,
+accepting `__pxxSig*` on hosted xtensa and answering out of a handler that was
+never installed. That is a plausible wrong value in code that dispatches on it,
+i.e. the precise failure the refusal was written to prevent, and the ruling is
+explicit that the runtime is *authorized in principle, not dispatched*.
+
+**The axis moves in the same commit that adds `EmitSignalRuntimeXtensa`, never
+ahead of it.** That sentence is now in the comment, at the site, where the person
+who writes the runtime will be standing.
+
+**The Pascal sibling is deliberately untouched.** `pasparser_expr.inc:4382`
+still carries the retired premise verbatim. It is frankA's file and the ruling
+gates on exactly that contention; this grant did not cover it and I did not take
+it. Whoever lands the runtime moves both — that is now written at the NilPy site
+and in the ruling's addendum, so the sibling is discoverable from either end
+rather than from neither.
+
+**Evidence it is inert:** `make compiler/pascal26` converged in 1 round and the
+resulting binary is **byte-identical** (`2d2bc2fb0e15`) to the one saved before
+the edit. A comment-only change that moved the binary would itself have been the
+finding; it did not.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -45969,9 +45969,29 @@ begin
           CaseEqual(name, '__pxxSigContext') or CaseEqual(name, '__pxxSigPCPtr')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
-        { Every hosted Linux target now installs with SA_SIGINFO; only xtensa/ESP
-          is left out, and deliberately — FreeRTOS is not a Unix and has no
-          signal runtime at all (EmitSignalRuntime* has no xtensa sibling). }
+        { Refused on xtensa — and the reason is NOT the one this comment used to
+          give. It said "FreeRTOS is not a Unix", which reasons from ARCH to
+          PLATFORM: true while those were the same thing for xtensa, and expired
+          without being edited the moment the hosted profile separated them
+          (ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired).
+          The live reason is broader, not narrower: EmitSignalRuntimeForTarget
+          has no xtensa arm AT ALL, so neither ESP nor hosted xtensa installs a
+          handler and refusing is correct on both today.
+
+          So do NOT re-key this on `not EspBareBoot` by itself. That IS where it
+          lands — riscv32's arm is the model, `if not EspBareBoot then
+          EmitSignalRuntimeRISCV32` — but flipping the axis BEFORE
+          EmitSignalRuntimeXtensa exists would accept __pxxSig* on hosted xtensa
+          and answer out of a handler that was never installed: a plausible wrong
+          value in code that dispatches on it, which is the exact failure mode
+          this refusal was written to prevent. The axis moves in the same commit
+          that adds the runtime, never ahead of it.
+
+          Sibling: pasparser_expr.inc carries this refusal verbatim. Two copies
+          is the intended design — each frontend owns its own refusals, per
+          the-substrate-is-ast-and-ir-not-the-parser — so they are a fix-one-arm
+          hazard, not drift: move both or NilPy is left refused by a premise the
+          Pascal side has already retired. }
         if TargetArch = TARGET_XTENSA then
           Error(name + ' needs SA_SIGINFO, which this target''s signal runtime '
                 + 'does not install (feature-signal-siginfo-ucontext)');
