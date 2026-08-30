@@ -65,11 +65,12 @@ lives in git, not in a timestamp._
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (359)
+## backlog (360)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol | A | 45 | audit | `TypeKind = tyRecord` is not a guard, and 20 reads use it as one | — |
+| audit-t-verdict-functions-with-fewer-slots-than-outcomes | T | 30 | audit | Five verdicts in one week reported an outcome the mechanism had not decided | — |
 | bug-a-2d-array-row-as-a-const-array-param-still-segfaults | A | 45 | bug | One arm of bug-aggregate-member-array-as-var-param (done) never got fixed: a ROW of a 2D array passed as a CONST array parameter still segfaults, on all five targets. The var form of the same row works, and the record-field form works in both modes, so three of the four cells that ticket's own acceptance named pass and the fourth does not. It is what still blocks reverting lib/rtl/ed25519.pas's 4-standalone-TGf workaround. | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
@@ -1001,6 +1002,7 @@ lives in git, not in a timestamp._
 - [p 32] [A+O] feature-opt-rtti-emit-on-use
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 30] [S] feature-pal-esp-posix-fd-semantics (unblocks 1) [parked — re-claim, do not duplicate]
+- [p 30] [T] audit-t-verdict-functions-with-fewer-slots-than-outcomes
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
 - [p 30] [A] bug-a-proc-map-emits-static-addresses-for-a-dynamic-build
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
