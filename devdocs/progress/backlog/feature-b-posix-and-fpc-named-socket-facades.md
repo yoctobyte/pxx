@@ -2,8 +2,8 @@
 track: B
 prio: 25
 type: feature
-blocked-by: []
-summary: "The Posix.* / FPC-named (BaseUnix, Sockets, UnixType) socket compat facades over the PAL substrate, with a selectable syscall-or-libc backend. Fully designed inside feature-networking and never built; split out when that umbrella closed so the design survives its container."
+blocked-by: [decide-posix-master-vs-fpc-named-master-for-the-socket-facades]
+summary: "BLOCKED on decide-posix-master-vs-fpc-named-master-for-the-socket-facades: the design says Posix.* is canonical and the FPC-named units wrap it, but the tree shipped the FPC-named units AS the implementation on PAL, and all three of the design's selectable backends already exist one layer down at the PAL. Building as designed would invert a working layer with 15 in-tree consumers plus Synapse, for zero current consumer. Not implementation work until the layering question is re-decided."
 status: backlog
 owner: unassigned
 ---
@@ -130,3 +130,57 @@ nonetheless offered as work. Unlike the crtl collector it is at p25 rather than
 at the head of a queue, so it misleads less — but it would be a `standing:`
 ticket under that proposal, and it is the case that shows the field is not
 needed only for collectors.
+
+## 2026-08-30 — dispatched again, re-measured again, and now BLOCKED on a `decide-`
+
+Offered as work a second time (frankB, Track B), the queue being thin above p25.
+The 2026-08-28 note's recommendation stands and is strengthened; what it lacked
+was a mechanism to stop the ticket being re-offered, since a recommendation in
+prose is invisible to the ranker. It now has one: `blocked-by:`
+[[decide-posix-master-vs-fpc-named-master-for-the-socket-facades]]. **Do not
+pick this up until that resolves** — the question is which way the layering goes,
+and it is not Track B's to answer.
+
+### The 2026-08-28 table re-verified against `d9b663137` — accurate, with two fixes
+
+Line counts and absences confirmed exactly: `sockets` 633, `baseunix` 149,
+`unix` 46, `unixutil` 16, `unixtype` and `Posix.*` absent. `sockets.pas` sits on
+`platform` (PAL) directly — `uses platform, sysutils`, 17 PAL call sites — so
+"the FPC-named units ARE the implementation" is measured, not inferred. Two
+corrections, both cutting the same way:
+
+- **`baseunix` has 11 in-tree consumers, not 10** — `test/manual/test_pylexer.pas`
+  was missed. Plus Synapse: `synautil.pas:81`, `synaser.pas:139`, and the three
+  `ssl_openssl*_lib.pas`.
+- **`compiler/compiler.pas` is a FALSE POSITIVE.** It does say
+  `uses SysUtils, Math, BaseUnix, …` at line 39 — inside `{$ifdef FPC}`, true
+  only under real FPC, so it binds FPC's own BaseUnix during the seeded
+  bootstrap and is not taken under PXX self-host. A grep reads it as "the
+  compiler depends on this" and would wrongly put the self-host gate in an
+  inversion's blast radius. Second instance of this ticket's own "false positive
+  worth naming" section — the first was `test/dotted/posix.syssocket.pas`.
+
+### The finding the earlier note did not have
+
+**All three of the design's selectable backends already exist, one layer down at
+the PAL.** `posix_syscall` → `lib/rtl/platform/posix/platform_backend.pas`;
+`posix_libc` → that file's `-dPXX_DYNLIB_LIBC` path; `posix_lwip` →
+`lib/rtl/platform/esp/platform_backend.pas`. The design's own vocabulary
+(`PXX_POSIX_LIBC`, `posix_syscall`, `posix_lwip`) appears **nowhere in the tree**
+outside this ticket, closed `feature-networking`, and `plan-networking.md` — it
+was never spoken in code because the capability landed under PAL's names. So
+building `Posix.*` as designed adds a *second* backend-selection mechanism over
+a substrate that already selects backends, and a *fourth* face over PAL
+(`sockets`, `net.pas`, `asyncnet.pas` are the three).
+
+And the design's rationale for Posix-as-master was goal 2 of the programme:
+compile Synapse via its **Delphi-`Posix.*` branch, explicitly not the FPC one**
+(`plan-networking.md:16`, `:188-202`). Every Synapse job in `lib-test` compiles
+with `--mimic-fpc` — the branch the plan said not to target. The goal that made
+Posix master was dropped, and the route that shipped is the one it ruled out.
+Details and the fork in the `decide-` ticket.
+
+### Gate note for whoever eventually builds this
+
+Nothing was built and nothing needs re-verifying: this session read the tree and
+wrote tickets. No `lib-test` / `demos` run is claimed and none was needed.

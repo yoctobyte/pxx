@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (329)
+## backlog (330)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -212,6 +212,7 @@ _none_
 | decide-nilpy-deepcopy-over-the-container-subset | U | 40 | decide | `copy.deepcopy`: implement over the subset, or keep the loud absence? | — |
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
 | decide-nilpy-what-version-does-sys-version-info-claim | U | 62 | decide | sys.version_info is absent, and providing it is a product claim, not an implementation detail: real code branches on it to select code paths, so any number we answer silently steers third-party libraries. Decide what version a NilPy build reports — and whether it reports a CPython version at all. | — |
+| decide-posix-master-vs-fpc-named-master-for-the-socket-facades | U | 25 | decide | `Posix.*` is master, or the FPC-named units are? The tree has already answered, the other way | — |
 | decide-release-signing-key-custody | U | 25 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | decide-settextbuf-needs-buffered-text-io-or-stays-missing | U | 55 | decide | SetTextBuf's contract is 'use this caller-supplied buffer for this handle', and lib/rtl/textfile.pas has no buffering at all — it reads one byte per PalRead syscall. So the fork is: build buffered Text I/O (a real win beyond this routine) and make SetTextBuf mean something, or leave it missing so the compile error stays honest. Stubbing it is already ruled out. | — |
 | decide-should-forwardlint-join-the-mandatory-per-fix-loop | U | 55 | decide | Collapses the two tickets that both asked what may join the three-line per-fix loop. make compiler/pascal26 compiles compiler.pas WITH pxx, so the loop and the self-host fixedpoint are blind BY CONSTRUCTION to a construct pxx accepts and FPC rejects -- and FPC is the bootstrap seed. tools/forwardlint.py models FPC's resolution, runs in 4.1s, and as of 7aba316be is silent on a clean tree, which removes the one argument that kept it out. Five measured instances of the seed breaking while the loop stayed green. Recommendation: option 1, narrowly. The edit is to CLAUDE.md's gating section, so only the owner makes it. | — |
@@ -248,7 +249,7 @@ _none_
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-a-xtensa-the-last-five-builtins-and-the-entry-stub-that-blocks-one | A+S | 40 | feature | Xtensa's last five non-compiling builtins — four are ports, one needs the entry stub | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 20 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
-| feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | The Posix.* / FPC-named (BaseUnix, Sockets, UnixType) socket compat facades over the PAL substrate, with a selectable syscall-or-libc backend. Fully designed inside feature-networking and never built; split out when that umbrella closed so the design survives its container. | — |
+| feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | BLOCKED on decide-posix-master-vs-fpc-named-master-for-the-socket-facades: the design says Posix.* is canonical and the FPC-named units wrap it, but the tree shipped the FPC-named units AS the implementation on PAL, and all three of the design's selectable backends already exist one layer down at the PAL. Building as designed would invert a working layer with 15 in-tree consumers plus Synapse, for zero current consumer. Not implementation work until the layering question is re-decided. | decide-posix-master-vs-fpc-named-master-for-the-socket-facades |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-diagnostics-name-the-module-they-are-in | C | 40 | feature | A Pascal diagnostic now prints `in: <path>` when the error is in an include or a `uses`d unit. The C frontend has the same information already — CModRange* is populated in every build, not just under -g — and prints nothing, so an error in a crtl module or an included header still reports a bare line number. | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -976,6 +977,7 @@ _none_
 - [p 30] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 30] [A] refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
+- [p 25] [U] decide-posix-master-vs-fpc-named-master-for-the-socket-facades (unblocks 1)
 - [p 25] [A] bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted
 - [p 25] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
 - [p 25] [A] bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout
@@ -994,7 +996,6 @@ _none_
 - [p 25] [P] compat-pascal-distinct-type-declaration
 - [p 25] [U] decide-release-signing-key-custody
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
-- [p 25] [B] feature-b-posix-and-fpc-named-socket-facades
 - [p 25] [S] feature-esp-hardware-flash-validation
 - [p 25] [A] feature-nilpy-arc-cross-parity
 - [p 25] [N] feature-nilpy-ascii-flag-fast-path
@@ -1076,6 +1077,7 @@ _none_
 - **1** — decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
+- **1** — decide-posix-master-vs-fpc-named-master-for-the-socket-facades
 - **1** — decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - **1** — decide-tobject-classinfo-blob-or-refusal
 - **1** — decide-which-gtk-a-bare-gtk-gtk-h-means
