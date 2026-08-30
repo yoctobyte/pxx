@@ -2,7 +2,7 @@
 slug: grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s
 track: A
 prio: 55
-status: open
+status: done
 ---
 
 # GRANT: the xtensa arm of `EmitManagedLocalCleanupForTarget` → Track S
@@ -58,3 +58,38 @@ The finding behind it is banked as face 118: `0f48fa6a9` gathered these six arms
 into one procedure **specifically to stop them drifting**, and two arms then grew
 inside it, twenty lines from xtensa's one row, four separate times. Co-location
 makes drift visible; only an oracle makes it fail.
+
+## Log
+
+- 2026-08-30 — **closed WITHOUT doing the work: it had already landed.** Not a
+  duplicate-effort near-miss caught late, but the first thing a read of the file
+  showed. The xtensa arm of `EmitManagedLocalCleanupForTarget` releases **7 of
+  7** managed kinds at HEAD, not 1.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
+
+### Evidence, since "it looks done" is not the same as "it works"
+
+| check | result |
+| --- | --- |
+| six kinds landed | `e1d7977a2` *"xtensa's scope-exit release goes from one managed kind to six"*, an ancestor of HEAD |
+| the seventh (dyn array) | `3a1c1dc73`, with the retain-before-release ordering argument in its comment |
+| provenance ticket | `bug-a-xtensa-scope-exit-releases-one-of-seven-managed-kinds` is already in `done/` |
+| `test_managed_local_release_reuse` | **MATCH** vs the x86-64 oracle (this ticket recorded 1/5) |
+| `test_interface_arc` | **MATCH** (this ticket recorded `freed=1` where the oracle says `freed=3`) |
+
+Both divergences this ticket named as downstream symptoms are gone, measured at
+HEAD rather than inferred from the diff.
+
+### The grant itself was sound; the ticket's picture of the tree was stale
+
+Worth separating, because the failure here is not in the grant machinery. The
+scope was precise, the incumbent lane's consent was measured rather than
+estimated, and the coordinator verified three ways that `ir_codegen.inc` was
+free before handing it over. All of that was correct work. What nobody re-ran
+was the **counting query the ticket was built on** — `xtensa: 1` was true when
+written and false by the time it was dispatched, and a grant ticket carries its
+evidence in prose where nothing re-evaluates it.
+
+A ticket whose body is a measurement has an expiry date that nothing in the
+board prints.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

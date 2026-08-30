@@ -84,3 +84,40 @@ Adding `TARGET_WASM32` to `TargetHasProcCleanupFrame` without implementing
 `else Error('compiler error: no proc exception cleanup frame for this target')`
 arm and breaks every wasm build that owns a managed local. The predicate is the
 last line of the change, not the first.
+
+## Update 2026-08-30 (frankS): ONE OF XTENSA'S TWO BLOCKERS IS GONE
+
+This ticket, and the comment above `TargetHasProcCleanupFrame` that it quotes,
+both give two reasons for xtensa's exclusion:
+
+> *xtensa is out because its exception runtime exists only under the Call0 ABI
+> **and its managed-local arm handles `AnsiString` alone***
+
+**The second half is no longer true.** `e1d7977a2` took that arm from one
+managed kind to six and `3a1c1dc73` added the seventh, so
+`EmitManagedLocalCleanupForTarget`'s xtensa block now releases all 7 — COM
+interface, static array of managed, scalar `AnsiString`, `Variant`, promo-int,
+record-with-managed-fields, and local dynamic array. Verified at HEAD, and both
+downstream divergences that work was filed against (`test_managed_local_release_reuse`,
+`test_interface_arc`) now MATCH the x86-64 oracle.
+
+So the release SEQUENCE a cleanup frame would need as its landing pad already
+exists on xtensa and is complete. What remains is only the first reason: the
+exception runtime is Call0-only (`IR_EXC_ENTER` and `IR_RAISE` both `Error` out
+under `--xtensa-abi=windowed`). That makes the remaining xtensa work narrower
+than this ticket describes — **wire the existing enter/leave under Call0 and
+keep the predicate false for windowed**, rather than "ESP-campaign work" of
+unstated size.
+
+Not re-priced here; p25's argument (it needs a raise crossing a frame that owns
+a managed local) is unaffected by which blocker remains.
+
+### A source comment now states something false
+
+`ir_codegen.inc`, immediately above `TargetHasProcCleanupFrame`, still asserts
+*"its managed-local arm handles AnsiString alone"*. That line should go when
+someone next holds the file. **Not fixed here:** the Track S grant covering this
+area is scoped to the `TargetArch = TARGET_XTENSA` block inside
+`EmitManagedLocalCleanupForTarget` and nothing else in `ir_codegen.inc`, and
+this comment sits outside it. A one-line comment fix is exactly the size of
+edit a grant boundary looks silly around, which is the point of having one.

@@ -2395,6 +2395,7 @@ should not read it to find out what to do. Grep it freely._
 | grant-devdocs-dev-audit-to-frankd-time-boxed-report-only | D | 50 | grant | GRANT: `devdocs/dev/*.md` → frankD, audit-only, time-boxed | — |
 | grant-pasparser-lval-to-the-wasm-lane-for-the-nilpy-str-helper-collision | A | 55 | grant | GRANT: `compiler/pasparser_lval.inc` → the wasm lane, for the NilPy str/helper collision | — |
 | grant-progress-py-to-pxx-a5-for-the-uncited-resolve-check | T | 45 | grant | GRANT: `tools/progress.py` → pxx-a5, scoped to the `UNCITED-RESOLVE` check | — |
+| grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s | A+S | 55 | grant | GRANT: the xtensa arm of `EmitManagedLocalCleanupForTarget` → Track S | — |
 | idea-progress-board-md | B | 50 | idea | On-demand `BOARD.md` kanban grid | — |
 | idea-public-status-page | D | 25 | idea | Publish a live compatibility/corpus status report on the website — the static docs/reference/status.md page exists; wire it to the already-generated tstate reports (twatch_web conformance.html/bench.html/dashboard.html) so public numbers stay current instead of hand-maintained | — |
 | lib-intToStr-missing | B | 50 | lib | `IntToStr` not available | — |
