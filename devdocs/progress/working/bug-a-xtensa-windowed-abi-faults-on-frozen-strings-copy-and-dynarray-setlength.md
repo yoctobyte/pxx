@@ -370,3 +370,68 @@ adopting the story.
 3. "Plain `sp` move + call depth is sufficient" (round 3) — depth-24 passes.
 4. "The desync needs `a1` to change between spill and reload" (round 4) — no
    mid-body `sp` move exists; all five are prologue-local.
+
+## Round 5 (frankS) — the prediction was RUN, it failed, and it EXONERATES the prologue ticket
+
+Round 4 derived a consequence and left it untested. Tested now.
+
+`deepbig.pas`: no strings, no `Copy`, recursion 24 deep, each frame carrying a
+112-byte local array so the prologue is a big `addi` like every frame on `Copy`'s
+path.
+
+```
+deep24+112B  call0     rc=0  24
+deep24+112B  windowed  rc=0  24
+```
+
+**Passes.** And — the part that makes this a real test rather than a null result —
+**it reproduced the conditions exactly.** Verified rather than assumed:
+
+| condition | `Copy` (faults) | `deepbig` (passes) |
+| --- | --- | --- |
+| prologue shape | `entry a1, 32` + `addi a1, a1, -112` | **identical**, `-112` and `-96` |
+| WINDOWBASE reached | 6 | **6** |
+| WINDOWSTART range | `55 51 50 14 10 04` | **`55 54 50 45 15 14 10 05 04`** |
+| reaches the fault state `wb=2 ws=04` | yes — and dies | **yes — and returns fine** |
+
+A program that reaches the **identical window state**, with **identical frame
+shapes**, wrapping the register file to the same depth, does not fault.
+
+### What this rules out, and it is the useful half
+
+- Frame size is not the missing ingredient.
+- The prologue `addi` is not sufficient **even at the same sizes**.
+- Register-file wrap is not sufficient **at the same depth**.
+- Reaching `wb=2 ws=04` and reloading a caller from memory is not sufficient
+  **in the same state**.
+
+**This is measured evidence that
+[[bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp]]
+does not cause this fault.** That ticket was filed separately on the epistemic
+grounds that *"violates the ABI" and "causes this fault" are different claims*;
+round 5 turns that caution into a result. The prologue divergence is real,
+confirmed against gcc, and **exonerated as the cause of the `Copy` SIGBUS**. The
+two tickets should not be merged, and the prologue one should not be raised on
+this ticket's evidence.
+
+### Where that leaves the discriminator
+
+Every *structural* explanation is now dead: the code path, the `sp` movement, the
+frame size, the wrap depth, and the window state at the fault are all matched by a
+program that works. What remains must be something about **what `Copy` puts in
+those frames or reloads out of them** — a content or address property rather than
+a shape property. That is a different class of hypothesis than rounds 1-5 and the
+instruments so far have all been shape instruments.
+
+Still unestablished, and no narrower than it was: **what `Copy` supplies that
+`Pos`, concat, deep recursion and deep-recursion-with-large-frames do not.**
+
+### Falsified, complete list
+
+1. Misaligned word copy — 5x5 sweep, every cell faults including aligned.
+2. "The failing path moves `sp` more" — it moves it less: 5 vs 8.
+3. "Plain `sp` move + call depth is sufficient" — depth-24 passes.
+4. "The desync needs `a1` to change between spill and reload" — no mid-body `sp`
+   move exists; all five are prologue-local, 6 bytes after `entry`.
+5. "Wrap + reload + large frames is sufficient" — a program matching all of it,
+   including the exact fault state, passes.
