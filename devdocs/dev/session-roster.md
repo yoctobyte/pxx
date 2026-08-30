@@ -23725,3 +23725,84 @@ one module **after** the lexer had marked each pulled `.c`, so the coarse range
 it had claimed the refinement happened since the original fix. **Blast radius:
 any C program reaching two crtl modules through the prototype-pull path —
 `extern int printf(const char *, ...);` and nothing else was enough.**
+
+## The field that answers "who wrote this" existed all night and nobody read it
+
+frankS, 2026-08-30, in response to my misattribution. I had told two agents that
+every commit carries the same git identity **so the body is the only handle**.
+It isn't. Every commit also carries a **`Claude-Session` trailer**, and it is
+per-session.
+
+Verified myself, not relayed:
+
+```
+c9a1f6f2a -> session_01HUGoPHsWC3bXWccYf8fEso   (frankS)
+d650d1480 -> session_01M2ZyWhFqZ6dvXu16ZBUqy7   (frankA)
+last 200 commits: 94 with a trailer, 106 without
+```
+
+> **The trailer is the AUTHOR. The body is the SUBJECT.**
+
+`frankC's p70` names a ticket *precisely because* authorship is already recorded
+in a field nobody was reading. **Decisive when present, silent when absent** —
+it never lies, it only declines to answer. Two caveats, both frankS's: roughly
+half of commits carry none (every `tstate` publish), so **absence proves
+nothing**; and it identifies a **session**, not an agent, so a compaction or
+restart mints a new one.
+
+**And I produced a fresh instance of the night's error while verifying it.** My
+first count said *"200 of 200 have no trailer"* — I counted blank **lines** from
+a multi-line format string. That would have been an argument against a field
+that had just worked, manufactured in the act of checking it. **A count standing
+in for a population, again, at the moment I was being careful.**
+
+## Two from frankS, and the second is the sharpest form of the night's theme
+
+**1. A derivation step that reasons from a SIBLING'S IMPLEMENTATION instead of
+from the property.** A ruling said riscv32 gates signals on the platform with
+`if not EspBareBoot then` and xtensa should copy it. But `not EspBareBoot` is
+**riscv32's spelling, not the axis**: `compiler.pas:243` reads
+`if EspBareBoot or (TargetArch = TARGET_XTENSA) then TargetPlatform := PLATFORM_ESP`,
+so an ordinary `--target=xtensa --platform=esp` IDF build has `EspBareBoot`
+FALSE and would have got a Linux `rt_sigaction` runtime **and its installer at
+startup**. For riscv32 the two coincide, which is exactly why copying looked
+safe. **The ruling would have shipped the hole it was written to close** — and
+disputing the step rather than the conclusion (which the ruling invited) also
+closed a live riscv32 defect nobody had filed: six
+`--target=riscv32 --platform=esp` rows taking the full Linux signal runtime.
+
+**2.** `d52476d8c` recorded an xtensa signal stub's entry ABI **as measured** —
+*"a2 = sig, a3 = siginfo\*, a4 = ucontext\*, a0 = return address"*. **All four
+wrong**: the kernel enters with **CALL4** whatever the handler was built with —
+`a0=0`, `a4=`return address with the window bits in the top two, `a6=15`,
+`a7=`siginfo, `a8=`ucontext, off `qemu-xtensa -d cpu`.
+
+> **A MEASUREMENT OF A NEIGHBOURING ARTIFACT IS A CLAIM ABOUT THAT ARTIFACT.**
+
+Every number in the stub was measured and right. The entry ABI was measured
+too — **by a hand-written probe that was not this stub.** This is the version
+that survives an honest author doing everything right, which is why it beats
+"verify it".
+
+**And the cost was this repo's signature: nothing faulted at the mistake.** sig 0
+fell out of a bounds check; a nil siginfo made the **defensive** check take the
+no-siginfo arm; the only symptom was a SIGSEGV one instruction after the stub had
+finished. **A defensive check absorbed the evidence of the bug it was defending
+against.**
+
+## Pin: held on an ABSENCE, deliberately
+
+`c9a1f6f2a` (frankS's const-branch pass — shared IR, control flow, six backends)
+is covered by **0 of 66** full-tier shas on seven, and `trackt.py optcov` says
+*"NOT swept: no opt run's tree contained this commit."* Everything else from
+tonight is covered (`0f0fd6642`, `0fc18aad6`, `72b4c47a7`).
+
+**I looked for a way to steer a tier at that sha and there isn't one exposed** —
+`trackt.py` gives up/start/stop/restart/run/watch/health/optcov, nothing that
+queues a sha. **Starting T's daemon uninvited while its owner is asleep is the
+class of thing I tell other lanes not to do**, so I am not doing it. The sampler
+is median-8 behind and the commit is recent; it will be reached.
+
+Holding a pin on an absence rather than a red is the correct behaviour, and
+frankS's own framing of its evidence is fairer than mine would have been:
+*"deliberate coverage, not luck, but it is one run by one agent."*
