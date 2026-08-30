@@ -24,6 +24,16 @@ printing a blank that reads as absence. Absence prompts a search; a constant doe
 not, which is the whole reason %an is useless here (it is `yoctobyte` on every
 commit, by construction, because every agent commits as the owner).
 
+TO BE SEEN BY THIS TOOL, put a `Lane:` trailer on your commits:
+
+    Lane: frankA
+
+That is additive -- it does NOT replace CLAUDE.md's `Claude-Session:` line, which
+is the spec and identifies a transcript. `Lane:` identifies someone you can reach,
+which is the thing a collision actually needs, and a session whose id has no URL
+form can satisfy it without fabricating one. The tool prefers `Lane:` and falls
+back to the session id.
+
 UNCOMMITTED work is invisible to this. A lane editing a file it has not committed
 does not appear, so `quiet` means "nobody has LANDED anything recently", never
 "nobody is in it". Ask before opening a file that matters.
@@ -39,8 +49,16 @@ def sh(*a):
 
 def recent(path, minutes):
     """(age_min, session, subject) for each commit touching path in the window."""
+    # Two trailers, deliberately. `Lane:` is the ADDRESSABLE one -- the string
+    # ListAgents shows and SendMessage takes -- and is what answers "who do I ask".
+    # `Claude-Session:` is CLAUDE.md's spec and identifies a transcript; it is read
+    # as a fallback and is NOT redefined here. A lane whose session id has no URL
+    # form (plain UUID sessions) can satisfy `Lane:` without fabricating a URL,
+    # which is the divergence that prompted this.
     out = sh("git", "log", f"--since={minutes} minutes ago", "--date=unix",
-             "--format=%H%x01%cd%x01%s%x01%(trailers:key=Claude-Session,valueonly=true)",
+             "--format=%H%x01%cd%x01%s%x01"
+             "%(trailers:key=Lane,valueonly=true)%x01"
+             "%(trailers:key=Claude-Session,valueonly=true)",
              "origin/master", "--", path)
     now, rows = time.time(), []
     for line in out.splitlines():
@@ -48,12 +66,17 @@ def recent(path, minutes):
         if len(parts) < 3:
             continue
         _, cd, subj = parts[0], parts[1], parts[2]
-        trailer = parts[3] if len(parts) > 3 else ""
+        lane = (parts[3] if len(parts) > 3 else "").strip()
+        trailer = parts[4] if len(parts) > 4 else ""
         sess = ""
-        for tok in trailer.split():
-            if tok.startswith("session_"):
-                sess = tok[8:16]
-                break
+        if lane:
+            # a lane name is worth more than a session id: it is reachable
+            sess = lane.split("(")[0].strip()[:18]
+        else:
+            for tok in trailer.split():
+                if tok.startswith("session_"):
+                    sess = tok[8:16]
+                    break
         try:
             age = int((now - int(cd)) / 60)
         except ValueError:
