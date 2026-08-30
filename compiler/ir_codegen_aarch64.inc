@@ -1385,6 +1385,63 @@ begin
   else Error('target aarch64: unsupported float compare operator');
 end;
 
+{ -O3 W1 slice 10's aarch64 twin. Does the shift arm OPEN with a widen of the
+  left operand? Both the pre-decision that SKIPS the left load and the emit site
+  that must honour it call THIS function, so they cannot drift: a skip the widen
+  site failed to honour would leave x0 never loaded at all -- a wrong value, not
+  a crash. One condition, two readers.
+  Returns 0 = no leading widen, 1 = sxtw (signed, native-width result),
+  2 = `mov w0, w0` (zero-extend). Both flavours fuse; the x86-64 twin fused only
+  the sign-extending one, which is a gap on that side, not a difference here.
+  Deliberately NOT the `lsl` arm: its extend is TRAILING (it narrows the
+  RESULT), so there is no load to fuse it with. }
+function W1LeadingExtA64(node, left, op: Integer): Integer;
+begin
+  W1LeadingExtA64 := 0;
+  if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
+  if op = Ord(tkIdent) then                                  { Pascal `shr` }
+  begin
+    if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+       TypeSigned(IntToTypeKind(IRTk[left])) then
+      W1LeadingExtA64 := 1
+    else
+      W1LeadingExtA64 := 2;
+  end
+  else if op = Ord(tkShr) then                               { C `>>` }
+    W1LeadingExtA64 := 1;
+end;
+
+{ -O3 W1 slice 10's aarch64 twin: can the left operand's load be skipped and
+  carried by the widen? Returns its home register, or 0.
+  `sxtw x0, wN` and `mov w0, wN` each read the low 32 bits of xN and write x0 --
+  the read AND the extension in one instruction, where `mov x0, xN` plus the
+  extension is two. Correct by construction: neither depends on what the upper
+  half of xN holds, so unlike DELETING the extension this rests on no residency
+  normalisation invariant.
+  Exactly-4 is required: a 1- or 2-byte symbol's own load is a sxtb/sxth from
+  the low 8/16 bits, which neither of these is. }
+function W1ExtLeftEligibleA64(node, left, op: Integer): Integer;
+begin
+  W1ExtLeftEligibleA64 := 0;
+  if OptLevel < 3 then Exit;
+  if W1LeadingExtA64(node, left, op) = 0 then Exit;
+  if not LeafSymRcxLoadable(left) then Exit;
+  if TypeSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
+  W1ExtLeftEligibleA64 := ResidentRegOf(IRA[left]);
+end;
+
+{ Emit the leading widen of the left operand into x0, fusing the resident read
+  into it when the load above was skipped. reg = 0 means the value is already
+  staged in x0 and only the extension is emitted -- byte-identical to what these
+  two sites emitted before the fold existed. }
+procedure EmitWidenLeftA64(kind, reg: Integer);
+begin
+  if kind = 1 then
+    EmitI32($93407C00 or (reg shl 5))      { sxtw x0, w0|wN }
+  else
+    EmitI32($2A0003E0 or (reg shl 16));    { mov  w0, w0|wN }
+end;
+
 { cmp Xn, Xm -- which on aarch64 IS `subs xzr, Xn, Xm`, so BOTH sources are
   free register fields. That is the whole reason -O3 W1 slices 5 and 7 collapse
   into one arm here where x86-64 needed two: neither operand has to be staged.
@@ -1405,6 +1462,7 @@ var
   pNilPos, pDonePos: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
+  w1ExtLA64: Integer;   { -O3 W1 slice 10 (aarch64): 0 = left load emitted, else the resident reg the widen must read }
   w1CmpLA64, w1CmpRA64: Integer;   { -O3 W1 slices 5+7 (aarch64): 0 = the normal x0/x1 contract, else x19..x24 read in place }
   sgn, isComp, savedLValueWrite: Boolean;
 begin
@@ -2170,6 +2228,7 @@ begin
           feature-opt-o3-a64-fold-a-resident-compare-left-across-a-complex-right }
         w1CmpLA64 := 0;
         w1CmpRA64 := 0;
+        w1ExtLA64 := 0;
         if (OptLevel >= 3) and CmpFusible(node) then
         begin
           if LeafSymRcxLoadable(left) and
@@ -2177,16 +2236,30 @@ begin
             w1CmpLA64 := ResidentRegOf(IRA[left]);
           if LeafSymRcxLoadable(right) then
             w1CmpRA64 := ResidentRegOf(IRA[right]);
-        end;
+        end
+        else if (OptLevel >= 3) and
+                ((IRKind[right] = IR_CONST_INT) or (IRKind[right] = IR_LOAD_SYM)) then
+          { -O3 W1 slice 10's aarch64 twin: a 4-byte resident feeding a shift's
+            LEADING widen needs no load of its own -- `sxtw x0, wN` (or
+            `mov w0, wN`) is the read and the widen in one instruction. Safe to
+            defer across the right operand's setup for the same reason the
+            compare fold is: in these two arms the right is a constant or a leaf
+            symbol, so nothing between here and the widen writes x0, and nothing
+            can mutate the symbol out from under the deferred read. Restricted
+            to those two arms because the general one below stages x0 through
+            the stack, and there the deferred read has to move with it. }
+          w1ExtLA64 := W1ExtLeftEligibleA64(node, left, op);
 
         if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) then
         begin
-          if w1CmpLA64 = 0 then IREmitNodeAarch64(left);   { x0 = left }
+          if (w1CmpLA64 = 0) and (w1ExtLA64 = 0) then
+            IREmitNodeAarch64(left);            { x0 = left }
           EmitLoadImmA64(1, IRIVal[right]);     { x1 = right, no stack round trip }
         end
         else if (OptLevel >= 3) and (IRKind[right] = IR_LOAD_SYM) then
         begin
-          if w1CmpLA64 = 0 then IREmitNodeAarch64(left);      { x0 = left }
+          if (w1CmpLA64 = 0) and (w1ExtLA64 = 0) then
+            IREmitNodeAarch64(left);               { x0 = left }
           if w1CmpRA64 = 0 then
             EmitLoadVarA64Dest(IRA[right], 1);    { x1 = right, no stack round trip }
         end
@@ -2314,11 +2387,7 @@ begin
           begin
             { a NATIVE-width result sign-extends a signed operand first — see
               the x86-64 twin }
-            if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
-               TypeSigned(IntToTypeKind(IRTk[IRA[node]])) then
-              EmitI32($93407C00)                           { sxtw x0, w0 }
-            else
-              EmitI32($2A0003E0);                          { mov w0, w0 }
+            EmitWidenLeftA64(W1LeadingExtA64(node, left, op), w1ExtLA64);
           end;
           EmitI32($9AC12400);                              { lsr x0, x0, x1 }
         end
@@ -2329,7 +2398,7 @@ begin
             instead of zero-extending for a <8-byte operand, and uses asrv
             instead of lsrv. }
           if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
-            EmitI32($93407C00);                            { sxtw x0, w0 }
+            EmitWidenLeftA64(W1LeadingExtA64(node, left, op), w1ExtLA64);
           EmitI32($9AC12800);                              { asr x0, x0, x1 }
         end
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or

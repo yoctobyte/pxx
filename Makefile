@@ -4031,6 +4031,22 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_shrwidensf326 "$$($(TESTTMP)/test_shrwidensf326)" "$$(printf 'acc=1121256676948\none=373752225564\ndone')"
 	./$(COMPILER) -O0 --strict-fpc test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwidensf026
 	tools/expect_same.sh test_shrwidensf026 "$$($(TESTTMP)/test_shrwidensf026)" "$$(printf 'acc=1121256676948\none=373752225564\ndone')"
+	# The same fold on AARCH64, where the leading widen is `sxtw x0, w0` (signed,
+	# native-width result) or `mov w0, w0` (zero-extend) and BOTH flavours fuse:
+	# `sxtw x0, wN` / `mov w0, wN` is the resident read and the extension in one
+	# instruction. The unsigned `u shr 1` row is what prices the second flavour.
+	# aarch64 must produce the SAME numbers as x86-64 -- that agreement is the
+	# point, since the two backends reach them by different encodings.
+	# Three deliberate breaks (wrong Rn in sxtw, wrong Rm in the zero-extend,
+	# widen site ignoring the deferred load) each move aarch64 -O3.
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  for o in 0 3; do \
+	    ./$(COMPILER) --target=aarch64 -O$$o test/test_shr_resident_widen.pas $(TESTTMP)/test_srw_a64_$$o >/dev/null || { echo "srw aarch64 -O$$o compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh aarch64/test_srw_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_srw_a64_$$o)" "$$(printf 'acc=2399488939246\none=799829646330\ndone')" || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_shr_resident_widen: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
 	# AARCH64 W1 slices 5+7, which collapse into ONE arm there: `cmp Xn, Xm` on
 	# aarch64 IS `subs xzr, Xn, Xm`, so BOTH sources are free register fields and
 	# a resident left AND a resident right are each read where they live. x86-64
@@ -4050,7 +4066,7 @@ test-threads: $(COMPILER)
 	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
 	  for o in 0 3; do \
 	    ./$(COMPILER) --target=aarch64 -O$$o test/test_cmp_both_in_place.pas $(TESTTMP)/test_cbip_a64_$$o >/dev/null || { echo "cbip aarch64 -O$$o compile FAIL"; exit 1; }; \
-	    tools/expect_same.sh aarch64/test_cbip_a64_$$o "$$$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cbip_a64_$$o)" "$$$$(printf 'acc=49149\none=16383\ndone')" || exit 1; \
+	    tools/expect_same.sh aarch64/test_cbip_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cbip_a64_$$o)" "$$(printf 'acc=49149\none=16383\ndone')" || exit 1; \
 	  done; \
 	else \
 	  echo "=== test_cmp_both_in_place: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \

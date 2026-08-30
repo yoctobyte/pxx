@@ -232,3 +232,99 @@ Slice 6 (resident left times a constant, three-operand multiply — aarch64 has
 (the narrow 32-bit compare — `cmp Wn, Wm` exists and should be a small
 follow-on), and the last-call-argument push/pop collapse. The ticket stays open
 for those.
+
+
+## Slice 8 on aarch64 is worth ZERO — measured, not ported
+
+The next item on the list was slice 8, the narrow 32-bit compare. **It has no
+aarch64 analogue with a win, and the right answer was not to write it.**
+
+`cmp Wn, Wm` and `cmp Xn, Xm` are both one four-byte instruction, so the width
+itself buys nothing. What slice 8 actually bought on x86-64 was the **memory**
+form — dropping REX.W is what made `cmp rNd, [rbp+d32]` legal, folding a frame
+slot into the compare. aarch64 has no memory operand for `cmp` at all, so the
+half that paid has nothing to port.
+
+Measured rather than argued, because "both encodings are one instruction" is the
+kind of claim that is right for the wrong reason often enough to check. Programs
+identical but for `LongInt` vs `Int64` operands, at `-O3` on aarch64, over a
+loop of N compares:
+
+| compare rows | 32-bit | 64-bit | delta |
+| --- | --- | --- | --- |
+| 3 | 130228 | 130220 | 8 |
+| 9 | 130348 | 130340 | 8 |
+| 27 | 130708 | 130700 | 8 |
+
+**The delta is constant.** A narrow operand costs 8 bytes once — two `sxtw` at
+residency init — and **zero per compare**. Varying the row count is what turns
+"32-bit code is slightly bigger" from a number that looks like a per-compare
+cost into one that is provably not: a single measurement at 3 rows would have
+read as "8 bytes of slack, go get it".
+
+A pass that fires and saves nothing is worse than no pass: it is more code, more
+risk, and it would have grown the aarch64 gate count — *closing the parity gap
+numerically while buying nothing*, which is precisely the number-versus-
+conclusion drift this ticket's own three wrong counts were about.
+
+## Slice 10's twin ported instead — the leading widen
+
+Baseline `d89206e1b8de`, new `8ba8a81efea0`, both at the same HEAD with the
+baseline being HEAD minus only this hunk.
+
+aarch64's shift arms open with the same leading widen x86-64's do — `sxtw x0,
+w0` for a signed native-width result, `mov w0, w0` to zero-extend — preceded by
+`mov x0, xN` when the operand is resident. `sxtw x0, wN` and `mov w0, wN` each
+do the read AND the extension in one instruction.
+
+**Both flavours fuse here, and only one does on x86-64** — slice 10 fused the
+`cdqe` and left `mov eax, eax` alone. Writing the aarch64 helper with a
+two-valued result made that asymmetry visible; filed as
+`feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64` [p45].
+**Porting a pass is a second reading of it, by someone who has to state its
+shape in a different language.**
+
+**Measured (aarch64 -O3, output identical, -O0/-O1/-O2 byte-identical, x86-64
+byte-identical at every level):** `test_shr_resident_widen` −24 bytes (6
+firings), `bench/w1_three_locals` −4 (1); `lispdemo` and
+`test_cmp_both_in_place` unchanged, no firing. Small — the population is shifts
+of a resident narrow, not compares — and it is the same instruction the x86-64
+twin deletes.
+
+**Non-vacuity:** three deliberate breaks — a wrong Rn in the `sxtw`, a wrong Rm
+in the zero-extend form, and the widen site ignoring the deferred load (so x0 is
+never loaded) — each move aarch64 `-O3` while `-O0` and x86-64 stay correct,
+to three different wrong answers.
+
+### The aarch64 test rows were ZERO coverage and looked like a row
+
+Caught by the coordinator off twatch, not by me. The `for`-loop rows I added for
+`test_cmp_both_in_place` used `$$$$(...)` where a make recipe needs `$$(...)`,
+so the shell saw `$$` — its own PID — followed by a literal `(printf ...)`. Both
+sides of the comparison were command *strings*, never program output, and could
+never have matched.
+
+The failure mode is the one this ticket already banked in the other direction: a
+deliberate break that passes is a wrong claim about your code, and **a row that
+fails for a reason unrelated to what it tests is equally uninformative — had the
+two strings happened to agree, it would have been a green row proving nothing
+about 901 deleted instructions.**
+
+Repaired and then *proven*, which is the part worth copying: the recipe block was
+extracted into a scratch makefile so real `make` did the `$$` expansion, run
+green, then run again with **only the aarch64 expectation** perturbed by one
+digit — it fails there, on `acc=49149` from the qemu run, which is proof the
+comparison now reaches the program. Same treatment applied to the new
+`test_shr_resident_widen` aarch64 rows before trusting them.
+
+### Per-backend gate count: x86-64 22, aarch64 7 -> **9**
+
+### Remaining
+
+Slice 6 (resident left times a constant) is the last of the family, and it is
+**a different shape, not a port**: aarch64 has no `imul`-immediate form, so
+there is no three-operand encoding to fold into and the constant needs
+materialising into a register first — which is what the const-right arm already
+does. It should be reassessed on its own merits, and the slice-8 result above is
+the reason to measure before writing. The last-call-argument push/pop collapse
+is untouched and is genuinely a port.
