@@ -600,7 +600,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (127)
+## decided (128)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -711,6 +711,7 @@ _none_
 | decide-t-notification-transport-poll-not-webhooks | U | 60 | decide | How Track T's findings reach an agent or a human: polling, never webhooks. 60s is the baseline; adaptive backoff is allowed but the daemon must not grow a time-based one. | — |
 | decide-t-queue-scope-2026-08-03 | T | 60 | decide | User calls on four standing assumptions in the Track T queue: borg's watcher, the arm oracles, who may pin, and when the NilPy fuzzer earns its keep | — |
 | decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one | U | 60 | decide | DECIDE: `licensing-concerns.md` says "No License Yet"; the repo root carries LICENSE | — |
+| decide-the-o-level-charter | U | 65 | decide | RULED 2026-08-30. O0 zero optimization / O1 DEBUG-SAFE optimization (our divergence: this is -Og elsewhere, and it needs a test or it is only a label) / O2 proven default / O3 experimental, staging for O2. NO -O4 maturity tier: 'only for certain applications' is a TRADE-OFF, not a maturity stage, and mixing the two axes puts draining and permanent passes in one level where neither can be told apart. Permanent trade-offs are NAMED FLAGS, because an author must choose WHICH trade, not HOW MUCH. | — |
 | decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it | U | 65 | decide | -O3 was 28-34% faster than -O2 on the compiler's own workload. ~78-82% of that was ONE pass -- EmitStaticLitHandle / EmitStaticLitHandleA64, the static string-literal handle -- PROMOTED to -O2 in 440c822e6a80 (both backends; quick gate green, full+cross sweep requested from frankT, not pin-eligible until it returns). MEASURED AFTER: the remaining -O3 gap is ~5-7%, real (7 of 9 paired runs) but at the edge of what a contended box resolves. The campaign is effectively over -- the rest does not justify per-pass promotion at this measurement precision. -O1 limbo untouched. | — |
 | decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop | U | 70 | decide | The ticket lock is too heavy for the loop it sits in — 607 commits, 3 locks | — |
 | decide-threadsafe-gate-is-reach-based-not-use-based | U | 45 | decide | Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one | — |

@@ -163,10 +163,17 @@ flag or lands incrementally, never on a long-lived branch.
 - **N — NilPy is UPWARD compatible with CPython**, one direction: code that works
   on CPython must work here. Accepting something CPython rejects is a feature,
   not a defect (`devdocs/dev/nilpy-semantics-divergences.md`).
-- **O — the tiers, ruled by the owner 2026-08-30:** `-O0` debugging, `-O1` **in
-  limbo**, `-O2` the de-facto stable default, `-O3` **experimental by design** —
-  where a pass lives while it earns `-O2`, not a staging area that ought to be
-  empty.
+- **O — the levels, charter ruled 2026-08-30** (`decided/decide-the-o-level-charter`):
+  `-O0` zero optimization, source 1:1 · `-O1` **debug-safe optimization** (our
+  divergence — this is `-Og` elsewhere; **unenforced until someone builds the
+  test**, so it is an intention today) · `-O2` the proven default · `-O3`
+  **experimental, staging for `-O2`** — where a pass lives while it earns the
+  default, not a staging area that ought to be empty.
+  **There is no `-O4` and there should not be one.** "Only for certain
+  applications" is a **trade-off**, not a maturity stage; a level holding both
+  draining and permanent passes lets you tell neither apart, and *"level 4"* does
+  not tell an author WHICH trade they are buying. **Permanent trade-offs are
+  named flags.**
   **Proof is ruled and exhaustive: self-host + all tests passed.** *"We have no
   more proof until we have a counterproof."* The reasoning is that **the compiler
   and the target set ARE the proof** — a pass that miscompiles anything real does
@@ -316,12 +323,27 @@ hex characters: `git merge-base --is-ancestor <sha> origin/master` (not `git
 cat-file -e`, which answers about your own object store and so cannot tell a
 ghost from a commit).
 
+**The one-line form, from frank-optimize, and it covers every instance above:
+every instrument that lied tonight lied by being CORRECT ABOUT SOMETHING ELSE.**
+A stale binary, a stale tree, an under-powered null, a half-applied document, a
+store-local `cat-file`, a truncated `tail`. **None errored. All answered.** That
+is why the guard cannot be "check for errors" — there were none to find.
+
 Its companion, from the coordinator, who broke it while arguing for it:
 **a verification claim scopes to exactly what was checked, and an unlabelled
 claim travelling beside it inherits that credibility.** "I checked both facts
 myself" carried a third, unchecked one into a decision. Name the facts you
 checked, or claim none — an unlabelled companion is how a bad claim *travels*
 rather than merely exists.
+
+**And the dispatch form, frankwasm's, aimed at a night where three agents
+independently cleared the same suspect and only one then asked "then what?":
+an EXCULPATION NEEDS AN OWNER FOR THE RESIDUAL QUESTION.** Being cleared was
+never the risk. The risk was that the clearing was so clean — 24 of 24 jobs
+never-seen-before, the suspect commit touching no code — that it read as a
+*complete explanation*, and a real miscompile blocking the pin sat behind a
+satisfying answer. **"Not X" is half a finding. Name who owns "then what?"
+before you close it.**
 
 ## Debugging — measure, do not reason
 
@@ -478,6 +500,16 @@ something you are nervous about, skip it when you are not. It is **REQUIRED
 before a pin**, which is now the only place the proof is mandatory. This is the
 change of 2026-08-25, surviving the `dev` collapse of 2026-08-26: the proof
 moved off the critical path, it did not disappear.
+
+**One cheap addition for a MARSHALLING change, and it is evidence, not gate
+widening:** carry a one-line repro from **each frontend your quick tier does not
+cover**. Measured 2026-08-30 — a caller/callee offset mismatch shipped with every
+runnable gate green (eight string-heavy tests, both widestring canaries, the
+fixedpoint, `gate.sh quick`) because the affected population was `test-nilpy`,
+which is **full-tier only and the hook denies it to the author**. `x = "a" * 3`
+costs under a second and would have caught it. The answer was never a wider gate
+— that spends the machine that produces T's median-8 sampling, which is what
+actually caught it.
 
 **That is the entire gate. Nothing is missing from it.** Breadth — the full
 suites, cross targets, the corpus, regressions elsewhere — is **Track T's job**,
