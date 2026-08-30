@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given | A | 65 | bug | EmitParamSpillsForTarget's ProcCdecl arms have three gaps that only surface once the C frontend routes into them: aarch64 mishandles a by-value Single, i386's arm has no float classification at all, and arm32's cannot compile a varargs-using translation unit. These are PREREQUISITES for bug-c-a-c-function-s-calling-convention-depends-on-the-target, not follow-ons -- routing the C prologue into an arm with these gaps breaks pure C no matter what the call sites do. | — |
-| bug-p-a-specialized-body-reports-errors-in-the-wrong-file | P | 60 | bug | An error inside a replayed (specialized) generic method body reports a file and line that are BOTH wrong — measured on the rtl-generics corpus, where `unknown type: TKey` is attributed to `generics.defaults.pas:78` while its own `near:` context is `generics.collections.pas:1631`, another unit ~1550 lines further down. `TKey` does not occur in the named file at all. Only `near:` survives substitution, so `near:` is currently the only trustworthy field. Not a parity issue with FPC — our own diagnostic points at the wrong source — and it costs real time on every corpus triage, because the first move is always to open the named file. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
@@ -69,7 +68,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (388)
+## backlog (389)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -121,6 +120,7 @@ _none_
 | bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 | A | 25 | bug | `--emit-obj` on i386/aarch64/arm32 refuses with `only xtensa/riscv32 targets` -- but x86-64 supports it and is the target most users are on. The message names a set that excludes a working target, so a reader who trusts the diagnostic over the docs concludes the feature is ESP-only. | — |
 | bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss | A+S | 25 | bug | An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate — nothing watches this number. | — |
 | bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use | A | 25 | bug | defs.inc:816 documents IR_FRAME with 'the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address' — stated as universal. It is false on riscv32, where s0 points at the BOTTOM of the frame and the links sit at +8/+12. ir.inc:4977 knows this and says assuming the common layout 'would have silently walked into the locals'. The lowering is correct (it asks FramePrevFpOffset/FrameRetAddrOffset); the DOC a backend implementer reads is not. | — |
+| bug-a-the-near-context-window-is-stale-after-a-token-splice | A | 45 | bug | `InsertTokens`/`RemoveTokens` shift `Tokens[]` and adjust the source-range and DWARF tables, but do NOT shift the parallel `TokSrcOff[]`/`TokSrcLen[]` arrays that `WriteTokenContext` prefers for a token's source spelling. After any splice, every `near:` window past the edit prints the spelling that used to live at that index. Visible today on a generic specialization: the window prints `< T > = class public >>> Val : T` — un-substituted `T`, which cannot occur in a substituted body — for an error whose token is `TNoSuchTypeAnywhere` in the spliced body. Filed by Track P; the fix is in lexer.inc, which is Track A ground. | — |
 | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help | A | 35→40 | bug | The "no FPU" diagnostic tells you to `uses softfloat`, and doing so changes nothing | — |
 | bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
 | bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 25 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
@@ -732,9 +732,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2844)
+## done (2845)
 
-2844 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2845 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (59)
 
@@ -945,6 +945,7 @@ _none_
 - [p 45] [A] bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown
 - [p 45] [A] bug-a-q-plus-overflow-checking-has-no-runtime-helper-on-arm32-and-riscv32
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
+- [p 45] [A] bug-a-the-near-context-window-is-stale-after-a-token-splice
 - [p 45] [A+S] bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp
 - [p 45] [A+S] bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled
 - [p 45] [D] bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary

@@ -3,7 +3,7 @@ slug: bug-p-a-specialized-body-reports-errors-in-the-wrong-file
 track: P
 prio: 60
 type: bug
-status: working
+status: done
 blocked-by: []
 summary: "An error inside a replayed (specialized) generic method body reports a file and line that are BOTH wrong — measured on the rtl-generics corpus, where `unknown type: TKey` is attributed to `generics.defaults.pas:78` while its own `near:` context is `generics.collections.pas:1631`, another unit ~1550 lines further down. `TKey` does not occur in the named file at all. Only `near:` survives substitution, so `near:` is currently the only trustworthy field. Not a parity issue with FPC — our own diagnostic points at the wrong source — and it costs real time on every corpus triage, because the first move is always to open the named file."
 owner: frank-rust
@@ -181,3 +181,96 @@ frankS's `pasparser_generic.inc` work. A live red recipe in `test-core` turns
 every lane's gate red and reads to Track T as a regression against whatever sha
 happens to touch it next. Uncomment **in the same commit as the fix** — the
 Makefile comment says so at the site.
+
+## FIXED — the arena held three kinds of region and the lookup knew one
+
+`TemplateSrcKeyOfTok` answers "which file did this arena token come from" by
+scanning `Templates[i].TokStart/TokCount`. The arena holds **three** kinds of
+region:
+
+| region | covered by | scanned before |
+| --- | --- | --- |
+| a captured template | `Templates[i]` | yes |
+| a buffered generic METHOD body (`BufferGenericMethod`) | `GenericMethods[i]` | **no** |
+| a generic FUNCTION body | `GenericFuncs[i]` | **no** |
+
+`Templates[].TokCount` stops growing when the template's own capture ends
+(`pasparser_generic.inc:1907`) and never takes the appended bodies in. So every
+method body returned **-1**, `PasSpliceTokFile` took its `srcKeyId < 0` early
+exit, no provenance was planted, and the pasted region silently inherited the
+DESTINATION file — the template's `.Line` (rides on the token) under the
+instantiating unit's name (rides on the index). Exactly the two-sources pairing
+the reduction showed.
+
+Fix: scan `GenericMethods[]` too, mapping a body back to its owning template's
+key through `TemplateIdx`. Four lines of scan in `pasparser_generic.inc`, no
+other file touched.
+
+### Confirmed by instrument, not by inference
+
+`PXXDBG=a.srcmap:*` on the reduction. Before, ONE splice is planted — the class
+declaration. After, TWO:
+
+```
+SPLICE start=28986 count=16 src=.../uerrtmpl.pas resumes=3
+SPLICE start=29008 count=26 src=.../uerrtmpl.pas resumes=3   <- new: the method body
+```
+
+The second line is the bug: it was always supposed to be there.
+
+### Why one arm was accidentally right
+
+`ParseSpecialization` splices the method bodies immediately after the class
+declaration — still inside the region that splice had just attributed to the
+template — so inheriting the destination *was* inheriting the right answer.
+`FlushPendingClassSpecializations` puts them past `implementation`, in a region
+belonging to the instantiating unit, and the luck runs out. That is the whole of
+"why did the program shape work": not a different code path, a different landing
+spot.
+
+### The third region is real and deliberately NOT fixed
+
+`GenericFuncs[]` has the identical gap. It is unreachable: a `generic function`
+cannot be declared in a unit interface at all today (`unexpected token in a unit
+interface section` — measured, not assumed), so its body never crosses a file
+boundary and inheriting the destination is always right. There is no reachable
+wrong output, and `GenericFuncs` has no source-key field to answer with, so
+covering it would mean untestable code plus a new parallel array. Noted at the
+fix site for whoever enables interface generic functions.
+
+### Verified
+
+| | before `a9a4818ab6c8` | after |
+| --- | --- | --- |
+| specialization in a unit INTERFACE | `in: uerrinst.pas` (wrong) | `in: uerrtmpl.pas` ✓ |
+| specialization in a PROGRAM type section | `in: utmpl.pas` ✓ | `in: utmpl.pas` ✓ |
+
+Plus `test_generic_spec_per_unit` 4/4, `test_delphi_generic_cross_unit` 4/4,
+`test_generic_cross_unit_inline_specialize` 1/1, `test_generic_func`,
+`test_inline_generic_specialization`, `test_generic_name_overload`,
+`test_generic_arg_is_enclosing_template_param` 5/5. Self-host fixedpoint
+converged. The `test-core` recipe is now live (uncommented in this commit) and
+its three greps pass.
+
+## Still broken, filed separately: the `near:` window
+
+The `in:` file and the line are now right. `near:` is **not**, and the output
+convicts itself: it prints `< T > = class public >>> Val : T` — an
+un-substituted `T`, which cannot occur in a substituted body — for an error
+whose token is `TNoSuchTypeAnywhere`.
+
+Cause is a different mechanism in a different file: `InsertTokens` shifts
+`Tokens[]` and adjusts the range tables but does not shift the parallel
+`TokSrcOff[]`/`TokSrcLen[]` arrays that `WriteTokenContext` prefers, so every
+window past a splice prints stale spellings. `lexer.inc` is Track A ground, so
+it is filed rather than fixed:
+[[bug-a-the-near-context-window-is-stale-after-a-token-splice]].
+
+**This corrects advice I gave two agents.** I told frankB and the coordinator to
+trust `near:` and ignore `in:` during corpus triage. That was right about `in:`
+and wrong about `near:`: `near:` is honest until the first splice, and a
+specialization-heavy corpus is nothing but splices. It looked trustworthy on the
+corpus because it was; it is not trustworthy in general.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -7670,25 +7670,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Futest/delphi_generic_units test/test_generic_cross_unit_inline_specialize.pas $(TESTTMP)/test_generic_xunit_inline26
 	tools/expect_same.sh test_generic_xunit_inline26 "$$($(TESTTMP)/test_generic_xunit_inline26 | tail -1)" "total ok 1 / 1"
 	# A specialized method body's diagnostic must name the file that CONTAINS the
-	# token. Today it pairs the template's LINE NUMBER with the instantiating
-	# unit's FILE NAME -- two independent sources that agree only when template
-	# and specialization share a file. The units are built so the coincidence is
-	# impossible: the real site is uerrtmpl.pas:22, and uerrinst.pas:22 is a
-	# comment saying it is not the site.
-	#
-	# DELIBERATELY COMMENTED OUT: this recipe is RED today. It is the failing
-	# test for bug-p-a-specialized-body-reports-errors-in-the-wrong-file, written
-	# ahead of the fix because the fix waits on another agent's file. Landing it
-	# live would turn test-core red for every lane and read to Track T as a
-	# regression against whatever sha touched it. Uncomment IN THE SAME COMMIT as
-	# the fix. Measured before the fix, binary d5a35c8de13a:
-	#   pascal26:22: error: unknown type: TNoSuchTypeAnywhere
-	#     in: test/generic_errloc_units/uerrinst.pas    <-- wrong file
-	#
-	#	! ./$(COMPILER) -Futest/generic_errloc_units test/test_generic_error_location_names_a_third_file_fail.pas $(TESTTMP)/test_generic_errloc26 > $(TESTTMP)/test_generic_errloc.log 2>&1
-	#	grep -q "unknown type: TNoSuchTypeAnywhere" $(TESTTMP)/test_generic_errloc.log
-	#	grep -q "^  in: .*uerrtmpl\.pas" $(TESTTMP)/test_generic_errloc.log
-	#	grep -q "^pascal26:22: " $(TESTTMP)/test_generic_errloc.log
+	# token. It used to pair the template's LINE NUMBER with the instantiating
+	# unit's FILE NAME -- two sources that agree only when template and
+	# specialization share a file. The units make the coincidence impossible: the
+	# real site is uerrtmpl.pas:22, and uerrinst.pas:22 is a comment saying it is
+	# not the site. On d5a35c8de13a this printed `in: uerrinst.pas`. The three
+	# greps are separate on purpose -- a test asserting only "an error occurs"
+	# passed the whole time the bug was live.
+	! ./$(COMPILER) -Futest/generic_errloc_units test/test_generic_error_location_names_a_third_file_fail.pas $(TESTTMP)/test_generic_errloc26 > $(TESTTMP)/test_generic_errloc.log 2>&1
+	grep -q "unknown type: TNoSuchTypeAnywhere" $(TESTTMP)/test_generic_errloc.log
+	grep -q "^  in: .*uerrtmpl\.pas" $(TESTTMP)/test_generic_errloc.log
+	grep -q "^pascal26:22: " $(TESTTMP)/test_generic_errloc.log
 	# a generic argument that is the ENCLOSING template's parameter must not be
 	# minted as a concrete alias -- and a genuinely concrete one still must be
 	./$(COMPILER) test/test_generic_arg_is_enclosing_template_param.pas $(TESTTMP)/test_generic_encl_param26

@@ -306,7 +306,26 @@ end;
 { Which template a TemplateTokens[] pool index belongs to, as a KeyStrs id for
   its source file (-1 when unknown). Templates are captured in pool order and
   there are at most MAX_TEMPLATES of them, so a linear scan is the whole
-  implementation. }
+  implementation.
+
+  THE ARENA HOLDS TWO KINDS OF REGION and this must answer for both. A captured
+  template is covered by Templates[i].TokStart/TokCount; a generic METHOD BODY
+  buffered by BufferGenericMethod is appended to the same arena but is covered
+  only by GenericMethods[i].TokStart/TokCount — Templates[].TokCount stops
+  growing when the template's own capture ends and never takes the bodies in.
+  Scanning only the first table therefore returned -1 for every method body,
+  PasSpliceTokFile took its `srcKeyId < 0` early exit, and the pasted region
+  silently inherited the DESTINATION file's provenance: the tokens kept the
+  template's `.Line` (it rides on the token) under the instantiating unit's name
+  (it rides on the index).
+
+  That is why the defect looked shape-dependent rather than total. Splice the
+  bodies where ParseSpecialization does — just after the class declaration, still
+  inside the region that splice attributed to the template — and inheriting the
+  destination is inheriting the right answer, by luck. Splice them anywhere else
+  (FlushPendingClassSpecializations puts them past `implementation`) and the
+  luck runs out. One arm being accidentally correct is what kept this alive.
+  bug-p-a-specialized-body-reports-errors-in-the-wrong-file }
 function TemplateSrcKeyOfTok(t: Integer): Integer;
 var i: Integer;
 begin
@@ -316,6 +335,25 @@ begin
        (t < Templates[i].TokStart + Templates[i].TokCount) then
     begin
       TemplateSrcKeyOfTok := TemplateSrcKey[i];
+      Exit;
+    end;
+  { a buffered method body carries its owning TEMPLATE's file, which is where its
+    tokens were read from -- not the unit that specializes it.
+
+    GenericFuncs[] is a THIRD kind of region in this same arena and has the same
+    gap, deliberately not covered here: a generic FUNCTION cannot be declared in
+    a unit interface at all today (`unexpected token in a unit interface section`),
+    so its body never crosses a file boundary, and inheriting the destination is
+    always inheriting the right file. There is no reachable wrong output to fix,
+    and GenericFuncs has no source-key field to answer with. Whoever makes
+    `generic function` work in an interface must add the third scan with it. }
+  for i := 0 to GenericMethodCount - 1 do
+    if (t >= GenericMethods[i].TokStart) and
+       (t < GenericMethods[i].TokStart + GenericMethods[i].TokCount) and
+       (GenericMethods[i].TemplateIdx >= 0) and
+       (GenericMethods[i].TemplateIdx < TemplateCount) then
+    begin
+      TemplateSrcKeyOfTok := TemplateSrcKey[GenericMethods[i].TemplateIdx];
       Exit;
     end;
 end;
