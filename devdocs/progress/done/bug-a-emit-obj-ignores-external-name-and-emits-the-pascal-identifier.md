@@ -2,9 +2,10 @@
 prio: 55
 track: A
 type: bug
-status: backlog
+status: done
 found: 2026-08-30
 found-by: pxx-b
+owner: frankA
 ---
 
 # `--emit-obj` ignores `external name 'sym'` and emits the Pascal identifier as the undefined symbol
@@ -107,3 +108,98 @@ that the UND symbol is `sym` and not the Pascal identifier. Cheap, no linker
 needed, and it fails today.
 
 Note the test must assert the symbol NAME. "It compiles" passes right now.
+
+---
+
+## RESOLVED 2026-08-30 (frankA)
+
+### The divergence, and it was FIVE copies of one decision, not two
+
+The ticket frames this as one back end honouring the clause and another
+discarding it. The measurement is narrower and worse: `elfwriter.inc` made the
+same "alias, else Pascal name" decision in **five** places, hand-rolled each
+time. Two were right and three were wrong.
+
+| site | writer | before |
+| --- | --- | --- |
+| `PrepareDynamicData` ×2 | executable dynamic imports | correct — tested `ProcExtName` |
+| `writeELF32RelIram` | xtensa/riscv32 `--emit-obj` (iram) | wrong |
+| `writeELF32Rel` | 32-bit `--emit-obj` | wrong |
+| `writeELFRelX64` | x86-64 `--emit-obj` | wrong |
+| `writeELFSharedX64` | **`--shared` (.so)** | wrong — *not in the ticket* |
+
+Each wrong writer was wrong **twice**, because sizing the string table and
+writing it are separate loops: `Length(Procs[ExternalProc[i]].Name)` when
+sizing, `writeStrZ(..., Procs[ExternalProc[i]].Name)` when writing. Ten call
+sites over five decisions.
+
+### `--shared` was affected too, and the ticket did not know
+
+Found by grepping for the sibling rather than by trusting the scope line. It is
+invisible to `readelf`: the `.so` this writer emits carries no section header
+table, so `readelf --dyn-syms` prints *"Dynamic symbol information is not
+available"* and a symbol-level check sees nothing at all. The bytes are still in
+`.dynstr`, so the demonstration is `strings`:
+
+```
+alias_old.so:  PalSysOpen 1  PalSysRead 1  PalSysWrite 1   bare 'open' 1
+alias_new.so:  PalSysOpen 0  PalSysRead 0  PalSysWrite 0   bare 'open' 2
+```
+
+An instrument that cannot see a defect is not evidence the defect is absent.
+
+### The fix — one function, not six patches
+
+`ExternalLinkName(extIdx)` at `elfwriter.inc:126` is now the only place the
+decision exists; all ten sites call it. This is
+`normalise-dont-special-case.md` applied literally: the bug WAS the second
+path, and sizing/writing can no longer drift apart because they ask the same
+function.
+
+Deliberately NOT changed: the `Error(...)` at `:1870` still names
+`Procs[ExternalProc[0]].Name`. It is a diagnostic pointing the user at a
+declaration they wrote, so the Pascal identifier is the useful name there.
+
+### Verification
+
+`make compiler/pascal26` — `converged after 2 round(s)`, fixedpoint verified.
+
+The ticket's exact repro, all three `--emit-obj` writers:
+
+| build | UND before | UND after |
+| --- | --- | --- |
+| x86-64 | `PalSysOpen/Read/Write` | `open` `read` `write` |
+| riscv32 `--platform=esp` | `PalSysOpen/Read/Write` | `open` `read` `write` |
+| xtensa `--platform=esp` | `PalSysOpen/Read/Write` | `open` `read` `write` |
+
+`calloc`/`free` correctly still resolve to their Pascal names — they carry no
+alias, so the fallback arm is exercised too. `readelf` reports no string-table
+corruption, which is the check that the sizing and writing halves agree.
+
+### The regression asserts the NAME, in both directions
+
+frankB's acceptance criterion, taken literally. `test/test_emit_obj.pas` gains
+`ext_alias_decl` declared `external name 'ext_aliased_link'`, and
+`test-emit-obj` asserts on riscv32 and xtensa:
+
+```
+readelf -sW ... | grep -q 'UND ext_aliased_link'      # the alias is there
+! readelf -sW ... | grep -q 'ext_alias_decl'          # the Pascal name is NOT
+```
+
+The negative is the half that catches the bug. Confirmed as a control, not
+assumed — run against the pinned pre-fix binary and the fixed one:
+
+```
+BASELINE (pinned)  riscv32  alias=0 pascal_name=1 -> FAIL
+BASELINE (pinned)  xtensa   alias=0 pascal_name=1 -> FAIL
+FIXED (HEAD)       riscv32  alias=1 pascal_name=0 -> pass
+FIXED (HEAD)       xtensa   alias=1 pascal_name=0 -> pass
+```
+
+The baseline **compiled cleanly** in both rows. That is the whole reason this
+survived: every existing check of the path is satisfied by an object that is
+wrong.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

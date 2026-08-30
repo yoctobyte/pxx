@@ -116,6 +116,20 @@ begin
   DataPutU64(value);
 end;
 
+
+{ The LINK symbol for external index `extIdx`: the `external name 'sym'` alias
+  when the declaration carried one, else the Pascal identifier. EVERY writer
+  that names an undefined symbol must go through here. The dynamic-import paths
+  resolved the alias and the three --emit-obj writers did not, which is
+  `bug-a-emit-obj-ignores-external-name`; sizing a string table and writing it
+  are two separate callers of this, so they cannot drift apart either. }
+function ExternalLinkName(extIdx: Integer): AnsiString;
+begin
+  if ProcExtName[ExternalProc[extIdx]] >= 0 then
+    Result := Strs[ProcExtName[ExternalProc[extIdx]]].Text
+  else
+    Result := Procs[ExternalProc[extIdx]].Name;
+end;
 procedure PrepareDynamicData;
 var
   i, j, libIdx, relType: Integer;
@@ -156,10 +170,7 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     nameOff[i] := DataLen - DynamicStrOff;
-    if ProcExtName[ExternalProc[i]] >= 0 then
-      DataPutZ(Strs[ProcExtName[ExternalProc[i]]].Text)
-    else
-      DataPutZ(Procs[ExternalProc[i]].Name);
+    DataPutZ(ExternalLinkName(i));
   end;
   DynamicStrSize := DataLen - DynamicStrOff;
   while (DataLen mod 8) <> 0 do DataPutB(0);
@@ -266,10 +277,7 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     nameOff[i] := DataLen - DynamicStrOff;
-    if ProcExtName[ExternalProc[i]] >= 0 then
-      DataPutZ(Strs[ProcExtName[ExternalProc[i]]].Text)
-    else
-      DataPutZ(Procs[ExternalProc[i]].Name);
+    DataPutZ(ExternalLinkName(i));
   end;
   DynamicStrSize := DataLen - DynamicStrOff;
   while (DataLen mod 4) <> 0 do DataPutB(0);
@@ -2129,7 +2137,7 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     ObjExtStrOff[i] := strSize;
-    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+    strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
 
   firstGlobal := 5 + numProcSyms;        { null + 4 section syms + procs }
@@ -2225,7 +2233,7 @@ begin
     if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
   writeStrZ(f, 'app_main');
   for i := 0 to ExternalCount-1 do
-    writeStrZ(f, Procs[ExternalProc[i]].Name);
+    writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text — only relocs whose CodePos stays in flash .text.
@@ -2381,7 +2389,7 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     ObjExtStrOff[i] := strSize;
-    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+    strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
 
   firstGlobal := 4 + numProcSyms;  { null + .text/.data/.bss section syms + procs }
@@ -2445,7 +2453,7 @@ begin
     if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
   writeStrZ(f, 'app_main');
   for i := 0 to ExternalCount-1 do
-    writeStrZ(f, Procs[ExternalProc[i]].Name);
+    writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text: literal slots -> .data / .bss / undefined externals.
@@ -2547,7 +2555,7 @@ begin
   for i := 0 to ExternalCount - 1 do
   begin
     ObjExtStrOff[i] := strSize;
-    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+    strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
 
   firstGlobal := 2;   { null sym + .text section sym }
@@ -2597,7 +2605,7 @@ begin
   { .strtab }
   writeU8(f, 0);
   for i := 0 to AsmGlobalSymCount - 1 do writeStrZ(f, AsmGlobalSymName[i]);
-  for i := 0 to ExternalCount - 1 do writeStrZ(f, Procs[ExternalProc[i]].Name);
+  for i := 0 to ExternalCount - 1 do writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text: one R_X86_64_PLT32 per `call <extern>` site. addend -4:
@@ -2696,7 +2704,7 @@ begin
   for i := 0 to ExternalCount - 1 do
   begin
     strOffImport[i] := dynstrSize;
-    dynstrSize := dynstrSize + Length(Procs[ExternalProc[i]].Name) + 1;
+    dynstrSize := dynstrSize + Length(ExternalLinkName(i)) + 1;
   end;
 
   { DT_NEEDED: one per distinct imported library (Strs[] index dedup, same
@@ -2799,7 +2807,7 @@ begin
   { .dynstr }
   writeU8(f, 0);
   for i := 0 to AsmGlobalSymCount - 1 do writeStrZ(f, AsmGlobalSymName[i]);
-  for i := 0 to ExternalCount - 1 do writeStrZ(f, Procs[ExternalProc[i]].Name);
+  for i := 0 to ExternalCount - 1 do writeStrZ(f, ExternalLinkName(i));
   for i := 0 to neededCount - 1 do writeStrZ(f, Strs[neededLibStr[i]].Text);
   writePad(f, dynsymOff - (dynstrOff + dynstrSize));
 

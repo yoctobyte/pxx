@@ -13934,6 +13934,11 @@ test-emit-obj: $(COMPILER)
 	readelf -h $(TESTTMP)/test_emit_obj_rv.o | grep -q 'RISC-V'
 	readelf -s $(TESTTMP)/test_emit_obj_rv.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
 	readelf -s $(TESTTMP)/test_emit_obj_rv.o | grep -q 'UND ext_notify'
+	# bug-a-emit-obj-ignores-external-name: the alias must be the UND symbol,
+	# and the Pascal identifier must appear nowhere. The negative is the half
+	# that catches the bug -- the pre-fix object compiled and was still wrong.
+	readelf -sW $(TESTTMP)/test_emit_obj_rv.o | grep -q 'UND ext_aliased_link'
+	! readelf -sW $(TESTTMP)/test_emit_obj_rv.o | grep -q 'ext_alias_decl'
 	readelf -r $(TESTTMP)/test_emit_obj_rv.o | grep -q 'R_RISCV_32'
 	readelf -r $(TESTTMP)/test_emit_obj_rv.o | grep -q 'ext_notify + 0'
 	./$(COMPILER) --target=xtensa test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_xt.o
@@ -13941,6 +13946,11 @@ test-emit-obj: $(COMPILER)
 	readelf -h $(TESTTMP)/test_emit_obj_xt.o | grep -q 'Xtensa'
 	readelf -s $(TESTTMP)/test_emit_obj_xt.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
 	readelf -s $(TESTTMP)/test_emit_obj_xt.o | grep -q 'UND ext_notify'
+	# bug-a-emit-obj-ignores-external-name: the alias must be the UND symbol,
+	# and the Pascal identifier must appear nowhere. The negative is the half
+	# that catches the bug -- the pre-fix object compiled and was still wrong.
+	readelf -sW $(TESTTMP)/test_emit_obj_xt.o | grep -q 'UND ext_aliased_link'
+	! readelf -sW $(TESTTMP)/test_emit_obj_xt.o | grep -q 'ext_alias_decl'
 	readelf -r $(TESTTMP)/test_emit_obj_xt.o | grep -q 'R_XTENSA_32'
 	readelf -r $(TESTTMP)/test_emit_obj_xt.o | grep -q 'ext_notify + 0'
 	# bug-cfront-no-entry-stub-for-xtensa: C compiles for the ESP ISAs in the only
