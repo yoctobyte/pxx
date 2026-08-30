@@ -1190,3 +1190,65 @@ whole carrier set, not just for itself, and a carrier that was never wired
 correctly will not show up until then. The near-miss above is exactly that
 failure mode caught early; assume there are others and treat 7b's first wide
 program as a test of 6a–6d rather than of 7b alone.
+
+## 7b — landed behind `PXX_WIDE_PAYLOAD` (`e031655e3`)
+
+`WideString`/`UnicodeString` become the wide **element width** of the one
+managed-string kind instead of a bare alias — but only under the define. Default
+builds are unchanged, pinned by `test/test_widestring_alias_gate` whose
+`.expected` is an **oracle**: FPC 3.2.2 produces byte-identical output.
+
+### Why it is gated — the structural finding
+
+Breaking the alias makes the **compiler** believe UTF-16 while the **runtime**
+still stores UTF-8. Measured ungated:
+
+```
+w := 'abcd';   Length(w) = 2      w[2] = 'c'      writeln(w) = abcd
+```
+
+`Length` halves a byte count that was never doubled; indexing steps two bytes
+through UTF-8. **Strictly worse than the alias it replaces** — silently wrong
+where the alias was merely unfinished.
+
+The cause is structural: the four wide functions in `builtin/builtinwide.pas`
+are called from **nowhere**. `pasparser_prog.inc` only decides whether to `uses`
+the unit — which is all 7a ever claimed. Nothing converts a literal on
+assignment, concatenates in wide, or converts back for `Write`. **The real 7b/7c
+is the lowering**, and on the evidence of what 6a–6d cost it is plausibly larger
+than 6a–6d combined.
+
+### The carrier bug, and the lesson that outlives it
+
+With the break active, **six of seven carriers halved correctly and the record
+field did not** — `Length(r.w)` said 4 where `Length(w)` said 2 for the same
+value. `symtab.inc` hardwired `UFldStrElemTk[fi] := Ord(tyChar)` under a comment
+written in **6a** justifying it:
+
+> *"tyChar is the only thing reachable today — `widestring` is still an alias, so
+> no field can be wide."*
+
+True when written. False the instant 7b landed.
+
+**A comment explaining why a constant is safe *today* does not stop the constant
+being wrong tomorrow — and it actively reads as reassurance, converting an
+unexamined assumption into an apparently examined one.** Reading the channel
+costs the same and cannot go stale. That is worth more than the fix.
+
+It is also the concrete argument for having taken 7b before 6d-2: six carriers
+survived every neutrality test 6a–6d ran, and the first *reader* found a bug in
+one of them within minutes. **A carrier nothing reads is a carrier nothing
+tests.**
+
+### Method note: a success line where a rebuild belonged
+
+The first default-vs-gated comparison proved nothing — both columns ran on the
+same pre-gate binary. `make` had left the binary untouched because the
+fixedpoint stamp and the edited source shared an mtime **to the second**, so it
+saw the target as up to date and printed a `verified` line for the OLD binary.
+
+This is CLAUDE.md's documented seeded-tree hole reached by a different route —
+same-second granularity rather than a copied-in seed — and **the tell was
+identical: a success message where a rebuild belonged.** The fix is the one that
+section already prescribes: require the binary's sha256 to *change*
+(`df36eb4a47f9` → `0e5770fa2d2f`), never accept the absence of an error.
