@@ -110,3 +110,65 @@ means there is no gated coverage that would have caught it either way.
 Hosted profile under `qemu-xtensa`, HEAD `f17cd5607`, compiler `cf30672a934e`.
 Not checked on real IDF hardware, and not checked against a `MOVSP`-using
 reference compiler (`xtensa-esp-elf-gcc` would be the oracle and was not run).
+
+## ORACLE RUN 2026-08-30 (frankS) — `xtensa-esp-elf-gcc` does neither of the things we do
+
+The "Bound" above noted the reference compiler was the obvious oracle and had not
+been run. It has now. **`xtensa-esp32-elf-gcc` 15.2.0** (esp-15.2.0_20251204),
+`-O2 -S`, default windowed ABI.
+
+### Static frames: gcc puts the WHOLE frame in `entry`'s immediate
+
+```c
+int big(int n){ char buf[112];  sink(buf,n); return buf[0]+n; }
+int huge(int n){ char buf[4000]; sink(buf,n); return buf[0]+n; }
+```
+
+```
+entry	sp, 144
+entry	sp, 4032
+```
+
+**No `addi` on `sp` anywhere, and no `movsp`.** The frame size goes in `entry`,
+including at 4032 bytes — `entry`'s immediate reaches 32760, so an ordinary
+function never needs to move `sp` at all.
+
+### Dynamic frames: where `sp` genuinely must move, gcc uses `MOVSP`
+
+```c
+int dyn(int n){ char *p = __builtin_alloca(n); sink(p,n); return p[0]; }
+```
+
+```
+entry	sp, 32
+sub	a8, sp, a8
+movsp	sp, a8
+```
+
+It computes the new `sp` into a scratch register and installs it with **`movsp`** —
+never plain arithmetic on `sp`.
+
+### What this settles, and what it still does not
+
+The ticket left two readings open. **The second one is now dead:**
+
+> ~~2. It is benign as emitted, because `entry a1, 32` plus a later `addi` happens
+> to leave the area where the handler looks, and the ABI rule is stricter than
+> this codegen needs.~~
+
+The reference implementation treats the rule as binding in **both** situations —
+it avoids the sp move entirely when it can, and uses `MOVSP` when it cannot. Our
+`entry a1, 32` + `addi a1, a1, -112` matches neither arm. This is a real
+divergence from the reference on its own hardware ABI, not an over-reading of the
+spec by this ticket.
+
+**It still does not demonstrate a fault**, and the falsified prediction above
+stands unchanged: plain recursion 24 deep passes under both ABIs. So reading 1
+(latent) is now the only one standing, and "latent" is still not "live".
+
+The cheapest fix shape is also now visible and is the reference's own: **put the
+frame in `entry`'s immediate** rather than emitting `entry` + `addi`. That is a
+`symtab.inc` change in shared Track A ground and is not this lane's to make —
+noted as a direction, not a proposal, since whoever takes it must check
+`entry`'s 32760 ceiling and 8-byte granularity against `size + XtSpillMax`, and
+decide what happens above it (gcc's answer there is `movsp`).
