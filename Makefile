@@ -12431,6 +12431,14 @@ test-core: $(COMPILER)
 	# bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized
 	./$(COMPILER) $(PXXFLAGS) -O2 test/test_managed_temp_branch_lifetime.pas $(TESTTMP)/test_managed_temp_branch_lifetime26
 	$(TESTTMP)/test_managed_temp_branch_lifetime26 | diff -u test/test_managed_temp_branch_lifetime.expected -
+	@echo "=== what a caret yields, through arithmetic and a non-IDENT base ==="
+	# Rows 3 and 5 print a raw ADDRESS on any binary before the deref-shape
+	# widening: `(pp + 1)^` over a ^PChar, and an index whose base is a FIELD.
+	# Rows 1, 2 and 4 are the controls that must not move (the span an integer
+	# and a byte are scaled by, and an index over a plain variable).
+	# refactor-a-two-predicates-answer-what-a-caret-yields
+	./$(COMPILER) $(PXXFLAGS) test/test_deref_shape_through_arith_and_nonident_base.pas $(TESTTMP)/test_deref_shape_arith26
+	$(TESTTMP)/test_deref_shape_arith26 | diff -u test/test_deref_shape_through_arith_and_nonident_base.expected -
 	@echo "=== progress board check (non-fatal) ==="
 	@./tools/progress.sh check || echo "WARNING: progress board stale or invalid — run 'tools/progress.sh board-md' (non-fatal)"
 

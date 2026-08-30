@@ -5379,8 +5379,23 @@ end;
   devdocs/dev/normalise-dont-special-case.md is about, and the reason this is
   extracted rather than copied a fifth time.
   refactor-centralize-managed-string-pchar-conversion }
+procedure ResolveDerefShapeAt(node: Integer; var tk: TTypeKind; var recName: Integer;
+                              var remDepth, ptrBaseTk, ptrBaseRec: Integer;
+                              depth: Integer); forward;
+
 procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integer;
                             var remDepth, ptrBaseTk, ptrBaseRec: Integer);
+{ The public entry: the walk, from the top. The recursion carries a depth so the
+  two arms that recurse into a SUB-expression (an index over a non-variable base,
+  and pointer arithmetic) cannot loop on a malformed tree -- the same bound
+  NodePtrElem has always had. }
+begin
+  ResolveDerefShapeAt(node, tk, recName, remDepth, ptrBaseTk, ptrBaseRec, 0);
+end;
+
+procedure ResolveDerefShapeAt(node: Integer; var tk: TTypeKind; var recName: Integer;
+                            var remDepth, ptrBaseTk, ptrBaseRec: Integer;
+                            depth: Integer);
 var baseNode, baseRec, fIdx: Integer;
     fieldName: AnsiString;
 begin
@@ -5461,11 +5476,46 @@ begin
             ptrBaseRec := SymPtrBaseRec[ASTIVal[baseNode]];
           end;
         end
+        else if depth < 8 then
+        begin
+          { A base that is not a plain variable -- an element of a pointer-array
+            FIELD (`PRec(raw)^.arr[1]^`), of a cast, of a nested index. This arm
+            used to give up here and answer tyUnknown, and the tyUnknown
+            backstop below then asked NodePtrElem, which recurses an INDEX into
+            its base and so got the POINTEE right while dropping the DEPTH.
+
+            That asymmetry -- ResolveDerefShape richer per shape, NodePtrElem
+            richer in shapes, neither a superset -- is what made swapping a call
+            site from one to the other a silent trade, and it shipped a
+            regression when a call site was swapped (15ec54d7a, fixed in
+            bfb7b4c59 by adding the backstop). Recursing into the base with THIS
+            walk gets both: the base's arm supplies its own depth and ultimate
+            base, so an element of a `^PChar` array field now resolves the way
+            an element of a `^PChar` array VARIABLE already did.
+            refactor-a-two-predicates-answer-what-a-caret-yields }
+          ResolveDerefShapeAt(baseNode, tk, recName, remDepth, ptrBaseTk,
+                              ptrBaseRec, depth + 1);
+        end
         else
         begin
           tk := tyUnknown;
           recName := REC_NONE;
         end;
+      end
+      else if (ASTKind[node] = AN_BINOP) and
+              (TTokenKind(ASTIVal[node]) in [tkPlus, tkMinus]) and (depth < 8) then
+      begin
+        { Pointer ARITHMETIC, `(p + k)^`. Pointer arithmetic keeps the pointer's
+          type, so the shape comes from whichever operand carries one. This walk
+          had no arm for it and fell to the final else, which asks NodePtrElem
+          and therefore answered the pointee with remDepth 0 -- so `(pp + 1)^^`
+          resolved one level where `pp[1]^^` resolved two.
+          refactor-a-two-predicates-answer-what-a-caret-yields }
+        ResolveDerefShapeAt(ASTLeft[node], tk, recName, remDepth, ptrBaseTk,
+                            ptrBaseRec, depth + 1);
+        if tk = tyUnknown then
+          ResolveDerefShapeAt(ASTRight[node], tk, recName, remDepth, ptrBaseTk,
+                              ptrBaseRec, depth + 1);
       end
       else if ASTKind[node] = AN_DEREF then
       begin
@@ -5544,12 +5594,23 @@ begin
       end
       else
       begin
-        { Anything else -- above all pointer ARITHMETIC, `(p + k)^`, which only
-          the parenthesised tail can reach. NodePtrElem sees through the binop
-          to whichever operand carries a pointee; it knows nothing of depth, so
-          a `^PChar` reached this way still resolves one level only. That is the
-          pre-existing behaviour of both callers, preserved rather than widened
-          here. }
+        { Anything else. This used to be where pointer ARITHMETIC landed --
+          `(p + k)^`, which only the parenthesised tail can reach -- and
+          NodePtrElem answered it by seeing through the binop to whichever
+          operand carries a pointee, while knowing nothing of DEPTH, so a
+          `^PChar` reached this way resolved one level only and printed a raw
+          address. There is an arm for arithmetic above now, so this is the
+          catch-all for node kinds no arm claims at all.
+
+          MEASURED, with a counter on this line and on the tyUnknown backstop
+          below: with the two new arms disabled, compiling
+          test_deref_shape_through_arith_and_nonident_base.pas hits this line 3
+          times and the backstop once; with them enabled, both are 0 and the new
+          arms take exactly those 4. Neither fallback is reached by any shape in
+          compiler.pas's own 436 calls. Not deleted on that evidence -- the
+          population is a handful of files, and NodePtrElem answering False is
+          load-bearing here in a way this else is not.
+          refactor-a-collapse-nodeptrelem-into-the-deref-walk }
         tk := tyInteger;
         recName := REC_NONE;
         if not NodePtrElem(node, tk, recName, 0) then
