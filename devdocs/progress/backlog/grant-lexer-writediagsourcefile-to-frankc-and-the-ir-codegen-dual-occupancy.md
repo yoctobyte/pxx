@@ -77,3 +77,46 @@ permitted for a stated reason, with a stated expiry, and with a named condition 
 revokes it. That is the difference between a decision and a habit — and a guard whose stated
 reason nobody re-reads is the more dangerous kind (see face 181 in
 `feature-a-a-refusal-is-a-claim-with-a-date-on-it`).
+
+
+---
+
+## CORRECTION, 2026-08-30 ~14:0x — section 2's table is STALE and says the opposite of the truth
+
+Found by frankS running `ls devdocs/progress/backlog/grant-*`, the enumeration procedure this
+ticket's own existence argues for. **Both rows of section 2's dual-occupancy table are now
+false**, and the filed version says the function frankA is currently in belongs to frankS.
+
+| the table says | the truth at HEAD |
+| --- | --- |
+| frankS holds `EmitParamSpillsForTarget`'s xtensa arm | **frankS is off it.** That work landed, tree clean, nothing unpushed. |
+| frankA is in `EmitSyscall` | **frankA holds `ir_codegen.inc` whole-file**, for `EmitParamSpillsForTarget`'s four-target C-convention prologue arm. |
+
+**This is not a live collision** — frankS's side is stale rather than held. It is worse in a
+different way: the board's visible record contradicts the coordinator's dispatch, and the
+board is what anyone else would check. Someone reconciling the two would have concluded that
+frankA was trespassing.
+
+### The condition that lapsed with it
+
+The dual occupancy was permitted on frankA's statement that the register rotation stays
+**inside `EmitSyscall` with no caller changes**, and this grant says explicitly that if that
+stops being true the grant lapses and frankA must say so before touching a call site.
+**Whole-file for `EmitParamSpillsForTarget` is a different footprint than the argument that
+cleared it.** The wider grant is deliberate and current — but it was given fresh, not
+inherited from this one, and this ticket should not be read as authorising it.
+
+### Section 1 is unaffected
+
+frankC's `lexer.inc` grant, bounded to `WriteDiagSourceFile`, is **live and correct**. It is
+now a deliberate dual occupancy with frank-optimize, which holds the `Expect` call site in the
+same file — measured disjoint: frank-optimize needs neither half of `WriteDiagSourceFile`, and
+its fix folds a stray raw `writeln` into the `Error(...)` call already on the next line.
+
+### The lesson, which is this ticket's second
+
+Filing a grant makes it enumerable. It does **not** make it *current*. A grant ticket records
+a disposition at a moment, and nothing re-checks it — the same defect as a prose park
+condition, which `check`'s STALE-PARK aperture exists to catch and which has no equivalent for
+grants. Fourth expired premise of the day, and the second one found inside a document about
+expired premises.

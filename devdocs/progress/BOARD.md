@@ -62,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (376)
+## backlog (375)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -386,7 +386,6 @@ _none_
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
-| grant-builtinheap-pxxsys-wrappers-to-franks | A | 45 | grant | frankS gets compiler/builtin/builtinheap.pas bounded to riscv32/xtensa arms on PXXSysOpenRO, PXXSysLseek and PXXSysClose, for bug-a-loadfile-runtime-wrappers-have-no-riscv32-or-xtensa-arm. Cleared against BOTH other interests by asking each for a footprint rather than a permission: frankA does not touch the file at all, and b4's census edits are landed and ~300 lines away. | — |
 | grant-elf-writer-and-object-writers-to-b4 | A | 50 | grant | frankA holds Track A. frank-optimize-b4 keeps a bounded file slice under A's gate: compiler/elfwriter.inc, defs.inc's ELF constants, and the object writers (writeELFRelX64 / writeELF32Rel). Dispatched by ticket, not by lane. Disjoint from symtab.inc and every frontend. | — |
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break | A+P | 50 | grant | frankwasm holds compiler/defs.inc, compiler/pasparser_lval.inc and compiler/rtti_emit.inc for feature-unicodestring-model. symtab.inc is QUEUED behind frank-optimize. DO NOT CLAIM these files — this ticket is a lock record, not work. | — |
@@ -702,9 +701,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2810)
+## done (2811)
 
-2810 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2811 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -938,7 +937,6 @@ _none_
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
 - [p 45] [B] feature-random-library [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
-- [p 45] [A] grant-builtinheap-pxxsys-wrappers-to-franks
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [A] refactor-a-the-owned-string-release-predicate-is-hand-copied-across-five-backends
 - [p 45] [A] refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count

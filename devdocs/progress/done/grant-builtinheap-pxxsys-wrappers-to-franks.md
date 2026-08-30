@@ -3,7 +3,7 @@ slug: grant-builtinheap-pxxsys-wrappers-to-franks
 track: A
 prio: 45
 type: grant
-status: open
+status: done
 found: 2026-08-30
 blocked-by: []
 summary: "frankS gets compiler/builtin/builtinheap.pas bounded to riscv32/xtensa arms on PXXSysOpenRO, PXXSysLseek and PXXSysClose, for bug-a-loadfile-runtime-wrappers-have-no-riscv32-or-xtensa-arm. Cleared against BOTH other interests by asking each for a footprint rather than a permission: frankA does not touch the file at all, and b4's census edits are landed and ~300 lines away."
@@ -67,3 +67,6 @@ asked what it had done rather than whether it objected.
 ## Expiry
 
 When the ticket resolves. Not a standing widening of Track S into `compiler/builtin/**`.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
