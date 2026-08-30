@@ -1,8 +1,8 @@
 ---
 prio: 55
 track: A
-status: backlog
-owner: ""
+status: done
+owner: frank-optimize
 ---
 
 # -O3 (aarch64): fold a resident compare LEFT across a complex right, and drop the staging entirely
@@ -79,3 +79,6 @@ Verify non-vacuity by breaking the encoding on purpose and confirming the
 
 - Parent: `feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen`
 - Umbrella: `feature-opt-o3-register-pressure` (W1)
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -2315,8 +2315,12 @@ begin
         w1ExtLA64 := 0;
         if (OptLevel >= 3) and CmpFusible(node) then
         begin
-          if LeafSymRcxLoadable(left) and
-             ((IRKind[right] = IR_CONST_INT) or (IRKind[right] = IR_LOAD_SYM)) then
+          { The right-operand restriction is GONE as of 2026-08-30: a resident
+            left folds across an arbitrary right subtree too, and there the win
+            is three instructions rather than one, because the staging the
+            general arm below used to do disappears with it. See the note on
+            that arm. }
+          if LeafSymRcxLoadable(left) then
             w1CmpLA64 := ResidentRegOf(IRA[left]);
           if LeafSymRcxLoadable(right) then
             w1CmpRA64 := ResidentRegOf(IRA[right]);
@@ -2349,19 +2353,46 @@ begin
         end
         else
         begin
-          { Unreachable with a flag set, and structurally so rather than by
-            luck: w1CmpLA64 is only assigned when the right operand is a
-            CONST_INT or a LOAD_SYM, and w1CmpRA64 only when LeafSymRcxLoadable
-            says LOAD_SYM -- both of which take an arm above. No reset here,
-            because a guard that cannot fire is not a guard; it is a claim
-            nobody can check. If a future edit widens the pre-decision, THIS is
-            the arm that breaks, and the test's complex-right row is what says
-            so. }
-          IREmitNodeAarch64(left);
-          EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
-          IREmitNodeAarch64(right);
+          { This arm USED to carry a note saying w1CmpLA64 could not be set
+            here, and that a future edit widening the pre-decision would break
+            exactly this spot. That edit is the one above, and this is the
+            break, arriving as designed rather than as a bug. The note did its
+            job; it is replaced rather than deleted so the next widening still
+            lands somewhere that expects it.
+
+            w1CmpRA64 genuinely cannot be set here -- it is only assigned when
+            LeafSymRcxLoadable says the RIGHT is a leaf symbol, which takes the
+            LOAD_SYM arm above. Left unasserted for the same reason as before: a
+            guard that cannot fire is a claim nobody can check.
+
+            With a resident left there is nothing to preserve across the right.
+            The five instructions below exist ONLY to carry a value that never
+            stopped living in x19..x24 -- the left is not materialised, so the
+            str/ldr pair has no subject and the staging mov has no purpose. Three
+            instructions go, one of them a stack round trip.
+
+            Correct for the same two measured reasons as the narrower arms, plus
+            one this arm is the first to reach: a right subtree CAN contain a
+            store, so `a < (a = 5)` in C reads the register after the right ran
+            rather than before. That expression modifies and reads `a` with no
+            sequence point between, which is undefined in C -- gcc and pxx
+            already disagree with the naive reading and agree with each other
+            (both print r=0). No DEFINED program can observe the difference,
+            because the only ways to mutate a local from inside a subexpression
+            are an unsequenced store like that one, or a route through a nested
+            procedure or a var/address-of parameter -- and the last two mark the
+            symbol ESCAPES, which denies it a register in the first place. }
+          if w1CmpLA64 <> 0 then
+            IREmitNodeAarch64(right)              { x0 = right; the left stays home }
+          else
+          begin
+            IREmitNodeAarch64(left);
+            EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
+            IREmitNodeAarch64(right);
+          end;
           EmitI32($AA0003E1); { mov x1, x0 }
-          EmitI32($F84107E0); { ldr x0, [sp], #16 }
+          if w1CmpLA64 = 0 then
+            EmitI32($F84107E0); { ldr x0, [sp], #16 }
         end;
 
         if op = Ord(tkPlus) then
