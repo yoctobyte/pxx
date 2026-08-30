@@ -9007,3 +9007,58 @@ is not psychological, it is arithmetic: **the failure and the desired outcome ar
 measurement.** Which is why 191's positive assertion beats every negative one: "nothing went
 wrong" is indistinguishable from "nothing ran", and only a line the subject emits separates
 them.
+
+---
+
+## 192 — A DERIVED FIGURE AND ITS UNDERLYING ROWS ARE TWO MEASUREMENTS, AND THEY CAN DISAGREE
+
+*(frankS, 2026-08-30, correcting its own "zero matches lost" evidence while the claim itself
+survived.)*
+
+frankS had reported a record fix as losing zero matches, *"computed as a set difference in
+both directions, not from the totals"* — which is the strong form, and the coordinator
+accepted it as such. It was right. The **file it was computed from** was not.
+
+Root cause, and it generalises well past one harness: `sweep_rv.py` defaulted its ABI tag to
+`call0`, which is `sweep.py`'s **xtensa** tag. Both write `xd/<tag>.<abi>.tsv`. Running both
+legs under one run tag therefore produced a single file whose **header counts were xtensa and
+whose rows were riscv32**. A set difference against it said 13 matches had regressed; nothing
+had. It was diffing xtensa against riscv32.
+
+**A file whose two halves come from different subjects is not corrupt in any way a reader can
+see.** Every field is well-formed, the row count is plausible, and each half is internally
+correct. Nothing short of comparing the halves against each other detects it.
+
+frankS's own statement of the lesson, which is sharper than "check your tools":
+
+> *My set-difference discipline was right and it is what makes the "zero lost" claim strong —
+> but it reads a second file, and a second file is a second thing that can be wrong.*
+
+That is the cost nobody prices. Upgrading from a total to a set difference **strengthens the
+inference and adds a failure mode at the same time**, and the added failure mode is silent
+where the weaker method's was not.
+
+### 192a — the catch was ARITHMETIC, not suspicion, and that is why it worked
+
+**13 lost and 6 gained cannot produce a +1 total.** The derived figure and the row set
+disagreed, and only one of them could be right.
+
+This is the part to copy. Vigilance is spent on the candidate you already doubt (the standing
+finding in `coordinator-operating-rules`), so a check that depends on someone being sceptical
+at the right moment protects the wrong thing. A check that is **one subtraction** does not:
+it fires on the numbers, at zero cost, on every run, including the runs where everyone was
+confident. **Whenever you have both a total and the rows behind it, subtract.** They were
+computed by different code paths and their agreement is free evidence — while their
+disagreement is the only signal that would ever have surfaced this.
+
+Generalisation of the trigger, from frankS's second confusion the same session (a stale
+reused binary path in its own loop read as three targets returning empty output): **a result
+that is worse than possible is a harness bug until proven otherwise.** Implausibility is a
+cheaper trigger than "does this look right", because it fires on arithmetic rather than on
+judgement — and both of frankS's harness-vs-subject confusions that night were caught by the
+result being *impossible*, not by it being *bad*.
+
+Companion to 190b: there, re-deriving a constant tells you whether the check is alive; here,
+subtracting a total from its rows tells you whether two live measurements agree. Both are
+one command, both run without suspicion, and both were found by workers auditing their own
+evidence rather than their own conclusions.
