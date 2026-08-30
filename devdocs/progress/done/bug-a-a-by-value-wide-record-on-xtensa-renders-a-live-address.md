@@ -163,4 +163,6 @@ quick gate was run rather than skipped). `test_arm32_record_byval_wide` is wired
 into `test-xtensa`, compared against the x86-64 oracle rather than a literal
 transcript, since the point of the row is agreement with the other backends.
 
-resolved, commit PENDING-COMMIT.
+## Log
+
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
