@@ -125,4 +125,4 @@ include is that, and I ran the gate one commit late.
 
 ## Log
 - 2026-08-30 — filed by frankC from the last census cell, with the diagnosis.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 10a989d4f.
