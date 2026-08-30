@@ -235,4 +235,4 @@ build and run rc=0; `c_pasunit_case_fail.c` and `c_pasunit_collide_fail.c` still
 refuse; Pascal's own `uses` still reports line 3 with its normal `near:` window.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 4794d1251.
