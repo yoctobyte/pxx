@@ -2823,7 +2823,8 @@ end;
   never ran and the call returned whatever the last unit routine did — a
   `try: import math` in a def made every call return math's pi, silently
   (bug-nilpy-import-inside-def-clobbers-proc-context). }
-procedure ParseUsesUnitBody(const name: AnsiString); forward;
+procedure ParseUsesUnitBody(const name: AnsiString;
+  diagLine: Integer; const diagSpell: AnsiString); forward;
 
 { The two HOST-HEADER probes of the unit resolver, in one place because they are
   now called from two positions: early for every non-NilPy frontend, and late
@@ -3140,12 +3141,24 @@ end;
 
 procedure ParseUsesUnitAmbient(const name: AnsiString); forward;
 
+procedure ParseUsesUnitAt(const name: AnsiString;
+  diagLine: Integer; const diagSpell: AnsiString); forward;
+
 procedure ParseUsesUnit(const name: AnsiString);
+{ The ordinary entry: no diagnostic origin, so every message reports CurTok
+  exactly as before. ParseUsesUnitAt is the same routine for a caller that has
+  already consumed the tokens it wants blamed. }
+begin
+  ParseUsesUnitAt(name, 0, '');
+end;
+
+procedure ParseUsesUnitAt(const name: AnsiString;
+  diagLine: Integer; const diagSpell: AnsiString);
 var savedProc, savedFrame, savedSelf, vsym: Integer;
 begin
   savedProc := CurProc; savedFrame := FrameSize; savedSelf := CurSelfClass;
   CurProc := -1;
-  ParseUsesUnitBody(name);
+  ParseUsesUnitBody(name, diagLine, diagSpell);
   CurProc := savedProc; FrameSize := savedFrame; CurSelfClass := savedSelf;
   { RTL LAYOUT GUARD. This compiler's inline codegen assumes a runtime data
     layout (header size, refcount/magic offsets); the builtinheap it just linked
@@ -3265,7 +3278,22 @@ begin
   end;
 end;
 
-procedure ParseUsesUnitBody(const name: AnsiString);
+procedure ParseUsesUnitBody(const name: AnsiString;
+  diagLine: Integer; const diagSpell: AnsiString);
+{ DIAGNOSTIC ORIGIN, supplied by a caller whose CurTok has already moved past
+  the thing the user wrote. Zero means "there is none" and every message falls
+  back to CurTok, which is right for a Pascal `uses` -- CurTok is still ON the
+  unit name when the loader fails, so that path reported the correct line all
+  along and is deliberately left alone.
+
+  The C caller is the one that needs this. CParsePascalUnitMarker consumes the
+  marker identifier, both string tokens and the semicolon BEFORE it calls, so
+  by the time a miss is raised CurTok is the first token of the NEXT line and
+  the error named a real, innocent line of the user's source. diagSpell is the
+  author's own spelling (`nosuch.pas`), which the loader has by then rewritten
+  into an absolute path with the extension stripped -- correct as input to the
+  loader, wrong as output to a human.
+  bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker }
 var
   lo, cName, path: AnsiString;
   startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx, savedCUC: Integer;
@@ -3572,6 +3600,16 @@ begin
     end;
     if Length(UnitContent) = 0 then
     begin
+      if diagLine > 0 then
+      begin
+        { The C author wrote `#include "x.pas"`, so say include and say it in
+          their own spelling. ErrorAt also passes withContext=False, which drops
+          the `near:` window -- and that window was printing the preprocessor's
+          internal __pxx_pascal_unit marker, a token the author never wrote and
+          cannot grep for. }
+        ConcatThree('include: Pascal unit source not found: ', diagSpell, '', emsg);
+        ErrorAt(diagLine, emsg);
+      end;
       ConcatThree('uses: unit source not found: ', basePath, '', emsg);
       Error(emsg);
     end;
@@ -4172,6 +4210,11 @@ begin
                   ' and no shim ' + lo, emsg)
     else
       ConcatThree('uses: unit source not found: ', lo, '', emsg);
+    if diagLine > 0 then
+    begin
+      ConcatThree('include: Pascal unit source not found: ', diagSpell, '', emsg);
+      ErrorAt(diagLine, emsg);
+    end;
     Error(emsg);
   end;
 

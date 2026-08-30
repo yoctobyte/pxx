@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:31 blocked:7 backlog:384 backlog_new:23 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2825 rejected:58`
+`working:1 unfinished:31 blocked:7 backlog:384 backlog_new:23 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2826 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker` [C] — owner: frankC
 - `feature-unicodestring-model` [A] — owner: frankwasm
 
 ## unfinished (31) — parked mid-flight; re-claim, do not duplicate

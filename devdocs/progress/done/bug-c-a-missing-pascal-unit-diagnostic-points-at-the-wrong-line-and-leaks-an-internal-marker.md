@@ -2,7 +2,7 @@
 track: C
 prio: 30
 type: bug
-status: working
+status: done
 blocked-by: []
 owner: frankC
 summary: "`#include \"nosuch.pas\"` from C reports the line AFTER the include (pointing at innocent code), leaks the internal `__pxx_pascal_unit` marker into the `near:` context, and speaks Pascal (`uses:`) at an author who wrote `#include`. Measured at aa78a7faf63a. CORRECTED 2026-08-30: the raise site is fine; the offset is created by the C-side caller, so the edit needs cparser.inc AND pasparser_proc.inc -- see the measurement section at the end."
@@ -174,3 +174,65 @@ at `cparser.inc:483`) and `PyImportLang='pas'` is also set by NilPy's
 
 **Do not land a P-side half alone** — with no caller to supply the position it is
 dead code that reads as a finished change.
+
+## RESOLVED — all four defects, one mechanism, 2026-08-30 (frankC)
+
+Compiler `61deff86a046`, `converged after 1 round(s)`; `tools/gate.sh quick` GREEN.
+
+```
+before:  pascal26:2: error: uses: unit source not found: /abs/path/to/nosuch
+           near: __pxx_pascal_unit /abs/path/to/ nosuch.pas  >>>  main
+after:   pascal26:1: error: include: Pascal unit source not found: nosuch.pas
+```
+
+Line 1 for an include on line 1, line 5 for one on line 5 — the fixed +1 is gone,
+the C author is addressed in C's vocabulary, the spelling is the author's own,
+and the internal marker is no longer printed. **One change fixed all four**,
+because they had one cause: the raise site reported `CurTok`, and the C caller
+had already moved it.
+
+### How, without touching `defs.inc` or the other frontends
+
+The obvious implementation is a global set by the caller and read at the raise
+site — the pattern `PyImportLang` and `PyDottedImport` already use across this
+exact call. **It was avoidable, and avoiding it kept the change inside two
+files.** The globals live in `defs.inc`, which is Track A's and which frankA was
+editing at the time.
+
+Instead the origin is a *parameter*, which turned out to be cheap because both
+raise sites are inside `ParseUsesUnitBody` and it has exactly **one** caller:
+
+- `ParseUsesUnitBody(name, diagLine, diagSpell)` — the two raise sites use
+  `ErrorAt(diagLine, ...)` when `diagLine > 0`, and fall through to the existing
+  `Error(...)` when it is 0.
+- `ParseUsesUnitAt(name, diagLine, diagSpell)` — new entry, holds what
+  `ParseUsesUnit` used to.
+- `ParseUsesUnit(name)` — now a one-line delegate passing `(0, '')`.
+
+So `bparser.inc` (the BASIC frontend, the third caller) is untouched, and every
+existing call keeps today's behaviour *explicitly*: origin 0 means "report
+`CurTok`", which is exactly right for a Pascal `uses` and is why that path was
+never broken.
+
+`ErrorAt` earned its place twice: it takes the line, and it passes
+`withContext=False`, which drops the `near:` window — so defect 2, the leaked
+`__pxx_pascal_unit`, was fixed by the same call rather than by teaching the
+context printer about markers.
+
+### Regression test
+
+`test/c_pasunit_missing_fail.c` + two recipes beside the `c_pasunit_*_fail`
+block. **The include sits on line 13, not line 1, deliberately** — a line-1
+include would report "1" under the very off-by-one this fixes, so that test
+would pass against the bug. And it is two assertions rather than one: the
+line/vocabulary/spelling grep, and a separate negative grep for
+`__pxx_pascal_unit`. The fix has separable halves and a single grep would let
+one of them rot silently.
+
+Verified no regression on the paths that must keep working, named individually
+rather than swept: `c_pasunit.c`, `c_pasunit_twice.c`, `c_pasunit_strings.c` all
+build and run rc=0; `c_pasunit_case_fail.c` and `c_pasunit_collide_fail.c` still
+refuse; Pascal's own `uses` still reports line 3 with its normal `near:` window.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

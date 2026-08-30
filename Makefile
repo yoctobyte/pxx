@@ -11002,6 +11002,19 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/c_pasunit_case_fail.c $(TESTTMP)/c_pasunit_case_fail26 2>&1 \
 	  | grep -q "call to undeclared function: mymod_pas_twice" \
 	  || { echo 'c_pasunit_case_fail: FAIL - mymod_pas_twice must not reach Twice'; exit 1; }
+	# A MISSING unit is diagnosed at the INCLUDE's own line, not the line after.
+	# The message reported CurTok, and CParsePascalUnitMarker has by then consumed
+	# the marker, both strings and the semicolon -- so it named the next line, which
+	# is a real and innocent line of the user's source. Three assertions, because
+	# the fix has three separable halves and one grep would let two of them rot:
+	# the LINE, the author's own spelling (the loader rewrites it to an absolute
+	# path with '.pas' stripped), and the absence of the internal marker.
+	@./$(COMPILER) test/c_pasunit_missing_fail.c $(TESTTMP)/c_pasunit_missing_fail26 2>&1 \
+	  | grep -q "pascal26:13: error: include: Pascal unit source not found: definitely_no_such_unit.pas" \
+	  || { echo 'c_pasunit_missing_fail: FAIL - want the include line (13), C vocabulary, and the author spelling'; exit 1; }
+	@./$(COMPILER) test/c_pasunit_missing_fail.c $(TESTTMP)/c_pasunit_missing_fail26 2>&1 \
+	  | grep -q "__pxx_pascal_unit" \
+	  && { echo 'c_pasunit_missing_fail: FAIL - the internal marker leaked into the diagnostic'; exit 1; } || true
 	# no prototype for an overloaded routine: nothing to select with
 	@./$(COMPILER) test/c_pasunit_ovl_fail.c $(TESTTMP)/c_pasunit_ovl_fail26 2>&1 \
 	  | grep -q "is an OVERLOADED Pascal routine and this call does not say which one" \

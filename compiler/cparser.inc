@@ -431,8 +431,16 @@ end;
 
 procedure CParsePascalUnitMarker;
 var baseDir, spec, uname, hops, resolved: AnsiString;
-    i: Integer; isPath, savedCProgramMode: Boolean;
+    i, diagLine: Integer; isPath, savedCProgramMode: Boolean;
 begin
+  { The line the AUTHOR's `#include` sits on, captured before a single token is
+    consumed. Everything below advances CurTok past the marker, both strings and
+    the semicolon, so by the time the unit loader can fail CurTok is the first
+    token of the NEXT line -- and a miss was reported there, naming a real and
+    innocent line of the user's source. Measured as a fixed +1: an include on
+    line 1 reported line 2, on line 5 reported 6.
+    bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker }
+  diagLine := CurTok.Line;
   Next;                                  { the marker identifier }
   baseDir := ''; spec := '';
   if CurTok.Kind = tkString then begin baseDir := CurTok.SVal; Next; end;
@@ -492,7 +500,10 @@ begin
     bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit }
   savedCProgramMode := CProgramMode;
   CProgramMode := False;
-  ParseUsesUnit(uname);
+  { The author's own spelling rides along: `uname` has by now become an
+    absolute path with the '.pas' stripped, which is what the LOADER needs and
+    is not what a human wrote. }
+  ParseUsesUnitAt(uname, diagLine, spec);
   CProgramMode := savedCProgramMode;
   PyImportLang := '';
   CCheckPascalUnitCollision(CPascalUnitKeyOf(spec), resolved, isPath);
