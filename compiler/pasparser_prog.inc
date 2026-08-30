@@ -551,7 +551,7 @@ var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
-    needsSoftFloat: Boolean;
+    needsSoftFloat, needsWasiFile: Boolean;
     needsThreads: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
@@ -625,6 +625,7 @@ begin
   usesMath := False;
   needsMath := False;
   needsSoftFloat := False;
+  needsWasiFile := False;
   needsThreads := False;
   needsPromoInt := False;
   { Default standard surface: textfile (classic Text/Assign/Reset/WriteLn) is
@@ -731,6 +732,17 @@ begin
          (Tokens[i].Kind = tkReal_T) or (Tokens[i].Kind = tkSingle_T) or
          (Tokens[i].Kind = tkDouble_T) or (Tokens[i].Kind = tkExtended_T) then
       begin needsSoftFloat := True; Break; end;
+  end;
+  { wasm32: the sys* file intrinsics have no instruction to lower to on this
+    target and reach WASI through compiler/builtin/wasibackend.pas instead --
+    pulled here, on demand, so that a wasm module which never touches a file
+    does not import the preopen functions. See the injection site below. The
+    five are contiguous in the token enum (defs.inc:1444). }
+  if TargetArch = TARGET_WASM32 then
+  begin
+    for i := 0 to TokCount - 1 do
+      if (Tokens[i].Kind >= tkSysOpen) and (Tokens[i].Kind <= tkSysFchmod) then
+      begin needsWasiFile := True; Break; end;
   end;
   { FPC's LOW-LEVEL thread API lives in the System unit, so portable sources call
     BeginThread / EndThread / WaitForThreadTerminate / CloseThread and declare a
@@ -1289,6 +1301,34 @@ begin
     needsBuiltin := True;
   end;
   if needHeapUnit then ParseUsesUnitAmbient('builtinheap');
+  { The WASI file core, on wasm32 ONLY. `sysopen`/`sysread`/`syswrite` are
+    intrinsics that every native backend emits as a raw `syscall` instruction
+    inline — which is precisely why a program using them needs no RTL. wasm has
+    no syscall instruction, so the wasm backend emits a CALL instead, and this
+    is the unit it calls. See compiler/builtin/wasibackend.pas for why the
+    logic lives in builtin/ and not in the PAL.
+
+    TARGET-GATED, never ambient. builtinheap above is injected for every
+    program on every target, by every compiler INCLUDING the older pinned one
+    other lanes build with; a wasm-only unit made ambient the same way would be
+    parsed by all of them, and a construct one of them could not read would
+    break targets that have nothing to do with wasm. Same shape as
+    `if cWantsSoftFloat then ParseUsesUnitAmbient('softfloat')`
+    (cparser.inc:9778). Idempotent via the CompiledUnits guard, so an explicit
+    `uses wasibackend` is harmless.
+
+    ON DEMAND within that gate, from the token scan above, for the same reason
+    `math` and `softfloat` are: the unit's preopen scan calls fd_prestat_get /
+    fd_prestat_dir_name, and a wasm import is STATIC -- present in the module
+    whether or not it is ever reached. Injecting unconditionally therefore made
+    every wasm32 module, including one that touches no file at all, refuse to
+    instantiate on a host that had not wired those two functions up. Measured:
+    it broke 20 of the slices in test/wasm, each with `LinkError: function
+    import requires a callable`. Demand here is exact rather than heuristic --
+    an intrinsic is a TOKEN, so its presence is not a guess the way `pi` or a
+    `/` is -- and no library unit calls the sys* family (only the compiler's own
+    PxxEnvLoad and elfwriter do), so a miss through a unit is not reachable. }
+  if needsWasiFile then ParseUsesUnitAmbient('wasibackend');
   if needsBuiltin then ParseUsesUnitAmbient('builtin');
   { the TYPE is spelled PromoInt; the UNIT implementing it is promocore — see
     the note at the top of compiler/builtin/promocore.pas for why they differ }

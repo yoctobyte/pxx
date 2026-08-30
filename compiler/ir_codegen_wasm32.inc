@@ -604,6 +604,8 @@ procedure WasmStrScratchPop(scr: Integer); forward;
 { The metaclass-value emitter, defined beside the descriptor-cell table it
   reuses and dispatched from the value switch well above it. }
 procedure WasmEmitClassRef(node: Integer); forward;
+{ The sys* intrinsic family, defined below the builtin dispatch that calls it. }
+function WasmEmitSysCallFam(node, p: Integer; isStmt: Boolean): Boolean; forward;
 procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
@@ -1870,6 +1872,11 @@ begin
   else if p = -Ord(tkString_T) then WasmBuiltinName := 'String() cast'
   else if p = -Ord(tkArgCount) then WasmBuiltinName := 'ParamCount'
   else if p = -Ord(tkArgStr) then WasmBuiltinName := 'ParamStr'
+  else if p = -Ord(tkSysOpen) then WasmBuiltinName := 'sysopen'
+  else if p = -Ord(tkSysRead) then WasmBuiltinName := 'sysread'
+  else if p = -Ord(tkSyswrite) then WasmBuiltinName := 'syswrite'
+  else if p = -Ord(tkSysClose) then WasmBuiltinName := 'sysclose'
+  else if p = -Ord(tkSysFchmod) then WasmBuiltinName := 'sysfchmod'
   else if p = -100 then WasmBuiltinName := 'LoadFile'
   else if p = -101 then WasmBuiltinName := 'SetLength on a frozen string'
   else if p = -102 then WasmBuiltinName := 'SetLength'
@@ -1914,6 +1921,11 @@ begin
   else if p = -SPECIAL_IN then WasmBuiltinResultType := tyBoolean
   else if p = -Ord(tkLength) then WasmBuiltinResultType := tyInt32
   else if p = -Ord(tkArgCount) then WasmBuiltinResultType := tyInt32
+  { open/close/fchmod answer an fd or an errno; read/write a byte count. }
+  else if (p = -Ord(tkSysOpen)) or (p = -Ord(tkSysClose))
+          or (p = -Ord(tkSysFchmod)) then WasmBuiltinResultType := tyInt32
+  else if (p = -Ord(tkSysRead)) or (p = -Ord(tkSyswrite)) then
+    WasmBuiltinResultType := tyInt64
   else if (p = -Ord(tkOrd)) and (IRB[node] <> -1) then
     WasmBuiltinResultType := WasmNodeResultType(IRA[IRB[node]])
   else
@@ -2603,6 +2615,13 @@ begin
   if p = -Ord(tkArgStr) then
   begin
     WasmEmitBuiltin := WasmEmitArgStr(node);
+    Exit;
+  end;
+
+  if (p = -Ord(tkSysOpen)) or (p = -Ord(tkSysRead)) or (p = -Ord(tkSyswrite))
+     or (p = -Ord(tkSysClose)) or (p = -Ord(tkSysFchmod)) then
+  begin
+    WasmEmitBuiltin := WasmEmitSysCallFam(node, p, isStmt);
     Exit;
   end;
 
@@ -3922,6 +3941,177 @@ begin
   if cell < 0 then Exit;
   WasmDataAddr(cell);
   WasmMemOp($28, 'i32.load', 2, 0);
+end;
+
+{ ===== the sys* intrinsic family =====
+
+  `sysopen` / `sysread` / `syswrite` / `sysclose` / `sysfchmod` are the raw
+  file primitives the compiler bootstraps on, and on every NATIVE target they
+  are not calls at all — the backend emits a `syscall` instruction inline
+  (ir_codegen.inc:8023). That is exactly why `compiler.pas` needs no RTL and
+  links no PAL, which is a design goal rather than an accident.
+
+  wasm has no syscall instruction. Anything emitted here has to be a CALL, and
+  WASI's `path_open` is capability-based — a guest cannot open a path, only a
+  path RELATIVE to a directory the host granted it — so the callee is a few
+  hundred lines of preopen bookkeeping. It lives in `compiler/builtin/
+  wasibackend.pas`, injected on wasm32 only (pasparser_prog.inc), NOT in the
+  PAL: the compiler deliberately does not link the PAL, and linking it to get
+  file I/O would trade the design goal for the feature.
+
+  So this arm is a plain argument marshal plus a `WasmCallRtl`. All the
+  interesting work is on the other side of the call. }
+
+{ Leave a NUL-TERMINATED C string pointer for `path` on the operand stack.
+
+  Two shapes, and they are the same two the x86-64 arm distinguishes
+  (ir_codegen.inc:8036): a MANAGED string's handle already points at
+  nul-terminated characters, so the value IS the pointer; a FROZEN string is an
+  [len:8][chars] buffer with no terminator promised, so a NUL has to be written
+  at chars+len first and the pointer is buffer+8.
+
+  Getting this wrong is not a crash — `path_open` would be handed a length it
+  reads past, and the failure would surface as a mysterious ENOENT on a path
+  that visibly exists. }
+function WasmEmitPathArg(valNode: Integer): Boolean;
+var sym, lenL, adrL: Integer;
+begin
+  WasmEmitPathArg := False;
+  sym := -1;
+  if (IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LEA) then
+    sym := IRA[valNode];
+
+  if (sym >= 0) and (Syms[sym].TypeKind = tyAnsiString)
+     and not Syms[sym].IsArray then
+  begin
+    { Managed: the handle is the path. nil is a real possibility (an empty
+      managed string is nil by this RTL's model), and path_open would fault on
+      it, so it becomes a pointer to a NUL instead of a trap. }
+    WasmEmitValueAs(valNode, WT_I32, 'sysopen path');
+    if WasmBodyBroken then Exit;
+    adrL := WasmAddLocal(WT_I32, 'pathp');
+    WasmLocalTee(adrL);
+    WasmOp($45, 'i32.eqz');
+    WasmIf(WT_I32);
+      WasmDataAddr(Strs[InternStr('')].Offset + 8);
+    WasmElse;
+      WasmLocalGet(adrL);
+    WasmEnd;
+    WasmEmitPathArg := True;
+    Exit;
+  end;
+
+  if sym < 0 then
+  begin
+    WasmUnsupported('a sys* path argument that is neither a managed nor a '
+                    + 'frozen string variable');
+    Exit;
+  end;
+
+  { Frozen: write the terminator, then hand over buffer+8. The store is what
+    EmitTerminateString does on x86-64, spelled as one i32.store8. }
+  adrL := WasmAddLocal(WT_I32, 'pathbuf');
+  lenL := WasmAddLocal(WT_I32, 'pathlen');
+  WasmLValueAddr(sym);
+  WasmLocalTee(adrL);
+  WasmMemOp($28, 'i32.load', 2, 0);          { the 8-byte length prefix, low word }
+  WasmLocalSet(lenL);
+  WasmLocalGet(adrL);
+  WasmI32Const(8);
+  WasmOp($6A, 'i32.add');
+  WasmLocalGet(lenL);
+  WasmOp($6A, 'i32.add');
+  WasmI32Const(0);
+  WasmMemOp($3A, 'i32.store8', 0, 0);
+  WasmLocalGet(adrL);
+  WasmI32Const(8);
+  WasmOp($6A, 'i32.add');
+  WasmEmitPathArg := True;
+end;
+
+{ EVERY arm below must drop its result in statement position. The ordinary
+  call path does this for itself (`if isStmt and Procs[p].IsFunc then drop`,
+  :3007) but WasmEmitBuiltin returns before reaching it, so a builtin arm owns
+  its own stack discipline. All five callees are functions, and `sysclose(fd);`
+  / `sysfchmod(fd, 420);` are both ordinary statements in real code — leaving
+  their results behind is a validation failure at module load
+  ("expected 0 elements on the stack for fallthru"), which is the good
+  direction: wasm refuses the module rather than running with a drifting
+  operand stack the way a register target would silently leak a register. }
+function WasmEmitSysCallFam(node, p: Integer; isStmt: Boolean): Boolean;
+var a1, a2, a3: Integer; nm: AnsiString;
+
+  { Named WasmSysDone and not `Done`: tools/forwardlint.py FLATTENS nested
+    functions, so a short nested name collides with any global spelled the
+    same — `done` at lexer.inc:1465 — and the lint reports a use-before-
+    declaration that is not real. Same reason rparser.inc:1131 spells its
+    helper RStrOfLit rather than Lit. }
+  function WasmSysDone(ok: Boolean): Boolean;
+  begin
+    if ok and isStmt then WasmOp($1A, 'drop');
+    WasmSysDone := ok;
+  end;
+
+begin
+  WasmEmitSysCallFam := False;
+  a1 := IRB[node];
+  if a1 = -1 then
+  begin
+    WasmUnsupported(WasmBuiltinName(p) + ' with no arguments');
+    Exit;
+  end;
+
+  if p = -Ord(tkSysOpen) then
+  begin
+    a2 := IRB[a1];
+    if a2 = -1 then
+    begin
+      WasmUnsupported('sysopen with no flags argument');
+      Exit;
+    end;
+    if not WasmEmitPathArg(IRA[a1]) then Exit;
+    WasmEmitValueAs(IRA[a2], WT_I32, 'sysopen flags');
+    if WasmBodyBroken then Exit;
+    { mode: the third argument when present, else 0 — which is what the x86-64
+      arm hardcodes (`MovRaxImm(0)` into rdx), so this is not a new default. }
+    a3 := IRB[a2];
+    if a3 <> -1 then WasmEmitValueAs(IRA[a3], WT_I32, 'sysopen mode')
+    else WasmI32Const(0);
+    if WasmBodyBroken then Exit;
+    WasmEmitSysCallFam := WasmSysDone(WasmCallRtl('PXXWasiOpen'));
+    Exit;
+  end;
+
+  if (p = -Ord(tkSysRead)) or (p = -Ord(tkSyswrite)) then
+  begin
+    a2 := IRB[a1];
+    if a2 = -1 then begin WasmUnsupported(WasmBuiltinName(p) + ' with no buffer'); Exit; end;
+    a3 := IRB[a2];
+    if a3 = -1 then begin WasmUnsupported(WasmBuiltinName(p) + ' with no length'); Exit; end;
+    if p = -Ord(tkSysRead) then nm := 'PXXWasiRead' else nm := 'PXXWasiWrite';
+    WasmEmitValueAs(IRA[a1], WT_I32, nm + ' fd');
+    WasmEmitValueAs(IRA[a2], WT_I32, nm + ' buffer');
+    WasmEmitValueAs(IRA[a3], WT_I32, nm + ' length');
+    if WasmBodyBroken then Exit;
+    WasmEmitSysCallFam := WasmSysDone(WasmCallRtl(nm));
+    Exit;
+  end;
+
+  if p = -Ord(tkSysClose) then
+  begin
+    WasmEmitValueAs(IRA[a1], WT_I32, 'sysclose fd');
+    if WasmBodyBroken then Exit;
+    WasmEmitSysCallFam := WasmSysDone(WasmCallRtl('PXXWasiClose'));
+    Exit;
+  end;
+
+  { sysfchmod }
+  a2 := IRB[a1];
+  if a2 = -1 then begin WasmUnsupported('sysfchmod with no mode'); Exit; end;
+  WasmEmitValueAs(IRA[a1], WT_I32, 'sysfchmod fd');
+  WasmEmitValueAs(IRA[a2], WT_I32, 'sysfchmod mode');
+  if WasmBodyBroken then Exit;
+  WasmEmitSysCallFam := WasmSysDone(WasmCallRtl('PXXWasiFchmod'));
 end;
 
 { A metaclass value — `TFoo` used as a value, which is what `is`/`as`, a
