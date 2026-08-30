@@ -113,7 +113,7 @@ lives in git, not in a timestamp._
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
 | bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp | A | 70 | bug | `ParamStr(i)` as an EXPRESSION smashes the stack when the argument is longer than 256 bytes (x86-64) | — |
-| bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer | A+S | 45 | bug | `CALL0`/`CALL8` encode an 18-bit WORD offset, so a call can reach at most +-512 KiB. Nothing emits a veneer, so once the image passes that, EVERY sufficiently distant call is a hard compile error: `call0 displacement -131454 is outside the encodable range`. Five test programs hit it the moment the xtensa syscall table let them reach codegen at all. This is not an edge case — 512 KiB is a SMALL image here: test_overflow_qplus_narrow is 758 KiB of code on riscv32. | — |
+| bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 40 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 40 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
 | bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works | A+S | 45 | bug | `Write` of any real SIGBUSes on xtensa — while `Str` of the same value is correct | — |
 | bug-b-gui-shot-blank-frame-detector-no-longer-detects-a-blank-frame | B | 30 | bug | tools/gui_shot.sh rejects a capture as blank when it is <= BLANK_MAX=4000 bytes, on a comment claiming 'a blank frame is ~1-3 KB'. Measured 2026-08-30 at the script's own default 1100x700 under ffmpeg 8.0.1: a fully blank frame is 4013 bytes, five samples, no variance. 4013 > 4000, so the blank check passes every blank capture and the Xvfb restart-and-retry path it guards can never fire. The number was right when written; the encoder or the default size moved under it. Lane note: gui_shot.sh is not in Track T's listed file set, so this is filed to the lane that uses it for PCL/GUI work — reroute if that reading is wrong. | — |
@@ -675,9 +675,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2741)
+## done (2742)
 
-2741 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2742 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -875,7 +875,6 @@ lives in git, not in a timestamp._
 - [p 45] [A] bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown
 - [p 45] [A+O] bug-a-o3-alone-computes-a-different-result-for-a-nested-case-statement
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
-- [p 45] [A+S] bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer
 - [p 45] [A+S] bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
@@ -926,6 +925,7 @@ lives in git, not in a timestamp._
 - [p 40] [A] bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
 - [p 40] [A] bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage
+- [p 40] [A+S] bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build
 - [p 40] [A+S] bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
 - [p 40] [N] bug-n-from-package-import-submodule-binds-the-parent-package
