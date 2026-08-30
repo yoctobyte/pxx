@@ -141,4 +141,4 @@ lower, and they do — but it is the debt that lowering them incurred, and leavi
 it unfiled is how it would have been lost.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 7943a0762.
