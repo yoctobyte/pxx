@@ -52,7 +52,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (303)
+## backlog (304)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -135,6 +135,7 @@ _none_
 | bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure | T | 50 | bug | `trackt setup --fetch-corpus` provisions library_candidates/ only. It never runs, mentions or checks tools/install_externals.sh or tools/install_cross_sysroot.sh, so a box built strictly to track-t.md's documented deploy recipe comes up able to publish verdicts and unable to run ten of the jobs behind them. The corpus half self-announces as SKIP; the sysroot half goes RED, and a red is read as a defect in the tree — on seven's first full tier it auto-filed an 18-job cascade naming twelve innocent Rust commits. | — |
 | bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable | T | 40 | bug | CLAUDE.md gates the widen-your-gate exception on `twatch.py --status` exit 1 OR `trackt.py health` DOWN, as if they were two ways to ask one question. They are not: --status reads PUBLISHED tstate (was work swept recently) and health checks for a RUNNING PROCESS (is anything sweeping now). Measured 2026-08-29 during a watcher handover, they returned UP/exit-0 and DOWN simultaneously. Joined by `or`, the disagreement silently resolves to `down`, so every agent widens its gate by ~10 minutes per fix during any handover — the exact cost the rule exists to avoid. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
+| bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver | A | 60 | bug | compiler.pas now lowers COMPLETELY for wasm32 (3780 of 3780 bodies) and the module validates, instantiates and answers --version / --where / usage. Compiling anything faults: `memory access out of bounds` in PXXStrSetLen, reading [oldData-8] where oldData is the non-nil garbage contents of ParseUsesUnitBody's `path` slot, reached through PyTryHostHeader -> ConcatThree. Five plausible causes ruled out by measurement. Wasm-only; the same source is what the native compiler runs on every build. | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping | A | 40 | chore | Grant: frankwasm holds `compiler/ir.inc` for the `:11207` mistyping fix | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
@@ -701,6 +702,7 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
+- [p 60] [A] bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [A] feature-a-wasm32-sys-intrinsics-and-ir-syscall-lowering
 - [p 60] [N] feature-nilpy-process-exec-binding
