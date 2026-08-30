@@ -103,7 +103,7 @@ def main():
         for b, h, n, s, e, ln in sel[:limit]:
             print("  Makefile:%-6s %-34s %-38s hit=%.2f  %s" % (ln, n[:34], s[:38], h, e[:60]))
 
-if not any(f in sys.argv for f in ('--files','--oracle','--oracle-c','--oracle-pas')):
+if not any(f in sys.argv for f in ('--files','--oracle','--oracle-c','--oracle-pas','--unoracled')):
     main()
 
 # ---------------------------------------------------------------------------
@@ -404,6 +404,81 @@ def oracle_pas(limit=None):
             print("    Makefile:%-7d %s" % (ln, n))
     return 0
 
+
+
+
+# ---------------------------------------------------------------------------
+# --unoracled: the aperture, ranked.
+#
+# The three oracle modes answer what they can reach. What they CANNOT reach is
+# the part where a captured-and-wrong expectation would be unfindable rather
+# than merely unfound, so it is the part that has to be read -- and reading it
+# is only tractable if it is ordered.
+#
+# This intersects the two instruments: rows no oracle can answer, ranked by the
+# literal-overlap signal (does the expected text appear in the test's own
+# source?). Lowest overlap first, because a value appearing nowhere in its
+# source is a computed result, and computed results are where capture happens.
+# ---------------------------------------------------------------------------
+
+def unoracled(limit=40):
+    import subprocess, tempfile
+    mk = open(MAKEFILE, errors='replace').read().split('\n')
+    CMAPP = re.compile(r'\$\(COMPILER\)[^\n]*?\b(test/[A-Za-z0-9_./-]+\.pas)\s+\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
+    CMAPC = re.compile(r'\$\(COMPILER\)[^\n]*?\b(test/[A-Za-z0-9_./-]+\.c)\s+\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
+    b2s = {}
+    for l in mk:
+        for m in CMAPP.finditer(l): b2s.setdefault(m.group(2), (m.group(1), 'pas'))
+        for m in CMAPC.finditer(l): b2s.setdefault(m.group(2), (m.group(1), 'c'))
+    E2 = re.compile(r'expect_same\.sh\s+([A-Za-z0-9_./-]+)\s+(".*")\s*$')
+    BIN = re.compile(r'\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
+    rows = []
+    for i, l in enumerate(mk):
+        m = E2.search(l)
+        if not m: continue
+        names = set(BIN.findall(l)) & set(b2s)
+        if len(names) != 1: continue
+        b = next(iter(names)); src, kind = b2s[b]
+        rows.append((b, src, kind, m.group(1), l, i + 1))
+    tmp = tempfile.mkdtemp(prefix='unoracled_'); u = os.path.join(tmp, 'u'); os.makedirs(u, exist_ok=True)
+    buildable = set()
+    for b in sorted({r[0] for r in rows}):
+        src, kind = b2s[b]
+        cmd = (['fpc', '-Mobjfpc', '-vw', '-FU' + u, '-o' + os.path.join(tmp, b), src]
+               if kind == 'pas' else ['gcc', '-w', '-I', 'test', '-o', os.path.join(tmp, b), src])
+        try:
+            if subprocess.run(cmd, capture_output=True, text=True, errors='replace',
+                              timeout=90).returncode == 0:
+                buildable.add(b)
+        except subprocess.TimeoutExpired:
+            pass
+    out = []
+    cache = {}
+    for b, src, kind, name, line, ln in rows:
+        cross = 'run_target.sh' in line
+        if b in buildable and not cross:
+            continue                      # an oracle can reach it; not our problem here
+        if src not in cache:
+            cache[src] = open(src, errors='replace').read()
+        args = split_args(E2.search(line).group(2))
+        exp = args[-1] if args else ''
+        toks = tokens(exp)
+        hit = 1.0 if not toks else sum(1 for t in toks if t in cache[src]) / len(toks)
+        why = 'cross-target' if cross else ('%s cannot build it' % ('fpc' if kind == 'pas' else 'gcc'))
+        out.append((round(hit, 2), name, src, why, exp[:70], ln))
+    out.sort(key=lambda r: r[0])
+    print("rows no oracle can reach: %d  (showing the %d lowest literal-overlap)"
+          % (len(out), min(limit, len(out))))
+    print("  lower overlap = the expected text appears LESS in the test's own source")
+    for h, name, src, why, exp, ln in out[:limit]:
+        print("  hit=%.2f Makefile:%-7d %-30s %-26s %s" % (h, ln, name[:30], why, exp[:44]))
+    return out
+
+
+if '--unoracled' in sys.argv:
+    a = sys.argv
+    unoracled(limit=int(a[a.index('--limit')+1]) if '--limit' in a else 40)
+    sys.exit(0)
 
 if '--oracle' in sys.argv:
     sys.exit(oracle())
