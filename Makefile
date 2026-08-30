@@ -14456,10 +14456,10 @@ test-xtensa: $(COMPILER)
 	# bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_exception_cleanup.pas $(TESTTMP)/test_xtensa_managed_exc_cleanup
 	./$(COMPILER) test/test_managed_exception_cleanup.pas $(TESTTMP)/test_xtensa_managed_exc_cleanup_x64
-	tools/expect_same.sh xtensa/test_managed_exception_cleanup "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_managed_exc_cleanup)" "$$($(TESTTMP)/test_xtensa_managed_exc_cleanup_x64)"
+	tools/expect_same.sh xtensa/test_managed_exception_cleanup "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_managed_exc_cleanup; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_managed_exc_cleanup_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interface_arc_exc.pas $(TESTTMP)/test_xtensa_interface_arc_exc
 	./$(COMPILER) test/test_interface_arc_exc.pas $(TESTTMP)/test_xtensa_interface_arc_exc_x64
-	tools/expect_same.sh xtensa/test_interface_arc_exc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_interface_arc_exc)" "$$($(TESTTMP)/test_xtensa_interface_arc_exc_x64)"
+	tools/expect_same.sh xtensa/test_interface_arc_exc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_interface_arc_exc; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_interface_arc_exc_x64; echo "exit=$$?")"
 	# ---------------------------------------------------------------------
 	# WINDOWED ABI — the executed rows. Everything above this line is Call0.
 	#
