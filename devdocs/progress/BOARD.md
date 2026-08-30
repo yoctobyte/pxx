@@ -41,7 +41,7 @@ _none_
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
-| feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
+| feature-target-wasm | A+B | 25 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
@@ -108,7 +108,7 @@ _none_
 | bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss | A+S | 25 | bug | An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate — nothing watches this number. | — |
 | bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use | A | 25 | bug | defs.inc:816 documents IR_FRAME with 'the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address' — stated as universal. It is false on riscv32, where s0 points at the BOTTOM of the frame and the links sit at +8/+12. ir.inc:4977 knows this and says assuming the common layout 'would have silently walked into the locals'. The lowering is correct (it asks FramePrevFpOffset/FrameRetAddrOffset); the DOC a backend implementer reads is not. | — |
 | bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
-| bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 50 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
+| bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 25 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
 | bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 40 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. | — |
@@ -199,7 +199,7 @@ _none_
 | bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile | A | 25 | bug | The residual after the WASI u64-alignment defect was fixed. On the SAME module, wasmtime compiles a program to a byte-identical ELF five times out of five at exit 0; node segfaults five times out of five, leaving a 0-3 byte artifact. Node handles --version, --where and --list-libraries (a directory walk) at exit 0 and dies only on a full compile. A sandboxed guest cannot fault its host, only trap, so this is host-side — and unlike the predecessor ticket that inference now has a control behind it. LOW PRIO: wasmtime is the campaign's host and the milestone is met without node. | — |
 | chore-a-adopt-allocrecvar-at-the-twenty-remaining-record-temp-sites | A | 35 | chore | chore(A): adopt AllocRecVar at the 20 remaining `AllocVar(…, tyRecord)` sites | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
-| chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping | A | 40 | chore | Grant: frankwasm holds `compiler/ir.inc` for the `:11207` mistyping fix | — |
+| chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping | A | 20 | chore | Grant: frankwasm holds `compiler/ir.inc` for the `:11207` mistyping fix | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 20 | chore | PAUSED 2026-08-21 after batch 4 with 15 of the original 98 files left, and all 15 are in lanes the user has DEFERRED (13 Track N pyeval/pyexec, 2 Track F softfloat) — resume when either is un-deferred; nothing is half-applied. DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
@@ -252,7 +252,7 @@ _none_
 | decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work | U | 50 | decide | tools/exit_observable_devtest.py fails when the count of stdout-only cross-target rows exceeds a high-water mark. The number grew 531 -> 551 in six hours from four commits across three lanes doing normal work. Bumping the ratchet each time measures nothing; holding the red makes a shared gate permanently owned by no one. Third option: report the drift and its attribution WITHOUT failing. Raised by pxx-a5, which deliberately did not make the change. | — |
 | decide-where-a-persistent-fpc-trunk-oracle-lives | U | 30 | decide | The FPC trunk oracle works but has nowhere to live: a trunk build is ~4 min and ~1GB, it must sit OUTSIDE the repo, and installing into ~ needs the owner's say-so. Three options with different refresh obligations. Filed because closing feature-t-fpc-probe-needs-a-trunk-oracle with item 3 undone would otherwise lose it. | — |
 | decide-which-gtk-a-bare-gtk-gtk-h-means | U | 55 | decide | GTK2 and GTK3 both answer to `#include <gtk/gtk.h>` and are told apart only by include root. /usr/include/gtk-2.0 is a default system include root and gtk-3.0 is not, so GTK3 needs an explicit -I today. Adding gtk-3.0 to the defaults decides the GTK version for every C consumer at once — including the GTK2 macro-soup regression guard. | — |
-| decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner | U | 50 | decide | compiler/builtin/wasibackend.pas and lib/rtl/platform/wasi/platform_backend.pas each carry their own preopen table and rights logic. Both work, so nothing is red -- and a duplicated CAPABILITY model fails silently, as one path opening files the other refuses with ENOTCAPABLE. De-duplicating is not a typing job: a shared include double-defines when both units co-occur in one program, wasibackend cannot use the PAL by design, and the remaining direction points a lib/rtl unit at compiler/builtin, backwards from every other dependency in the tree. That is a layering call, not an implementation detail. | — |
+| decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner | U | 25 | decide | compiler/builtin/wasibackend.pas and lib/rtl/platform/wasi/platform_backend.pas each carry their own preopen table and rights logic. Both work, so nothing is red -- and a duplicated CAPABILITY model fails silently, as one path opening files the other refuses with ENOTCAPABLE. De-duplicating is not a typing job: a shared include double-defines when both units co-occur in one program, wasibackend cannot use the PAL by design, and the remaining direction points a lib/rtl unit at compiler/builtin, backwards from every other dependency in the tree. That is a layering call, not an implementation detail. | — |
 | feature-a-a-general-x86-64-relocatable-object-writer | A | 30 | feature | There is no general x86-64 relocatable object writer, and that is the gap | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
 | feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile | A+S | 35 | feature | xtensa is the only hosted target with NO signal runtime — EmitSignalRuntimeForTarget has arms for five arches and falls through for xtensa, on purpose, because `FreeRTOS is not a Unix`. That rationale was written before the hosted xtensa profile existed, and under --platform=posix xtensa IS a Unix running on Linux via qemu. Not the 8-line IR_SET_SIGNAL port it looks like: the arm depends on a ~155-line runtime that does not exist. Unblocks 4 programs, not 1, because the three SA_SIGINFO refusals are gated on the same fact. | — |
@@ -266,7 +266,7 @@ _none_
 | feature-a-finalize-for-bare-dynarray-and-variant | A | 30 | feature | The VARIANT half landed 2026-08-24 (PXXVarClear through the slot address, FPC-identical on four targets); what remains is the DYNAMIC ARRAY only. A bare dyn-array lvalue still gets a clear compile error, because the release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING one is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow. | — |
 | feature-a-getinterface-refcounting | A | 45 | feature | __pxxGetInterface stores the instance pointer into the caller's interface variable without an AddRef, so the slot holds a borrowed reference while the compiler treats the variable as managed and releases it at scope exit. Every Supports/GetInterface hit is therefore one release the object never got a retain for. Nothing observed to crash yet, which is why it is a ticket and not an urgent bug — but the asymmetry is real and worth settling deliberately. | — |
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 40 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
-| feature-a-merge-the-wasm-branch-the-shared-file-arms | A | 40 | feature | Branch `wasm` modifies four existing files: compiler.pas (5 edits), exception_emit.inc (1 arm), ir_codegen.inc (1 arm), and lib/rtl/platform.pas (1 additive constant). The last is Track B and carries B's gate, so the merge review spans two lanes, not one. Nothing on the branch is pre-approved. This ticket is the ledger; the branch's own CHARTER table is not visible from master and was stale. | — |
+| feature-a-merge-the-wasm-branch-the-shared-file-arms | A | 20 | feature | Branch `wasm` modifies four existing files: compiler.pas (5 edits), exception_emit.inc (1 arm), ir_codegen.inc (1 arm), and lib/rtl/platform.pas (1 additive constant). The last is Track B and carries B's gate, so the merge review spans two lanes, not one. Nothing on the branch is pre-approved. This ticket is the ledger; the branch's own CHARTER table is not visible from master and was stale. | — |
 | feature-a-promoint-variant-esp-targets | A+S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 45 | feature | Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix. | — |
 | feature-a-report-fixed-cap-headroom | A | 40 | feature | Three fixed caps in defs.inc have now been raised AFTER a user hit them — MAX_CODE 8->16 MB, MAX_STRS 8192->65536, MAX_CODE 16->32 MB — and each was found by a program failing, never by anyone looking. Nothing reports how close a compile came to any cap, so the only headroom signal the project has is an overflow. Proposal: a PXXDBG=a.caps topic printing per-cap utilisation at end of compile, so `the next one` is a number someone can read instead of an incident. Small, additive, no behaviour change. | — |
@@ -370,7 +370,7 @@ _none_
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 30 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
 | feature-t-record-host-cpu-features-in-tstate | T | 20 | feature | tstate records host, sha, tier, wall and compiler_sha256 — nothing about the machine. So 'can we emit FMA?' could not be answered from the repo and needed an ssh into plexus. Record CPU model and the x86-64 feature level per host, once, in the host json. | — |
-| feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host | A | 40 | feature | Every check in test/wasm/ runs its module under node's WASI, which does not enforce the pointer alignment WASI preview1 requires of u64 out-params. Measured: with that defect reinstated, the align slice prints every expected line under node and exits 0, and traps under wasmtime before its first line. check_align.sh now covers the specific calls, but the four general WASI slices — sysio, loadfile, pal, wasi — still run under the lenient host only, so the class stays invisible wherever they are the coverage. | — |
+| feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host | A | 25 | feature | Every check in test/wasm/ runs its module under node's WASI, which does not enforce the pointer alignment WASI preview1 requires of u64 out-params. Measured: with that defect reinstated, the align slice prints every expected line under node and exits 0, and traps under wasmtime before its first line. check_align.sh now covers the specific calls, but the four general WASI slices — sysio, loadfile, pal, wasi — still run under the lenient host only, so the class stays invisible wherever they are the coverage. | — |
 | feature-t-uforth-bench-on-the-watcher-idle-phase | T | 25 | feature | tools/uforth_bench.py is standalone + a make target, so uforth rows only exist when a human types it. Hang it off the watcher's idle bench phase so rows land per-sha automatically — which is also the only way to get the quiet-box baseline the harness has never had, and the instrument for the open slow-creep question. | — |
 | feature-t-uforth-bench-restore-the-elfhash-outlier | T | 15 | feature | blocktest-elfhash SKIPs in the uforth bench: blocktest.fth needs uforth's block-word preamble (FIRST-TEST-BLOCK / LIMIT-TEST-BLOCK / [?IF]) that tester.fr alone does not supply. It is the tracked ~100x-slow outlier, so while it skips the harness has no visibility on the worst case. | — |
 | feature-t-windows-wine-harness | M | 20 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
@@ -447,7 +447,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data | A | 35 | bug | The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros. | — |
-| bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 55 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
+| bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 25 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
@@ -811,7 +811,6 @@ _none_
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [T] feature-t-commit-trailer-hook
-- [p 60] [A+B] feature-target-wasm [parked — re-claim, do not duplicate] [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image [parked — re-claim, do not duplicate]
 - [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor
@@ -825,7 +824,6 @@ _none_
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
-- [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-from-import-alias-resolves-its-source-through-flat-scope
@@ -879,7 +877,6 @@ _none_
 - [p 50] [A] bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
 - [p 50] [A] bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit
-- [p 50] [A] bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend
 - [p 50] [A+S] bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
@@ -889,7 +886,6 @@ _none_
 - [p 50] [T] bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure
 - [p 50] [U] decide-does-the-legacy-gtk-alias-still-point-at-gtk-2
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
-- [p 50] [U] decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-nested-routine-fixed-array-capture
 - [p 50] [A] feature-port-openbsd-libc
@@ -972,7 +968,6 @@ _none_
 - [p 40] [P] bug-p-a-default-value-is-accepted-on-an-open-array-parameter
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [T] bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable
-- [p 40] [A] chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping
 - [p 40] [T] chore-t-board-html-render-is-13s-of-every-ticket-move
 - [p 40] [T] chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code
@@ -980,7 +975,6 @@ _none_
 - [p 40] [U] decide-two-threading-docs-disagreed-for-seven-weeks
 - [p 40] [A] feature-a-emit-obj-record-class-abi-mode
 - [p 40] [A] feature-a-io-lock-owner-from-tls-not-gettid
-- [p 40] [A] feature-a-merge-the-wasm-branch-the-shared-file-arms
 - [p 40] [A] feature-a-report-fixed-cap-headroom
 - [p 40] [C] feature-c-csmith-differential-fuzzing
 - [p 40] [P] feature-embed-dwscript-rtti
@@ -992,7 +986,6 @@ _none_
 - [p 40] [A] feature-rtl-libc-frontend-sites-and-thread-errno
 - [p 40] [T] feature-t-audit-tests-that-pass-with-the-implementation-removed
 - [p 40] [T] feature-t-check-flags-a-lane-blocker-that-has-no-in-edges
-- [p 40] [A] feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - [p 40] [W] feature-web-machine-readable-project-metadata
 - [p 40] [A] feature-writeln-as-library
 - [p 40] [A] grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy
@@ -1085,6 +1078,7 @@ _none_
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
 - [p 25] [U] decide-posix-master-vs-fpc-named-master-for-the-socket-facades (unblocks 1)
 - [p 25] [A] bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted
+- [p 25] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 25] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
 - [p 25] [A] bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout
 - [p 25] [A] bug-a-set-membership-truncates-the-test-value-on-32-bit-backends
@@ -1093,6 +1087,7 @@ _none_
 - [p 25] [A+S] bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss
 - [p 25] [A] bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use
 - [p 25] [A] bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july
+- [p 25] [A] bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend
 - [p 25] [N] bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver
 - [p 25] [N] bug-n-an-import-inside-exec-is-silently-skipped-and-execution-continues
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
@@ -1105,6 +1100,7 @@ _none_
 - [p 25] [P] compat-pascal-distinct-type-declaration
 - [p 25] [U] decide-release-signing-key-custody
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
+- [p 25] [U] decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner
 - [p 25] [S] feature-esp-hardware-flash-validation
 - [p 25] [A] feature-nilpy-arc-cross-parity
 - [p 25] [N] feature-nilpy-ascii-flag-fast-path
@@ -1112,7 +1108,9 @@ _none_
 - [p 25] [N] feature-nilpy-match-statement
 - [p 25] [A+O] feature-opt-arch-level-and-dispatch
 - [p 25] [T] feature-t-a-second-oracle-dimension-section-alignment
+- [p 25] [A] feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - [p 25] [T] feature-t-uforth-bench-on-the-watcher-idle-phase
+- [p 25] [A+B] feature-target-wasm [parked — re-claim, do not duplicate] [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 25] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
 - [p 25] [A] refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files
@@ -1127,10 +1125,12 @@ _none_
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 20] [A] chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
 - [p 20] [B] chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 20] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
 - [p 20] [U] decide-should-writeableconst-off-be-honoured
+- [p 20] [A] feature-a-merge-the-wasm-branch-the-shared-file-arms
 - [p 20] [A+S] feature-a-promoint-variant-esp-targets
 - [p 20] [A] feature-a-typeinfo-integer-name-under-strict-fpc
 - [p 20] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
