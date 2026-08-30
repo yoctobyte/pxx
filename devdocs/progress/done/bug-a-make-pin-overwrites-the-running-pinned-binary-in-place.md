@@ -5,7 +5,7 @@ type: bug
 status: done
 owner: "frankA"
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: 9d8fbfb95
 summary: "`make pin` replaced the blessed binary with `cp ... stable_pinned`, overwriting IN PLACE the exact inode that `pinned` resolves to and that every $(PXX_STABLE) consumer executes. Measured: with a reader running, cp fails ETXTBSY -- and because the recipe was semicolon-chained, the pin then REPORTED SUCCESS, printed the OLD sha as if it were new, wrote a pin.log entry for a pin that never happened, and exited 0 so make saw nothing wrong. Fixed to cp-to-temp + mv (rename(2)), which is atomic and leaves the old inode untouched for readers already executing it."
 ---
 
