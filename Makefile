@@ -9876,6 +9876,40 @@ test-core: $(COMPILER)
 	# encoding policy instead of the unit pull.
 	./$(COMPILER) test/test_widechar_no_cast_in_program.pas $(TESTTMP)/test_widechar_nocast26
 	tools/expect_same.sh test_widechar_nocast26 "$$($(TESTTMP)/test_widechar_nocast26)" "$$(printf '1 A\n2 xA\n2 Ax\n1 B\n2 yC\n1 A')"
+	# --- feature-unicodestring-model: the UTF-16 element-width family ---
+	# All nine were written across 2026-08-30 and NONE of them was wired, which
+	# tools/check_test_wiring.py had been reporting the whole time. That includes
+	# test_widestring_jsonscanner_wall, the campaign's ACCEPTANCE test -- the one
+	# line from fcl-json's jsonscanner.pp the campaign exists to make compile. An
+	# acceptance test no suite runs is a claim, not a test, and the campaign was
+	# one message from being closed on it.
+	# Expected outputs live in .expected files rather than inline printf: these
+	# produce non-ASCII bytes and unit ordinals, and the inline form would put a
+	# UTF-8 payload inside a shell double-quoted string inside a make recipe.
+	# ORACLE NOTE for anyone regenerating these: FPC agrees byte for byte only
+	# with `uses cwstring`. Its default widestring manager converts AnsiString
+	# <-> WideString byte-for-byte and NO source-codepage setting changes that,
+	# because the knob is the manager and not the source. See
+	# devdocs/dev/debugging-playbook.md.
+	./$(COMPILER) test/test_widestring_jsonscanner_wall.pas $(TESTTMP)/test_ws_wall26
+	$(TESTTMP)/test_ws_wall26 | diff -u test/test_widestring_jsonscanner_wall.expected -
+	./$(COMPILER) test/test_widestring_alias_gate.pas $(TESTTMP)/test_ws_gate26
+	$(TESTTMP)/test_ws_gate26 | diff -u test/test_widestring_alias_gate.expected -
+	./$(COMPILER) test/test_widestring_lowering.pas $(TESTTMP)/test_ws_lower26
+	$(TESTTMP)/test_ws_lower26 | diff -u test/test_widestring_lowering.expected -
+	./$(COMPILER) test/test_widestring_transcode.pas $(TESTTMP)/test_ws_trans26
+	$(TESTTMP)/test_ws_trans26 | diff -u test/test_widestring_transcode.expected -
+	./$(COMPILER) test/test_widestring_element_positions.pas $(TESTTMP)/test_ws_elem26
+	$(TESTTMP)/test_ws_elem26 | diff -u test/test_widestring_element_positions.expected -
+	./$(COMPILER) test/test_widestring_assign_positions.pas $(TESTTMP)/test_ws_assign26
+	$(TESTTMP)/test_ws_assign26 | diff -u test/test_widestring_assign_positions.expected -
+	./$(COMPILER) test/test_widestring_pointee_width.pas $(TESTTMP)/test_ws_ptr26
+	$(TESTTMP)/test_ws_ptr26 | diff -u test/test_widestring_pointee_width.expected -
+	# NOT an oracle -- its header names which of the six lines FPC produces.
+	./$(COMPILER) test/test_widestring_surrogate_pair.pas $(TESTTMP)/test_ws_surr26
+	$(TESTTMP)/test_ws_surr26 | diff -u test/test_widestring_surrogate_pair.expected -
+	./$(COMPILER) test/test_sysutils_utf8_encode_decode.pas $(TESTTMP)/test_su_utf826
+	$(TESTTMP)/test_su_utf826 | diff -u test/test_sysutils_utf8_encode_decode.expected -
 	./$(COMPILER) test/test_pchar_concat_and_array_element.pas $(TESTTMP)/test_pchar_concat26
 	tools/expect_same.sh test_pchar_concat26 "$$($(TESTTMP)/test_pchar_concat26)" "$$(printf 'xyabcde\nxabcde\nabcdetail\nQabcde\nabcdeQ\nzabcde\nbcde\ncde\nabcde\ncde\npabcde\n5\neq\nabcde\ncde\nbcde\nqe\nbcde')"
 	# a POINTER TO PChar (`^PChar`, and PPChar which is FPC's name for the same
