@@ -1,6 +1,6 @@
 ---
-track: C
-prio: 55
+track: A+C
+prio: 65
 type: bug
 status: new
 blocked-by: []
@@ -69,3 +69,78 @@ case, not an added one*: the conformant layout already existed as the variadic
 tail reversal gated on `ProcVariadic`, because a `va_arg` walk reads forward from
 overflow and so needed psABI order. The ordinary path was the wrong one. The win
 is deleting the disagreeing cases, not synthesising another.
+
+## Re-rated p55 -> p65 and re-laned C -> A+C (coordinator, 2026-08-30)
+
+frankC measured the shape where **no compensating guard applies** — a Pascal unit
+whose implementation is a C translation unit (`uses './abi.c'`), so a Pascal-mode
+caller meets a bodied C callee and the two sides must already agree. Binary at
+fixedpoint `a7a03ffb95e1`; probe and runner in `/tmp/frankC-share/abi-probe/`.
+
+```
+shape                       x86-64  aarch64  arm32  riscv32  i386
+f(double x, int n)            ok     0.00     ok      ok     Nan
+f(int n, double x)            ok      ok     0.00     ok     Nan
+f(int,int,int) -> 123         ok      ok      ok      ok     321
+f(double a, double b)         ok    27.50     ok      ok     Nan
+f(int,double,int,double)      ok   1034.00 refused    ok     Nan
+f(float f, int n)             ok     0.00     ok      ok     Nan
+```
+
+**This is a silent-wrong-answer bug, not a consistency refactor.** Ordinary Pascal
+calling ordinary C returns wrong numbers on three of five targets. CLAUDE.md's
+compat table: *"real Pascal source compiles but runs wrong → bug, own lane, own
+prio"*. p55-as-a-follow-on-refactor understated it.
+
+**Why 65 and not higher:** the affected shape is a Pascal unit implemented by a C
+TU, which is not yet common in the tree, and the two targets that matter most for
+the ESP campaign — riscv32 and x86-64 — are clean. **Why not lower:** wrong
+values, no diagnostic, and `i386` shows it with **no float at all**.
+
+- **i386 is a fourth affected target and the worst — 6/6 wrong**, and nobody had
+  listed it. `cparser.inc:11085` has its own i386 arm; `ir_codegen386.inc` carries
+  the same three guards. Its divergence is argument **order**, hence `321` for
+  `123`.
+- **riscv32 is clean on all six** — frankA's psABI convention fix, and this
+  ticket's own "expect one arm to be correct already" landing as written.
+
+## It is an A ticket with a C-side deletion, and that is why frankC stopped
+
+The prologue is Track C's; the compensating guards are **seven sites across three
+Track A backends** — `ir_codegen_aarch64.inc:2993,3188`,
+`ir_codegen_arm32.inc:2658,2965`, `ir_codegen386.inc:3204,3561,3646` — and this
+ticket's own gate requires them in the same commit.
+
+**Deleting the `cparser.inc` arms alone is strictly worse than the status quo**: an
+AAPCS prologue against still-positional C-mode call sites breaks every C-to-C call
+on three targets in order to fix the bridge.
+
+**The destination already exists.** `EmitParamSpillsForTarget` has proven
+`ProcCdecl` arms for i386 / aarch64 / arm32 / x86-64, each mirrored from that
+backend's external-call marshalling — a classification validated every time pxx
+calls libc with a float. The aarch64 arm's own comment records that it was **not**
+mirrored from `cparser.inc`, *"that one is POSITIONAL and says so."* So the C side
+is the same three-arm deletion the x86-64 half already was.
+
+## The gate the ticket names cannot prove this
+
+A pure C program is self-consistent **both before and after** — positional on both
+sides today, AAPCS on both sides after — so `test-c-conformance-*` and
+`test-lua-cross` can detect a **regression** here but can never go red-to-green.
+**The differentiating shape is the probe above, and it belongs in `test/` as the
+behavioural gate.** Anyone who runs the cross suites, sees green, and concludes
+the convention was asserted has measured the wrong thing.
+
+## Two notes recorded so they are not re-chased
+
+- **No cross-gcc on this box** (no `aarch64-linux-gnu-gcc`, no clang, x86-64 gcc
+  only), so "prototype against real gcc" is not executable for the two targets in
+  question. **It also was not needed**: unlike the bitfield case, where only gcc
+  could say what `sizeof` should be, a calling convention's observable is a
+  returned number and that number is target-independent arithmetic. `f(2.5, 4)` is
+  `10.00` everywhere, so a disagreeing target is wrong **by construction**, with no
+  oracle to consult. gcc pinned the x86-64 row only.
+- **A non-finding:** an early run segfaulted on `mix4` on x86-64 *and* riscv32 —
+  the two clean targets. Pascal `Mix4` and C `mix4` differ only in case, bind
+  case-insensitively, and recurse until the stack dies. Renaming gives `1234.00`.
+  Not a crash on the correct path.
