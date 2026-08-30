@@ -2438,7 +2438,25 @@ begin
             else EmitFloatUnaryCallXtensa('__pxx_dint', True, True);
             Exit;
           end;
-          Error('target xtensa: builtin calls not supported in bare-metal stage 1');
+          if procIdx = -210 then
+          begin
+            { bare `Eof` (stdin) -> PXXStdinEof: Boolean (portable builtin,
+              shares the peek byte with PXXReadLine). Hosted only. }
+            procIdx := FindProc('PXXStdinEof');
+            if procIdx < 0 then Error('compiler error: PXXStdinEof not found');
+            EmitCallProc(procIdx);
+            Exit;
+          end;
+          { Names the builtin. The message used to read "builtin calls not
+            supported in bare-metal stage 1" and identify nothing — and it is
+            reached under --platform=posix, where there is no bare-metal stage
+            at all, so the words send the reader to a profile question that is
+            not the problem. Second instance tonight of the same defect class as
+            the binop message; the rule is the same: a diagnostic that cannot
+            name its own subject makes the reader guess, and the guess is
+            usually the message's own stale hint. }
+          ErrorIdent := 'builtin ' + AIntToStr(procIdx);
+          Error('target xtensa: this builtin has no arm in the xtensa backend');
         end;
 
         { Word-based argument passing (matches the callee spill in pasparser_*.inc):
@@ -2823,6 +2841,68 @@ begin
         else
           EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[node]));   { a2=dest, a3=src, a4=count }
         EmitCallProc(procIdx);
+      end;
+
+    IR_READLINE:
+      begin
+        procIdx := FindProc('PXXReadLine');
+        if procIdx < 0 then Error('compiler error: PXXReadLine not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_READ_DISCARD:
+      begin
+        procIdx := FindProc('PXXReadDiscard');
+        if procIdx < 0 then Error('compiler error: PXXReadDiscard not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_READ_VAR:
+      begin
+        { Parse one read/readln target from the shared line buffer via the
+          portable builtin helpers. A managed string wants its SLOT address —
+          force lvalue-write mode (mirrors every other backend). Ported from
+          riscv32; the three read ops together were the last node-dispatch gap
+          keeping `readln` off this target. }
+        tk := IntToTypeKind(IRTk[node]);
+        if tk = tyAnsiString then
+        begin
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeXtensa(IRA[node]);           { a2 = slot address }
+          InLValueWrite := savedLVW;
+          procIdx := FindProc('PXXReadVarStrM');
+          if procIdx < 0 then Error('compiler error: PXXReadVarStrM not found');
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            xtensa_mov(XtensaArgRegN(0), reg_xtensa_a2);
+          EmitCallProc(procIdx);
+        end
+        else if tk = tyChar then
+        begin
+          IREmitNodeXtensa(IRA[node]);           { a2 = target address }
+          procIdx := FindProc('PXXReadVarChar');
+          if procIdx < 0 then Error('compiler error: PXXReadVarChar not found');
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            xtensa_mov(XtensaArgRegN(0), reg_xtensa_a2);
+          EmitCallProc(procIdx);
+        end
+        else if TypeIsOrdinal(tk) then
+        begin
+          IREmitNodeXtensa(IRA[node]);           { a2 = target address }
+          procIdx := FindProc('PXXReadVarInt');
+          if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
+          { arg1 = the target's width. Load it AFTER moving arg0 into place,
+            never before: windowed's arg0 is a10 and Call0's is a2, and on
+            Call0 a2 already holds the address — so a write to arg1 that
+            happened first would still be fine, but the move is what makes the
+            two ABIs read identically at this site. }
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            xtensa_mov(XtensaArgRegN(0), reg_xtensa_a2);
+          EmitLoadConstXtensa(XtensaArgRegN(1), TypeSize(tk));
+          EmitCallProc(procIdx);
+        end
+        else
+          Error('target xtensa: read/readln target type not supported');
       end;
 
     IR_CLASSREF:

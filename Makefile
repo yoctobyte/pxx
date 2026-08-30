@@ -13060,7 +13060,18 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen
 	./$(COMPILER) test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64
 	tools/expect_same.sh xtensa/test_nested_dynarray_setlen "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen)" "$$($(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64)"
-	@echo "hosted xtensa: 95 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	# +2: the read family (READLINE / READ_VAR / READ_DISCARD) and bare Eof.
+	# PIPED stdin, exactly as the riscv32 rows do it — the differential sweep
+	# that measured these ran with stdin at /dev/null, where both sides see EOF
+	# immediately and a broken readln would still 'match'. Feeding the same bytes
+	# to both sides is the assertion; an empty stdin is not one.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_readln.pas $(TESTTMP)/test_xtensa_readln
+	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_xtensa_readln_x64
+	tools/expect_same.sh xtensa/test_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_xtensa_readln_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin
+	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin_x64
+	tools/expect_same.sh xtensa/test_eof_stdin "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_eof_stdin)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_xtensa_eof_stdin_x64)"
+	@echo "hosted xtensa: 97 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
