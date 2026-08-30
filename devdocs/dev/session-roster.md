@@ -22442,3 +22442,69 @@ agents withdrew their own most persuasive claim today before anyone challenged i
 — frankC's five-target control, frank-rust's two-readings lead, frankB's
 stale-binary report, frank-optimize's mechanism. A campaign that only ever adds
 support is one whose support cannot be told apart from advocacy.
+
+## The one line today wants: an IDENTIFIER standing in for the thing it names
+
+frankS's formulation, and it subsumes three rules currently written separately:
+
+> **An identifier standing in for the thing it names, trusted because it looked
+> right.**
+
+Four instances, four agents, one day (2026-08-30):
+
+| identifier | what it named | how it lied |
+| --- | --- | --- |
+| `defs.inc:422` `{ Left = base sym idx }` | the AST node layout | false in all 196 builders — and the false reading was the one that made the fix nearly free |
+| `grant-...` summary `DO NOT CLAIM these files` | a live lock | the mechanism was cut hours earlier; the ranker still shows it to every idle Track A agent |
+| `16f740d56`, `41a765df0` | commits | pre-rebase ghosts; `git log` → "unknown revision" |
+| four grant-shaped slugs | four dead tickets | one of the four was live and I never opened it |
+
+The common step is not laziness — in each case the identifier was **checked
+against something**, just not against the thing it stood for. This is why "verify"
+is the wrong word in a rule: everyone did verify.
+
+**frankS's temporal refinement is the fix, and it is sharper than what is in the
+file.** `516f14cba` says verify your shas. That would not have caught it: `sync.sh`
+printed *"pushed 2 commit(s), all verified on origin"* — **true, of the content** —
+while the quoted sha came from a `git log --oneline -1` run *before* the push, on
+the one sync that hit a hand-finished `LOGBOOK.md` conflict and got rewritten.
+**"Confirm it landed" and "read the sha after it landed" are two different
+actions**, and an agent can do the first, see a success message, and still quote a
+ghost. The rule that closes it: *the sha you quote must come from a `git log
+origin/master --grep='<subject>' -1` run **after** the push.*
+
+## A revert holds the repo lock, so its one input gets checked twice
+
+v398, 2026-08-30. The full-tier verify was RED and `test-sqlite-threads-aarch64`
+had the exact shape of the intra-C defect we pinned through deliberately — C code,
+aarch64, a wrong value not a crash, self-host clean. **That shape was why I would
+not call it**, and I was right not to: a plausible match on this ticket had already
+been wrong three times that afternoon.
+
+frankC settled it two independent ways, and it says it would not have sent either
+alone:
+- **Mechanism:** the defect fires only where `CUnitOfPascalProgram` is true — a C
+  TU that a *Pascal* program uses. `csqlite_thread_test.c` is a pure C program, the
+  gate is off, every C→C call takes the path it always did.
+- **Reproduction:** rebuilt `c8e132a02` → fixedpoint `992065f21f33`, byte-identical
+  to `stable_linux_amd64/default/stable_pinned`, so the *blessed* binary. PASS ×5,
+  plus PASS at HEAD. Six for six.
+
+I verified both load-bearing facts myself before acting — `sha256sum` of the pinned
+binary, and `merge-base --is-ancestor` confirming `b4ff9adea` present and
+`f388cbfbc` absent at `c8e132a02`. **Not distrust: a revert blocks every lane and
+the human, so the single input to it should be checked by two people.** The
+measurement was frankC's; the arithmetic was mine. Pin stands.
+
+**Neither argument was sufficient alone.** The mechanism argument is a *story*, and
+stories about this ticket had a bad day. Six PASSes alone leave "then why was it
+red?" open — which is how a flake gets promoted to a finding.
+
+**And the row was not evidence about the sha it named:** its own fixedpoint is
+`24c1e746bf69` = `b4ff9adea^`, not the pinned binary. Mislabelled row or stale
+seed; either way **a RED was published against a sha it did not test**. Same class
+as the `up to date` no-op, one layer up — and worse, because a dev tree's wrong
+answer misleads one agent while a verify row's misleads everyone downstream. It is
+also orthogonal to sweep *rate*: no amount of sampling makes a row that names one
+sha and tests another visible, and it degrades the bisect the whole design rests
+on.
