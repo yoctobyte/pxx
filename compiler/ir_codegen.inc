@@ -11760,15 +11760,26 @@ end;
   are the same frame with different landing pads. What follows is those two
   pieces called from the proc driver instead of from the statement lowering.
 
-  xtensa is deliberately absent: it is the one target whose exception runtime
-  exists only under the Call0 ABI, and its managed-local arm handles AnsiString
-  alone. That is ESP-campaign work, tracked on the ticket, not a silent skip. }
+  xtensa is in under CALL0 ONLY, and the ABI is the whole of the condition. Its
+  exception runtime does not exist under the windowed ABI at all -- IR_EXC_ENTER
+  and IR_RAISE both refuse there, because a longjmp-style unwind needs the
+  register windows spilled first and bare-metal has no handler for that -- so
+  under windowed this predicate stays false and a proc keeps leaking its managed
+  locals on an unwind, as it always has.
+
+  The OTHER half of xtensa's old exclusion is gone and this comment used to
+  assert it: "its managed-local arm handles AnsiString alone" was true until
+  e1d7977a2 took EmitManagedLocalCleanupForTarget's xtensa block from one
+  managed kind to six and 3a1c1dc73 added the seventh. The landing pad a cleanup
+  frame needs is that block, and it has been complete for a while.
+  bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa }
 
 function TargetHasProcCleanupFrame: Boolean;
 begin
   Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or
             (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_AARCH64) or
-            (TargetArch = TARGET_RISCV32);
+            (TargetArch = TARGET_RISCV32) or
+            ((TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_CALL0));
 end;
 
 procedure EmitProcCleanupFrameLeaveForTarget;
@@ -11787,6 +11798,7 @@ begin
   else if TargetArch = TARGET_AARCH64 then IREmitLeaveExceptionFramesAarch64(1)
 {$endif}
   else if TargetArch = TARGET_RISCV32 then IREmitLeaveExceptionFramesRISCV32(1)
+  else if TargetArch = TARGET_XTENSA then IREmitLeaveExceptionFramesXtensa(1)
   else Error('compiler error: no proc exception cleanup frame for this target');
 end;
 
@@ -11873,6 +11885,29 @@ begin
     landPatch := CodeLen; EmitI32(EncodeRISCVJAL(reg_zero, 0));
     Exit;
   end;
+  if TargetArch = TARGET_XTENSA then
+  begin
+    { Byte-for-byte the IR_EXC_ENTER arm in ir_codegen_xtensa.inc, which is the
+      point: a try frame and a proc cleanup frame are the same frame, so the two
+      cannot drift if the second is a transcription of the first. The one
+      difference is the landing pad it branches to. }
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -EXC_FRAME_SIZE_XT);
+    EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+    xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
+    xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
+    { EmitXtensaCallToCode, not xtensa_call0: the helper may be more than
+      512 KiB behind us, and this is the call form that survives that. }
+    EmitXtensaCallToCode(ExcSetJmpAddr);
+    { beq skips the j on the NORMAL return (a2 = 0); the j is the taken edge, so
+      the landing pad may sit anywhere within J's reach. Offset 6 clears the
+      three-byte j that follows. }
+    xtensa_movi(reg_xtensa_a4, 0);
+    xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);
+    landPatch := CodeLen; xtensa_j(4);
+    Exit;
+  end;
   Error('compiler error: no proc exception cleanup frame for this target');
 end;
 
@@ -11911,6 +11946,14 @@ begin
     CheckProcCleanupBranchRange(CodeLen - landPatch, 1048576);
     Patch32(landPatch, EncodeRISCVJAL(reg_zero, CodeLen - landPatch));
   end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    { J's imm18 is a BYTE offset, so the reach is +-128 KiB -- four times
+      tighter than the aarch64/riscv32 limits above, and the reason this arm
+      states its own number instead of copying theirs. }
+    CheckProcCleanupBranchRange(CodeLen - landPatch, 131072);
+    Patch24(landPatch, EncodeXtensaJ(CodeLen - landPatch));
+  end
   else
     Error('compiler error: no proc exception cleanup frame for this target');
 end;
@@ -11927,6 +11970,8 @@ begin
     begin skipPatch := CodeLen; EmitI32($14000000); end
   else if TargetArch = TARGET_RISCV32 then
     begin skipPatch := CodeLen; EmitI32(EncodeRISCVJAL(reg_zero, 0)); end
+  else if TargetArch = TARGET_XTENSA then
+    begin skipPatch := CodeLen; xtensa_j(4); end
   else
     Error('compiler error: no proc exception cleanup frame for this target');
 end;
@@ -11943,6 +11988,11 @@ begin
   begin
     CheckProcCleanupBranchRange(CodeLen - skipPatch, 1048576);
     Patch32(skipPatch, EncodeRISCVJAL(reg_zero, CodeLen - skipPatch));
+  end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    CheckProcCleanupBranchRange(CodeLen - skipPatch, 131072);
+    Patch24(skipPatch, EncodeXtensaJ(CodeLen - skipPatch));
   end
   else
     Error('compiler error: no proc exception cleanup frame for this target');
@@ -11968,6 +12018,8 @@ begin
 {$endif}
   else if TargetArch = TARGET_RISCV32 then
     EmitI32(EncodeRISCVJAL(reg_ra, ExcRaiseAddr - CodeLen))
+  else if TargetArch = TARGET_XTENSA then
+    EmitXtensaCallToCode(ExcRaiseAddr)
   else
     Error('compiler error: no proc exception cleanup frame for this target');
 end;
