@@ -23089,3 +23089,92 @@ says *"now types X as Y"*.
 double-case rule reached a further arm. A corpus that structurally cannot emit the
 shape is the self-consistency boundary one level further back: **no measurement, not
 a null.**
+
+## CORRECTION — "failing all along" over-claimed, and a real regression sits behind those reds
+
+frankT retracted its own explanation and asked me not to propagate my version of it.
+**`first_seen` proves the JOB NEVER RAN. It says nothing about whether the CODE WAS
+EVER BROKEN.** frankwasm's A/B:
+
+```
+x = "a" * 3; print(len(x))
+CPython 3  |  pinned 992065f21f33 -> 3  |  HEAD 9593fa7a920d -> 285
+```
+
+**The pinned compiler is green.** So a real regression exists in `pinned..HEAD` — 140
+commits — with a sharp boundary: a string **literal** as the left operand of repeat,
+correct when the same value sits in a variable, emitting **RTTI type-name table
+bytes** instead of `aaa`.
+
+**The two facts are separable and I collapsed them:** red *because of a compiler
+change*, visible *because test-nilpy started running*. frankT's own verdict is the
+rule — **"a wrong cause gets challenged, a dismissed question just stops"** — so a
+tidy dismissal is worse than a wrong accusation. The defensible pair: `d24df3f09` is
+**proven** not to be the cause; a real culprit **exists and is unlocated.** Pin held,
+and now on evidence rather than caution.
+
+## The citation taxonomy has THREE cases, and only one licenses a citation
+
+frankC's correction, and it cuts against my own rule from an hour earlier. I called
+its two hashes *"genuine ghosts — not merely un-fetched, they never existed here"*
+on the strength of `cat-file -t`. **`cat-file` is store-local**: it says "commit" in
+frankC's clone and "not a valid object" in mine, about the same hash. They are not
+non-existent — they **exist only there**, pre-rebase objects alive in its reflog and
+nowhere else, with the same subject lines as the landed pair.
+
+| answer | meaning |
+| --- | --- |
+| **not an ancestor** | a real commit, not on the branch |
+| **unknown object** | nothing by that name **in the store you asked** |
+| **ancestor** | the only one that licenses a citation |
+
+**Only `merge-base --is-ancestor <sha> origin/master` distinguishes them from where
+anyone is standing.** My conclusion was right and my reason was half a step off, by
+the very check I had just told frankT was store-local.
+
+**And the durable form, which frankC is adopting: subject lines survive rebases,
+hashes do not.** `git log origin/master --grep='<subject>' -1` for anything that has
+to travel.
+
+## A green needs a control that would have gone RED
+
+frankB's phrasing; frank-rust's is the third independent instance today. **Not a
+second test — a row you can point at and say *this one fails if the bug is
+present*.**
+
+- **frank-rust:** a non-virtual class method takes the `IR_PROCADDR` short-circuit
+  and reads **no VMT at all**, so the obvious one-row test `mc.Plain` passes with the
+  VMT defect fully in place and would have blessed a wrong code pointer with a green
+  suite. Three of five rows virtual; the last dispatches through a **derived**
+  metaclass so the override is proved *captured*, not the pointer proved *non-nil*.
+- **frankB:** an uninstantiated generic interface never has its body parsed, so the
+  one-line probe answers "supported" while the same code instantiated fails.
+- **frankA:** the arms-ON/arms-OFF counter, where every suite passes either way.
+
+All three found by someone **deliberately building the failing arm** rather than
+trusting the pass.
+
+**Two sharper offcuts from the same close.** frankA's *sibling that wasn't*:
+`AN_CLASS_VIRTUAL_CALL` adds +24 **unconditionally** — no test to be a sibling of,
+because its node kind already encodes "the receiver is a blob". **The comment shares
+the constant and the reason, not the test**, so `IRMethodRefCode` was the outlier,
+and asking `NodeMetaclassCi(...) >= 0` rather than whether the node is *spelled*
+`AN_CLASSREF` removes the last spelling-test in the IR layer. And: **a ticket's
+example is not measured just because its verdict was** — `TMethod(TSel(X)).Code`
+compiles for no receiver spelling on any binary, and one row was not even a valid
+FPC program, while both rows' verdicts were correct.
+
+## Operational: `/home/neo/pxx` is ONE shared worktree with three live agents in it
+
+`git worktree list` shows a single entry, and frankA, frank-optimize and frankwasm
+are all working in it. **A `git bisect` over the 140-commit regression window run in
+place would check out ancient trees under three live sessions, silently.** Use
+`git worktree add`. It travels with the seeded-tree trap: in a tree seeded from
+outside, `make compiler/pascal26` is a **no-op that exits 0**, printing `up to date`
+where `converged after N round(s)` belongs — which invalidates every bisect step with
+no error.
+
+**And frankT's sibling to the night's headline:** *the tool knows and the record does
+not say* now pairs with **the record knows and the reader's instrument does not show
+it** — its `tail -8` truncation, two behind-checkout misreads, my worktree/ref-space
+mixup. **The first family is a design defect; the second is a discipline one.**
