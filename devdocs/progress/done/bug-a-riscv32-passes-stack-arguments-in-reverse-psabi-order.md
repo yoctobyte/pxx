@@ -2,10 +2,9 @@
 track: A+S
 prio: 55
 type: bug
-status: open
+status: done
 found: 2026-08-30
 found-by: claude-A
-blocked-by: bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
 ---
 
 # riscv32 passes stack arguments in REVERSE psABI order, so pxx↔C interop is wrong at ten or more words
@@ -92,3 +91,6 @@ core registers. **Not measured against an arm32 oracle** — flagged so it is no
 found later as a surprise.
 
 xtensa is **not measured** and is not assumed to share this shape.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
