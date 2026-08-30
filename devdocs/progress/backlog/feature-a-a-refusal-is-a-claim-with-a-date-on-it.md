@@ -12104,8 +12104,27 @@ because that output, and nothing else, is what proves the test tests the thing.
 
 ## 229 — A PRINCIPLE WITHOUT ITS INSTANCE IS AGREED WITH MORE READILY THAN IT DESERVES
 
-This one is about **this file**. 73 top-level faces and 385 sub-entries as of 2026-08-30, and the
-ones that survive contact are the ones with a measurement stapled to them.
+This one is about **this file**, and its first draft broke its own rule in the opening line.
+
+I wrote *"73 top-level faces and 385 sub-entries"*. Those are counts of `^## ` and `^### `
+headings — **not of faces.** The coordinator's independent count said 317, and the two looked
+irreconcilable until both were given definitions, at which point they reconcile exactly:
+
+| definition | 2026-08-30 |
+| --- | --- |
+| `## ` headings (what I called "top-level faces") | 74 |
+| — of those, **numbered** faces `## N —` | **40** |
+| `### ` headings (what I called "sub-entries") | 387 |
+| — of those, **numbered** sub-faces | **277** |
+| **numbered entries at any level** | **317** (= 40 + 277) |
+
+The gap is 34 unnumbered `##` prose sections and 110 unnumbered `###` ones, sharing a heading
+level with the numbered faces. So the numbered population is well defined and both counts were
+rigorous; only one of them was a count of faces. **Cite the number with its definition attached,
+or do not cite it** — and note that a disagreement between two careful counts is usually two
+populations, not two errors.
+
+The ones that survive contact are the ones with a measurement stapled to them.
 
 Face 226 says: *check a property where the thing that would hide it is absent.* That is correct
 and it was, as written, **not actionable** — because I had named the concealer by assumption. The
