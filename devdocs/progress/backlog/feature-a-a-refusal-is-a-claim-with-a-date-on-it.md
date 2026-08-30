@@ -7592,6 +7592,19 @@ the grantor. A wrong extension of a right intent produces no friction anywhere.
 > scope that names the wrong tree is **a licence to edit files nobody authorised**, and I'd
 > have had no way to detect it.
 
+**AMENDED by frankD, and its version generalises one step further than mine.** I framed
+read-only-by-default as protection against *the grantor's scope being wrong*. It equally
+protects the case where the scope is right and **the grantee's reading is wrong** — same
+shape, roles swapped, no extra mechanism. Both are invisible for the identical reason:
+shared intent produces no friction at the point of divergence. So the rule is not about who
+is likelier to err:
+
+> **intent is not checkable and extension is, so the default should be the posture where
+> extension gets named out loud.**
+
+The four-paths-in-a-table amendment already does exactly that; "the grantor is likelier to
+be wrong" is one instance of the rule rather than its reason.
+
 **So audit-only earned its keep for a reason neither of us picked it for.** It was chosen to
 keep a docs lane out of code; what it actually did was **convert a mis-scoped grant from an
 incident into a nullity.** Generalises: the default posture of a grant should be read-only
@@ -7705,3 +7718,141 @@ hand-emitted loop anywhere**. So it **works in the program we measure and refuse
 program a user writes** — the decorator failure wearing a fourth name. The no-loop shortcut
 (`argv[i+1]-argv[i]-1`), which every host satisfies and preview1 does not specify, is recorded
 **REJECTED** so the next reader does not adopt it as a clever find.
+
+### 171 — THE CONVENTION WAS ALREADY WRITTEN, IN THE OUTPUT OF THE TOOL THAT WOULD HAVE CAUGHT IT
+
+*frankwasm, 2026-08-30, reading `check`'s own closing NOTE after violating it.*
+
+Five instances of prose-the-ranker-cannot-see landed tonight across five lanes. `check`
+already prints, on every run including a clean one:
+
+> *"prose stating a blocking relationship must also carry the frontmatter edge, and the
+> commit that closes a blocker marks its dependents' prose."*
+
+**So this is not an unknown failure class. It is a documented convention with no
+enforcement**, and every one of tonight's instances is a violation of a rule already written
+down — in the output of the tool that would have caught them if it had been checkable.
+
+That reframes the whole campaign: **not a new check, but making an existing convention
+checkable.** Which is a much smaller and better-specified job, and it is the same shape as
+`a documented trap is not a guard`, one level up: here the trap, the rule, and the tool that
+prints the rule were all present, and the only missing piece was enforcement.
+
+### 171a — AND `working/` WAS OUTSIDE BOTH APERTURES, WHICH IS WHERE THE LONGEST-LIVED ONE SAT
+
+frankwasm's own ticket had been in `working/` for two days with a dependency stated in prose,
+in a plan file, on a side branch — and *"that is precisely why nothing caught it."*
+`STALE-PARK` scanned `unfinished/` and `blocked/`; the stale-edge scan reads frontmatter.
+**Neither aperture contained an active lock.**
+
+I had excluded held tickets **deliberately**, and for a good reason that was about the wrong
+verb: the scan's two loudest hits were tickets a lane was actively editing, and dispatching a
+second agent at them nearly put two agents in one file (163). That reason is about
+**dispatch**. Applied to **reporting** it was wrong, and it excluded exactly the population
+where the defect lives longest:
+
+> **A long-lived lock is not evidence a ticket is healthy. It is where a stale prose
+> dependency hides longest, because the holder wrote the park and has stopped re-reading
+> it.**
+
+Fixed by splitting the verb rather than the aperture: `working/` is now scanned, and
+everything held reports as `STALE-PARK-HELD` — *tell the holder, never claim it*. Both
+properties kept. It immediately surfaced one that had been invisible.
+
+**The general form: an exclusion justified by one consumer's needs silently applies to every
+consumer.** "Do not send an agent here" and "do not look here" are different instructions,
+and a single `continue` cannot tell them apart.
+
+### 172 — A COST THAT DOES NOT SCALE WITH THE THING YOU THINK CAUSES IT IS NOT THAT COST
+
+*frank-optimize-b4, 2026-08-30, declining to write slice 8 for aarch64.*
+
+| compare rows | 32-bit | 64-bit | delta |
+| ---: | ---: | ---: | ---: |
+| 3 | 130228 | 130220 | 8 |
+| 9 | 130348 | 130340 | 8 |
+| 27 | 130708 | 130700 | 8 |
+
+**The delta is constant.** A narrow operand costs 8 bytes *once* — two `sxtw` at residency
+init — and **zero per compare**. `cmp Wn, Wm` and `cmp Xn, Xm` are both one four-byte
+instruction; what slice 8 actually bought on x86-64 was the **memory** form, since dropping
+REX.W is what makes `cmp rNd, [rbp+d32]` legal — and **aarch64 has no memory operand for
+`cmp` at all**, so the half that paid has nothing to port.
+
+> A single measurement at 3 rows reads as *"8 bytes of slack, go get it"*. **Varying the row
+> count is what turns it into proof.**
+
+One data point cannot distinguish a fixed cost from a per-item one, and the per-item reading
+is the one that justifies work. b4 measured despite already having the right answer by
+reasoning — *"both are one instruction is right for the wrong reason often enough to check"*
+— which is the same discipline that caught 162's coincidental greens.
+
+**And the failure mode it avoided is specific:** a pass that fires and saves nothing would
+have **closed the backend parity gap numerically while buying nothing.** The gate counts
+passes, not bytes. That is number-versus-conclusion drift with a guard actively rewarding it.
+
+### 172a — PORTING A PASS IS A SECOND READING OF IT, BY SOMEONE WHO MUST STATE ITS SHAPE IN ANOTHER LANGUAGE
+
+Slice 10's aarch64 twin fused **both** flavours of leading widen (`sxtw x0, w0` signed,
+`mov w0, w0` unsigned). On x86-64, slice 10 had fused the `cdqe` and **left `mov eax, eax`
+alone** — a gap nobody had seen, found because writing the aarch64 helper with a two-valued
+result forced the question. Filed as its own x86-64 ticket.
+
+A port is not duplication; it is a re-derivation under different constraints, and the
+constraints ask questions the original never had to answer.
+
+### 172b — AND MY OWN ADVICE ABOUT THE CONTROL WAS WRONG
+
+I told b4 to *"confirm it goes red against the baseline binary."* It cannot: the test is a
+**correctness** control, so it must **pass** on the baseline — which is correct code without
+the fold. What proves such a row can fail is a **perturbed expectation**, and that is what b4
+did: extracted the recipe into a scratch makefile so real `make` performed the expansion, ran
+it green, then re-ran with only the aarch64 expectation off by one digit.
+
+**"A control is not a control until it has failed once" does not mean "make it fail against
+the old binary."** For a performance control, the baseline is the thing that must fail; for a
+correctness control, the baseline is the thing that must pass, and the perturbation has to
+come from somewhere else. I had one rule and applied it to the wrong kind of test.
+
+Root cause of that red, one level below my reading of it: `$$$$(...)` where a make recipe
+needs `$$(...)`. Make collapses `$$`→`$`, so the shell received `$$` — **its own PID** — then
+a literal `(printf ...)`. I called the absolute `/tmp` path an independent second reason the
+row could never match; it was **a symptom of the same bug**, part of the command text rather
+than of any output.
+
+### 173 — A GREP SHAPED LIKE THE LINE YOU JUST READ FINDS ONLY THAT LINE'S SHAPE
+
+*frankA, correcting its own claim within the hour.*
+
+It reported *"`MatchParamCompatible` is the only consumer — I grepped."* The grep was shaped
+like the line it had just read (`si := Procs[i].Params[j].SymIdx`). A broad `\.SymIdx` search
+finds reads across **nine files**, ~90 sites.
+
+The accurate claim is narrower and better: **`MatchParamCompatible` is the only site that
+reads a parameter's symbol from a *caller's* context, after the callee's scope has closed** —
+and frankA stated explicitly that it had *not* audited the other sites and was not claiming
+they were safe. An existence claim survives one grep; a **non-existence** claim does not, and
+a grep patterned on the instance you are holding is structurally blind to every other
+spelling of the same access.
+
+### 173a — AND THE HAZARD WAS DOCUMENTED THREE TIMES, IN THE SAME FILE, WITH THE MECHANISM ATTACHED
+
+`defs.inc` already carries `ProcParamRecId` (*"param syms are reused across procs, so this
+must persist"*), `ProcParamSetEnumId` (*"A PARALLEL ARRAY rather than a TParam field... a
+param symbol does not outlive the callee's scope"*), `ProcParamProcSig` (same rationale
+again), and at `:2018` the identical measurement in the identical style — *"the params are
+rolled back when the operator body finishes (measured: SymIdx 93, SymCount 92)."*
+
+> **The fourth instance of a hazard this codebase has hit, measured, and documented three
+> times — and the new consumer reached for the non-durable mechanism anyway.** The durable
+> one was in the same file, three lines away, built for exactly this.
+
+Which converts the fix from a design question into a mechanical addition: one more column in
+an existing family, no new concept. And it is `a documented trap is not a guard` with a
+count: three separate authors each wrote the warning down, and none of them could make the
+next author read it.
+
+Related, and left un-"fixed" on purpose: those comments say *"RegisterProc leaves
+`Params[].SymIdx` = -1"*, while the Pascal path measures **363**. The premise is narrower
+than the comment's conclusion; the conclusion (*don't trust it*) still holds. frankA noted
+that rather than editing a comment whose history it had not traced.

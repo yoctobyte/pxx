@@ -1663,7 +1663,13 @@ pre code{background:none;padding:0}
             re.I)
         SLUGISH = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+){3,}")
         for t in self.tickets:
-            if t.status not in ("unfinished", "blocked"):
+            # working/ IS SCANNED -- added 2026-08-30, and it is the gap that
+            # mattered. frankwasm: "My ticket was in working/, outside both
+            # apertures, which is precisely why nothing caught it for two
+            # days." An active lock is the LONGEST-lived place a stale prose
+            # dependency can sit, because the holder wrote the park and has
+            # stopped re-reading it. Reported as HELD, never dispatched.
+            if t.status not in ("unfinished", "blocked", "working"):
                 continue
             # EXCLUDE TICKETS THAT ARE ACTUALLY BEING WORKED. Measured by
             # frankwasm 2026-08-30, triaging the scan's first eleven: the two
@@ -1677,9 +1683,26 @@ pre code{background:none;padding:0}
             # findings systematically point at the busiest lane and at files
             # nobody else may open. Two of eleven, and they were the two I told
             # an agent to take first -- which nearly put two agents in one file.
-            if (t.fm.get("status", "").strip() == "working"
-                    or t.fm.get("owner", "").strip()):
-                continue
+            # HELD tickets are REPORTED, not skipped -- corrected 2026-08-30.
+            #
+            # The exclusion below was added because the scan's two loudest hits
+            # were tickets a lane was actively editing, and dispatching a second
+            # agent at them nearly put two agents in one file. That reason is
+            # about DISPATCH. Applied to REPORTING it was wrong, and frankwasm
+            # produced the counter-example from inside its own lane: its ticket
+            # sat in working/ for two days accumulating exactly this defect --
+            # a dependency stated in prose, in a plan file, on a side branch --
+            # and nothing caught it, because working/ is outside both apertures.
+            #
+            # A long-lived lock is not evidence a ticket is healthy. It is the
+            # place a stale prose dependency hides LONGEST, because the holder
+            # has stopped re-reading the park they wrote.
+            #
+            # So: still surfaced, under a different verb. Tell the holder; do
+            # not send anyone else.
+            held = (t.status == "working"
+                    or t.fm.get("status", "").strip() == "working"
+                    or bool(t.fm.get("owner", "").strip()))
             rows = t.text.splitlines()
             hits: set[str] = set()
             for i, line in enumerate(rows):
@@ -1697,14 +1720,26 @@ pre code{background:none;padding:0}
                 warning_count += 1
                 shown = sorted(hits)[:4]
                 more = f" (+{len(hits) - 4} more)" if len(hits) > 4 else ""
-                lines.append(
-                    f"STALE-PARK: {t.slug} [{t.track} p{t.prio}] is parked in "
-                    f"{t.status}/ and its PROSE names {len(hits)} now-resolved "
-                    f"ticket(s) near a blocking phrase ({', '.join(shown)}"
-                    f"{more}) — the resume condition may already be met. "
-                    f"Read the park; a prose condition has no owner and "
-                    f"nothing else re-checks it"
-                )
+                if held:
+                    who = t.fm.get("owner", "").strip() or "a lane"
+                    lines.append(
+                        f"STALE-PARK-HELD: {t.slug} [{t.track} p{t.prio}] is "
+                        f"HELD by {who} and its PROSE names {len(hits)} "
+                        f"now-resolved ticket(s) near a blocking phrase "
+                        f"({', '.join(shown)}{more}). DO NOT CLAIM IT — tell "
+                        f"the holder. A long-lived lock is where a stale prose "
+                        f"dependency hides longest, because the holder has "
+                        f"stopped re-reading the park they wrote"
+                    )
+                else:
+                    lines.append(
+                        f"STALE-PARK: {t.slug} [{t.track} p{t.prio}] is parked in "
+                        f"{t.status}/ and its PROSE names {len(hits)} now-resolved "
+                        f"ticket(s) near a blocking phrase ({', '.join(shown)}"
+                        f"{more}) — the resume condition may already be met. "
+                        f"Read the park; a prose condition has no owner and "
+                        f"nothing else re-checks it"
+                    )
 
         # The mirror: filed as a decision without writing DOWN the answer.
         # Dependents reach the decision by following their blocked-by slug into
@@ -1973,8 +2008,9 @@ pre code{background:none;padding:0}
         # prior investigation and pre-empts the check that would have caught
         # it.
         lines.append(
-            "NOTE stale-edge reads FRONTMATTER; STALE-PARK reads PROSE but "
-            "only in unfinished/ and blocked/, where a resume condition is "
+            "NOTE stale-edge reads FRONTMATTER; STALE-PARK reads PROSE in "
+            "unfinished/, blocked/ and working/ (the last as STALE-PARK-HELD: "
+            "tell the holder, never claim it), where a resume condition is "
             "load-bearing. Prose in a RANKED folder is still unchecked — a "
             "clean run means those two apertures are clean, not the family. "
             "Convention that keeps them in sync: prose stating a blocking "
