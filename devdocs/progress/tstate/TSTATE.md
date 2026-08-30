@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `0c99981669b7` | 2026-08-30T03:49:19Z | GREEN (native) | 377.9s | `e46dbffaa80d` RED |
-| seven | `e6802ca213b6` | 2026-08-30T04:09:15Z | GREEN (native) | 111.0s | `cd152a0c9017` RED |
+| seven | `e6802ca213b6` | 2026-08-30T04:24:23Z | RED (full) | 891.1s | `e6802ca213b6` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
