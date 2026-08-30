@@ -1,7 +1,18 @@
 ---
 prio: 70
-track: P
+track: A
 ---
+
+> **Re-laned P -> A by the coordinator, 2026-08-30.** The guess came from the test
+> SOURCE (`.pas` -> Track P). The failing **job** is `test-asm` — the x86-64 assembler /
+> disassembly emitter — which is Track A whatever language it is fed. `test_asm_emit_x64`
+> reports `undefined variable (EmitSyscall)` in **`compiler/x64enc.inc`**, and the only
+> code commit touching that file in the range is `3a0ed43fb` (`--rtl-libc` converts the
+> mnemonic-emitted syscalls). Nothing here is Pascal-frontend work.
+>
+> **Master is NOT broken.** Measured at HEAD by the coordinator: `make compiler/pascal26`
+> exits 0, `converged after 2 round(s)`, fixedpoint `a3f0f9e3325f`. So this red is specific
+> to the `test-asm` path, not a general build break — do not read it as one.
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
 
