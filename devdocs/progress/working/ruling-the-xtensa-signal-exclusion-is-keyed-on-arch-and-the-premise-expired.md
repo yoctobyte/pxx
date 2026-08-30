@@ -347,3 +347,117 @@ ticket's runtime existing, so a probe CAN read a ucontext before
 the kernel's `a4` where Pascal can read it — far less than the runtime, and the
 altstack-scan trick (dump a known buffer and match the sentinel) may avoid even that.
 Not yet attempted; recorded so the next session does not re-derive it.
+
+## Addendum 5 (frankS, 2026-08-30): xtensa's signal syscall numbers, measured — four pinned, one narrowed, and one self-correction
+
+The port cannot be written without these and **not one of them is in the tree**:
+xtensa carries its own table (`write` = 13, not the generic 64) and the tree knows
+only read/write/close/openat/fchmod. All measured under `qemu-xtensa`, compiler
+sha256 **2f88481adc6b**, HEAD `6e20c989f`. No compiler source touched.
+
+| call | n | how it was pinned |
+| --- | --- | --- |
+| `rt_sigaction` | **226** | a working install, end to end (addendum 4), not an errno signature |
+| `rt_sigprocmask` | **227** | the `n(100, nil, buf, 8)` separator — ignores `how` under a nil set |
+| `sigaltstack` | **224** | installed a real altstack and read it back: `sp` matches, `size` = 32768 |
+| `kill` | **123** | the ONLY candidate accepting a non-positive pid |
+| `getpid` | **{120, 126, 127}** | narrowed, **not pinned** — see the correction below |
+| `rt_sigreturn` | *(225)* | **inferred, NOT measured** — see the caveat below |
+
+### `kill` = 123, and why three candidates answered alike
+
+A scan for `{kill(self,0) -> 0, kill(999999,0) -> -ESRCH}` returns **123, 124 and
+215**: `tkill` and `tgkill` share that signature exactly. The separator is a
+**non-positive first argument**, which only `kill(2)` accepts — pid 0 means "my
+process group", -1 means "everything I may signal", while tkill/tgkill validate a
+tid > 0:
+
+| n | `n(0, 0)` | `n(-1, 0)` | verdict |
+| --- | --- | --- | --- |
+| **123** | 0 | 0 | **kill** |
+| 124 | -22 | -22 | tkill — validates tid > 0 |
+| 215 | 0 | -22 | tgkill-family |
+
+`sig = 0` throughout, so the whole scan is a permission check that signals nothing.
+
+### The self-correction: `getpid` is NOT 150, and the oracle was the thing that was wrong
+
+Recorded because the failure is reusable, not because the number matters.
+
+I pinned `getpid = 150` against what I called an oracle: the shell backgrounded the
+run and `$!` gave a pid that 150 returned exactly. **`$!` was the `timeout`
+process, which is qemu's PARENT** — so 150 answered the oracle because 150 is
+`getppid`, and the match was real, sound, and about the wrong process.
+
+It survived because it agreed with an independent measurement. What killed it was
+a **second** independent measurement disagreeing: the full scan's stable-positive
+list showed *seven* numbers answering pid-shaped values, which cannot all be
+`getpid`. Re-run with the qemu process as a **child** of a `setsid` leader, so that
+sid, pgid, pid and ppid are four distinct numbers, the candidates split cleanly:
+
+| candidates | answered | is |
+| --- | --- | --- |
+| 129 | the leader's pid | `getsid`/`getpgrp` |
+| **120, 126, 127** | qemu's own pid | **the getpid family** |
+| 149, **150**, 151 | qemu's parent | the `getppid` family |
+
+Three still answer the process's own id — `getpid`, `gettid` and most likely
+`set_tid_address`, which are **indistinguishable in a single-threaded process by
+construction**. Any of the three would work operationally in the `.dfl` path, since
+all three feed `kill` the right number; recording the wrong *name* in the comment
+beside it is the defect to avoid, so it stays narrowed rather than guessed.
+
+> The lesson is not "check the oracle". It is that **an oracle can be precise,
+> reproducible and about a different subject than you think**, and the only thing
+> that catches that is a second measurement whose shape is different — here, a
+> count that came out too large.
+
+### `rt_sigreturn` = 225 is INFERRED and must not be used as measured
+
+A blind no-arg scan crashes at **225**, which is what calling `rt_sigreturn`
+outside a signal context does, and 224/226/227 bracket it as a contiguous signal
+block. That is a good story and it is **not a measurement**. Nothing in the port
+needs it — the kernel supplies the return path itself (addendum 4, and the return
+test below) — so it is recorded as a hypothesis and no code should cite it.
+
+### Return-from-handler WORKS, and the first test that said otherwise was confounded
+
+The dispatch stub returns to resume the interrupted program, exactly as riscv32's
+does through the kernel trampoline. First test: install a SIGSEGV handler, fault,
+return without fixing anything, count re-entries. It **died 139 on the first
+return**, which reads as "the return path is broken on xtensa".
+
+It is not. **SIGSEGV is blocked inside its own handler**, so the re-fault takes the
+default action and force-kills — that happens whether the return path works or not,
+so the test could not answer its own question. Re-run with `SA_NODEFER`
+(`0x40000000`) so the signal is not blocked on re-entry:
+
+```
+sigaction=0
+ENTRIES=3
+exit=0
+```
+
+Three entries and a clean exit: **`ret` out of a Call0 handler unwinds correctly on
+hosted xtensa.** Had the first result been written into this ticket it would have
+been a wrong root cause of exactly the kind
+`devdocs/dev/root-cause-over-microfix.md` is about — a plausible story, a real
+crash, and the wrong mechanism.
+
+### Where the port stands
+
+Everything the stub needs is now known except one name among three:
+
+- entry ABI: Call0, kernel enters a plain Pascal proc — **measured**
+- `struct sigaction`: riscv/arm64-shaped, no SA_RESTORER, sigsetsize 8 — **measured**
+- return path: works — **measured**
+- install / altstack / re-raise numbers: 226 / 224 / 123 — **measured**
+- `getpid`: one of three, all operationally equivalent here — **narrowed**
+
+Remaining before the stub is correct rather than plausible: xtensa has no `auipc`,
+so materialising the dispatch stub's own address (riscv32 does it with
+`auipc+addi`, x86-64 with call/pop, aarch64 with `adr`) needs the `call0 .next`
+idiom, which lands the address in `a0` and therefore has to be framed around the
+install stub's own return address. `EmitGlobRef`/`EmitDataRef` relocate DATA
+addresses only, and `ProcAddrFix` is keyed by proc index, so neither serves a raw
+code offset. That is the one piece of the port with no in-tree model.
