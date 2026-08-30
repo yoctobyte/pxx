@@ -183,4 +183,4 @@ diagnosis, and keeping them stops a future timing-flavoured change from quietly
 re-opening it.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit cce53aada.
