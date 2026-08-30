@@ -10197,12 +10197,7 @@ begin
           { Managed-record temp (e.g. a hidden aggregate-result dest): zero the
             full record so every managed field starts nil, not just the first
             qword. }
-          EmitAsmX64([
-            'lea rdi, [rbp+%]', Syms[i].Offset,
-            'xor rax, rax',
-            'mov rcx, %', RecSize(SymTR[i].RecId),
-            'rep stosb'
-          ]);
+          EmitZeroLocalSlotForTarget(i, RecSize(SymTR[i].RecId));
         end
         else
           EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset]);
