@@ -155,7 +155,7 @@ Docs corrected in the same pass (`docs/index.md`, `docs/reference/cli.md`) and
 `--help`, since this commit is what makes the old wording false.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 1befc225d.
 
 ### The measured matrix, at this fix's binary — both axes
 
