@@ -3,7 +3,7 @@ track: P
 prio: 65
 owner: frankA
 blocked-by: []
-status: working
+status: unfinished
 type: feature
 ---
 
@@ -1112,7 +1112,10 @@ The frontier is now two units further on. Current state, measured:
 ### Both segfaults were one bug, and it is not generics machinery either
 
 [[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] — filed, not
-fixed here. A cast written through a user-declared alias of an ordinal type does
+fixed here. **(It landed at `6cc4afc17`, 2026-08-29 22:32 — this paragraph is a
+record of that session, not a live blocker; see the 2026-08-30 note at the end.
+Marked here because a prose condition has no owner and nothing sweeps it the way
+frontmatter `blocked-by:` edges get swept.)** A cast written through a user-declared alias of an ordinal type does
 not narrow: with `A1 = byte` and `c = $12345678`, `byte(c)` gives 120 and
 `A1(c)` gives 305419896.
 
@@ -1252,3 +1255,21 @@ tonight (`decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop`).
 Everything is pushed; nothing is half-applied. **Re-measure before trusting the
 table above** — that is the rule this ticket has now taught twice in its own
 history, and this section is a snapshot like every other.
+
+## 2026-08-30 (frankA) — park cleared, frontmatter drift fixed, still unfinished
+
+`progress check` flagged this ticket as STALE-PARK-HELD: its prose names
+`bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate` next to a blocking
+phrase, and that ticket is in `done/`. Confirmed — it landed at `6cc4afc17` on
+2026-08-29, and the entry above has been marked in place rather than rewritten,
+because it is an accurate record of what that session did and knew.
+
+Also fixed FM-STATUS-DRIFT: the frontmatter said `status: working` while the
+file sits in `unfinished/`, so it read as actively held to anyone who opened it.
+The location is the truth; the field now matches.
+
+**Nothing here is blocked any more.** The next session on this rung should do
+what the 2026-08-25 recon already asked for — re-stage rtl-generics and drive it
+until the wall moves — rather than starting from any conclusion recorded above,
+since the walls have moved three times and each recorded line number was
+superseded within a session or two.
