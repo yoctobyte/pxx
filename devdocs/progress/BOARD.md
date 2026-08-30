@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (330)
+## backlog (331)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -158,6 +158,7 @@ _none_
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered | P | 55 | bug | The address of a virtual class method cannot be lowered (`AN_CLASS_VIRTUAL_CALL`, kind 88) | — |
 | bug-p-two-different-nested-specializations-of-one-template-collide | P | 65 | bug | Two different nested specializations of ONE template, in one generic, collide | — |
+| bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in | T | 45 | bug | A container ticket for an active campaign has nowhere correct to live. working/ is a per-agent live LOCK, and an umbrella held there for the length of a campaign is a lock that never clears; every other status ready/next scans is claimable, so parking it invites a second agent onto files the campaign owns. The status vocabulary has no term for 'this is a container, not a unit of work'. | — |
 | bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget | T | 55 | bug | learn_timeout() raises a timed-out job's expected duration so 'the next run gets room', but deliberately leaves n=0, and the only consumer of that duration is gated on n >= METRICS_MIN_RUNS. So the raise is written and never read for a job that has NEVER PASSED on this host -- which is precisely the job it cannot rescue. calibrate() cannot cover for it either: it returns max(1.0, dt/0.35) and plexus measures 0.26s, so the floor is the answer on every box measured so far, and a 2010 Westmere gets the same budgets as a 2013 Ivy Bridge. | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | A+T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
@@ -842,6 +843,7 @@ _none_
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [P] bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name
+- [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
 - [p 45] [T] bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident
