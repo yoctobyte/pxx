@@ -71,10 +71,32 @@ faults on a misaligned data section:
 ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
     --xtensa-abi=windowed test/test_cross_record.pas $(TESTTMP)/xt_win_record
 ./$(COMPILER) test/test_cross_record.pas $(TESTTMP)/xt_win_record_x64
+tools/run_target.sh xtensa $(TESTTMP)/xt_win_record > $(TESTTMP)/xt_win_record.out 2>&1; \
+  tools/expect_same.sh xtensa-windowed/test_cross_record-rc "$$?" "0"
 tools/expect_same.sh xtensa-windowed/test_cross_record \
-  "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_win_record)" \
-  "$$($(TESTTMP)/xt_win_record_x64)"
+  "$$(cat $(TESTTMP)/xt_win_record.out)" "$$($(TESTTMP)/xt_win_record_x64)"
 ```
+
+**Two rows, not one, and the first draft of this ticket got it wrong.** It wrapped
+the runner in `$$(...)`, which keeps stdout and discards the status — and **a
+SIGBUS is a status, not a string.** That row would have compared truncated output
+and reported a *value mismatch* for a signal death: the right verdict for the
+wrong reason, and the wrong diagnosis handed to whoever read it. Corrected by
+frank-optimize-b4, which had fixed the same defect in 20 cross-target rows the
+same night.
+
+Worth stating plainly because of where it landed: **the row written to catch a
+crash was itself written with one outcome slot for a subject that has two.** The
+existing `test_xtensa_sigdfl` row two screens up already uses the correct form
+(`> /dev/null 2>&1; expect_same "$$?" "143"`) — the pattern was in this same
+target and was not copied.
+
+The sharpest instance of the family, also b4's, is worth carrying here for the
+next person writing a row: the two `test_asmcore_*` rows ran
+`binary | tail -1 | grep -q`, and a pipe eats the status while the success line
+is printed *before* the crash — so they were **green through an entire window in
+which the binary was segfaulting.** Both slots wrong, in the direction that reads
+as healthy.
 
 Measured: that exact row FAILS at `75d2ba662^` (SIGBUS) and PASSES at
 `75d2ba662`. It is a real canary, not a hopeful one.
