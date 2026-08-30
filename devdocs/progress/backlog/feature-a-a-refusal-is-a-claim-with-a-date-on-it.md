@@ -11795,3 +11795,49 @@ by construction, and its output is what everyone else will read forever.
 were audited by hand instead of trusted — the remedy line, followed as written, would have
 deleted 270 cross-namespace references. That is the real bill this entry is warning about,
 and it was not paid.
+## 226 — CHECK A PROPERTY WHERE THE THING THAT WOULD HIDE IT IS ABSENT
+
+The ELF writer had **never** aligned the data section, on any target. It went unnoticed for as
+long as anyone had been watching, because two separate things were hiding it, and each one is a
+shape worth recognising on its own.
+
+**The first concealer was an optimisation.** Forty-one xtensa programs were green because an
+unrelated *performance* commit's page padding happened to word-align the section. A correctness
+property was resting on a coincidence in a perf pass.
+
+> **A check that runs only where optimisation is on measures a tree in which the concealer is
+> present.** It would have returned clean for months. Check the property with the thing that
+> would hide it switched OFF — at `-O0`, on the unpadded artifact, in the configuration nobody
+> ships — because that is the only place the property is actually load-bearing.
+
+This is why the `-O0` requirement in the alignment-oracle ticket is not fussiness, and it is the
+half most likely to be dropped by whoever implements it.
+
+**The second concealer was a tolerant target**, and it produced the more dangerous number. See
+226a.
+
+The disconfirmation that settled it is the general move: to establish that a property is
+*intended* rather than *incidental*, **delete the accident and see whether the property
+survives.** Track A removed the padding and confirmed the canary stayed green. A passing test with
+the coincidence still in place proves nothing, and reads identically.
+
+### 226a — a pass rate over targets that tolerate the defect measures tolerance, not correctness
+
+53 programs passed; 41 of those on the target that faults. It read as "mostly fine, one
+architecture is fragile". Every sampled program in **both** groups was ≡3 (mod 4).
+
+> The misalignment was **universal**. The 53 that passed were never safe — they were
+> **untested**. x86-64 and riscv32 tolerate unaligned word loads, so they were silently wrong and
+> reported nothing.
+
+So the pass rate was not measuring the property at all; it was measuring how many targets forgive
+its absence. Two consequences worth carrying:
+
+- **An oracle keyed to the faulting target confirms the property only where it was already
+  visible.** Answering "check alignment" with "run everything under xtensa" makes the one
+  intolerant architecture the authority on a property every target shares — slow, partial, and
+  blind exactly where the silence is. One header table is exact, instant and total.
+- Sibling of face 221 (check the magnitude before the content) and of the empty-tree audit: the
+  interesting cell was the one nobody sampled, and both groups had to be measured before the
+  split meant anything. Measuring only the group that looks wrong was the mistake available all
+  night.

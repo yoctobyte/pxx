@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 35
+prio: 55
 type: feature
 status: open
 found: 2026-08-30
@@ -27,6 +27,28 @@ No amount of fuzzing on the current oracle set finds that. Native never faults,
 so there is nothing to disagree about. Same structural blindness as the bitfield
 `sizeof` finding: the comparison is over the wrong observable.
 
+## Priced at 35, raised to 55 once the evidence landed
+
+Filed the same night at prio 35 on a relayed summary. Four hours later Track A
+finished the investigation and every number moved the wrong way:
+
+- The misalignment was **universal**, not a property of the faulting target.
+  Every sampled program in BOTH groups was ≡3 (mod 4) — so the 53 that passed
+  were never safe, only **untested**. A pass rate was reporting tolerance, not
+  correctness.
+- The 41 green xtensa programs were green because an unrelated **performance**
+  commit's page padding word-aligned the section by accident. A correctness
+  property was resting on a coincidence in an optimisation, and had been for
+  as long as anyone had been looking at the number.
+- Finding it cost a bisect, two throwaway worktrees and most of a night, on the
+  single architecture whose hardware is intolerant enough to report it.
+
+One ELF header table would have shown all of it on every target at once, in an
+instant. That is the argument for the prio, and it is now a measurement rather
+than a prediction. (Track A has since landed an explicit invariant and tested
+it the right way — by DELETING the accidental pad and confirming the canary
+stays green.)
+
 ## What to add
 
 A second oracle **dimension**, not a second oracle: assert properties of the
@@ -39,11 +61,18 @@ Cheapest first cut, in rough order of value per line:
    property of one ELF header table — no execution, no QEMU, no oracle to
    disagree with, and it would have caught the live bug above on every target
    at once rather than on the one that faults.
-2. **The alignment is INTENDED, not incidental.** The bug above is green today
-   by accident, so the check must be able to tell "aligned because the writer
-   aligned it" from "aligned because something else padded". Simplest version:
-   assert alignment holds with padding-producing passes off (`-O0`), which is
-   where the accident does not apply.
+2. **The alignment is INTENDED, not incidental.** The bug above was green by
+   accident, so the check must tell "aligned because the writer aligned it"
+   from "aligned because something else padded". Assert it with the
+   padding-producing passes OFF (`-O0`), where the accident does not apply.
+
+   This requirement is sharper than it reads, and it is the half most likely to
+   be dropped as fussiness. **The thing that hid the bug was a perf pass.** A
+   check that runs only where optimisation is on measures a tree in which the
+   concealer is present, and would have returned clean for months while the
+   defect sat there. Generally: *check a property where the thing that would
+   hide it is absent* — otherwise you are measuring the concealer's reach, not
+   the property.
 3. Later, if it earns it: section overlap, `p_align` on the program headers,
    entry point alignment.
 
