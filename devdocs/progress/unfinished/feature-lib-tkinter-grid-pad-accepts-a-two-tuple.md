@@ -213,3 +213,67 @@ done from this lane until the next `make pin` picks up the N fix.
 and 4 compile, close it — `lib/pcl` needs no change, which was this ticket's
 finding all along. If they still fail, that is a *new* N/A finding against a pin
 that contains the fix, and it should be filed as one rather than reopened here.
+
+## Retirement test WIDENED 2026-08-30 — `grid` is one of four, not one
+
+Re-checked at HEAD: the pin is still **v393** (`1d69760deabe`), unchanged, so
+the four spellings above still behave exactly as recorded and the ticket is
+still gated on pin advancement. Nothing to build. But the retirement test as
+written checks **one method**, and that is too narrow — for the same reason two
+other tickets went wrong tonight: an acceptance aimed at the reported symptom
+leaves the siblings unverified.
+
+The N fix ([[bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]],
+`51b0753e7`) is general — `OverloadArgParamIdx` resolves an argument to its
+declared parameter in `FindUMethOverloadAhead`, and its commit message states
+that `settings.py` compiles at lines 178 and 183. So `grid` will pass. The
+question the four spellings cannot answer is whether the **rest of the façade**
+passes with it.
+
+### The at-risk shape, enumerated over `lib/pcl/*.pas`
+
+A façade **method** is exposed when a `Variant` parameter can be reached with an
+earlier defaulted parameter left unbound. Eight declarations match; two are
+**unit-level functions**, which the parent ticket's own boundary table says take
+a different path (no probe), and they are confirmed unaffected below. That
+leaves six methods, four of which have a call a real application would write:
+
+| method | the exposed parameter | today, at v393 |
+| --- | --- | --- |
+| `Widget.grid` | `padx` / `pady` | **FAILS** |
+| `Widget.pack` | `padx` / `pady` | **FAILS** |
+| `Canvas.configure` / `.config` | `scrollregion`, `yscrollcommand` | **FAILS** |
+| `Canvas.create_text` | `font` | **FAILS** |
+| `Text.tag_configure` | `underline` | shape present; a tuple `underline` is not a call anyone writes, so untested |
+| `askopenfilename` / `asksaveasfilename` | `filetypes` | **compiles** — unit-level function, not a method |
+
+Measured now, so the post-pin check has a baseline rather than a guess:
+
+```
+pack(padx=(8, 6))                                   FAILS: no overload of pack
+pack(side="left", fill="x", expand=0, padx=(8, 6))  COMPILES
+configure(scrollregion=(0, 0, 100, 100))            FAILS: no overload of configure
+configure(state="normal", scrollregion=(0,0,1,1))   COMPILES
+create_text(1.0, 2.0, "hi", font=("Arial", 12))     FAILS: no overload of create_text
+create_text(..., anchor="w", fill="red", font=...)  COMPILES
+askopenfilename(filetypes=[("a", "*.b")])           COMPILES   <- the control
+```
+
+Each failing row has its own passing row directly underneath, differing only in
+whether the earlier defaults are named. Same diagnostic, same signature, same
+mechanism. And `askopenfilename` is the control that keeps the claim honest: it
+has the identical parameter shape and an object-valued argument, and it compiles
+today — because it is not a method, exactly as the parent ticket predicted.
+
+### To retire this ticket
+
+After the next pin, re-run **all seven rows** above plus the original four
+`grid` spellings. If every FAILS row flips to COMPILES and the two COMPILES
+controls stay green, close it — `lib/pcl` needs no change, which was this
+ticket's finding all along. If any FAILS row survives, that is a residue of
+`51b0753e7` in a sibling it did not reach, and it is a **new N ticket** with
+this table as its boundary — not a reopen of this one.
+
+Still in `unfinished/` and still owned by this lane: it cannot be completed from
+Track B until the pin carries the fix, and claiming it into `working/` would be
+a lock over work that cannot proceed.
