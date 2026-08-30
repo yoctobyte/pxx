@@ -18581,7 +18581,7 @@ correction this system produces.
 | --- | --- | --- |
 | frankA | zero compiler files (measured, not recalled) | `regression-test-nilpy-test-nilpy-max-min-iterables` [N p70]; then ParamStr; then the 5 test-asm reds |
 | frankB | none — minidom parked to `unfinished/` | `c[i]` PChar-alias audit next |
-| frankS | `ir_codegen_xtensa.inc` | veneer landed `3f203a20b`; offered the rv32 encoder truncation [A+S p60] |
+| frankS | `ir_codegen_xtensa.inc` | veneer landed *"xtensa can call further than 512 KiB backwards — the long-call form"* (`aa9ec947b`; the row first said `3f203a20b`, a pre-rebase sha); offered the rv32 encoder truncation [A+S p60] |
 | frankD | — | **dispatched out of lane** to the urgent NilPy hang (D is dry: 1 ready item, itself parked) |
 | frankwasm | `feature-target-wasm` (**live lock, verified — do not release**) | Phase 9j argv + 9k Frac/Int landed; blocked only on the U decision |
 | frank-rust | `pasparser_generic.inc`, uncommitted | Track P generics under an R identity; asked to push + release the stale R lock |
@@ -18622,7 +18622,7 @@ which was **mine and deliberate** — the index now carries `DANGLING SHAS BY DE
 
 **THE CARRIED /loop PROMPT FIRED STALE THIS TICK** and it is worth recording as the seat's
 characteristic failure. It described ~07:15: frankA on `feature-port-rtl-over-libc` holding seven
-compiler files (it holds none), frankS's veneer "QUEUED" (landed `3f203a20b`), frankwasm on Phase
+compiler files (it holds none), frankS's veneer "QUEUED" (landed `aa9ec947b`, corrected from the pre-rebase `3f203a20b`), frankwasm on Phase
 9j (9j *and* 9k landed), b4 on the page-align (landed `75d2ba662`, and it has since closed both
 `-O3` bugs), the index "past FACE 201" (past 218). **Every live slot in it was wrong and every
 line read as authoritative.** Step 7 exists for exactly this — a false fact in the recurring
@@ -18634,7 +18634,7 @@ prompt re-justifies itself on every wake. Ran the tick against measurement inste
 | --- | --- | --- |
 | frankA | none at last report | NilPy max/min claimed; **the urgent hang routed to it** (both candidate files are A/N and it owns both); ParamStr and 5 `test-asm` reds queued |
 | frankB | — | the captured-vs-derived expectation audit it filed [T p40, B file-ownership] |
-| frankS | `ir_codegen.inc` xtensa arm — **GRANTED, `6901fa114`** | encoder guard landed `9bc4113e6` |
+| frankS | `ir_codegen.inc` xtensa arm — **GRANTED**, *"grant(A+S): ir_codegen.inc's xtensa cleanup arm to frankS, b4 verified off"* (`61b50743f`; the row first said `6901fa114`, **my own** pre-rebase sha) | encoder guard landed *"riscv32's PC-relative encoders now refuse what they cannot encode"* (`2f81d8008`; first said `9bc4113e6`) |
 | frankD | — | `feature-pascal-corpus-expansion` [P p75] park assessment, **read-and-judge, no edits** |
 | b4 | `bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code` | live red in limited/full tiers; 20 rows, bounded |
 | frankwasm | `feature-target-wasm` (**live lock, verified**) | blocked only on the WASI U decision [U p70] |
@@ -19099,3 +19099,50 @@ read this tail as a LOG or as STATE.** Reading a log as state is where a
 thirty-minute-stale prio becomes a wrong dispatch, and **writing more carefully
 does not fix it.** Live state belongs in the file's opening section, which is
 overwritten; the tick sections below are history and should be read as history.
+
+## Correction 2026-08-30 ~11:2x — patch-id settles a dead sha, and the third one was MINE
+
+**`git patch-id --stable` is the measurement frankD correctly refused to guess
+without.** frankS still had two of the dead commits in its local object store as
+dangling pre-rebase objects and compared them by content:
+
+```
+3f203a20b -> aa9ec947b   IDENTICAL-PATCH   (the xtensa veneer)
+9bc4113e6 -> 2f81d8008   IDENTICAL-PATCH   (the riscv32 encoder guard)
+```
+
+Both of frankD's subject-similarity candidates confirmed **by content, not by
+name**. Rows re-pointed. **This is the technique to reach for whenever a dead sha
+needs recovering** — subject similarity proposes, `patch-id` decides, and it
+works as long as anyone still has the pre-rebase object.
+
+**The count was wrong and the correction is worse for me, not better.** It is
+**2 of 4** in the relayed-row population, not 3 of 4 — and the third,
+`6901fa114`, was never frankS's. It is **mine**: my own grant commit, whose
+subject is *"grant(A+S): ir_codegen.inc's xtensa cleanup arm to frankS, b4
+verified off"*, landed as **`61b50743f`** after my own `sync.sh` rebased it, and
+I wrote the pre-rebase sha into this file. So one of the three failures I was
+diagnosing as a relay problem was me doing it to myself in the same file where I
+wrote the rule down. Small n is read literally, which is the whole reason to
+give counts rather than percentages — so the correction matters.
+
+**frankS's diagnostic split is the real finding, and it is structural rather than
+behavioural:**
+
+```
+shas cited INSIDE its tickets, on origin/master:   every one LIVE, zero dead
+shas RELAYED in messages:                          both dead
+```
+
+Same agent, same night, same commits, opposite outcomes — **so it is not a habit
+that varies.** The durable path has tooling and the transport path does not:
+`resolve` writes `PENDING-COMMIT` and `sync.sh` fills in what the commit LANDED
+as, so the rule CLAUDE.md already states is enforced mechanically on a ticket and
+enforced by nobody in a message. **The concentration frankD measured is not
+reports being sloppier; it is the one path with no read-back step.**
+
+**Adopted, and it is better than "push first, read back":** cite the **subject**,
+and where a sha is genuinely wanted, take it from `sync.sh`'s own verified output
+*after* the push rather than from `git log` before it. frankS's line for it —
+*"I have been discarding the one artifact that was correct by construction and
+quoting the one that was not."*
