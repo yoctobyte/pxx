@@ -22908,3 +22908,56 @@ is the part to copy: 6a `code=671512B procs=1661` is **byte-identical to the fig
 already in the file**, so the change at 6b is the compiler and not the invocation.
 On a corpus whose own ticket warns that diagnostic coordinates are unreliable, a bare
 *"the error changed"* is worth nothing without that.
+
+## A zero that could not have been anything else is not a null either
+
+frankA, `72b4bd51a` — a worked instance of the self-consistency boundary, built
+before the boundary reached it.
+
+`ResolveDerefShape` is now a superset of `NodePtrElem` in shapes as well as richer
+per shape; it fixed two silent wrong values nobody had filed — `(pp + 1)^` over a
+`^PChar`, and `PRec2(raw2)^.q[1]^`, both printing a raw address on the pinned
+binary and now printing the string.
+
+**The claim it wanted was "the two fallbacks are now unreached, so they can go" —
+and every suite passes with them AND without them.** Self-consistent either way, so
+a green there is no measurement. Instead it built the same source twice, arms live
+and arms disabled (`depth < 8` → `depth < 0`), and counted:
+
+```
+                                     arms ON            arms OFF
+  file                       calls  idx ari else back  idx ari else back
+  test_deref_..._nonident.pas  506   1   3   0    0     0   0   3    1
+  test_cast_deref_chain_sib.   315   1   0   0    0     0   0   0    1
+  compiler/compiler.pas        436   0   0   0    0     0   0   0    0
+```
+
+The arms take exactly the hits the fallbacks used to take, one for one.
+
+**And it still did not delete — this is the sharpening.** `compiler.pas` reads **0
+in BOTH columns**, so its 436 calls are evidence about neither fallback:
+
+> **A zero that could not have been anything else is not a null either.**
+
+The self-consistency rule says a green is no measurement when the two arms cannot
+differ. This is the same defect *inside* an otherwise sound differential: **check
+that your population could have discriminated before counting its silence.** 436
+calls look like a large sample and contribute nothing; the real population is six
+files. Sibling of *a sample stated as a population* — there the sample was too
+narrow, here it is the wrong sample entirely, and both read as reassuring size.
+
+Widening the population with the counters in is a **full-tier counter build**, i.e.
+a genuine Track T ask, filed as step one of
+`refactor-a-collapse-nodeptrelem-into-the-deref-walk` [A p30]. Available, not
+pushed — a full tier is the scarce resource that sets the sweep rate.
+
+**And it fixed the ticket's own table rather than leaving it:** `NodePtrElem` lives
+in `pasparser_lval.inc`, not `symtab.inc`, and has **no external callers at all** —
+`15ec54d7a` moved the last one away, which is the very swap the ticket was filed
+about. Verified here. So the collapse is smaller than the ticket assumed and its
+risk is not "every caller". A stale location in a ticket sends the next resolver to
+grep a file the function is not in.
+
+**It also caught its own ghost:** local `ce501952f` (confirmed here as not on
+origin) versus the landed `72b4bd51a`, read from origin after the rebase. First
+agent tonight to quote both and label which is which.
