@@ -596,6 +596,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-sizeof-array-type-ignores-extent | C | 35 | bug | C `sizeof(int[10])` returns the element size (4), not 40 — sizeof of an array TYPE-NAME ignores the extent (silent wrong value) | — |
 | bug-c-sizeof-array-yields-element-size | C | 50 | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-c-sizeof-expr-no-parens | C | 55 | bug | C `sizeof expr` without parentheses fails to parse | — |
+| bug-c-sizeof-of-a-dereferenced-pointer-to-array-answers-the-element-size | C | 45 | bug | C: `sizeof(*p)` where `int (*p)[4]` answers 4 (the ELEMENT size) where gcc says 16 (the whole pointee). Silent wrong value, compiles clean, exit 0. Same for `int (*r)[4] = m` over an `int m[3][4]`. Pascal's equivalent `SizeOf(p^)` is CORRECT, so this is the C reader alone, not the metadata: SymPtrElemArrLen is populated and DerefPtrArrayInfo already answers the flat count for the Pascal side. Found while regression-checking a Track A fix to `p^[i]` indexing; measured byte-identical on the pinned compiler, so it is pre-existing and NOT a regression from that work. | — |
 | bug-c-sizeof-string-literal | C | 50 | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-sizeof-widening-cast-expr | C | 40 | bug | C: `sizeof((long)expr)` returns 4, not 8 — widening-cast expression keeps operand width | — |
 | bug-c-sqlite-offsetof-style-field-address-array-bound | C | 50 | bug | C: sqlite offsetof-style field address in array bound | — |
