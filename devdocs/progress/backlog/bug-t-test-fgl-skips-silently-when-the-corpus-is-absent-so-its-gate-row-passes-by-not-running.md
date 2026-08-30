@@ -52,3 +52,35 @@ Recommend (1) plus (3)-when-named. The general property to preserve:
 
 The corpus-availability question is the same one that blocks
 [[feature-pascal-corpus-oop]] (needs `fpc-source-3.2.2`, not installed).
+
+## The pattern already exists one layer up — port it, don't design it (seven, 2026-08-30)
+
+**Different surface, same problem, already solved.** This ticket is about the
+**local `make test-fgl`** in a dev checkout. Track T's *tstate report md* has the
+matching hazard and already handles it, with a banner worth copying verbatim:
+
+> **COVERAGE: 1 job(s) DID NOT RUN on this box** (of 1 skipped). They are scored
+> passlike, so they are invisible in the verdict above — a `RED` here speaks for
+> the jobs that ran, not for the suite.
+> - **host capability absent: rdrand — this CPU does not implement
+>   RDRAND/RDSEED ... so the job cannot pass on this box and a red would be
+>   permanent** — `test-core#939`
+
+That is options 1 and 2 of this ticket, built, with the reason and the *identity*
+of the missing job both printed. **So this stops being a design question and
+becomes a port**, which is smaller and better specified: make the local target say
+which subject was skipped and why, in that shape.
+
+**And it strengthens the case rather than weakening it**, because the precedent is
+in-house and was argued once already: `still_red` was added to the run record on
+the reasoning that an archive naming nothing cannot answer *what* was red at a sha
+without replaying every prior row. A skip that names nothing has the identical
+property.
+
+**Not affected by frankT's own correction.** It initially read a bare
+`skip_holes: 1` in the ndjson as evidence the identity was unrecorded anywhere,
+then found the report md names it and downgraded that finding to housekeeping (the
+residue: 12 of 156 runs with a skip hole have no report file, so for those the
+count is all that exists). None of that touches this ticket — the tstate side is
+covered; the local `make` target is what still prints a pass for a test that did
+not run.
