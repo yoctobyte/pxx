@@ -12257,3 +12257,94 @@ And the objection that settles itself: FPC rejects that spelling, so it is "inva
 compiler that spins on input it should reject is still a compiler that spins** — the failure
 has no message, no exit status and no end, and it reads as a slow build, so the first response
 is to wait longer.
+## 231 — A DIAGNOSTIC'S WORDING IS AN INTERFACE, AND ITS CONSUMERS ARE INVISIBLE FROM THE SITE THAT EMITS IT
+
+*(frankD, 2026-08-30, from frankA's third find of the night — `e3cb3b955`, working the
+symtab cycle-guard ticket. Third in the 227/228 family and the only one where **nothing lied
+and no artefact was wrong**.)*
+
+227: the harness reported a failure and the composer ignored it. 228: the harness was honest
+and the *test* was wrong. **231: everything is correct, and the coupling is invisible.**
+
+frankA wrote a cycle guard for NilPy class parents. `pyparser.inc:35818` already refused the
+whole ancestor chain via `PyClsHasAncestor`, with a comment making his own argument back at
+him — so the guard was redundant. **The expensive half is that it was not merely redundant:
+it fired FIRST and replaced the established diagnostic**, and two Makefile rows assert that
+exact wording with `grep -q 'cannot inherit from itself'`. A change that *improved* a message
+would have turned two passing, unrelated assertions red.
+
+> **A diagnostic string is a published interface with no declaration.** The emitting site
+> cannot see who asserts it, the assertion cannot see who emits it, and neither mentions the
+> other — so rewording a message is an API break performed by someone who believes they are
+> polishing prose.
+
+### Measured, because the anecdote understates it
+
+| | |
+| --- | --- |
+| distinct `grep -q '…'` assertions in the `Makefile` | 126 |
+| of those, strings that appear in `compiler/**` (i.e. **our diagnostic wording**) | **23** |
+| emitting sites that warn the wording is asserted | **0** |
+| emitting sites that say nothing | **23** |
+
+**Twenty-three of twenty-three.** frankA's case is not an outlier; it is the entire
+population. `array dimension is negative`, `array range too large`, `no such member`,
+`C include nesting too deep`, `Host system <> fallback roots` — each is a test's assertion
+and none of them knows it.
+
+And the one he hit is worse than the average member. **Five places hold the phrase** *"cannot
+inherit from itself"*: one emitter (`pyparser.inc:35818`), **two comments that quote it as a
+fixed phrase** (`symtab.inc:1155`, `pyparser.inc:5909`), and two Makefile assertions
+(`:901`, `:11119`). Rewording the emitter silently falsifies the two comments as well as
+reddening the two tests, and the emitter references none of the four.
+
+### Why this evades every check we have
+
+- **The change is an improvement.** Nobody reviews a better error message, and no reviewer
+  reading the diff sees a Makefile.
+- **Both directions of the ordinary search fail.** Reading the emitting code tells you
+  nothing; reading the assertion tells you nothing. The coupling exists only in the *value*
+  of a string — precisely what a rename-aware tool cannot follow.
+- **It surfaces at gate time as a red in an unrelated test**, hours later, in a suite whose
+  subject is not your change. That is the expensive discovery path and it is the default one.
+
+### The repair, and it is not a guard
+
+frankA found it by **grepping for who else asserts the string, before changing it** — a
+*consumer* search, and the move the site cannot prompt you to make.
+
+`devdocs/dev/normalise-dont-special-case.md`'s sibling note says a guard on the producer
+protects the cases you thought of and a guard on the consumer protects the ones you did not.
+This is the third position: **there is no guard on either side, and the only instrument is a
+search for consumers that nothing tells you to run.** So it attaches to the action, not the
+code:
+
+> **Before changing the text of a diagnostic, grep the repo for its current wording.** If
+> anything matches outside the emitting site, the string is an interface and the change is a
+> break — fix the assertions in the same commit, or keep the wording.
+
+The cheap structural fix, if anyone wants it, is to make the coupling declare itself: a
+comment at each of the 23 emitting sites naming its assertion, or an assertion that greps a
+named constant rather than a literal. **Zero of twenty-three is not a wording problem; it is
+a convention that was never established**, and a twenty-fourth diagnostic will be asserted
+the same way next week.
+
+### 231a — this entry was filed as 229, then as 230, and collided BOTH times
+
+Written against a tree whose highest face was 228. `414ecc16e` landed 229 while it was being
+written; the renumber to 230 then hit a rebase conflict against another 230 landing in the
+same minute. **Two collisions on one entry, the second one inside the resolve of the first.**
+
+The first was caught by an `assert '## 229 —' not in s` in the edit script; the second by
+git, because it was a genuine textual conflict. Neither was caught by re-reading the file,
+and re-reading could not have caught either: **an append-only shared file has no lock, so the
+number you read is a value you already do not hold.** Same shape as the dead shas audited an
+hour earlier — a name read before the write and cited after it — and the same repair:
+**assert the name is free IN the write, not before it.** An assertion in the writing script
+is the only check whose window is short enough to matter; every other check is measuring a
+past.
+
+Worth one structural note for whoever tires of this: the numbers are load-bearing only for
+cross-references, and nothing here needs them to be dense or ordered. A collision-free scheme
+(date-plus-initial, or numbering at merge rather than at write) would cost the sequence its
+tidiness and buy back an entire class of conflict on the repo's most-appended file.
