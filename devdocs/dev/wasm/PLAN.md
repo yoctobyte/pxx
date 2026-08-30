@@ -2337,7 +2337,7 @@ that passes it should be able to fail without it; here that took one line and
 one rebuild, and it is the only thing separating "compiled with the define" from
 "compiled".
 
-### Phase 9j — `ParamCount` / `ParamStr` — **MEASURED AND PARKED, 2026-08-30. Nothing applied.**
+### Phase 9j — `ParamCount` / `ParamStr` — **DONE, 2026-08-30.**
 
 argv is **4 of the anchor's 36 refusals**: one `ParamCount` (builtin `-55`, in
 `main$142`) and three `ParamStr` (builtin `-56`, in `PrintWhere`,
@@ -2432,3 +2432,59 @@ same slice.
 
 Nothing applied. Measured at self-host fixedpoint `fb83a9c891b9`; the tree is
 back at that binary.
+
+#### What landed
+
+Backend-emitted, as the costing below concluded, and the two rejected routes
+stayed rejected. `compiler/ir_codegen_wasm32.inc` gained `WasmEmitArgvFetch`
+(the `args_sizes_get` / `args_get` pair plus the `PXXAlloc`/`PXXFree` around
+them), `WasmEmitCStrLen` (a synthesised strlen), `WasmEmitArgCount` and
+`WasmEmitArgStr`, with arms in `WasmEmitBuiltin`, `WasmBuiltinName` and
+`WasmBuiltinResultType`.
+
+Three things worth carrying forward:
+
+* **The `ParamCount` arm sits ABOVE the empty-argument-list guard.**
+  `WasmEmitBuiltin` opens with `argNode := IRB[node]; if argNode = -1 then
+  Exit;`, and `ParamCount` takes no arguments, so an arm placed in the natural
+  reading order would have refused it forever while looking correct.
+
+* **The out-of-range guard is x86-64's, not riscv32's.** The two register
+  targets disagree — `EmitArgvToString` compares the index against argc
+  unsigned and yields `''`; riscv32 reads `argv[index]` for any index and
+  documents the junk. Checked rather than assumed, and the guarded one is the
+  one worth copying. Here it costs an unsigned compare and a typed `if`.
+
+* **The buffer is sized from what `args_sizes_get` reports.** No cap, no
+  guess, freed before the arm returns — which is why the 300-byte-argument
+  case passes on wasm32 and cannot be diffed against native (below).
+
+Coverage on the anchor: **36 → 34 refused bodies**, and no `-55`/`-56` remains
+anywhere in the report. Two bodies cleared outright; two others now report the
+NEXT builtin they cannot lower (`-50`) instead of `ParamStr`, which is what
+first-refusal-wins reporting looks like from the outside and is worth
+remembering when reading a delta in this report.
+
+Tests: `test/wasm/check_argv.sh` (registered in `check_all.sh`), diffing
+`argv_slice.pas` against the native build, plus `argv_oob_slice.pas` asserted
+wasm-only against a written-out expectation.
+
+#### It found a bug in the NATIVE build
+
+The oracle is what broke. `ParamStr(i)` in expression position desugars to a
+frozen temp of `LOCAL_STR_CAP + 8` = 264 bytes, and x86-64's
+`EmitArgvToString` (`compiler/symtab.inc:6048`) copies the full
+`strlen(argv[i])` into it with no clamp — so an argument over ~256 bytes
+overwrites the adjacent frame slot. In a `for i := 1 to ParamCount` loop that
+slot is the counter, and the loop never terminates. Measured threshold: 258
+fine, 260 not.
+
+Filed on master as
+`bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp` (Track A, prio 70) —
+not fixed here, per the lane rule. riscv32 routes the same construct through
+`PXXCStrToFrozen`, which clamps at 255, so it truncates instead; the managed
+destination path is unaffected on every target.
+
+This is why the diffed slice stops at 200 bytes and the 300-byte case is
+asserted wasm-only. The long argument moves back into the diffed slice when
+that ticket closes — that is the regression test.

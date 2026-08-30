@@ -589,6 +589,12 @@ function WasmStrParts(node, scrLoc, scratchOfs: Integer;
 procedure WasmEmitAtomic(node: Integer); forward;
 function WasmStrSlot(k: Integer): Integer; forward;
 function WasmCallRtl(const nm: AnsiString): Boolean; forward;
+{ Defined with the rest of the import machinery, well below the argv arms that
+  need it. Forward-declared rather than moved: FPC compiles this file top to
+  bottom during the seed build and check_forwards.sh is what says so. }
+function WasmHostImport(const modName, fldName: AnsiString;
+                        const params: array of Byte;
+                        const results: array of Byte): Integer; forward;
 procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
@@ -1850,6 +1856,8 @@ begin
   else if p = -Ord(tkChar_T) then WasmBuiltinName := 'Char() cast'
   else if p = -Ord(tkBoolean_T) then WasmBuiltinName := 'Boolean() cast'
   else if p = -Ord(tkString_T) then WasmBuiltinName := 'String() cast'
+  else if p = -Ord(tkArgCount) then WasmBuiltinName := 'ParamCount'
+  else if p = -Ord(tkArgStr) then WasmBuiltinName := 'ParamStr'
   else if p = -100 then WasmBuiltinName := 'LoadFile'
   else if p = -101 then WasmBuiltinName := 'SetLength on a frozen string'
   else if p = -102 then WasmBuiltinName := 'SetLength'
@@ -1893,6 +1901,7 @@ begin
   else if p = -Ord(tkGetMem) then WasmBuiltinResultType := tyPointer
   else if p = -SPECIAL_IN then WasmBuiltinResultType := tyBoolean
   else if p = -Ord(tkLength) then WasmBuiltinResultType := tyInt32
+  else if p = -Ord(tkArgCount) then WasmBuiltinResultType := tyInt32
   else if (p = -Ord(tkOrd)) and (IRB[node] <> -1) then
     WasmBuiltinResultType := WasmNodeResultType(IRA[IRB[node]])
   else
@@ -2303,12 +2312,286 @@ begin
   WasmEmitSetIn := True;
 end;
 
+{ ---- argv: ParamCount and ParamStr, Phase 9j -----------------------------
+
+  Every register target reads its arguments off the initial stack pointer: the
+  entry stub saves `sp`, argc is the word it points at and argv the words
+  after it (ir_codegen_riscv32.inc:2494). WASI has no such stack. A command
+  module gets its arguments through two host calls instead —
+  `args_sizes_get(&argc, &bufSize)` reports the counts, and
+  `args_get(vec, buf)` fills a pointer vector and a character buffer the
+  CALLER provides — so the read is an allocation and two calls, not a load.
+
+  EMITTED BY THE BACKEND, and not written as Pascal in the WASI PAL. That is a
+  measured conclusion, not a preference, and both halves of it were measured
+  the hard way: `compiler.pas` links no PAL at all, so a PAL routine cannot be
+  what `ParamStr` reaches in the one program this lane most needs to compile;
+  and even where the PAL IS linked, a PAL routine with no Pascal caller is
+  removed by DCE before it can be imported, so the call fails at link with
+  `the builtin unit has no PalBackendArgCount`. Both roads are closed. This
+  one is open, and it is the same road the register targets take — they emit
+  the argv walk inline too.
+
+  Sized from what args_sizes_get REPORTS. No cap and no guess: the buffer is
+  exactly `argc*4 + bufSize` bytes, and it is freed before the arm returns. }
+
+{ Extend an i32 already on the operand stack to the width a builtin-unit
+  parameter declares. NativeInt is i32 on wasm32 today, so this emits nothing;
+  writing it makes that an assumption the code CHECKS rather than one it
+  silently depends on, which is the difference between this and a bug that
+  surfaces the day the model changes. }
+procedure WasmWidenI32To(vt: Byte);
+begin
+  if vt = WT_I64 then WasmOp($AD, 'i64.extend_i32_u');
+end;
+
+{ Fetch the argument vector into freshly allocated linear memory.
+
+  On return `argcL` holds the RAW WASI argc — which counts argv[0], so
+  Pascal's ParamCount is one less — and `vecL` points at the pointer array,
+  whose character buffer follows it in the same block. The caller owns that
+  block and must free it. }
+function WasmEmitArgvFetch(var argcL, vecL: Integer): Boolean;
+var szImp, getImp, scratchL, bufszL, alloc: Integer; pvt: Byte;
+begin
+  WasmEmitArgvFetch := False;
+  alloc := FindProc('PXXAlloc');
+  if alloc < 0 then
+  begin
+    WasmUnsupported('the builtin unit has no PXXAlloc');
+    Exit;
+  end;
+  szImp := WasmHostImport('wasi_snapshot_preview1', 'args_sizes_get',
+                          [WT_I32, WT_I32], [WT_I32]);
+  getImp := WasmHostImport('wasi_snapshot_preview1', 'args_get',
+                           [WT_I32, WT_I32], [WT_I32]);
+  scratchL := WasmAddLocal(WT_I32, 'argsizes');
+  argcL    := WasmAddLocal(WT_I32, 'argc');
+  bufszL   := WasmAddLocal(WT_I32, 'argbufsz');
+  vecL     := WasmAddLocal(WT_I32, 'argvec');
+
+  { scratch := PXXAlloc(8, 8) — two i32 out-parameters for args_sizes_get.
+    The heap and NOT the 16 bytes below $sp that the unhandled-exception
+    wrapper uses: that wrapper has no frame of its own and this arm runs
+    inside a body that does, where below-$sp is the next call's frame. }
+  if not WasmParamValType(alloc, 0, pvt) then pvt := WT_I32;
+  if pvt = WT_I64 then WasmI64Const(8) else WasmI32Const(8);
+  if not WasmParamValType(alloc, 1, pvt) then pvt := WT_I32;
+  if pvt = WT_I64 then WasmI64Const(8) else WasmI32Const(8);
+  if not WasmCallRtl('PXXAlloc') then Exit;
+  WasmLocalSet(scratchL);
+
+  WasmLocalGet(scratchL);
+  WasmLocalGet(scratchL); WasmI32Const(4); WasmOp($6A, 'i32.add');
+  WasmCallImport(szImp, 'args_sizes_get');
+  WasmOp($1A, 'drop');                       { the errno; a failure leaves 0s }
+
+  WasmLocalGet(scratchL); WasmMemOp($28, 'i32.load', 2, 0);
+  WasmLocalSet(argcL);
+  WasmLocalGet(scratchL); WasmMemOp($28, 'i32.load', 2, 4);
+  WasmLocalSet(bufszL);
+
+  { vec := PXXAlloc(argc*4 + bufSize, 8) — the pointer vector and the text it
+    points into, in one block, so one free releases both. }
+  WasmLocalGet(argcL); WasmI32Const(4); WasmOp($6C, 'i32.mul');
+  WasmLocalGet(bufszL); WasmOp($6A, 'i32.add');
+  if not WasmParamValType(alloc, 0, pvt) then pvt := WT_I32;
+  WasmWidenI32To(pvt);
+  if not WasmParamValType(alloc, 1, pvt) then pvt := WT_I32;
+  if pvt = WT_I64 then WasmI64Const(8) else WasmI32Const(8);
+  if not WasmCallRtl('PXXAlloc') then Exit;
+  WasmLocalSet(vecL);
+
+  WasmLocalGet(vecL);
+  WasmLocalGet(vecL);
+  WasmLocalGet(argcL); WasmI32Const(4); WasmOp($6C, 'i32.mul');
+  WasmOp($6A, 'i32.add');
+  WasmCallImport(getImp, 'args_get');
+  WasmOp($1A, 'drop');
+
+  WasmLocalGet(scratchL);
+  if not WasmCallRtl('PXXFree') then Exit;
+  WasmEmitArgvFetch := True;
+end;
+
+{ Free the block WasmEmitArgvFetch allocated. }
+function WasmEmitArgvRelease(vecL: Integer): Boolean;
+begin
+  WasmLocalGet(vecL);
+  WasmEmitArgvRelease := WasmCallRtl('PXXFree');
+end;
+
+{ strlen, synthesised, leaving the length in `lenL`. `ptrL` is unchanged.
+
+  A hand-emitted loop, which this backend has done before — the interface
+  dispatch at :4251 is the same block/loop pair — so the structure is not new
+  ground. It is also self-contained and BALANCED: the block and the loop are
+  opened and closed here, and the two branches are to depths 0 and 1, which
+  are the loop and the block themselves. Nothing reaches past them, so the
+  IR's own WasmDepthToLoop bookkeeping cannot see this construct at all.
+
+  Not the `argv[i+1] - argv[i] - 1` shortcut. That reads a length out of the
+  ADJACENCY of two pointers, which WASI does not promise and which is simply
+  wrong for the last argument, where argv[argc] is not a pointer this block
+  contains. A wrong length here is a wrong string, silently. }
+procedure WasmEmitCStrLen(ptrL, lenL: Integer);
+begin
+  WasmI32Const(0);
+  WasmLocalSet(lenL);
+  WasmBlock(WT_VOID);
+    WasmLoop(WT_VOID);
+      WasmLocalGet(ptrL); WasmLocalGet(lenL); WasmOp($6A, 'i32.add');
+      WasmMemOp($2D, 'i32.load8_u', 0, 0);
+      WasmOp($45, 'i32.eqz');
+      WasmBrIf(1);                           { NUL -> leave the block }
+      WasmLocalGet(lenL); WasmI32Const(1); WasmOp($6A, 'i32.add');
+      WasmLocalSet(lenL);
+      WasmBr(0);                             { next byte }
+    WasmEnd;
+  WasmEnd;
+end;
+
+{ ParamCount. WASI's argc counts the program name, Pascal's ParamCount does
+  not, so the answer is argc - 1. }
+function WasmEmitArgCount: Boolean;
+var argcL, vecL: Integer;
+begin
+  WasmEmitArgCount := False;
+  if not WasmEmitArgvFetch(argcL, vecL) then Exit;
+  if not WasmEmitArgvRelease(vecL) then Exit;
+  WasmLocalGet(argcL);
+  WasmI32Const(1);
+  WasmOp($6B, 'i32.sub');
+  WasmEmitArgCount := True;
+end;
+
+{ ArgStr(index, dest) — the two-argument statement form that a ParamStr(i)
+  expression desugars into, with a hidden frozen temporary as the
+  destination.
+
+  Both destination shapes are handled in the one arm, because both reach it:
+  a managed `string` gets PXXStrFromLit + PXXStrPublish through its SLOT
+  address, and a frozen buffer gets PXXCStrToFrozen at the address the node
+  itself evaluates to. Handling only the managed half would leave the far
+  commoner desugared form refusing.
+
+  RANGE-GUARDED, matching x86-64 and not riscv32 — the two register targets
+  disagree, so this was checked rather than assumed. x86-64 compares the index
+  against argc unsigned and yields '' when it is out of range
+  (`EmitArgvToString`, symtab.inc:6048); riscv32 reads `argv[index]` for any
+  index and documents that a huge one yields junk from past envp
+  (ir_codegen_riscv32.inc:2523). The guarded answer is the one worth copying,
+  and here it costs an unsigned compare and a typed `if`.
+
+  The unsigned compare is deliberate: it folds the negative case into the same
+  test, since a negative index is a very large unsigned one — which is also
+  how x86-64 spells it. }
+function WasmEmitArgStr(node: Integer): Boolean;
+var argNode, valNode, argcL, vecL, ptrL, lenL, si, sym: Integer;
+    pvt: Byte; f: Integer;
+begin
+  WasmEmitArgStr := False;
+  argNode := IRB[node];
+  if argNode = -1 then
+  begin
+    WasmUnsupported('ArgStr with no index argument');
+    Exit;
+  end;
+  if IRB[argNode] = -1 then
+  begin
+    WasmUnsupported('ArgStr with no destination string');
+    Exit;
+  end;
+  valNode := IRA[IRB[argNode]];
+
+  ptrL := WasmAddLocal(WT_I32, 'argptr');
+  lenL := WasmAddLocal(WT_I32, 'arglen');
+  if not WasmEmitArgvFetch(argcL, vecL) then Exit;
+
+  { ptr := (index u< argc) ? vec[index] : <the empty literal>.
+
+    The out-of-range answer is the address of an interned '' rather than nil,
+    so neither PXXCStrToFrozen nor the strlen loop ever meets a null pointer.
+    An interned literal is laid out as an 8-byte length prefix followed by the
+    characters and a NUL, so +8 is a valid empty C string by construction —
+    the same address arithmetic the unhandled-exception wrapper uses. }
+  si := InternStr('');
+  WasmEmitValueAs(IRA[argNode], WT_I32, 'ArgStr index');
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(lenL);                        { the index, reusing the local }
+  WasmLocalGet(lenL);
+  WasmLocalGet(argcL);
+  WasmOp($49, 'i32.lt_u');
+  WasmIf(WT_I32);
+    WasmLocalGet(vecL);
+    WasmLocalGet(lenL); WasmI32Const(4); WasmOp($6C, 'i32.mul');
+    WasmOp($6A, 'i32.add');
+    WasmMemOp($28, 'i32.load', 2, 0);
+  WasmElse;
+    WasmDataAddr(Strs[si].Offset + 8);
+  WasmEnd;
+  WasmLocalSet(ptrL);
+
+  sym := -1;
+  if IRKind[valNode] = IR_LOAD_SYM then sym := IRA[valNode];
+  if (sym >= 0) and (Syms[sym].TypeKind = tyAnsiString)
+     and not Syms[sym].IsArray then
+  begin
+    { Managed destination: build a handle from the bytes, then PUBLISH it into
+      the slot, which is what releases whatever the slot held. Publishing and
+      not storing — a raw store would leak the old handle. }
+    f := FindProc('PXXStrFromLit');
+    if f < 0 then
+    begin
+      WasmUnsupported('the builtin unit has no PXXStrFromLit');
+      Exit;
+    end;
+    WasmEmitCStrLen(ptrL, lenL);
+    WasmLValueAddr(sym);
+    WasmLocalGet(lenL);
+    if not WasmParamValType(f, 0, pvt) then pvt := WT_I32;
+    WasmWidenI32To(pvt);
+    WasmLocalGet(ptrL);
+    if not WasmCallRtl('PXXStrFromLit') then Exit;
+    if not WasmCallRtl('PXXStrPublish') then Exit;
+  end
+  else
+  begin
+    { Frozen destination: a fixed buffer whose ADDRESS is the node's value,
+      exactly as the register targets read it. PXXCStrToFrozen walks to the
+      NUL itself, so no length is computed on this path. }
+    WasmEmitValueAs(valNode, WT_I32, 'ArgStr destination');
+    if WasmBodyBroken then Exit;
+    WasmLocalGet(ptrL);
+    if not WasmCallRtl('PXXCStrToFrozen') then Exit;
+  end;
+
+  if not WasmEmitArgvRelease(vecL) then Exit;
+  WasmEmitArgStr := True;
+end;
+
 function WasmEmitBuiltin(node, p: Integer; isStmt: Boolean): Boolean;
 var argNode: Integer; ctk: TTypeKind; atk: TTypeKind; want: Byte; wide: Boolean;
 begin
   WasmEmitBuiltin := False;
+
+  { ParamCount takes NO ARGUMENTS, so it has to be answered BEFORE the guard
+    below — which refuses any builtin with an empty argument list, and would
+    otherwise report it as an unlowerable `-55` forever. }
+  if p = -Ord(tkArgCount) then
+  begin
+    WasmEmitBuiltin := WasmEmitArgCount;
+    Exit;
+  end;
+
   argNode := IRB[node];
   if argNode = -1 then Exit;
+
+  if p = -Ord(tkArgStr) then
+  begin
+    WasmEmitBuiltin := WasmEmitArgStr(node);
+    Exit;
+  end;
 
   { --- casts and Ord: a value conversion, not a no-op --- }
   if WasmCastKind(p, ctk) then
