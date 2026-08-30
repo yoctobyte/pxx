@@ -665,8 +665,44 @@ if [ "$PUSH" = "1" ]; then
     # rebase is frequently another lane's commit, and printing it is how a
     # dropped commit read as a successful push.
     if [ "$manifest_n" -gt 0 ]; then
+        # PRINT THE LANDED SHA, not just the subject.
+        #
+        # This is the whole fix for the ghost-sha class, and it is a print
+        # statement. Measured 2026-08-30: the fleet lands ~1932 commits/day, one
+        # every 45s across eleven agents, so essentially EVERY push is behind and
+        # essentially every commit is rebased between `git commit` and landing.
+        # The ghost rate is therefore ~100% BY CONSTRUCTION, not a discipline
+        # failure -- an agent who reads `git log -1` after committing has read a
+        # doomed id, every time, however careful it is. Four agents did it in one
+        # evening by four different routes, one of them while verifying.
+        #
+        # `verify_manifest_landed` above already PROVED each subject is on
+        # origin. It just threw the id away. Resolving it here turns "read the
+        # sha off origin/master after the push" from a rule people must remember
+        # into a line they have already been shown.
+        #
+        # WINDOWED, unlike the check above, and the asymmetry is deliberate: a
+        # miss there manufactures a false MISSING whose advice is `cherry-pick`,
+        # which corrupts a correct state. A miss HERE prints one blank column.
+        # Costs nothing and degrades to exactly today's behaviour.
+        #
+        # Newest match wins: two commits can share a subject (a revert of a
+        # revert, a repeated `board: regenerate`), and ours is the one that just
+        # landed.
         echo "sync: pushed $manifest_n commit(s), all verified on origin:"
-        printf '%s\n' "$manifest" | sed 's/^/  /'
+        _ids=$(git log --format='%h%x09%s' -400 "origin/$BRANCH" 2>/dev/null)
+        while IFS= read -r subj; do
+            [ -n "$subj" ] || continue
+            _sha=$(printf '%s\n' "$_ids" \
+                   | awk -F'\t' -v s="$subj" '$2==s {print $1; exit}')
+            if [ -n "$_sha" ]; then
+                printf '  %s  %s\n' "$_sha" "$subj"
+            else
+                printf '  %s\n' "$subj"
+            fi
+        done <<EOF
+$manifest
+EOF
     else
         echo "sync: nothing of ours to push — origin/$BRANCH at $(git log --oneline -1 "origin/$BRANCH")"
     fi

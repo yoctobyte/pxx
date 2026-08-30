@@ -729,11 +729,17 @@ fix the doc, not the loop.
   first does not cover the second** — `sync.sh`'s *"all verified on origin"* is
   true of the **content** and says nothing about an id you wrote down beforehand.
   An agent who did verify, at the wrong moment, still published a ghost.
-  **Four routes produced ghosts in one evening, and the fourth is the worst:** a
-  pre-push `log -1`; a hand-finished conflict; a `--continue` that rewrote the
-  commit; and `sync.sh` printing *"push raced another writer — rebasing and
-  retrying"*, which then **succeeds and reports success**. Nothing anywhere looks
-  like an error. Recovery, when it happens anyway: match the commit **subject**
+  **The ghost rate is ~100% BY CONSTRUCTION, not a discipline failure.** Measured
+  2026-08-30: **1932 commits in 24h, one every 45s** across eleven agents, so
+  essentially every push is behind and essentially every commit is rebased
+  between `git commit` and landing. A pre-push `log -1` reads a doomed id *every
+  time*, however careful you are — which is why four agents produced ghosts in
+  one evening by four different routes, the worst being `sync.sh` printing
+  *"push raced another writer — rebasing and retrying"* and then **succeeding and
+  reporting success**. Nothing anywhere looks like an error.
+  **So `tools/sync.sh` now PRINTS the landed sha beside each subject** — it had
+  already proved the commit was on origin and was discarding the id. Read that
+  line; it is the answer, and it costs you nothing to obtain. Recovery, when it happens anyway: match the commit **subject**
   on origin/master — the only handle a ghost leaves, and the practical reason to
   write a real subject line.
 - **Cold start — "continue on tickets" (no track named):** self-dispatch,
