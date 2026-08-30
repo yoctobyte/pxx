@@ -124,4 +124,4 @@ cannot contain its own delimiters in either style, so quoting code in one is a
 hazard in a repo whose comments quote C constantly.**
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit e1ce94434.
