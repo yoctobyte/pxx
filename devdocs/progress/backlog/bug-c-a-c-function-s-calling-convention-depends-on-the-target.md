@@ -144,3 +144,50 @@ the convention was asserted has measured the wrong thing.
   the two clean targets. Pascal `Mix4` and C `mix4` differ only in case, bind
   case-insensitively, and recurse until the stack dies. Renaming gives `1234.00`.
   Not a crash on the correct path.
+
+## DISPROVEN before dispatch: the seven guards are NOT the mechanism (frankA, 2026-08-30)
+
+**Read this before the section above.** The re-lane and the p65 stand; the
+*mechanism* the section above points at does not. frankA deleted **all seven**
+`not CProgramMode` guards, rebuilt to a fixedpoint (converged 1 round,
+`b9ead8dda12b` — a genuinely different binary), and reran frankC's probe:
+**byte-for-byte identical failures.** Then restored and rebuilt back to
+`faf762981c3c`.
+
+They are **inert on this path**. `CProgramMode` is False when the program is
+Pascal, so `ProcCdecl and (not CProgramMode)` already reduces to `ProcCdecl` in
+exactly the configuration the probe exercises. Deleting them changes nothing
+because they were never being consulted differently.
+
+**Why it looked certain, and why that is the lesson worth keeping:** the three
+backends carrying the guard are *precisely* the three failing targets, and the
+three without it are x86-64, riscv32 and xtensa — of which riscv32 and x86-64 are
+both clean. Five targets, two groups, **perfect separation, and completely
+spurious.** No amount of reading would have separated the guard from the backend
+it lives in, because the guard and the failure are both properties of *which
+backend this is*. frankA's own note: *"I would have reported it as the mechanism
+if deleting it had not been cheaper than reasoning about it."* That is
+`devdocs/dev/debugging-playbook.md`'s rule — measure, do not reason — catching a
+wrong root cause **one step before it was written into a dispatch**.
+
+### What is actually established
+
+- **IR is correct on both sides on i386** — args in order, no reordering — so the
+  divergence is purely **codegen**: caller push order versus callee spill order.
+- **`ProcCdecl` is not missing**: it *is* set True for a genuinely-new C proc at
+  `cparser.inc:10736`, gated on `wasNewProc`.
+- That narrows it to **which side consults `ProcCdecl` on the
+  Pascal-caller-to-C-callee path**. Whoever takes this starts from the two codegen
+  sides, **not** from the guards.
+
+### Two rows that are not this ticket
+
+- **It is not a regression of the cdecl campaign.** Against the *same* binary that
+  fails the probe 6/6 on i386, `test_cdecl_bodied_narrow` passes **12/12** —
+  including the three-distinct-integer order case, the exact shape the `three_ints`
+  row fails — and `test_cdecl_bodied_wide` passes 3/3. Two different paths: the
+  campaign covers Pascal-declared `cdecl` procs, this ticket a C-*defined* proc
+  reached from a Pascal caller. Same symptom, different site.
+- **The arm32 `refused` row is a separate, already-filed defect**:
+  [[bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area]], which already carries
+  frankA's warning about lifting the refusal. Do not fold it in here.
