@@ -5582,6 +5582,31 @@ test-core: $(COMPILER)
 	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare_float.pas $(TESTTMP)/test_socf_xt26
 	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_s326
 	cmp $(TESTTMP)/test_socf_xt26 $(TESTTMP)/test_socf_s326
+	# THE DATA SECTION MUST START ON AN 8-BYTE BOUNDARY, AND THIS IS THE ONLY
+	# EXECUTABLE PATH WHERE THE ASSERTION CAN FAIL.
+	#
+	# Every writer places data immediately after code, so the data base is
+	# whatever CodeLen happens to leave. Xtensa's l32i faults on a misaligned
+	# word (SIGBUS, signal 7); x86-64 and riscv32 absorb it. That cost 41
+	# windowed programs before AlignCodeForData landed in df98fea47.
+	#
+	# On a HOSTED image the boundary is also a PT_LOAD boundary (3b8d1039e), so
+	# it is page-aligned and 8 comes free — the invariant is real but cannot be
+	# observed to fail there. A bare ESP image has ONE RWX segment and skips the
+	# page pad entirely, so `AlignCodeForData` is the sole mechanism, and it is
+	# measurably doing work: this exact program emits 4 bytes MORE than `pinned`
+	# does on both ESP targets, because its unpadded code length is 4 mod 8.
+	# Before df98fea47 its data section started 4 bytes off a word boundary, on
+	# the architecture that faults on exactly that.
+	#
+	# Checked from the `ok:` line rather than with readelf because the data
+	# section is not a section header here: file offset = ELF32 ehdr + 2 phdrs
+	# (ESP_CODE_OFFSET32 = 116) + code, and the load base is 8-aligned, so this
+	# is the data VADDR's alignment. bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
+	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare_float.pas $(TESTTMP)/test_socf_align_xt > $(TESTTMP)/test_socf_align_xt.log
+	tools/expect_same.sh esp-bare-xtensa-data-align8 "$$(( ( $$(sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_xt.log) + 116 ) % 8 ))" "0"
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_align_rv > $(TESTTMP)/test_socf_align_rv.log
+	tools/expect_same.sh esp-bare-riscv32-data-align8 "$$(( ( $$(sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_rv.log) + 116 ) % 8 ))" "0"
 	./$(COMPILER) test/test_esp_bare_float.pas $(TESTTMP)/test_socf_oracle26
 	tools/expect_same.sh test_socf_oracle26 "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" "7|16|32|75|1234567|-32|65537|ESP BARE FLOAT OK|"
 	# ...and a float-free bare program must still pay NOTHING for it: the pull is
