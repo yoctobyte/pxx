@@ -198,4 +198,4 @@ Two things worth keeping from that:
 ## Log
 - 2026-08-30 — filed by frankS with the eight measured slots and the
   two-backend disassembly proving shared layout.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 599000083.
