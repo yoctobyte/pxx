@@ -6657,3 +6657,158 @@ coerced the callable into the raw `Pointer` the slot wants, and a callable value
 immune only because the plain-call path had that coercion inline — so **the working sibling
 was working for an accidental reason**, which is why it could not serve as the model.
 Moving the sort to `pyeval` as the ticket directed would not have prevented one row of it.
+
+### 154 — A CONTROL DRAWN FROM THE SAME IDEA AS THE GUARD TESTS THE IDEA, NOT THE CODE
+
+*frankA, 2026-08-30, on a guard of its own that reached origin and widened the bug it fixed.*
+
+The guard asked *"is this group followed by `=`, and NOT preceded by `:`?"* — the `:`
+meant to spare a typed constant. **It spares exactly one spelling of one.**
+`const P: ^specialize TTest<LongInt> = Nil` is also a use, is also followed by `=`, and is
+preceded by **`specialize`**. So the guard fired on it and killed the rewrite: the failure
+went from *a handful of type names* to **every type name**, and sat on origin for about an
+hour.
+
+And the author **had** tested typed constants when writing it — with
+`cb: TBox<Integer> = (V: 7)`, *the one spelling its own blacklist already handled*.
+
+> **My control passed against a compiler I had just broken.**
+
+This is 151 with a sharper edge. There a suite sampled one mechanism; here **the control
+was derived from the same mental model as the fix**, so it could only ever confirm the
+model. A control has to come from somewhere the design did not — a second author's table,
+an oracle, a shape the implementer did not think of. It was caught only by running
+**frankB's** trap table and getting FAIL on all six rows where frankB had four passing:
+**a discrepancy with someone else's data, which is exactly what a control drawn from your
+own idea cannot produce.**
+
+The repair also stops enumerating: a declaration's left-hand side can only follow the
+`type` keyword or the `;` ending the previous declaration, so it is a **whitelist** now.
+*Enumerating the ways a use can be spelled is unbounded; enumerating where a declaration
+can begin is not.*
+
+### 154a — and the unexplained half was solved, PREDICTIVELY
+
+The open question was why a harvest keying on token *shape* cared whether the token said
+`Integer` or `Int64`. **It does not. It cares whether the token is an IDENTIFIER.**
+
+The collector records only `tkIdent`. The lexer gives dedicated token kinds to exactly ten
+spellings — `boolean`, `byte`, `char`, `double`, `extended`, `integer`, `longword`, `real`,
+`single`, `string`. **Every other type name** — `longint`, `cardinal`, `int64`, `qword`,
+`smallint`, `word`, `shortint`, and every user alias whatever it aliases — stays `tkIdent`,
+is harvested as a bound name, and poisons.
+
+**That reproduces frankB's observed table and then makes predictions frankB had not run:**
+`Word` and `ShortInt` must fail; `Char`, `Double`, `Single` must pass. **Measured 8 of 8**,
+including all four previously recorded as ok.
+
+**An explanation that only fits the data you already have is a story; one that predicts
+rows you have not measured is a mechanism.** So the fix's boundary is now *knowable* — it
+is "which names lex as identifiers", not "which names are aliases", which was the first
+guess and was wrong. It also dissolves frankB's backwards-reaching row with no new
+mechanism: the harvest is a whole-file pre-pass into one flat unscoped array rebuilt each
+call, so a const on line 7 is in the set before line 6 is rewritten — flagged as
+data-consistent rather than proven, which is the right weight.
+
+### 155 — I PICKED THE CORPUS FROM THE LANGUAGE I WAS EDITING, NOT FROM THE PATHS THAT REACH THE CODE
+
+*frankC, 2026-08-30, reverting `eefa85d70` after it took five gtk tests red.*
+
+37 named C tests byte-identical, self-host fixedpoint, `gate.sh quick` — all green.
+**Not one of them is a Pascal program binding a C header.**
+
+> *I chose the differential population by grepping C sources for string content and node
+> shapes; the affected population was `.pas` files, so my instrument could not have seen it
+> however many cells I added.*
+
+That is "a green is silent on every defect the two arms share" one level out, and the rule
+is cheap to apply: **select the corpus by the PATHS that reach the code you changed, not
+by the language you are writing it in.** A C-frontend change exercised only by C programs
+is a gate that cannot fail for the reason you most need it to.
+
+**And the actual divergence was not where either of us guessed.** Not "a Pascal binding
+reaches the importer by a different route" — **the header walk is not entered only by the
+user's `uses <header>`: crtl's own modules flow through it.** `uses gtk` pulls `gtk.h`
+pulls `stdlib.h`, which brings `lib/crtl/src/stdlib.c` into the same token buffer and the
+same single-pass walk, which never reserves file-scope `static` variables (every
+declaration goes to `ParseCSubroutine`, never `ParseCGlobalVarDecl`). Harmless **for
+exactly as long as the bodies were being thrown away.**
+
+### 155a — TWO deeper dependencies on TWO successive patches is a scope signal, not a patch signal
+
+Patch 1 fixed the unreserved statics. The body then needed `__pxx_open`, a pxx-internal
+runtime symbol the crtl two-pass supplies and the header walk does not. **It reverted
+rather than patching a third time.**
+
+> *I was one attempt into "microfix as a consolation" before I stopped.*
+
+**The count of successive deeper dependencies is the measurement.** One is a bug; two in a
+row says the boundary is wrong, and each patch makes the next one feel more justified
+because you are closer. Naming the threshold — and admitting the second patch was already
+one too many — is what makes it repeatable rather than a matter of taste. The reopened
+ticket carries the diagnosis, the options, and the test material, and the next attempt
+scopes by token **provenance** (`CModuleOfTok`) rather than by mode.
+
+### 156 — SOMETIMES THE BLOCK *IS* THE SAFETY PROPERTY
+
+*frankS, 2026-08-30, landing the xtensa syscall table.*
+
+The inverse of *a missing op hides every bug in the programs it stops from compiling* — and
+the more dangerous direction, because the remedy looks obviously safe.
+
+Filling in the scheduler's six syscall numbers is a two-line change anyone would wave
+through. It would replace **six honest compile errors** with **six programs that build and
+jump into a `CoSwitch` that was never emitted for xtensa, from a stack primed with the
+x86-64 frame layout** (`SpawnSized`'s `{$else}` chain falls through to x86-64).
+**The compile error was the only thing preventing that.**
+
+> **On finding a hole in a table, the move is not "fill the table". It is: fill it, then
+> ask PER ROW whether the error was CONCEALING a defect or PREVENTING one.**
+
+The measured numbers went into the Track A ticket precisely so nobody fills them in without
+the `CoSwitch`. Note the shape — this is a **documented trap becoming a guard** only
+because the person who found it wrote down *why* the obvious fix is unsafe, where the
+table itself says nothing.
+
+**And the headline is the same lesson:** 14 syscall rows bought **one** green row, not
+fourteen. MATCH 96 → 97, CFAIL 25 → 23. **The other twelve did not stay one problem — they
+became five distinct filed defects that no ticket could have named that morning**, including
+a call0 displacement ceiling of ±512 KiB that caps the *whole corpus* (a riscv32 test is
+758 KiB), not five odd tests. *A blocked population is not a homogeneous population.*
+
+### 156a — GREP THE SIBLING, and the sibling was silently wrong
+
+The `Double` typed const that misaligns the **next** const array: measured by **printing
+addresses from the program** rather than reading the emitter. `@ 3 (mod 8)` on xtensa,
+**4 on arm32**, 0 on x86-64/i386/aarch64/riscv32.
+
+**Four right, two wrong in the same direction by different amounts — and arm32 has the
+defect silently, because two 4-byte loads never fault.** Fixing it in
+`ir_codegen_xtensa.inc` would have left arm32 quietly emitting under-aligned constant
+arrays. Filed as A at prio 55 because it is a **live silent under-alignment on arm32
+today**.
+
+**And it is NOT Track F.** The program that dies sums an array of `Int64` and contains no
+float arithmetic: the `Double` is the **trigger**, the subject is a data-section cursor
+ending on an odd byte, and the observable is a **crash**. *Rank the mechanism, never the
+datatype* — mis-tagging this F is exactly how a real bug disappears.
+
+### 156b — a define that names a SHAPE, read as a NUMBERING
+
+`PalBackendVforkAndExec` hardcoded `93` in the `PAL_GENERIC_SYSCALLS` arm. **That define
+names a calling SHAPE** (clone, dup3, direct sockets), **not a syscall numbering** — it was
+correct only because the two arches sharing that shape also happen to share the asm-generic
+table. **A coincidence doing load-bearing work**, exactly like 151a's two defaults agreeing
+at `/tmp`.
+
+On xtensa `93` is `socket`. So a child whose `execve` failed would **open a socket, fall
+out of the `if pid = 0` block still being the child, and hand its caller pid 0 to read as
+"I am the parent"** — a fork bomb wearing the costume of a failed exec. All four literals
+replaced with a per-arch `SYS_exit`.
+
+**The regression surface was PROVED, not argued:** a program that actually reaches
+`PalBackendVforkAndExec`, built with `$(PXX_STABLE)` for all five existing targets before
+and after, **sha256 matching on every one.** And the split was named rather than glossed —
+the xtensa half necessarily used the HEAD compiler, because `pinned` predates two days of
+xtensa work and cannot produce a working xtensa binary at all. **Stating which half could
+not use the pin, and why, is what makes the other half's byte-identity meaningful.**
