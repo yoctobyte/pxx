@@ -595,6 +595,12 @@ function WasmCallRtl(const nm: AnsiString): Boolean; forward;
 function WasmHostImport(const modName, fldName: AnsiString;
                         const params: array of Byte;
                         const results: array of Byte): Integer; forward;
+{ The shadow-stack scratch push/pop, defined with the string machinery that
+  first needed them and used by the float-write arm well above it. Same reason
+  as the import above: FPC compiles this file top to bottom during the seed
+  build, and check_forwards.sh is what says so. }
+function WasmStrScratchPush(slot: Integer): Integer; forward;
+procedure WasmStrScratchPop(scr: Integer); forward;
 procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
@@ -3713,7 +3719,7 @@ end;
 
 procedure WasmEmitWrite(node: Integer);
 var
-  valNode, wid, decs, si, hp, scFrac, scExp: Integer;
+  valNode, wid, decs, si, hp, scFrac, scExp, scr: Integer;
   sVal: AnsiString;
   tk: TTypeKind;
 begin
@@ -3756,13 +3762,57 @@ begin
 
   tk := IntToTypeKind(IRTk[node]);
 
+  { --- write of a float: the three RTL writers, all taking the double by
+    ADDRESS ---
+
+    Which one is the same three-way choice every register backend makes
+    (ir_codegen_riscv32.inc:2860), read off `decs`: a non-negative decimal
+    count is the fixed form, -2 is the native form, anything else is
+    scientific with the digit split SciFormatFor derives from the field width.
+    The selection is shared; only the spill is this target's problem.
+
+    THE SPILL GOES ON THE SHADOW STACK, not in a reserved frame slot. The
+    frame is the obvious place and it is wrong here for exactly the reason the
+    Char scratch above documents: one reserved area per body is one ADDRESS
+    per body, and `WriteLn(a, b)` or a float whose value is itself a call
+    would share it. A push nests by construction. It also has to be a push
+    rather than bytes below $sp, because the writer is a CALL and its frame
+    goes below $sp — writing the double there would put it inside the callee.
+
+    Reserved BEFORE the value is evaluated, which is what makes a nested call
+    in the value safe: that call's frame lands below the reservation rather
+    than on top of it. }
   if TypeIsFloat(tk) then
   begin
-    { The float writers take the ADDRESS of a double, so the value has to be
-      spilled. Not yet done here — a shadow-stack temp of its own is a small
-      job and it is not what the milestone is about. Reported, not skipped. }
-    WasmUnsupported('write of a float — the RTL writers take a double by '
-                    + 'address and this arm does not spill one yet');
+    if decs >= 0 then hp := WasmWriteHelper('PXXWriteFloatFixed')
+    else if decs = -2 then hp := WasmWriteHelper('PXXWriteFloatNat')
+    else hp := WasmWriteHelper('PXXWriteFloatSci');
+    if hp < 0 then Exit;
+    scr := WasmAddLocal(WT_I32, 'fltspill');
+    WasmStrScratchPush(scr);
+    WasmLocalGet(scr);
+    { Always a DOUBLE, whatever the source width — the writers take one, and a
+      tySingle argument is promoted here rather than at three call sites. }
+    WasmEmitValueAs(valNode, WT_F64, 'float write');
+    if WasmBodyBroken then Exit;
+    WasmMemOp($39, 'f64.store', 3, 0);
+    WasmLocalGet(scr);
+    if decs >= 0 then
+    begin
+      WasmWriteConstArg(hp, 1, decs);
+      WasmWriteConstArg(hp, 2, wid);
+    end
+    else if decs <> -2 then
+    begin
+      { Sci takes (fracdigits, expdigits) in the two arguments the fixed form
+        uses for (decimals, width) — the same asymmetry riscv32 calls out. }
+      SciFormatFor(wid, Ord(tk), scFrac, scExp);
+      WasmWriteConstArg(hp, 1, scFrac);
+      WasmWriteConstArg(hp, 2, scExp);
+    end;
+    if WasmBodyBroken then Exit;
+    WasmCall(WasmSlotForProc(hp), Procs[hp].Name);
+    WasmStrScratchPop(scr);
     Exit;
   end;
 

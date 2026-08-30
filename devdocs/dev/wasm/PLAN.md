@@ -2535,3 +2535,49 @@ this target — "the RTL writers take a double by address and this arm does not
 spill one yet". That gap is not on the anchor path (`compiler.pas` writes no
 floats) but it is why a float intrinsic cannot be tested by printing its
 result, which is worth knowing before writing the next float slice.
+
+### Phase 9l — `Write` / `WriteLn` of a real — **DONE, 2026-08-30.**
+
+Deliberately **off** the anchor path and picked up for that reason: the U
+decision gates all 32 remaining `compiler.pas` refusals, and this is real lane
+work that the answer does not touch (`compiler.pas` writes no floats — the
+count stays 32 either side of this phase).
+
+The refusal it replaces said the job plainly: *"the RTL writers take a double
+by address and this arm does not spill one yet"*. The three-way writer
+selection is shared with every register backend and was copied, not invented —
+`decs >= 0` is `PXXWriteFloatFixed(p, decimals, width)`, `-2` is
+`PXXWriteFloatNat(p)`, anything else is `PXXWriteFloatSci(p, frac, exp)` with
+the digit split `SciFormatFor` derives from the field width
+(`ir_codegen_riscv32.inc:2860`). What is this target's own is the spill.
+
+**The spill goes on the SHADOW STACK, not in a reserved frame slot**, and both
+halves of that were already argued in this file by the Char scratch a thousand
+lines up. A reserved area per body is one ADDRESS per body, and two floats are
+live at once in `WriteLn(a:0:2, b:0:3)`; a push nests by construction. It also
+cannot be bytes below `$sp`, because the writer is a CALL and its frame goes
+below `$sp` — the double would end up inside the callee. Reserving BEFORE the
+value is evaluated is what makes a float whose value is itself a call safe: the
+inner frame lands below the reservation rather than on top of it.
+
+Both of those are in the slice as cases, because both would pass a naive test.
+
+**Not Track F, and this one is closer to the line than 9k.** The charter puts
+`Write`/`WriteLn` of a real squarely in F — the rendering side is F end to end.
+But the rendering here is the shared RTL's and is untouched: every digit the
+slice prints comes from the same `PXXWriteFloat*` routine the native build
+calls, and the test diffs against native precisely so the formatter is held
+fixed. The subject is a **spill** — an addressability question that would read
+identically if the callee took a record by address. Rank the mechanism, never
+the datatype.
+
+Test: `test/wasm/check_floatwrite.sh`. Eighteen lines against native: all
+three writers, a field width, a negative, zero, 1e20, 1e-20 at 25 decimals, a
+tySingle (whose scientific digit split differs from a double's, which is what
+proves `SciFormatFor` is being asked the node's real type), two floats live in
+one `WriteLn`, and a float whose value is a call.
+
+Remaining non-anchor gap in the same arm, reported and not skipped: **write of
+a variant** — *"needs the slot ADDRESS, not its value"*. Same shape of problem
+and a different answer, since a variant already lives in a slot and wants
+`WasmLValueAddr` rather than a spill.
