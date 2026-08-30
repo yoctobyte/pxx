@@ -103,12 +103,18 @@ properly. for now, we move all related tickets to the float subfolder. so we can
 work on those tickets in a consolidated session."* Three overlapping umbrellas
 existed in three folders and none referenced the others; they are now one.
 
+**Standing policy, owner 2026-08-30:** `Extended` = `Double` on **all** targets
+for the foreseeable future, and the rest of this cluster waits until it becomes
+relevant *"or until some mathematician studies the topic and comes up with a
+solid plan."* If it is ever revived, the recorded direction is **software
+emulation of IEEE binary128**, not x87's 80-bit — see the umbrella.
+
 | ticket | track | prio | role |
 | --- | --- | --- | --- |
 | `feature-a-extended-is-an-alias-for-double` | A+F | 25 | **the umbrella** — scope, the four workstreams, the ruling |
 | `feature-extended-type-support` | A+F | 25 | superseded gravestone (kept for three inbound citations) |
 | `decide-is-real-a-double-or-fpcs-80-bit-extended` | U | 30 | residual open question: does bare `Real` follow `Extended` on x86-64? |
-| `bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets` | P | 65 | **not blocked by the umbrella** — a one-line fix that makes the big job smaller |
+| `bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets` | P | 65 | **un-parked to `backlog/` 2026-08-30** — correctness under the permanent alias, not float work |
 
 This cluster is the clearest instance of what this index exists for. The four
 aspects — the 10-byte type with its padding, x87 codegen (the SSE2 path cannot

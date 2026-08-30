@@ -141,7 +141,7 @@ targets — under FPC too, which is the argument that it is acceptable.
 | **this file** | float/ | the umbrella; scope + ruling live here |
 | [[feature-extended-type-support]] | float/ | **superseded** by this ticket; kept as a gravestone, its RTL constraint folded in above |
 | [[decide-is-real-a-double-or-fpcs-80-bit-extended]] | float/ | Track U. Partly answered by the ruling above — but the *residual* question stands: does the bare name `Real` follow Extended on x86-64, or stay Double for cross-target coherence? **Answer before starting workstream 1.** |
-| [[bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets]] | float/ | **NOT blocked by this ticket** — see below |
+| [[bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets]] | **backlog/** | **NOT blocked by this ticket, and un-parked 2026-08-30** — under a permanent `Extended = Double` alias a wrong `SizeOf` is the compiler lying about its own type, which is correctness, not float work. Ranked normally. |
 | [[decide-default-float-output-format-and-constant-precision]] | float/ | workstream 3's parent question; goes moot for Extended if this lands, since the digits become real rather than Double's rendered wider |
 | [[bug-n-nilpy-carries-its-own-copies-of-the-float-type-table]] | backlog/ | left ranked deliberately (it is a duplication bug worth fixing regardless), but `pyparser.inc:966` collapses `single` and `extended` into `tyDouble` in a private table — **workstream 1 must land there too, or NilPy silently keeps the alias** |
 | `done/feature-extended-alias-or-reject` | done | the 2026-06-22 holding position; now interim per the ruling |
@@ -339,3 +339,57 @@ Which is also why the cluster stays parked rather than rejected. The real use
 case is real; it is just rare, and it is best served by the cheap-to-build,
 portable half. If this is ever picked up, **start with soft_extended and stop
 there** until something measured asks for more.
+
+---
+
+## OPTION 2026-08-30 — if it is emulated anyway, emulate **binary128**, not x87's 80-bit
+
+Follows directly from the soft_extended direction above. Once the decision is
+"software", the 80-bit format stops having anything to recommend it, and the
+choice of *which* wide format to emulate is suddenly free.
+
+| | x87 80-bit (`Extended`) | IEEE 754 **binary128** |
+| --- | --- | --- |
+| mantissa | 64 bits | **113 bits** |
+| storage | 10 bytes, 16-byte aligned, array stride 10 — the whole mess measured above | 16 bytes, 16-aligned, stride 16. No special case anywhere |
+| status | a 1980s x87 artifact; only FPC-on-Intel and C's `long double` speak it | **the actual IEEE standard type** |
+| who else has it (2026) | almost nobody by name | C `_Float128`/`__float128` (C23 + libquadmath), C++23 `std::float128_t`, Fortran `real128`, **Zig `f128` as a builtin primitive**, Julia `Float128`, Rust `f128` (nightly) |
+| hardware | x86 x87 only, and not on win64 | POWER9/10, IBM z. Not x86, not ARM — **software everywhere we target** |
+
+Since it is software on every pxx target either way, binary128 costs the same to
+build and delivers **strictly more precision than FPC's `Extended`**, with none
+of the layout weirdness that makes workstream 1 fiddly. `Extended` would become
+the *name* that maps to it — a superset of what FPC promises, which is the
+comfortable direction to diverge (CLAUDE.md: *we accept a form FPC rejects → not
+a defect*).
+
+It also lands where the rest of the world already is. Track Z is the sharpest
+illustration: **Zig's primitive float set is `f16`/`f32`/`f64`/`f80`/`f128`**, so
+a Zig frontend will eventually want `f128` regardless of what Pascal's
+`Extended` does, and building it once in the IR serves both — exactly the
+`ir-as-substrate.md` argument.
+
+### The Python cautionary tale, measured 2026-08-30 on this box
+
+Worth recording because it is the exact mistake this option avoids:
+
+```
+numpy 2.3.5, x86-64
+np.float128 itemsize = 16 bytes,  finfo declares 128 bits
+   ...but nmant = 63              -> it is x87 80-bit extended
+1/3 = 0.33333333333333333334      -> 20 digits, identical to FPC's Extended
+np.float128 is np.longdouble      -> True
+
+true __float128 on the same box:  mantissa 113 bits
+1/3 = 0.333333333333333333333333333333333317
+```
+
+`numpy.float128` is the platform `long double` **padded** to 16 bytes; the
+"128" is storage, not precision. And on aarch64 — where ARM's `long double`
+genuinely is binary128 — the same name means 113 mantissa bits instead of 63.
+**One name, two precisions, depending on the machine.** That is precisely the
+per-target divergence this cluster keeps trying to avoid, shipped by a major
+library, and it is what naming a type after its byte count buys you.
+
+CPython itself has no wide float at all: `float` is C `double`, and real
+precision work goes to `decimal`, `mpmath` or `gmpy2` (MPFR).

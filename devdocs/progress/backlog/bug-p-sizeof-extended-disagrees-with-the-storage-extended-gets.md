@@ -5,7 +5,7 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "`SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element."
-status: float
+status: backlog
 ---
 
 # `SizeOf(Extended)` disagrees with the storage `Extended` gets
@@ -95,7 +95,7 @@ end.
 Track P: `make compiler/pascal26` (the self-host fixedpoint) plus this repro
 printing three consistent numbers.
 
-## Parked in `float/` 2026-08-30 — with a caveat worth re-reading
+## Parked in `float/`, then UN-PARKED the same day — 2026-08-30
 
 Moved `backlog_new/` → `float/` with the rest of the `Extended` cluster, at the
 owner's request, so the whole set can be worked in one consolidated session
@@ -128,3 +128,43 @@ owner's request, so the whole set can be worked in one consolidated session
    on its own** — it is a one-line fix at `pasparser_lval.inc:6417` plus the
    audit of the sibling names (`valreal`, `tdatetime`, `currency`) that the
    Suggested fix already asks for, and it does not need the session.
+
+### UN-PARKED 2026-08-30 (owner) — this one is correctness, not float work
+
+> *"for now we treat 'extended' as 'double' across all targets, right? so, this
+> makes the sizeof() ticket indeed relevant, as we should not lie. so that is a
+> minor fix. that will give us correctness ... so, sizeof() ticket can move back
+> to backlog"*
+
+Yes — and confirmed against the source, not assumed. `pasparser_lval.inc:6304`
+maps `extended` to `tyDouble` **unconditionally**, with no target test, so
+`Extended` is `Double` on every target today including riscv32 and xtensa (where
+that `Double` is itself softfloat). Unlike `Real`, which *is* target-dependent
+via `RealTypeKind` — that divergence is a separate open question in
+[[decide-is-real-a-double-or-fpcs-80-bit-extended]] and is **not** part of this
+fix.
+
+So the policy is settled and stable: **`Extended` = `Double`, all targets, for
+the foreseeable future.** The rest of the cluster stays parked in `float/` until
+it becomes relevant *"or until some mathematician studies the topic and comes up
+with a solid plan."*
+
+That makes this ticket the one piece of the cluster that is **not** a float
+feature at all. Under a permanent alias, `SizeOf(Extended)` answering 10 against
+storage of 8 is simply the compiler **stating something untrue about its own
+type** — the owner's phrasing, *"we should not lie"* — and the damage is the
+ordinary silent-wrong-values kind: a stride, `GetMem`, `Move` or `FillChar`
+sized from it is two bytes too long per element.
+
+Moved `float/` → `backlog/`. This is the F charter working as designed rather
+than an exception to it: **rank the mechanism, never the datatype.** The
+mechanism is a two-table disagreement producing a wrong constant; the `Extended`
+content is incidental, exactly as it was when the same defect on the `Real` arm
+was fixed as an ordinary bug.
+
+**Scope, unchanged and small:** `pasparser_lval.inc:6417`, `extended` ->
+`tyDouble`, plus the audit the Suggested fix already asks for — check `valreal`,
+`tdatetime` and `currency` in that same table against `BuiltinScalarTypeKind`
+rather than assuming them. Note this also makes `tyExtended` genuinely dead
+(`:6417` is its only producer compiler-wide, measured 2026-08-30), which is the
+clean starting position if the cluster is ever revived.

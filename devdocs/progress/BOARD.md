@@ -69,7 +69,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (387)
+## backlog (388)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -194,6 +194,7 @@ _none_
 | bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out | P | 35 | bug | ParseFactorCore's carve-out to PyParseFactorCore is partial: 36 NilPy diagnostics remain on the Pascal arm and 10 exist verbatim on BOTH arms, so a correction to one of them lands on one arm and silently leaves the other stale. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
+| bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered | P | 55 | bug | The address of a virtual class method cannot be lowered (`AN_CLASS_VIRTUAL_CALL`, kind 88) | — |
 | bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body | P | 55 | bug | The rtl-generics corpus wall, as of binary d5a35c8de13a: `unknown type: TKey` raised while replaying a `TList<T>` method body, where `TKey` is not a parameter of `TList<T>` and the surrounding tokens still show `SizeOf(T)` with `T` un-substituted. Symptom recorded from a measurement; the mechanism is NOT diagnosed and the obvious story (a body replayed against another template's parameter set) is a hypothesis only. Unmoved by the cross-unit interface-splice fix — it fires before splice placement can matter, so it is the thing actually holding `uses Generics.Collections`. | — |
@@ -565,7 +566,7 @@ _none_
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 | meta-fpc-error-reporting-parity-cluster | U | 10 | meta | Parking lot for the whole FPC error-REPORTING parity cluster: the SEGV default, stack overflow's 202, --mimic-fpc not implying the --fpc-*-errors flags, tier-2 catchable EAccessViolation, and the per-arch gap. All low prio by the recorded principle that a strict flag governs compilation, not death. NOT in scope: emitted nil checks, which are language-level catchability and stay ranked. | — |
 
-## float (24)
+## float (23)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -577,7 +578,6 @@ _none_
 | bug-nilpy-complex-pow-is-a-few-ulp-off-cpython | B+F | 20 | bug | `(-8) ** (1/3)` answers a complex now, but its imaginary part is 5 ulp low: pylib cannot `uses math`, so complex pow rides hand-rolled sqrt/sin/cos beside PyMathLn/PyMathExp. Every other line of the complex oracle matches CPython exactly. | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N+F | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-float-power-is-a-ulp-off-the-rtl-already-has-the-fix | B+F | 20 | bug | NilPy's `**` with a fractional exponent still uses exp(y*ln(x)), so 2**0.5 != math.sqrt(2); lib/rtl/math.pas's Power was fixed with a double-double kernel for exactly these cases and names 2^0.5 in its own comment | — |
-| bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P+F | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | compat-pascal-a-whole-valued-double-variant-writes-a-trailing-point-zero | P+F | 20 | compat | `writeln(v)` on a Variant holding a whole-valued Double prints `15.0` where FPC prints `15`. Rendering only — the value is right, and the same Double in a plain variable renders identically to FPC. Float FORMATTING, so it parks here. | — |
 | compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags | A+F | 30 | compat | FPC unmasks the FP exceptions every ISA leaves masked: 1/0 is a runtime error there and Inf here, and Floor(1e30) raises EInvalidOp where pxx now saturates. Decided that pxx keeps IEEE masked semantics by default and FPC's behaviour goes behind opt-in flags — TWO of them, because div-by-zero -> runtime error 208 is nearly free (an FPU control word bit) while Floor raising EInvalidOp costs sysutils, +127 KB code and +33 KB bss on every `uses math` program. | — |
 | decide-default-float-output-format-and-constant-precision | U+F | 10 | decide | decide: should WriteLn's default float format follow the STATIC type, and should untyped float constants evaluate at Single precision? | — |
@@ -823,6 +823,7 @@ _none_
 - [p 65] [A] bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
+- [p 65] [P] bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
