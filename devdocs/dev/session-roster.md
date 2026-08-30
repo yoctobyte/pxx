@@ -22057,3 +22057,64 @@ terminates and matches gcc; an absent header still gives the correct not-found
 diagnostic. `/usr/include/sys/` does not exist on this box, so the suspect is
 host-fallback **resolution** — and the first move recorded in the ticket is to
 *print what the fallback resolves it to*, not to read the header.
+
+## A carrier and its reader are ONE change — and entity-shaped matrices have an entity-shaped blind spot
+
+frankwasm, 2026-08-30. Two generalisations from one miss, both of which outlive
+the UTF-16 campaign entirely. This is the fourth instance of the day's dominant
+family and the first where **the same hand wrote both halves**.
+
+7c wired the width conversion into assignment, concat and `Write` — and **not into
+call arguments.** `TakesWide(narrowStr)` handed the callee UTF-8 bytes that
+`Length` then halved (`café` arriving as two units of mojibake);
+`TakesNarrow(wideStr)` handed over raw UTF-16 that `Write` emitted as eight bytes.
+Both silent. The carrier it needed is `ProcParamStrElemTk`, **which frankwasm had
+added itself in 6c-params for exactly this**, then shipped 7c without reading.
+
+### 1. A carrier and its reader are one change
+
+> Split across two steps, the gap is invisible **from both sides** — the writer
+> sees a slot correctly filled, and the reader does not exist to be missing.
+
+That is why "check your carriers" is the wrong lesson: there is nothing to check.
+Both halves are individually correct and complete. The defect exists only in the
+join, which no review of either file can see. Practical form: **do not land a
+carrier in a commit that has no consumer of it**, and if the campaign's step
+numbering separates them, renumber the campaign.
+
+### 2. Entity-shaped test matrices have an entity-shaped blind spot
+
+The 7c matrix was six carriers, both concat orders, both round-trip directions —
+and **no parameter**. It was built from the **entities** that hold a width:
+variable, alias, field, array element, function result, pointee. **An argument is
+not an entity, it is a POSITION**, and positions were an axis never enumerated.
+
+The generalisation: a test matrix inherits the shape of whatever list it was
+derived from, and is systematically blind to every axis that list does not
+express. When a matrix is built from a taxonomy, **ask what the taxonomy is a
+taxonomy of** — and enumerate at least one other axis before trusting it.
+
+### 3. Third instance: an ASCII corpus cannot see a width bug
+
+`UTF8Encode`/`UTF8Decode` were documented as the identity and survived that way
+for a long time, because **on ASCII a UTF-8 byte count and a UTF-16 unit count are
+the same number.** Same blind spot as 7c's index bug (stride right, load width
+wrong, correct on every ASCII string because a BMP unit's low byte *is* the
+character on little-endian) and the same reason 7c's own six-carrier test is
+deliberately ASCII and needs the surrogate test beside it.
+
+The fix's `.expected` is an FPC 3.2.2 oracle byte for byte with **non-ASCII on
+purpose** — unit values `99 97 102 233`. An ASCII-only oracle would have passed
+the identity it was written to replace.
+
+### Two smaller calls worth keeping
+
+**Value parameters only.** A `var` parameter binds the variable, so converting
+would hand the callee a temp and silently drop the write-back — a width mismatch
+there is a **type error, not a conversion**, which is FPC's answer too.
+
+**The sysutils bodies did not change.** The entire conversion is in the two
+signatures, because `Result := s` across a width boundary lowers to the runtime
+transcoders by 7c's own rule. **One transcoder in this compiler, and it is in the
+runtime.** Writing the loop out by hand in the RTL would have been the second
+implementation, and the second one is the one that stays broken.
