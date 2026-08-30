@@ -692,6 +692,46 @@ begin
             ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
 end;
 
+{ Would CALLING this method already produce the method pointer the context
+  wants? Then it is a CALL, not a reference, and TryParseParenlessMethodRef must
+  stand down.
+
+  This is Delphi's extended-syntax rule, and it is the only thing separating the
+  two readings of a bare routine name in a context that wants a procedural
+  value: the routine is CALLED when its result fits the target, and ADDRESSED
+  when it does not. Every caller of the helper has already established that a
+  METHOD POINTER is wanted, so "fits the target" is exactly "returns a method
+  pointer" -- no other result type is assignable there, so no other result type
+  changes the reading.
+
+  Measured against FPC 3.2.2, which calls in both spellings:
+
+    function TSvc.Handler: TSel;              { parameterless, returns TSel }
+    t := Self.Handler;   -> FPC CALLS Handler
+    t := Handler;        -> FPC CALLS Handler
+
+  pxx took Handler's ADDRESS on the dotted spelling, stored a {Code, Data} pair
+  built from the wrong routine, compiled clean, and SIGSEGV'd on the first call
+  through `t`. That is the same failure shape as
+  bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults, one construct
+  further on, and it is why this test lives in the helper rather than in the arm
+  that happened to need it: all three receiver spellings reach it.
+
+  A method that REQUIRES arguments cannot be the call reading -- there are no
+  arguments here, the `(` case exits earlier -- so it stays a reference.
+  ParamCount includes the hidden Self. }
+function MethodResultSatisfiesTarget(mmi: Integer): Boolean;
+var mpi: Integer;
+begin
+  Result := False;
+  if MethodPtrRecId = REC_NONE then Exit;
+  mpi := UMthProc_[mmi];
+  if (mpi < 0) or (mpi >= ProcCount) then Exit;
+  if not Procs[mpi].IsFunc then Exit;
+  if Procs[mpi].ParamCount > 1 then Exit;
+  Result := (Procs[mpi].RetType = tyRecord) and (ProcRetRecId[mpi] = MethodPtrRecId);
+end;
+
 { `obj.M` / `TClass.M` with no `@` and no argument list, read as a method
   REFERENCE rather than a call.
 
@@ -728,6 +768,51 @@ begin
   if not DelphiMode then Exit;
   if CurTok.Kind <> tkIdent then Exit;
   if TokPos + 2 >= TokCount then Exit;
+
+  { NO RECEIVER AT ALL -- a bare method name inside the class's own method,
+    `TSel(Pick)`. Same concept as the two dotted spellings and the same node:
+    the receiver is the implicit `Self`, which is an ordinary symbol in scope
+    here, so this arm resolves it and then joins the instance-variable path
+    unchanged rather than growing a third construction.
+
+    Two guards make it safe to try before the dot test. A name that IS a symbol
+    in scope is a variable and shadows the method, so it is not this shape --
+    and that check runs FIRST, which is what keeps a local named after a method
+    reading as the local. A following `(` is an argument list, i.e. a real call.
+    Everything else falls through to the dotted arms untouched, with no tokens
+    consumed.
+
+    A class method's `Self` is the metaclass and its symbol carries REC_NONE, so
+    it fails the class test below and exits -- the metaclass receiver is the
+    separate arm C, which needs a sym-level predicate split out of
+    NodeMetaclassCi and is a Track A change.
+    bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings }
+  if (Tokens[TokPos].Kind <> tkDot) and (Tokens[TokPos].Kind <> tkLParen) and
+     (FindSym(CurTok.SVal) < 0) then
+  begin
+    rsym := FindSym('Self');
+    if rsym < 0 then Exit;
+    if Syms[rsym].RecName < REC_UCLASS_BASE then Exit;
+    if UClsIsRecord[Syms[rsym].RecName - REC_UCLASS_BASE] then Exit;
+    rci := Syms[rsym].RecName - REC_UCLASS_BASE;
+    rmmi := FindUMeth(rci, CurTok.SVal);
+    if rmmi < 0 then Exit;
+    if MethodResultSatisfiesTarget(rmmi) then Exit;
+
+    { committed }
+    opNode := AllocNode(AN_IDENT);
+    ASTIVal[opNode] := rsym;
+    ASTTk[opNode] := Ord(tyClass);
+    refNode := AllocNode(AN_METHODREF);
+    ASTIVal[refNode] := UMthProc_[rmmi];
+    ASTLeft[refNode] := opNode;
+    ASTRight[refNode] := UMthVirSlot[rmmi];
+    ASTTk[refNode] := Ord(tyRecord);
+    Next;   { consume the method name; there was no receiver to consume }
+    Result := refNode;
+    Exit;
+  end;
+
   if Tokens[TokPos].Kind <> tkDot then Exit;
   if Tokens[TokPos + 1].Kind <> tkIdent then Exit;
   if Tokens[TokPos + 2].Kind = tkLParen then Exit;   { an argument list: a CALL }
@@ -746,6 +831,7 @@ begin
 
   rmmi := FindUMeth(rci, GetTokenStr(TokPos + 1));
   if rmmi < 0 then Exit;
+  if MethodResultSatisfiesTarget(rmmi) then Exit;
 
   { committed: nothing below can fail, so no tokens are consumed speculatively }
   if rsym >= 0 then

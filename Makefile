@@ -2744,6 +2744,18 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_method_pointer_cast.pas $(TESTTMP)/test_method_ptr_cast26
 	@$(TESTTMP)/test_method_ptr_cast26 | diff -u test/test_method_pointer_cast.expected - \
 	  || { echo 'test_method_pointer_cast: FAIL - a method-pointer cast lost its reference reading'; exit 1; }
+	@# TWO HALVES OF ONE DECISION, previously answered in three places. (1) The
+	@# BARE receiver -- a method named with no receiver inside its own class,
+	@# `t := Pick` / `TSel(Pick)` -- fell through to the call path and was rejected;
+	@# FPC accepts it. (2) The CALL READING: `t := Self.Handler` on a parameterless
+	@# `function Handler: TSel` took Handler's ADDRESS, compiled clean and SIGSEGV'd,
+	@# where FPC calls it (pre-existing on pinned, not a regression). The assignment
+	@# site carried its own copies of the two receiver arms and so had to be fixed
+	@# twice; it now asks TryParseParenlessMethodRef like the cast site does, which
+	@# is why every row is tested in BOTH contexts. Oracle: FPC.
+	@./$(COMPILER) test/test_method_pointer_bare_receiver_and_call_reading.pas $(TESTTMP)/test_mpbare26
+	@$(TESTTMP)/test_mpbare26 | diff -u test/test_method_pointer_bare_receiver_and_call_reading.expected - \
+	  || { echo 'test_method_pointer_bare_receiver_and_call_reading: FAIL - a bare method receiver or the call-vs-reference rule'; exit 1; }
 	@# A method may be NAMED `Default` -- rtl-generics' central idiom, and a
 	@# collision with nothing to do with generics. Exercises the property
 	@# `default` MODIFIER alongside it, since that is what a too-eager fix breaks.

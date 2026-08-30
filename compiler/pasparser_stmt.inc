@@ -4561,7 +4561,7 @@ end;
 
 function ParseStatementAST: Integer;
 var
-  smmiS, pvSig, pvTarget, smSelfNode, fanSym: Integer;
+  smmiS, pvSig, pvTarget, smSelfNode, fanSym, mrefNode: Integer;
   pvIsMeth: Boolean;
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
@@ -6851,70 +6851,34 @@ begin
                   ParseExpr path. }
                 argIdx := -1;
                 if (CurTok.Kind = tkIdent) then argIdx := FindSym(CurTok.SVal);
-                if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
-                   (Syms[idx].TypeKind = tyRecord) and (argIdx >= 0) and
-                   (Syms[argIdx].RecName >= REC_UCLASS_BASE) and
-                   (not UClsIsRecord[Syms[argIdx].RecName - REC_UCLASS_BASE]) and
-                   (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
-                   (Tokens[TokPos+2].Kind <> tkLParen) and
-                   (FindUMeth(Syms[argIdx].RecName - REC_UCLASS_BASE, GetTokenStr(TokPos+1)) >= 0) then
-                begin
-                  { Delphi @-optional METHOD pointer: `p := obj.M` (no `@`) == `@obj.M`,
-                    where p is a method-pointer lvalue (`procedure(...) of object`,
-                    a 16-byte {Code,Data} record so TypeKind = tyRecord). Builds the
-                    same AN_METHODREF the `@obj.M` path emits; AN_ASSIGN writes the
-                    two pointers into the TMethod target. }
-                  smci := Syms[argIdx].RecName - REC_UCLASS_BASE;
-                  smmii := FindUMeth(smci, GetTokenStr(TokPos+1));
-                  Next; Next;   { consume obj name and '.'; CurTok = method name }
-                  opNode := AllocNode(AN_IDENT);
-                  ASTIVal[opNode] := argIdx;
-                  ASTTk[opNode] := Ord(tyClass);
-                  CurASTNode := AllocNode(AN_METHODREF);
-                  ASTIVal[CurASTNode] := UMthProc_[smmii];
-                  ASTLeft[CurASTNode] := opNode;
-                  ASTRight[CurASTNode] := UMthVirSlot[smmii];   { VMT slot (>=0 virtual) }
-                  ASTTk[CurASTNode] := Ord(tyRecord);
-                  LastExprTk := tyRecord;
-                  Next;   { consume method name }
-                end
-                else if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
-                   (Syms[idx].TypeKind = tyRecord) and (CurTok.Kind = tkIdent) and
-                   (argIdx < 0) and (FindUClass(CurTok.SVal) >= 0) and
-                   (not UClsIsRecord[FindUClass(CurTok.SVal)]) and
-                   (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
-                   (Tokens[TokPos+2].Kind <> tkLParen) and
-                   (FindUMeth(FindUClass(CurTok.SVal), GetTokenStr(TokPos+1)) >= 0) then
-                begin
-                  { ...and the CLASS receiver twin: `p := TSvc.ClassMethod`, where
-                    the receiver names a TYPE rather than a variable. The arm above
-                    opens with FindSym, which resolves a variable only, so a class
-                    receiver fell through here to the ordinary expression path and
-                    was parsed as a CALL -- `TSvc.CPick` was invoked with the class
-                    as its hidden self and the returned Int64 stored into the
-                    16-byte method-pointer target. Calling it then jumped to that
-                    integer. Compiled clean, SIGSEGV at run time.
+                { Delphi @-optional METHOD pointer: `p := obj.M` (no `@`) == `@obj.M`,
+                  where p is a method-pointer lvalue (`procedure(...) of object`, a
+                  16-byte {Code,Data} record, so TypeKind = tyRecord). The LHS is
+                  the whole context: it is what makes the RHS a REFERENCE and not
+                  a call, exactly as a cast to a method-pointer type is on the
+                  other side.
 
-                    Self for a class method is the metaclass (AN_CLASSREF, the RTTI
-                    blob pointer) -- the same self node GenMakeStaticMethodCall
-                    passes -- so AN_ASSIGN's Data half needs no special case: it
-                    already stores IRLowerAST(ASTLeft). The virtual half is handled
-                    in IRMethodRefCode, which must read the blob's VMT at +24
-                    rather than dereferencing [Self+0].
-                    bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
-                  smci := FindUClass(CurTok.SVal);
-                  smmii := FindUMeth(smci, GetTokenStr(TokPos+1));
-                  Next; Next;   { consume class name and '.'; CurTok = method name }
-                  opNode := AllocNode(AN_CLASSREF);
-                  ASTIVal[opNode] := smci;
-                  ASTTk[opNode] := Ord(tyPointer);
-                  CurASTNode := AllocNode(AN_METHODREF);
-                  ASTIVal[CurASTNode] := UMthProc_[smmii];
-                  ASTLeft[CurASTNode] := opNode;
-                  ASTRight[CurASTNode] := UMthVirSlot[smmii];   { VMT slot (>=0 virtual) }
-                  ASTTk[CurASTNode] := Ord(tyRecord);
+                  ASKED THROUGH THE ONE HELPER, not re-derived here. This site
+                  carried its own hand-written copies of the instance-variable and
+                  class-name receivers -- two of the four AN_METHODREF
+                  construction sites TryParseParenlessMethodRef's own comment says
+                  to stop and count rather than add to. They have been folded in,
+                  which is what gives this site the two receiver spellings it
+                  never had (a BARE name inside the class's own method, and
+                  whatever arm is added next) and the call-vs-reference rule it
+                  was missing: `t := Self.Handler` on a parameterless
+                  `function Handler: TSel` took Handler's ADDRESS, compiled clean
+                  and SIGSEGV'd, where FPC calls it. See
+                  MethodResultSatisfiesTarget.
+                  bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings }
+                mrefNode := -1;
+                if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
+                   (Syms[idx].TypeKind = tyRecord) then
+                  mrefNode := TryParseParenlessMethodRef;
+                if mrefNode >= 0 then
+                begin
+                  CurASTNode := mrefNode;
                   LastExprTk := tyRecord;
-                  Next;   { consume method name }
                 end
                 else if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
                    (CurTok.Kind = tkIdent) and (argIdx < 0) and

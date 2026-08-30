@@ -83,3 +83,91 @@ Four programs, one per row of the table, each **calling through** the taken
 address rather than only asserting it is non-nil — a wrong pointer is non-nil
 too. Compare against FPC; `tools/fpc_diff_probe.sh` is the oracle. Arms B and D
 must stay green.
+
+
+---
+
+# ARM A DONE. Arm C is what is left, and the table above needs two corrections.
+
+Binary `490a2cfd83a2`, `gate.sh quick` GREEN. Test:
+`test/test_method_pointer_bare_receiver_and_call_reading.pas` (+ `.expected`),
+wired into `test-core`, fails on `pinned` with the recorded error and matches
+FPC at HEAD.
+
+## What landed
+
+**Arm A — bare receiver.** `TryParseParenlessMethodRef` gained a no-receiver arm
+that resolves the implicit `Self` as the ordinary symbol it is and then joins the
+instance-variable path unchanged, so it is one more spelling of the same node
+rather than a fourth construction site. Two guards keep it safe and run BEFORE
+the dot test: a name that IS a symbol in scope is a variable and shadows the
+method (so a local named after a method still reads as the local), and a
+following `(` is an argument list.
+
+**...and the site that had to be fixed twice, which is the real find.** The
+ticket says the decision "lives in one place". It did not. The ASSIGNMENT context
+(`p := obj.M`, `pasparser_stmt.inc`) carried its own hand-written copies of the
+instance-variable and class-name arms — two more of the four AN_METHODREF
+construction sites the helper's own comment says to stop and count. Adding arm A
+to the helper therefore fixed only the CAST context; the assignment context still
+rejected `t := Pick`. Both copies are now deleted and that site asks the helper,
+which is why every row of the new test is exercised in **both** contexts.
+
+**A SEGFAULT fell out of the unification, and it is the more serious half.**
+Folding the arms together exposed that neither site had Delphi's
+call-vs-reference rule:
+
+```pascal
+  function TSvc.Handler: TSel;   { parameterless, RETURNS a method pointer }
+  t := Self.Handler;             { FPC CALLS Handler }
+```
+
+pxx took Handler's **address**, stored a `{Code, Data}` pair built from the wrong
+routine, compiled clean, and **SIGSEGV'd on the first call through `t`** —
+measured on `pinned`, so pre-existing and not a regression. Same failure shape as
+`bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults`, one construct
+further on. The rule now lives in `MethodResultSatisfiesTarget`, **inside the
+helper**, so all three receiver spellings get it rather than the one arm that
+happened to need it: every caller has already established that a method pointer
+is wanted, so "the result fits the target" is exactly "the result IS a method
+pointer", and no other result type changes the reading.
+
+## Two corrections to the table at the top of this ticket
+
+Both found by trying to write the gate this ticket specifies.
+
+1. **`TMethod(TSel(X)).Code` does not compile — for ANY receiver spelling, and
+   never did.** `expected ')' before '.'` on `pinned` and at HEAD. So rows B and
+   D were not measured in the spelling they are written in; they were measured
+   through a variable (`f := TSel(s.Pick); m := TMethod(f)`), which does work.
+   Filed as [[bug-p-a-field-selection-on-a-record-cast-is-not-parsed]].
+2. **Row B is not a valid FPC program as written.** `TSel(TSvc.Pick)` on an
+   INSTANCE method is rejected by FPC — *"Only class methods, class properties
+   and class variables can be referred with class references"*. A class-name
+   receiver has to be exercised against a CLASS method. The class-name arm itself
+   is fine; the row's example is not.
+
+The lesson is small and cheap: **a ticket's example is not measured just because
+its verdict was.** Both rows' verdicts are right about the receiver arms; the
+spellings printed beside them had never been run.
+
+## A third axis, found the same way and NOT part of this ticket
+
+`Result := s.Pick` is refused for **every** receiver spelling, while
+`t := s.Pick; Result := t` works — the implicit `Result` symbol is allocated as a
+plain var with no recorded procedural signature, so the LHS never looks like a
+method-pointer lvalue. That is the LHS spelling, orthogonal to the receiver
+spellings this ticket enumerates, and it lives in result-symbol setup that every
+function in every mode goes through. Filed as
+[[bug-p-result-is-not-a-method-pointer-lvalue]]; the new test uses locals
+throughout and says so in its header.
+
+## Arm C — unchanged, and the recommendation stands
+
+Metaclass VARIABLE receiver (`mc: class of TSvc; TSel(mc.Pick)`). Option (2) from
+the fork above: split a sym-level `SymMetaclassCi(si)` out of `NodeMetaclassCi`'s
+`AN_IDENT` arm in `symtab.inc` and have `NodeMetaclassCi` delegate to it. frankA
+has cleared it with two conditions: `git pull --rebase` immediately before
+writing (that file is under repeated concurrent edit), and verify the `AN_IDENT`
+arm reads nothing off the node but the sym index. Arm A needed no such clearance
+and is done.
