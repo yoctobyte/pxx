@@ -844,3 +844,73 @@ would close it is a deliberate attempt that fails — a wider flag set, or the
 This makes **four dry sittings over 1050 fresh seeds**, which strengthens rather
 than changes sitting 3's conclusion above: keep csmith as a cheap background
 regression net, spend session time on `tools/pasmith.py` instead.
+
+## SITTING 2026-08-30 (frankC) — 443 comparisons, DRY, and the -O3 axis run for the first time
+
+A null batch is a result, so it is reported as one, with its seed range and its
+flag set.
+
+| batch | seeds | csmith args | opts | agreed | skipped | findings |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| A | 1-200 | default | **0,2,3** | 175 | 25 | **0** |
+| B | 40000-40299 | default (full complexity) | **0,2,3** | 268 | 32 | **0** |
+
+Compiler `f2bfbb3c94a5` — a self-host fixedpoint at HEAD `f278ddaca`, converged
+in 1 round, sha distinct from `pinned`, so the binary is the one these sources
+define and not a copied-in seed.
+
+**Seed space 40000+ was unused by any prior sitting** (previous runs took 5000+,
+9000+, 12000+, 20000+, 31000+), so batch B is new ground rather than a re-walk.
+
+### The `-O3` axis, previously listed as open, is now run — and it is clean
+
+The bullet said the harness *"only ran `-O0,-O2` in anger"* and that adding `-O3`
+*"would point the same oracle at Track O's newer passes for free"*. Both batches
+ran `--opts 0,2,3`. **Zero `MISCOMPILE_OPT`** across 443 comparisons.
+
+That is the finding we own outright — a disagreement between our own `-O0` and
+`-O3` needs no oracle and admits no question of who is right — and it is worth
+recording as a negative: Track O's `-O3`-gated passes have no differential
+coverage anywhere else, and now they have 443 programs of it.
+
+### The 25/32 skips are legitimate, checked rather than assumed
+
+`skip (the native validity filter could not build/run it)` is 12.5% of batch A.
+Measured on seed 191: **gcc builds it fine** and the **gcc-built binary does not
+terminate** — still running at 120s against a 15s cap. So these are
+non-terminating csmith programs and skipping them is correct; nothing about pxx
+is being hidden.
+
+Worth stating because the harness gets this right in a way other rungs in this
+repo do not: it reports `175 agreed ... (25 skipped)`, keeping the skip count
+**out of** the pass count. `200 pass` would have been the lie.
+
+### All three named open findings now pass — and NONE of them can be closed
+
+`901`, `1502` (2026-07-13) and `5004` (2026-07-18, the `PXX_COMPILE_FAIL` kind-5
+`AN_BINOP` gap) all pass at HEAD.
+
+**Do not read that as three fixes.** A seed reproduces the same program only
+against an identical generator *and* identical `--csmith-args`; this box runs
+csmith 2.3.0/`30dccd7` and nothing records what produced the July findings, whose
+saved `t.c` files lived in a `/tmp` scratchpad this ticket already notes is gone.
+So each "passes" is equally consistent with *fixed* and with *today's csmith
+emitting a different program for that seed*. The error class still exists as a
+general fallback at `ir.inc:617`.
+
+Filed as `bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix` [T p45] —
+three independent instances, so a format defect rather than bad luck. **The three
+findings above should be marked unverifiable (cause: citation format), not
+closed**, and rediscovered by a future batch if the classes survive.
+
+### Still open after this sitting
+
+- **The residual crash class** — still unestablished. Batch B was full
+  complexity, which is where the ticket says a crasher must come from, and found
+  none in 268 comparisons. That is evidence, not proof: it narrows the class
+  without closing it.
+- **Cross targets** — `--target` is implemented and ready (see the section
+  above); no cross batch run this sitting.
+- **Bitfield LAYOUT** (`sizeof` 12 vs gcc's 8) — structurally invisible to the
+  checksum oracle, so no batch will ever find it. Still unfiled.
+- **Brace elision over rows** — pre-existing, unchanged.

@@ -70,3 +70,86 @@ p30. Nothing is broken now that the refusal is loud, the ESP-IDF path — the on
 with a real consumer — works on both its targets, and the `.asm` path works.
 This is capability, not repair. Raise it the moment something actually needs to
 link a pxx object into an x86-64 build.
+
+## TRIP-WIRE — when this extends to aarch64, an ABI mismatch goes live. frankC, 2026-08-30
+
+Placed here rather than in a Track C ticket because **there is no defect today**;
+it is a hazard that this ticket's own work arms. Whoever generalises the object
+writer for x86-64 is the next person to look at aarch64, and this is what they
+need to know before they do.
+
+### The hazard
+
+On aarch64 a pxx-compiled **C** function's prologue is **positional**, while
+pxx's own external-call path is **AAPCS** (`ir_codegen_aarch64.inc:2985` —
+independent lo/hi counters, `fmov d[hi]` / `fcvt s[hi]`). `cparser.inc`'s aarch64
+param spill mirrors the *Pascal* aarch64 spill rather than AAPCS. Observed by
+frankA while giving the cross targets a real C-convention prologue; measured
+here.
+
+### Why it is inert today — and NOT for the reason it first appears
+
+The tempting summary is *"it only bites where a real C caller calls into
+pxx-compiled C, and there is no such caller."* **That is false and should not be
+recorded.** Real C callers invoke pxx-compiled C on aarch64 today, every time a
+libc callback runs: `qsort`, `bsearch`, `pthread_create`'s start_routine,
+`signal` handlers, `atexit`. The class is reachable. The safety comes from
+somewhere else:
+
+**Positional and AAPCS COINCIDE for all-integer/pointer signatures.** AAPCS
+assigns integers to x0-x7 in order, which *is* positional. They diverge only for
+**mixed int/float** arguments, because that is when AAPCS's independent GP and FP
+counters stop tracking the argument index. No standard libc callback has that
+shape — they take pointers and ints.
+
+So the safety is a property of the **signatures**, not an absence of callers.
+The distinction is the whole reason this note exists: *"nothing can reach it"* is
+falsified the day somebody writes one callback with a `double` in it, and nobody
+re-checks a note that claims nothing can reach it. A condition invites
+re-checking; an absence does not.
+
+### The two conditions that make it live
+
+1. **An aarch64 object writer landing** — then an external toolchain links
+   directly against pxx-compiled aarch64 code, with arbitrary signatures. This
+   ticket is the work that leads there.
+2. **Any callback signature carrying floating-point arguments.**
+
+### Measured, 2026-08-30, compiler `f2bfbb3c94a5`
+
+Route 1 is closed outright today, by the compiler's own refusal:
+
+```
+$ pascal26 --target=aarch64 --emit-obj t.c t.o
+error: --emit-obj: a general relocatable object ... is emitted for
+       --target=xtensa and --target=riscv32; x86-64 emits objects for .asm
+       sources only; i386, arm32 and aarch64 have no object writer
+```
+
+riscv32 emits one fine; x86-64 refuses for general programs, which is this
+ticket. **aarch64 has no object writer at all**, so nothing external can link
+against pxx-compiled aarch64 code by any route.
+
+And the current behaviour is correct, on a function with mixed `int`/`double`
+parameters called three ways — directly, through a function pointer, and via a
+libc callback — run through `tools/run_target.sh` (a bare `qemu-aarch64` on a
+dynamically-linked binary fails with `Could not open
+/lib/ld-linux-aarch64.so.1`, which looks like a red and is not one):
+
+| | aarch64 | gcc oracle |
+| --- | --- | --- |
+| direct | 15.0 | 15.0 |
+| via function pointer | 15.0 | 15.0 |
+| `qsort` callback | 12345 | 12345 |
+
+Self-consistency confirmed, and the libc-callback path confirmed working.
+
+### What to do when you get here
+
+Before extending object emission to aarch64, make `cparser.inc`'s aarch64 param
+spill AAPCS rather than positional — or establish that it already is, since
+frankA's observation was a **reading of the code and not a measurement**, and the
+table above only proves the cases that coincide. The falsifying test is a
+function with mixed int/float parameters called from a *genuinely external* C
+caller, which is precisely what this ticket makes constructible for the first
+time.
