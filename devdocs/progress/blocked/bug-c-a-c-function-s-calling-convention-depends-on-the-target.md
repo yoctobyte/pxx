@@ -308,3 +308,54 @@ fails `flt` today, so the two cannot be the same defect.
 The cross rows stay wired as `test-c-abi-cross`, RED by design, not a dependency
 of `test`. It is the red that A's prerequisite plus this ticket turn green
 together.
+
+## The model this ticket was built on is WRONG, and the fix is now a decision
+
+Everything above is measurement and stands. The *explanation* attached to it
+does not, and a reader arriving here should start at this section.
+
+**`CProgramMode` does not mean "this is a C program".** It means *"the source in
+front of me is C"* — `ParseCUnit` sets it exactly as `ParseCProgram` does, so it
+is True while compiling a C translation unit that a **Pascal** program `uses`.
+frankA found it with a probe on the prologue gate. Verified here independently,
+with no compiler change: a `double`-taking C function called *from other C code
+inside a Pascal-used unit* gives **1000/1000 on all five targets**, which is only
+possible if those call sites and the positional prologue already agree.
+
+Three things follow, and the first two retire earlier text on this page:
+
+1. **The four positional prologue arms are load-bearing, not dead.** Inside C
+   source the call sites choose positional through the seven guards (False
+   there), so caller and callee agree. **Deleting the arms moves only the
+   callee** — which is why the pure-C control is destroyed on three targets and
+   why "both halves" was necessary but not sufficient. It is
+   [[bug-a-a-c-mode-function-took-the-cdecl-call-path-on-aarch64-and-arm32]] run
+   backwards.
+2. **"C-mode call sites take the positional path" was the right observation with
+   the wrong reason.** I read the guards as compensating for a per-TARGET
+   disagreement. They are compensating for a per-SOURCE-LANGUAGE one, and the
+   target table above is the symptom, not the axis.
+3. **The remaining work is a decision, not an implementation.** Filed as
+   [[decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it]]
+   (U, p65): does a C function *always* use the C ABI — one answer everywhere,
+   this ticket's requirement 3, at the cost of changing convention for every pure
+   C program on three targets against a corpus that is self-consistent today — or
+   only when its unit belongs to a Pascal program, which is far smaller and makes
+   the ABI depend on **who included the unit**?
+
+**Working instruction while the user decides** (coordinator): frankA proceeds
+with the provenance gate, the discriminator lands as **one named predicate**, and
+the uniform-C-ABI destination is named in the code. That constraint is
+arm-independent — it is what makes either answer a one-function edit rather than
+a second archaeology pass — which is why it could be adopted before the fork is
+settled. Eight spellings of "is this reached by the C ABI" is how the original
+defect reached strike three.
+
+**Verification assets, unchanged and still the gate:**
+`test/test_c_abi_pascal_caller.pas` (the red), `test/c_abi_pure_c_control.c` (the
+control, green on all five and asserted cross-target by `test-c-abi-cross`), and
+`/tmp/frankC-share/verify-convention.sh`, which builds **both** sides from source
+so the pair is honest, refuses a dirty tree, fails a build that does not print
+`converged after`, and leads its report with the control verdict — because a
+bridge row going green does not offset a control regression: the first says the
+change is incomplete, the second says it is wrong.
