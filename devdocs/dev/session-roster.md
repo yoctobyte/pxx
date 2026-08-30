@@ -18187,3 +18187,52 @@ COUNT, never write "all N"). Widest reach:
   reporting its absence (`readelf --dyn-syms` on a section-header-less `.so`).
 - **128** (frankC) unifying two implementations of one rule **deletes an accidental
   oracle** — their disagreement was a free differential test.
+
+## 2026-08-30 ~04:00 — all eight working; `Lane:` is taking; faces at 131
+
+**Assignments.** frankA → `bug-p-the-delphi-generic-rewrite-injects-specialize-...`
+[P p55] (its own, 11-line repro; parser files verified quiet via `whoholds`).
+frankB → `bug-b-drawimage-discards-pdfgens-error-...` [B p52] (its own; **the double
+case is the deliverable** — drawString/line/rect/circle drop codes identically).
+frankC → C string-literal decay. frankD → doc audit, `docaudit` now runs
+`cites slugs limits targets comments`. frankS → `rtti_reg`, then set/read families;
+38 sources still uncompiled. frankwasm → parked `render_backend`, taking next N.
+pxx-a5 → `chore-t-sweep-for-rows-that-assert-stdout-when-the-subject-is-an-exit-code`
+[T p55]. frank-optimize-b4 → W1, ticket correctly in `working/`.
+
+**`Lane:` ADOPTION IS REAL — 25 of the last 200 commits, from ZERO two hours ago.**
+`Claude-Session:` at 47/200. So the U ticket's "make the trailer mandatory first"
+recommendation is live, not dead — re-measure each tick and say so if it stalls.
+`tools/whoholds.py <file>` before opening anything shared; `--hot` for the
+contended set. Grammar: letters/digits/`_ . -`, leading letter, **no `@`, no
+spaces**, use the name `ListAgents` shows.
+
+**Landed across the fleet this stretch:** `--emit-obj` external-name (five
+hand-rolled copies, ten call sites, **one resolver**), xtensa 69→84 matching with
+zero regressions, `Halt(n)` exiting 0 on hosted xtensa, the C header-body import
+bug, `ImageReader.getSize` returning a real pair, the wrapped-citation guard.
+
+**MY OWN CALLS THIS STRETCH, for audit:**
+- Un-blocked `bug-a-xtensa-write-of-any-real-sigbuses-...` (blocker closed) to
+  **`backlog/`, NOT resolved** — "its blocker is in `done/`" and "the capability
+  works" are different claims. Retirement test in the ticket, plus a warning not to
+  let it absorb the separately-filed float-**width** divergence.
+- **`backlog/` vs `unfinished/` is decided by whether the lane that can do the work
+  is STAFFED.** frankB sent its tkinter ticket to `unfinished/` because ranking it
+  would dispatch work Track B cannot perform (gate is pin advancement); I sent the
+  xtensa one to `backlog/` because S is staffed. Same rule, opposite answers.
+- Ruled frankS's `emit.inc` edits **in scope**: *a grant for a defect covers every
+  arm of that same defect in the same file; it does not cover an adjacent different
+  defect noticed while there.*
+- Approved frankwasm's **handoff** of `render_backend` on its own non-neutrality
+  argument (its remaining suspect is adjacent to work it did the same night).
+
+**Faces 129-131.** **129** the SMALLER number is the one nobody questions — an
+over-reporting check gets triaged within an hour; an under-reporting one is
+*pleasant*, and its silence is indistinguishable from success. **130** (pxx-a5) a
+guard built from the UNION of your cases is blind to their INTERSECTION — 19 guards,
+0 FAIL, on a broken condition, because fixtures are naturally written one property
+each. **131** (frankwasm + frankA, converging independently) **bank what you
+ELIMINATED** — a positive finding is self-preserving because it becomes the fix; a
+negative one evaporates unless written down, and it costs more to produce. An
+exclusion set is also what makes a park honest.
