@@ -1,12 +1,20 @@
 ---
 track: A
-prio: 55
+prio: 25
 type: bug
 blocked-by: []
 summary: "EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target."
 status: new
 owner: ""
 ---
+
+> **Re-priced by the owner, 2026-08-30: WASM IS LOW PRIO FROM NOW ON.** *"it works,
+> it tests our IR, we should be able to compile applications.. for now, that's good
+> enough."* The anchor is met — `pascal26` runs under wasmtime and emits an ELF
+> byte-identical to the native compiler's for the same source. wasm has served its
+> real purpose, which was exercising the IR from a second direction. These tickets
+> stay OPEN and correct; they simply must not outrank ordinary Track A work. Pick
+> them up on request, or when a lane is warm on the files anyway.
 
 # `EmitZeroFrameSlot` has no wasm32 arm
 

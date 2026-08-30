@@ -2,7 +2,7 @@
 slug: feature-a-merge-the-wasm-branch-the-shared-file-arms
 title: "Merge the wasm branch: the ledger of shared-file arms it carries, and the two lanes' gates that apply"
 track: A
-prio: 40
+prio: 20
 type: feature
 blocked-by: []
 status: open
@@ -10,6 +10,14 @@ owner: unassigned
 created: 2026-08-28
 summary: "Branch `wasm` modifies four existing files: compiler.pas (5 edits), exception_emit.inc (1 arm), ir_codegen.inc (1 arm), and lib/rtl/platform.pas (1 additive constant). The last is Track B and carries B's gate, so the merge review spans two lanes, not one. Nothing on the branch is pre-approved. This ticket is the ledger; the branch's own CHARTER table is not visible from master and was stale."
 ---
+
+> **Re-priced by the owner, 2026-08-30: WASM IS LOW PRIO FROM NOW ON.** *"it works,
+> it tests our IR, we should be able to compile applications.. for now, that's good
+> enough."* The anchor is met — `pascal26` runs under wasmtime and emits an ELF
+> byte-identical to the native compiler's for the same source. wasm has served its
+> real purpose, which was exercising the IR from a second direction. These tickets
+> stay OPEN and correct; they simply must not outrank ordinary Track A work. Pick
+> them up on request, or when a lane is warm on the files anyway.
 
 # Why this ticket exists
 

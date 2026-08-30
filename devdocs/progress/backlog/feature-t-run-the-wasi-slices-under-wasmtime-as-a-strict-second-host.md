@@ -2,7 +2,7 @@
 slug: feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 title: "Run the four WASI slices under wasmtime too — node cannot see a whole class of bug"
 track: A
-prio: 40
+prio: 25
 type: feature
 status: backlog
 owner: ""
@@ -10,6 +10,14 @@ created: 2026-08-30
 found-by: frankwasm (after the u64-alignment bug passed every existing check)
 summary: "Every check in test/wasm/ runs its module under node's WASI, which does not enforce the pointer alignment WASI preview1 requires of u64 out-params. Measured: with that defect reinstated, the align slice prints every expected line under node and exits 0, and traps under wasmtime before its first line. check_align.sh now covers the specific calls, but the four general WASI slices — sysio, loadfile, pal, wasi — still run under the lenient host only, so the class stays invisible wherever they are the coverage."
 ---
+
+> **Re-priced by the owner, 2026-08-30: WASM IS LOW PRIO FROM NOW ON.** *"it works,
+> it tests our IR, we should be able to compile applications.. for now, that's good
+> enough."* The anchor is met — `pascal26` runs under wasmtime and emits an ELF
+> byte-identical to the native compiler's for the same source. wasm has served its
+> real purpose, which was exercising the IR from a second direction. These tickets
+> stay OPEN and correct; they simply must not outrank ordinary Track A work. Pick
+> them up on request, or when a lane is warm on the files anyway.
 
 # The gap
 

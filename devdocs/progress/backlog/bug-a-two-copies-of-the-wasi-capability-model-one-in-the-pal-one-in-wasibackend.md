@@ -2,7 +2,7 @@
 slug: bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend
 title: "Two copies of the WASI capability model: the PAL's and wasibackend's, and the promised de-duplication was never filed"
 track: A
-prio: 50
+prio: 25
 type: bug
 status: backlog
 owner: ""
@@ -10,6 +10,14 @@ created: 2026-08-30
 found-by: frankwasm (closing feature-a-wasm32-sys-intrinsics-and-ir-syscall-lowering)
 summary: "compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it."
 ---
+
+> **Re-priced by the owner, 2026-08-30: WASM IS LOW PRIO FROM NOW ON.** *"it works,
+> it tests our IR, we should be able to compile applications.. for now, that's good
+> enough."* The anchor is met — `pascal26` runs under wasmtime and emits an ELF
+> byte-identical to the native compiler's for the same source. wasm has served its
+> real purpose, which was exercising the IR from a second direction. These tickets
+> stay OPEN and correct; they simply must not outrank ordinary Track A work. Pick
+> them up on request, or when a lane is warm on the files anyway.
 
 > ## UNBLOCKED AND RESCOPED, 2026-08-30 — the answer is a TEST, not a de-duplication.
 >

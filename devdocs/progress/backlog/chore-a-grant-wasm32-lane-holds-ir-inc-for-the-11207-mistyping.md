@@ -3,11 +3,19 @@ slug: chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping
 title: "GRANT: the wasm32 lane holds compiler/ir.inc for the 11207 retain/release mistyping"
 track: A
 type: chore
-prio: 40
+prio: 20
 status: backlog
 found: 2026-08-29
 found-by: frank-coordinator
 ---
+
+> **Re-priced by the owner, 2026-08-30: WASM IS LOW PRIO FROM NOW ON.** *"it works,
+> it tests our IR, we should be able to compile applications.. for now, that's good
+> enough."* The anchor is met — `pascal26` runs under wasmtime and emits an ELF
+> byte-identical to the native compiler's for the same source. wasm has served its
+> real purpose, which was exercising the IR from a second direction. These tickets
+> stay OPEN and correct; they simply must not outrank ordinary Track A work. Pick
+> them up on request, or when a lane is warm on the files anyway.
 
 # Grant: frankwasm holds `compiler/ir.inc` for the `:11207` mistyping fix
 

@@ -2,7 +2,7 @@
 slug: decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner
 title: "The WASI capability model exists twice. Unifying it means a layering call only the owner can make."
 track: U
-prio: 50
+prio: 25
 type: decide
 status-note: "REOPENED 2026-08-30 within hours of being decided — see EVIDENCE AGAINST THE RESOLUTION. Previously: DECIDED 2026-08-30 by the owner's standing constraint, derived by the coordinator and confirmed by measurement. Answer: C -- keep both copies deliberately, guard the drift with a differential test. Do NOT invert the layering."
 blocked-by: []
@@ -12,6 +12,14 @@ created: 2026-08-30
 found-by: frankwasm (measured the options), filed by frank-coordinator (escalating the fork)
 summary: "compiler/builtin/wasibackend.pas and lib/rtl/platform/wasi/platform_backend.pas each carry their own preopen table and rights logic. Both work, so nothing is red -- and a duplicated CAPABILITY model fails silently, as one path opening files the other refuses with ENOTCAPABLE. De-duplicating is not a typing job: a shared include double-defines when both units co-occur in one program, wasibackend cannot use the PAL by design, and the remaining direction points a lib/rtl unit at compiler/builtin, backwards from every other dependency in the tree. That is a layering call, not an implementation detail."
 ---
+
+> **Re-priced by the owner, 2026-08-30: WASM IS LOW PRIO FROM NOW ON.** *"it works,
+> it tests our IR, we should be able to compile applications.. for now, that's good
+> enough."* The anchor is met — `pascal26` runs under wasmtime and emits an ELF
+> byte-identical to the native compiler's for the same source. wasm has served its
+> real purpose, which was exercising the IR from a second direction. These tickets
+> stay OPEN and correct; they simply must not outrank ordinary Track A work. Pick
+> them up on request, or when a lane is warm on the files anyway.
 
 > ## RESOLUTION, 2026-08-30 — **C. Keep both copies; guard the drift with a test.**
 >
