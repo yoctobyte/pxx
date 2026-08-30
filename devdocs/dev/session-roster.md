@@ -20397,3 +20397,85 @@ to a change that landed this morning. None of it is in the pin gate's path
 (`gate.sh quick` + `stabilize-fast`), so a pin CAN proceed. **It should not proceed
 without the owner being told this**, which is the correction my last two state
 reports needed.
+
+## CAUSATION CONFIRMED, AND IT INVERTS MY FRAMING — the checks were never there
+
+frank-user ran the falsifier I wrote into the six tickets. **`pinned` rejects all
+six, HEAD accepts all six** — so the link to `d23f52948` is established. And the
+mechanism is the opposite of what I proposed.
+
+I wrote that the constraint checker *"lost the information it decides on"*. **There
+has never been a constraint checker.** Verified here in the source rather than
+taken on report — `compiler/pasparser_generic.inc`:
+
+```pascal
+if Eat(tkColon) then
+  while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkGt) and
+        (CurTok.Kind <> tkEOF) do
+    Next;   { skip the constraint list }
+```
+
+`T: class`, `T: record`, `T: constructor`, `T: <class>`, `T: <interface>` — parsed
+to keep the parse moving, **recorded nowhere**. Filed as
+`bug-p-generic-type-constraints-are-parsed-and-discarded` [P p70]; the six shard
+tickets are closed into it as six views of one defect.
+
+### WHY THE TESTS WERE GREEN, AND IT IS THE SHARPEST THING TODAY
+
+`ugenconstraints.pas:65` is `TTestObject1 = object`. Under `pinned` that
+declaration **did not parse** —
+
+```
+pascal26:67: error: unexpected token in a unit interface section: it starts no
+                    declaration (a mistyped section header?)
+  in: ugenconstraints.pas
+```
+
+— so **every test importing the unit failed to compile, and a `{ %FAIL }` test
+that fails to compile reports PASS.** They were green for a reason unconnected to
+what they test. `d23f52948` made the unit parse and removed the barrier; what
+stood behind it was nothing.
+
+> **A conformance test that passes because the file it depends on will not compile
+> is not passing, and nothing in the output distinguishes the two.**
+
+This is face 222's family with a new instance — not a test wired to nothing, but a
+test whose *dependency* died upstream. And it is the **second instance today**:
+`generics.collections:146` hid `:120` exactly this way. **Both were found by
+comparing two binaries, which is the only thing that distinguishes them.**
+
+### THREE CORRECTIONS TO MY NUMBERS, ALL IN THE DIRECTION OF WORSE
+
+1. **The six is a shard artefact.** Measured across the corpus: **35 of 35**
+   FAIL-marked tests using `ugenconstraints` are wrongly accepted on HEAD. My
+   "4 → 10" undercounts by construction — I counted *shards*, which is the unit
+   the runner reports, not the unit the defect has.
+2. **My two disconfirming cases were EXPLAINED, not dismissed.** `tgenconstraint21`
+   and `27` name no `object`, and leading with them was right — they never reached
+   their own constraint, because the unit they import died at line 65. That is why
+   they moved with the other four. *"There may be two causes"* was the correct
+   hypothesis to hold until measured, and the correct thing to write into a ticket
+   I was not going to work.
+3. **The classification call was right for the right reason.** The compat table's
+   *"we accept a form FPC rejects → not a defect"* row is about **deliberate**
+   dialect choices; this is a check that was never written, so it is the
+   silent-wrong-behaviour escape. My instinct that a checker falling through to
+   accept differs in kind from a decided laxness held — there was simply no checker
+   to fall through.
+
+### THE PIN CONSEQUENCE FLIPS: NOT A REVERT CANDIDATE
+
+Reverting `d23f52948` restores green on all 35 **by restoring a FALSE green**, and
+re-breaks real Pascal source (`generics.collections`). **These reds are the first
+accurate report this suite has ever given about constraint checking.**
+
+So the line I gave the owner — *"a pin would bless a master carrying a same-day
+regression"* — was wrong in its most important word. **There is no new breakage.
+There is newly visible absence.** Master's full tier should be read as ~35 latent,
+not 10, and none of it was introduced today; the change that exposed it also fixed
+a real wall. A pin blesses a compiler that is strictly better than the pinned one
+on this axis and merely honest about a gap that predates it.
+
+frank-user is **not starting the fix** — five constraint forms, combinable,
+per-parameter storage, a real feature rather than a patch — and holds the T → P
+re-lane.
