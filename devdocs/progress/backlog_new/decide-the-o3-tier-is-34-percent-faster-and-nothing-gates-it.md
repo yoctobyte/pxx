@@ -68,7 +68,14 @@ what the RTL and the compiler are made of and what a 3-op arithmetic function is
 not. I had this backwards for one measurement and it is an easy mistake to
 repeat: a microbenchmark that shows nothing here is not evidence of nothing.
 
-### What `-O3` actually changes in the emitted code
+### What `-O3` changes in the emitted code — CORRELATION ONLY, see the correction below
+
+**CORRECTED 2026-08-30, same session, before this ticket was acted on.** The
+counts in this section are real and were measured correctly. The sentence that
+followed them — that this code-shape improvement *is* the win — was an
+assertion I could not then demonstrate, and attempting to demonstrate it
+falsified it. Read this section as "what differs", never as "why it is faster".
+The attribution attempt is in "Why no pass can be named" below.
 
 Statically, on one NilPy binary:
 
@@ -78,13 +85,56 @@ Statically, on one NilPy binary:
 | `push %rax` | 15,249 | **11,342** |
 | `rep stosb` / `rep movsb` | 1457 / 1492 | 1457 / 1492 (unchanged) |
 
-The hot RTL routines at `-O2` spend **twelve instructions and three stack
-round-trips on `if p = nil`** — load the param, `push`, a 10-byte `movabs $0`,
+The hot RTL routines at `-O2` spend twelve instructions and three stack
+round-trips on `if p = nil` — load the param, `push`, a 10-byte `movabs $0`,
 `mov`, `pop`, `cmp`, `sete`, `movzbq`, store the bool to a stack slot, reload it,
-`test`, `je`. Sampling a NilPy call benchmark (700 samples) put **~55% of total
-runtime in routines shaped exactly like that**, which also explains the uforth
-profile's "134 routines, no peak": the cost is flat because *every* routine is
-built this way, so no single one stands out.
+`test`, `je`. Sampling a NilPy call benchmark (700 samples) put ~55% of total runtime in
+routines shaped like that. That the profile is flat — the uforth ticket's "134
+routines, no peak" — is consistent with a uniform baseline cost, but consistency
+is not attribution and I stopped calling it one.
+
+## Why no pass can be named — the attribution attempt, which failed
+
+`CLAUDE.md`'s promotion policy is per-pass, so the obvious next step was to find
+which pass earns the 34%. I promoted each `-O3` gate group to `-O2`, rebuilt the
+compiler (each reached a self-host fixedpoint), and measured. **Every group,
+individually, gives nothing:**
+
+| promoted to `-O2` | vs `-O2` |
+| --- | ---: |
+| `ir_codegen.inc`, all 16 gates (W1/W2 scratch-register passes) | -6% (noise) |
+| `ir.inc`, the inlining gates | 0% |
+| `inline_expand.inc`, the 2c inline slices | 0% |
+| `symtab.inc`, resident-slot dual-write elimination | -3% (noise) |
+| dead-code elimination alone (`-O2 --dce`; a flag exists, no patch needed) | **0%** |
+| every gate at once | 12% |
+| `-O3 --no-dce` | **26%** |
+
+Two things follow, and the second is the important one.
+
+**DCE is not the cause.** `-O3` turns DCE on (`compiler.pas:1689`) and the `-O3`
+binary is 3.3% smaller, which made it the natural second hypothesis after the
+scratch-register passes died. `-O2 --dce` is flat and `-O3 --no-dce` keeps the
+entire win. Both halves of that check matter; either alone would have been
+suggestive rather than decisive.
+
+**Promoting every gate at once recovers only half the win, and produces a
+DIFFERENT binary from the `-O3` one.** (Their file sizes match, but that is page
+rounding — the bytes differ.) So a discriminator between `-O2` and `-O3` exists
+that is not any `OptLevel` comparison I can find in `compiler/**`. Until it is
+found, **nobody should claim to know why `-O3` is faster.**
+
+### What this does to the options
+
+It weakens option 1 and strengthens option 2. **If no individual pass reproduces
+the win, per-pass promotion may never deliver it** — each promotion would gate a
+change that measures as zero, and the 34% would stay unclaimed through the whole
+campaign. Gating the tier as a whole does not depend on knowing which pass is
+responsible. The recommendation below is unchanged; one of its competitors got
+worse.
+
+Finding the discriminator is worth a session on its own and is the natural
+follow-up whichever option is chosen.
 
 ## Correctness evidence — real, and NOT a substitute for a gate
 
