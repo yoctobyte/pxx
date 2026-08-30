@@ -204,4 +204,4 @@ answer for a file with no `main`. `gate.sh quick` GREEN; self-host fixedpoint
 converged.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 1672aeaad.
