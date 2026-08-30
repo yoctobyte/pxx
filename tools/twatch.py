@@ -4392,6 +4392,69 @@ def guess_track(src):
 STUB_MARKER = "auto-filed by twatch"
 
 
+# Auto-close is sound for a DETERMINISTIC test and unsound for a racy one.
+# Build, run, compare: a pass genuinely refutes the red. For anything whose
+# failure is probabilistic -- threads, sockets, scheduling, allocator order --
+# one green is what a live bug produces most of the time, and the close is not
+# a misfire, it is what the rule yields on that input. It happened:
+# test-threads#src:test/test_sched_reactor_exhaustion.pas was auto-closed TWICE
+# on 2026-08-29 while the defect was live (~12% failure at 24 workers).
+#
+# THE TICKET'S OWN PROPOSED FIX DOES NOT WORK, and that is worth stating rather
+# than half-adopting. It suggested reusing RUN_RETRY_CLASSES -- but that set is
+# {qemu, corpus, conformance, opt}, which is about runtime variance from the
+# ENVIRONMENT (emulation, corpora, big sweeps), not about a test's own
+# concurrency. classify() puts the reactor recipe in `unit`: measured, not
+# assumed. So the class rule would not have caught the very incident that
+# produced the ticket. It is kept below as one arm because it is still right
+# about what it covers -- it is simply not the arm that matters.
+#
+# "N consecutive greens" does not work either, and the arithmetic is the whole
+# argument: at the measured ~12% failure rate, three greens still leaves a 68%
+# chance (0.88**3) the bug is live, and driving that under 5% needs ~24 -- a
+# number no sweep cadence can pay. Absence of a failure is not evidence for a
+# race at any affordable N, so the answer cannot be a bigger N.
+#
+# What DOES discriminate is evidence already in the record, and both arms are
+# free:
+#
+#   * the closing green was itself FLAKY -- the job failed and passed on a
+#     retry IN THIS RUN. That is not an inference about the test, it is the
+#     race firing while we watched. (The field existed in testmgr's result
+#     JSON and was dropped by this publisher until 2026-08-30, which is why
+#     this arm could not have been written before.)
+#   * the stub is a REPEAT. stub_slug_for_filing() opens `<base>-2`, `-3` when
+#     a resolved predecessor exists, so a variant suffix is a structural record
+#     that this job already went red, was closed, and came back. That is the
+#     definition of intermittent-or-never-fixed, it needs no new state, and it
+#     is the arm that catches the reactor case.
+#
+# Refusing is NOT silent and NOT a leak: the ticket is annotated with the green
+# and the reason, so whoever closes it by hand has the evidence rather than an
+# older ticket that simply stopped moving.
+def one_green_cannot_close(base, slug, job_rec):
+    """Why a single green must not auto-close this stub, or None if it may."""
+    if job_rec and job_rec.get("flaky"):
+        return ("the job FAILED and passed on a retry in this very run, so "
+                "this green is the race firing rather than evidence against it")
+    if slug != base:
+        return ("this is a repeat stub (`%s`, not `%s`) — the job already went "
+                "red, was closed, and came back, so one green is the outcome a "
+                "live intermittent bug produces most of the time" % (slug, base))
+    cls = (job_rec or {}).get("cls")
+    if cls in RETRY_CLASSES:
+        return ("the job's class is `%s`, which testmgr treats as runtime-"
+                "nondeterministic (RUN_RETRY_CLASSES) — a single pass does not "
+                "refute a red there" % cls)
+    return None
+
+
+# Mirrors testmgr's RUN_RETRY_CLASSES. Duplicated rather than imported because
+# twatch does not import testmgr, and guarded by
+# tools/twatch_autoclose_race_devtest.py so the copy cannot drift silently.
+RETRY_CLASSES = frozenset({"qemu", "corpus", "conformance", "opt"})
+
+
 def close_stub_tickets(clone, host, closed, sha, report):
     """Face-1 auto-close: retire a stub whose job is green again.
 
@@ -4426,7 +4489,7 @@ def close_stub_tickets(clone, host, closed, sha, report):
     red_srcs = {(j.get("src") or "").strip() for j in report["jobs"]
                 if j.get("status") in ("fail", "timeout")}
     red_srcs.discard("")
-    paths, slugs = [], []
+    paths, slugs, annotated = [], [], []
     for r in closed:
         base = ("regression-cascade-" + (r.get("bad") or "")[:12]
                 if r.get("cascade") else reg_slug(r["job"]))
@@ -4455,6 +4518,29 @@ def close_stub_tickets(clone, host, closed, sha, report):
             print("twatch: %s's job is green, but %s is still red in another "
                   "job — keeping the stub open (it is that source's only "
                   "ticket)" % (slug, m.group(1).strip()), flush=True)
+            continue
+        job_rec = next((j for j in report["jobs"]
+                        if (j.get("sel") or j.get("name")) == r.get("job")
+                        or j.get("name") == r.get("job")), None)
+        why_not = one_green_cannot_close(base, slug, job_rec)
+        if why_not:
+            if sha[:12] in body:
+                print("twatch: %s stays open (%s) — already annotated at %s"
+                      % (slug, why_not.split(" \u2014 ")[0], sha[:12]), flush=True)
+                continue
+            if "\n## Log\n" not in body:
+                body = body.rstrip("\n") + "\n\n## Log\n"
+            body = (body.rstrip("\n") + "\n- %s — the %s watcher saw `%s` GREEN "
+                    "at %s (tier %s) and did NOT close this: %s. The green is "
+                    "recorded because it is evidence and because a ticket that "
+                    "stops moving with no reason reads as forgotten; closing "
+                    "this one is a human's call.\n"
+                    % (utcnow()[:10], host, r.get("job") or slug, sha[:12],
+                       report["tier"], why_not))
+            with open(src, "w") as f:
+                f.write(body)
+            annotated.append((slug, os.path.relpath(src, clone.path)))
+            print("twatch: %s stays open — %s" % (slug, why_not), flush=True)
             continue
         if "\n## Log\n" not in body:
             body = body.rstrip("\n") + "\n\n## Log\n"
@@ -4501,6 +4587,13 @@ def close_stub_tickets(clone, host, closed, sha, report):
         os.unlink(src)
         paths += [os.path.relpath(p, clone.path) for p in (src, dst)]
         slugs.append(slug)
+    if annotated:
+        clone.publish("tstate-ticket(%s): %s green but NOT closed (%s)"
+                      % (host, ", ".join(s for s, _ in annotated),
+                         "race-unsafe on one green"),
+                      paths=[p for _, p in annotated])
+        print("twatch: %d stub(s) green but left open — annotated, not closed"
+              % len(annotated), flush=True)
     if slugs:
         # Both paths go to publish(): `git add -- <gone> <new>` is what records
         # the move; staging only the destination leaves the stub in backlog on
