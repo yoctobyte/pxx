@@ -47,11 +47,10 @@ _none_
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 
-## blocked (8)
+## blocked (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works | A+S | 45 | bug | `Write` of any real SIGBUSes on xtensa — while `Str` of the same value is correct | bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | B+S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | feature-pal-esp-posix-fd-semantics |
 | bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound | N | 60 | bug | `import random` then `random.randint(1,100)` produces the SAME sequence on every run — CPython seeds from OS entropy at import and NilPy never does. PARKED: the fixed seed is DELIBERATE and argued in pylib.pas, so it needs decide-does-nilpy-random-seed-itself-at-import first. | decide-does-nilpy-random-seed-itself-at-import |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | bug-b-reportlab-mimic-multi-font-heap-corruption |
@@ -60,7 +59,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (329)
+## backlog (330)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,6 +94,7 @@ _none_
 | bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 40 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
+| bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works | A+S | 45 | bug | `Write` of any real SIGBUSes on xtensa — while `Str` of the same value is correct | — |
 | bug-b-drawimage-discards-pdfgens-error-and-writes-a-pdf-with-no-image | B | 52 | bug | Canvas.drawImage in lib/pcl/mimic_reportlab_pdfgen.pas calls pdf_add_image_file and throws the return code away. When pdfgen refuses the image -- an unsupported colour type, or today's byte-swapped PNG header -- the PDF is written, saved and reported OK with the image simply absent. The unit's stated policy is loud refusal; this is the one path that is silent. | — |
 | bug-b-seven-of-eight-workarounds-waiting-on-an-open-bug-are-waiting-on-nothing | B | 35 | bug | track-b-workarounds.md's section titled 'Waiting on an open bug' has 8 rows and 7 cite a bug that is now in done/ or rejected/. Four of those seven carry no keep-note, so lib/rtl and lib/pcl are written non-idiomatically for bugs fixed weeks ago -- verified live in the code, not just stale in the ledger. The file's own instruction ('when the listed bug moves to done/, revert the workaround and drop the entry') has not been run, and the section header asserts the opposite of what is true. | — |
 | bug-c-has-include-unsupported-so-pdfgen-selects-big-endian | C | 55 | bug | pxx's C preprocessor does not define `__has_include`, so the vendored pdfgen skips its `#include <endian.h>` probe; its fallback then compares two macros endian.h would have defined -- both absent, so `0 == 0` is true and it selects BIG endian on a little-endian host. `ntoh32` becomes the identity, every 32-bit PNG header field is byte-swapped, and PNG embedding into PDFs silently fails. | — |
@@ -833,6 +833,7 @@ _none_
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-a-static-array-of-promo-ints-releases-only-element-zero
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
+- [p 45] [A+S] bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race

@@ -2,11 +2,33 @@
 track: A+S
 type: bug
 prio: 45
-status: blocked
-blocked-by: [bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot]
+status: open
+blocked-by: []
 found: 2026-08-30
 found-by: frankS
 ---
+
+<!-- UN-BLOCKED 2026-08-30, coordinator. Its only blocker
+`bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot` is CLOSED
+(frankC, one line flooring alignment in the allocator), so this sat in `blocked/`
+with nothing blocking it -- and `ready`/`next` never scan `blocked/`, which makes
+that state invisible to the ranker rather than merely untidy. Flagged by frankB
+via `progress.sh check`'s STALE-EDGE-HIDDEN.
+
+MOVED TO `backlog/`, NOT RESOLVED. frankS measured `test_write_real_frame_align`,
+`test_cross_float_return` and `test_single_in_aggregate` all MATCHING after that
+fix, which strongly suggests the SIGBUS is gone -- but "the blocker is in done/"
+and "the capability works" are different claims, and closing this on someone
+else's adjacent measurement is exactly the filing-decision-as-measurement error
+this board keeps recording. The S lane has hosted xtensa running and can settle it
+in one run.
+
+RETIREMENT TEST: run this ticket's own repro at HEAD. If `Write` of a real no
+longer SIGBUSes, resolve it -- and note that a residual DIFFERENCE is NOT this
+bug: frankC filed
+`bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc`
+for the width divergence that survived the alignment fix. Do not let this ticket
+absorb that one; they have different causes and different lanes of evidence. -->
 
 # `Write` of any real SIGBUSes on xtensa — while `Str` of the same value is correct
 
