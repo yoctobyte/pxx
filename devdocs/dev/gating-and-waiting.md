@@ -132,6 +132,46 @@ and the loop runs forever. This actually happened, twice, and looked exactly lik
 a stuck build. Wait on a marker file or on the job's own exit, not on a pattern
 that your waiting command also matches.
 
+**The trap survives changing the mechanism.** Moving from `pgrep -f` to a
+hand-written `/proc` scanner does not help: any detector whose pattern appears in
+the command that runs it will find itself, and the second implementation feels
+like a fix precisely because it is a different mechanism answering the same wrong
+way. Measured twice in five minutes on 2026-08-30, in two different lanes.
+
+### ...and the log you are told to read instead can be EMPTY (2026-08-30)
+
+The advice above -- *do not ask the process table, read the job's own output* --
+is right, and it has a failure mode that lands exactly when you need it.
+
+**Python block-buffers stdout when it is not a tty.** A long-running tool
+launched in the background, its output redirected to a file, accumulates every
+line in an 8 KB buffer and writes nothing until it exits. Measured: a
+`--minutes 40` fuzz run had **zero lines in its log after an hour**, and would
+have filled in completely the moment the answer stopped mattering.
+
+So the one artifact capable of distinguishing *slow* from *stuck* is empty for
+precisely as long as the question is live. **If you depend on the subject
+emitting, the subject has to be able to emit** -- and buffering is invisible
+interactively, which is the only place anyone would ever notice it missing.
+
+- **Writing a long-running Python tool:** `sys.stdout.reconfigure(line_buffering=True)`
+  before the run starts, and guard it with a test, because it has no local
+  effect. `tools/pasmith_run.py:1056` does this;
+  `tools/pasmith_recheck_units_devtest.py:486` is the guard.
+- **Waiting on someone else's tool:** run it under `python3 -u` or with
+  `PYTHONUNBUFFERED=1` when you control the invocation.
+- **When you control neither:** ask the **workdir**, not the log -- generated
+  artifact count and newest-mtime answer *slow vs stuck* without the subject
+  having to say anything. "196 seeds, newest 1 second old" is a complete answer
+  and needs no cooperation from the process being watched.
+
+The general rule this is an instance of: **ask the subject to emit; do not ask
+the system whether the subject succeeded** -- grep the file for conflict markers
+rather than trusting a resolver's exit status, look for `converged after N
+round(s)` and diff the sha256 rather than trusting `make` to exit 0, which a
+copied-in seed turns into a silent no-op. Each of those has been wrong in this
+repo inside seven days.
+
 ## Match the gate to the situation
 
 `make test` takes roughly three times as long as it looks like it should, because
