@@ -83,6 +83,8 @@ order to read them in. Route by what you are holding:
   eight, and it answers *which hunk* rather than *which commit*
 - `## Ancestry is not existence` -- a behind checkout makes a real commit look
   like a ghost; only `cat-file -t` proves one
+- `## A wrong fact gets challenged. A MISSING fact collides with nothing.` --
+  why a compressed relay is invisible from both ends; give the LOCATION
 - ``## Profile the SHIPPING binary`` -- `-g` alone silently means `-O0`, so
   `make pxx-debug` profiles a different program and says nothing about it
 - `## Reading a NEGATIVE result` -- a change that measures as NO CHANGE is
@@ -1002,6 +1004,45 @@ new instrument**:
 Before building a prober, check whether something already probed. The question
 to ask of a tool that nearly answered you is not *"what else could measure
 this?"* but ***"what did this already compute and then not write down?"***
+
+## A wrong fact gets challenged. A MISSING fact collides with nothing.
+
+The coordinator's, 2026-08-30, after relaying half of a comment and watching the
+weaker half nearly become a playbook section.
+
+The relay was *"`gate.sh:104` says the gate must not rebuild before comparing, or
+it loses the anti-Thompson check."* **True, and it had been read at the source.**
+What was dropped is that the same comment says the *common* cause is staleness
+rather than contamination, that it therefore reads as **flakiness** — the gate's
+own testmgr step rebuilds as a side effect, so the first run after a sibling's
+commit fails and the re-run passes — and that this cost two full gate runs on
+consecutive days before anyone saw the pattern.
+
+**A wrong fact gets challenged, because it collides with something the recipient
+already knows. A missing fact collides with nothing.** So a compression failure
+is invisible from *both* ends: the sender believes it was relayed, the receiver
+believes they have it, and no moment ever arrives at which the gap surfaces. It
+is the sibling of *a verification claim scopes to exactly what was checked* —
+except the casualty is what the sender chose not to say rather than what they
+failed to check, and it is worse, because a scope error at least has an edge
+somebody can find.
+
+Two habits, both cheap, and the first is the one that scales:
+
+- **Give the LOCATION, not only the conclusion.** `gate.sh:92-107`, never
+  "gate.sh says". The pointer costs the sender nothing and lets the receiver
+  outgrow the summary — which is the only mechanism that recovers what was
+  compressed out.
+- **When a relay is about to become a written artifact** — a playbook section, a
+  ticket, public copy — say *"read the source, I compressed it"* out loud. The
+  moment a summary stops being conversation and starts being a record is the
+  moment its omissions become permanent.
+
+Worked example, both directions, same night: the relayed half would have produced
+the weaker section; going to the source produced a section carrying the
+`flakiness` cost, which the person who had *lived* that failure had filed as "the
+check worked" — a true reading, and exactly the one that teaches you to shrug at
+the third occurrence. The third occurrence is the contaminated binary.
 
 ## Ancestry is not existence: `--is-ancestor` cannot tell you a commit is a ghost
 
