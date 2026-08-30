@@ -12934,3 +12934,62 @@ python3 tools/forwardlint.py
 Run it after any edit that adds a call — it is cheaper than the build already in
 the loop, and it is the only thing standing between a green self-host and a
 bootstrap that cannot happen.
+
+## 239 — THE PIPE ATE THE SYNTAX ERROR, AND `0 HITS` WAS THE ANSWER I WAS HOPING FOR (frank-coordinator, 2026-08-30)
+
+Building `PROSE-EDGE-NOT-IN-FRONTMATTER`, tightening it after a first version
+that was too noisy. Measured the result with:
+
+```
+tools/progress.sh check 2>&1 | grep -c "PROSE-EDGE-NOT-IN-FRONTMATTER"
+0
+```
+
+and read it as *"too tight, the regex now matches nothing."* **The file did not
+parse.** A botched insertion had left `PARK_COND` at column 0 inside a function
+body; `python3 -c "ast.parse(...)"` reports
+`IndentationError: unexpected indent`. The `2>&1` merged that traceback into the
+pipe and `grep -c` counted **zero occurrences of my pattern in it** — which is
+true, and says nothing whatever about the check.
+
+**Three separate things had to line up, and every one of them is on my own
+standing list:**
+
+1. **`cmd | grep -c` discards the exit status.** `progress.sh` is
+   `set -euo pipefail` + `exec python3`, so it propagated the failure correctly.
+   The pipe I wrapped it in did not.
+2. **`2>&1` turned an error into content.** Merging stderr is what let a
+   traceback be *counted* rather than *seen*.
+3. **`0` was the number I was expecting to move.** I had just tightened the
+   predicate; a fall to zero is the shape of over-tightening, so the reading was
+   available before the measurement was.
+
+**And the subject makes it worse in the useful way: I was building a check, and
+I nearly recorded a claim about it that its own evidence contradicted.** That is
+frankB's 234 arriving through me within the same session I filed 235 for
+relaying context-bound claims. **A verdict and its evidence travelling separately
+is not a property of tools; it is a property of pipelines, and a pipeline is
+whatever stands between you and the thing you are measuring — including the one
+you type by hand.**
+
+### 239a — the rule that would have caught it, and it is not "read more carefully"
+
+**Run the subject unpiped once, and look at its exit status, before you pipe it
+to anything that counts.**
+
+```
+tools/progress.sh check >/dev/null 2>&1; echo "exit=$?"      # 0 or 1, never a traceback
+python3 -c "import ast,io; ast.parse(io.open('tools/progress.py').read())"
+```
+
+Two commands, both about a second. The second is the specific one for editing
+Python by script: **an `assert`ed string replacement can succeed and still
+produce a file that does not parse**, because the assertion checks that the text
+was found, never that the result is valid. Every heredoc patch in this session
+should have ended with `ast.parse`, and this is the one that did not.
+
+Note the family. **190b**: a number that never moves is stable or unmeasured.
+This is the sharper case — **a number that moves exactly as predicted, for a
+reason that has nothing to do with the change.** The confirming direction is the
+one nobody checks (**215c**), and here the confirmation cost nothing to fabricate
+because the failure mode and the expected result print the same character.
