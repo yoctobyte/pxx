@@ -4,7 +4,7 @@ title: "GRANT: ir_codegen.inc's xtensa managed-cleanup arm to frankS, b4 verifie
 track: A+S
 prio: 55
 type: grant
-status: backlog
+status: done
 owner: "frankS"
 created: 2026-08-30
 found-by: frank-coordinator
@@ -50,3 +50,6 @@ riscv32's arm is a verbatim port away, which is why b4 was right to decline re-d
 `ir_codegen.inc` has carried deliberate dual occupancy tonight (`715a2e1b3`). Anyone else
 entering it must state their routine, not just the file — the collisions that matter here have
 been **semantic adjacencies with zero textual overlap**, which no diff-based check can see.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

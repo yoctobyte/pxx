@@ -4,7 +4,7 @@ title: "GRANT: ir_codegen.inc for the narrowed xtensa Call0 cleanup-frame work, 
 track: A+S
 prio: 50
 type: grant
-status: backlog
+status: done
 owner: "frankS"
 created: 2026-08-30
 found-by: frank-coordinator
@@ -69,3 +69,6 @@ complete**, and the remaining work is narrower than that ticket describes — wi
 enter/leave, not "ESP-campaign work of unstated size". Ticket updated, deliberately **not**
 re-priced: p25's argument (needs a raise crossing a frame that owns a managed local) is untouched
 by which blocker remains.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

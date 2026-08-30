@@ -3,7 +3,7 @@ slug: grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm
 track: A
 prio: 55
 type: grant
-status: open
+status: done
 found: 2026-08-30
 ---
 
@@ -47,3 +47,6 @@ riscv32's diagnostic for the missing arm is the generic *"standard builtin calls
 supported in bare-metal stage 1"* bucket — **face 144 still live on that backend**, and the
 reason the gap was invisible there. Fixing the arm does not fix the message; that is
 `bug-a-iropname-has-no-entry-for-seven-ir-ops` territory and stays A's.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

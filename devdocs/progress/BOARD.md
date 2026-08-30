@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (379)
+## backlog (376)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -386,9 +386,6 @@ _none_
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | grant-builtinheap-pxxsys-wrappers-to-franks | A | 45 | grant | frankS gets compiler/builtin/builtinheap.pas bounded to riscv32/xtensa arms on PXXSysOpenRO, PXXSysLseek and PXXSysClose, for bug-a-loadfile-runtime-wrappers-have-no-riscv32-or-xtensa-arm. Cleared against BOTH other interests by asking each for a footprint rather than a permission: frankA does not touch the file at all, and b4's census edits are landed and ~300 lines away. | — |
 | grant-elf-writer-and-object-writers-to-b4 | A | 50 | grant | frankA holds Track A. frank-optimize-b4 keeps a bounded file slice under A's gate: compiler/elfwriter.inc, defs.inc's ELF constants, and the object writers (writeELFRelX64 / writeELF32Rel). Dispatched by ticket, not by lane. Disjoint from symtab.inc and every frontend. | — |
-| grant-ir-codegen-call0-cleanup-frame-to-franks | A+S | 50 | grant | frankS may edit ir_codegen.inc as the narrowed Call0 cleanup-frame work requires -- wire the existing enter/leave under Call0, keep TargetHasProcCleanupFrame false under windowed, and delete the stale clause in the comment above that predicate. Wider than the block-level grant it supersedes. File verified clear: b4 moved to elfwriter.inc, frankA is in symtab.inc. | — |
-| grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm | A | 55 | grant | GRANT: `ir_codegen_riscv32.inc` → frankS (Track S), scoped to the `SPECIAL_IN` arm | — |
-| grant-ir-codegen-xtensa-cleanup-arm-to-franks-b4-verified-off | A+S | 55 | grant | Discharges grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s. frankS may edit the `if TargetArch = TARGET_XTENSA then` block inside EmitManagedLocalCleanupForTarget at ir_codegen.inc:10680 and nothing else in that file. b4's release verified three independent ways, not relayed from its word alone. | — |
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break | A+P | 50 | grant | frankwasm holds compiler/defs.inc, compiler/pasparser_lval.inc and compiler/rtti_emit.inc for feature-unicodestring-model. symtab.inc is QUEUED behind frank-optimize. DO NOT CLAIM these files — this ticket is a lock record, not work. | — |
 | idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 5 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
@@ -704,9 +701,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2805)
+## done (2808)
 
-2805 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2808 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -864,8 +861,6 @@ _none_
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
 - [p 55] [T] feature-t-a-user-hold-must-survive-a-bulk-re-price [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 55] [A] grant-ir-codegen-riscv32-to-track-s-for-the-special-in-arm
-- [p 55] [A+S] grant-ir-codegen-xtensa-cleanup-arm-to-franks-b4-verified-off
 - [p 55] [A+O] perf-o-promote-constant-divisor-strength-reduction-to-o2
 - [p 55] [A] refactor-a-two-predicates-answer-what-a-caret-yields
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
@@ -893,7 +888,6 @@ _none_
 - [p 50] [A] feature-port-openbsd-libc
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] grant-elf-writer-and-object-writers-to-b4
-- [p 50] [A+S] grant-ir-codegen-call0-cleanup-frame-to-franks
 - [p 50] [A+P] grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
