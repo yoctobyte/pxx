@@ -7,7 +7,7 @@ status: done
 found: 2026-08-30
 found-by: frankS
 owner: frankS
-resolved: PENDING-COMMIT
+resolved: 0d21318a2
 summary: "FIXED 2026-08-31. The prologue reserves six 3-byte slots and PatchXtensaFrameAdjust writes a CHAIN of ADDMIs into them, NOPping the rest -- six because exactly ONE procedure in the whole compiler exceeds 32 KB and it wants 136448 bytes. The Call0 error was only the visible half: the WINDOWED arm had NO check and EncodeXtensaAddmi masks its immediate, so it silently miscompiled -- measured, the pre-fix compiler ACCEPTS a 40 KB frame under --xtensa-abi=windowed and the binary SEGFAULTS. One helper now serves both ABIs. xtensa still cannot build the compiler: it now reaches the NEXT wall, `j displacement -169568 outside -131072..131071`."
 ---
 
@@ -53,7 +53,7 @@ compiler/compiler.pas` must produce an artifact; plus `make test-xtensa`, since
 every proc prologue on the target goes through the changed sequence.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 0d21318a2.
 
 
 ## Resolution (frankS, 2026-08-31)
