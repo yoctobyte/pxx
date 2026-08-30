@@ -722,6 +722,18 @@ begin
       end;
       if ok and ((j >= TokCount) or (Tokens[j].Kind <> tkGt)) then ok := False;
       if ok and (na <> np) then ok := False;
+      { A DECLARATION, not a use: `TFoo<T> = record ...`. `j` is the closing
+        `>`, so a following `=` means this group is the LEFT-HAND SIDE of a type
+        declaration that happens to reuse a name already registered as a
+        template -- a unit shadowing a generic it imported (legal, and FPC
+        compiles it), or a redeclaration in one unit. Rewriting it injects
+        `specialize` in FRONT of a declaration and the parse dies with
+        `Expected: =, but got: <name>`.
+        The `:` test is what keeps a typed constant out of this arm: `x:
+        TFoo<Integer> = (V: 1)` is ALSO followed by `=` and IS a genuine use.
+        bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use }
+      if ok and ((j + 1) < TokCount) and (Tokens[j+1].Kind = tkEq) and
+         ((i = 0) or (Tokens[i-1].Kind <> tkColon)) then ok := False;
       if ok then
       begin
         { A `<...>` group can be resolved EAGERLY into an alias only when every
@@ -802,6 +814,13 @@ begin
             begin
               ins[0].Kind := tkIdent; ins[0].IVal := 0; ins[0].Line := Tokens[i].Line;
               ins[0].SOffset := TokCharsAppend('specialize'); ins[0].SLen := 10;
+              { The rewrite's only observable is the token stream it edits, so a
+                test that merely compiles cannot tell a correct rewrite from one
+                that injects in the wrong place. Print every in-place injection.
+                bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use }
+              if PxxDbgEnabled('p.dgen') then
+                writeln('PXXDBG p.dgen inject specialize before ', tname,
+                        ' tok=', i, ' line=', Tokens[i].Line);
               InsertTokens(i, ins, 1);
               i := j + 1;   { the loop's Inc(i) lands past the inserted group }
             end;

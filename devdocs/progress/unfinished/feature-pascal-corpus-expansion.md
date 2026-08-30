@@ -900,7 +900,7 @@ sweep `625991d20` moved to the uses clause. Both binaries fail, so this is a
 **changed failure mode on already-failing code, not a working case broken** —
 but the wall was re-walled one layer down, exactly the shape this ladder keeps
 producing. Filed as
-[[bug-p-the-delphi-generic-rewrite-injects-specialize-before-a-declaration-in-an-include]].
+[[bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use]].
 
 **Next holder:** the remaining corpus wall is the include, not the
 specialization. Start from the bisection above, not from the error text.
@@ -908,7 +908,7 @@ specialization. Start from the bisection above, not from the error text.
 ### PARKED 2026-08-30 (frankA) — released from `working/`, probe complete
 
 The re-probe above is finished and the ladder's next step is blocked on
-[[bug-p-the-delphi-generic-rewrite-injects-specialize-before-a-declaration-in-an-include]].
+[[bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use]].
 Released from `working/` rather than held, because a lock held by a session
 that is not working the ticket reads as "someone is on it" while nothing
 happens — which is the exact failure measured fleet-wide tonight and filed as
@@ -917,3 +917,34 @@ happens — which is the exact failure measured fleet-wide tonight and filed as
 Everything is pushed. Nothing is half-applied. **Re-measure before trusting the
 table above** — that is the rule this ladder keeps re-teaching, and this
 section is now itself a snapshot.
+
+### CORRECTION 2026-08-30 (frankA) — the include was NOT the trigger, and the repro was a DIFFERENT bug
+
+The section above says the corpus wall was narrowed to
+`{$I inc\generics.dictionariesh.inc}` and that an 11-line include repro
+reproduces it. **Both halves are wrong**, and this correction is the reliable
+part of that entry.
+
+**The repro was a different defect.** Its error is `unexpected token`; the
+corpus wall's is `unknown type: TKey`. I let "both fail near generics after the
+same bisect" stand in for "same bug". The repro's real trigger was a name
+reuse I had left in the support unit from an earlier experiment — the include
+and the reuse varied together and I named the wrong one. Isolated four ways:
+include without the reuse is **clean**; the reuse without any include
+**fails**. That defect is real, is fixed, and is
+[[bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use]].
+
+**The corpus wall is untouched by that fix** — re-probed after it landed,
+`generics.collections` still stops at `unknown type: TKey` in
+`generics.defaults.pas`, same line, same message.
+
+**What survives:** the bisection itself. `cut@438` clean, `cut@474` reproduces,
+and the include line sits between them. That is a measurement and it still
+stands — but it locates the trigger's *neighbourhood*, not its mechanism, and I
+wrote it up as though it were the mechanism.
+
+**For the next holder: the corpus wall is UNREDUCED.** There is no repro for it.
+Do not start from the include hypothesis and do not reuse the shadowing repro —
+that is a different bug. Start by asking why `generics.defaults` parses cleanly
+alone and fails when reached through `generics.collections`, and get a
+reduction before believing any mechanism, including this paragraph's framing.

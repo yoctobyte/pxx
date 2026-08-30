@@ -5415,6 +5415,25 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:21: error: undefined variable' \
 	   && test ! -e $(TESTTMP)/test_diagspec26 \
 	  || { echo "test_diag_in_specialized_body_names_the_template_file_fail: FAIL - rc=$$rc (want rc=1, line 21, in: test/units/ugenericbad.pas, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use:
+	@# the mode-Delphi rewrite matched a generic DECLARATION whose name was
+	@# already registered as a template and spliced `specialize` in front of it,
+	@# so a program redeclaring a generic it imports died at `Expected: =`. FPC
+	@# compiles that file, so it was valid Pascal we rejected.
+	@# The rewrite's ONLY observable is the token stream it edits, so asserting
+	@# the run output cannot tell a correct rewrite from one that injects in the
+	@# wrong place. PXXDBG=p.dgen must therefore show ZERO injections in front of
+	@# the TBox declaration -- and at least one in front of TPairU, which is a
+	@# genuine paramform use in the same file, so the zero cannot be satisfied by
+	@# a rewrite that stopped firing altogether. Both halves were confirmed by
+	@# disabling the guard: 2 injections and a failed parse.
+	./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26
+	test "$$($(TESTTMP)/test_genshadow26)" = "shadow 12 10"
+	@out=$$(PXXDBG=p.dgen ./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26 2>&1); \
+	 decl=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TBox'); \
+	 real=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TPairU'); \
+	 test "$$decl" = "0" && test "$$real" -ge "1" \
+	  || { echo "test_generic_shadow_decl: FAIL - injections before the TBox DECLARATION=$$decl (want 0); real paramform injections before TPairU=$$real (want >=1)"; printf '%s\n' "$$out"; exit 1; }
 	@# Every lowering-owned dialect refusal must survive an EARLIER recovered
 	@# diagnostic. `ErrCount > 0 -> Exit` at the top of CompileAST silently made
 	@# each of these unreachable in exactly the multi-error file they exist for.
