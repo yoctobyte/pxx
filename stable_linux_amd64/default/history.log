@@ -391,3 +391,4 @@
 2026-08-29T18:47:11Z  v391  06e61e8b3f38d1bbfb508e658dd2ff89f43ef1ec8e14bfcbec8eb8081a75974c  f4654ba1e3cdf2a5b9738bca6f401a0c408269fd  docs: worktrees not under /tmp; sharpen face 42 with its first real test
 2026-08-29T19:45:54Z  v392  60b060bb54a8db98d9f0172c2d845fc32c3dc9d5c1405954ff73d39879f759c3  5d58fb87343842cdba0dbaa7f0cfd85dbe727a78  ticket(P): ten NilPy diagnostics exist on both arms of the ParseFactorCore carve-out
 2026-08-29T20:28:51Z  v393  1d69760deabe2865b534920a31578473d191a5c1da81c8a6c7df52dfa6c0ad01  1fb9774b741733ad4666af964255404d4dab4b5f  Merge branch 'master' of github.com:yoctobyte/pxx
+2026-08-30T04:12:12Z  v394  53800fbeb0b66e117077982d5c4bd056ae7c73a964a01586bff517c7ae7102ca  43c8e341204989508a12734ad437c0c4d63ff5c3  fix(tools): DANGLING-SHA tests REACHABILITY, not object existence
