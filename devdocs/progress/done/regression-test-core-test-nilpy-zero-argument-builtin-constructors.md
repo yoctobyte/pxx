@@ -40,3 +40,6 @@ ok: /tmp/testmgr-scratch-1206433/test_nilpy_zeroctor26  [code=1285912B  data=786
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-30 — auto-closed by the seven watcher: `test-core#src:test/test_nilpy_zero_argument_builtin_constructors.npy` passes at e2d1d1e047df (tier native); it was red at dc798834ba33. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
