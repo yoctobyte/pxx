@@ -12348,3 +12348,63 @@ Worth one structural note for whoever tires of this: the numbers are load-bearin
 cross-references, and nothing here needs them to be dense or ordered. A collision-free scheme
 (date-plus-initial, or numbering at merge rather than at write) would cost the sequence its
 tidiness and buy back an entire class of conflict on the repo's most-appended file.
+
+## 232 — THE PREDICATE WAS RIGHT EVERY TIME; NOBODY HAD STATED THE POPULATION
+
+Three corrections in one night, across **two** different checks in `tools/progress.py`. Not one
+of them was a logic error, and that is the entire content of this face.
+
+| commit | check | what changed |
+| --- | --- | --- |
+| `8dc8fa5cb` | DANGLING-LINK | the ticket-prefix set — omitted `refactor-`, 37 tickets |
+| `ced8d67fe` | DANGLING-LINK | the folder tuple `("unfinished","blocked","working")`, copied from the park scan |
+| `0f9947cf6` | DUP-FACE-NUMBER | a separator character class — **one `.` added**, 90 faces |
+
+A tuple, a set, and a single character. Every predicate around them was correct before and after.
+
+### Why this class never surfaces as a decision
+
+**Logic errors present as choices.** You consider an alternative and pick the wrong one, and the
+wrong pick is visible in the diff as a thing that was decided. These arrive **already decided** —
+inherited from the check they were copied from, or derived from the sample the author happened to
+be looking at. They were never weighed, so there is no moment at which they could have been
+weighed wrongly.
+
+A reviewer reading the function sees correct code, because the code *is* correct. The defect sits
+in a literal at the top that reads as **configuration** rather than as an **assertion**, and
+nobody reviews configuration.
+
+> The tell that it is happening at all: the check has a name that says what it looks for and
+> nothing that says what it looks *at*. `DANGLING-LINK` promises to find dangling links. It does
+> not promise which links.
+
+### 232a — an understated aperture returns the reassuring answer with full confidence
+
+This is 212 at the level of scope rather than outcomes.
+
+Face 212 and its strengthening say a tool that cannot tell must be **incapable** of expressing the
+reassuring answer. A check with an understated population is worse than that: it *can* tell, it
+*does* tell, and it tells you about a subset it never named.
+
+> `0 duplicates` over 317 headings and `0 duplicates` over 407 headings **print the same string.**
+
+There is no degradation, no partial result, no hedge — the output is byte-identical to the output
+of a complete check. Same shape as `ledger_open` being reused for a question it was never asked
+(224c), and same shape as a test row that compiles but does not run: the mechanism is sound and
+the aperture is the lie.
+
+### 232b — the operational form: state the population as a claim, in the same commit, dated
+
+Checkable, unlike "be more careful":
+
+> **When you write a check, write its population down as a sentence in the same commit — and date
+> it.** Not *"the check is correct"* but *"this runs over folders X, Y and Z as of 2026-08-30,
+> chosen because …"*.
+
+Both bad tuples above would have died on being written as a sentence. Neither could die while it
+was a literal at the top of a function, because a literal makes no claim and so cannot be
+contradicted.
+
+The dating is not decoration — see 229: a definition drawn from today's convention silently
+excludes yesterday's, and the separator character class is exactly that failure. The population
+statement has an expiry the same way a ticket's evidence does (219).
