@@ -7419,6 +7419,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_generic_qualified_arg26 "$$($(TESTTMP)/test_generic_qualified_arg26 | tail -1)" "total ok 5 / 5"
 	./$(COMPILER) test/test_generic_qualified_arg_delphi.pas $(TESTTMP)/test_generic_qualified_arg_delphi26
 	tools/expect_same.sh test_generic_qualified_arg_delphi26 "$$($(TESTTMP)/test_generic_qualified_arg_delphi26 | tail -1)" "total ok 5 / 5"
+	# a nested type of the ENCLOSING template used as a generic argument:
+	# `specialize TEnum<TPair>` inside TDict, where TPair is TDict's own nested
+	# record. The nested type is hoisted to a top-level declaration and the in-body
+	# declaration becomes an ALIAS to it -- a copy would be a distinct type.
+	# bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument
+	./$(COMPILER) test/test_generic_nested_type_as_argument.pas $(TESTTMP)/test_generic_nested_type_as_argument26
+	tools/expect_same.sh test_generic_nested_type_as_argument26 "$$($(TESTTMP)/test_generic_nested_type_as_argument26 | tail -1)" "total ok 5 / 5"
 	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
 	./$(COMPILER) test/test_impl_static_and_pchar_index.pas $(TESTTMP)/test_impl_static_and_pchar_index26
 	tools/expect_same.sh test_impl_static_and_pchar_index26 "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" "total ok 5 / 5"

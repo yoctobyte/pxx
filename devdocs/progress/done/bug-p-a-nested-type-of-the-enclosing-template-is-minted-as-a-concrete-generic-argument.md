@@ -3,7 +3,7 @@ slug: bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-gene
 track: P
 prio: 65
 type: bug
-status: unfinished
+status: done
 blocked-by: [bug-p-a-qualified-type-name-cannot-be-a-generic-argument]
 summary: "`TEnum<TPair>` where TPair is a type nested INSIDE the enclosing template is minted eagerly as `TEnum$TPair`, giving `unknown type: TPair` at TEnum's own line. Same shape as bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type, which is fixed — that one catches PARAMETER names via a token-level scan, and a nested type name is not a parameter, so it slips through. 23-line repro, FPC prints 4. This is the current stop for `uses Generics.Collections` (generics.collections.pas:120, TEnumerator<TDictionaryPair>). Two mechanisms for one concept: read the whitelist analysis below before adding a third."
 owner: unassigned
@@ -204,6 +204,74 @@ register its type as a nested declaration — `procedure P(a: Integer = 0)` is a
 **Corpus is unmoved** by this half: `uses Generics.Collections` still stops at
 `generics.collections.pas:120`.
 
+## 2026-08-30 — RESOLVED via route B (hoist). Reduction 5/5 against FPC, and wired.
+
+Both halves are now closed. The first (2026-08-29) stopped the eager mint; this
+one supplies the emission.
+
+**What was built.** `SpecializeStream` was split into a substitution half
+(`SpecializeToBuffer`, ending at a filled buffer and touching `Tokens[]` not at
+all) and the splice — a behaviour-preserving split, because the buffer was always
+there and only the splice was welded to it. On top of that:
+`CollectHoistCandidates` finds a template's own nested type declarations and
+their RHS extents; `NestedSpecArg` gains a second mapping so an argument naming
+one becomes the top-level name it is lifted to; `EmitHoistedDecls` writes
+`specName$Nested = <RHS, substituted>;` into the prerequisite stream; and
+`SpecializeToBuffer` collapses the in-body declaration's RHS to that name, making
+it an **alias**.
+
+**Two defects found by reading, neither of which had a test that would have
+failed. Both are in the write-up because the next person will re-derive them
+otherwise.**
+
+1. **It would not have terminated, and the fix is a modelling change rather than
+   a guard.** Emitting the hoists takes the DEFERRAL path, which re-emits the
+   declaration behind them; the re-parse runs the candidate scan again, marks the
+   same candidate used again, and defers again — redeclaring the hoisted type
+   every round until the deferral counter calls it a cycle. The re-parse must
+   still SEE the candidate as used, because the class body needs it to collapse
+   the in-body RHS to an alias. So **"used" and "still to emit" are two
+   questions**, and conflating them is what does not terminate.
+2. **`HoistStart`/`HoistEnd` are absolute arena indices belonging to ONE
+   template**, and `SpecializeToBuffer` has other callers (generic functions, the
+   pending-method flush) whose ranges live in the same arena. A stale candidate
+   set could collide with an unrelated range at the same index, so the gate is
+   opened around the class-body stream only, not left on.
+
+**Corpus: NOT advanced, and the figure in this ticket's summary is stale.**
+Measured on this build and on `pinned`, same command
+(`{$mode delphi}` + `uses Generics.Collections`, `-Fu<rtl-generics/src>`):
+
+| binary | stop |
+| --- | --- |
+| `pinned` | `generics.collections.pas:146` — `generic templates must be class, record, interface, array or procedure declarations` |
+| HEAD (this change) | **the same line, the same message** |
+
+So the "current stop is line 120, `TEnumerator<TDictionaryPair>`" in the summary
+above does not reproduce against either binary today, and this change moves the
+corpus **not at all**. The next wall is
+`TCustomPointersCollection<T, PT> = object` — a generic over an OBJECT type,
+which the frontend rejects outright — filed as
+`bug-p-a-generic-template-cannot-be-an-object-type`. Stated plainly because a
+"this unblocks the corpus" claim is exactly the kind that gets believed and is
+expensive to unwind.
+
+**Do not read the `blocked-by` edge as "route A was unfinished".** It records
+that `bug-p-a-qualified-type-name-cannot-be-a-generic-argument` gated this
+ticket, and says nothing about whether that ticket's ANSWER is this ticket's
+answer. It is not: route A is impossible (three declarations in a cycle, FPC
+rejects the desugaring too — see the measurement above). The qualified fix made
+the form readable; the form was the wrong one here.
+
+**Test:** `test/test_generic_nested_type_as_argument.pas`, 5 rows, oracle FPC,
+`total ok 5 / 5` on both, now **wired** into `test-core` and its
+`test/UNWIRED.txt` exemption deleted, as that exemption instructed.
+
+**Regression:** 25 named generic tests, 8 `.expected` clean, the rest identical to
+`pinned`'s output; `test_generic_cycle_fail` still fails with its cycle
+diagnostic (the control that a deferral change must not break). Self-host
+fixedpoint `374fa81e8293`, converged after 2 rounds. `forwardlint` clean.
+
 ## Gate
 
 The repro printing `4`; the two `test_generic_arg_is_enclosing_template_param*`
@@ -241,3 +309,6 @@ recurring error string makes those look like one claim.
 Nothing here impugns the original reduction. Error strings in this area are simply not
 stable enough to serve as citations, which is a fact about the area and not about the
 reporter.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

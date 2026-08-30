@@ -68,6 +68,105 @@ begin
       Result := i;
 end;
 
+{ ---- HOISTING a template's own nested types --------------------------------
+
+  `TDict<TKey,TVal>` declaring `type TPair = record K: TKey; V: TVal; end;` and
+  then using `specialize TEnum<TPair>` inside its own body. `TPair` names
+  something that exists only inside a specialization of TDict, so the group
+  cannot be minted concretely -- that half is fixed, and the group is correctly
+  deferred to the nested-prerequisite path. The prerequisite is then emitted at
+  the TOP LEVEL as `TEnum$TPair = specialize TEnum<TPair>`, where `TPair` does
+  not exist.
+
+  ROUTE, chosen after hand-compiling both desugarings rather than reasoning about
+  them. The obvious repair -- name it in qualified form,
+  `specialize TEnum<TDict$Integer$LongInt.TPair>` -- is IMPOSSIBLE, and not
+  because pxx cannot parse it (it can, since
+  bug-p-a-qualified-type-name-cannot-be-a-generic-argument). It needs three
+  declarations in a cycle: the alias needs the specialized class declared, that
+  class body names the TEnum prerequisite, and the prerequisite needs the alias.
+  FPC rejects the hand-written desugaring too, so there is no order to find.
+
+  So HOIST instead. The nested type is lifted to its own top-level declaration
+  with the substitution applied, and the declaration left behind in the class body
+  becomes an ALIAS to it:
+
+    TDict$I$L$TPair = record K: Integer; V: LongInt; end;
+    TEnum$TDict$I$L$TPair = specialize TEnum<TDict$I$L$TPair>;
+    TDict$I$L = class
+    type TPair = TDict$I$L$TPair;              <- alias, NOT a second copy
+      ...
+    end;
+
+  Each line names only what precedes it.
+
+  AN ALIAS AND NOT A COPY, which is the load-bearing half. Emitting a top-level
+  duplicate of the record and leaving the in-class declaration alone is easier and
+  is wrong: the two would be structurally identical but DISTINCT types, so `d.P`
+  would have one and the specialization's result the other, and assigning between
+  them fails. That is a silent-shaped defect, so the rewrite of the in-body
+  declaration is the part to get right.
+
+  ONLY WHAT IS ACTUALLY USED AS A GENERIC ARGUMENT IS HOISTED. Hoisting every
+  nested type of every specialization would rewrite programs that work today --
+  test_generic_nested_type_identity and test_generic_nested_type_field_name are
+  both nested-type programs with no generic-argument use in sight -- so the
+  trigger is the argument, not the declaration. A template with nested types and
+  no such use produces byte-identical output to before. }
+
+const MAX_HOISTED_NESTED = 32;
+var
+  { in-body name, e.g. TPair }
+  HoistName  : array[0..MAX_HOISTED_NESTED-1] of AnsiString;
+  { the top-level name it is lifted to, e.g. TDict$Integer$LongInt$TPair }
+  HoistFull  : array[0..MAX_HOISTED_NESTED-1] of AnsiString;
+  { ABSOLUTE TemplateTokens indices of the declaration RHS, both inclusive }
+  HoistStart : array[0..MAX_HOISTED_NESTED-1] of Integer;
+  HoistEnd   : array[0..MAX_HOISTED_NESTED-1] of Integer;
+  { set when some generic argument in the body actually named it }
+  HoistUsed  : array[0..MAX_HOISTED_NESTED-1] of Boolean;
+  HoistCount : Integer;
+  { False while the hoisted RHS is itself being substituted, so the replacement
+    hook below does not eat its own body }
+  HoistActive: Boolean;
+  { Every hoisted declaration ALREADY emitted, for the whole compilation.
+
+    Without this the fix does not terminate. Emitting the hoists takes the
+    DEFERRAL path, which re-emits `TE = specialize TDict<...>` behind them; the
+    re-parse runs CollectHoistCandidates again, NestedSpecArg marks the same
+    candidate used again, and it defers again -- redeclaring the hoisted type
+    every round until the deferral counter calls it a cycle. The re-parse must
+    still SEE the candidate as used, because the class body streaming needs it to
+    collapse the in-body RHS to an alias; what it must not do is emit it twice.
+    So "used" and "still to emit" are separate questions, and this answers the
+    second. }
+  HoistEmitted     : array[0..MAX_HOISTED_NESTED*8-1] of AnsiString;
+  HoistEmittedCount: Integer;
+
+{ Has this hoisted declaration already been written into the stream? }
+function HoistAlreadyEmitted(const nm: AnsiString): Boolean;
+var k: Integer;
+begin
+  HoistAlreadyEmitted := False;
+  for k := 0 to HoistEmittedCount - 1 do
+    if CaseEqual(HoistEmitted[k], nm) then HoistAlreadyEmitted := True;
+end;
+
+{ The hoisted name for an in-body nested type, or '' when the name is not one.
+  Marks it used, which is what makes it hoisted at all. }
+function HoistedNameFor(const nm: AnsiString): AnsiString;
+var k: Integer;
+begin
+  HoistedNameFor := '';
+  for k := 0 to HoistCount - 1 do
+    if CaseEqual(HoistName[k], nm) then
+    begin
+      HoistUsed[k] := True;
+      HoistedNameFor := HoistFull[k];
+      Exit;
+    end;
+end;
+
 { Does TemplateTokens[ts + i] open a `specialize NAME<...>` group naming a
   template we know? Returns the offset of the closing `>`, or -1. A binder
   (`X = specialize ...`, a nested type declaration) is ParseSpecialization's
@@ -106,7 +205,7 @@ end;
   force (SpecSub*): a reference to the enclosing template's parameter becomes
   the concrete type it is being specialized with. }
 procedure NestedSpecArg(ts, at: Integer; var t: TRawToken);
-var k: Integer; nm: AnsiString;
+var k: Integer; nm, hn: AnsiString;
 begin
   t.Kind := TemplateTokens[ts + at].Kind;
   t.IVal := TemplateTokens[ts + at].IVal;
@@ -121,8 +220,19 @@ begin
       t.Kind := SpecSubKinds[k];
       t.SOffset := TokCharsAppend(SpecSubValues[k]);
       t.SLen := Length(SpecSubValues[k]);
-      Break;
+      Exit;
     end;
+  { ...and a name the template declares in its OWN body becomes the top-level
+    name that body's declaration is hoisted to. Second mapping, same reason as
+    the first: the argument means something only inside a specialization, and a
+    prerequisite is emitted OUTSIDE one. See the hoisting note. }
+  hn := HoistedNameFor(nm);
+  if hn <> '' then
+  begin
+    t.Kind := tkIdent;
+    t.SOffset := TokCharsAppend(hn);
+    t.SLen := Length(hn);
+  end;
 end;
 
 { The alias name the group resolves to — the SAME minting DelphiRewriteGenericUses
@@ -246,14 +356,22 @@ begin
   SpecSubNamePosition := False;
 end;
 
-procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
+{ The SUBSTITUTION half of SpecializeStream, ending at a filled
+  SpecializeTokens[0..Result-1] and touching Tokens[] not at all.
+
+  Split out because a hoisted nested type needs the same substituted token run
+  put somewhere ELSE -- into a prerequisite declaration emitted ahead of the
+  specialization, rather than spliced at the cursor. The buffer was always
+  there; only the splice was welded to it.
+  bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument }
+function SpecializeToBuffer(tokStart, count: Integer; const specName: AnsiString): Integer;
 { Substitutions come from the SpecSub* globals (param name -> concrete
   name/kind), set by the caller — multi-param generics replace every type
   parameter in one pass. }
 var
   i, j, k: Integer;
   subCount: Integer;
-  gEnd: Integer;
+  gEnd, hoistHit: Integer;
   s, aliasNm: AnsiString;
 begin
   { PASS 1 — which type parameters does this template also declare as a name?
@@ -279,6 +397,31 @@ begin
       exists (it defers the whole declaration otherwise), so an unresolved group
       here means a name that is not a type at all: leave it alone and let the
       ordinary error reporting name it. }
+    { A hoisted nested type's RHS collapses to the single identifier of the
+      top-level declaration it was lifted to, turning `TPair = record ... end`
+      into `TPair = TDict$Integer$LongInt$TPair`. An ALIAS, so the in-class name
+      and the hoisted name are ONE type -- a second copy would be structurally
+      identical and distinct, and assigning between them would fail. Guarded by
+      HoistActive so that substituting the hoisted RHS itself does not collapse
+      it into a reference to the declaration being written. }
+    if HoistActive then
+    begin
+      hoistHit := -1;
+      for k := 0 to HoistCount - 1 do
+        if HoistUsed[k] and (tokStart + i = HoistStart[k]) then hoistHit := k;
+      if hoistHit >= 0 then
+      begin
+        SpecializeTokens[subCount].Kind := tkIdent;
+        SpecializeTokens[subCount].IVal := 0;
+        SpecializeTokens[subCount].Line := TemplateTokens[tokStart + i].Line;
+        SpecializeTokens[subCount].SOffset := TokCharsAppend(HoistFull[hoistHit]);
+        SpecializeTokens[subCount].SLen := Length(HoistFull[hoistHit]);
+        Inc(subCount);
+        i := HoistEnd[hoistHit] - tokStart + 1;
+        Continue;
+      end;
+    end;
+
     gEnd := NestedSpecGroup(tokStart, i, count);
     if gEnd >= 0 then
     begin
@@ -356,7 +499,14 @@ begin
     Inc(subCount);
     Inc(i);
   end;
+  SpecializeToBuffer := subCount;
+end;
 
+{ Substitute one template range and SPLICE it at the parse cursor. }
+procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
+var i, subCount: Integer;
+begin
+  subCount := SpecializeToBuffer(tokStart, count, specName);
   EnsureTokCapacity(TokCount + subCount + 1);
   i := TokCount - 1;
   while i >= TokPos do
@@ -1522,6 +1672,39 @@ begin
   Inc(NSpecInsCnt);
 end;
 
+{ Emit `HoistFull = <the RHS, substituted>;` into NSpecIns for every candidate a
+  generic argument actually named. Runs with HoistActive False so the RHS is not
+  collapsed into a reference to the declaration being written. }
+procedure EmitHoistedDecls(const specName: AnsiString);
+var k, n, q, ln: Integer;
+begin
+  ln := 0;
+  if TokPos > 0 then ln := Tokens[TokPos - 1].Line;
+  for k := 0 to HoistCount - 1 do
+    if HoistUsed[k] and not HoistAlreadyEmitted(HoistFull[k]) then
+    begin
+      HoistActive := False;
+      n := SpecializeToBuffer(HoistStart[k], HoistEnd[k] - HoistStart[k] + 1, specName);
+      HoistActive := False;
+      if HoistEmittedCount < MAX_HOISTED_NESTED * 8 then
+      begin
+        HoistEmitted[HoistEmittedCount] := HoistFull[k];
+        Inc(HoistEmittedCount);
+      end;
+      if NSpecInsCnt + n + 4 > MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS) then
+        Error('hoisted nested type is too large for the prerequisite buffer ' +
+              '(raise MAX_NESTED_SPECS): ' + HoistFull[k]);
+      QualPush(tkIdent, HoistFull[k], ln);
+      QualPush(tkEq, '', ln);
+      for q := 0 to n - 1 do
+      begin
+        NSpecIns[NSpecInsCnt] := SpecializeTokens[q];
+        Inc(NSpecInsCnt);
+      end;
+      QualPush(tkSemicolon, '', ln);
+    end;
+end;
+
 { Emit `alias = A.B.C;` into NSpecIns, and mark the alias as declared so no
   later specialization emits it a second time. }
 procedure EmitQualAliasDecl(const aliasNm, path: AnsiString);
@@ -1728,6 +1911,132 @@ begin
     end;
 end;
 
+{ The arena index of the `;` that ends the declaration whose RHS starts at d,
+  stepping over any nested record/class/case body. -1 when it never closes.
+  Flat, not nested inside CollectHoistCandidates: nested routines appear nowhere
+  else in this file. }
+function HoistDeclEndAt(d, limit: Integer): Integer;
+var q, dep: Integer;
+begin
+  q := d; dep := 0;
+  while q < limit do
+  begin
+    if (TemplateTokens[q].Kind = tkRecord) or (TemplateTokens[q].Kind = tkCase) or
+       (TemplateTokens[q].Kind = tkClass) then
+      Inc(dep)
+    else if TemplateTokens[q].Kind = tkEnd then
+    begin
+      Dec(dep);
+      if dep < 0 then Break;
+    end
+    else if (TemplateTokens[q].Kind = tkSemicolon) and (dep <= 0) then
+    begin
+      HoistDeclEndAt := q;
+      Exit;
+    end;
+    Inc(q);
+  end;
+  HoistDeclEndAt := -1;
+end;
+
+{ Find the nested TYPE declarations of one template's class body and record each
+  one's name and RHS extent. Nothing is hoisted here -- this only builds the
+  candidate set; HoistUsed decides. }
+procedure CollectHoistCandidates(ti: Integer; const specName: AnsiString);
+var ts, tc, j, depth, k, pdepth: Integer;
+    inTypeSec, isModifier: Boolean;
+    nm: AnsiString;
+
+begin
+  HoistCount := 0;
+  ts := Templates[ti].TokStart;
+  tc := Templates[ti].TokCount;
+  depth := 0;
+  inTypeSec := False;
+  j := ts;
+  while j < ts + tc do
+  begin
+    if TemplateTokens[j].Kind = tkEnd then
+    begin
+      Dec(depth);
+      if depth <= 0 then Break;
+      inTypeSec := False;
+    end
+    else if (TemplateTokens[j].Kind = tkRecord) or (TemplateTokens[j].Kind = tkCase) then
+      Inc(depth)
+    else if TemplateTokens[j].Kind = tkClass then
+    begin
+      { `class function` / `class var` / `class of` etc. is a MODIFIER and opens
+        no body -- the same distinction CollectNestedTypeNames documents. }
+      isModifier := (j + 1 < ts + tc) and
+                    ((TemplateTokens[j + 1].Kind = tkFunction) or
+                     (TemplateTokens[j + 1].Kind = tkProcedure) or
+                     (TemplateTokens[j + 1].Kind = tkVar) or
+                     (TemplateTokens[j + 1].Kind = tkConst) or
+                     (TemplateTokens[j + 1].Kind = tkOf) or
+                     ((TemplateTokens[j + 1].Kind = tkIdent) and
+                      (CaseEqual(GetTokenStrFromRaw(TemplateTokens[j + 1].SOffset,
+                                                    TemplateTokens[j + 1].SLen), 'operator') or
+                       CaseEqual(GetTokenStrFromRaw(TemplateTokens[j + 1].SOffset,
+                                                    TemplateTokens[j + 1].SLen), 'constructor') or
+                       CaseEqual(GetTokenStrFromRaw(TemplateTokens[j + 1].SOffset,
+                                                    TemplateTokens[j + 1].SLen), 'destructor'))));
+      if not isModifier then
+      begin
+        { a BODILESS class opens nothing -- see the same case in
+          CollectNestedTypeNames, and the bug it cost:
+          bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section }
+        k := j + 1;
+        while (k < ts + tc) and (TemplateTokens[k].Kind = tkIdent) and
+              (CaseEqual(GetTokenStrFromRaw(TemplateTokens[k].SOffset,
+                                            TemplateTokens[k].SLen), 'abstract') or
+               CaseEqual(GetTokenStrFromRaw(TemplateTokens[k].SOffset,
+                                            TemplateTokens[k].SLen), 'sealed')) do Inc(k);
+        if (k < ts + tc) and (TemplateTokens[k].Kind = tkLParen) then
+        begin
+          pdepth := 0;
+          while k < ts + tc do
+          begin
+            if TemplateTokens[k].Kind = tkLParen then Inc(pdepth)
+            else if TemplateTokens[k].Kind = tkRParen then
+            begin
+              Dec(pdepth);
+              if pdepth <= 0 then begin Inc(k); Break; end;
+            end;
+            Inc(k);
+          end;
+        end;
+        if (k >= ts + tc) or (TemplateTokens[k].Kind <> tkSemicolon) then
+          Inc(depth);
+      end;
+    end
+    else if TemplateTokens[j].Kind = tkType then
+      inTypeSec := (depth = 1)
+    else if (TemplateTokens[j].Kind = tkVar) or (TemplateTokens[j].Kind = tkConst) or
+            (TemplateTokens[j].Kind = tkProcedure) or (TemplateTokens[j].Kind = tkFunction) or
+            (TemplateTokens[j].Kind = tkProperty) then
+      inTypeSec := False
+    else if inTypeSec and (depth = 1) and (TemplateTokens[j].Kind = tkIdent) and
+            (j + 2 < ts + tc) and (TemplateTokens[j + 1].Kind = tkEq) then
+    begin
+      k := HoistDeclEndAt(j + 2, ts + tc);
+      if (k > j + 2) and (HoistCount < MAX_HOISTED_NESTED) then
+      begin
+        nm := GetTokenStrFromRaw(TemplateTokens[j].SOffset, TemplateTokens[j].SLen);
+        HoistName[HoistCount]  := nm;
+        HoistFull[HoistCount]  := specName + '$' + nm;
+        HoistStart[HoistCount] := j + 2;
+        HoistEnd[HoistCount]   := k - 1;
+        HoistUsed[HoistCount]  := False;
+        Inc(HoistCount);
+        j := k;
+      end;
+    end;
+    Inc(j);
+  end;
+end;
+
+
 { Record every `specialize NAME<args>` in one template-arena range as a nested
   prerequisite, skipping this declaration itself and anything already known or
   already queued. One body, three callers (the class body, each buffered method,
@@ -1787,6 +2096,7 @@ var
   nDeclEdges: Integer;   { NSpec entries below this came from the CLASS BODY }
   dup: Boolean;
   qPath: AnsiString;     { non-empty while the current argument is a dotted name }
+  hoistPending: Boolean; { some nested type of this template must be lifted out }
 begin
   Result := False;
   Next; { consume 'specialize' }
@@ -1877,6 +2187,12 @@ begin
     SpecSubValues[i] := cNames[i];
     SpecSubKinds[i]  := cKinds[i];
   end;
+
+  { The template's OWN nested type declarations, as hoist CANDIDATES only --
+    nothing is hoisted unless a generic argument in the body names one, which
+    NestedSpecArg decides while the prerequisite scan runs below. A template with
+    nested types and no such use is untouched. See the hoisting note. }
+  CollectHoistCandidates(ti, specName);
 
   { Nested generic prerequisites: every `specialize NAME<args>` in the body,
     with args mapped through the substitution, that is not a type yet.
@@ -1992,7 +2308,13 @@ begin
     A genuine cycle is unaffected: both its edges are declaration-time, so
     nDeclEdges > 0 on at least one side and the deferral path below still runs.
     test/test_generic_cycle_fail.pas is the control and must keep failing. }
-  if (NSpecCount > 0) and (nDeclEdges = 0) and (QNeedCount = 0) then
+  { "still to emit", NOT "used" -- see HoistEmitted. On the re-parse behind its
+    own hoists this is False, which is what ends the deferral. }
+  hoistPending := False;
+  for k := 0 to HoistCount - 1 do
+    if HoistUsed[k] and not HoistAlreadyEmitted(HoistFull[k]) then hoistPending := True;
+
+  if (NSpecCount > 0) and (nDeclEdges = 0) and (QNeedCount = 0) and (not hoistPending) then
   begin
     NSpecInsCnt := 0;
     for k := 0 to NSpecCount - 1 do
@@ -2009,7 +2331,7 @@ begin
     so the alias has to be a type before this declaration is parsed at all, not
     after. Deferring re-emits the declaration behind the alias, and the re-parse
     sees the minted identifier and takes the ordinary single-token path. }
-  if (NSpecCount > 0) or (QNeedCount > 0) then
+  if (NSpecCount > 0) or (QNeedCount > 0) or hoistPending then
   begin
     { Defer. CurTok is this declaration's trailing ';', so TokPos is exactly
       where the type-section loop reads next: put the prerequisites there,
@@ -2040,7 +2362,11 @@ begin
       else
         Error('circular generic specialization: ' + specName);
     NSpecInsCnt := 0;
-    { qualified-argument aliases FIRST: a nested prerequisite emitted below may
+    { HOISTED nested types first of all -- the nested prerequisite emitted below
+      names one as its argument, and the re-emitted declaration's own class body
+      aliases to it. }
+    if hoistPending then EmitHoistedDecls(specName);
+    { qualified-argument aliases next: a nested prerequisite emitted below may
       name one of them as its own argument. }
     for k := 0 to QNeedCount - 1 do
       EmitQualAliasDecl(QNeedName[k], QNeedPath[k]);
@@ -2084,7 +2410,17 @@ begin
 
   SpecializeTemplateName := Templates[ti].Name;
   SetSpecSubs(ti, SpecializationCount - 1);
+  { The collapse of a hoisted declaration's RHS applies to the CLASS BODY and
+    nowhere else, so the gate is opened around this one call rather than left on.
+    HoistStart/HoistEnd are absolute arena indices belonging to ONE template, and
+    SpecializeToBuffer has other callers (generic functions, the pending-method
+    flush) whose ranges are in the same arena — a stale candidate set could
+    otherwise collide with an unrelated range at the same index. Method bodies
+    need no collapse: they refer to the nested type by NAME, and the name is
+    still declared in the class, now as an alias. }
+  HoistActive := True;
   SpecializeStream(Templates[ti].TokStart, Templates[ti].TokCount, specName);
+  HoistActive := False;
   Next;
 end;
 

@@ -78,7 +78,6 @@ test/csqlite_schema_exec_probe.c  schema/exec bringup probe over the crtl unity 
 test/gui/helloworld/main.pas  unit of the stock Lazarus helloworld reference project (helloworld.lpr), kept as a fixture to mirror; the pxx equivalent test/gui/test_pcl_helloworld.pas is wired and carries the assertions
 test/kwpadprobe.pas  Pascal unit imported by test/test_nilpy_keyword_call_tuple_on_a_skipped_default.npy (wired, test-nilpy) via `import 'kwpadprobe.pas' as kw`
 test/strhelperprobe.pas  Pascal unit imported by test/test_nilpy_str_method_vs_pascal_string_helper.npy (wired, test-nilpy) via `import 'strhelperprobe.pas' as probe`
-test/test_generic_nested_type_as_argument.pas  the 5-row REDUCTION for bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument (unfinished); it does not compile at HEAD (`unknown type: PT`), so it is a repro and not yet a test — wire it in the commit that closes that ticket and delete this line
 
 # The CPython differential for the minidom shim. It PASSES under CPython today
 # (34 checks against the real xml.dom.minidom) and is banked so its expectations

@@ -5,14 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:30 blocked:7 backlog:368 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2777 rejected:57`
+`working:2 unfinished:29 blocked:7 backlog:369 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2778 rejected:57`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `bug-p-object-value-types-standard-meaning` [P] — owner: frank-user
 
-## unfinished (30) — parked mid-flight; re-claim, do not duplicate
+## unfinished (29) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -20,7 +20,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
-- `bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument` [P] — blocked-by: bug-p-a-qualified-type-name-cannot-be-a-generic-argument
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — blocked-by: bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
@@ -71,7 +70,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [U+S]` decide-is-the-2026-07-12-esp-park-still-in-force (unblocks 1)
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
-- `[p 65] [P]` bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument
 - `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -86,6 +84,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- `[p 60] [P]` bug-p-a-generic-template-cannot-be-an-object-type
 - `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 
 _361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
