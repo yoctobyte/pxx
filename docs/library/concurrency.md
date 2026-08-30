@@ -105,9 +105,18 @@ Constraints in this version:
 
 - Requires `--threadsafe` and `uses palparallel`.
 - Must appear **inside a routine**, not directly in the main program body.
-- The body may reference the loop variable, globals, and enclosing **scalar**
-  locals (captured by reference through the frame). Capturing a record, class,
-  array, or string local is not supported yet.
+- The body may reference the loop variable, globals, and enclosing locals —
+  scalars, strings, records, classes, and arrays alike — captured by reference
+  through the frame. The one restriction is that the local's **type must be
+  named**: an anonymous `var da: array of Integer` is refused, and the compiler
+  says how to fix it —
+
+  ```
+  error: parallel for: capturing 'da' — its type is unnamed; declare it with
+  a named type (e.g. `type TFoo = ...`) to capture it
+  ```
+
+  Give it a `type TDA = array of Integer;` and it captures like anything else.
 - Iterations must be independent — the pool runs them concurrently and in no
   guaranteed order. Writing disjoint slots is safe; accumulating into one shared
   variable is a data race unless you guard it.

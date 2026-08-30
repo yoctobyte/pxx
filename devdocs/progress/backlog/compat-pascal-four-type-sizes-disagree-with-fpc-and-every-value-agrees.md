@@ -5,6 +5,24 @@ track: P
 prio: 25
 ---
 
+> **`prio: 25` is correct and must not be raised to match the ranked output.**
+> This ticket shows as **P p70** in `ready`/`next`, and the gap is not a mistake:
+> effective rank is a human `prio:` **propagated down dependency edges**, so a
+> blocker inherits the priority of what it unblocks. The single edge is
+> [[feature-pascal-typed-and-untyped-files]] [P p70], whose frontmatter declares
+> `blocked-by` on this ticket. `file of T` is standard Pascal that real code uses
+> heavily, so p70 is right *for that goal*, and this ticket inherits it.
+>
+> **25 is this ticket's own intrinsic worth** — verified 2026-08-30, see the note
+> at the bottom: nothing in pxx computes a wrong value, `packed` is honoured, and
+> the byte-exact layout is expressible today with explicit widths. Editing either
+> number to make them agree is the tempting wrong move: raising `prio:` overstates
+> the intrinsic worth, and lowering the goal drops a genuine p70 feature out of
+> the queue. Leave both; the ranker is doing what it was built to do.
+>
+> Direction is settled too: sizes come **before** a typed-file on-disk format,
+> because settling layout afterwards would silently invalidate written data.
+
 # Four type sizes disagree with FPC — and every value agrees
 
 **Umbrella, opened 2026-08-26.** Four tickets from the same 2026-08-16/20 FPC
@@ -136,10 +154,19 @@ fixed.
 If a binary-interop or memory ticket makes it pay for itself — the two natural
 triggers are typed-file I/O against FPC-written data
 (`feature-pascal-typed-and-untyped-files`) and any embedded target where 32
-bytes per set matters. Do it together with
-`compat-pascal-subrange-storage-size`: they are the same job (storage size from
-the declared range) over two type constructors, and doing one alone leaves half
-the layouts still divergent.
+bytes per set matters. Do it together with the **subrange** half — which is not a separate ticket to
+coordinate with, it is the *"A subrange type is always 4 bytes"* section of THIS
+file, absorbed here and still carrying its old slug at the section head. They are
+the same job (storage size from the declared range) over two type constructors,
+and doing one alone leaves half the layouts still divergent.
+
+*(De-linked 2026-08-30. `compat-pascal-subrange-storage-size` resolved to no
+ticket because it was merged INTO this one — so this document was citing itself
+as a separate dependency it needed to coordinate with. A merge that keeps the
+absorbed ticket's citations converts them all into dangling links pointing at a
+section of the citing file; that is a fifth outcome beside rename, never-filed,
+delivered-under-another-name and never-was-a-ticket, and it is the only one where
+the answer is already in the reader's hands.)*
 
 ## A subrange type is always 4 bytes
 
@@ -235,8 +262,8 @@ characters, in place; pxx uses its managed string with a declared cap, so
 `s[0]` is a Turbo Pascal idiom that FPC still honours and that real code does
 use, but reading it here answers #0 rather than a wrong length, so a program
 that uses it gets an obviously-empty answer rather than a plausible one. The
-layout difference matters for the same reasons as
-[[compat-pascal-subrange-storage-size]]: a record with a `string[N]` field, a
+layout difference matters for the same reasons as the subrange section above
+(merged in from `compat-pascal-subrange-storage-size`, hence no longer a link): a record with a `string[N]` field, a
 `file of TRec`, and anything handed to C see a pointer where FPC puts N+1
 bytes in place.
 
@@ -307,3 +334,73 @@ probably why both kinds are in `FrozenStrSlotSize` already.
 
 The table above as a test with FPC's column as `.expected`; `gate.sh quick`;
 self-host fixedpoint; cross targets, since the layout is ABI.
+
+---
+
+## Verification 2026-08-30 (frankA) — measurement only, no fix, no claim
+
+Re-measured at HEAD `3309b9ba6609` against `fpc -O- -Mobjfpc` 3.2.2, because
+this repo's tables go stale and this one is from 2026-08-16/20. **It does not:
+every row still holds**, and `lenbyte` is now 5 on both sides — the one row this
+ticket already records as closed.
+
+```
+                    pxx   FPC
+set8                 32     4
+set031               32     4
+setbyte              32    32
+recset               48    12
+small                 4     1
+neg                   4     1
+big                   4     4
+packedrec            12     3
+arr                  16     4
+strN                  8    21
+lenbyte               5     5   <- closed row, agrees
+recstr               24    11
+recstri              24    16
+```
+
+### Asked to route this bug-vs-defer. It is **neither row**, and the reason matters
+
+CLAUDE.md's bug row is *"real Pascal source compiles but runs wrong."* Measured
+against pxx **alone**, with no oracle in the program, nothing runs wrong:
+
+- **`packed` is honoured.** `packed record a: TSmall; b: TNeg; c: 0..255` has
+  field offsets 0/4/8 and `SizeOf` 12, which is exactly the sum of its field
+  sizes — **no padding**. pxx is not failing to pack; its subrange fields are
+  simply 4 bytes wide.
+- **The byte-exact layout is expressible today.** `packed record a: Byte;
+  b: ShortInt; c: Byte` is **3** in pxx, matching FPC. Code that needs a
+  wire-exact or struct-exact layout writes explicit widths — which is what such
+  code already does — and it works.
+- **pxx round-trips its own bytes.** `Move(r, r2, SizeOf(TRec))` on a record
+  with a `string[10]` field preserves both fields.
+
+So the cost is real but it is **memory footprint (4x on subrange arrays, 8x on
+small sets) and cross-toolchain layout**, not a wrong answer. Equally it is
+*not* the defer row — that row is for diagnostics and rendering, and storage
+size is neither. It is an ordinary compat item, and **its filed `prio: 25` is
+right on its own merits.**
+
+### The p70 is borrowed, and the lender is inside the loan
+
+This ticket shows as **P p70** only by propagation: the sole edge is
+[[feature-pascal-typed-and-untyped-files]] [P p70], whose frontmatter carries
+`blocked-by: [compat-pascal-four-type-sizes-...]`.
+
+That matters because **this ticket's strongest argument for mattering is a
+`file of TRec`** — *"a program that writes a record to a file and reads it back
+with FPC gets garbage"* — and `file of T` **does not exist**: it is refused
+outright with *"file types are not supported (use TextFile for text I/O)"*,
+which is precisely what that other ticket is for. Measured, not assumed; it is
+what made the round-trip probe above use `Move`.
+
+So the two tickets hold each other up. Neither is independently urgent, and the
+one that makes the other look urgent is blocked on it. **Not asserting the edge
+is wrong** — sequencing sizes before a typed-file on-disk format is a defensible
+call, since settling layout afterwards would silently invalidate written data.
+Flagging it as the thing to decide, because it is what is putting a prio-25
+compat item at the head of Track P.
+
+No files touched outside this note.

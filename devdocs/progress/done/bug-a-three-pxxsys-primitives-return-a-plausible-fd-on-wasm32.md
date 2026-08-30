@@ -116,7 +116,7 @@ rather than wasm-shaped, so it covers wasm32, riscv32 and xtensa/IDF at once —
 and the next target too, which was the point.
 
 ## Log
-- 2026-08-29 — resolved with the root-cause sibling. PENDING-COMMIT
+- 2026-08-29 — resolved with the root-cause sibling, in commit 4eeadadc4.
 
 ## CORRECTION 2026-08-29 — `{$error}` exists; see the sibling ticket
 

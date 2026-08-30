@@ -1,5 +1,54 @@
 # FPC / LCL compile probe — where pxx walls today (2026-07-04)
 
+> ## Superseded 2026-08-30 (frankD). Every wall below is gone; read it as history.
+>
+> The body is left intact — it is a dated survey and rewriting it would falsify
+> what that day measured. What follows is what is true now, **measured against
+> the pinned binary `1d69760d…`, not inferred from ticket state**:
+>
+> | the survey said | today |
+> | --- | --- |
+> | #1 `TObject.Destroy`/`Create` not virtual | fixed 2026-07-04, in the body already |
+> | #2 [LIBRARY] `TComponent` lives in `classes_lite`, reduced surface | **in `lib/rtl/classes.pas` as `TComponent(TPersistent)`**, with `Components[]`, `ComponentCount`, `InsertComponent`, `Notification`, `Tag` — the exact five the body lists as missing |
+> | #3 `fgl` walls at `:136`; two mundane dialect gaps behind it | **`fgl` compiles and runs.** 7 of 7 drivers byte-match an FPC 3.2.2 oracle, 0 known-fail |
+>
+> `fgl` is now a wired corpus rung, not a probe target:
+> `tools/run_fgl_corpus.sh` over `test/fgl/*.pas` against real `fgl.pp`, with
+> `test/fgl/pxx.skip` **empty**. See [[feature-pascal-corpus-fgl]].
+>
+> ### The Reproduce block at the bottom cannot run on any box here
+>
+> It compiles against `/usr/share/fpcsrc/3.2.2`, a distro package that is not
+> installed on the dev box, the watcher box, or in a fresh clone. That is not a
+> detail: a `make test-core` check guarded on the same path printed
+> `SKIP (no fpcsrc)` and passed **for months**, green and measuring nothing,
+> until [[feature-pascal-corpus-fgl]] replaced it with a fetched, pinned tree at
+> `library_candidates/fpc-rtl/`. Point the runner there, or at any checkout that
+> has fetched it.
+>
+> ### Why the ranked blocker list was wrong in the direction it was
+>
+> The method was a **first-wall survey**: compile until the parser stops, record
+> where. That instrument cannot see past the first wall, so its output is the
+> order in which the parser trips — not the order of difficulty, and not a count.
+> The body reads that output as a ranking (*"the compiler showstoppers are
+> narrow"*, *"two mundane dialect gaps"*, *"Highest-leverage move: …"*), which is
+> a completeness claim the measurement never supported.
+>
+> `fgl` did not need two fixes. It needed six or more, across three layers, and
+> **the last one was invisible to every parse-level probe**: after all the syntax
+> walls cleared, `ifclist` failed at RUNTIME because pxx had no Object Pascal
+> method hiding, so `l.Add(TFoo.Create(3))` bound the hidden inherited
+> `TFPSList.Add(Pointer)` and stored the object's VMT word
+> (bug-p-a-descendant-method-does-not-hide-the-inherited-one, plain-quoted here
+> because it is `done/`). A survey that stops at the first diagnostic will
+> systematically under-count in exactly this way, and will report the shallowest
+> remaining gap as the deepest one left.
+>
+> The conclusion the body draws — *"pxx is not blocked on core Pascal syntax for
+> real FPC code"* — was right, and stayed right. Its **ranking** of what to do
+> next was an artefact of where the measurement stopped.
+
 A quick "throw real FPC 3.2.2 + Lazarus 3.0 LCL source at pxx and see where it
 breaks" pass, as a coverage/progress indicator. **Not** an attempt to actually
 compile them — a first-wall survey.

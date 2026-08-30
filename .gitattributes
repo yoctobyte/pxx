@@ -7,13 +7,28 @@
 # NOTE: git archive reads the .gitattributes of the tree being archived, so this
 # file must exist in the tagged commit to take effect.
 
-# BOARD.md is fully generated from the ticket files (tools/progress.sh board-md)
-# and both parallel agents regenerate it constantly, so a merge/rebase "both
-# modified BOARD.md" is pure noise. The `ours` merge driver keeps the current
-# side instead of conflicting; the content self-heals the next time the board is
-# regenerated. One-time local setup (per checkout, not committable):
+# The BOARD files are fully generated from the ticket files (tools/progress.sh
+# board-md) and every lane regenerates them constantly, so a merge/rebase "both
+# modified" on one is pure noise. The `ours` merge driver keeps the current side
+# instead of conflicting; the content self-heals the next time the board is
+# regenerated.
+#
+# MEASURED 2026-08-30, over the previous 12h of origin/master (864 commits):
+#   BOARD-brief.md  206 commits   <-- the MOST-touched, and it was NOT covered
+#   BOARD.md        198 commits
+#   BOARD-done.md   102 commits
+# 227 of 864 commits (26%) touch a generated board, which is what makes this the
+# conflict majority across eight concurrent lanes rather than an annoyance. The
+# glob is deliberate: the original line named BOARD.md when that was the only
+# board, and BOARD-brief.md -- added later, and now the busiest of the three --
+# inherited none of its protection. Name the class, not the file that existed.
+#
+# THE DRIVER MUST BE REGISTERED PER CHECKOUT; git config is not committable, and
+# an unregistered driver makes this line silently inert (that is how it sat from
+# the day it was written until 2026-08-30). tools/sync.sh registers it on every
+# run, so a clone that has ever synced is covered. By hand:
 #     git config merge.ours.driver true
-devdocs/progress/BOARD.md merge=ours
+devdocs/progress/BOARD*.md merge=ours
 
 agents/               export-ignore
 thesises/             export-ignore

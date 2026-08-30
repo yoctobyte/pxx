@@ -1,0 +1,70 @@
+# A class defining ONE method twice, whose body assigns a parameter to a
+# SAME-NAMED attribute, with a later scope holding a bare local of that name.
+#
+# This hung the compiler FOREVER -- 100% CPU, flat RSS, no output, no exit. A
+# rebound parameter is renamed to "$byref.<name>" to hide it from ordinary
+# lookup, but it had already been filed in the symbol hash under its ORIGINAL
+# name. The scope-exit rollback recomputed the bucket from the NEW name, so it
+# unlinked a bucket the slot was never in and left "prefix"'s head pointing at a
+# dead slot. The second definition then re-allocated that very index, linked it
+# to itself, and FindSym walked a one-element cycle forever.
+# bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
+#
+# THE REAL ASSERTION IS THAT COMPILATION TERMINATES. A hang emits nothing, so no
+# output can be diffed against it -- the Makefile's `timeout` around the COMPILE
+# is the assertion, and it is what makes a regression a RED instead of a suite
+# that never returns. Do not drop it for being unusual.
+#
+# Every shape below was confirmed to hang on the pre-fix binary and to pass
+# after. Two constraints are NOT obvious and were measured, so do not "tidy"
+# them away -- either one silences the bug and leaves a test that always passes:
+#   * the third scope's local must be BARE. Adding `return prefix` to it makes
+#     the pre-fix compiler finish.
+#   * the attribute and the parameter must share ONE name. `self.zzz = prefix`
+#     with a local `zzz`, or with a local `prefix`, both compile pre-fix.
+
+
+class C:
+    def __init__(self, name, prefix):
+        self.prefix = prefix
+
+    def __init__(self, tagName, prefix):
+        self.prefix = prefix
+
+    def other(self):
+        prefix = None
+
+
+# CPython accepts a re-def -- it rebinds, and the LAST definition wins.
+c = C("a", "b")
+print(c.prefix)
+print(C("x", "y").prefix)
+
+
+# The third scope does not have to be a method of the class: a module-level def
+# holding the local is enough, and this spelling hung pre-fix too.
+class E:
+    def __init__(self, name, prefix):
+        self.prefix = prefix
+
+    def __init__(self, tagName, prefix):
+        self.prefix = prefix
+
+
+def free_scope():
+    prefix = None
+
+
+print(E("p", "q").prefix)
+
+
+# DELIBERATELY ABSENT: calling a duplicated ORDINARY method, e.g.
+#     class D:
+#         def m(self, prefix): self.prefix = prefix
+#         def m(self, other, prefix): self.prefix = prefix
+#     D().m("p", "q")
+# That compiles and then SEGFAULTS, on the pre-fix binary and after this fix
+# alike, so it is a different defect that happens to share this source shape:
+# bug-nilpy-calling-a-duplicated-ordinary-method-segfaults. Add it here when that
+# is fixed. Until then, do not read this file as covering duplicated methods that
+# are CALLED -- everything above only constructs.

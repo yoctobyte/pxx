@@ -1222,9 +1222,63 @@ begin
     IREmitNodeRISCV32(node);
 end;
 
+procedure EmitSysBuiltinRISCV32(node, sysNr, nArgs, nZeroTail: Integer; atFdCwd: Boolean);
+{ The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family: evaluate the builtin's
+  arguments and issue one raw syscall. Twin of EmitSysBuiltinXtensa, landed in
+  the same pass and deliberately the same shape.
+
+  ONE routine, not five sequences. arm32 open-codes all five (~90 lines of svc
+  blocks) and that is what this does not copy -- the five differ only in a
+  number and an arity (devdocs/dev/normalise-dont-special-case.md).
+
+  Args are pushed in order and then read back at sp-relative offsets, which is
+  the marshalling the IR_SYSCALL arm in this file already uses; a7 = number,
+  a0..a5 = arguments, result in a0.
+
+  `atFdCwd` prepends AT_FDCWD and `nZeroTail` appends zero words, which is how
+  SysOpen reaches openat(2) -- rv32 is asm-generic and has NO plain open. }
+var argNode, i, total: Integer;
+begin
+  total := 0;
+  if atFdCwd then
+  begin
+    EmitLoadImmRISCV32(reg_a0, -100);                { AT_FDCWD }
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+    Inc(total);
+  end;
+  argNode := IRB[node];
+  i := 0;
+  while (argNode <> -1) and (i < nArgs) do
+  begin
+    IREmitNodeRISCV32(IRA[argNode]);
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+    Inc(total); Inc(i);
+    argNode := IRB[argNode];
+  end;
+  if i < nArgs then
+    Error('target riscv32: a syscall builtin was reached with fewer arguments '
+          + 'than its arity -- the parser should have rejected this call');
+  for i := 1 to nZeroTail do
+  begin
+    EmitLoadImmRISCV32(reg_a0, 0);
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+    Inc(total);
+  end;
+  if total > 6 then
+    Error('target riscv32: a syscall builtin needs more than six argument words');
+  { Argument k sits at sp + (total-1-k)*4 -- pushed first is deepest. Read them
+    all BEFORE moving sp, so no offset has to account for a partial pop. }
+  for i := 0 to total - 1 do
+    rv32_lw(reg_a0 + i, reg_sp, (total - 1 - i) * 4);
+  rv32_addi(reg_sp, reg_sp, total * 4);
+  EmitLoadImmRISCV32(reg_a7, sysNr);
+  EmitI32($00000073);                                { ecall }
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
+  itemNode, hi: Integer;   { `x in [consts]` — SPECIAL_IN's item walk }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
@@ -2423,6 +2477,42 @@ begin
           rv32_lw(reg_a0, reg_a0, -8);
           Exit;
         end;
+        if procIdx = -100 then
+        begin
+          { LoadFile(path, dst): read the whole file named by `path` into the
+            managed-string `dst` through the portable PXXStrLoadFile helper,
+            then publish the new handle and release dst's old one. Managed dst
+            only. The file I/O is entirely in the helper -- what a backend owns
+            here is the refcount dance, which is why this is a call and not a
+            syscall, and it is the same publish-then-DecRef order IR_STORE_SYM
+            uses a thousand lines up rather than a second spelling of it.
+
+            Landed WITH the riscv32/xtensa arms of PXXSysOpenRO/PXXSysLseek/
+            PXXSysClose, never before them: those three had arms for four
+            targets and none for these two, and their {$else} returns -1, so
+            this arm on its own compiles a LoadFile that hands back an empty
+            string in place of a diagnostic. }
+          argNode := IRB[node];
+          left := IRA[argNode];            { arg1 = path }
+          valNode := IRB[argNode];
+          right := IRA[valNode];           { arg2 = dst }
+          if not ((IRKind[right] = IR_LOAD_SYM) and
+                  (Syms[IRA[right]].TypeKind = tyAnsiString)) then
+            Error('target riscv32: LoadFile expects a managed-string destination');
+          si := IRA[right];
+          IREmitNodeRISCV32(left);         { a0 = path handle (nul-terminated) }
+          procIdx := FindProc('PXXStrLoadFile');
+          if procIdx < 0 then Error('compiler error: PXXStrLoadFile not found');
+          EmitCallProc(procIdx);           { a0 = new handle (refcount 1) }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
+          EmitLoadVarRISCV32(si);          { a0 = dst's OLD handle }
+          procIdx := FindProc('PXXStrDecRef');
+          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(procIdx);
+          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);    { pop new }
+          EmitStoreVarRISCV32(si);
+          Exit;
+        end;
         if procIdx < 0 then
         begin
           { Type-pun passthroughs: Ord/Chr/Integer()/LongWord() are identity on
@@ -2563,6 +2653,91 @@ begin
             procIdx := FindProc('PXXStdinEof');
             if procIdx < 0 then Error('compiler error: PXXStdinEof not found');
             EmitCallProc(procIdx);
+            Exit;
+          end;
+          if procIdx = -SPECIAL_IN then
+          begin
+            { `x in [items]` where EVERY item is constant. The second shape `in`
+              arrives in: a set literal containing any RUNTIME element routes
+              through ParseSetLiteralAST and becomes an ordinary AN_BINOP tkIn,
+              while an all-constant literal never becomes a set at all — the
+              parser emits an AN_CALL with -SPECIAL_IN and the backend compares
+              inline. ir_codegen.inc, aarch64, arm32 and i386 carried this arm;
+              riscv32 and xtensa did not, and both were found in the same pass
+              rather than one being left for the next lane
+              (devdocs/dev/normalise-dont-special-case.md — grep for the sibling
+              BEFORE closing the first arm, which includes the sibling BACKEND).
+
+              arm32's model accumulates with conditional execution and xtensa's
+              has to branch, but riscv has `slt`, so this arm is branchless: no
+              labels, no forward patching, one straight run of ALU ops. Same
+              rule, each backend's own idiom — which is what normalising a
+              construct across targets is supposed to look like. }
+            argNode := IRB[node];             { arg1 = the test value (IR_ARG) }
+            IREmitNodeRISCV32(IRA[argNode]);  { a0 = test value }
+            rv32_addi(reg_a2, reg_a0, 0);     { a2 = x }
+            rv32_addi(reg_a3, reg_zero, 0);   { a3 = membership accumulator }
+            argNode := IRB[argNode];          { first set item }
+            while argNode <> -1 do
+            begin
+              itemNode := IRA[argNode];
+              if IRKind[itemNode] = IR_BLOCK then
+              begin
+                { [lo..hi]  ->  (x >= lo) and (x <= hi) }
+                lo := Integer(IRIVal[IRA[itemNode]]);
+                hi := Integer(IRIVal[IRB[itemNode]]);
+                EmitLoadImmRISCV32(reg_a4, lo);
+                rv32_slt(reg_a4, reg_a2, reg_a4);   { a4 = x < lo }
+                rv32_xori(reg_a4, reg_a4, 1);       { a4 = x >= lo }
+                EmitLoadImmRISCV32(reg_a5, hi);
+                rv32_slt(reg_a5, reg_a5, reg_a2);   { a5 = hi < x }
+                rv32_xori(reg_a5, reg_a5, 1);       { a5 = x <= hi }
+                rv32_and(reg_a4, reg_a4, reg_a5);
+              end
+              else
+              begin
+                if IRKind[itemNode] <> IR_CONST_INT then
+                  Error('target riscv32: `in [..]` reached the constant-only path '
+                        + 'with a non-constant element; a runtime element must '
+                        + 'lower to a set binop (ParseSetMembershipAST)');
+                lo := Integer(IRIVal[itemNode]);
+                EmitLoadImmRISCV32(reg_a4, lo);
+                rv32_xor(reg_a4, reg_a2, reg_a4);   { 0 iff equal }
+                rv32_sltiu(reg_a4, reg_a4, 1);      { a4 = x = v }
+              end;
+              rv32_or(reg_a3, reg_a3, reg_a4);
+              argNode := IRB[argNode];
+            end;
+            rv32_addi(reg_a0, reg_a3, 0);     { a0 = result }
+            Exit;
+          end;
+          { The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family. rv32 linux is
+            the asm-generic table: read=63, write=64, close=57, fchmod=52,
+            openat=56. There is NO plain open in that table, so SysOpen lowers
+            to openat(AT_FDCWD, path, flags, 0) -- which is also the shape the
+            xtensa twin uses, so the two backends landed in this pass share one
+            spelling rather than two.
+
+            mode is 0 because the public builtin takes no mode argument; the
+            family's own test creates with mode 0 and then chmods through
+            SysFchmod, which is why SysFchmod is in the family at all.
+
+            This backend has no bare-metal/hosted split on this path: unlike
+            xtensa's IR_SYSCALL there is no PLATFORM_ESP arm here to mirror. }
+          if (procIdx = -Ord(tkSysOpen)) or (procIdx = -Ord(tkSysRead)) or
+             (procIdx = -Ord(tkSyswrite)) or (procIdx = -Ord(tkSysClose)) or
+             (procIdx = -Ord(tkSysFchmod)) then
+          begin
+            if procIdx = -Ord(tkSysOpen) then
+              EmitSysBuiltinRISCV32(node, 56, 2, 1, True)   { openat(AT_FDCWD,path,flags,0) }
+            else if procIdx = -Ord(tkSysRead) then
+              EmitSysBuiltinRISCV32(node, 63, 3, 0, False)  { read(fd,buf,count) }
+            else if procIdx = -Ord(tkSyswrite) then
+              EmitSysBuiltinRISCV32(node, 64, 3, 0, False)  { write(fd,buf,count) }
+            else if procIdx = -Ord(tkSysClose) then
+              EmitSysBuiltinRISCV32(node, 57, 1, 0, False)  { close(fd) }
+            else
+              EmitSysBuiltinRISCV32(node, 52, 2, 0, False); { fchmod(fd,mode) }
             Exit;
           end;
           begin
@@ -2962,12 +3137,17 @@ begin
 
             Mirrors the aarch64 arm: evaluate the code into the first argument
             register, THEN load the syscall number, so computing it cannot
-            clobber a0. EmitExit's own encodings only cover a constant. }
+            clobber a0. That ordering now lives in EmitExitReg (emit.inc)
+            together with every other target's, which is where this comment's
+            last sentence used to say the gap was: "EmitExit's own encodings
+            only cover a constant" was a note describing a missing abstraction
+            from inside the fifth hand-rolled copy of it. Two of the six had
+            drifted to a thread-only exit by then —
+            bug-b-concurrent-halt-from-several-threads-exits-0. }
           if (IRA[node] <> -1) and (not EspBareBoot) then
           begin
             IREmitNodeRISCV32(IRA[node]);        { a0 = the exit code }
-            EmitI32($05E00893);                  { addi a7, x0, 94  (exit_group) }
-            EmitI32($00000073);                  { ecall }
+            EmitExitReg;
           end
           else
             EmitExit(0);                         { no argument, or ESP bare: park }

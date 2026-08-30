@@ -6,6 +6,26 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PXX_STABLE="${PXX_STABLE:-"$ROOT/stable_linux_amd64/default/pinned"}"
 
+# The GTK3 include root. lib/pcl/gtk3_c.h is `#include <gtk/gtk.h>` against the
+# INSTALLED headers, and gtk-2.0 is a default system include root while gtk-3.0
+# is not -- both answer to that same spelling, so the root that comes first
+# decides the GTK version for every C consumer at once. Passing it explicitly
+# keeps this suite off that fork entirely
+# (decide-which-gtk-a-bare-gtk-gtk-h-means). pkg-config when it is available,
+# so a box that installs GTK3 somewhere else still works; the literal path is
+# the fallback, not the source of truth.
+# FLAG ORDER IS LOAD-BEARING: emit the Pascal -Fu roots BEFORE $GTK3_INC.
+# A -I root is a unit search root too, searched in flag order, so an include
+# root ahead of -Fu can capture a `uses` and bind it to a same-named C header:
+# gtk's pkg-config cflags carry /usr/include/libpng16, whose png.h collides
+# with lib/rtl/png.pas. Nothing built here uses png today, so the order is the
+# only thing between us and a silent dynamic import -- do not reflow it.
+# Track A fixed the mechanism in 4576ad4d1, but these recipes build with
+# $PXX_STABLE, which is still the pre-fix pin.
+# bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
+GTK3_INC="$(pkg-config --cflags-only-I gtk+-3.0 2>/dev/null || true)"
+[ -n "$GTK3_INC" ] || GTK3_INC="-I/usr/include/gtk-3.0/"
+
 fail=0
 
 say() {
@@ -22,7 +42,7 @@ run_gui_test() {
   # a previous run's binary gets tested and the suite reports on code that is
   # no longer there.
   rm -f "$out"
-  if ! "$PXX_STABLE" -Fulib/pcl "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  $name -- compile: $(tail -1 "$log")"
     fail=1
     return
@@ -41,14 +61,54 @@ run_gui_test() {
 # (feature-pcl-widgetset-select): the default must be byte-identical to an
 # explicit gtk3, and every unsupported cell must be a COMPILE error naming the
 # reason rather than a silent build.
+# Compile + run + assert the FULL OUTPUT. run_gui_test above checks only the
+# exit status, which cannot tell a working subject from one whose callbacks
+# never fired: test_gtk_signals exits 0 whether or not "clicked" was ever
+# delivered, and test_pcl_helloworld exits 0 with clicks=0 when the streamer
+# fails to wire Button1. For a subject whose whole point IS what it printed,
+# rc is not the assertion -- the text is.
+#
+# Also timeout-bounded, which run_gui_test is not. These subjects drive real
+# gtk main loops and self-quit from a g_timeout; a subject that loses its
+# quit would hang the suite rather than fail it.
+#
+# NOTE what this tier does and does not witness. It runs with whatever display
+# happens to exist, and these subjects print their success lines even with
+# DISPLAY and WAYLAND_DISPLAY both unset -- gtk_init_check still returns 1 and
+# gtk_window_new still returns non-nil. So a green row here asserts widget
+# construction, callback delivery and clean exit. It does NOT assert that a
+# window ever mapped; that is gui_realwindow's tier, and it needs xdotool.
+run_gui_expect() {
+  local name="$1" expect="$2"
+  local src="$ROOT/test/gui/$name.pas"
+  local out="/tmp/gui_test_$name"
+  local log="/tmp/gui_test_$name.log"
+  local got
+
+  rm -f "$out"
+  if ! "$PXX_STABLE" -Fulib/pcl $GTK3_INC "$src" "$out" >"$log" 2>&1; then
+    say "FAIL  $name -- compile: $(tail -1 "$log")"; fail=1; return
+  fi
+  if ! got="$(timeout 60 "$out" 2>"$log")"; then
+    say "FAIL  $name -- runtime: $(tail -1 "$log")"; fail=1; return
+  fi
+  if [ "$got" != "$expect" ]; then
+    say "FAIL  $name -- output mismatch"
+    say "      want: $(printf '%s' "$expect" | tr '\n' '/')"
+    say "      got:  $(printf '%s' "$got"    | tr '\n' '/')"
+    fail=1; return
+  fi
+  say "OK    $name"
+}
+
 widgetset_matrix() {
   local src="$ROOT/test/gui/test_pcl_widgets.pas"
   local a="/tmp/gui_ws_default" b="/tmp/gui_ws_gtk3"
   local log="/tmp/gui_ws.log"
-  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl "$src" "$a" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl $GTK3_INC "$src" "$a" >"$log" 2>&1; then
     say "FAIL  widgetset -- default build: $(tail -1 "$log")"; fail=1; return
   fi
-  if ! "$PXX_STABLE" -dWIDGETSET_GTK3 -Fulib/pcl -Fulib/rtl "$src" "$b" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -dWIDGETSET_GTK3 -Fulib/pcl -Fulib/rtl $GTK3_INC "$src" "$b" >"$log" 2>&1; then
     say "FAIL  widgetset -- explicit gtk3: $(tail -1 "$log")"; fail=1; return
   fi
   if ! cmp -s "$a" "$b"; then
@@ -57,7 +117,7 @@ widgetset_matrix() {
   # every unsupported cell refuses, and says why
   local ws
   for ws in WIDGETSET_WIN32 WIDGETSET_QT; do
-    if "$PXX_STABLE" "-d$ws" -Fulib/pcl -Fulib/rtl "$src" /tmp/gui_ws_bad >"$log" 2>&1; then
+    if "$PXX_STABLE" "-d$ws" -Fulib/pcl -Fulib/rtl $GTK3_INC "$src" /tmp/gui_ws_bad >"$log" 2>&1; then
       say "FAIL  widgetset -- -d$ws built instead of refusing"; fail=1; return
     fi
     if ! grep -q 'widgetset' "$log"; then
@@ -67,7 +127,43 @@ widgetset_matrix() {
   say "OK    widgetset selection + matrix"
 }
 
+# lib/pcl/gtk3_c.h is `#include <gtk/gtk.h>` against the installed headers, and
+# a bare <gtk/gtk.h> resolves to GTK **2** on this box unless $GTK3_INC puts the
+# gtk-3.0 root first.
+#
+# This function checks the LINK. It was commented as asserting the VERSION, and
+# the two readelf lines below cannot do that -- measured, not argued: built with
+# $GTK3_INC removed, so against GTK2 headers, test_gtk_ffi still has
+# libgtk-3.so.0 in DT_NEEDED and still has no libgtk-x11-2.0.so.0, so BOTH
+# conditions pass on exactly the state they exist to reject. The reason is
+# structural: CHeaderStem maps the gtk3_c stem to gtk-3, so the link never
+# follows -I, only the headers do. Nothing here could have caught a
+# wrong-version build.
+#
+# The version is now asserted at the include, in lib/pcl/gtk3_c.h, where the
+# information actually is (#if GTK_MAJOR_VERSION < 3 -> #error). These lines are
+# kept because a correct link is still worth checking -- it is just a narrower
+# claim than the old comment made, and the comment was the load-bearing part of
+# the mistake: it told the next reader this ground was already covered.
+# feature-b-pcl-should-assert-its-gtk-version-rather-than-rely-on-an-accident
+gtk_version_check() {
+  local src="$ROOT/test/gui/test_gtk_ffi.pas"
+  local out="/tmp/gui_gtk_version" log="/tmp/gui_gtk_version.log"
+  rm -f "$out"
+  if ! "$PXX_STABLE" -Fulib/pcl $GTK3_INC "$src" "$out" >"$log" 2>&1; then
+    say "FAIL  gtk version -- compile: $(tail -1 "$log")"; fail=1; return
+  fi
+  if ! readelf -d "$out" | grep -q 'libgtk-3\.so\.0'; then
+    say "FAIL  gtk version -- not linked against libgtk-3.so.0"; fail=1; return
+  fi
+  if readelf -d "$out" | grep -q 'libgtk-x11-2\.0\.so\.0'; then
+    say "FAIL  gtk version -- linked against GTK2 as well"; fail=1; return
+  fi
+  say "OK    gtk version (libgtk-3.so.0, no GTK2)"
+}
+
 say "=== running GUI test suite (PCL) ==="
+gtk_version_check
 widgetset_matrix
 run_gui_test test_gtk_ffi
 run_gui_test test_pcl_click
@@ -81,6 +177,37 @@ run_gui_test test_pcl_paned
 run_gui_test test_pcl_stream_paned
 run_gui_test test_pcl_tabbar
 
+# The six that nothing ran until 2026-08-30. check_test_wiring surfaced them
+# once it stopped blanket-crediting test/gui
+# (chore-t-six-orphan-gui-tests-the-blanket-was-hiding). They are NOT redundant
+# leftovers -- between them they are the only executable description of
+# SignalConnect, raw gtk_window_new/show_all/gtk_main, ShowMessage +
+# DismissActiveDialog, Application.CreateForm's metaclass path, and the
+# WILDCARD {$R *.lfm} that real Lazarus code writes (test_pcl_lfm exercises
+# only the explicit `{$R TMainForm ...}` form). None of that was covered by the
+# eleven rows above.
+#
+# They use run_gui_expect rather than run_gui_test on purpose: each was written
+# to be WATCHED by a human, so its result is prose on stdout, and an rc-only
+# row would pass on a dead callback. The expected text is the assertion.
+run_gui_expect test_gtk_window    'window shown, exiting'
+run_gui_expect test_gtk_signals   'button clicked
+timeout -> quit
+exited cleanly'
+run_gui_expect test_pcl_window    'starting
+created app
+initialized app
+created form
+created button
+added timeout
+auto-quit
+done'
+run_gui_expect test_pcl_showmessage 'before ShowMessage
+dismiss dialog
+after ShowMessage'
+run_gui_expect test_pcl_helloworld 'Button1Click -> ShowMessage
+clicks=1'
+
 # Solitaire GUI demo (engine in examples/solitaire_gui): compile + headless
 # --smoke run (renders the board + a few engine moves, prints SMOKE OK).
 solitaire_built=0
@@ -88,7 +215,7 @@ solitaire_smoke() {
   local src="$ROOT/examples/solitaire_gui/solitaire_gui.pas"
   local out="/tmp/gui_test_solitaire" log="/tmp/gui_test_solitaire.log"
   rm -f "$out"
-  if ! "$PXX_STABLE" -Fulib/pcl -Fuexamples/solitaire_gui "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl -Fuexamples/solitaire_gui $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  solitaire_gui -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   solitaire_built=1
@@ -177,7 +304,7 @@ life_smoke() {
   local src="$ROOT/examples/life/life.pas"
   local out="/tmp/gui_test_life" log="/tmp/gui_test_life.log"
   rm -f "$out"
-  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  life -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   if ! have_xvfb; then
@@ -204,7 +331,7 @@ eliah_smoke() {
   #   OK    eliah_ide (real window 1100x727)
   # two lines apart -- a red that reads half-green.
   rm -f "$out"
-  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl -Fuapps/ide/garin "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl -Fuapps/ide/garin $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  eliah_ide -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   eliah_built=1

@@ -111,6 +111,63 @@ after fixing a 32-bit loop counter found a second live instance of the identical
 bug in another file. That grep costs a minute and is the single highest-yield
 habit in this whole note.
 
+## Which predicate to reach for: ask what the value IS, not what node made it
+
+The rest of this note tells you to collapse two paths into one. It leaves
+*which* predicate the surviving path should be written with to taste. It should
+not, because one of the two available spellings cannot be defeated and the other
+always can:
+
+> **Asking what a value IS cannot be defeated by wrapping it; asking what node
+> produced it always can.**
+
+A node-keyed predicate — `ASTKind[<my operand>] = AN_SOME_LITERAL` — is really
+asking *"is my operand syntactically the thing itself?"*, so **any** node in
+between answers no: a parenthesis, a cast, a comma operator, a ternary, a
+constant fold. Every one of those is a wrapper somebody will eventually write,
+and the predicate does not fail loudly when they do — it silently takes the
+other branch. A value-keyed predicate — `IRTk[<the lowered value>] = tyString`
+— asks a question about the value that arrives, and no amount of wrapping
+changes the answer.
+
+**Measured, 2026-08-30, `refactor-c-string-literal-decay-belongs-at-the-producer`.**
+A C string literal lowers to a frozen-string *handle*: an 8-byte length prefix,
+then the data. Four consumers each added the `+8` themselves, keyed on
+`ASTKind[...] = AN_STR_LIT`. A census of every way to wrap a literal x every
+site that consumes one (13 x 5, gcc deciding each cell) came back like this:
+
+```
+site      plain paren comma comma-nested cast cast-comma comma-cast ...
+assign    ok    ok    ok    ok           ok   FAIL       ok
+return    ok    ok    FAIL  FAIL         ok   FAIL       FAIL
+arg       ok    ok    ok    ok           ok   ok         ok
+```
+
+The `arg` row is green across all thirteen wrappers. It is not better tested
+and it was not written more carefully — it is the one site that keys on
+`IRTk[aval] = tyString` instead of the node kind. The five live wrong values
+were all in the node-keyed rows, all comma operators, and all silently returned
+an **empty string** rather than crashing, because the pointer landed on the
+length prefix whose remainder is zero.
+
+So the two rules compose, and this is the order to apply them:
+
+1. Push the decision to the **producer**, so it is made once. (This note.)
+2. Write the surviving predicate against the **value**, not the node. (This
+   section.)
+
+Doing only the first still leaves a predicate a wrapper can defeat; doing only
+the second leaves four correct copies to keep in sync. The fix above did both,
+and the honest summary is that it invented nothing — one of the four sites was
+already right, and the work was noticing which one and why.
+
+**The one-line test before you write a predicate:** *can I make this answer
+wrong by putting a harmless node in front of its operand?* If yes, you are
+asking about syntax when you meant to ask about a value. Note that the failure
+mode is what makes this worth a rule rather than a preference: a node-keyed
+predicate that gets defeated does not error, it takes the wrong branch — the
+quiet class this whole note is about.
+
 ## The work list
 
 `meta-constant-normalisation` (in `../progress/backlog/`) is the standing index

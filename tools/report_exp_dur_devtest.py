@@ -104,8 +104,15 @@ r = testmgr.report_job(job(status="fail", flaky=True, attempts=3,
 # PXX-SUBJECT: marker in its own source, so a red arrives carrying the priority
 # of its subject instead of only the priority of being red. "" for passing jobs
 # and for tests that declare nothing.
+# "step_i"/"step_line"/"step_src"/"step_n" joined 2026-08-30
+# (bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step):
+# WHICH recipe line went red, and what THAT line names. A job is a script of up
+# to ~200 lines spanning several lanes' files, so `src` -- the job's first two
+# sources -- describes its subject and says nothing about the failure. The four
+# are always present and filled only for a red, like `subject`.
 expect = {"name", "cls", "src", "sel", "pin_built", "advisory", "status",
-          "subject", "flaky", "attempts", "dur", "exp_dur", "mem", "cpu",
+          "subject", "step_i", "step_line", "step_src", "step_n",
+          "flaky", "attempts", "dur", "exp_dur", "mem", "cpu",
           "reason", "log"}
 check(set(r) == expect,
       "the key set is exactly the documented one",

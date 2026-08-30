@@ -11,7 +11,9 @@ summary: "--threadsafe self-compile emits 45% more global fixups than the normal
 - **Split out 2026-08-02** from
   [[bug-a-threadsafe-self-host-exceeds-max-globfix-by-121]], whose "fix
   directions" recommended raising the cap now and asking this separately. The
-  cap was raised (commit 5d7fa14f3's parent, `91f063250`) so nothing is blocked
+  cap was raised by `91f063250` (verified on origin/master, 2026-08-30 — the
+  sha this line used to reach it *through* was a pre-rebase one and is on no
+  remote ref at all; the parent was always the load-bearing half) so nothing is blocked
   on this; it is the question the capacity bug left behind.
 
 ## The measurement, from that ticket

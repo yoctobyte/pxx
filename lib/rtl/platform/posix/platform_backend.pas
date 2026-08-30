@@ -113,6 +113,10 @@ implementation
 
 {$ifdef CPU_AARCH64}{$define PAL_GENERIC_SYSCALLS}{$endif}
 {$ifdef CPU_RISCV32}{$define PAL_GENERIC_SYSCALLS}{$endif}
+{ xtensa fits the generic CALLING SHAPE — no fork, no vfork, no socketcall; it
+  has clone(116), dup3(310) and the direct socket syscalls — but NOT the generic
+  NUMBERING. That distinction is why SYS_exit exists below. }
+{$ifdef CPU_XTENSA}{$define PAL_GENERIC_SYSCALLS}{$endif}
 
 const
   PAL_PLATFORM_POSIX = 1;
@@ -133,6 +137,7 @@ const
   SYS_getcwd = 79; SYS_rt_sigaction = 13;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
   SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
+  SYS_exit = 60;
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -152,6 +157,7 @@ const
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
+  SYS_exit = 1;
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
@@ -169,6 +175,7 @@ const
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
+  SYS_exit = 93;
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -186,12 +193,29 @@ const
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
+  SYS_exit = 1;
 {$endif}
 {$ifdef CPU_RISCV32}
   { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
-    lseek is llseek(62) with a split 64-bit offset — PalSeek below only passes
-    small offsets, and qemu-user tolerates the plain form for them; the
-    time-related calls keep the legacy generic numbers qemu implements. }
+    62 is _llseek(fd, off_hi, off_lo, loff_t *result, whence), NOT plain lseek —
+    rv32 has no plain lseek at all. A 3-arg call leaves the result pointer NULL,
+    the kernel returns EINVAL, and the -1 flows onward as a size. So a caller
+    must split the 64-bit offset and pass the address of a local to receive the
+    new position: see PalBackendSeek below, and the identical arm in PXXSysLseek
+    (compiler/builtin/builtinheap.pas) — the two must not drift.
+
+    This sentence previously said qemu-user tolerated the plain form for small
+    offsets. It does not, and the correction is a measurement rather than a
+    reading — qemu-riscv32 -strace, 2026-08-30:
+
+      openat(AT_FDCWD,"test/hello.pas",O_RDONLY) = 3
+      llseek(3,0,2,NULL,UNKNOWN)                 = -1 errno=22 (Invalid argument)
+      read(3,0x2b2ad050,-22)                     = -1 errno=14 (Bad address)
+
+    The stale claim cost a debugging cycle: a new caller was written to it and
+    produced a LoadFile returning an empty string with no error anywhere.
+
+    The time-related calls keep the legacy generic numbers qemu implements. }
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
@@ -207,6 +231,41 @@ const
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
+  SYS_exit = 93;
+{$endif}
+{$ifdef CPU_XTENSA}
+  { xtensa linux has its OWN numbering — neither asm-generic nor i386's. These
+    were MEASURED, not recalled: one syscall per process under `qemu-xtensa
+    -strace`, every argument 2147483647 so the call is inert whatever it turns
+    out to be (unmapped as a pointer, out of range as an fd, nonexistent AND
+    positive as a pid so it can never mean a process group). All five values
+    this repo had already established independently come back exactly:
+    read=12, write=13, mmap2=80, exit=118, exit_group=119.
+      A many-syscalls-per-process scan gave mmap2=79 — qemu kills the process on
+    a bogus bind, the restart loses a number, and every row after it is off by
+    one. Plausible and wrong is this repo's expensive shape; one per process is
+    what makes the table trustworthy.
+      lseek: xtensa has BOTH plain lseek(15) and _llseek(17), so unlike rv32
+    (whose 62 IS _llseek) the ordinary 3-arg PalBackendSeek path is correct and
+    no arm is added there. 32-bit off_t, same small-offset bound rv32 records.
+      mmap: 80 is mmap2, matching i386's 192 and arm32's 192 — the call sites
+    already pass a page offset of 0. }
+  SYS_read = 12; SYS_write = 13; SYS_close = 9; SYS_lseek = 15;
+  SYS_fsync = 26; SYS_openat = 288; SYS_mkdirat = 289; SYS_getdents64 = 60; SYS_statx = 351;
+  SYS_chdir = 41; SYS_linkat = 293; SYS_symlinkat = 294;
+  SYS_unlinkat = 291; SYS_renameat = 292;
+  SYS_socket=96; SYS_connect=101; SYS_accept4=333; SYS_bind=100; SYS_listen=102;
+  SYS_setsockopt=97; SYS_shutdown=99; SYS_fcntl=67;
+  SYS_getsockopt=98; SYS_getsockname=104; SYS_getpeername=105; SYS_ioctl=66;
+  SYS_sendto=110; SYS_recvfrom=111; SYS_ppoll=273;
+  SYS_clone = 116; SYS_execve = 117; SYS_pipe2 = 311; SYS_dup3 = 310; SYS_wait4 = 121; SYS_kill = 123;
+  SYS_clock_gettime = 245;
+  SYS_mmap = 80; SYS_munmap = 81; SYS_mprotect = 82; SYS_fchmod = 52; SYS_getpid = 120; SYS_nanosleep = 195; SYS_utimensat = 296;
+  SYS_fchmodat = 300; SYS_umask = 58;
+  SYS_getcwd = 43; SYS_rt_sigaction = 226;
+  SYS_ftruncate = 23; SYS_faccessat = 301; SYS_geteuid = 140; SYS_fchown = 53; SYS_readlinkat = 295;
+  SYS_getuid = 137; SYS_getgid = 139; SYS_getegid = 141; SYS_getppid = 150;
+  SYS_exit = 118;
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_EMPTY_PATH = $1000;
@@ -1235,19 +1294,16 @@ begin
 
     res := Integer(__pxxrawsyscall(SYS_execve, Int64(path), Int64(argv), Int64(envp), 0, 0, 0));
 
-    { If execve fails, exit }
-{$ifdef CPUX86_64}
-    res := Integer(__pxxrawsyscall(60, 127, 0, 0, 0, 0, 0));
-{$endif}
-{$ifdef CPU_I386}
-    res := Integer(__pxxrawsyscall(1, 127, 0, 0, 0, 0, 0));
-{$endif}
-{$ifdef PAL_GENERIC_SYSCALLS}
-    res := Integer(__pxxrawsyscall(93, 127, 0, 0, 0, 0, 0));
-{$endif}
-{$ifdef CPU_ARM32}
-    res := Integer(__pxxrawsyscall(1, 127, 0, 0, 0, 0, 0));
-{$endif}
+    { If execve fails, exit. Through the per-arch SYS_exit constant, never a
+      literal: this was four {$ifdef} arms holding 60 / 1 / 93 / 1, and the 93
+      was keyed on PAL_GENERIC_SYSCALLS -- which means a calling SHAPE (clone,
+      dup3, direct sockets), not a numbering. It happened to be right because
+      the only two arches with that shape also shared the asm-generic table.
+      xtensa has the shape and its own numbers, where 93 is `socket`: the child
+      would open a socket, fall out of this block still being the child, and
+      hand its caller pid 0 to read as "I am the parent". Every arch keeps the
+      exact number it had, so the five existing targets are unchanged. }
+    res := Integer(__pxxrawsyscall(SYS_exit, 127, 0, 0, 0, 0, 0));
   end;
 
   Result := pid;

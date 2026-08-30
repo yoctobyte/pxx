@@ -1,0 +1,10 @@
+find       1 1
+count      2
+index      2
+startswith True True
+str->str   ABC zbczbc
+literal    1
+module     2.0 [1, 2]
+userclass  99
+usable     2 True
+class-ret  ['C', 'minor'] ['C', 'minor']

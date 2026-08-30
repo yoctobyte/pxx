@@ -1,13 +1,33 @@
 ---
 track: A
-prio: 70
+prio: 35
 type: feature
 summary: "`Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change."
-status: working
-owner: frankA
+status: backlog
+owner: ""
 ---
 
 # `Error()` halts, so no parse can be speculative
+
+> **STATE 2026-08-29 — read this before the history below, which is long.**
+> Want #2 (multiple errors per compile) **already works**; slices 1-5 landed it.
+> What is left is want #1, a trial parse that can FAIL and back out.
+>
+> **The one-sentence reason it is worth doing now:** the trial parses already in
+> the tree are safe **by accident of a naming scheme, not by design** — a retry
+> mints `$pylam2` because `PyLamSeq` is monotonic, so the leak is a growth leak
+> and never a corruption leak. **Any speculative parse over a construct named
+> from the SOURCE — a def, a class, a method — re-registers the same name and
+> gets the duplicate the counter has been hiding.** That is exactly what item
+> 1's NilPy pre-pass must trial-parse, so the landmine is aimed at the very work
+> this ticket exists to enable.
+>
+> **Slice 6 landed 2026-08-29**: `ProcRollbackTo` (`db7dfec69`) and its wiring
+> into all six rewind sites (`d6cb27a9a`). A rewound trial parse now unregisters
+> what it registered. The primitive item 1 needs therefore **exists**; what is
+> still missing is the part that ties an ERROR to a rollback point, and the
+> decision about which errors are fatal.
+
 
 - **Type:** feature (compiler core) — **Track A**.
   Split out 2026-08-14 by the user while re-pricing
@@ -547,6 +567,296 @@ smaller question.
 **Held back on the coordinator's request** (2026-08-29): frank-rust hit exactly
 this wall on rung 9 of the Rust frontend and routed around it with a token scan,
 so there is fresh evidence about what this would actually buy that should be
-weighed before anyone starts. **And the work lands squarely in
-`compiler/symtab.inc`, which another agent is in right now** — the file the
-whole double-dispatch episode of the same day ran through.
+weighed before anyone starts. ~~And the work lands squarely in
+`compiler/symtab.inc`, which another agent is in right now~~ — **STRUCK
+2026-08-29 (frankA).** That clause was a file-ownership fact written in the
+PRESENT TENSE into a ticket body, where nothing ever updates it. It was true for
+about an hour. `compiler/symtab.inc` was released the same day, confirmed by
+reading the holder's working tree (`M compiler/ir.inc` only) rather than by
+asking. Left visible rather than deleted, because the failure mode is worth
+seeing: a stale present-tense claim in a ticket reads as live to every later
+session, and this one had already stopped one session from starting.
+
+## MEASURED 2026-08-29 (frankA) — the trial parses DO leak, and the leak is safe by ACCIDENT
+
+The previous section recommended landing `ProcRollbackTo` first, and framed the
+open question as a fork: *do the existing trial parses actually leak procs, or is
+`ProcHashInsert`'s assertion that rollback "cannot be needed" currently true?*
+
+Measured, and the answer is **neither branch**. They leak, the assertion is
+still literally true, and the reason those two facts coexist is the finding.
+
+### The measurement
+
+`PXXDBG=n.caps` prints one line per lambda **parse**, so it counts re-parses
+without patching anything. Controlled pair — the same lambda and the same list
+literal, with only the trial-parse boundary moved:
+
+```python
+# A — lambda OUTSIDE len()'s argument        # B — same lambda, INSIDE it
+xs = [(lambda a: a + 1)(1), 2]               print(len([(lambda a: a + 1)(1), 2]))
+print(len(xs))
+```
+
+| | lambda parses | procs | code |
+| --- | ---: | ---: | ---: |
+| **A** (outside the trial region) | 1 | 1860 | 1,252,804 B |
+| **B** (inside it) | **2** | **1861** | **1,253,135 B** |
+| **D** (two lambdas, outside) | 2 | 1861 | 1,253,423 B |
+| **C** (two lambdas, inside) | **4** | **1863** | **1,254,149 B** |
+
+Linear: **one orphaned proc and ~350 B of dead code per lambda inside a
+trial-parsed region.** Both intercepts do it — `len()` and the f-string hole
+(`pystr_of`), which is the same rewind in two places. Every program above still
+prints what CPython prints, so nothing is wrong today; this is waste and a
+landmine, not a wrong answer.
+
+### Why it leaks
+
+The intercepts roll back exactly **two** things — `TokPos` and the hoist queue
+(`PyHoistPark`/`Restore`). A lambda is an *expression*, and parsing one runs
+`Inc(PyLamSeq)`, `RegisterProc('$pylam' + N)` and `Inc(PyPendLamCount)`
+(`pyparser.inc:9549-9568`). The rewind undoes none of that, and
+`pyparser.inc:30125` later compiles **every** pending lambda's body — so the
+abandoned attempt's body is emitted.
+
+`pasparser_expr.inc:2036` is the precedent, in this same file, for this same
+class of defect: *"a parse has SIDE EFFECTS… the discarded parse's copy stayed
+in the queue and was emitted"*, which made `len(f.read().upper())` read the file
+twice. One side effect was found and fixed. This is a second one of the same
+shape, and `normalise-dont-special-case.md`'s "grep for the sibling" is exactly
+what would have caught it.
+
+### The finding: safe by accident of a naming scheme
+
+`ProcHashInsert`'s comment — *"proc names are immutable after registration, so
+the index never goes stale"* — is **true, and it is not the reason nothing has
+broken.** The re-parse does not reuse or corrupt the orphan's index; it takes a
+*fresh* one, because `PyLamSeq` is monotonic and mints `$pylam2` where the
+abandoned attempt made `$pylam1`. So the leak is a **growth** leak, never a
+corruption leak.
+
+That is a property of the *name generator*, not of the trial-parse design.
+Any speculative parse over a construct whose registered name is derived from
+the SOURCE rather than from a counter — a `def`, a class, a method, which is
+precisely what item 1's NilPy pre-pass must trial-parse — re-registers the
+**same name** on the retry and gets the duplicate the counter has been hiding.
+The assertion is a coincidence with a short remaining life.
+
+### What this changes about the plan
+
+The previous section's recommendation stands, but its own ranking caveat does
+not. It said item 1's *"only known consumer (NilPy typing) is deferred, so the
+ranking argument for doing it now is weak."* **There is a live consumer already
+in the tree** — the two rewind sites above — and it comes with a gate that is a
+single integer:
+
+> **B's proc count must equal A's**, with both still matching CPython.
+
+That is a bounded, measurable first commit that needs no new speculation
+machinery and no decision about which errors are fatal.
+
+### One table the previous section's list does not have
+
+It enumerated the counters a rollback must handle (`SymCount`, `ProcCount`,
+`UClsCount`, `StrCount`, …). **`PyPendLam*` is not among them**, and it is the
+one a trial parse measurably dirties *today* — five parallel arrays plus
+`PyPendLamCount`, consumed by a `while PyPendLamCount > mark` loop that already
+takes a **mark**. That loop's existing mark discipline is the shape the rollback
+should follow, not a new invention.
+
+
+## Slice 6 landed 2026-08-29 (frankA) — the primitive exists, and it closed a live leak on the way
+
+`ProcRollbackTo` (`db7dfec69`) + wiring at all six rewind sites (`d6cb27a9a`).
+
+**The recommendation was tested rather than inherited, and that changed it.** The
+previous section recommended landing `ProcRollbackTo` first and called it
+groundwork whose *"only known consumer (NilPy typing) is deferred, so the ranking
+argument for doing it now is weak."* Measuring first found a **consumer already in
+the tree** and a **live defect**: the `len()` and f-string intercepts leaked one
+proc and ~350 B of dead code per lambda in a trial-parsed argument. The
+prerequisite was a bug fix. Numbers and method are in the MEASURED section above.
+
+### What ProcRollbackTo is, and the asymmetry that will get "simplified"
+
+Not a mirror of `SymRollbackTo`, and the reason is in the code:
+
+| | insert | so rollback… |
+| --- | --- | --- |
+| `SymHashInsert` | **LIFO**, newest-first | the highest live index is its bucket's **head** — O(1) pop |
+| `ProcHashInsert` | **FIFO**, append at tail | the highest live index is its bucket's **tail** — needs its predecessor |
+
+The FIFO order is load-bearing: `ProcChainHead`'s contract is *registration
+order*, which overload resolution walks, so the chain **cannot** be flipped to
+LIFO to make rollback cheap. Descending iteration recovers the invariant the
+other way up — indices are handed out and appended in increasing order, so within
+a bucket the chain is sorted by index, and walking downwards makes each index its
+bucket's current tail.
+
+**No analogue of `SymRollbackTo`'s typed-const exception**, and the code says why
+rather than leaving it to be rediscovered: that rule exists because a symbol
+*index* outlives its scope (the -O2 inliner verifies copied bodies after
+`SymCount` has come back down). `RegisterProc` reinitialises every field of a
+slot it hands out, and a rolled-back proc has no emitted call referring to it.
+
+### What is still open — and it is now a smaller question
+
+Item 1 is **not** finished. What exists is the state-unwind primitive for two
+tables (`ProcCount` via `ProcRollbackTo`, `PyPendLam*` via its own mark) plus the
+pre-existing `SymRollbackTo`. What does not exist:
+
+- **Nothing ties an `Error()` to a rollback point.** `ErrorRecover` returns; no
+  caller wraps a parse in a mark/rollback pair keyed on `ErrCount` rising.
+- **The other tables in the previous section's list are unproven** —
+  `UClsCount`, `StrCount`, `UClsAliasCount`, `CompiledUnitCount`,
+  `PyImpAliasCount`, `ResPendCount`, `PasSrcRangeCount`. Counters are cheap; the
+  overload chains and any per-symbol widening a trial parse performed are not,
+  and a high-water-mark rollback that ignores them looks correct and is not.
+- **"Which errors are fatal" is still undecided**, and is still the right thing
+  to decide last.
+
+Syntax errors still halt at the first one, deliberately.
+
+## Slice 7 landed 2026-08-30 (frankA) — the rollback list was wrong in both directions
+
+Slice 6 left a list of tables a rollback "must handle", inherited from an
+earlier session and **never run**: `UClsCount`, `StrCount`, `UClsAliasCount`,
+`CompiledUnitCount`, `PyImpAliasCount`, `ResPendCount`, `PasSrcRangeCount`.
+Slice 7 opened by measuring it instead of implementing it.
+
+### The measurement
+
+Snapshot **fourteen** counters at each trial-parse entry, diff them at the
+rewind (`PXXDBG=n.trial`, reverted). Six hand-written programs, each provoking a
+different construct inside a `len()` / f-string argument, rather than sampled
+tests — the point was to *provoke* each table, not hope something did.
+
+| counter | moves across a rewind? | when |
+| --- | --- | --- |
+| `SymCount` | **yes — 4 of 6 cases, up to +6** | any expression needing a temp |
+| `ProcCount` | yes | a lambda |
+| `PyPendLamCount` | yes | a lambda |
+| the seven inherited names | **never** | — |
+| `NestedTypeCount`, `AliasCount`, `ArrTypeCount`, `EnumTypeCount` | **never** | — |
+
+**Zero of the seven listed tables move. The most-dirtied table of all,
+`SymCount`, was not on the list.** The list is not a list with gaps; it has no
+demonstrated relationship to what a trial parse touches. Rollback code for those
+seven would have looked exactly as finished as rollback code for the right
+three.
+
+**And `NestedTypeCount` — which I predicted would matter and said so before
+measuring — does not move either.** It was a good prediction from the
+`ParsingClassBodyCi` bug earlier the same night and it was wrong: NilPy cannot
+declare a class-like type inside an expression, so the trial parse never reaches
+`AddNestedType`. Recorded because the method is only worth anything if it is
+allowed to contradict the person running it.
+
+### The fix
+
+`SymRollbackTo` **already existed** and simply was not called at these six sites
+— slice 6 wired up procs and pending lambdas and left symbols. Now called, with
+its `FrameSize` restore, exactly as paired at the routine-exit site
+(`pyparser.inc:30121`). Verified working directly: `POST want=475 got=475`.
+
+### What this does NOT do, stated plainly
+
+**There is no observable symptom today.** Unlike slice 6's proc leak — which
+emitted a dead lambda body, measurable as ~350 B per occurrence — the symbol
+leak changes **nothing** in the output: program `B` compiles byte-identical
+before and after this slice (`code=1252974 data=55100 bss=50460 procs=1859`
+both ways).
+
+**Correcting an over-read of my own from earlier in this slice.** I first
+compared a comprehension inside `len()` against one outside and reported the
++48 B `bss` difference as the leak made visible. It is not: those two programs
+are not a controlled pair — the "outside" version declares an extra named
+binding (`zs`) that the other does not, so +48 B was a difference between two
+*different programs*. The honest control is the same program before and after
+the fix, and that control says **no change**. Slice 6's pair was properly
+controlled (identical list literal, only the boundary moved) and its numbers
+stand; this one was not, and its first number did not.
+
+So this slice is **hygiene for the primitive, not a bug fix**, and it is the
+same "safe by accident" story one level on: nothing breaks today only because
+every rewind here is followed by a re-parse that re-creates the symbols. A
+speculative parse that ABANDONS an attempt without re-parsing — which is exactly
+what item 1 needs — would leak them for real.
+
+### Still open
+
+- **Nothing ties an `Error()` to a rollback point.** The three tables a trial
+  parse dirties are now all rolled back, so the *state-unwind* question in
+  "Shape, not a prescription" is answered for the shapes that exist today. What
+  does not exist is a `TryParse` that marks, attempts, notices `ErrCount` rose,
+  and unwinds — and no consumer needs one yet.
+- **"Which errors are fatal" is still undecided**, and still the right thing to
+  decide last.
+- Syntax errors still halt at the first one, deliberately.
+
+**Gate:** self-host fixedpoint 1 round `ce851914b6eb`; `tools/gate.sh quick`
+GREEN; slice 6's counter gate re-run unchanged (A==B 1860, D==C 1861); the six
+slice-7 programs all matching CPython. Per the note above, the fixedpoint is
+"the compiler still builds" for a change on the NilPy side, not evidence about
+the change — the CPython agreement is.
+
+## Prio lowered 70 -> 35 by the coordinator, 2026-08-30 — on the author's own recommendation
+
+frankA, on parking slice 7:
+
+> *"All three tables a trial parse actually dirties are rolled back, so the
+> state-unwind question is answered **for the shapes that exist today**. What is
+> missing is a `TryParse` tying an `Error()` to a rollback point, and **no
+> consumer needs one yet** — so I would not rank this back up until one does.
+> 'Which errors are fatal' remains undecided and remains the right thing to
+> decide last."*
+
+It sat at **p70, the head of Track A's ready queue**, which is where the ranker
+kept offering it — so the queue was pointing every free A agent at work its own
+author had just said should not be done yet. That is the mirror of
+`refactor-a-c-exclusive-lowering`'s problem earlier the same night: **the board
+can tell whether a ticket is unblocked and cannot tell whether it should be
+worked.** A ranked queue says *unblocked*, not *has work left in it*.
+
+**Raise it again when a consumer appears** — an actual caller that needs to
+abandon a parse without re-parsing. Until then the remaining scope is
+speculative in both senses.
+
+### What slices 1-7 established, so the next holder does not re-derive it
+
+**The inherited "tables a rollback must handle" list was wrong in both
+directions, measured over 14 counters across six programs:**
+
+| counter | moves across a rewind? |
+| --- | --- |
+| `SymCount` | **yes — 4 of 6 cases, up to +6** |
+| `ProcCount`, `PyPendLamCount` | yes (lambdas) |
+| **the seven names the list gave** | **never — zero of seven** |
+| `NestedTypeCount`, `AliasCount`, `ArrTypeCount`, `EnumTypeCount` | never |
+
+**Zero of seven, and the most-dirtied table was absent from the list.**
+`SymRollbackTo` already existed and was simply not called at the six sites;
+slice 6 wired procs and pending lambdas and left symbols. Now called with its
+`FrameSize` pair, verified `POST want=475 got=475`.
+
+**`NestedTypeCount` was predicted to move — by the author and the coordinator
+both — and does not.** NilPy cannot declare a class-like type inside an
+expression, so a trial parse never reaches `AddNestedType`. It was a good
+inference from the `ParsingClassBodyCi` bug, which is exactly what made it the
+most likely thing to be assumed in. *The method is only worth anything if it can
+contradict the person running it, and this is the run where it did.*
+
+**Slice 7 has no observable symptom** and the ticket says so: the same program
+compiles byte-identical before and after. It is hygiene for the primitive, not a
+bug fix — nothing breaks today only because every rewind here is followed by a
+re-parse that re-creates the symbols. A speculative parse that *abandons*
+without re-parsing would leak them for real, which is precisely what the unbuilt
+item 1 needs.
+
+**And one published number was withdrawn:** a `+48 B` `bss` difference reported
+mid-slice as "the leak made visible" was **not controlled** — the two programs
+differed by an extra binding, so it compared two different programs and read the
+difference as the effect. The honest control is the same program before and
+after, and it shows no change. Slice 6's pair *was* controlled (identical list
+literal, only the boundary moved) and those numbers stand.

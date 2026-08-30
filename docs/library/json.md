@@ -44,7 +44,7 @@ If the input string is malformed or has trailing junk, `JSONParse` raises an **`
 
 ## Compiling Example
 
-The following program demonstrates parsing, reading typed values, checking keys, serializing, and handling parse errors. It compiles and runs on the pinned compiler:
+The following program demonstrates parsing, reading typed values, checking keys, serializing, and handling parse errors. It compiles and runs on the pinned compiler — verified 2026-08-30, and the output below is that run's:
 
 ```pascal
 program json_demo;
@@ -108,7 +108,7 @@ begin
     root.FreeTree;
   except
     on E: EJSONError do
-      writeln('Caught expected JSON parse error: ', E.Reason);
+      writeln('Caught expected JSON parse error: ', E.Message);
   end;
 end;
 
@@ -142,5 +142,17 @@ Pretty JSON:
   ]
 }
 --- Testing Parse Error ---
-Caught expected JSON parse error: expected value
+Caught expected JSON parse error: JSON: expected , or } at offset 17
 ```
+
+> **Corrected 2026-08-30.** This example used `E.Reason`, which is not a member
+> of `EJSONError` — it is `class(Exception)`, so the text is in `Message` — and
+> the program therefore did not compile, under a sentence saying it does.
+>
+> The output block is the interesting part: it matches a real run **exactly**,
+> line for line, except the final one. So the example *was* verified, against a
+> version of the library where the exception carried a bare `Reason` ("expected
+> value"). What changed is the library, not the example: the message now
+> carries a `JSON:` prefix and the byte offset, which is strictly more useful.
+> The recorded output is evidence the snippet was genuinely checked once, and
+> evidence of exactly when that stopped being true.

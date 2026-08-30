@@ -5,13 +5,148 @@ status: backlog
 owner: ""
 ---
 
+> **RELEASED FROM working/ 2026-08-30 by frank-optimize-b4**, same day it was
+> re-claimed. The W1 slices are landed and resolved
+> ([[feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen]]),
+> and the session moved to a different ticket. Holding an umbrella's lock while
+> working something else is the mirror of the failure recorded below: there the
+> folder said `backlog` while the file was being edited, here it would say
+> `working` while nobody was on it. Both make the folder a claim about the past.
+>
+> Note the lane's real protection did not lapse: this session still holds
+> `ir_codegen.inc` under
+> [[bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython]], which is
+> in `working/` and is a Track A file lock in its own right. The umbrella was
+> never what was protecting the file.
+>
+> > **RE-CLAIMED 2026-08-30 by frank-optimize-b4** (session
+> `c1d9983f-88e9-4fba-a00a-88b3be8ff1c8`). The coordinator's DO-NOT-CLAIM note
+> below is preserved because its *reasoning* outlives the stopgap — the folder is
+> the lock now, so the note is no longer load-bearing, but what it records is.
+>
+> **The failure mode, worth keeping: a lock is a claim about the present made by
+> an action in the past, and nothing re-asserts it.** This ticket was correctly
+> released when the campaign parked ("RELEASED FROM working/ 2026-08-29, four of
+> four landed") — and then the campaign RESUMED without re-claiming. The folder
+> said `backlog` and was telling the truth about the last deliberate act, while
+> eight commits landed in `ir_codegen.inc` over five hours. `ready --track A`
+> therefore offered the hottest shared file in the tree to every idle agent, and
+> frankA was aimed straight at it; it caught the collision only because it opened
+> the ticket at HEAD before claiming.
+>
+> **Resuming parked work is the one transition with no natural prompt to re-take
+> the lock**, because you are continuing rather than starting — every other
+> transition has a `claim` in front of it. If you pick this campaign back up
+> after a park, claim it first.
+>
+> **!! DO NOT CLAIM — 2026-08-30, coordinator.** This ticket is in `backlog/` and
+> is being **actively worked**. It was legitimately released from `working/` on
+> 2026-08-29 ("frank-optimize-b4 parked, four of four landed"), and then the
+> campaign **resumed without re-claiming it**: eight commits since 22:33, the last
+> at 02:02. They edit `compiler/ir_codegen.inc`, the hottest shared file in Track A.
+>
+> So the ranker offers this as the top Track A item to every idle agent, and the
+> lock protocol says nothing, because the lock lives in the folder and the folder
+> says backlog. frankA ran `next --track A`, got aimed here, and caught it only by
+> opening the ticket at HEAD before claiming.
+>
+> Whoever is on the O campaign: **move this back to `working/`.** Until then this
+> note is the only guard. Anyone else: do not claim it, and do not open
+> `ir_codegen.inc` for register-pressure work.
+
+
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
+
+## READ FIRST — four standing rules for every slice in this campaign
+
+Each of these was paid for once. They are here, at the top, rather than inside
+the write-up of the slice that learned them, because that is where the next
+slice will actually read them.
+
+**1. Every `-O3` pass needs its OWN control test. The self-host gate cannot see
+an `-O3`-only defect.** Not "might not" — cannot: `make compiler/pascal26` builds
+the compiler at the DEFAULT `-O` level, so no `OptLevel >= 3` arm runs while
+building it. Demonstrated on purpose, not inferred: slice 5's comparison encoding
+was deliberately broken in the ModRM field, `-O3` printed `acc=0`, and the
+fixedpoint reported `converged after 1 round(s)` the whole time. CLAUDE.md
+records this scope limit in the abstract from a defect found after the fact; this
+is the same limit shown with a known-bad input and a green gate.
+
+The pattern that works, and the one to copy: **run the test at BOTH `-O0` and
+`-O3` against ONE expectation.** Because the pass is `-O3`-gated, `-O0` is a
+control that provably cannot use the new code, so a wrong encoding shows up as
+two optimisation levels disagreeing rather than as a number with no oracle. Add
+an independent oracle (FPC) on top. Then **break the pass on purpose and confirm
+the test goes red** — a control that has never failed is not known to be a
+control.
+
+**2. A population count is not a firing count.** A census measures what COULD be
+affected and reads as evidence about what WILL be. Slice 5's census said CMP was
+the largest bucket in every program (2891 vs 2649 ALU in compiler.pas, 31-52%
+with MULIMM); the first implementation fired on **11 sites** and left the
+benchmark byte-identical, because the `-O2` cmp-immediate fold and the
+`IR_JUMP_IF_FALSE` branch fold had already consumed most of the population being
+counted. The gap was two arms wide and invisible until the pass was fired.
+This is a *different* failure from "the static sweep understates W1" further
+down — that one under-reports a real effect; this one over-reports a possible
+one. **Count the population to choose the target; count the firings to claim a
+result.**
+
+**3. Rebuild your baseline at HEAD, and check what rebased in under you.**
+`tools/sync.sh` does a `pull --rebase`, so other lanes' compiler changes arrive
+in your tree between two of your own builds. Slice 6 was measured against a
+baseline that predated frankA's for-loop fix (`8b35e88fa`) landing in this
+checkout, and the result read as **"slice 6 leaked outside its `-O3` gate and made
+`-O0` output 82 bytes bigger"** — an alarming and completely false conclusion.
+The tell was the self-host printing `converged after 2 round(s)` where every
+previous build said 1; rebuilding the true baseline at HEAD gave 1 round and
+byte-identical `-O0`/`-O1`/`-O2`, with the *same* final binary sha. The binary had
+been right the whole time.
+
+Two things made it cheap to catch, and both are worth keeping: per-procedure
+size extraction from the `.map` (only 3 procedures had changed, all RTL, none
+user code — a whole-binary `cmp` says only "everything differs"), and the fact
+that an `-O3`-gated pass changing `-O0` output is *impossible*, so the
+contradiction pointed at the measurement rather than at the code. **When a
+result says something that cannot be true, suspect the baseline before the
+change.**
+
+**4. A deliberate break must be verified at the level the BUG lives — and the
+row it targets must be sensitive to it.** Rule 1 says break the pass and confirm
+the test goes red. Slice 7 found the two ways that can silently not work, and
+both look like a passing control:
+
+- *The break was an identity.* Changing `$85 or ((lreg - 8) shl 3)` to
+  `$85 or (lreg - 8)` looks like a wrong ModRM reg field. For the register that
+  actually occurred (`r13`) it emits **the same byte** — `$85` already has bit 2
+  set, so `or 5` changes nothing. The edit script asserted the source matched
+  exactly once, which proves the *edit* applied and says nothing about the
+  *encoding* changing. Verify a break by disassembling the emitted bytes, not by
+  asserting the patch applied.
+- *The row was insensitive.* With a genuine break (`r13` -> `r14`), the test
+  still passed: the row was `if a > b` with `b = -5000000001`, which is true for
+  essentially any junk value a wrong register could hold. Three separate real
+  breaks passed for this reason. The fix is to **straddle**: with `blo = a-1` and
+  `bhi = a+1`, the pair `a > blo` and `a < bhi` is true only for a register
+  holding *exactly* `a`, and only for those two slots — so one shape catches a
+  wrong reg field, a wrong rm field and a wrong displacement at once. Mirror it
+  (`blo < a`, `bhi > a`) to cover the operand roles the other way round.
+
+The general form, and it outlives this campaign: **a test row proves the encoding
+only if its answer changes when the encoding names the wrong thing.** Picking
+"distinct, memorable, far-apart values" — which is the instinct, and which the
+first cut of that test followed deliberately — produces rows that are maximally
+*insensitive*, because far-apart values compare the same way against almost
+anything. Adjacent values, not distinct ones, are what make an operand
+observable.
+
 
 - **Type:** feature (codegen — optimization) — **Track O** (Optimization lane;
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** working
+- **Status:** backlog (folder is the lock; line corrected by the coordinator 2026-08-30)
+  umbrella sat in `backlog/` between slices)
   section at the bottom for what landed, what is left and what to read first).
   Nothing is half-applied. Worked from a
   dedicated optimization checkout (`~/frank-optimize`), because Track O is
@@ -52,6 +187,67 @@ r14/r15 param residency ([[feature-callconv-register-args]]) already bought
 far from exhausted. Killing the 37% is where the next multiplier lives.
 
 ## Target scope — per-backend effort = x86-64 + aarch64 only
+
+> **MEASURED 2026-08-30, and the scope was not being met.** This section states
+> aarch64 is in scope; nothing checked whether it was. Parsed `OptLevel >= 3`
+> gate sites: **x86-64 15, aarch64 4**, the other four backends 0 (correct — they
+> are out of scope by this very section). aarch64 has the W2 residency keystone
+> and two operand folds; it has none of the W1 slice 5-8 family. Filed as
+> `feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen`.
+>
+> "aarch64 is in scope" and "aarch64 got 4 of 15" are consistent statements,
+> which is why a stated scope needs a recurring count rather than a comment.
+> **From now on, each W1/W2 slice records its per-backend gate count here** —
+> one command, and the only thing that would have caught this.
+>
+> **CORRECTION, 2026-08-30 (slice 10): the count itself was undercounting, and
+> its own recurrence is what caught it.** The published method greps
+> `OptLevel >= 3`, and roughly a fifth of the gates in this campaign are spelled
+> `if OptLevel < 3 then Exit;` — an early return at the top of a predicate, which
+> is the shape slices 7, 8 and 10 all use. Parsing BOTH spellings:
+>
+> | file | `>= 3` | `< 3` | total |
+> | --- | --- | --- | --- |
+> | `ir_codegen.inc` (x86-64) | 17 | 6 | 23 |
+> | `ir_codegen_aarch64.inc` | 5 | 2 | 7 |
+> | the other four backends | 0 | 0 | 0 |
+>
+> **And 23 : 7 was wrong too — by one on each row. See the correction below;
+> the number is 22 : 6.** The story never changed (aarch64 has the W2 keystone
+> and none of the W1 slice 5-10 family); the count needed three tries. The sibling ticket's slug says "four-of-fifteen"; slugs
+> are cited by resolved commits and are not renamed, so the corrected count is
+> recorded inside it instead.
+>
+> The lesson is the instrument's, not the scope's: **a count is a grep, and a
+> grep is a spelling.** "Count arms by parsing, not by reading" (face 118) buys
+> nothing if the parse matches one of the two ways the arm is written. Slice 10
+> added a gate and the `>= 3` count did not move — 17 before, 17 after — which
+> is the tell, and it is only visible because the count is taken every slice.
+> **SECOND CORRECTION, same day, same shape: 23 : 7 counted prose as code.**
+> Each of those two files carries exactly one CONTINUATION line inside a
+> `{ ... }` block that mentions a gate in passing — `ir_codegen.inc:4434` and
+> `ir_codegen_aarch64.inc:1280` — and neither is caught by "does this line start
+> with a comment marker?", because neither does. Properly comment-stripped, the
+> counts are **x86-64 22, aarch64 6**. The aarch64 file's original figure even
+> carried the footnote "*(a 5th match is prose)*", which is the tell: a number
+> that needs an asterisk is a number nobody can re-derive.
+>
+> **Three counts, three wrong answers, and every one of them was the instrument
+> rather than the thing measured.** 15 : 4 missed a spelling; 23 : 7 counted
+> comments; only the third, from stripped source, needs no footnote. The
+> conclusion survived all three unchanged — which is the point, and also the
+> danger: a finding whose supporting number keeps moving while its direction
+> holds is one nobody re-checks.
+>
+> So the count is no longer a command anyone has to remember to run correctly.
+> It is **`tools/check_o3_backend_parity.py`**, wired as a step in
+> `gate.sh quick`: it comment-strips, matches every spelling of an `-O3` gate
+> (`>= 3`, `> 2`, `< 3`, `<= 2`, `= 3`), derives the backend list from a glob so
+> a seventh emitter cannot escape it, and freezes 22 : 6. It does **not** forbid
+> a one-armed slice — most legitimately are. It forbids one nobody *noticed* was
+> one-armed: widening the delta becomes an edit to that file, in the same
+> commit, visible in the diff. `--census` prints every match with file and line
+> so a reader can check the number instead of trusting it.
 Optimization splits by home (see `optimization-architecture.md` §3): **shared-IR
 passes (§3a) help all six targets for free** — one implementation, keep those
 target-agnostic. **Per-backend work (§3b: emitter peepholes, the operand
@@ -2554,3 +2750,586 @@ every queue *and* mis-tracked, and the second fault was masked by the first.
 **Landed, four of four:** operand scheduler, callee-saved scratch, float-resident
 dead-store elimination, and the aarch64 `-O1` leaf-operand port (42084 bytes and
 10521 instructions off mandelbrot at `-O3`, 5.8%).
+
+---
+
+## 2026-08-29 — the aarch64 leaf-operand remainder is CLOSED, by census
+
+The aarch64 leaf-operand collapse is complete: CONST landed in `1185b3489`,
+LEAFSYM in the `EmitLoadVarA64` two-step. Together they take 93-94% of integer
+binops on this target. **The ~6% remainder is not worth a pass, and this is the
+measurement rather than the intuition.**
+
+`PXXDBG=a.a64binop` now names the IR kind of an `OTHER` right operand, because
+"6% are OTHER" is a number with no next step. What they are:
+
+| right operand kind | compiler.pas | mandelbrot | lispdemo | collapsible? |
+| --- | --- | --- | --- | --- |
+| `binop` | 1914 | 193 | 183 | **no** — a nested expression evaluates through x0/x1 itself |
+| `call` | 745 | 48 | 51 | **no** — side effects, and it owns x0/x1 for args and result |
+| `neg` | 724 | 22 | 15 | only if ITS operand is a leaf — a nested case, not this one |
+| `load_mem` | 525 | 29 | 36 | maybe, for simple addressing; needs its own analysis |
+| `not` / `lea` / `index` | 8 | 8 | 8 | negligible |
+
+**The two dominant kinds are structurally uncollapsible.** The whole trick is
+that a constant or a leaf-symbol right operand has no side effects and cannot
+observe the left, so it can be materialised *after* the left is in x0. A nested
+binop and a call are exactly the operands for which that is false — they need x0
+as their own working register, and the stack round trip is what makes them safe,
+not what makes them slow.
+
+What is left after removing those: `neg`-of-a-leaf and simple `load_mem`, which
+on mandelbrot is **51 sites — 1.0% of all binops**, at 3 instructions each, and
+`neg` only for the subset whose own operand is a leaf. That is a smaller slice of
+a smaller slice, needing an addressing analysis that does not exist yet.
+
+**So: not filed as a ticket, deliberately.** A ticket justified by the fact that a
+number remains is a placeholder that sits at low prio forever — the exact backlog
+leak CLAUDE.md names. The remainder is priced and closed; if someone wants it
+later, this table is the starting point and the answer it gives today is no.
+
+---
+
+## 2026-08-29 — W1 slice 1 measured DYNAMICALLY: 1 instruction per iteration, 4.54%
+
+The umbrella asks W1 to be justified on a dynamic profile, not a static sweep.
+Here is the dynamic number for slice 1 (the constant shift count), and the method
+matters as much as the figure.
+
+**`perf` is unavailable on this box** — `perf_event_paranoid = 4` denies
+unprivileged access to every event, hardware and software alike, and lifting it
+is a root sysctl change on the owner's workstation. Not done, not worked around.
+
+**`qemu-x86_64 -one-insn-per-tb -d exec` was used instead, and it is the better
+instrument here.** It emits one log line per instruction *executed*, so the count
+is **exact and deterministic** rather than sampled — no multiplexing, no skid, and
+**completely load-invariant**, which on a box that sat between 9.5 and 16.4 all
+evening is the property that actually decides whether a number is worth writing
+down. The cost is a ~100x slowdown, paid for by shrinking `n`: the loop is
+straight-line with a single back-edge, so the per-iteration count is constant and
+the measurement scales exactly.
+
+| n | BASE retired | HEAD retired | delta | delta/n | saved |
+| --- | --- | --- | --- | --- | --- |
+| 2 000 | 44 211 | 42 211 | 2 000 | 1.000 | 4.52% |
+| 20 000 | 440 227 | 420 227 | 20 000 | 1.000 | 4.543% |
+| 50 000 | 1 100 235 | 1 050 235 | 50 000 | 1.000 | 4.544% |
+
+**delta is exactly n at all three sizes** — one instruction removed per iteration,
+with no residue. Per-iteration cost 22.0047 → 21.0047 instructions; the fractional
+tail is the fixed prologue amortising away, and it converges as it should.
+
+The loop body, counted from the execution trace rather than from the listing: **18
+addresses hit exactly n times, 3 hit n-1 times** (the increment tail, skipped on
+the final iteration) = **22 instructions per iteration in BASE, 21 in HEAD**.
+Note this **corrects the earlier "1-of-18" static claim** — 18 was the
+straight-line body, and it omitted the loop-control tail that also retires every
+iteration. The honest denominator is 22, so the saving is **4.55% of the loop's
+dynamic instruction stream**, not 5.6%.
+
+**Provenance, proven by content rather than by filename** — binaries
+`85655efad0ff` (HEAD, has the slice) and `272e95c5ec9c` (BASE, pre-slice),
+compiling the same `three.pas` at `-O3`. The loop body differs in exactly one
+instruction and nothing else:
+
+```
+BASE:  mov rax,r12 / mov rcx,0x1 / cdqe / shr rax,cl     48 c7 c1 01 00 00 00 + 48 d3 e8  = 10 B
+HEAD:  mov rax,r12 /              cdqe / shr rax,0x1                        48 c1 e8 01  =  4 B
+```
+
+6 bytes per site, matching the static sweep's figure, and `code=16683B` →
+`code=16659B` = 24 B over 4 sites. A filename is not evidence of what a binary
+contains; a diff of the emitted loop is.
+
+**Load average is recorded because a perf number without it has the same
+unstated-`as-of` problem as a benchmark without its baseline sha** — 9.51 at the
+start of the run, 16.44 shortly before. It does not matter here, which is exactly
+the point of choosing an instrument whose output cannot depend on it.
+
+**Wall clock is still owed** and is deliberately not taken: the box carried seven
+concurrent `pascal26` processes, a `stage_2a` fixedpoint and a `pinned` at 106%
+over 12 cores. Best-of-five alternation is a sound design for a mildly noisy box
+and is not one at 1.2x oversubscription with self-host builds landing at random.
+It goes in when the fleet quiets, stamped with its own load.
+
+---
+
+## 2026-08-29 — W1 slice 5 LANDED behind -O3: resident left operand into a compare
+
+Slice 4 killed `mov rcx, rN` on the RIGHT. The left half of the funnel is
+harder and mostly **cannot** be killed: add/sub/and/or/xor write their result to
+rax, so a resident left operand has to be moved there. A **compare has no
+destination**, so its `mov rax, rN` is deletable outright.
+
+**Census before writing the arm, not after** — `PXXDBG=a.w1left` (new,
+report-only) classifies every binop whose left operand is a resident leaf symbol
+by what it feeds. "The funnel is 1.21% of the binary" does not say which arms
+could drop the move; this does. Static emit sites at `-O3`:
+
+| program | CMP | ALU | MULIMM | SHIFT | OTHER | deletable |
+| --- | --- | --- | --- | --- | --- | --- |
+| compiler.pas | **2891** | 2649 | 422 | 285 | 110 | 52% |
+| jsondemo | **794** | 806 | 91 | 105 | 113 | 46% |
+| mandelbrot | 234 | 462 | 31 | 59 | 55 | 32% |
+| lispdemo | 237 | 451 | 27 | 59 | 52 | 32% |
+| sieve | 226 | 451 | 27 | 59 | 58 | 31% |
+
+CMP is the largest bucket in every program and the half needing no encoding
+trick. **MULIMM is the other deletable bucket** — `imul rax, rN, imm` is a
+three-operand form — and is deliberately **not** in this slice: different
+encoding, different proof, own measurement.
+
+**The census also over-promised, and the first cut proved it.** Guarding only
+the two `-O1` leaf-operand arms fired on **11-12 sites** and left `three.pas`
+byte-identical at `-O3` — because most comparisons with a constant right are
+folded earlier by the `-O2` cmp-immediate arm, and the for-loop's own compare is
+emitted by the branch fold in `IR_JUMP_IF_FALSE`, not by the binop path at all.
+Extending to those two folds is what made the slice real: −119 B on `three.pas`,
+−2772 B on jsondemo. **A population count is not a firing count**, and the gap
+between them was two arms wide.
+
+**Four sites, two new emitters** (`EmitCmpLeftRcx`, `EmitCmpLeftImm32`), not four
+hand-written encodings — the same normalisation as `EmitAluRaxRight`. Worth
+naming: the immediate form is a **different opcode**, not the rax one with a
+register swapped. rax has a short accumulator encoding (`48 3D id`) that
+`r12..r15` do not, so the resident form is `81 /7 id` — 2 bytes longer on the cmp
+itself, still net −1 byte and −1 instruction once the `mov` is gone.
+
+**Soundness.** `EmitLoadVar`'s resident arm emits the move and *nothing else*;
+its own comment states the register already holds a correctly size/sign-extended
+value, so `cmp rN, rcx` is equivalent instruction-for-instruction. For the
+register form the eligibility test is a **whitelist** of operand types,
+deliberately not a copy of the conditions guarding the string/char arms below it:
+every one of those is reached through `tyAnsiString`, `tyString` or `tyChar`, so
+excluding exactly those three is sound *today* and stops being sound, silently,
+the day a fourth is added — and the caller skips the left load on this
+predicate's word, so a string arm reached with rax unloaded compares a stale
+register. Naming what is allowed fails closed. The two cmp-immediate arms need no
+whitelist: `CmpFusible` already excludes float/string/variant and those arms have
+no path below them.
+
+**Verification**
+
+| check | result |
+| --- | --- |
+| `-O0`/`-O1`/`-O2` vs base compiler | **byte-identical**, all five programs |
+| `-O3` size | smaller on all five: −119 / −360 / −413 / −455 / −2772 B |
+| values at `-O0`..`-O3` vs base | identical, and equal to FPC 3.2.2 |
+| self-host fixedpoint | converged after 1 round, `bf5d6afc8e37` |
+
+**Dynamic, on the three-local loop** (qemu exact count, method in the entry
+above): **22 → 20 retired instructions per iteration**, delta exactly `2n` at
+n=2000/20000/50000 — **9.09%** of the loop's instruction stream, of which slice 1
+was the first instruction and this slice the second. The `mov rax,r12` before
+`cmp r12,rcx` is gone from the emitted loop.
+
+**No whole-program dynamic number.** qemu's exact count costs ~100x, and sieve
+and lispdemo did not finish inside a bounded run on a loaded box. The honest
+state is: exact dynamic evidence on the microbenchmark, static size evidence on
+the five programs, and nothing in between. Not padded with an estimate.
+
+**The test is a control pair, and it was proven non-vacuous.** It runs at **both
+`-O0` and `-O3`** against one expectation — the pass is `-O3`-gated, so `-O0`
+provably cannot use either new encoding, which makes a wrong encoding show up as
+two optimisation levels disagreeing rather than as a number with no oracle. Every
+variable holds a distinct value and none is 0 or 1, because the failure being
+hunted is *comparing the wrong register*; negatives and values astride the 32-bit
+boundary cover the sign-extension half.
+
+Breaking the ModRM field on purpose made `-O3` print `acc=0` while `-O0` stayed
+correct. **And the compiler still self-hosted byte-identically while broken**,
+because it builds at the default `-O` level — a concrete instance of the scope
+limit CLAUDE.md records: the fixedpoint gate cannot see an `-O3`-only defect.
+That is the reason this test exists rather than leaning on the gate.
+
+Landed `81d2ec232`. `-O2` promotion not taken — coordinator's call, after soak.
+
+---
+
+## 2026-08-29 — W1 slice 6 LANDED behind -O3: resident left operand × constant → three-operand imul
+
+The second deletable bucket from slice 5's census (MULIMM, 422 sites in
+compiler.pas). `imul` is the **only** form in the `-O1` immediate-fold arm with a
+three-operand encoding, so a resident left operand can be its *source* while rax
+stays its *destination* and the `mov rax, rN` in front disappears. The five arms
+beside it — add/sub/and/or/xor — are short accumulator encodings that read *and*
+write rax, so a resident left has to be moved there and this does not help them.
+
+**No type screen, and that is a decision rather than an omission.** The
+equivalence is at the **register** level, not the type level: `EmitLoadVar`'s
+resident arm emits the move and nothing else, and the consumer here is the very
+next instruction emitted — there is no path below that could reach a different
+arm expecting rax loaded. That last clause is exactly what slice 5's *register-
+form* compare does not have, which is why that one needs a whitelist and this one
+does not. Same campaign, two arms, opposite answers, for a reason that is
+written down at both sites.
+
+**Verification** (against a baseline rebuilt at HEAD — see standing rule 3):
+
+| check | result |
+| --- | --- |
+| `-O0`/`-O1`/`-O2` vs baseline | **byte-identical**, all five programs |
+| `-O3` size | −18 / −27 / −15 / −15 / −159 B |
+| values `-O0`..`-O3` | identical, and equal to FPC 3.2.2 |
+| self-host fixedpoint | converged after 1 round, `76c14ec57dcc` |
+| dynamic, three-local loop | delta exactly `n` at n=20000 and n=50000 |
+
+The emitted loop now opens `49 69 c4 03 00 00 00` — `imul rax, r12, 0x3`.
+
+**Cumulative W1 on that loop: 22 → 19 retired instructions per iteration =
+13.6%**, one instruction each from slices 1, 5 and 6, every one of them measured
+as an exact delta rather than estimated.
+
+**The test puts the changed arm and the five unchanged ones in one program**, so
+a mistake in `imul` cannot hide behind the five that still work. Non-vacuous by
+construction check: swapping the reg/rm fields — the specific mistake this
+encoding invites, because the operand roles are the **opposite** way round from
+this campaign's compare emitters — made `-O3` produce no output at all while
+`-O0` stayed correct.
+
+Landed `7f01306c8`. `-O2` promotion not taken — coordinator's call, after soak.
+
+### What is left in W1, and what it is worth
+
+The census bucket that remains is **ALU** (2649 sites in compiler.pas), and it is
+*not* a third easy slice: add/sub/and/or/xor write their result to rax, so a
+resident left operand cannot stay in place. `lea rax,[rN+rM]` could serve the
+commutative subset but does not set flags, which needs a liveness answer this
+campaign does not have. Priced and parked, not filed — per the backlog-leak rule,
+a ticket justified by a number remaining is a placeholder.
+
+Still genuinely open, and larger than any of the three landed slices: the
+`mov r8,rax` / `mov rax,r8` park around a right subtree, and the for-limit temp
+reloaded from the frame every iteration. Note the ticket's own earlier warning
+before touching the latter — making the limit a constant measured *slower*
+(0.87 vs 0.79), so it is not the obvious win it looks like.
+
+---
+
+## 2026-08-29 — the AN_FOR init temp is elided at -O3 when both bounds are re-emittable
+
+Follow-up to `8b35e88fa`, which fixed a real correctness bug (both for-loop
+bounds must be evaluated before the control variable is assigned) and paid for
+it by capturing the initial bound into a hidden temp. That capture is what this
+removes, for the subset where it is provably unnecessary.
+
+**Priced before building, per standing rule 2.** The cost is **exactly 2
+instructions per loop ENTRY** — not per iteration — measured by exact
+instruction count on a shape built to maximise it (inner loop entered 20 000
+times, running twice): 500 198 → 540 198, i.e. **8%** of that program. Statically,
+per procedure, pre- vs post-`8b35e88fa`: mandelbrot **+301 B over 23 procs**,
+jsondemo **+863 B over 60**, and **every changed procedure grew, none shrank** —
+the signature of a fixed per-entry cost rather than anything data-dependent.
+
+**The condition.** The capture exists because `initValNode` is a value node the
+backend re-emits at the store, so leaving it uncaptured moves the initial
+expression's side effects after the limit's. It is unnecessary when re-emitting
+the initial bound later cannot observe anything different — true for a literal, a
+plain scalar variable, or pure arithmetic over those. **Both** bounds must pass:
+the initial one so there is nothing to reorder, the limit so it cannot write what
+the initial one reads.
+
+`ForBoundReEmittable` is a **closed allow-list defaulting to false**, which is the
+opposite default from `CASTLValueHasSideEffect` a few thousand lines up. That is
+deliberate and worth stating: a wrong "no side effect" there merely misses an
+optimisation, while a wrong one here **silently restores a wrong iteration
+count** — the bug this lowering was fixed for two hours earlier. `AN_INDEX` and
+`AN_FIELD` are excluded as a judgement call, not an oversight: they are reads
+that a pure limit cannot disturb, but they can **fault**, and fault ordering is
+not something to reason about casually in a lowering this recently broken.
+
+### The census over-promised AGAIN — same shape as slice 5, second instance
+
+`PXXDBG=a.forinit` (new) reports the AST kinds of both bounds for every loop that
+pays for the temp. compiler.pas, top shapes of ~250:
+
+| init | limit | count | elided? |
+| --- | --- | --- | --- |
+| ident | binop | **87** | only if the binop is call-free |
+| binop | literal | 55 | only if the binop is call-free |
+| field | binop | 28 | no |
+| binop | binop | 25 | only if both are call-free |
+| index | binop | 18 | no |
+| ident | literal | 13 | **yes** |
+| ident | ident | 11 | **yes** |
+
+Reading that table, widening from "plain ident or literal" to "pure arithmetic"
+should have reached most of the population. **It recovers 14 B on mandelbrot and
+28 B on jsondemo.** The blocker is invisible in the table: those binops mostly
+*contain calls* — `Length(s) - 1` is an `AN_BINOP` whose child is an `AN_CALL`.
+The census classified by the ROOT node kind, and the disqualifying node was a
+child. **A census is only as good as the granularity it classifies at**, which is
+a sharper version of the same rule slice 5 produced.
+
+**What reaching the big bucket would require, and why it is not attempted.** A
+call-bearing *limit* is fine if the *initial* bound is a local that no call can
+write. That is an aliasing question, and the tree has an address-taken flag for
+**params only** (`ProcBodyAddrTakenParam`) — nothing for locals. Building that
+analysis inside a lowering fixed two hours ago, to recover 2 instructions per
+loop entry, is the wrong trade tonight. Banked, not filed: the probe and this
+table are the starting point.
+
+**So the honest result:** a real win for tight loops with simple bounds — exactly
+the shape this campaign targets, and the worst-case inner loop returns to its
+**exact** pre-`8b35e88fa` instruction count — and close to nothing for the RTL's
+string-processing loops, whose bounds are calls.
+
+**Verification:** `-O0`/`-O1`/`-O2` byte-identical on four programs; `-O3`
+smaller; `8b35e88fa`'s own `test_for_bounds_before_control_var` passes all 13
+rows at all four levels; self-host fixedpoint `b3434e287096`, 1 round.
+
+### The new test's control was VACUOUS, and only the vacuity check found it
+
+Worth recording as a method failure rather than a footnote. The test carries a
+call-bearing row precisely so that an accidental widening to calls would be
+caught. Breaking the elision on purpose — eliding unconditionally, ignoring
+purity — **left that row passing**. Eliding a call-bearing bound swaps the two
+calls, and both orders make the same number of calls and produce the same
+iteration count, so the call *counter* and the count are both blind to it.
+`8b35e88fa`'s test failed one row; mine failed none.
+
+The row now logs call **order** (`iL` correct, `Li` broken) and the deliberate
+break moves it. **A counter cannot assert an ordering**, and "I added a control
+for this" is not the same claim as "I watched this control fail" — which is
+standing rule 1's last clause, met here by the rule catching its own author.
+
+Landed `a2711f2ea`. `-O2` promotion not taken — coordinator's call, after soak.
+
+### 2026-08-29 — W1 slice 7 LANDED behind -O3: fused compare reads its RIGHT operand in place
+
+A fused compare staged its right operand through `rcx` unconditionally: `mov
+rcx, <right>` then `cmp rax|rN, rcx`. When the right operand is already a value
+`cmp` can address, that `mov` is dead weight. Two cases now fold:
+
+- **register-resident right** — `cmp rN, rM` (`4C/4D 3B /r`)
+- **8-byte frame local or param** — `cmp rN, [rbp+off]` (ModRM mod=10 rm=101)
+
+`W1CmpRightInPlace` returns `W1CMP_REG` / `W1CMP_MEM` / `W1CMP_NONE`, screened
+by the existing `LeafSymRcxLoadable` (which already excludes arrays, floats,
+strings and by-ref params — a by-ref slot holds a *pointer*, so folding it would
+compare the wrong thing entirely). Wired into both the value form and the
+`IR_JUMP_IF_FALSE` branch form.
+
+**Only 8-byte operands fold, deliberately.** A 4-byte local is loaded with
+`movsxd`; folding it would mean a 32-bit compare *plus* the assumption that the
+left register holds a properly sign-extended value. That invariant's failure
+mode is a silently wrong comparison — a wrong loop bound, not a crash — so the
+4-byte rows in the test are controls that must stay on the `rcx` path.
+
+**Result, and the honest half first:** `three.pas`'s hot loop is **unchanged**,
+and its dynamic delta is **0**. Its limit temp is a 4-byte `movsxd`, so the
+8-byte-only fold correctly declines — the slice does not fix the case that
+motivated it. What it does do is shrink every program measured: `three.pas`
+-63 B, mandelbrot -213 B, lispdemo -159 B, sieve -156 B, **jsondemo -978 B**.
+
+**Verification.** Re-run at the LANDED HEAD after the push, because
+`tools/sync.sh` rebased a sibling compiler change (`4576ad4d1`) in underneath —
+standing rule 3, and the reason the pre-push binary sha `36f9c3c11b99` is not
+reachable from master. Controlled A/B at HEAD, baseline = HEAD with only this
+slice's `ir_codegen.inc` hunk reverted:
+
+| program | -O0 | -O1 | -O2 | -O3 base -> new |
+| --- | --- | --- | --- | --- |
+| `perf/three.pas` (scratch) | same | same | same | 18677 -> 18614 (**-63**) |
+| `bench/portable/mandelbrot.pas` | same | same | same | 25260 -> 25158 (**-102**) |
+| `examples/mandelbrot/mandelbrot.pas` | same | same | same | 122855 -> 122642 (**-213**) |
+| `examples/lisp/lispdemo.pas` | same | same | same | 105836 -> 105677 (**-159**) |
+| `examples/json/jsondemo.pas` | same | same | same | 447995 -> 447017 (**-978**) |
+| `examples/primes/sieve.pas` | same | same | same | 86753 -> 86597 (**-156**) |
+
+New binary `13d2803df79f`, baseline `261e6cd2b58f`, both self-host in 1 round.
+Values identical at all four levels; FPC 3.2.2 agrees with the test's
+expectation. **Correction to the commit message of `e9ec79125`:** it quotes
+mandelbrot at -213 alongside the other four, which reads as one program — those
+are two different mandelbrots, and both numbers above are real.
+
+**Non-vacuity — this is where the slice cost its time, and it produced standing
+rule 4 at the top of this ticket.** Six deliberate breaks now move the test:
+mem reg field, mem displacement (+1 slot), both reg/rm forms of the reg-reg
+encoding, and each REX bit. Getting there took three false passes: one break was
+a no-op *encoding* despite the patch applying cleanly, and two genuine breaks
+passed because the rows were insensitive to which register was named. The band
+rows (`blo = a-1`, `bhi = a+1`, straddled from both sides) are the fix and the
+transferable part. Read rule 4 before writing the next slice's test.
+
+**Banked, not filed:** the ALU bucket (2649 sites) needs flags-liveness before
+`lea` is safe; widening the fold to 4-byte operands needs the sign-extension
+invariant proved rather than assumed.
+
+### 2026-08-30 — W1 slice 8 LANDED behind -O3: the 4-byte compare, folded as a 32-BIT compare
+
+Slice 7's honest failure was that `three.pas`'s loop — the shape this campaign
+exists for — came out **unchanged**, because its for-limit temp is 4-byte and the
+fold was 8-byte-only. This is the completion.
+
+**The argument is better than the one banked, and that is why it was worth
+taking now.** It was banked as *"needs the sign-extension invariant proved rather
+than assumed"*, which was a correct reason not to act on a hunch. But the
+invariant is not needed at all if the compare is **32-bit**: `cmp r12d, DWORD PTR
+[rbp+off]` (opcode 3B, **no REX.W**) reads exactly four bytes of the slot and
+exactly the low half of the register, so what is in the upper half is irrelevant
+*by construction rather than by proof*. **"Do not depend on an invariant" beats
+"prove an invariant"** — the second decays the moment someone changes how
+residents are normalised; the first does not.
+
+Equivalence, stated once: sign- and zero-extension from 32 to 64 bits are both
+strictly monotonic maps under **signed and unsigned** order alike (sign-extension
+sends everything >= 2^31 above everything < 2^31, which preserves unsigned
+order). Both operands are gated to the same TypeKind, so both are extended by the
+same map — therefore the narrow compare agrees with the wide compare of the
+extended values under *every* predicate. The fold cannot introduce a
+disagreement with the existing semantics, whatever those semantics are.
+
+**Result on the motivating loop: 19 -> 18 instructions**, the `movsxd rcx,[rbp-0x24]`
+replaced by a fused `cmp r12d,DWORD PTR [rbp-0x24]`. Cumulative for the campaign
+on that loop: **22 -> 18**.
+
+Controlled A/B at HEAD, baseline = HEAD with only this hunk reverted
+(new `bf1c35821b23`, baseline `e6a8e8d87798`, both 1 round):
+
+| program | -O0 | -O1 | -O2 | -O3 base -> new |
+| --- | --- | --- | --- | --- |
+| `perf/three.pas` | same | same | same | 18614 -> 18590 (**-24**) |
+| `bench/portable/mandelbrot.pas` | same | same | same | 25158 -> 25137 (**-21**) |
+| `examples/mandelbrot/mandelbrot.pas` | same | same | same | 122642 -> 122534 (**-108**) |
+| `examples/lisp/lispdemo.pas` | same | same | same | 105677 -> 105587 (**-90**) |
+| `examples/json/jsondemo.pas` | same | same | same | 447017 -> 446761 (**-256**) |
+| `examples/primes/sieve.pas` | same | same | same | 86597 -> 86511 (**-86**) |
+
+#### The probe is the transferable part, not the encoding
+
+Slice 8 was written, self-hosted clean at `f0c3e2b8bf39`, and changed its target
+loop by **zero bytes**. There was no way to tell a pass that never ran from a
+pass that ran and declined — the exact shape the campaign had already been
+warned about. So the first thing built after that was `PXXDBG=a.w1cmp32`, which
+prints on **every** exit including `FIRE32`, not only on success.
+
+It answered immediately, and the answer was not on the list of things worth
+guessing: the guard `IRTk[left] <> IRTk[right]` was rejecting because the left
+node's IR type is frequently **0 — unset, not different**. A guard that looked
+prudent was rejecting on *missing metadata*, and it rejected precisely the
+for-loop limit compare the arm exists for. The guard was also not load-bearing
+(the monotonicity argument above is the real one), so it went.
+
+Two things follow. **A pass that says why it did not fire is the difference
+between an optimisation you can reason about and one you have to disassemble** —
+and a disassembly is what slice 7 needed instead. And **a guard that has never
+been observed rejecting is not known to be selective**: this one was silently
+rejecting everything interesting, and passing every test, because declining is
+always semantically safe. Correctness tests cannot see an over-strict guard;
+only a decline log can. The probe now also proves the mixed-width control in the
+test is a control — it shows exactly one `typekind` decline, the 8-vs-4-byte row.
+
+**Non-vacuity:** four deliberate breaks — REX.R dropped, REX.W restored (a
+64-bit read of a 4-byte slot), displacement +4 (the adjacent slot), and a wrong
+reg field — each move `-O3` while `-O0` stays correct. Band rows from the start
+this time, per standing rule 4, rather than retrofitted.
+
+**(B) and (C) are now SPLIT OUT as their own ranked tickets**, with the
+disassembly carried into each rather than left in this log:
+
+- `feature-opt-o3-fuse-resident-read-and-widen-into-movsxd` (**-1**) — and the
+  split changed its design. Banked here as "the `cdqe` is a no-op, delete it",
+  which is *correct today* and is exactly the invariant-dependent elision slice
+  8 refused. Writing it up properly produced the version that needs no
+  invariant: emit `movsxd rax, r12d` (3 bytes, one instruction) instead of
+  `mov rax,r12` + `cdqe` (5 bytes, two). Same net effect, strictly better
+  encoding, correct whatever the upper half holds. **Splitting a banked item out
+  is not clerical — it is the first time anyone writes the argument down, and
+  that is when the better design shows up.**
+- `feature-opt-o3-operand-order-for-non-commutative-binops` (**-2**) — the
+  emit-time operand scheduler this umbrella names in its own charter. Distinct
+  from the `-O2` mirror already in the file: the mirror *swaps operands* and so
+  needs commutativity, while this swaps *evaluation order* and keeps the operand
+  roles, which is what covers `-`, `shr`, `div`, `mod`.
+
+Together they take this loop **18 -> 15**. Both carry forward the two controls
+this campaign paid for: an ordering change is invisible to a counter (log the
+order), and a guard needs a decline log to be known selective.
+
+## W1 slice 10 — the resident read and the widen are one instruction
+
+`feature-opt-o3-fuse-resident-read-and-widen-into-movsxd`, landed 2026-08-30 as
+`2365dafa2`. Baseline compiler `1bca19929e04`, new compiler `46ff97f32ed7` —
+**both built at the LANDED HEAD, the baseline being HEAD with only this hunk
+reverted**, so the delta is immune to a sibling's commit rebasing in.
+
+> Those are the SECOND pair of shas. The first — `1055347eb44a` / `c8303ca1f5b2`
+> — were measured before `tools/sync.sh` rebased, and `de276c8f5` (xtensa) and
+> `d2a61a524` (`lib/rtl/math.pas`, `bignum.pas`) landed underneath. `compiler/`
+> was untouched by both, and the binary still moved, because **the compiler
+> links the RTL: `lib/**` is a build input.** The pre-rebase shas do not
+> reproduce at HEAD and are no longer quotable.
+>
+> This is the second time this campaign has quoted a sha the rebase then
+> invalidated, so it is worth stating as a rule rather than an incident: **a
+> sha measured before the push names a tree that may not survive it.** The
+> re-measurement produced byte-for-byte the same deltas (-2 / -10 / -6, all
+> lower levels identical), which is exactly the property the
+> "HEAD-minus-only-this-hunk" baseline was chosen for — the DELTA survived a
+> changed tree, the absolute shas did not. Same shape as `three.pas` below:
+> deltas travel, absolutes do not. **Re-measure after the push, not before.**
+
+A shift's LEADING sign-extend on a 4-byte signed operand was `mov rax, rN` +
+`cdqe`; it is now `movsxd rax, rNd`. Five bytes and two instructions become
+three and one. In `three.pas`'s loop, verbatim:
+
+```
+  base:  4c 89 e0        mov    %r12,%rax
+         48 98           cltq
+         48 c1 e8 01     shr    $0x1,%rax
+  new:   49 63 c4        movslq %r12d,%rax
+         48 c1 e8 01     shr    $0x1,%rax
+```
+
+**Measured, -O0/-O1/-O2 byte-identical on every program tested and -O3 strictly
+smaller, at exactly -2 bytes per firing:** `three.pas` -2 (1), `jsondemo` -10
+(5), the new test -6 (3); `lispdemo` unchanged (no firing). `-O3` runtime output
+identical on all of them. The loop body goes **22 -> 21** instructions.
+
+**That 22 is NOT this campaign's running 18 -> 17, and the chain is not extended
+here.** `three.pas` was a scratch file, never committed, and is gone; the file
+measured above is a RECREATION from the description in this log, and it is a
+bigger program (`j := i xor s` needs a narrowing cast that the original
+evidently did not have, which is four instructions of difference before this
+slice does anything). Two numbers named `three.pas` are two programs. What
+carries across is the *delta* — one firing, one instruction, two bytes, on a
+baseline that is HEAD with only this hunk reverted — and that is the number to
+quote. **A benchmark that lives only in `/tmp` cannot be re-measured, and a
+cumulative chain built on one silently becomes a chain of different programs.**
+The recreation is therefore **committed**, as
+`bench/w1_three_locals.pas`, with that history in its own header — so the next
+slice can re-measure the same file instead of re-deriving it from this prose. It
+is a measuring stick, not a test: nothing in the Makefile runs it.
+
+**Why not the obvious version.** The `cdqe` is a provable no-op *today*: every
+write to a 4-byte resident re-normalises the register. Deleting it would work
+and would be one instruction cheaper still — and it is exactly the
+invariant-dependent elision slice 8 refused, resting on code in another file,
+failing silently, and decaying the moment residency normalisation changes.
+`movsxd` sign-extends the low 32 bits by construction and costs the same.
+
+**One condition, two readers.** The pre-decision that SKIPS the left load and
+the emit site that must honour the skip both call `W1LeadingCdqe`. They cannot
+drift apart, and the reason they must not is asymmetric: a widen site that
+failed to honour a skip would leave rax *never loaded*, holding whatever the
+previous statement left there. That is deliberate break 3 below, and it is a
+wrong number rather than a crash.
+
+**Non-vacuity:** three deliberate breaks — a wrong ModRM rm field (names the
+adjacent resident), a dropped REX.B (reads rsp's encoding instead of r12's), and
+the widen site ignoring the deferred load — each move `-O3` while `-O0` stays
+correct.
+
+**A second oracle, free.** In this dialect `LongInt shr 1` promotes to native
+width, which is *why* the leading cdqe exists; FPC keeps 32 bits and answers
+differently. `--strict-fpc` reproduces FPC 3.2.2 exactly on every row — and is
+simultaneously a CONTROL, because strict mode tags the result 4 bytes, so
+`W1LeadingCdqe` is false and the fold cannot fire. The test therefore carries
+two expectations, both asserted at `-O0` and `-O3`.
+
+**Per-backend gate count: x86-64 22, aarch64 6** (comment-stripped, all
+spellings — see both corrections above; the 23 : 7 first published with this
+slice was itself one-per-row too high). This slice is one-armed — x86-64 only —
+so it widens the delta by one, as every one-armed slice does. That delta is now
+asserted by `tools/check_o3_backend_parity.py` rather than recounted by hand.

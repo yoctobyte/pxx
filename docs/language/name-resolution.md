@@ -51,6 +51,26 @@ Pascal unit, name it with its extension: import 'classes.pas' as classes
 That refusal is the point. Before it, such an import loaded the Pascal unit and
 failed somewhere inside a file the program never mentioned.
 
+### The one exception: a Python extension module
+
+A Pascal unit that declares itself a **cpyext extension module** is never the
+rule's subject. It is a Python module whose body happens to be Pascal and C —
+the same thing `_socket` or `_json` is to CPython — so a bare `import` of it is
+the correct spelling and resolves. Two things must both be true of the unit:
+
+- a line consisting of exactly `{$PYEXTENSION}` — the **declaration**;
+- its `uses` clause binds the cpyext runtime, `lib/cpyext/src/pyruntime.c` —
+  the **check** on that declaration.
+
+The declaration is what makes the unit a Python module; the runtime binding
+only confirms the claim. A unit that binds the runtime and does *not* declare
+itself is still refused with the message above, so the exception cannot widen
+into "anything that touches CPython". Nothing in the module's *name* is a
+signal — `_ext`, a leading underscore, or neither, it makes no difference.
+
+See [Nil Python](../targets/nil-python.md#python-extension-modules-import-bare)
+for what an extension module is for and what a declaration looks like.
+
 ### To reach another language, name the file
 
 A quoted string with a foreign extension routes that file through the other
@@ -138,7 +158,9 @@ degraded copy of the other. `Round(2.5)` is `2` in Pascal and `3` in C, and both
 are correct for their language.
 
 Where a real ambiguity survives, the compiler's obligation is to **warn and name
-what it picked**, not to guess quietly. Qualification (below) is the escape.
+what it picked**, not to guess quietly — though that warning is not emitted yet
+(see [current status](#current-status)). Qualification (below) is the escape,
+and it works today.
 
 If you deliberately pull both `math.pas` and `math.c` into scope and then write
 an ambiguous bare call, you own that outcome. The compiler will tell you what it
@@ -193,6 +215,27 @@ end.
 Same rule for the built-ins: `System.Random(i + 1)` reaches the builtin even
 when a used unit declares its own `Random`.
 
+#### Across languages, give the file a scope name
+
+This is the escape that makes own-language-first a rule rather than a wall.
+Import the foreign file **with a scope name**, and the name you could not reach
+unqualified is reachable through it:
+
+```pascal
+{ cm.c:  double exp(double x)  { return 42.0; }
+         double cube(double x) { return x*x*x; }  }
+program q;
+uses math, './cm.c' as cmath;
+begin
+  WriteLn(Exp(1.0):0:4);        { 2.7183 — Pascal's own, as own-language-first says }
+  WriteLn(cmath.exp(1.0):0:4);  { 42.0000 — C's, asked for by name }
+  WriteLn(cube(3.0):0:1);       { 27.0 — no collision, so no qualification needed }
+end.
+```
+
+Nothing becomes unreachable; a colliding name just has to be asked for. A
+foreign name that collides with nothing — `cube` here — still binds unqualified.
+
 ## Which reference implementation applies
 
 **Each frontend follows its own language's reference implementation:** CPython
@@ -241,12 +284,11 @@ Two parts of the above are settled rules that the compiler does not fully
 enforce yet. They are documented here because they are the rules the language
 has, but do not write code that depends on them landing:
 
-- **Own-language-first is not yet implemented as an explicit precedence.** Today
-  the case rule and ordinary scope hiding produce the right answer in the known
-  cases, and a bare call that is ambiguous across languages resolves without a
-  warning rather than with one.
-- **Scope hiding covers routines, not types and classes.** Two units exporting
-  the same *class* name still resolve first-match rather than last-named.
+- **Own-language-first is implemented, but it does not warn.** The precedence
+  is real and it does outrank import order — a Pascal `Exp` stays Pascal's
+  whether the C file is named before or after `math` in the `uses` clause. What
+  is still missing is the diagnostic: an ambiguous cross-language bare call
+  resolves silently rather than announcing what it picked.
 - **`from '<file>' import <name>` is not built.** The `as` form is how a
   foreign file is imported; `from 'sysutils.pas' import Trim` is refused with
   *expected a module name after from*.

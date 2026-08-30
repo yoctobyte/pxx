@@ -371,6 +371,84 @@ So, periodically, of your own reports:
 Related: the same shape one level down is a true fact about the wrong subject
 (below); this is a true *measurement* answering the wrong question.
 
+### Measured 2026-08-30: the population is small, and mostly not what you fear
+
+Enumerated by `git blame` over every `.py`/`.sh` in `tools/` and `test/`, looking
+for hardcoded expected values and thresholds whose **line** no commit had touched
+in a month. **255 files, 63,863 lines blamed, 129 matches at any date, 21 older
+than a month across 7 files.** (Reporting the searched population, not only the
+hits, is the point of `the-empty-tree-audit.md` — 21 is unreadable without the
+63,863.) 47 files carry such values and were touched recently, so the absence of
+any devtest from the stale list is a real result rather than a broken glob.
+
+Then the part that matters: **of those 21, only 2 are in the class that can rot.**
+
+| kind | n | can it rot? |
+| --- | --- | --- |
+| policy tunables — `MEM_FLOOR`, `PSI_ADMIT`, `HEARTBEAT_STALE`, `CASCADE_THRESHOLD`, `HISTORY_CAP` … | 15 | **no** — a chosen operating point. Stability is the intent; "unchanged for a month" is health, not staleness. |
+| exit codes and protocol constants — `rc == 130`, `rc == 124`, `VT_PROMO_INT64 = 8193` | 4 | **only against their source.** Checked: 8193 still matches `compiler/defs.inc:1151`. |
+| **asserted observations** — `ADDLINE=10` (`dwarf_smoke.sh`), `BLANK_MAX=4000` (`gui_shot.sh`, since deleted — see below) | **2** | **yes** — a number someone measured once and wrote down. |
+
+**So sort by what a number IS, not by how long it has sat still.** A tunable and a
+recorded measurement look identical in a diff and age identically in `git blame`,
+and only the second one decays. Scanning for "old numbers" and treating the count
+as a backlog manufactures 19 items of work out of 2 — the polarity that sends
+effort somewhere useless rather than stopping you looking.
+
+**Both re-derived, same day. One held, one had rotted — which is the ratio the
+partition exists to find.**
+
+- `ADDLINE=10` (`dwarf_smoke.sh`): **correct.** Line 10 of the generated heredoc
+  is `local := a + b;`, the first statement of `Add`. Verified by counting the
+  heredoc — the constant indexes a source that lives in the same file, so no
+  build was needed at all.
+- `BLANK_MAX=4000` (`gui_shot.sh`): **rotted.** An empty Xvfb display at the
+  script's own default 1100x700 captures at **4013 bytes** under ffmpeg 8.0.1,
+  five samples, no variance. The test is `-le BLANK_MAX`, so every blank frame
+  now passes as a real window, and the Xvfb restart-and-retry path it guards is
+  unreachable. Filed as `bug-b-gui-shot-blank-frame-detector-no-longer-detects-
+  a-blank-frame`.
+
+**Outcome, and it moved the lesson.** Track B did not re-derive `BLANK_MAX` — it
+**deleted the measurement**. `a13e52b21` replaced the compressed-size proxy with
+a decoded-pixel ratio, because the re-derivation could not be done:
+
+```
+empty display     4013 bytes   (five samples, no variance)
+real xterm window 4068 bytes
+```
+
+**Fifty-five bytes apart.** A mostly-empty frame compresses to nearly the same
+size whether or not something is drawn in one corner, so there is no threshold
+that separates the two cases — the proxy had lost its discriminating power, not
+merely its calibration. The constant named in the table above no longer exists.
+
+That is a third outcome the partition did not anticipate, and it changes what to
+do with a rotted observation:
+
+> **Before re-deriving a measured constant, check that the measurement still
+> separates the cases it was chosen to separate.** A number can be stale; a
+> *proxy* can be dead. Re-measuring a dead proxy produces a fresh number with a
+> confident derivation note and no discriminating power — which is strictly
+> worse than the stale one, because it now looks maintained.
+
+The tell is available before any fix: measure BOTH sides, not just the one that
+looks wrong. I measured the blank frame five times and reasoned about the other
+side from the comment ("a real PCL window compresses to well over this"). One
+measurement of a real window would have shown 4068 and turned "the threshold is
+13 bytes off" into "the threshold cannot work", which is a different ticket.
+
+The rotted one is still the shape worth remembering: **the number was right when it was
+written.** Nobody edited it and nobody was careless — ffmpeg's encoder or the
+default size moved underneath it, and a prose comment ("a blank frame is ~1-3
+KB") is not something that re-checks itself. **A measured constant needs its
+derivation recorded beside it**, or the only thing left asserting it is the
+memory of whoever measured it.
+
+**The enumeration is cheap and the re-derivation is not, so they are separate
+jobs** — do the counting whenever, and spend cores only on the residue. Here the
+residue was two, and one of them turned out to need no cores either.
+
 ## Rule: "filed", "done", "already handled" are CLAIMS — and `ls` settles them
 
 Work that exists in prose but not as a rankable ticket is invisible to
@@ -408,6 +486,14 @@ phantom follow-up behind converts one invisible item into a permanently
 invisible one, since nobody re-reads `done/`.
 
 ## Rule: a coverage claim needs its BOUNDARY checked, not just its result
+
+**The mechanical version of this rule is `devdocs/dev/the-empty-tree-audit.md`:**
+run every guard against a scratch tree with an empty `Makefile` and an empty
+`test/`, because a guard that passes over nothing was never measuring anything.
+It needs no prior suspicion, it partitions the population for free, and it found
+two real defects in one pass — one of them a guard written earlier the same
+session by the agent running the audit. The rest of this section is the same
+error found by reading; that doc is how to find it by running.
 
 Track T's product is coverage claims — "the tier is green", "this sweep covered
 those commits", "that guard handles this case". The characteristic way they fail

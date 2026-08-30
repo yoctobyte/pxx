@@ -194,6 +194,13 @@ const
   MAX_REACTORS = 64;
 {$endif}
 
+const
+  { Upper bound on the loser-side wait in the exhaustion fatal below. Sized to
+    be unreachable in practice (the winner needs one write syscall) while still
+    being a bound: ~1e7 lock-prefixed compare-exchanges is a fraction of a
+    second, so a wedged winner costs a late fatal, never a hung process. }
+  FATAL_SPIN_MAX = 10000000;
+
 type
   TReactor = record
     coSp    : array[0..MAX_CO-1] of Int64;       { saved stack pointer }
@@ -216,6 +223,7 @@ var
   reactors : array[0..MAX_REACTORS-1] of TReactor;
   regLock  : Integer;   { atomic spinlock guarding slot attachment (0=free 1=held) }
   fatalOnce: Integer;   { 0 until a thread claims the reactor-exhaustion fatal }
+  fatalDone: Integer;   { 0 until that thread has finished WRITING it }
 
 function SelfTid: Int64;
 begin
@@ -227,7 +235,7 @@ end;
   (already attached) is lock-free; attachment is guarded by a tiny atomic
   spinlock (contended only briefly at worker-thread startup). }
 function CurR: PReactor;
-var me, ignore: Int64; i, slot: Integer;
+var me, ignore: Int64; i, slot, spins: Integer;
 begin
   me := SelfTid;
   for i := 0 to MAX_REACTORS - 1 do
@@ -244,40 +252,55 @@ begin
     deliberately-shared errno slot is.
     bug-a-the-17th-thread-silently-aliases-reactor-slot-0 }
   slot := -1;
+  spins := 0;
   for i := 0 to MAX_REACTORS - 1 do
     if reactors[i].used = 0 then begin slot := i; Break; end;
   if slot < 0 then
   begin
-    { EXACTLY ONE thread may report and Halt, and it must not hold regLock while
-      it does. Both halves are measured, not defensive:
+    { EXACTLY ONE thread may report, and it must not hold regLock while it does.
+      That half is still measured, not defensive: Halt cannot be serialised into
+      safety here, because its exit path joins the worker threads. Keeping
+      regLock hung the process (exit 124 by `timeout` at 4, 8 and 20 workers);
+      releasing it and parking the losers hung it too, for the real reason -- a
+      parked thread is one the join waits on forever. A hang is not an
+      improvement on a lie. So: release the lock, let exactly one thread report,
+      and let every refused thread call Halt.
 
-      - With Halt here the exit status is UNRELIABLE -- it races. Same binary,
-        same width, repeated: 4 workers gave 0, 216, 0; 8 workers gave 0, 0, 0;
-        20 gave 216, 216, 216. So a fatal sometimes reports SUCCESS, and a
-        harness reading the status sees a pass. exit_group is 216 in 30/30 runs
-        across 3, 4, 8, 20 and 64 workers.
-        The cause is NOT simply "concurrent Halt": six plain palthread threads
-        all calling Halt(216) at once exited 216 in 6/6 runs, so something about
-        halting from inside a parallel-for worker during reactor attachment is
-        involved and is NOT isolated here. Recorded, not diagnosed:
-        bug-b-concurrent-halt-from-several-threads-exits-0.
-        (Related in shape to the i386 exit_group number in pxxcio.pas, which
-        made every failing C program exit 0 -- there too, what got lost was the
-        report of the failure rather than the failure.)
-      - And Halt cannot be serialised into safety here, because Halt's exit path
-        JOINS the worker threads. Keeping regLock hung the process (exit 124 by
-        `timeout` at 4, 8 and 20 workers); releasing it and parking the losers
-        hung it too, for the real reason -- a parked thread is one the join
-        waits on forever. A hang is not an improvement on a lie.
+      This arm called exit_group through __pxxrawsyscall from 2026-08-28 to
+      2026-08-29, because Halt's exit status was UNRELIABLE: same binary, same
+      width, repeated, 4 workers gave 0, 216, 0 and 8 workers gave 0, 0, 0 -- a
+      fatal reporting SUCCESS to any harness reading the status.
 
-      So this arm does not use Halt at all: exit_group takes the process down
-      immediately, with the right status, joining nothing and racing nothing.
-      Finalizers are skipped, which is the correct trade when the alternative
-      state is two OS threads sharing one coroutine table. }
+      That was a COMPILER bug, now fixed: Halt(n) on x86-64 and arm32 emitted
+      the `exit` syscall instead of `exit_group`, so it ended only the calling
+      thread and the process status fell to whichever thread exited last.
+      bug-b-concurrent-halt-from-several-threads-exits-0.
+
+      The workaround is reverted deliberately and not merely tidied away.
+      Leaving it would have left test_sched_reactor_exhaustion passing whether
+      or not the compiler was fixed -- a green test guarding nothing, which is
+      what a workaround becomes the moment the bug behind it closes. }
     ignore := __pxxatomic_xchg(@regLock, 0);
     if __pxxatomic_cas(@fatalOnce, 0, 1) = 0 then
+    begin
       writeln('fatal: scheduler out of reactor slots (MAX_REACTORS)');
-    ignore := __pxxrawsyscall(SYS_exit_group, 216, 0, 0, 0, 0, 0);
+      ignore := __pxxatomic_xchg(@fatalDone, 1);
+    end
+    else
+      { A LOSER MUST NOT TAKE THE PROCESS DOWN WHILE THE WINNER IS WRITING.
+        Halt is exit_group now, so the first refused thread to reach it ends
+        every thread -- including the one mid-writeln. That lost the message
+        outright: status 216 with an empty log, i.e. a fatal that reports its
+        number and not its reason. Measured here at 24 workers, 1 run in 15 with
+        the output on a FILE (0 in 15 at 4 workers, and 0 in 12 on a pipe --
+        which is why the harness saw it on `seven` and the pipe-shaped local
+        check did not). regression-test-threads-test-sched-reactor-exhaustion-5.
+        Bounded, so a winner that never arrives degrades to a slightly-late
+        fatal rather than to a hang -- exhaustion must stay loud, and a hang is
+        the one outcome worse than a quiet exit. }
+      while (__pxxatomic_cas(@fatalDone, 0, 0) = 0) and (spins < FATAL_SPIN_MAX) do
+        Inc(spins);
+    Halt(216);
   end;
   reactors[slot].coCount := 0;
   reactors[slot].curCo   := -1;

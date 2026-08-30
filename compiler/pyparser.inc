@@ -173,6 +173,15 @@ var
     -(pi + 1). }
   PyImpAliasSym: array[0..63] of Integer;
   PyImpAliasSrc: array[0..63] of Integer;
+  { Which from-import STATEMENT queued this entry, as that statement's own
+    token index. The self-capture scan asks "did the SAME statement just bind
+    this name?", and neither cheaper answer survives: a queue INDEX is wrong
+    because PyParseImportRun is visited TWICE over the same tokens, so a
+    statement's first-pass entries sit BELOW its second-pass base and the guard
+    silently stops firing; the raw queue is wrong because it spans every
+    statement in the run. The token index is stable across both passes and
+    unique per statement, so it is what actually identifies a statement. }
+  PyImpAliasStmt: array[0..63] of Integer;
   PyImpAliasCount: Integer;
   { The alias NAMES, kept after PyFlushImportAliases drains the queue above —
     call sites run long after the flush and still have to know that a name was
@@ -648,6 +657,7 @@ function PyUserNameShadowsHere(const nm: AnsiString): Boolean; forward; { does t
 function PyMakeTupleFromArgs(firstArg: Integer): Integer; forward; { a PYSEQ_TUPLE from an already-parsed AN_ARG chain — the multi-arg exception fold asks, and is defined above it }
 function PyEnsureExceptionClass: Integer; forward; { pylib's Exception, shelled lazily — the bare-class `raise` resolver asks, ~12000 lines above the definition }
 function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
+function PyIsClassMethodAt(defIdx: Integer): Boolean; forward; { ditto }
 { PyMakeIdent and PyHiddenName are likewise forward-declared in pasparser_*.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }
 { PyCallMeth1 is forward-declared in pasparser_*.inc (included before this file),
@@ -4261,6 +4271,42 @@ begin
     pname := '';
     Result := False;
   end;
+end;
+
+{ Does NilPy's own `str` surface own this spelling on this receiver? Asked by
+  the TYPE-HELPER dispatch in pasparser_lval.inc, which resolves `recv.member`
+  against a `record helper for T` in scope and Exits with the PASCAL method --
+  before the NilPy str-method loop in pasparser_expr.inc can run.
+
+  sysutils.pas declares `TStringHelper = type helper for AnsiString`, so the
+  moment any imported unit pulls sysutils, EVERY str-typed NilPy receiver has a
+  Pascal helper in scope, and Pascal member lookup is case-insensitive. Four
+  Python spellings collide with TStringHelper, and only the first was visible:
+
+    split(sep, maxsplit) vs Split(array of Char)   -> arity, `unexpected token`
+    startswith(tuple)    vs StartsWith(AnsiString) -> `no overload ... matches`
+    startswith(str)      -> COMPILED, silently the Pascal method
+    endswith(str)        -> COMPILED, silently the Pascal method
+    replace(old, new)    -> COMPILED, silently the Pascal method
+
+  The last three are the expensive half: `str.replace`'s optional third argument
+  is a COUNT, `TStringHelper.Replace`'s third is a TReplaceFlags set. Same
+  spelling, different function, no diagnostic.
+
+  Gated on the METHOD TABLE rather than on the receiver alone, deliberately:
+  a str-typed NilPy receiver calling a Pascal-only helper member (`s.Trim`,
+  `s.Substring`, `s.IsEmpty` -- spellings Python's str does not have) must keep
+  reaching the helper, because PyParseStrMethod would reject them outright. So
+  this answers True only where the two surfaces actually collide, and the guard
+  is observed rejecting as well as accepting -- see the negative rows in
+  test_nilpy_str_method_vs_pascal_string_helper.npy.
+
+  See bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter. }
+function PyStrMethodOwnsMember(recvTk: TTypeKind; const memb: AnsiString): Boolean;
+var oPName: AnsiString; oTk: TTypeKind; oWant: Integer;
+begin
+  PyStrMethodOwnsMember := isNilPy and PyIsStrBaseTk(recvTk)
+                           and PyStrMethodInfo(memb, oPName, oTk, oWant);
 end;
 
 { Can this str method be called with exactly `argCount` explicit arguments?
@@ -8383,6 +8429,21 @@ begin
   argsHead := slot[0];
   lastArg := slot[maxIdx];
   nArgs := maxIdx + 1;
+
+  { A callable handed to a raw callback `Pointer` parameter, coerced here —
+    AFTER the reorder above, which is what makes an argument's position equal
+    its parameter index.
+
+    Here rather than in the argument loops because there are SEVEN of them (a
+    local receiver, a field receiver, an indexed receiver, a dynamic receiver,
+    the star-unpack and collect paths, the class-method path), spread across
+    files two tracks own, and every one of them funnels through this procedure.
+    Wiring the coercion into one loop is how `xs.sort(key=f)` came to work on a
+    local and a field receiver and SEGFAULT on `nested[0].sort(key=f)` — the
+    same construct, a different loop, no reason a reader could see.
+    devdocs/dev/normalise-dont-special-case.md
+    feature-nilpy-list-sort-inplace-key-reverse }
+  PyCoerceCallableArgsIn(mpi, argsHead);
 end;
 
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer;
@@ -12067,6 +12128,7 @@ begin
   else if dotted = 'os.startfile' then Result := 'pyos_startfile'
   else if dotted = 'os.rename' then Result := 'pyos_rename'
   else if dotted = 'os.stat' then Result := 'pyos_stat'
+  else if dotted = 'os.listdir' then Result := 'pyos_listdir'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
   else if dotted = 'sys.stdin.read' then Result := 'pystdin_read'
   else if dotted = 'sys.stdin.readline' then Result := 'pystdin_readline'
@@ -12086,6 +12148,12 @@ begin
     contract) -- intercepted here by name, ahead of the ordinary qualified-
     call resolution that `import math` would otherwise hit.
     bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float }
+  { time.time() must not reach C's time(2) — `import time` resolves the NAME to
+    the C header, so `time.time()` bound to time(2) and reported "no overload of
+    time matches these arguments". Same wrong-target shape as math.floor below,
+    and intercepted the same way, ahead of qualified resolution.
+    feature-nilpy-stdlib-coverage-gaps-measured }
+  else if dotted = 'time.time' then Result := 'pytime_time'
   else if dotted = 'math.floor' then Result := 'pymath_floor'
   else if dotted = 'math.ceil' then Result := 'pymath_ceil'
   { math.fabs has no Pascal RTL counterpart under that name at all --
@@ -12196,9 +12264,14 @@ begin
     if pname <> '' then begin nTok := 1; Result := True; Exit; end;
   end;
   base := LowerCase(GetTokenStr(TokPos - 1));
+  { This list and PyStdlibCallProc's table are ONE concept in two places: a
+    dotted name not admitted here never reaches the table, so an entry added
+    there alone is silently dead code. Adding a base costs a line; forgetting
+    it costs the shim. (time.time went in and did nothing until `time` was
+    added here.) }
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
      (base <> 'select') and (base <> 'dict') and (base <> 'math') and
-     (base <> 'random') and (base <> 'str') then Exit;
+     (base <> 'random') and (base <> 'str') and (base <> 'time') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));
@@ -15511,7 +15584,21 @@ begin
   end;
   mmi := PyPromoteOverloadByKw(ci, mmi, mn);
   selfArg := AllocNode(AN_ARG);
-  ASTLeft[selfArg] := baseNode;
+  { A static-marked method (@staticmethod or @classmethod) takes the CLASS at
+    slot 0, never an instance — so a receiver that is an object must be reduced
+    to its RTTI blob, exactly as `self.__class__` does. This path is the FRESH
+    construction `Cls().m()`; the named-receiver paths in pasparser_lval already
+    do their own reduction, which is why `b.probe()` answered the right class
+    (Derived included) while `Base().probe()` answered a blank one — the class
+    name printed empty because the blob was an instance pointer.
+
+    Reading the blob from the object is also what makes the RUNTIME class
+    arrive: `Derived().probe()` must say Derived, not the declaring Base. }
+  if (mmi >= 0) and UMthIsStatic[mmi] and
+     (IntToTypeKind(ASTTk[baseNode]) = tyClass) then
+    ASTLeft[selfArg] := GenMakeRttiOfCall(baseNode)
+  else
+    ASTLeft[selfArg] := baseNode;
   ASTRight[selfArg] := -1;
   lastArg := selfArg;
   mpi := UMthProc_[mmi];
@@ -15635,6 +15722,11 @@ begin
     lastArg := argNode;
     Inc(k);
   end;
+  { The same callable→Pointer coercion the plain-call path does, now that the
+    overload (and so the parameter TYPES) is settled: `xs.sort(key=f)` reaches
+    a raw callback Pointer exactly as `sorted(xs, key=f)` does. }
+  PyCoerceCallableArgsIn(mpi, selfArg);
+
   { VIRTUAL dispatch only when the class actually participates in a hierarchy.
     NilPy classes that merely SHARE a method name (songformatter has eight
     unrelated detector classes each declaring analyze) still get virtual slots,
@@ -21148,6 +21240,110 @@ begin
   end;
 end;
 
+function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean;
+{ A callable VALUE handed to a raw callback `Pointer` parameter, coerced to the
+  code address the slot has always wanted.
+
+  A `Callable[...]`/`key=` parameter is tyPointer (PyCallKey1 calls through it),
+  while every callable a NilPy program can NAME is a 16-byte variant: a lambda
+  or def in a variable (tag 9/12), a bound method (8), a lifted bound-fn (10).
+  The plain coercion takes the variant's first word — its TAG — as the code
+  address, so the program jumps to 8, 9, 10 or 12. The faulting PC being a
+  small tag number is the tell, the same one PyFixCallableTypeArgs documents
+  for the builtin-TYPE crossing.
+
+  Extracted from the free-function call path so the METHOD paths can ask the
+  same question. It was inline there, and being inline is exactly why
+  `sorted(xs, key=f)` worked for all six callable spellings while
+  `xs.sort(key=f)` segfaulted on five of them — one road had the coercion and
+  the other could not reach it. One implementation, two callers; the second
+  copy is the one that would have drifted.
+  devdocs/dev/normalise-dont-special-case.md
+  feature-nilpy-list-sort-inplace-key-reverse
+
+  argsHead is the whole AN_ARG chain INCLUDING Self on a method call, so the
+  walk lines up with Procs[].Params either way: Self sits at slot 0 and is
+  never tyPointer, so it is skipped by the test rather than by a special case. }
+var currArg, i, capSym, identNode, argSeq, tailArg, exprNode: Integer;
+    btPi, argN, code, wrapPi: Integer;
+begin
+  Result := False;
+  if not isNilPy then Exit;
+  if procIdx < 0 then Exit;
+  btPi := FindProc('pybtype');
+  currArg := argsHead;
+  i := 0;
+  while (currArg <> -1) and (i < Procs[procIdx].ParamCount) do
+  begin
+    { A builtin TYPE in the slot — `xs.sort(key=str)`. It is the `pybtype(code)`
+      call the frontend itself builds, and its payload is a small CODE, not an
+      address: coerced into the pointer slot the program jumps to 5. Rewritten
+      to the address of the one-argument routine that type performs, which is
+      what the slot has always wanted. PyFixCallableTypeArgs does exactly this
+      for the plain-call path, where it must run BEFORE overload matching (the
+      argument's TYPE is what picks the overload); here the overload is already
+      settled, so the resolved parameter answers the same question exactly
+      rather than by asking the whole name family.
+      bug-nilpy-a-builtin-type-as-a-key-callback-segfaults }
+    if (i < MAX_PROC_PARAMS) and (btPi >= 0) and
+       (Procs[procIdx].Params[i].TypeKind = tyPointer) and
+       (ASTLeft[currArg] >= 0) and (ASTKind[ASTLeft[currArg]] = AN_CALL) and
+       (ASTIVal[ASTLeft[currArg]] = btPi) then
+    begin
+      argN := ASTLeft[ASTLeft[currArg]];
+      if (argN >= 0) and (ASTLeft[argN] >= 0) and
+         (ASTKind[ASTLeft[argN]] = AN_INT_LIT) then
+      begin
+        code := Integer(ASTIVal[ASTLeft[argN]]);
+        wrapPi := PyBuiltinTypeCallbackProc(code);
+        if wrapPi >= 0 then
+        begin
+          exprNode := AllocNode(AN_PROCADDR);
+          ASTIVal[exprNode] := wrapPi;
+          ASTTk[exprNode] := Ord(tyPointer);
+          ASTLeft[currArg] := exprNode;
+          Result := True;
+        end;
+      end;
+    end;
+    if (i < MAX_PROC_PARAMS) and
+       (Procs[procIdx].Params[i].TypeKind = tyPointer) and
+       (ASTLeft[currArg] >= 0) and
+       (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyVariant) then
+    begin
+      { A parameter that DECLARES a default of nil means "not given" by nil, so
+        None is a legal value for it — `sorted(xs, key=None)` is CPython's own
+        no-key spelling. The strict form stays for a parameter with no default,
+        where None really is an error (map/filter refuse it in CPython too). }
+      if ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] then
+        capSym := FindProc('pyvar_callable_ptr_opt')
+      else
+        capSym := FindProc('pyvar_callable_ptr');
+      if capSym >= 0 then
+      begin
+        identNode := AllocNode(AN_STR_LIT);
+        ASTSOffset[identNode] := PyStoredName(Procs[procIdx].Params[i].Name);
+        ASTSLen[identNode] := Length(Procs[procIdx].Params[i].Name);
+        ASTTk[identNode] := Ord(tyString);
+        argSeq := AllocNode(AN_ARG);
+        ASTLeft[argSeq] := identNode;
+        ASTRight[argSeq] := -1;
+        tailArg := AllocNode(AN_ARG);
+        ASTLeft[tailArg] := ASTLeft[currArg];
+        ASTRight[tailArg] := argSeq;
+        exprNode := AllocNode(AN_CALL);
+        ASTIVal[exprNode] := capSym;
+        ASTLeft[exprNode] := tailArg;
+        ASTTk[exprNode] := Ord(tyPointer);
+        ASTLeft[currArg] := exprNode;
+        Result := True;
+      end;
+    end;
+    currArg := ASTRight[currArg];
+    Inc(i);
+  end;
+end;
+
 function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean;
 { A user object implementing the iterator protocol, handed to a pylib routine
   that wants a CONTAINER. `list(bag)` / `sorted(bag)` / `tuple(bag)` resolved
@@ -23688,6 +23884,37 @@ begin
         ASTIVal[cmpNode] := Ord(tkGt)
       else
         ASTIVal[cmpNode] := Ord(tkLt);
+      { ...but the STOP still has to be evaluated exactly once, and on this arm
+        it was not. The runtime-step arm below binds it to a temp and its own
+        comment says why -- "the previous lowering re-ran the stop expression on
+        every iteration" -- and that fix was never applied here, so the literal
+        step kept splicing the expression straight into the guard.
+
+        Re-running it is not merely wasteful, it does not TERMINATE when the
+        stop reads the loop variable: `for n in range(3, n - 8, -1)` copies the
+        counter into `n` at the top of each body, so the bound falls in lockstep
+        with `n` and `i > stop` is never false. CPython yields 2 items; this
+        hung forever. A HANG is the worst shape this family takes -- there is no
+        wrong answer to notice and nothing to diff against the oracle, because
+        the program never reaches the compare.
+        bug-n-a-range-loop-whose-bound-reads-the-loop-variable-never-terminates
+
+        Literal stops keep the old shape: a constant cannot change and is free
+        to re-emit, the same exemption ir.inc's AN_FOR makes for IR_CONST_INT.
+        So `range(n - 1, -1, -1)` -- the shape the note above calls the
+        overwhelmingly common one -- still pays nothing. }
+      if not ((ASTKind[stopNode] = AN_INT_LIT) or
+              ((ASTKind[stopNode] = AN_NEG) and
+               (ASTLeft[stopNode] >= 0) and
+               (ASTKind[ASTLeft[stopNode]] = AN_INT_LIT))) then
+      begin
+        rngStopSym := AllocVar(PyHiddenName('stop'), tyInt64);
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := PyMakeIdent(rngStopSym);
+        ASTRight[node] := stopNode;
+        Result := PySeqAppend(Result, node);
+        stopNode := PyMakeIdent(rngStopSym);
+      end;
       ASTLeft[cmpNode] := PyMakeIdent(symIdx);
       ASTRight[cmpNode] := stopNode;
       ASTTk[cmpNode] := Ord(tyBoolean);
@@ -30592,6 +30819,27 @@ begin
             (LowerCase(GetTokenStr(i)) = 'staticmethod');
 end;
 
+{ Is the `def` at defIdx decorated `@classmethod`? The same backward scan, asked
+  from the same two places, for the same reason: the member pre-pass and the
+  real method parse must agree or the registered signature and the frame differ
+  silently.
+
+  The DIFFERENCE from @staticmethod is that a classmethod DECLARES its receiver
+  — the author writes `def make(cls)` — so there is nothing to inject. The
+  declared parameter already occupies slot 0, which is the slot the dispatch
+  fills with the class. What this flag changes is the parameter's TYPE and the
+  UMthIsStatic marking, not the parameter list's shape. }
+function PyIsClassMethodAt(defIdx: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := defIdx - 1;
+  while (i >= 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(i);
+  if i < 1 then Exit;
+  Result := (Tokens[i - 1].Kind = tkAt) and
+            (LowerCase(GetTokenStr(i)) = 'classmethod');
+end;
+
 function PyMethodName(const name: AnsiString): AnsiString;
 begin
   if name = '__init__' then Result := 'create' else Result := name;
@@ -30774,6 +31022,51 @@ end;
   A name rebound across kinds (`v = 3` then `v = 0.5`) reports the LAST kind,
   which is what the value at the return actually is in the straight-line case
   this can see. Returns tyUnknown when nothing typed. }
+function PyRetRecvClass(scanFrom, scanTo: Integer; const recvNm: AnsiString): Integer;
+{ The class a local of this body was last bound to, from its `recv = ClassName(`
+  assignment. Token-only, like every other chase in this scan: PyInferExprType's
+  own walk reads `PyLocals[..].RecCi`, which exists in the body pass and NOT in
+  the shell pre-pass, and the two passes answering differently is a silent ABI
+  mismatch.
+
+  Written once because PyRetFieldType and PyRetMethodType are the same question
+  about the same receiver and only differ in which member table they then ask.
+  A second copy of the chase is a second chance for the two shapes to diverge,
+  which is precisely how the method form stayed broken after the field form was
+  fixed. }
+var k, pi: Integer;
+begin
+  PyRetRecvClass := -1;
+  for k := scanFrom to scanTo - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
+       (Tokens[k + 1].Kind = tkAssign) and (Tokens[k + 2].Kind = tkIdent) and
+       (Tokens[k + 3].Kind = tkLParen) and
+       CaseEqual(GetTokenStr(k), recvNm) then
+    begin
+      { the LAST such binding wins, as everywhere else in this scan }
+      if FindUClassNonRecord(GetTokenStr(k + 2)) >= 0 then
+        PyRetRecvClass := FindUClassNonRecord(GetTokenStr(k + 2))
+      else
+      begin
+        { `c = get()` — bound from a DEF that returns an instance, not from a
+          constructor. Same receiver, same defect: without this the chase falls
+          through and types the return as the receiver's class again. Measured
+          as the one probe still segfaulting after the constructor form was
+          fixed, which is why it is here rather than in a follow-up ticket.
+
+          Safe against the intrinsic-collision family (PyIsClassTypeExact,
+          PyIsExactCtorName, PyDottedRootIsLocal): FindProc folds case, so `hi`
+          finds Pascal's `Hi` — but the guard demands a CLASS return with a real
+          rec id, and no intrinsic has one. A def defined later in the file has
+          no RetType yet, answers -1, and is left alone. }
+        pi := FindProc(GetTokenStr(k + 2));
+        if (pi >= 0) and (Procs[pi].RetType = tyClass) and
+           (ProcRetRecId[pi] >= REC_UCLASS_BASE) then
+          PyRetRecvClass := ProcRetRecId[pi] - REC_UCLASS_BASE;
+      end;
+    end;
+end;
+
 function PyRetFieldType(scanFrom, scanTo: Integer; const recvNm, fldNm: AnsiString;
                         var fldRec: Integer): TTypeKind;
 { The type of `recv.fld` where `recv` is a local of this body — for a def whose
@@ -30792,25 +31085,50 @@ function PyRetFieldType(scanFrom, scanTo: Integer; const recvNm, fldNm: AnsiStri
   mismatch. So the receiver's class is recovered the way the rest of this file
   does it — from the `recv = ClassName(` assignment in the body — and the field
   type from the class's own registered field. }
-var k, ci, fi: Integer;
+var ci, fi: Integer;
 begin
   PyRetFieldType := tyUnknown;
   fldRec := REC_NONE;
-  ci := -1;
-  for k := scanFrom to scanTo - 1 do
-    if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
-       (Tokens[k + 1].Kind = tkAssign) and (Tokens[k + 2].Kind = tkIdent) and
-       (Tokens[k + 3].Kind = tkLParen) and
-       CaseEqual(GetTokenStr(k), recvNm) and
-       (FindUClassNonRecord(GetTokenStr(k + 2)) >= 0) then
-      { the LAST such binding wins, as everywhere else in this scan }
-      ci := FindUClassNonRecord(GetTokenStr(k + 2));
+  ci := PyRetRecvClass(scanFrom, scanTo, recvNm);
   if ci < 0 then Exit;
   fi := FindUField(ci, fldNm);
   if fi < 0 then Exit;
   PyRetFieldType := IntToTypeKind(UFldTk[fi]);
   if (PyRetFieldType = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) then
     fldRec := UFldRec_[fi];
+end;
+
+function PyRetMethodType(scanFrom, scanTo: Integer; const recvNm, mthNm: AnsiString;
+                         var mthRec: Integer; var recvCi: Integer): TTypeKind;
+{ The type of `recv.mth(...)` where `recv` is a local of this body — the METHOD
+  sibling of PyRetFieldType, and the arm that was missing.
+
+  `def make(): c = C(); return c.call()` was typed tyClass (C), the RECEIVER's
+  class, exactly as `return q.n` had been. The field form was fixed and the
+  call form was not, so the two shapes of one concept answered differently:
+  a field read printed the right value, a method call SEGFAULTED at the caller,
+  which reads a returned string handle as an object pointer. It reproduces with
+  no inheritance, no name collision and no `None` — one local, one method.
+  regression-test-nilpy-test-nilpy-parent-call-after-instantiation
+
+  `recvCi` is reported back so the caller can tell "receiver is not a local of
+  this body" (leave the expression alone — `math.sqrt(2.0)` is a
+  module-qualified call and must keep its route) from "receiver IS a known
+  local but the method's type is not resolvable here". The second case must
+  NOT be left to fall through: the expression chase then types the return as
+  the receiver's class, which is the defect. tyVariant is the honest answer and
+  the one the equivalent two-statement spelling already produces. }
+var si: Integer;
+begin
+  PyRetMethodType := tyUnknown;
+  mthRec := REC_NONE;
+  recvCi := PyRetRecvClass(scanFrom, scanTo, recvNm);
+  if recvCi < 0 then Exit;
+  si := FindUMeth(recvCi, mthNm);
+  if si < 0 then Exit;
+  PyRetMethodType := Procs[UMthProc_[si]].RetType;
+  if (PyRetMethodType = tyClass) and (ProcRetRecId[UMthProc_[si]] >= REC_UCLASS_BASE) then
+    mthRec := ProcRetRecId[UMthProc_[si]];
 end;
 
 function PyRetNameType(scanFrom, scanTo: Integer; const nm: AnsiString): TTypeKind;
@@ -30937,6 +31255,10 @@ function PyInferDefRetTypeScanInner(methodStart: Integer; var retRec: Integer;
                                var sawNone: Boolean): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth, chainRec: Integer;
+    recvCi2: Integer;   { the method arm's receiver class, or -1 if not a local here }
+    smPname: AnsiString;      { the str-method arm: pylib entry, its return kind }
+    smRetTk: TTypeKind;       { and its arity code, all three unused except as }
+    smWant: Integer;          { PyStrMethodInfo's out-parameters }
     t2, cur, chainCur: TTypeKind;
     seenAny, tupComma: Boolean;
     tupLamHdr: Boolean;   { inside a lambda's PARAMETER list — its commas are not tuple commas }
@@ -31287,6 +31609,96 @@ begin
             PyInferLastCi := rec2 - REC_UCLASS_BASE
           else
             PyInferLastCi := -1;
+        end;
+      end;
+      { `return q.m(...)` — the METHOD sibling of the arm above, and the shape
+        it was never given. Same defect, one token further along: the chase
+        below types the RECEIVER and nothing resolves the call, so the def
+        answered tyClass and the caller read a returned string handle as an
+        object pointer. A field read printed fine; a method call segfaulted.
+        `t = q.m(); return t` was always correct, which is what identifies this
+        as the return-type scan rather than the call.
+
+        Receiver not a local of this body -> untouched, so `math.sqrt(2.0)`
+        keeps its module-qualified route. Receiver known but the method
+        unresolvable (defined later, or inherited from somewhere this scan
+        cannot see) -> tyVariant, NOT the fallthrough: letting it fall through
+        is what lets the chase claim the receiver's class, and claiming the
+        class is the bug, not the fallback.
+        regression-test-nilpy-test-nilpy-parent-call-after-instantiation }
+      if (e >= j + 6) and (Tokens[j + 1].Kind = tkIdent) and
+         (Tokens[j + 2].Kind = tkDot) and (Tokens[j + 3].Kind = tkIdent) and
+         (Tokens[j + 4].Kind = tkLParen) and (Tokens[e - 1].Kind = tkRParen) and
+         (PyEndOfGroup(j + 4, e) = e) then
+      begin
+        rec2 := REC_NONE;
+        recvCi2 := -1;
+        t2 := PyRetMethodType(bodyScanStart, j, GetTokenStr(j + 1),
+                              GetTokenStr(j + 3), rec2, recvCi2);
+        if t2 <> tyUnknown then
+        begin
+          cur := t2;
+          if (t2 = tyClass) and (rec2 >= REC_UCLASS_BASE) then
+            PyInferLastCi := rec2 - REC_UCLASS_BASE
+          else
+            PyInferLastCi := -1;
+        end
+        else if recvCi2 >= 0 then
+        begin
+          cur := tyVariant;
+          PyInferLastCi := -1;
+        end
+        { A BUILTIN-STRING method on a receiver that is a local or parameter.
+          PyRetMethodType resolves USER-CLASS methods only, so for a string
+          receiver it answers tyUnknown AND leaves recvCi2 = -1 -- neither arm
+          above fires, and the expression chase below then types the return as
+          the RECEIVER's own tyAnsiString. That is the very failure this
+          function's header warns about, one type-family over, and it is not
+          hypothetical: `def f(): y = "abc"; return y.find("b")` declared an
+          AnsiString result for a call returning an Integer, so $pyresult got a
+          managed zero-init and the caller read a small integer as a string
+          handle. SEGV, no diagnostic.
+          regression-test-nilpy-test-nilpy-startswith-tuple
+
+          The right answer is already tabulated: PyStrMethodInfo is what the
+          LOWERING consults to pick the pylib entry, so asking it here makes the
+          declared result type agree with the call actually emitted, which is
+          the property that was violated.
+
+          Two gates, and both are load-bearing. PyStrMethodInfo answers False
+          for a name it does not know, so only real str methods qualify. And the
+          receiver must be BOUND IN THIS DEF -- the local-vs-module distinction
+          PyDottedRootIsLocal already draws -- or `math.sqrt(2.0)` and every
+          other module-qualified call would be claimed by any module function
+          that happens to share a name with a str method.
+
+          Reached only when the user-class arm declined, so a local holding a
+          class that defines its own `find` still resolves as a method: that
+          case exits above with recvCi2 >= 0 and never arrives here.
+
+          A THIRD gate, added after the first two shipped: the row's type must
+          be a SCALAR. PyStrMethodInfo answers tyClass for the methods that
+          return a list or a tuple (`split`, `rsplit`, `partition`,
+          `splitlines`), and this arm pairs `cur := smRetTk` with
+          `PyInferLastCi := -1` -- which is right for a scalar, where there is
+          no class identity to carry, and destroys the answer for a class,
+          where there is. Claiming those rows regressed
+          `def a(label: str): return label.rsplit(" ", 1)` from ['C', 'minor']
+          to a bare handle printed as 124150846851152: the def's result became
+          an untyped class. Silent, and NOT reachable through the shapes this
+          arm was written for -- `print(s.rsplit(...))` and `x = s.rsplit(...)`
+          both stayed correct, because only the DEF RETURN path comes through
+          here. Mine, in 7ddcb9650; the pre-existing chase typed the class
+          results correctly and is left to keep doing so.
+          bug-n-a-str-method-returning-a-list-loses-its-class-in-a-def-return }
+        else if PyStrMethodInfo(GetTokenStr(j + 3), smPname, smRetTk, smWant)
+                and (smRetTk <> tyClass) and (smRetTk <> tyRecord)
+                and PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi,
+                                     PyInferBodyLo, PyInferBodyHi,
+                                     GetTokenStr(j + 1)) then
+        begin
+          cur := smRetTk;
+          PyInferLastCi := -1;
         end;
       end;
       { The same chase, for an EXPRESSION rather than a bare ident.
@@ -33239,6 +33651,16 @@ begin
         Inc(nparams);
         if Tokens[j].Kind = tkComma then Inc(j);
       end;
+      { @classmethod: the DECLARED receiver at slot 0 is the class, not an
+        instance, so it is typed as the pointer the dispatch actually passes —
+        the same tyPointer @staticmethod's injected `$clsrecv` uses, and for the
+        same reason (tyClass reaches IRLowerAddress and produces IR_UNSUPPORTED).
+        The body does not see this pointer: PyParseMethod rebinds the author's
+        name to a boxed classref local. Both passes must agree on this or the
+        registered signature and the frame differ silently — the warning
+        PyIsStaticMethodAt's comment already carries. }
+      if (not isCtor) and (nparams >= 1) and PyIsClassMethodAt(i) then
+        ptypes[0] := tyPointer;
       fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
       AppendChar(fullName, '.');
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
@@ -33522,7 +33944,12 @@ begin
         instance. Nothing needs to suppress a `self` parameter, because a
         static method simply does not declare one and the self handling is
         keyed on the literal NAME at position 0. }
-      if (not fieldsOnly) and (not isCtor) and PyIsStaticMethodAt(methodStart) then
+      if (not fieldsOnly) and (not isCtor) and
+         (PyIsStaticMethodAt(methodStart) or PyIsClassMethodAt(methodStart)) then
+        { @classmethod rides the SAME flag: both want the class at slot 0 and
+          neither is dispatched through the VMT. They differ only in where slot
+          0's parameter comes from — injected for a static, declared for a
+          classmethod. }
         UMthIsStatic[UMthCount - 1] := True;
       if not fieldsOnly then
       begin
@@ -33841,6 +34268,7 @@ var isGenDef: Boolean;
     pbInit, pbAsgn: Integer;
     pbRedo: Boolean; pbTk: TTypeKind;
     pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
+    isClsMeth: Boolean; clsLocal, clsAsgn, clsBox, clsArg, clsPi: Integer;
 begin
   { REPLAY of a flattened base's body: a definition the derived class or an
     earlier base already supplied was skipped by the registration pass, so
@@ -33907,6 +34335,11 @@ begin
     psigs[0] := -1;
     nparams := 1;
   end;
+  { @classmethod, read from the SAME token index for the same off-by-one
+    reason. Nothing is injected: the author declared the receiver, so slot 0 is
+    already theirs. What changes is its TYPE — see the pre-pass note, which must
+    agree with this one. }
+  isClsMeth := PyIsClassMethodAt(TokPos - 4) and (not isCtor);
   while CurTok.Kind <> tkRParen do
   begin
     { `*` / `*args` / `**kwargs` — mirrors the member pre-pass above; the two
@@ -34062,6 +34495,11 @@ begin
       if (i < Procs[procIdx].ParamCount) and
          ((not isGenDef) or (i > 1)) then   { 0 = __genself, 1 = self }
         ptypes[i] := Procs[procIdx].Params[i].TypeKind;
+  { Slot 0 is refreshed from the registered signature for i >= 1 only, so the
+    classmethod receiver's type is set here to the same tyPointer the pre-pass
+    registered. Stated rather than inherited: the two passes agreeing is the
+    whole safety property of this pairing. }
+  if isClsMeth and (nparams >= 1) then ptypes[0] := tyPointer;
   savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
   FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
   Procs[procIdx].ScopeBase := SymCount;
@@ -34082,6 +34520,24 @@ begin
     CALLER's slot). A method needs it for the same reason a def does: the two
     parameter paths are separate code, and a fix in one leaves the other wrong.
     bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list }
+  { @classmethod: the parameter carries a raw RTTI blob POINTER, but the body
+    must see a class VALUE — `cls()` constructs and `cls.__name__` answers only
+    for a VT_CLASSREF variant, which is what `type(self)` already produces and
+    what every classref consumer downstream expects. So the parameter symbol is
+    renamed out of the way and the author's own name becomes a variant LOCAL,
+    seeded below from PyBoxClassRef.
+
+    Exactly the rename-and-realias shape the rebound-variant block beneath this
+    one uses; borrowed rather than invented so there is one idiom here, not two.
+    Without it `cls` was the pointer read as an integer and `cls.__name__` said
+    "'int' object has no attribute '__name__'" -- a wrong VALUE reaching the
+    runtime, not a compile error. }
+  clsLocal := -1;
+  if isClsMeth and (nparams >= 1) and (Procs[procIdx].Params[0].SymIdx >= 0) then
+  begin
+    Syms[Procs[procIdx].Params[0].SymIdx].Name := '$clsptr';
+    clsLocal := AllocVar(pnames[0], tyVariant);
+  end;
   for i := 0 to nparams - 1 do
   begin
     pbLocal[i] := -1;
@@ -34192,6 +34648,36 @@ begin
       pbInit := PySeqAppend(pbInit, pbAsgn);
     end;
   if pbInit >= 0 then bodyNode := PySeqAppend(pbInit, bodyNode);
+  { `cls = PyBoxClassRef($clsptr)`, ahead of everything the body does — the very
+    first statement may already be `return cls()`. The blob arrives ready: the
+    dispatch fills slot 0 from __pxxRttiOf(receiver) for an instance and from
+    Self for a class, which is why this boxes the parameter directly instead of
+    deriving the RTTI here the way PyMakeClassRefOf does for `self.__class__`.
+    That is also what makes the RUNTIME class arrive rather than the declaring
+    one — the property this whole feature turns on. }
+  if (clsLocal >= 0) and (Procs[procIdx].Params[0].SymIdx >= 0) then
+  begin
+    clsPi := FindProc('PyBoxClassRef');
+    if clsPi < 0 then Error('Nil Python: pyeval (PyBoxClassRef) not loaded');
+    clsArg := AllocNode(AN_ARG);
+    ASTLeft[clsArg] := PyMakeIdent(Procs[procIdx].Params[0].SymIdx);
+    ASTRight[clsArg] := -1;
+    clsBox := AllocNode(AN_CALL);
+    ASTIVal[clsBox] := clsPi;
+    ASTLeft[clsBox] := clsArg;
+    ASTTk[clsBox] := Ord(tyVariant);
+    ASTRight[clsBox] := -1;
+    clsAsgn := AllocNode(AN_ASSIGN);
+    ASTLeft[clsAsgn] := PyMakeIdent(clsLocal);
+    ASTRight[clsAsgn] := clsBox;
+    { PySeqAppend(head, stmt) walks ASTRight[head] as a SEQUENCE chain, so the
+      head must already be one. Passing the bare AN_ASSIGN wrote through its own
+      ASTRight — the slot holding the assigned VALUE — which silently discarded
+      the whole method body: `return x * 10 + y` became the default `$pyresult
+      := 0` and the two-argument call answered 0. Built from -1 first, exactly
+      as the pbInit chain above does. }
+    bodyNode := PySeqAppend(PySeqAppend(-1, clsAsgn), bodyNode);
+  end;
   if cellInit >= 0 then bodyNode := PySeqAppend(cellInit, bodyNode);
   if isGenDef then
   begin
@@ -35661,17 +36147,15 @@ begin
         generic message, because "unsupported decorator" reads like a parser
         limitation when the real answer is that its `cls` receiver is not
         modelled yet. }
-      else if LowerCase(propName) = 'classmethod' then
-        Error('Nil Python: @classmethod is not supported yet — its `cls` '
-              + 'receiver is not modelled, and binding it to the declaring '
-              + 'class would be silently wrong in a subclass. @staticmethod works.')
       else if (LowerCase(propName) <> 'property') and
-              (LowerCase(propName) <> 'staticmethod') then
+              (LowerCase(propName) <> 'staticmethod') and
+              (LowerCase(propName) <> 'classmethod') then
         Error('Nil Python: unsupported decorator inside class (only @property, '
-              + '@<name>.setter and @staticmethod)');
+              + '@<name>.setter, @staticmethod and @classmethod)');
       PySkipNewlines;
       if CurTok.Kind <> tkFunction then
-        Error('Nil Python: @property/@staticmethod must be followed by a def');
+        Error('Nil Python: @property/@staticmethod/@classmethod must be '
+              + 'followed by a def');
       PyParseMethod(ci);
       PySkipNewlines;
     end
@@ -36134,7 +36618,9 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
     aliasSelfIdx: Integer;      { scans the pending alias queue, so a source
                                   name is not captured by an alias this same
-                                  import run created a moment earlier }
+                                  from-import STATEMENT created a moment earlier }
+    aliasStmtTok: Integer;      { THIS from-import statement's token index --
+                                  the stamp the scan below matches on }
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -36222,6 +36708,11 @@ begin
           fails, with the unit resolver's own "unit source not found: X". }
         PyRelativeLevel := impLevel;
         PyParseImportUnit(impName);
+        { The queue is PER-RUN and this loop is PER-STATEMENT, so entries have
+          to say WHICH statement queued them. This statement's token index is
+          that identity: unique per statement, and the same on both of the two
+          passes this block is visited on. See PyImpAliasStmt's declaration. }
+        aliasStmtTok := TokPos;
         while CurTok.Kind = tkIdent do
         begin
           { Record the name against the IMPORTING module (ParseUsesUnit has
@@ -36312,6 +36803,35 @@ begin
                 `5 18`. CPython binds every name in one from-import from the
                 SOURCE module, simultaneously.
 
+                THE SCAN IS PER-STATEMENT, NOT PER-RUN, and that distinction
+                is the whole of bug-n-a-second-from-import-of-the-same-module-
+                drops-its-alias. PyParseImportRun loops over every consecutive
+                `from`/`import` statement and the queue accumulates across all
+                of them, so scanning the WHOLE queue also matched entries a
+                PREVIOUS statement queued. Inside a pulled module every
+                from-imported name is queued -- aliased or not, that is the
+                re-export binding -- so
+
+                    from .two import A, B          # queues A and B
+                    from .two import A as RENAMED  # source A is now "queued"
+
+                looked exactly like self-capture, `aliasRealSym` was cleared,
+                and RENAMED was never allocated: `undefined variable`.
+
+                Matching on the STATEMENT STAMP rather than on a queue index is
+                the load-bearing part, and the obvious cheaper version is wrong
+                in a way that is invisible from the failing test. This block is
+                visited TWICE over the same tokens, so a statement's first-pass
+                entries sit BELOW the count its second pass starts from: an
+                `aliasStmtBase := PyImpAliasCount` taken at statement start
+                gives an EMPTY range on the second pass, the guard stops firing
+                altogether, and `from M import f as g, g as f` silently
+                regresses from `5 18` to `5 5` while the relative-import test
+                this was written for still passes. Measured, three-way, against
+                a same-base control; the token index is stable across both
+                passes and unique per statement, so it is what actually names a
+                statement.
+
                 Skipping only the queue is deliberately narrower than looking
                 the name up in the exporting unit, which is what this tried
                 first: `from pkgprobe.sub import greet` resolves through a shim
@@ -36322,7 +36842,8 @@ begin
                 bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
               if aliasRealSym >= 0 then
                 for aliasSelfIdx := 0 to PyImpAliasCount - 1 do
-                  if PyImpAliasSym[aliasSelfIdx] = aliasRealSym then
+                  if (PyImpAliasStmt[aliasSelfIdx] = aliasStmtTok)
+                     and (PyImpAliasSym[aliasSelfIdx] = aliasRealSym) then
                   begin
                     aliasRealSym := -1;
                     Break;
@@ -36351,6 +36872,7 @@ begin
                   Inc(PyAliasNameCount);
                 end;
                 PyImpAliasSym[PyImpAliasCount] := aliasSym;
+                PyImpAliasStmt[PyImpAliasCount] := aliasStmtTok;
                 if aliasRealSym >= 0 then
                   PyImpAliasSrc[PyImpAliasCount] := aliasRealSym
                 else
@@ -38654,7 +39176,15 @@ begin
   if (idx >= 0) and (CurTok.Kind = tkDot) and
      (Syms[idx].RecName < REC_UCLASS_BASE) and (not Syms[idx].IsArray) and
      not (Syms[idx].TypeKind in [tyRecord, tyClass, tyVariant, tyPointer]) and
-     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+     { ...unless NilPy's own `str` surface owns the spelling -- see
+       PyStrMethodOwnsMember for the collision table. sysutils' TStringHelper
+       is in scope for every str-typed receiver the moment any imported unit
+       pulls sysutils, and Pascal member lookup is case-insensitive, so
+       `split` / `startswith` / `endswith` / `replace` resolved to the PASCAL
+       method here and Exited before the str-method loop below could run.
+       Three of the four compiled clean and called the wrong function. }
+     not PyStrMethodOwnsMember(Syms[idx].TypeKind, GetTokenStr(TokPos)) then
   begin
     mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
     if (mci >= 0) and (FindUMeth(mci, GetTokenStr(TokPos)) >= 0) then
@@ -41757,7 +42287,7 @@ end;
 procedure PyParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
-    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
@@ -43353,6 +43883,25 @@ begin
         intBaseArg := TokPos;            { rewind point: CurTok = pystr_of }
         { park the hoist queue across the TRIAL parse — see the len() intercept
           below for what a discarded parse's leftover hoists do }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43404,6 +43953,10 @@ begin
           end;
         end;
         { no class rewrite: rewind and take the ordinary overload path }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       { ...unless the program declares its own `len`, which REPLACES the
@@ -43450,6 +44003,25 @@ begin
           reason PyParseMethod records: PySeqAppend mutates the saved chain's
           tail in place, so a plain restore cannot unlink anything.
           bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43528,6 +44100,10 @@ begin
         end;
         { a pylib container class, or a non-class argument: rewind and take
           the ordinary overload path, unchanged byte for byte }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       { hex/bin/oct of an ARBITRARY-PRECISION int. Python's take any width, while
@@ -43557,6 +44133,25 @@ begin
       begin
         intBaseArg := TokPos;
         { same parked TRIAL parse as the two intercepts above }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43589,6 +44184,10 @@ begin
           Exit;
         end;
         { a machine-width argument: rewind, take the ordinary overload }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       if (name = 'int') and (not PyUserShadowsProc(name)) then
@@ -45370,9 +45969,29 @@ begin
           CaseEqual(name, '__pxxSigContext') or CaseEqual(name, '__pxxSigPCPtr')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
-        { Every hosted Linux target now installs with SA_SIGINFO; only xtensa/ESP
-          is left out, and deliberately — FreeRTOS is not a Unix and has no
-          signal runtime at all (EmitSignalRuntime* has no xtensa sibling). }
+        { Refused on xtensa — and the reason is NOT the one this comment used to
+          give. It said "FreeRTOS is not a Unix", which reasons from ARCH to
+          PLATFORM: true while those were the same thing for xtensa, and expired
+          without being edited the moment the hosted profile separated them
+          (ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired).
+          The live reason is broader, not narrower: EmitSignalRuntimeForTarget
+          has no xtensa arm AT ALL, so neither ESP nor hosted xtensa installs a
+          handler and refusing is correct on both today.
+
+          So do NOT re-key this on `not EspBareBoot` by itself. That IS where it
+          lands — riscv32's arm is the model, `if not EspBareBoot then
+          EmitSignalRuntimeRISCV32` — but flipping the axis BEFORE
+          EmitSignalRuntimeXtensa exists would accept __pxxSig* on hosted xtensa
+          and answer out of a handler that was never installed: a plausible wrong
+          value in code that dispatches on it, which is the exact failure mode
+          this refusal was written to prevent. The axis moves in the same commit
+          that adds the runtime, never ahead of it.
+
+          Sibling: pasparser_expr.inc carries this refusal verbatim. Two copies
+          is the intended design — each frontend owns its own refusals, per
+          the-substrate-is-ast-and-ir-not-the-parser — so they are a fix-one-arm
+          hazard, not drift: move both or NilPy is left refused by a premise the
+          Pascal side has already retired. }
         if TargetArch = TARGET_XTENSA then
           Error(name + ' needs SA_SIGINFO, which this target''s signal runtime '
                 + 'does not install (feature-signal-siginfo-ucontext)');
@@ -48062,6 +48681,23 @@ begin
             the method-pointer param, mirroring the assignment path
             (bug-pascal-methodref-arg-to-named-of-object-param-no-match). }
           if ASTKind[exprNode] = AN_METHODREF then argTypes[i] := tyRecord;
+          { A NilPy string LITERAL node is tyString; a str-valued NAME is
+            tyAnsiString. Same value, two match types, and overload resolution
+            ranks against them differently — an inexact tyString receiver lets a
+            catch-all `(Variant, Variant)` sibling outrank the overload that was
+            actually meant. `max("bca", key=f)` bound pylib's two-argument
+            NUMERIC max and compared the string against the key itself
+            ("'>' not supported between instances of 'int' and 'str'"), while
+            `s = "bca"; max(s, key=f)` bound the AnsiString keyed overload and
+            answered correctly. Every non-literal spelling of the same value
+            already worked -- `"bca" + ""`, `str("bca")`, `"bca".upper()` -- which
+            is what shows this is the literal's TYPE and not its value.
+            NilPy has no `string[N]` syntax, so a literal here can only mean the
+            AnsiString the rest of the surface presents: report it as one rather
+            than growing a second ranking path.
+            regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload }
+          if (ASTKind[exprNode] = AN_STR_LIT) and (argTypes[i] = tyString) then
+            argTypes[i] := tyAnsiString;
           currArg := ASTRight[currArg];
         end;
 
@@ -48078,6 +48714,9 @@ begin
           for i := 0 to nArgs - 1 do
           begin
             argTypes[i] := IntToTypeKind(ASTTk[ASTLeft[currArg]]);
+            { same literal normalisation as the first pass above }
+            if (ASTKind[ASTLeft[currArg]] = AN_STR_LIT) and (argTypes[i] = tyString) then
+              argTypes[i] := tyAnsiString;
             currArg := ASTRight[currArg];
           end;
           procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
@@ -48158,49 +48797,17 @@ begin
                     + Procs[procIdx].Params[i].Name
                     + '", but the argument is a callable — call it, or declare '
                     + 'the parameter as a Callable');
-            { A `Callable[...]` parameter is tyPointer (the annotation registers a
-              $proctype signature), and a callable VALUE is a 16-byte variant. The
-              plain coercion took the variant's first word — its TAG — as the code
-              address, so passing a lambda to a Callable parameter jumped to 9.
-              pyvar_callee_addr yields the payload, unwrapping a {code, recv}
-              function value on the way
-              (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
-            if (Procs[procIdx].Params[i].TypeKind = tyPointer) and
-               (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyVariant) then
-            begin
-              { A parameter that DECLARES a default of nil means "not given" by
-                nil, so None is a legal value for it — `sorted(xs, key=None)` is
-                CPython's own no-key spelling and was raising a TypeError. The
-                strict form stays for a parameter with no default, where None
-                really is an error (map/filter refuse it in CPython too).
-                bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
-              if (i < MAX_PROC_PARAMS) and
-                 ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] then
-                capSym := FindProc('pyvar_callable_ptr_opt')
-              else
-                capSym := FindProc('pyvar_callable_ptr');
-              if capSym >= 0 then
-              begin
-                identNode := AllocNode(AN_STR_LIT);
-                ASTSOffset[identNode] := PyStoredName(Procs[procIdx].Params[i].Name);
-                ASTSLen[identNode] := Length(Procs[procIdx].Params[i].Name);
-                ASTTk[identNode] := Ord(tyString);
-                argSeq := AllocNode(AN_ARG);
-                ASTLeft[argSeq] := identNode;
-                ASTRight[argSeq] := -1;
-                lastArg := AllocNode(AN_ARG);
-                ASTLeft[lastArg] := ASTLeft[currArg];
-                ASTRight[lastArg] := argSeq;
-                exprNode := AllocNode(AN_CALL);
-                ASTIVal[exprNode] := capSym;
-                ASTLeft[exprNode] := lastArg;
-                ASTTk[exprNode] := Ord(tyPointer);
-                ASTLeft[currArg] := exprNode;
-              end;
-            end;
             currArg := ASTRight[currArg];
             Inc(i);
           end;
+          { A `Callable[...]` parameter is tyPointer (the annotation registers a
+            $proctype signature), and a callable VALUE is a 16-byte variant —
+            coerced to the code address by the ONE walk both the plain-call and
+            the method paths share. It lived inline here until a method call
+            needed the identical fix
+            (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable,
+            feature-nilpy-list-sort-inplace-key-reverse). }
+          PyCoerceCallableArgsIn(procIdx, argsHead);
         end;
 
         { NilPy nested def: fill the trailing parameters that stand for the

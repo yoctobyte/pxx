@@ -91,9 +91,20 @@ failures are crashes (still one dominant class — see below).
 - **A residual crash class.** `/tmp` findings are gone by now, but it reproduces in
   minutes: run the harness and reduce (recipe below). Last known unreduced crashers were
   csmith seeds 901 and 1502 (generated with the DEFAULT csmith flags).
-- **Bitfield LAYOUT** ([[bug-c-bitfield-packing-sizeof-vs-gcc]]) — `sizeof` of a packed
-  bitfield struct is 12 where gcc gives 8. Values are right, so the checksum oracle CANNOT
-  see it; it breaks ABI/interop instead.
+  **Both of those seeds PASS at HEAD as of 2026-08-29** (frankC, `--seed 901`
+  and `--seed 1502`, each `1/1 agreed with the gcc oracle, no findings`), so
+  this bullet's named repros are stale — something between 2026-07-13 and now
+  fixed them and nobody re-checked. Whether the crash CLASS is gone or just
+  these two representatives is not established: a fresh crasher has to be
+  found before the bullet can be closed, which is what a batch is for.
+- **Bitfield LAYOUT** — `sizeof` of a packed bitfield struct is 12 where gcc gives 8.
+  Values are right, so the checksum oracle CANNOT see it; it breaks ABI/interop instead.
+  **`bug-c-bitfield-packing-sizeof-vs-gcc` was never filed** (de-linked 2026-08-30). Do not
+  mistake `bugfix-cfront-bitfield-packing-gcc-compat` for it: that one is in `rejected/`,
+  and it was rejected as a **false diagnosis of the sqlite `VdbeCursor` crash**, having
+  measured PXX and gcc as *matching* on that struct — a different subject, closed for a
+  reason that says nothing about this. This bullet is the whole record of a finding the
+  oracle structurally cannot rediscover, and the link is what made it look filed.
 - **Brace elision over rows** ([[bug-c-multidim-brace-elision-flattens-rows]]) —
   `int q[2][3] = {{1},{2}}` gives q[0][1]=2 instead of 0. Pre-existing.
 - **`--opts 0,2,3`** — the harness only ran `-O0,-O2` in anger. Adding `-O3` would point
@@ -752,3 +763,44 @@ budget session time on widening it. Spend that time on
 `tools/pasmith.py` (random Object Pascal, FPC oracle) instead, which fuzzes the
 frontend that four of today's six findings came from.
 
+
+### Sitting 4 — 2026-08-29 (frankC), seeds 2000..2199, default `--opts 0,2`, x86-64
+
+```
+tools/csmith_fuzz.py --iters 200 --seed-start 2000
+```
+
+**183/200 agreed with the gcc oracle, 17 skipped by the native validity filter,
+no findings.** Compiler: a self-hosted `compiler/pascal26` at `a374f6b63`'s tree,
+fixedpoint verified (`converged after 2 round(s)`) before the run and not rebuilt
+during it — so the batch is pinned to one binary even though sitting 2's
+`--compiler` snapshot trick was not used. Findings directory empty; all five
+buckets zero.
+
+**Weaker than sittings 2-3 in one dimension, and it should be read that way:**
+this used the DEFAULT `--opts 0,2`, not their `0,1,2,3`. So `-O1` and `-O3` were
+not swept here and this sitting does not renew their evidence.
+
+The skip rate is *lower* than the established baseline rather than a new
+problem — 8.5% here against 13.2% (sitting 2) and 15.7% (sitting 3). Worth
+recording because a skip is a program that told us nothing, and the filter is
+purely gcc-side (`gcc won't build it` or its own binary hung), so no pxx-side
+coverage is being silently discarded by a pxx defect.
+
+#### The "residual crash class" bullet's named repros are gone
+
+The **What is still open** section named csmith seeds 901 and 1502 as the last
+known unreduced crashers, from 2026-07-13. Both now report `1/1 agreed with the
+gcc oracle, no findings` at HEAD, and this 200-program batch produced no crasher
+of any kind.
+
+**The bullet is left OPEN deliberately.** Two named seeds passing means those two
+representatives are fixed, not that the class is; and "no crasher in 200
+default-flag programs" is evidence against a class the ticket said *"reproduces
+in minutes"*, which is a genuine update but still not a proof of absence. What
+would close it is a deliberate attempt that fails — a wider flag set, or the
+`--opts 0,1,2,3` sweep this sitting skipped — not another dry default run.
+
+This makes **four dry sittings over 1050 fresh seeds**, which strengthens rather
+than changes sitting 3's conclusion above: keep csmith as a cheap background
+regression net, spend session time on `tools/pasmith.py` instead.

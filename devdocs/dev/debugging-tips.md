@@ -214,5 +214,15 @@ gen1 ≠ gen2 is *expected settling*, not a bug. Confirm with a **3rd generation
 4. Build `-g`; when the forward backtrace is garbage, switch to `rr`.
 5. `reverse-stepi`/`reverse-continue` from the crash to the first cause.
 6. Confirm the fix on the tiny repro; add it as a regression test.
-7. If it touches compiler-own codegen: FPC-bootstrap, reseed, then `make test`
-   + `stabilize` + `pin`.
+7. If it touches compiler-own codegen: FPC-bootstrap, reseed, then
+   `make compiler/pascal26` — that build **is** the byte-identical self-host
+   fixedpoint, which is the property this step exists to prove. Pin only if a
+   downstream lane needs the new binary: `make stabilize-fast && make pin`.
+
+> **Corrected 2026-08-30 (frankD).** `make test` and its family are **denied by a
+> PreToolUse hook** (`.claude/hooks/no-full-suite.sh`); CLAUDE.md is the single
+> source of truth for gating and the per-fix loop is `make compiler/pascal26`
+> (~12s, and it *is* the byte-identical self-host fixedpoint) plus your repro,
+> with `tools/gate.sh quick` optional per fix and required only before a pin.
+> Breadth is Track T's sweep against your pushed sha.
+

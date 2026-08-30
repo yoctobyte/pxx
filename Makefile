@@ -40,13 +40,38 @@ export PXX_TMP
 # Per-invocation scratch root for the TEST recipes' OUTPUTS (see PXX_TMP above,
 # which covers the self-host BUILD's intermediates).
 #
-# Default is plain /tmp, i.e. behaviour-identical, and deliberately NOT a
-# per-invocation mktemp like PXX_TMP: tools/testmgr.py privatizes a job's /tmp
-# paths by PREFIX SUBSTITUTION (/tmp/foo -> /tmp/testmgr-scratch-<pid>/foo), so
-# a nested default would expand to <scratch>/pxx-test-<pid>/foo -- a directory
-# nothing creates, breaking every job. Isolation is the CALLER's to ask for, by
-# passing TESTTMP=$$(mktemp -d) on the command line.
-TESTTMP ?= /tmp
+# PER-CHECKOUT, and stable within one. The old default was plain /tmp, which is
+# not per-checkout, not per-user and not per-PID: every tree on this box built
+# its test binaries to the SAME absolute paths, derived from the tests' own
+# names. Two bare `make` runs in two trees then overwrite each other's
+# artefacts, and the loser executes the winner's binary while comparing it
+# against its own expectation. The result is a VERDICT about the wrong binary --
+# a red that sends someone bisecting a defect that does not exist, or a green
+# that retires a real one. bug-a-testtmp-defaults-to-a-path-every-checkout-shares
+#
+# Keyed on $(CURDIR) (hashed, so the path stays short and cannot collide) and
+# on the uid, so two users on one box cannot land in a directory the other
+# owns. The checkout's BASENAME is carried in front of the hash purely so a
+# human can tell whose scratch a leftover directory is: a hash alone is
+# unattributable, and nothing can reap these by liveness (the tree they
+# belong to may be gone, and the hash does not name it).
+#
+# STABLE within a checkout, and deliberately NOT a per-invocation mktemp like
+# PXX_TMP: separate `make` invocations in one tree hand artefacts to each other
+# by path, and a fresh root each time would break that producer/consumer pairing
+# rather than isolate it.
+#
+# WHY THIS IS NOW SAFE, and it was not before. tools/testmgr.py privatizes a
+# job's paths by PREFIX SUBSTITUTION ($(TESTTMP)/foo -> $(TESTTMP)/testmgr-
+# scratch-<pid>/foo) and derives every matcher from TESTTMP. It also now PINS
+# the value into the environment of the make it spawns (BASE_ENV_KEEP), so
+# under testmgr this `?=` never fires and the producer cannot disagree with the
+# matchers. Do not move testmgr's own default off /tmp: its stale-scratch
+# reapers find abandoned runs by globbing that root.
+#
+# So this default governs BARE `make` only -- which is exactly the exposure the
+# ticket measured, testmgr-driven runs having been per-PID private all along.
+TESTTMP ?= /tmp/pxx-testtmp-$(shell id -u)-$(notdir $(CURDIR))-$(shell printf '%s' '$(CURDIR)' | sha1sum | cut -c1-10)
 $(shell mkdir -p $(TESTTMP))
 export TESTTMP
 # Named with a -<pid> suffix on the ROOT so tools/testmgr.py's sweep can reap an
@@ -67,6 +92,26 @@ STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 # Override to pin a specific version ad hoc, e.g.
 #   make lib-test PXX_STABLE=stable_linux_amd64/default/v9
 PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
+
+# The GTK3 include root, for anything that reaches lib/pcl/gtk3_c.h. That file
+# is `#include <gtk/gtk.h>` against the INSTALLED headers now, and gtk-2.0 is a
+# default system include root while gtk-3.0 is not -- both answer to that same
+# spelling, so whichever root comes first decides the GTK version for every C
+# consumer in the tree at once. Passing it explicitly keeps the PCL binding off
+# that fork entirely (decide-which-gtk-a-bare-gtk-gtk-h-means, still open), and
+# this variable is what goes away if gtk-3.0 ever becomes a default root.
+# pkg-config first so a box with GTK3 installed elsewhere still builds; the
+# literal path is the fallback, not the source of truth.
+# FLAG ORDER IS LOAD-BEARING: emit the Pascal -Fu roots BEFORE $(GTK3_INC).
+# A -I root is a unit search root too, searched in flag order, so an include
+# root ahead of -Fu can capture a `uses` and bind it to a same-named C header:
+# gtk's pkg-config cflags carry /usr/include/libpng16, whose png.h collides
+# with lib/rtl/png.pas. Nothing built here uses png today, so the order is the
+# only thing between us and a silent dynamic import -- do not reflow it.
+# Track A fixed the mechanism in 4576ad4d1, but these recipes build with
+# $(PXX_STABLE), which is still the pre-fix pin.
+# bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
+GTK3_INC ?= $(shell pkg-config --cflags-only-I gtk+-3.0 2>/dev/null || echo -I/usr/include/gtk-3.0/)
 # Where `make demos` writes built demo binaries. Defaults to an in-checkout,
 # gitignored dir so the binaries are convenient to run/inspect after a build;
 # override (e.g. DEMO_OUT=/tmp/demos) for a throwaway/CI build.
@@ -78,7 +123,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-xtensa test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest tools-devtest-sh c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -176,9 +221,35 @@ bootstrap-managed: bootstrap-check
 # that is deliberate, and it is what ends the second half of the bug: a gate
 # whose pass and whose skip print the same thing is not a gate. The recipe never
 # touches the binary, so nothing downstream rebuilds.
+# The seed-missing message names the SELF-SEED, not `make bootstrap`. It used to
+# say "Run: make bootstrap", which is the FPC cold-start path and is almost never
+# what the reader needs -- the committed stable binary seeds this build with no
+# FPC involved (devdocs/dev/track-t.md: "No FPC needed: the compiler self-seeds
+# from the committed stable binary"). An agent followed that message into an FPC
+# bootstrap on 2026-08-30, hit a pre-existing seed break that had nothing to do
+# with its work, and spent the detour before the owner pointed out the binary was
+# sitting right there. `make bootstrap` is for a tree with no trusted binary at
+# all; it is named last, and as what it is.
+#
+# Deliberately NO `touch` in the advice. The stamp above already closed the
+# copied-in-seed no-op: the recipe keys off $(COMPILER_STAMP), which a `cp`
+# cannot create, so a seed newer than every source still builds. Verified
+# 2026-08-30 -- cp pinned over the binary, rm the stamp, `make compiler/pascal26`
+# reports `converged after 2 round(s)`. Telling people to touch would be cargo
+# from before that fix, and it would print a $(COMPILER_INC) expansion that runs
+# to 200 file names.
 $(COMPILER_STAMP): $(COMPILER_SRC) $(COMPILER_INC)
-	@test -x $(COMPILER) || \
-	  (echo "self-hosted compiler seed missing. Run: make bootstrap"; exit 1)
+	@test -x $(COMPILER) || ( \
+	  echo "self-hosted compiler seed missing: $(COMPILER)"; \
+	  echo ""; \
+	  echo "  Seed it from the committed stable binary -- no FPC needed:"; \
+	  echo "      cp $(PXX_STABLE) $(COMPILER) && make $(COMPILER)"; \
+	  echo ""; \
+	  echo "  Accept the result only once you have seen 'converged after N round(s)'."; \
+	  echo ""; \
+	  echo "  make bootstrap is the FPC cold start, for a tree with NO trusted"; \
+	  echo "  binary at all. You almost certainly do not need it."; \
+	  exit 1)
 	@cur="./$(COMPILER)"; max=4; \
 	for r in $$(seq 1 $$max); do \
 	  a="$(BUILD_COMPILER)-r$$r"; b="$(VERIFY_COMPILER)-r$$r"; \
@@ -569,7 +640,7 @@ test-nilpy: $(COMPILER)
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy $(TESTTMP)/test_nilpy_itercur26
-	tools/expect_same.sh test_nilpy_itercur26.1 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y')"
+	tools/expect_same.sh test_nilpy_itercur26.1 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y\n[1, 2, 3]\n[1, 2, 3]\n7\n[8]')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy $(TESTTMP)/test_nilpy_sortpairs26
 	tools/expect_same.sh test_nilpy_sortpairs26.1 "$$($(TESTTMP)/test_nilpy_sortpairs26)" "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins
@@ -614,6 +685,17 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_subbase26.1 "$$($(TESTTMP)/test_nilpy_subbase26)" "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	tools/expect_same.sh test_nilpy_aoc26.1 "$$($(TESTTMP)/test_nilpy_aoc26)" "x:2"
+	# Importing a unit that declares `Text = class` must not change what `Text`
+	# means in a DIFFERENT unit that never names it. It did, silently, decided by
+	# import ORDER: ParsingClassBodyCi's "no class scope open" sentinel (-1) was
+	# initialised only in ParseProgram, so every non-Pascal frontend started at
+	# the BSS default 0 -- a valid class index -- and every imported unit's
+	# top-level classes were registered as nested types of it. Both orders, since
+	# only one of them was ever wrong.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_import_order_does_not_rebind_a_type.npy $(TESTTMP)/test_nilpy_impord26
+	$(TESTTMP)/test_nilpy_impord26 | diff -u test/test_nilpy_import_order_does_not_rebind_a_type.expected -
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_import_order_does_not_rebind_a_type_rev.npy $(TESTTMP)/test_nilpy_impordrev26
+	$(TESTTMP)/test_nilpy_impordrev26 | diff -u test/test_nilpy_import_order_does_not_rebind_a_type.expected -
 	# float's own methods: is_integer/hex/as_integer_ratio/conjugate. A float used
 	# to carry NONE of them, and the call COMPILED and raised "object is not
 	# callable" at run time. Expected output is CPython 3's on the same source.
@@ -793,7 +875,15 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3 >/dev/null
 	tools/expect_same.sh test_opt_sr_O0.1 "$$($(TESTTMP)/test_opt_sr_O0)" "$$($(TESTTMP)/test_opt_sr_O3)"
-	tools/expect_same.sh test_opt_sr_O0.2 "$$($(TESTTMP)/test_opt_sr_O0)" "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12\nbr shortint neg\nbr word small\nbr ulong small\nbr bool true\nbr constl GT\nbr between\nbr after neg\nmem   -112 -112 -110')"
+	tools/expect_same.sh test_opt_sr_O0.2 "$$($(TESTTMP)/test_opt_sr_O0)" "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12\nbr shortint neg\nbr word small\nbr ulong small\nbr bool true\nbr constl GT\nbr between\nbr after neg\nmem   -112 -112 -110\nreord 635218\nreord2 635317')"
+	# The last two rows are the case IRFirstEvaluated MIS-predicts: -O3's W1
+	# slice 9 evaluates the RIGHT subtree first, so the marked reload of qh must
+	# be REFUSED at emit time. Non-vacuous by construction -- deleting the
+	# `CodeLen = ReloadRaxCodeLen` half of the guard makes both rows print 222.
+	# Assert on the VALUE (635218 / 635317, FPC 3.2.2's answers), never on
+	# "the two -O levels agree": they agreed at 222 too, in a build where the
+	# reload was elided at every level.
+	# bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements
 	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep 'a.reload marked' > $(TESTTMP)/test_opt_sr_marks.log
 	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6
 	# ...and the two WIDENED statement kinds each fired: `bo` is only ever
@@ -801,6 +891,11 @@ test-nilpy: $(COMPILER)
 	# plus the three IR_STORE_MEM destinations (array elem / field / deref).
 	test "$$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 1
 	test "$$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 5
+	# ...and the emit-time refusal fired: a guard that never declines is a guard
+	# that cannot be shown to work, and this pass's whole failure mode is a
+	# prediction nobody checked.
+	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3c 2>&1 | grep 'a.reload DECLINED' > $(TESTTMP)/test_opt_sr_declined.log
+	test "$$(grep -c 'a.reload DECLINED' $(TESTTMP)/test_opt_sr_declined.log)" -ge 1
 	# A NilPy class may be NAMED after the imported class it derives from. The
 	# unit's declaration used to fill the forward row the shell pre-pass had
 	# registered for the program's own class -- one row for two classes, so the
@@ -927,8 +1022,11 @@ test-nilpy: $(COMPILER)
 	# existing UMthIsStatic dispatch already fills. Both parser passes must agree.
 	./$(COMPILER) test/test_nilpy_staticmethod.npy $(TESTTMP)/test_nilpy_staticm26
 	$(TESTTMP)/test_nilpy_staticm26 | diff -u test/test_nilpy_staticmethod.expected -
-	# ...and @classmethod must keep REFUSING itself by name, not parse as a static.
-	! ./$(COMPILER) test/test_nilpy_classmethod_fail.npy $(TESTTMP)/test_nilpy_cmfail26 2>&1 | grep -q 'ok:'
+	# ...and @classmethod, whose refusal test this replaces: `cls` must be the
+	# class the call was made ON (Derived.make() builds a Derived), through all
+	# four receiver forms, since they take different frontend paths.
+	./$(COMPILER) test/test_nilpy_classmethod.npy $(TESTTMP)/test_nilpy_classm26
+	$(TESTTMP)/test_nilpy_classm26 | diff -u test/test_nilpy_classmethod.expected -
 	# every iterable-taking builtin agrees about a bare genexpr arg; set() did not.
 	./$(COMPILER) test/test_nilpy_genexpr_arg_callees.npy $(TESTTMP)/test_nilpy_gexarg26
 	$(TESTTMP)/test_nilpy_gexarg26 | diff -u test/test_nilpy_genexpr_arg_callees.expected -
@@ -1759,6 +1857,37 @@ test-nilpy: $(COMPILER)
 	@# itself, not a hardcoded "vm" key
 	./$(COMPILER) test/test_nilpy_pyeval_no_vm_key.npy $(TESTTMP)/test_nilpy_novmkey26
 	tools/expect_same.sh test_nilpy_novmkey26 "$$($(TESTTMP)/test_nilpy_novmkey26)" "[42, 43]"
+	@# ...and the PASCAL-side entry point to the same contract. These twelve are
+	@# the only callers of EvalPyStmts / EvalPyExpr in the tree, so before this
+	@# the API had zero live users AND zero running tests: they encoded the
+	@# pre-ff439149e "receiver is a global named vm" rule, exited 1 on their
+	@# first host call, and were wired into no build rule, so nothing said they
+	@# had stopped meaning anything. Each halts(1) on any row, so running it IS
+	@# the assertion. bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed
+	./$(COMPILER) test/test_pyeval_bignum.pas $(TESTTMP)/tpe_bignum26
+	tools/expect_same.sh tpe_bignum26 "$$($(TESTTMP)/tpe_bignum26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_compound.pas $(TESTTMP)/tpe_compound26
+	tools/expect_same.sh tpe_compound26 "$$($(TESTTMP)/tpe_compound26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_def.pas $(TESTTMP)/tpe_def26
+	tools/expect_same.sh tpe_def26 "$$($(TESTTMP)/tpe_def26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_fstring.pas $(TESTTMP)/tpe_fstring26
+	tools/expect_same.sh tpe_fstring26 "$$($(TESTTMP)/tpe_fstring26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_is_in.pas $(TESTTMP)/tpe_is_in26
+	tools/expect_same.sh tpe_is_in26 "$$($(TESTTMP)/tpe_is_in26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_isinstance_del_dict.pas $(TESTTMP)/tpe_isinst26
+	tools/expect_same.sh tpe_isinst26 "$$($(TESTTMP)/tpe_isinst26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_m1.pas $(TESTTMP)/tpe_m126
+	tools/expect_same.sh tpe_m126 "$$($(TESTTMP)/tpe_m126 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_m2.pas $(TESTTMP)/tpe_m226
+	tools/expect_same.sh tpe_m226 "$$($(TESTTMP)/tpe_m226 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_m3.pas $(TESTTMP)/tpe_m326
+	tools/expect_same.sh tpe_m326 "$$($(TESTTMP)/tpe_m326 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_memory_bytes.pas $(TESTTMP)/tpe_membytes26
+	tools/expect_same.sh tpe_membytes26 "$$($(TESTTMP)/tpe_membytes26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_slice.pas $(TESTTMP)/tpe_slice26
+	tools/expect_same.sh tpe_slice26 "$$($(TESTTMP)/tpe_slice26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_trampoline_shapes.pas $(TESTTMP)/tpe_tramp26
+	tools/expect_same.sh tpe_tramp26 "$$($(TESTTMP)/tpe_tramp26 | tail -1)" "ALL PASS"
 	@# exec()'s expression grammar had no rule for ** at all
 	./$(COMPILER) test/test_nilpy_pyeval_power_operator.npy $(TESTTMP)/test_nilpy_pyevalpow26
 	tools/expect_same.sh test_nilpy_pyevalpow26 "$$($(TESTTMP)/test_nilpy_pyevalpow26)" "[1024, 512, -4, 0.5]"
@@ -1927,6 +2056,23 @@ test-nilpy: $(COMPILER)
 	@# list.sort(reverse=) -- the in-place method, not just the sorted() function
 	./$(COMPILER) test/test_nilpy_list_sort_method.npy $(TESTTMP)/test_nilpy_sortmethod26
 	$(TESTTMP)/test_nilpy_sortmethod26 | diff -u test/test_nilpy_list_sort_method.expected -
+	@# list.sort(key=) -- every callable SHAPE and every RECEIVER, since the
+	@# coercion that reaches the callback slot was per-loop and each was broken
+	@# independently; expectation generated from CPython
+	./$(COMPILER) test/test_nilpy_list_sort_key.npy $(TESTTMP)/test_nilpy_sortkey26
+	$(TESTTMP)/test_nilpy_sortkey26 | diff -u test/test_nilpy_list_sort_key.expected -
+	@# a class defining ONE method twice, whose body assigns a parameter to a
+	@# same-named attribute, with a later scope holding a bare local of that name.
+	@# A rebound parameter is renamed to hide it from lookup AFTER it was filed in
+	@# the symbol hash under its original name, so the scope-exit rollback unlinked
+	@# a bucket it was never in and left a dead head; the next allocation of that
+	@# index linked it to itself and FindSym walked a one-element cycle forever.
+	@# THE TIMEOUT IS THE ASSERTION -- the failure was a hang with no output, so
+	@# there is nothing to diff; without the bound a regression hangs this suite
+	@# instead of reporting. 120s against a ~3.5s compile is a 30x margin.
+	@# bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
+	timeout 120 ./$(COMPILER) test/test_nilpy_duplicate_method_def.npy $(TESTTMP)/test_nilpy_dupmethod26
+	$(TESTTMP)/test_nilpy_dupmethod26 | diff -u test/test_nilpy_duplicate_method_def.expected -
 	@# d[k] = None stores a real None, and a def with no return annotation parses
 	./$(COMPILER) test/test_nilpy_none_variant_residuals.npy $(TESTTMP)/test_nilpy_noneresid26
 	tools/expect_same.sh test_nilpy_noneresid26 "$$($(TESTTMP)/test_nilpy_noneresid26)" "$$(printf 'None\nTrue\nhi')"
@@ -2124,6 +2270,11 @@ test-nilpy: $(COMPILER)
 	# the surplus args were emitted anyway). CPython renders them as a tuple.
 	./$(COMPILER) test/test_nilpy_exception_multi_arg.npy $(TESTTMP)/test_nilpy_excmulti26
 	$(TESTTMP)/test_nilpy_excmulti26 | diff -u test/test_nilpy_exception_multi_arg.expected -
+	# time.time() and os.listdir() -- the two names that needed a PAL syscall
+	# (clock_gettime / getdents64) rather than a shim. Asserted by property:
+	# a clock reading and a directory listing are not reproducible.
+	./$(COMPILER) test/test_nilpy_time_and_listdir.npy $(TESTTMP)/test_nilpy_timelistdir26
+	$(TESTTMP)/test_nilpy_timelistdir26 | diff -u test/test_nilpy_time_and_listdir.expected -
 	# os.sep / os.linesep are ATTRIBUTES, not calls -- and the value builder
 	# behind them now checks WHICH module was asked, so sys.SEEK_SET raises
 	# AttributeError instead of answering 0.
@@ -2582,6 +2733,14 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_generic_nested_specialize_in_method_body.pas $(TESTTMP)/test_gen_nested_spec26
 	@$(TESTTMP)/test_gen_nested_spec26 | diff -u test/test_generic_nested_specialize_in_method_body.expected - \
 	  || { echo 'test_generic_nested_specialize_in_method_body: FAIL'; exit 1; }
+	@# Two DIFFERENT specializations of the SAME inner template inside ONE generic
+	@# (`specialize TCmp<T>.Size * 100 + specialize TCmp<U>.Size`). Excluded from
+	@# the test above because it still failed then; fixed incidentally by one of
+	@# the wall-6 ordering fixes, so nothing guarded it until this row.
+	@# bug-p-two-different-nested-specializations-of-one-template-collide
+	@./$(COMPILER) test/test_generic_two_nested_specializations_of_one_template.pas $(TESTTMP)/test_gen_two_nested26
+	@$(TESTTMP)/test_gen_two_nested26 | diff -u test/test_generic_two_nested_specializations_of_one_template.expected - \
+	  || { echo 'test_generic_two_nested_specializations_of_one_template: FAIL'; exit 1; }
 	@# `resourcestring` is a runtime-replaceable VARIABLE in FPC, so `@S` is legal.
 	@# We parsed the section as plain consts, and a const has no address, so the
 	@# Delphi/FPC `Exception.CreateRes(@SArgumentOutOfRange)` idiom -- 28 sites in
@@ -2743,6 +2902,12 @@ test-nilpy: $(COMPILER)
 	@# class; it printed right by coincidence and type() on it segfaulted
 	./$(COMPILER) test/test_nilpy_def_returning_a_field.npy $(TESTTMP)/test_nilpy_defretfield26
 	$(TESTTMP)/test_nilpy_defretfield26 | diff -u test/test_nilpy_def_returning_a_field.expected -
+	# range() evaluates its arguments ONCE. A stop expression that reads the loop
+	# variable and is re-evaluated per iteration never terminates, so this runs
+	# under `timeout`: the failure mode is a HANG, and a runner that waits forever
+	# turns a red into a stuck job instead of a test result.
+	./$(COMPILER) test/test_nilpy_range_bound_reads_loop_var.npy $(TESTTMP)/test_nilpy_rangebound26
+	timeout 60 $(TESTTMP)/test_nilpy_rangebound26 | diff -u test/test_nilpy_range_bound_reads_loop_var.expected -
 	@# `del d[k]` where d is an unannotated (variant) dict/list parameter — the
 	@# del lowering dispatched on the receiver's STATIC type and refused it
 	./$(COMPILER) test/test_nilpy_del_on_a_variant_receiver.npy $(TESTTMP)/test_nilpy_delvar26
@@ -3574,6 +3739,37 @@ test-nilpy: $(COMPILER)
 	# callable-as-identity and usable as an annotation for free.
 	./$(COMPILER) test/test_nilpy_typevar_and_newtype.npy $(TESTTMP)/test_nilpy_tvnt26
 	$(TESTTMP)/test_nilpy_tvnt26 | diff -u test/test_nilpy_typevar_and_newtype.expected -
+	# --- chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring
+	# Three .npy subjects that no rule referenced. They exist, they have an
+	# .expected beside them, they pass at HEAD -- and none of that made them
+	# covered: `test-nilpy` and `test-core` ENUMERATE their tests, so a file is
+	# gated only if someone also edited this Makefile, and for these three nobody
+	# did. They are wired HERE ONLY, never also into test-core: a second copy is
+	# a second expectation to keep in sync, which is what the ratchet in
+	# tools/npy_cross_target_expectation_devtest.py exists to stop growing.
+	#
+	# ORACLES, and two of the three have NONE -- say so rather than let a reader
+	# assume CPython agreement was checked. NilPy is upward-compatible with
+	# CPython in ONE direction, so CPython is an oracle only for source it can
+	# parse; `import 'file.pas' as x` it cannot, and rejects with a SyntaxError.
+	#
+	#   str_method_return_type_on_a_variable   CPython 3, byte for byte
+	#   keyword_call_tuple_on_a_skipped_default   none -- pxx-only import form
+	#   str_method_vs_pascal_string_helper        none -- pxx-only import form
+	#
+	# For the two with no oracle the .expected is the AUTHOR'S, committed with
+	# the test; it is not today's output recorded and relabelled. That is the
+	# same call the eleven above made for test_pyexec_trampoline_abi.
+	./$(COMPILER) test/test_nilpy_str_method_return_type_on_a_variable.npy $(TESTTMP)/test_nilpy_strmretvar26
+	$(TESTTMP)/test_nilpy_strmretvar26 | diff -u test/test_nilpy_str_method_return_type_on_a_variable.expected -
+	# a keyword argument that lands past a SKIPPED default, through a Pascal
+	# procedure imported into NilPy (test/kwpadprobe.pas)
+	./$(COMPILER) test/test_nilpy_keyword_call_tuple_on_a_skipped_default.npy $(TESTTMP)/test_nilpy_kwpaddef26
+	$(TESTTMP)/test_nilpy_kwpaddef26 | diff -u test/test_nilpy_keyword_call_tuple_on_a_skipped_default.expected -
+	# a str METHOD must win over a Pascal string helper of the same name that an
+	# imported unit brings into scope (test/strhelperprobe.pas)
+	./$(COMPILER) test/test_nilpy_str_method_vs_pascal_string_helper.npy $(TESTTMP)/test_nilpy_strmhelper26
+	$(TESTTMP)/test_nilpy_strmhelper26 | diff -u test/test_nilpy_str_method_vs_pascal_string_helper.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
@@ -3764,6 +3960,302 @@ test-threads: $(COMPILER)
 	set +e; $(TESTTMP)/test_sched_exhaust26 > $(TESTTMP)/sched_exhaust.log 2>&1; rc=$$?; set -e; \
 	  tools/expect_same.sh test_sched_exhaust26-rc "$$rc" "216"; \
 	  tools/expect_same.sh test_sched_exhaust26-msg "$$(head -n 1 $(TESTTMP)/sched_exhaust.log)" "fatal: scheduler out of reactor slots (MAX_REACTORS)"
+	# Halt(n) from a NON-MAIN thread must end the PROCESS. x86-64 and arm32 emitted
+	# `exit` (thread exit) rather than `exit_group`, so the fatal killed only the
+	# worker and the status fell to whichever thread exited last — 0, for a thread
+	# finishing normally. The exhaustion arm above cannot cover this: it is a whole
+	# subsystem away from the defect, and it passed for a day while scheduler.pas
+	# worked around the bug by calling exit_group directly. This one asks the
+	# question directly, and asks whether the process DIES rather than what status
+	# it reports — which makes it deterministic instead of a race.
+	# bug-b-concurrent-halt-from-several-threads-exits-0
+	./$(COMPILER) --threadsafe test/test_halt_from_worker_thread.pas $(TESTTMP)/test_halt_worker26
+	set +e; $(TESTTMP)/test_halt_worker26 > $(TESTTMP)/halt_worker.log 2>&1; rc=$$?; set -e; \
+	  tools/expect_same.sh test_halt_worker26-rc "$$rc" "216"; \
+	  tools/expect_same.sh test_halt_worker26-msg "$$(head -n 1 $(TESTTMP)/halt_worker.log)" "worker: calling Halt(216)"
+	# a CONSTANT shift count uses the immediate form at -O3 (no `mov rcx,k`).
+	# Every operand width and signedness, counts 0/1/3/5/7/9/31/32/63, and each
+	# constant count paired with a VARIABLE-count twin in the same program — the
+	# twin keeps the old `shr rax,cl` path, so a wrong immediate encoding shows up
+	# as the two disagreeing rather than as a value nobody has an oracle for.
+	# Count 0 is the one that can expose a sign-extension mistake; any count >= 1
+	# clears bit 31. feature-opt-o3-register-pressure W1
+	./$(COMPILER) -O3 test/test_shift_const_count.pas $(TESTTMP)/test_shiftconst26
+	tools/expect_same.sh test_shiftconst26 "$$($(TESTTMP)/test_shiftconst26 | tail -1)" "SHIFTS OK"
+	# a register-RESIDENT left operand feeding a compare is read in place at -O3:
+	# `cmp r12, rcx` and `cmp r12, imm32` instead of `mov rax, r12` first. Both
+	# encodings are new and neither is the rax form with a register swapped --
+	# the reg form adds REX.R and moves the ModRM reg field, and the imm form is
+	# a DIFFERENT OPCODE, because rax has a short accumulator encoding (48 3D)
+	# that r12..r15 do not. A wrong REX or ModRM compares the wrong register, so
+	# every variable holds a distinct value and none is 0 or 1.
+	# Run at BOTH -O0 and -O3 against ONE expectation: the pass is -O3-gated, so
+	# -O0 is a control that provably cannot use either encoding. Verified against
+	# FPC 3.2.2. Checked non-vacuous by breaking the ModRM field on purpose --
+	# -O3 then printed acc=0 while -O0 stayed correct, and note the compiler still
+	# self-hosted byte-identically while broken, because it builds at the default
+	# -O level: the fixedpoint gate cannot see an -O3-only defect.
+	# feature-opt-o3-register-pressure W1 slice 5
+	./$(COMPILER) -O3 test/test_cmp_resident_left.pas $(TESTTMP)/test_cmpresid326
+	tools/expect_same.sh test_cmpresid326 "$$($(TESTTMP)/test_cmpresid326)" "$$(printf 'acc=393213\none=131071\ndone')"
+	./$(COMPILER) -O0 test/test_cmp_resident_left.pas $(TESTTMP)/test_cmpresid026
+	tools/expect_same.sh test_cmpresid026 "$$($(TESTTMP)/test_cmpresid026)" "$$(printf 'acc=393213\none=131071\ndone')"
+	# a register-RESIDENT left operand times a CONSTANT uses imul's three-operand
+	# form at -O3 (`imul rax, r12, k`). imul is the ONLY form in the immediate-fold
+	# arm that can take its input from somewhere other than its output; the five
+	# beside it (add/sub/and/or/xor) are short accumulator encodings and are
+	# UNCHANGED -- the test exercises all six side by side so a mistake in the
+	# imul arm cannot hide behind the five that still work.
+	# Note the operand roles are the OPPOSITE way round from the compare emitters
+	# in this campaign: here the source is r/m (REX.B) and the destination is reg.
+	# Same -O0/-O3 control pair as the compare test. Verified against FPC 3.2.2 and
+	# checked non-vacuous by swapping the reg/rm fields on purpose -- -O3 then
+	# produced no output at all while -O0 stayed correct.
+	# feature-opt-o3-register-pressure W1 slice 6
+	./$(COMPILER) -O3 test/test_imul_resident_left.pas $(TESTTMP)/test_imulresid326
+	tools/expect_same.sh test_imulresid326 "$$($(TESTTMP)/test_imulresid326)" "$$(printf 'acc=20000053834\none=5000013460\ndone')"
+	./$(COMPILER) -O0 test/test_imul_resident_left.pas $(TESTTMP)/test_imulresid026
+	tools/expect_same.sh test_imulresid026 "$$($(TESTTMP)/test_imulresid026)" "$$(printf 'acc=20000053834\none=5000013460\ndone')"
+	# a fused compare reads its RIGHT operand in place at -O3: `cmp rN, rM` when it
+	# is register-resident, `cmp rN, [rbp+off]` when it is an 8-byte frame local or
+	# param, instead of staging it through rcx. ONLY 8-byte operands fold -- a
+	# 4-byte one would need the left register to be provably sign-extended, and the
+	# 4-byte rows here are the controls that must stay on the rcx path.
+	# The band rows are the point of this test. `a > b` with b = -5000000001 is
+	# true for whatever junk a WRONG reg/rm field names, so the obvious rows are
+	# insensitive to the exact bug this pass can introduce -- measured: three
+	# separate deliberate breaks passed. Straddling a with a-1 and a+1, from both
+	# sides, makes the pair true only for a register holding EXACTLY a and only for
+	# those two slots. All six breaks then move it: mem reg field, mem
+	# displacement, both reg/rm forms, and each REX bit. Verified against FPC 3.2.2.
+	# feature-opt-o3-register-pressure W1 slice 7
+	./$(COMPILER) -O3 test/test_cmp_right_in_place.pas $(TESTTMP)/test_cmprip326
+	tools/expect_same.sh test_cmprip326 "$$($(TESTTMP)/test_cmprip326)" "$$(printf 'acc=393213\none=131071\nbyref=10\ndone')"
+	./$(COMPILER) -O0 test/test_cmp_right_in_place.pas $(TESTTMP)/test_cmprip026
+	tools/expect_same.sh test_cmprip026 "$$($(TESTTMP)/test_cmprip026)" "$$(printf 'acc=393213\none=131071\nbyref=10\ndone')"
+	# BOTH operands 4-byte and same type -> the fused compare reads the right one
+	# in place with a 32-BIT compare (opcode 3B, no REX.W), instead of sign-
+	# extending it into rcx first. Slice 7 folded 8-byte only and declined exactly
+	# this, which is why its own benchmark loop came out unchanged.
+	# Dropping REX.W is what makes it safe: a 32-bit compare reads four bytes of
+	# the slot and the low half of the register, so nothing depends on the upper
+	# half being extended. Sign- and zero-extension are both monotonic under
+	# signed AND unsigned order, so with identical TypeKind the narrow compare
+	# agrees with the wide one under every predicate.
+	# Every row is a band (standing rule 4) -- adjacent values, not distinct ones.
+	# The unsigned rows sit above 2^31 where a signed reading differs, and the
+	# 8-vs-4-byte row is the control that must NOT fold. Verified against FPC
+	# 3.2.2; four deliberate breaks (REX.R, REX.W, displacement, reg field) each
+	# move -O3 while -O0 stays correct.
+	# feature-opt-o3-register-pressure W1 slice 8
+	./$(COMPILER) -O3 test/test_cmp_32bit_fold.pas $(TESTTMP)/test_cmp32f326
+	tools/expect_same.sh test_cmp32f326 "$$($(TESTTMP)/test_cmp32f326)" "$$(printf 'acc=189\none=63\ndone')"
+	./$(COMPILER) -O0 test/test_cmp_32bit_fold.pas $(TESTTMP)/test_cmp32f026
+	tools/expect_same.sh test_cmp32f026 "$$($(TESTTMP)/test_cmp32f026)" "$$(printf 'acc=189\none=63\ndone')"
+	# BOTH subtrees of a binop proven pure -> evaluate the RIGHT one first and park
+	# it in the scratch register, so the left value is produced last and is already
+	# in rax. Three moves become two. The arm below parks LEFT and needs a restore.
+	# The rows that matter are the IMPURE ones: the unsafe version of this pass is
+	# the one that checks only the right subtree, and it is caught by leftimp,
+	# where Bump's result straddles a `shr` boundary so a wrongly-early right read
+	# differs by exactly 1 (51 vs 52). A round number hides it -- 100 shr 1 and
+	# 101 shr 1 are both 50 -- which is standing rule 4 applied to an ORDERING.
+	# Verified against FPC 3.2.2; two deliberate breaks (drop the left-purity
+	# guard, mismatch the scratch register) each move -O3 while -O0 stays correct.
+	# feature-opt-o3-operand-order-for-non-commutative-binops (W1 slice 9)
+	./$(COMPILER) -O3 test/test_binop_operand_order.pas $(TESTTMP)/test_binoporder326
+	tools/expect_same.sh test_binoporder326 "$$($(TESTTMP)/test_binoporder326)" "$$(printf 'pure=957\nleftimp=51 log=L\nbothimp=-3 log=ab\ndone')"
+	./$(COMPILER) -O0 test/test_binop_operand_order.pas $(TESTTMP)/test_binoporder026
+	tools/expect_same.sh test_binoporder026 "$$($(TESTTMP)/test_binoporder026)" "$$(printf 'pure=957\nleftimp=51 log=L\nbothimp=-3 log=ab\ndone')"
+	# a 4-byte SIGNED resident feeding a shift's LEADING sign-extend is read and
+	# widened by ONE `movsxd rax, rNd` instead of `mov rax, rN` + `cdqe` -- 3 bytes
+	# and 1 instruction instead of 5 and 2. NOT by deleting the cdqe: that is a
+	# provable no-op today only because every write to a 4-byte resident
+	# re-normalises the register, an invariant maintained in another file whose
+	# failure mode is a silently wrong value. movsxd sign-extends by construction.
+	# a/b/c are a BAND (standing rule 4) -- adjacent values whose shifted results
+	# differ by exactly 1 -- carrying distinct weights, so naming the wrong
+	# resident is a specific wrong total. Values are NEGATIVE, so a dropped
+	# extension gives a number near 2^31 where the right answer is near 2^63.
+	# Three deliberate breaks (wrong rm field, dropped REX.B, widen site ignoring
+	# the deferred load) each move -O3 while -O0 stays correct.
+	# --strict-fpc is the second expectation AND a control: it tags the result 4
+	# bytes, so the fold cannot fire, and it reproduces FPC 3.2.2 exactly.
+	# feature-opt-o3-fuse-resident-read-and-widen-into-movsxd (W1 slice 10)
+	./$(COMPILER) -O3 test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwiden326
+	tools/expect_same.sh test_shrwiden326 "$$($(TESTTMP)/test_shrwiden326)" "$$(printf 'acc=2399488939246\none=799829646330\ndone')"
+	./$(COMPILER) -O0 test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwiden026
+	tools/expect_same.sh test_shrwiden026 "$$($(TESTTMP)/test_shrwiden026)" "$$(printf 'acc=2399488939246\none=799829646330\ndone')"
+	./$(COMPILER) -O3 --strict-fpc test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwidensf326
+	tools/expect_same.sh test_shrwidensf326 "$$($(TESTTMP)/test_shrwidensf326)" "$$(printf 'acc=1121256676948\none=373752225564\ndone')"
+	./$(COMPILER) -O0 --strict-fpc test/test_shr_resident_widen.pas $(TESTTMP)/test_shrwidensf026
+	tools/expect_same.sh test_shrwidensf026 "$$($(TESTTMP)/test_shrwidensf026)" "$$(printf 'acc=1121256676948\none=373752225564\ndone')"
+	# The same fold on AARCH64, where the leading widen is `sxtw x0, w0` (signed,
+	# native-width result) or `mov w0, w0` (zero-extend) and BOTH flavours fuse:
+	# `sxtw x0, wN` / `mov w0, wN` is the resident read and the extension in one
+	# instruction. The unsigned `u shr 1` row is what prices the second flavour.
+	# aarch64 must produce the SAME numbers as x86-64 -- that agreement is the
+	# point, since the two backends reach them by different encodings.
+	# Three deliberate breaks (wrong Rn in sxtw, wrong Rm in the zero-extend,
+	# widen site ignoring the deferred load) each move aarch64 -O3.
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  for o in 0 3; do \
+	    ./$(COMPILER) --target=aarch64 -O$$o test/test_shr_resident_widen.pas $(TESTTMP)/test_srw_a64_$$o >/dev/null || { echo "srw aarch64 -O$$o compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh aarch64/test_srw_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_srw_a64_$$o; echo "exit=$$?")" "$$(printf 'acc=2399488939246\none=799829646330\ndone\nexit=0')" || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_shr_resident_widen: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
+	# The LAST call argument is pushed last and popped first with nothing in
+	# between, so its 16-byte temp round trip is ceremony over a value already in
+	# x0. It becomes `mov x(n-1), x0`, and for a ONE-argument call not even that.
+	# Every argument list is a BAND -- consecutive values 10..18 with distinct
+	# weights -- so ANY permutation changes the total; far-apart values would let
+	# a swap that happens to cancel go unseen. The rows each cover one way it
+	# breaks: 1 arg (no mov at all), 2 args, 8 (the boundary), 9 (OVER it, where
+	# the collapse must not fire because that path rebuilds an outgoing block
+	# from the temp slots by offset), a call as the last argument (nested
+	# collapse), a virtual call (Self is arg 0 and is popped LAST, so the VMT
+	# load must still see x0), and a call through a procedure variable (the
+	# callee is pushed deepest of all).
+	# Verified against FPC 3.2.2; three deliberate breaks (wrong destination
+	# register, dropping the <=8 guard, skipping the push but keeping the ldr)
+	# give acc=71045, acc=133455897761776 and a segfault respectively.
+	./$(COMPILER) -O3 test/test_last_arg_collapse.pas $(TESTTMP)/test_lac326
+	tools/expect_same.sh test_lac326 "$$($(TESTTMP)/test_lac326)" "$$(printf 'acc=73224\none=24408\ndone')"
+	./$(COMPILER) -O0 test/test_last_arg_collapse.pas $(TESTTMP)/test_lac026
+	tools/expect_same.sh test_lac026 "$$($(TESTTMP)/test_lac026)" "$$(printf 'acc=73224\none=24408\ndone')"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  for o in 0 3; do \
+	    ./$(COMPILER) --target=aarch64 -O$$o test/test_last_arg_collapse.pas $(TESTTMP)/test_lac_a64_$$o >/dev/null || { echo "lac aarch64 -O$$o compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh aarch64/test_lac_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_lac_a64_$$o; echo "exit=$$?")" "$$(printf 'acc=73224\none=24408\ndone\nexit=0')" || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_last_arg_collapse: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
+	# AARCH64 W1 slices 5+7, which collapse into ONE arm there: `cmp Xn, Xm` on
+	# aarch64 IS `subs xzr, Xn, Xm`, so BOTH sources are free register fields and
+	# a resident left AND a resident right are each read where they live. x86-64
+	# needed two slices and a memory form to say the same thing.
+	# Every row is a band straddled from both sides -- a one-sided row is
+	# satisfied by almost any junk a wrong register field could hold. The
+	# unsigned rows sit one apart above 2^63 where a signed reading flips.
+	# x86-64 is a THIRD control here and must not move at all: this pass lives
+	# entirely in ir_codegen_aarch64.inc. Verified against FPC 3.2.2; three
+	# deliberate breaks (wrong Rn, wrong Rm, unfolded-right default) each move
+	# aarch64 -O3 while -O0 and x86-64 stay correct.
+	# feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen
+	./$(COMPILER) -O3 test/test_cmp_both_in_place.pas $(TESTTMP)/test_cbip326
+	tools/expect_same.sh test_cbip326 "$$($(TESTTMP)/test_cbip326)" "$$(printf 'acc=49149\none=16383\ndone')"
+	./$(COMPILER) -O0 test/test_cmp_both_in_place.pas $(TESTTMP)/test_cbip026
+	tools/expect_same.sh test_cbip026 "$$($(TESTTMP)/test_cbip026)" "$$(printf 'acc=49149\none=16383\ndone')"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  for o in 0 3; do \
+	    ./$(COMPILER) --target=aarch64 -O$$o test/test_cmp_both_in_place.pas $(TESTTMP)/test_cbip_a64_$$o >/dev/null || { echo "cbip aarch64 -O$$o compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh aarch64/test_cbip_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cbip_a64_$$o; echo "exit=$$?")" "$$(printf 'acc=49149\none=16383\ndone\nexit=0')" || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_cmp_both_in_place: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
+	# a string LITERAL that has to become a managed AnsiString is an ADDRESS at
+	# -O3, not a call that allocates and copies the same bytes again on every
+	# evaluation: InternStr lays a managed-string header down in front of every
+	# pooled literal, so the block is already one. PXXStrFromLit was 9.28% of
+	# uforth's profile and the allocator around it most of another 19%.
+	# The block is SHARED by every evaluation of that literal and is never
+	# freed, so the whole risk is writes: copy-on-write, in-place append,
+	# in-place SetLength, and a refcount walked to zero by handing the handle
+	# out without the reference the old fresh-block convention implied. Each
+	# row therefore reads the literal AGAIN after doing something to a copy,
+	# and prints both -- a mutated static block shows up as the SECOND read
+	# being wrong, never as a crash.
+	# -O0 is the control: the path is -O3-gated, so it provably cannot be
+	# taken there, and one expectation covers both. Checked non-vacuous by
+	# setting MSTR_STATIC_RC to 0 -- -O3 then printed `b=Zbcdef`, the static
+	# block edited in place, while -O0 stayed correct AND the compiler still
+	# self-hosted byte-identically, because it builds at the default -O level.
+	# bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+	./$(COMPILER) -O3 test/test_static_string_literals.pas $(TESTTMP)/test_ssl326
+	tools/expect_same.sh test_ssl326 "$$($(TESTTMP)/test_ssl326)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
+	./$(COMPILER) -O0 test/test_static_string_literals.pas $(TESTTMP)/test_ssl026
+	tools/expect_same.sh test_ssl026 "$$($(TESTTMP)/test_ssl026)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
+	# aarch64 carries the same pass through the same shared representation --
+	# the header is in the POOL, so the port is one predicate and three emit
+	# sites, not a second shim. It takes its reference with a call to
+	# PXXStrIncRef where x86-64 uses a four-byte `inc qword [rax-16]`: a
+	# hand-emitted aarch64 retain would have to reproduce the threadsafe arm
+	# too, and EmitStrIncRefA64 already gets that right.
+	# Same deliberate break confirms it fires: MSTR_STATIC_RC=0 makes aarch64
+	# -O3 print `b=Zbcdef` while aarch64 -O0 stays correct.
+	@if command -v qemu-aarch64 > /dev/null 2>&1; then \
+	  for o in 0 3; do \
+	    ./$(COMPILER) --target=aarch64 -O$$o test/test_static_string_literals.pas $(TESTTMP)/test_ssl_a64_$$o >/dev/null || { echo "ssl aarch64 -O$$o compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh aarch64/test_ssl_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_ssl_a64_$$o; echo "exit=$$?")" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone\nexit=0')" || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_static_string_literals: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
+	# -dPXX_ALLOC_CENSUS: how much does this program allocate, and of what size.
+	# There is no expected VALUE to pin -- it answers a cost question -- so what
+	# this row protects is the define itself. Every counter and trigger lives
+	# inside the ifdef, so the ordinary build never compiles them and a breaking
+	# edit stays invisible until somebody reaches for the tool, which by
+	# construction is while they are debugging something else.
+	# Both directions, because each catches a different rot: WITH the define a
+	# well-formed census must reach stderr (the code still compiles and runs),
+	# and WITHOUT it nothing may (the ifdefs still guard everything, so the
+	# shipped allocator is unchanged -- the compiler's own binary is
+	# byte-identical across this change, which is the stronger form of the same
+	# claim). Program stdout must be identical either way: a diagnostic that
+	# perturbs the program it measures is worse than no diagnostic.
+	# bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_alloc_census.pas $(TESTTMP)/test_tac_on
+	./$(COMPILER) test/test_alloc_census.pas $(TESTTMP)/test_tac_off
+	tools/expect_same.sh test_tac_stdout_on "$$($(TESTTMP)/test_tac_on 2>/dev/null)" "n=180000"
+	tools/expect_same.sh test_tac_stdout_off "$$($(TESTTMP)/test_tac_off 2>/dev/null)" "n=180000"
+	@n=$$($(TESTTMP)/test_tac_on 2>&1 >/dev/null | grep -c 'pxx-census: allocs='); \
+	  [ "$$n" -gt 0 ] || { echo "test_alloc_census: FAIL -- define ON produced no census line"; exit 1; }; \
+	  echo "ok: test_alloc_census on  ($$n census reports)"
+	@n=$$($(TESTTMP)/test_tac_off 2>&1 >/dev/null | grep -c 'pxx-census'); \
+	  [ "$$n" = "0" ] || { echo "test_alloc_census: FAIL -- define OFF still printed $$n census line(s)"; exit 1; }; \
+	  echo "ok: test_alloc_census off (silent)"
+	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
+	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
+	# "evaluate both bounds before assigning the control variable"; eliding it
+	# re-emits the initial bound AFTER the limit's code, so every row here is a
+	# shape where that reordering is observable -- bounds that MENTION the control
+	# variable, both directions, plus a call-bearing bound that must still capture.
+	# callorder is the row that matters: eliding a call-bearing bound swaps the two
+	# calls while leaving the call COUNT and the iteration count unchanged, so a
+	# counter cannot see it and only the order log can. That row was added after
+	# breaking the elision on purpose and watching the counter version pass.
+	# Counts verified against FPC 3.2.2; -O0 is the control that still captures.
+	./$(COMPILER) -O3 test/test_for_init_temp_elision.pas $(TESTTMP)/test_forinit326
+	tools/expect_same.sh test_forinit326 "$$($(TESTTMP)/test_forinit326)" "$$(printf 'plain=5\nident=5\nselfinit=3\nselfboth=1\narithself=4\ndownself=7\ncallbound=302\ncallorder=iL\ndone')"
+	./$(COMPILER) -O0 test/test_for_init_temp_elision.pas $(TESTTMP)/test_forinit026
+	tools/expect_same.sh test_forinit026 "$$($(TESTTMP)/test_forinit026)" "$$(printf 'plain=5\nident=5\nselfinit=3\nselfboth=1\narithself=4\ndownself=7\ncallbound=302\ncallorder=iL\ndone')"
+	# The bulk-copy helpers' BYTE TAIL, at every length 0..17: string SetLength
+	# (grow and shrink), dyn-array SetLength, Copy() at every offset and count,
+	# aliasing-vs-Copy, and concat. Every expectation diffed against FPC 3.2.2.
+	# NOTE FOR WHOEVER READS A GREEN HERE: on x86-64 this proves almost nothing.
+	# That target open-codes the block ops (rep movsb / rep stosb) and inlines
+	# SetLength, so PXXBlockCopy/PXXMemZero barely run — deleting PXXBlockCopy's
+	# byte tail outright leaves this test PASSING natively and produces 415
+	# failures under --target=aarch64. The value of this file is on the CROSS
+	# shards. feature-opt-bulk-copy-is-byte-at-a-time
+	./$(COMPILER) test/test_bulk_copy_tails.pas $(TESTTMP)/test_bulktails26
+	tools/expect_same.sh test_bulktails26 "$$($(TESTTMP)/test_bulktails26 | tail -1)" "BULK COPY TAILS OK"
+	# aarch64 EmitLoadVarA64's arms — every width and signedness of the sz/sgn
+	# ladder, a global Single, by-ref params of each, a by-ref dyn array and
+	# string. Target-neutral source; the .expected is the x86-64 oracle, and the
+	# cross shards are what make it an aarch64 test.
+	./$(COMPILER) test/test_a64_loadvar_arms.pas $(TESTTMP)/test_a64loadvar26
+	$(TESTTMP)/test_a64loadvar26 | diff -u test/test_a64_loadvar_arms.expected -
+	# the leaf-sym binop collapse, NON-COMMUTATIVE ops especially: a wrong-way-
+	# round operand pair is a plausible wrong ANSWER, not a crash, and commutative
+	# ops cannot observe it. Under {$Q+}{$R+}.
+	./$(COMPILER) test/test_a64_leafsym_binops.pas $(TESTTMP)/test_a64leafsym26
+	$(TESTTMP)/test_a64leafsym26 | diff -u test/test_a64_leafsym_binops.expected -
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas $(TESTTMP)/test_mulhi26
 	tools/expect_same.sh test_mulhi26 "$$($(TESTTMP)/test_mulhi26 | tail -1)" "MULHI OK"
@@ -3945,9 +4437,21 @@ test-asm: $(COMPILER)
 	./$(COMPILER) test/test_asm_mvp.asm $(TESTTMP)/test_asm_mvp26
 	$(TESTTMP)/test_asm_mvp26; tools/expect_same.sh test_asm_mvp26-rc "$$?" "42"
 	./$(COMPILER) test/test_asmcore_x64.pas $(TESTTMP)/test_asmcore_x64_26
-	$(TESTTMP)/test_asmcore_x64_26 | tail -1 | grep -q "all asmcore_x64 checks passed"
+	# Redirect-then-check, not `| tail -1 | grep -q`: a pipeline reports GREP's
+	# status, so a binary that printed its success line and THEN died still
+	# passed. That is not hypothetical here -- this row ran green through the
+	# entire window in which test_asmcore_x64 was SIGSEGVing on a BSS
+	# under-allocation, and a bisect done by hand is what found it.
+	$(TESTTMP)/test_asmcore_x64_26 > $(TESTTMP)/test_asmcore_x64_26.out; tools/expect_same.sh test_asmcore_x64_26-rc "$$?" "0"
+	tools/expect_same.sh test_asmcore_x64_26 "$$(tail -1 $(TESTTMP)/test_asmcore_x64_26.out)" "all asmcore_x64 checks passed"
 	./$(COMPILER) test/test_asmcore_aarch64.pas $(TESTTMP)/test_asmcore_aarch64_26
-	$(TESTTMP)/test_asmcore_aarch64_26 | tail -1 | grep -q "all asmcore_aarch64 checks passed"
+	# Redirect-then-check, not `| tail -1 | grep -q`: a pipeline reports GREP's
+	# status, so a binary that printed its success line and THEN died still
+	# passed. That is not hypothetical here -- this row ran green through the
+	# entire window in which test_asmcore_x64 was SIGSEGVing on a BSS
+	# under-allocation, and a bisect done by hand is what found it.
+	$(TESTTMP)/test_asmcore_aarch64_26 > $(TESTTMP)/test_asmcore_aarch64_26.out; tools/expect_same.sh test_asmcore_aarch64_26-rc "$$?" "0"
+	tools/expect_same.sh test_asmcore_aarch64_26 "$$(tail -1 $(TESTTMP)/test_asmcore_aarch64_26.out)" "all asmcore_aarch64 checks passed"
 	./$(COMPILER) test/test_asmcore_i386.pas $(TESTTMP)/test_asmcore_i386_26
 	$(TESTTMP)/test_asmcore_i386_26 | tail -1 | grep -q "all asmcore_i386 checks passed"
 	./$(COMPILER) test/test_asmcore_arm32.pas $(TESTTMP)/test_asmcore_arm32_26
@@ -4790,6 +5294,15 @@ test-core: $(COMPILER)
 	# derefed value in contexts Writeln does not.
 	./$(COMPILER) test/test_cast_deref_chain_siblings.pas $(TESTTMP)/test_cast_sib26
 	tools/expect_same.sh test_cast_sib26 "$$($(TESTTMP)/test_cast_sib26)" "$$(printf 'a nested ^.^.^  : world\nb field arr[i]^ : world\nc len of deref  : 5\nd concat        : hello!\ne nested field  : world?')"
+	# …and the LVALUE twin of those siblings. The alias-name cast used as an
+	# ASSIGNMENT TARGET was the sixth and last copy of the postfix pointer walk,
+	# and the only one still behind on BOTH axes: no `[` in its token set (row b
+	# was `Expected: :=, but got: [`, while the same chain as an rvalue parsed),
+	# and no shape stamps on its `^` (row c stored at the wrong address, silently).
+	# Rows a/d/e/f are the depth-1 spellings lib/rtl actually uses — correct all
+	# along, and what hid the two above.
+	./$(COMPILER) test/test_cast_lvalue_suffix_siblings.pas $(TESTTMP)/test_cast_lv26
+	tools/expect_same.sh test_cast_lv26 "$$($(TESTTMP)/test_cast_lv26)" "$$(printf 'a field         : 55\nb field[i]      : 42\nc double deref  : 99\nd nested field  : 77\ne bare deref    : 8 9\nf pchar adapter : Jello')"
 	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
 	# leftover debug dump keyed on that exact name, printing the whole alias
 	# table to STDOUT before the pointer-alias fallback resolved it. The
@@ -5095,6 +5608,31 @@ test-core: $(COMPILER)
 	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare_float.pas $(TESTTMP)/test_socf_xt26
 	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_s326
 	cmp $(TESTTMP)/test_socf_xt26 $(TESTTMP)/test_socf_s326
+	# THE DATA SECTION MUST START ON AN 8-BYTE BOUNDARY, AND THIS IS THE ONLY
+	# EXECUTABLE PATH WHERE THE ASSERTION CAN FAIL.
+	#
+	# Every writer places data immediately after code, so the data base is
+	# whatever CodeLen happens to leave. Xtensa's l32i faults on a misaligned
+	# word (SIGBUS, signal 7); x86-64 and riscv32 absorb it. That cost 41
+	# windowed programs before AlignCodeForData landed in df98fea47.
+	#
+	# On a HOSTED image the boundary is also a PT_LOAD boundary (3b8d1039e), so
+	# it is page-aligned and 8 comes free — the invariant is real but cannot be
+	# observed to fail there. A bare ESP image has ONE RWX segment and skips the
+	# page pad entirely, so `AlignCodeForData` is the sole mechanism, and it is
+	# measurably doing work: this exact program emits 4 bytes MORE than `pinned`
+	# does on both ESP targets, because its unpadded code length is 4 mod 8.
+	# Before df98fea47 its data section started 4 bytes off a word boundary, on
+	# the architecture that faults on exactly that.
+	#
+	# Checked from the `ok:` line rather than with readelf because the data
+	# section is not a section header here: file offset = ELF32 ehdr + 2 phdrs
+	# (ESP_CODE_OFFSET32 = 116) + code, and the load base is 8-aligned, so this
+	# is the data VADDR's alignment. bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
+	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare_float.pas $(TESTTMP)/test_socf_align_xt > $(TESTTMP)/test_socf_align_xt.log
+	tools/expect_same.sh esp-bare-xtensa-data-align8 "$$(( ( $$(sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_xt.log) + 116 ) % 8 ))" "0"
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_align_rv > $(TESTTMP)/test_socf_align_rv.log
+	tools/expect_same.sh esp-bare-riscv32-data-align8 "$$(( ( $$(sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_rv.log) + 116 ) % 8 ))" "0"
 	./$(COMPILER) test/test_esp_bare_float.pas $(TESTTMP)/test_socf_oracle26
 	tools/expect_same.sh test_socf_oracle26 "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" "7|16|32|75|1234567|-32|65537|ESP BARE FLOAT OK|"
 	# ...and a float-free bare program must still pay NOTHING for it: the pull is
@@ -5201,6 +5739,75 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:21: error: undefined variable' \
 	   && test ! -e $(TESTTMP)/test_diagspec26 \
 	  || { echo "test_diag_in_specialized_body_names_the_template_file_fail: FAIL - rc=$$rc (want rc=1, line 21, in: test/units/ugenericbad.pas, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use:
+	@# the mode-Delphi rewrite matched a generic DECLARATION whose name was
+	@# already registered as a template and spliced `specialize` in front of it,
+	@# so a program redeclaring a generic it imports died at `Expected: =`. FPC
+	@# compiles that file, so it was valid Pascal we rejected.
+	@# The rewrite's ONLY observable is the token stream it edits, so asserting
+	@# the run output cannot tell a correct rewrite from one that injects in the
+	@# wrong place. PXXDBG=p.dgen must therefore show ZERO injections in front of
+	@# the TBox declaration -- and at least one in front of TPairU, which is a
+	@# genuine paramform use in the same file, so the zero cannot be satisfied by
+	@# a rewrite that stopped firing altogether. Both halves were confirmed by
+	@# disabling the guard: 2 injections and a failed parse.
+	./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26
+	test "$$($(TESTTMP)/test_genshadow26)" = "shadow 12 10"
+	@# A pointer type ALIAS must be the type it aliases. RegisterGeneralAlias
+	@# recorded `AliasElemTk := tk`, so every general pointer alias claimed a
+	@# tyPointer element regardless of target -- `= Pointer`, `= PChar` and
+	@# `= PRec` all collapsed to the same value, right only for `^Pointer` and
+	@# right there by coincidence. Three symptoms on the pinned v393 binary:
+	@# `p^.f` through the alias would not compile, `c[i]` through a PChar alias
+	@# printed 378951523 instead of `pxx` (silent), and a Pointer alias refused a
+	@# class instance -- the last POSITION-DEPENDENTLY (index 0 accepted, 1 and 2
+	@# rejected, cross-unit accepted), which is why it read as two bugs and why
+	@# the `atpos` arm exists. `ctrl ok` is the control: `^Pointer` genuinely has
+	@# a pointer element and must NOT move.
+	./$(COMPILER) -Futest/units test/test_pointer_alias_identity.pas $(TESTTMP)/test_ptraliasid26
+	tools/expect_same.sh test_ptraliasid26 "$$($(TESTTMP)/test_ptraliasid26 | tr '\n' '|')" "same 3101 3102|atpos 6233|cross 7411 7422 7433|deref 4177 9931 14108|pchar pxx|ctrl ok|"
+	@# The control that a blacklist-style guard needs and that its absence cost:
+	@# `const PC: ^specialize TCell<Integer> = Nil` is a USE whose group is
+	@# followed by `=` and preceded by `specialize`, not `:`. Guarding only the
+	@# `x: TFoo<I> = (...)` spelling suppresses the rewrite here and breaks every
+	@# typed const of this shape. Oracle: FPC prints the same line.
+	./$(COMPILER) test/test_generic_ptr_specialize_const.pas $(TESTTMP)/test_genptrspec26
+	test "$$($(TESTTMP)/test_genptrspec26)" = "ptrspec 7 1"
+	@# regression-test-pascal-conformance-shard0-6-2: the bound-name harvest took
+	@# a typed const's ARGUMENTS for a declaration's parameters. It only ever
+	@# records tkIdent, and the lexer gives ten spellings a dedicated kind, so
+	@# the failing set and the passing set are disjoint lists of names -- a test
+	@# written with the idiomatic `Integer` passes over the live defect. Hence
+	@# the width-specific integers and a user alias here. Per-name split (8 fail
+	@# / 7 pass before the fix) is recorded in the file header. Oracle: FPC.
+	./$(COMPILER) test/test_generic_bound_name_harvest.pas $(TESTTMP)/test_genboundharvest26
+	test "$$($(TESTTMP)/test_genboundharvest26)" = "boundharvest 45 A 10 1111111111"
+	@# A GENERIC class declared bodyless WITH a Delphi modifier (`class abstract;`,
+	@# `class sealed(TBase);`) was mis-parsed: the bodyless test in
+	@# ParseGenericTemplateNamed looked at the token after `class` without
+	@# skipping `abstract`/`sealed`, so it decided the declaration had a body and
+	@# the depth loop -- which has no `end` to find -- swallowed the following
+	@# declarations. Needs all three of generic + modifier + bodyless. Reported
+	@# the damage on an EARLIER, innocent line, which is why reductions aimed at
+	@# the reported line never reproduced. Per-form before/after split and the
+	@# FPC divergence on the fourth form are in the file header. Oracle: FPC.
+	./$(COMPILER) test/test_generic_bodiless_class_modifier.pas $(TESTTMP)/test_genbodiless26
+	test "$$($(TESTTMP)/test_genbodiless26)" = "bodiless 7 3 1"
+	@# GetPropInfo(AnObject, 'Caption') -- the spelling every FPC consumer uses --
+	@# bound typinfo's PClassRTTI arm and segfaulted, because the narrowing guard
+	@# read the parameter's pointee from Syms[Params[j].SymIdx] and that symbol is
+	@# gone by match time: SymRollbackTo hands a routine's indices back, so the
+	@# slot held the CALLER's own variable. tyUnknown is the untyped-pointer
+	@# sentinel, so the guard failed OPEN. Reads the durable ProcParamPtrElemTk
+	@# column now. Baseline 46abdaa0285e segfaults (exit 139, no output); do NOT
+	@# simplify this into a local overload pair -- those pass on the bug.
+	./$(COMPILER) -Fulib/rtl test/test_typinfo_instance_overload.pas $(TESTTMP)/test_typinfoovl26
+	test "$$($(TESTTMP)/test_typinfoovl26)" = "typinfo-overload hi"
+	@out=$$(PXXDBG=p.dgen ./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26 2>&1); \
+	 decl=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TBox'); \
+	 real=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TPairU'); \
+	 test "$$decl" = "0" && test "$$real" -ge "1" \
+	  || { echo "test_generic_shadow_decl: FAIL - injections before the TBox DECLARATION=$$decl (want 0); real paramform injections before TPairU=$$real (want >=1)"; printf '%s\n' "$$out"; exit 1; }
 	@# Every lowering-owned dialect refusal must survive an EARLIER recovered
 	@# diagnostic. `ErrCount > 0 -> Exit` at the top of CompileAST silently made
 	@# each of these unreachable in exactly the multi-error file they exist for.
@@ -5317,6 +5924,17 @@ test-core: $(COMPILER)
 	# scores 4 / 8 on this file.
 	./$(COMPILER) test/test_variant_local_array_zero_init.pas $(TESTTMP)/test_vararrzi26
 	tools/expect_same.sh test_vararrzi26 "$$($(TESTTMP)/test_vararrzi26 | tail -1)" "total ok 8 / 8"
+	# …and the THIRD arm of ManagedLocalZeroBytes to ship without asking IsArray,
+	# after interfaces and Variants. The promo-int arm said `not IsArray`, left in
+	# place when the Variant one was fixed because no reachable case could be
+	# constructed then. `promoint64` IS a spellable Pascal type name, so
+	# `array[0..3] of promoint64` is an ordinary local — and it was zeroed NOT AT
+	# ALL, while the cleanup arm still called PXXPromoClear on element 0. That
+	# routine releases the payload as a managed string when the tag reads
+	# PROMO_TAG_HEAP, so a dirty frame freed a block the slot never owned: the
+	# pre-fix compiler SEGFAULTS on this test.
+	./$(COMPILER) test/test_promoint_local_array_zero_init.pas $(TESTTMP)/test_promoarrzi26
+	tools/expect_same.sh test_promoarrzi26 "$$($(TESTTMP)/test_promoarrzi26 | tail -1)" "promoint-array-zero-init 6/6"
 	# A record holding an interface field, both halves of the same design fault:
 	# RecordHasManagedFields excluded a COM interface field because FINALIZING one
 	# under the non-reentrant record heap lock deadlocks -- and that single
@@ -5428,6 +6046,23 @@ test-core: $(COMPILER)
 	# RUNS, because "accepted" and "correct" are different claims.
 	./$(COMPILER) test/test_assign_compatible_types.pas $(TESTTMP)/test_asgok26
 	tools/expect_same.sh test_asgok26 "$$($(TESTTMP)/test_asgok26)" "compat 7 abc 7 0 2"
+	# A class that is its own ancestor through a CHAIN is refused, and the
+	# refusal REPORTS rather than spinning. This hung the compiler forever with
+	# no output, no exit and no error: ~72 sites step UClsParent across five
+	# files and none is bounded, so the guard goes on the four WRITE sites and
+	# the cycle simply never exists. THE TIMEOUT IS THE ASSERTION -- the failure
+	# emitted zero bytes, so there is nothing to grep; without the bound a
+	# regression hangs this suite instead of reporting it. Three classes, not
+	# one: a guard comparing only against the class being declared passes a
+	# self-check and still hangs here.
+	# bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard
+	! timeout 60 ./$(COMPILER) test/test_class_circular_inheritance_fail.pas $(TESTTMP)/test_clscyc26 > $(TESTTMP)/test_clscyc.log 2>&1
+	grep -q "circular inheritance" $(TESTTMP)/test_clscyc.log
+	# ...and the under-guard direction, which the negative above cannot see: an
+	# ordinary forward declaration reaches the SAME write site and must still
+	# compile and run. A whitelist fails in two directions.
+	./$(COMPILER) test/test_class_forward_decl_no_cycle.pas $(TESTTMP)/test_clsfwd26
+	tools/expect_same.sh test_clsfwd26 "$$($(TESTTMP)/test_clsfwd26)" "3 TRUE"
 	# `not` over every operand shape the deleted node-kind whitelist ever named,
 	# plus the ones it deliberately distrusted. The list grew one entry per bug
 	# report -- array element, field, deref, Ord(x), value-cast, nested not,
@@ -5843,6 +6478,165 @@ test-core: $(COMPILER)
 	# [Move; 256] move-list stand-in for the engine's ArrayVec<Move, 256>.
 	./$(COMPILER) test/test_rust_struct_array.rs $(TESTTMP)/test_rust_struct_array26
 	tools/expect_same.sh test_rust_struct_array26 "$$($(TESTTMP)/test_rust_struct_array26)" "$$(printf 'checksum 1202\nsq 30')"
+	# bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot: an array
+	# symbol landing on a slot last used by a by-value record PARAM inherited that
+	# param's RecName, and RIsSliceSym (guarded only by TypeKind = tyRecord, which
+	# an array-of-record HAS, since that field holds the ELEMENT kind) then read
+	# `cells` as a &[T] slice header. Pre-fix this was a PARSE ERROR at cells[0].id.
+	# The shape is load-bearing: two params, and the array as main's first local.
+	./$(COMPILER) test/test_rust_recname_recycled_slot.rs $(TESTTMP)/test_rust_recname26
+	tools/expect_same.sh test_rust_recname26 "$$($(TESTTMP)/test_rust_recname26)" "106 11"
+	# The SILENT face of the same bug, through the C frontend and diffable against
+	# gcc: _Generic resolved an array-of-A to `struct B`. gcc says other/other/3;
+	# pre-fix pxx said B/B/3 -- compiled clean, ran clean, printed a wrong answer.
+	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
+	tools/expect_same.sh test_c_recname26 "$$($(TESTTMP)/test_c_recname26)" "$$(printf 'other\nother\n3')"
+	# __has_include, and pdfgen's endian chain that depends on it. Undefined, the
+	# `#ifdef __has_include` guard skipped the <endian.h> probe, and the fallback
+	# below it compared two macros only endian.h defines -- 0 == 0, true -- so
+	# pdfgen selected BIG endian on x86-64, byte-swapped every 32-bit PNG header
+	# field, and failed to embed PNGs while compiling and running clean. The last
+	# line is the assertion that matters; the five before it are the operator.
+	# Every value here matches gcc on the same file, and all six differ pre-fix.
+	./$(COMPILER) test/chas_include.c $(TESTTMP)/chas_include26
+	tools/expect_same.sh chas_include26 "$$($(TESTTMP)/chas_include26)" "$$(printf 'ifdef 1\ndefined 1\nstdio 1\nbogus 0\nrel 1\nmacro 1 1 0 1\npdfgen little')"
+	# The one row where we diverge from gcc on purpose, in its own file so the
+	# one above stays gcc-compilable for tools/gcc_diff_probe.sh. gcc REJECTS a
+	# non-header-name operand; we answer 0. Asserted, not merely allowed:
+	# "answers 0", "errors" and "loops forever" are indistinguishable from a
+	# test that never runs it, and the operand goes through the macro expander.
+	./$(COMPILER) test/chas_include_lax.c $(TESTTMP)/chas_include_lax26
+	tools/expect_same.sh chas_include_lax26 "$$($(TESTTMP)/chas_include_lax26)" "$$(printf 'lax 0 0')"
+	# A `static` DEFINED in a header reached by `uses`. The header walk dropped
+	# the body, marked it external and synthesised a soname from the header's own
+	# stem, so calling it produced a DT_NEEDED on a lib<header>.so that cannot
+	# exist. THE PAIR IS THE INVARIANT: the same source text must behave the same
+	# whichever extension it is given, so both halves run and both print 4242/42.
+	# The soname assertion is a NEGATED grep -q, never `grep -qv` -- the latter
+	# passes whenever any line fails to match, i.e. on every ELF, i.e. it can
+	# never fail. Validated in both directions: the pre-fix compiler's binary has
+	# the soname and dies at load.
+	./$(COMPILER) -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body.pas $(TESTTMP)/hdrstatic_h26
+	tools/expect_same.sh hdrstatic_h26 "$$($(TESTTMP)/hdrstatic_h26)" "$$(printf '4242\n42')"
+	./$(COMPILER) -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_c.pas $(TESTTMP)/hdrstatic_c26
+	tools/expect_same.sh hdrstatic_c26 "$$($(TESTTMP)/hdrstatic_c26)" "$$(printf '4242\n42')"
+	@if readelf -d $(TESTTMP)/hdrstatic_h26 2>/dev/null | grep -q 'libhdrstatic\.so'; then \
+	  echo "FAIL: hdrstatic_h26 links a DT_NEEDED on libhdrstatic.so, which cannot exist"; exit 1; \
+	else echo "ok: hdrstatic_h26 has no invented libhdrstatic.so"; fi
+	# A C diagnostic names the MODULE it is in, and stays silent about the main
+	# source -- the Pascal `in:` line's C half. The pair is the invariant, and the
+	# SILENT half is the one that needs the test: the C answer is consulted only
+	# where the Pascal table is empty, so a fallback that fires one state too early
+	# is invisible to every Pascal row (they never reach it) and shows up only as a
+	# wrong path under an unrelated C error. Assert the module row by SHAPE
+	# (lib/crtl/src/*.c) rather than by which crtl module happens to define memchr.
+	@printf '#define memchr(a,b,c) = ;\n#include <string.h>\nint main(void) { char b[4]; return (int)strlen(b); }\n' > $(TESTTMP)/cdiag_mod.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cdiag_mod.c $(TESTTMP)/cdiag_mod26 2>&1); \
+	 echo "$$out" | grep -q '^  in: .*lib/crtl/src/.*\.c$$' \
+	  || { echo 'cdiag_module: FAIL - an error inside a pulled crtl module must name that module'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cdiag_module names the crtl module'
+	# ...and the main .c stays silent, INCLUDING after a crtl pull has marked a
+	# module range: the ranges return to the main source, and if they ever stop
+	# doing so this row goes red instead of the user being told their own file is
+	# somewhere else. Errors print on stdout, hence 2>&1 with no separate stderr.
+	@printf '#include <string.h>\nint main(void)\n{\n  char b[4];\n  int x = ;\n  strlen(b);\n  return x;\n}\n' > $(TESTTMP)/cdiag_main.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cdiag_main.c $(TESTTMP)/cdiag_main26 2>&1); \
+	 echo "$$out" | grep -q 'error: expected C expression' \
+	  || { echo 'cdiag_main: FAIL - expected the deliberate syntax error to be reported'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -q '^  in: ' \
+	  && { echo 'cdiag_main: FAIL - the MAIN .c must not be named; the user typed it'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cdiag_main leaves the main source unnamed'
+	# An unterminated C construct must stop at the end of the C text. There is one
+	# shared token array: the C program's tkEOF is DELETED when the pulled units
+	# are appended, so `while CurTok.Kind <> tkEOF` could not fire until the Pascal
+	# RTL had been parsed as C. `int main(void) { return 1;` reported
+	# `pascal26:2: expected C expression`, `in: ./compiler/builtin/builtinheap.pas`
+	# and a near: window reading `unit builtinheap` -- every part correct about a
+	# place the user has never seen. BOTH rows are real before/afters: the pinned
+	# compiler gives line 2 and the builtin path for each.
+	@printf 'int main(void) { return 1; \n' > $(TESTTMP)/cunterm.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cunterm.c $(TESTTMP)/cunterm26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:1: error: unterminated C construct' \
+	  || { echo 'cunterm: FAIL - expected an unterminated-construct error on the C source line 1'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -q '^  in: ' \
+	  && { echo 'cunterm: FAIL - the diagnostic must not name a Pascal unit'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cunterm stops at the end of the C text'
+	# ...and after a crtl pull, where the appended region is C (path "") and must
+	# still be walked, so the boundary cannot be "anything was appended".
+	@printf '#include <string.h>\nint main(void) { char b[4]; return (int)strlen(b);\n' > $(TESTTMP)/cunterm_pull.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cunterm_pull.c $(TESTTMP)/cunterm_pull26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:2: error: unterminated C construct' \
+	  || { echo 'cunterm_pull: FAIL - expected the error on C source line 2, after the crtl pull'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cunterm_pull stops at the end of the C text after a crtl pull'
+	# ...and the DECLARATION side, which used to consume the appended Pascal RTL
+	# and fail with `main function not found` at platform_backend.pas:1313. Both
+	# rows are real before/afters. The cause was not fourteen loops: the C
+	# stream's tkEOF was DELETED, because both appenders only keep it when the
+	# frontend has set MainProgramTokCount and the C branch never did.
+	@printf 'struct S { int a;\n' > $(TESTTMP)/cunterm_struct.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cunterm_struct.c $(TESTTMP)/cunterm_struct26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:1: error: unterminated C construct' \
+	  || { echo 'cunterm_struct: FAIL - an unterminated struct must say so, on its own line'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -qi 'builtinheap\|platform_backend\|\.pas' \
+	  && { echo 'cunterm_struct: FAIL - a C diagnostic must not mention a Pascal source'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cunterm_struct names the construct, not the RTL'
+	@printf 'enum E { A, B\n' > $(TESTTMP)/cunterm_enum.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cunterm_enum.c $(TESTTMP)/cunterm_enum26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:1: error: unterminated C construct' \
+	  || { echo 'cunterm_enum: FAIL - an unterminated enum must say so, on its own line'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cunterm_enum names the construct'
+	# A C program with no main is a C error and must be reported as one: this ran
+	# after both passes with the cursor past every appended unit, so it printed a
+	# `near:` window of Pascal RTL source under a message about a missing main.
+	@printf 'int nomain(void) { return 0; }\n' > $(TESTTMP)/cnomain.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cnomain.c $(TESTTMP)/cnomain26 2>&1); \
+	 echo "$$out" | grep -q 'main function not found' \
+	  || { echo 'cnomain: FAIL - expected the missing-main error'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -qi 'builtinheap\|unit \|\.pas' \
+	  && { echo 'cnomain: FAIL - the missing-main error must not quote Pascal RTL source'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cnomain reports a C error without a Pascal context window'
+	# A missing closing brace on a struct used to SWALLOW the function defined
+	# after it -- silently. `struct S { int a;` then `void f(void) { }` COMPILED
+	# CLEAN on the pinned compiler, with f simply absent; the only diagnostic came
+	# later and elsewhere, `call to undeclared function: f` at the call site,
+	# pointing away from the missing brace by however many lines the header is.
+	# gcc names the `{` that opens the body, and so do we now. The SECOND row is
+	# the one that keeps this honest: the member parser's leniency past a missing
+	# semicolon is what carries the odd system header, so only a BODY is refused.
+	@printf 'struct S { int a;\nvoid f(void) { }\n};\nint main(void){ return 0; }\n' > $(TESTTMP)/cmember_body.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cmember_body.c $(TESTTMP)/cmember_body26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:2: error: a struct member cannot have a body' \
+	  || { echo 'cmember_body: FAIL - a function definition after an unclosed struct must be refused at its own line'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cmember_body refuses the swallowed definition'
+	@printf 'struct S { int a; int (*fp)(void); int b, c; };\nstruct T { int x\n};\nint main(void){ struct S s; s.a = 1; return s.a - 1; }\n' > $(TESTTMP)/cmember_lenient.c
+	@./$(COMPILER) $(TESTTMP)/cmember_lenient.c $(TESTTMP)/cmember_lenient26
+	@$(TESTTMP)/cmember_lenient26 || { echo 'cmember_lenient: FAIL - a real fn-pointer member and a missing semicolon before the closing brace must both still compile and run'; exit 1; }
+	@echo 'ok: cmember_lenient keeps the leniency the refusal must not widen into'
+	# Include nesting: the depth limit must be REPORTED, never silently applied.
+	# The preprocessor has sixteen include buffers, dispatched by a hand-written
+	# `case depth of 0..15`; MAX_CPREP_INCLUDES said 128, so 16..127 fell through
+	# to a load that did nothing and to a CPIncludeLength that returned an
+	# UNASSIGNED function Result. The 17th nested header vanished with no
+	# diagnostic -- LEVEL16 came back 0 where gcc says 16 -- and whether you got
+	# that or a spurious not-found was not a property of the program.
+	# Both halves are asserted, and the first is the one that pins the limit:
+	# exactly 16 levels must still COMPILE and produce gcc's values.
+	@python3 -c "import os,sys; d=sys.argv[1]; os.makedirs(d,exist_ok=True); N=16; [open('%s/g%d.h'%(d,i),'w').write(('#include \"g%d.h\"\n'%(i+1) if i+1<N else '')+'#define GL%d %d\n'%(i,i)) for i in range(N)]; open(d+'/gmain.c','w').write('#include <stdio.h>\n#include \"g0.h\"\nint main(void){ printf(\"%d %d\\\\n\", GL0, GL15); return 0; }\n')" $(TESTTMP)/cnest16
+	./$(COMPILER) $(TESTTMP)/cnest16/gmain.c $(TESTTMP)/cnest16_26
+	tools/expect_same.sh cnest16_26 "$$($(TESTTMP)/cnest16_26)" "0 15"
+	# ...and one level past it is an ERROR naming the limit, not a dropped header.
+	@python3 -c "import os,sys; d=sys.argv[1]; os.makedirs(d,exist_ok=True); N=18; [open('%s/g%d.h'%(d,i),'w').write(('#include \"g%d.h\"\n'%(i+1) if i+1<N else '')+'#define GL%d %d\n'%(i,i)) for i in range(N)]; open(d+'/gmain.c','w').write('#include <stdio.h>\n#include \"g0.h\"\nint main(void){ printf(\"%d\\\\n\", GL17); return 0; }\n')" $(TESTTMP)/cnest18
+	@# `> file 2>&1`, not `2> file`: pxx prints diagnostics on STDOUT, so a
+	@# stderr-only capture is empty and the grep below fails for the wrong reason
+	@# -- which is how this recipe first went red against a working compiler.
+	@if ./$(COMPILER) $(TESTTMP)/cnest18/gmain.c $(TESTTMP)/cnest18_26 > $(TESTTMP)/cnest18.err 2>&1; then \
+	  echo "FAIL: 18-deep include nesting compiled clean; it must report the limit"; \
+	  echo "      (pre-fix this dropped the header and printed 0 for GL17)"; exit 1; \
+	elif grep -q 'C include nesting too deep' $(TESTTMP)/cnest18.err; then \
+	  echo "ok: 18-deep include nesting reports the limit"; \
+	else \
+	  echo "FAIL: 18-deep nesting failed, but not with the nesting diagnostic:"; \
+	  head -3 $(TESTTMP)/cnest18.err; exit 1; fi
 	# Rust chess FULL legality (feature-rust-corpus-chess): Move packed into one i64
 	# (from|to<<6|flags<<12) replaces the engine's Move struct + ArrayVec; EP, castling,
 	# promotion, underpromotion + check detection. Node counts match the reference perft
@@ -5998,6 +6792,48 @@ test-core: $(COMPILER)
 	# checkable, which is the whole point after two plausible-wrong-value bugs.
 	./$(COMPILER) test/test_rust_string.rs $(TESTTMP)/test_rust_string26
 	tools/expect_same.sh test_rust_string26 "$$($(TESTTMP)/test_rust_string26)" "$$(printf 'empty [] len 0 isempty true\ncat abcde len 5 isempty false\neq true ne false lit 3\nacc [uci: go] len 7\nsq a1 h8 d4\nuci e2e4\nhello, world!\nfmt i=42 n=-7 b=true s=mid c=x\ndegen [] [just text]\nchain 3 1234\nbig a1-h899 len 7')"
+	@echo '--- rust: derives, and enum values in expression position ---'
+	# derive(Copy)/derive(PartialEq) needed NOTHING -- assignment already
+	# copies a record and the shared compare already answers field-wise.
+	# What was missing was older: an enum variant could not appear in an
+	# expression at all, so `c == Color::White` was a parse error while
+	# `let c: Color = Color::White` worked. Aggregates have no expression
+	# form here, so a variant now materializes into a hoisted temp -- the
+	# same channel `?` uses. `arr`/`knights`/`nest` pin the places that
+	# hoist has to survive: an array literal, a loop body, a nested call.
+	# The `dbg`/`deep` lines are derive(Debug): before it, `{:?}` on a struct
+	# printed its FIRST FIELD -- a plausible wrong value in real output.
+	./$(COMPILER) test/test_rust_derive.rs $(TESTTMP)/test_rust_derive26
+	tools/expect_same.sh test_rust_derive26 "$$($(TESTTMP)/test_rust_derive26)" "$$(printf 'val 1 3 0\ntag 0 7\nflip 3 1\nclone 1 2 eq true ne false\narr 1 3 0\nknights 1\nnest 1\ndbg Pos { f: 1, r: 2 }\ndeep Line { a: Pos { f: 1, r: 2 }, b: Pos { f: 3, r: 4 }, w: 9 }\nscal 5 "hi" true '"'"'q'"'"'\nvia Pos { f: 1, r: 2 }')"
+	@echo '--- rust: impl Trait for Type, and fmt::Display rerouted ---'
+	# The trait-impl path had NEVER RUN: both parsers compared a tkFor token
+	# against the string 'for' via GetTokenStr, which is empty for a keyword,
+	# so `impl Trait for Type` was always read as `impl <Trait>`. Dead code
+	# that looked live; found by trying to extend it.
+	# Display is REROUTED, not dispatched: `fn fmt(&self, f) -> Result`
+	# registers as `fn fmt(&self) -> String` and write! appends to it. `tag`
+	# pins that several write!s accumulate rather than overwrite.
+	./$(COMPILER) test/test_rust_traits.rs $(TESTTMP)/test_rust_traits26
+	tools/expect_same.sh test_rust_traits26 "$$($(TESTTMP)/test_rust_traits26)" "$$(printf 'area 16 15\nmv 12-28\nts 12-28\nvia <12-28>\ntag [w=7]\ndbg Move { from: 12, to: 28 }')"
+	# ArrayVec-shaped fixed-capacity vector of structs. The rung is
+	# `[Name { .. }; N]` -- a repeat array whose element is a STRUCT literal --
+	# in both positions it can appear: a `let` initializer and a struct FIELD
+	# initializer. Rust's `[e; N]` on a Copy type evaluates e once and copies it
+	# N-1 times, and that is exactly the lowering: the literal fills slot 0 and
+	# every other slot is a whole-record copy. `tail` pins that the slots past
+	# `len` still hold the constructor's fill value.
+	./$(COMPILER) test/test_rust_movelist.rs $(TESTTMP)/test_rust_movelist26
+	tools/expect_same.sh test_rust_movelist26 "$$($(TESTTMP)/test_rust_movelist26)" "$$(printf 'a 7 8 1 7\nb 2 3\nfresh 0 -1 -1\npush 2 12 6 4\nswap 6 12\nfill 5 10 18 70\ntail -1 0\ntwo 5 1 10 1')"
+	# Borrowing an array as a &[T] slice in ARGUMENT position -- `f(&arr)` and
+	# `f(&arr[lo..hi])`, which previously fell through to the no-op `&` and
+	# handed the ARRAY's address to a callee expecting a __ptr/__len header
+	# (compiled clean, segfaulted). `bump 101 132` is the load-bearing line:
+	# the second call mutates through a RANGE borrow, so the view has to alias
+	# the caller's storage rather than copy it. `aref 9` pins the other half --
+	# `&v` for a `&[T; N]` param stays a bare address, which only the callee's
+	# own parameter can decide.
+	./$(COMPILER) test/test_rust_slice_borrow.rs $(TESTTMP)/test_rust_slice_borrow26
+	tools/expect_same.sh test_rust_slice_borrow26 "$$($(TESTTMP)/test_rust_slice_borrow26)" "$$(printf 'whole 63 1 6\nrange 7 56 3\nslot 16 1\nbound 14 14\nbump 101 132\naref 9\nrec 18 13')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
@@ -6582,6 +7418,40 @@ test-core: $(COMPILER)
 	# two units, same specialization, same alias name, neither using the other
 	./$(COMPILER) -Futest/generic_spec_units test/test_generic_spec_per_unit.pas $(TESTTMP)/test_generic_spec_per_unit26
 	tools/expect_same.sh test_generic_spec_per_unit26 "$$($(TESTTMP)/test_generic_spec_per_unit26 | tail -1)" "total ok 4 / 4"
+	# a mode-Delphi generic declared in a USED UNIT, specialized with the angle-bracket
+	# surface from the program and from a third unit (the desugar used to sweep only
+	# forward from the template, and the program is lexed BEFORE the unit)
+	./$(COMPILER) -Futest/delphi_generic_units test/test_delphi_generic_cross_unit.pas $(TESTTMP)/test_delphi_generic_cross_unit26
+	tools/expect_same.sh test_delphi_generic_cross_unit26 "$$($(TESTTMP)/test_delphi_generic_cross_unit26 | tail -1)" "total ok 4 / 4"
+	# the objfpc arm of the same defect: INLINE `specialize T<X>` in a non-binder
+	# position, cross-unit. The binder form always worked, which is what made this
+	# read as Delphi-only.
+	./$(COMPILER) -Futest/delphi_generic_units test/test_generic_cross_unit_inline_specialize.pas $(TESTTMP)/test_generic_xunit_inline26
+	tools/expect_same.sh test_generic_xunit_inline26 "$$($(TESTTMP)/test_generic_xunit_inline26 | tail -1)" "total ok 1 / 1"
+	# a generic argument that is the ENCLOSING template's parameter must not be
+	# minted as a concrete alias -- and a genuinely concrete one still must be
+	./$(COMPILER) test/test_generic_arg_is_enclosing_template_param.pas $(TESTTMP)/test_generic_encl_param26
+	tools/expect_same.sh test_generic_encl_param26 "$$($(TESTTMP)/test_generic_encl_param26 | tail -1)" "total ok 5 / 5"
+	# ...and the objfpc spelling of it, which goes through the same isParamForm test
+	./$(COMPILER) test/test_generic_arg_is_enclosing_template_param_objfpc.pas $(TESTTMP)/test_generic_encl_param_objfpc26
+	tools/expect_same.sh test_generic_encl_param_objfpc26 "$$($(TESTTMP)/test_generic_encl_param_objfpc26 | tail -1)" "total ok 1 / 1"
+	# a QUALIFIED type name as a generic argument: `specialize TBox<TOuter.TPair>`.
+	# An argument was modelled as exactly one token everywhere in the frontend and a
+	# qualified name is three, so the objfpc arm errored `Expected: >, but got: .`
+	# and the delphi arm silently failed to match the group at all. Both arms are
+	# wired because they reach the rewrite through different procedures.
+	# bug-p-a-qualified-type-name-cannot-be-a-generic-argument
+	./$(COMPILER) test/test_generic_qualified_arg.pas $(TESTTMP)/test_generic_qualified_arg26
+	tools/expect_same.sh test_generic_qualified_arg26 "$$($(TESTTMP)/test_generic_qualified_arg26 | tail -1)" "total ok 5 / 5"
+	./$(COMPILER) test/test_generic_qualified_arg_delphi.pas $(TESTTMP)/test_generic_qualified_arg_delphi26
+	tools/expect_same.sh test_generic_qualified_arg_delphi26 "$$($(TESTTMP)/test_generic_qualified_arg_delphi26 | tail -1)" "total ok 5 / 5"
+	# a nested type of the ENCLOSING template used as a generic argument:
+	# `specialize TEnum<TPair>` inside TDict, where TPair is TDict's own nested
+	# record. The nested type is hoisted to a top-level declaration and the in-body
+	# declaration becomes an ALIAS to it -- a copy would be a distinct type.
+	# bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument
+	./$(COMPILER) test/test_generic_nested_type_as_argument.pas $(TESTTMP)/test_generic_nested_type_as_argument26
+	tools/expect_same.sh test_generic_nested_type_as_argument26 "$$($(TESTTMP)/test_generic_nested_type_as_argument26 | tail -1)" "total ok 5 / 5"
 	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
 	./$(COMPILER) test/test_impl_static_and_pchar_index.pas $(TESTTMP)/test_impl_static_and_pchar_index26
 	tools/expect_same.sh test_impl_static_and_pchar_index26 "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" "total ok 5 / 5"
@@ -7038,6 +7908,19 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cstruct_layout_stress_b13426; tools/expect_same.sh cstruct_layout_stress_b13426-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_paren_index_b29.c $(TESTTMP)/csizeof_paren_index_b2926
 	$(TESTTMP)/csizeof_paren_index_b2926; tools/expect_same.sh csizeof_paren_index_b2926-rc "$$?" "42"
+	# ... and the same subscript on a MULTI-dim array, where one subscript peels
+	# ONE dimension. Both spellings, six ways of reaching the array, and the two
+	# idioms it cost: memcpy sized from the row, and sizeof(a)/sizeof(a[0]).
+	# bug-c-sizeof-a-partial-index-answers-the-element-not-the-row
+	./$(COMPILER) test/csizeof_partial_index_row.c $(TESTTMP)/csizeof_partial_index_row26
+	$(TESTTMP)/csizeof_partial_index_row26; tools/expect_same.sh csizeof_partial_index_row26-rc "$$?" "42"
+	# The same array reached through a STRUCT FIELD must decay exactly as the
+	# bare identifier does. Five of these SIGSEGV'd and `*a.s[1]` silently read
+	# four bytes of a char row; every line is paired with its already-correct
+	# global spelling, because the pairing is the invariant.
+	# refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs
+	./$(COMPILER) test/cderef_decay_through_a_field.c $(TESTTMP)/cderef_decay_through_a_field26
+	$(TESTTMP)/cderef_decay_through_a_field26; tools/expect_same.sh cderef_decay_through_a_field26-rc "$$?" "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c $(TESTTMP)/cmulti_decl_ptr_b3026
 	$(TESTTMP)/cmulti_decl_ptr_b3026; tools/expect_same.sh cmulti_decl_ptr_b3026-rc "$$?" "42"
 	./$(COMPILER) test/ccall_field_b31.c $(TESTTMP)/ccall_field_b3126
@@ -7142,6 +8025,13 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_environ_prefilled_b38026; tools/expect_same.sh c_environ_prefilled_b38026-rc "$$?" "42"
 	./$(COMPILER) test/cfield_2d_row_decay_b62.c $(TESTTMP)/cfield_2d_row_decay_b6226
 	$(TESTTMP)/cfield_2d_row_decay_b6226; tools/expect_same.sh cfield_2d_row_decay_b6226-rc "$$?" "42"
+	# A PARTIAL index of a multidim struct FIELD: both the row pointer's stride
+	# and the offset multiplier were wrong, silently, with nothing covering the
+	# shape. The bare-array spellings sit beside each field one in the output, and
+	# they were always right — which is what says these were defects.
+	# bug-c-a-struct-field-partial-index-uses-the-outer-row-stride
+	./$(COMPILER) test/cfield_partial_index_stride.c $(TESTTMP)/cfield_partial_index_stride26
+	tools/expect_same.sh cfield_partial_index_stride26 "$$($(TESTTMP)/cfield_partial_index_stride26)" "$$(printf 'f2 *(m[1]+1)=11  a2 *(m[1]+1)=11\nf2 *(m[2]+3)=23  a2 *(m[2]+3)=23\nf2 r[0]=10 r[1]=11\nf3 q[0]=120 q[3]=123  a3 q[0]=120 q[3]=123\nf3 p[0][0]=100 p[1][2]=112 full=123')"
 	./$(COMPILER) test/ctypedef_shadow_local_b151.c $(TESTTMP)/ctypedef_shadow_local_b15126
 	$(TESTTMP)/ctypedef_shadow_local_b15126; tools/expect_same.sh ctypedef_shadow_local_b15126-rc "$$?" "42"
 	./$(COMPILER) test/cinit_struct_designator_b152.c $(TESTTMP)/cinit_struct_designator_b15226
@@ -7516,6 +8406,12 @@ test-core: $(COMPILER)
 	$(TESTTMP)/carr2d_param_row_length26; tools/expect_same.sh carr2d_param_row_length26-rc "$$?" "42"
 	./$(COMPILER) test/carr2d_decay_stride.c $(TESTTMP)/carr2d_decay_stride26
 	$(TESTTMP)/carr2d_decay_stride26; tools/expect_same.sh carr2d_decay_stride26-rc "$$?" "42"
+	# The same decays with a `long long` element type, and through a struct
+	# FIELD -- the two axes IRNodePointerBase's tyInt64 whitelist did not reach.
+	# refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
+	# bug-c-a-multidim-array-field-decays-with-the-element-stride
+	./$(COMPILER) test/cll_array_pointer_base.c $(TESTTMP)/cll_array_pointer_base26
+	$(TESTTMP)/cll_array_pointer_base26; tools/expect_same.sh cll_array_pointer_base26-rc "$$?" "42"
 	# ...and the OTHER reading of the same tag. An AN_IDENT for `long long a[8]`
 	# carries tyInt64 -- its element kind -- and the pointer-base test bailed on
 	# tyInt64 outright, so a signed 64-bit array was never a pointer base: `a + 1`
@@ -7738,6 +8634,49 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_unitpath_posix26 "$$($(TESTTMP)/test_unitpath_posix26)" "posix"
 	./$(COMPILER) -Futest/unitpath/esp test/test_unitpath.pas $(TESTTMP)/test_unitpath_esp26
 	tools/expect_same.sh test_unitpath_esp26 "$$($(TESTTMP)/test_unitpath_esp26)" "esp"
+	# A `uses` binds a Pascal UNIT, whatever a C include root contains. `-I<dir>`
+	# adds a root for BOTH `#include` and `uses`, and the search took a `.h`
+	# from a root before ever reaching the RTL dir -- so `-Ilib/crtl/include`
+	# put math.h / netdb.h / strings.h in front of lib/rtl/math.pas and friends
+	# (png.h too, via the /usr/include/libpng16 that every gtk+-3.0 pkg-config
+	# emits). RUN, not just compiled: on the arm where the header DOES declare
+	# the symbol the build succeeds and the `uses` becomes a dynamic import, so
+	# the binary carries a DT_NEEDED on a lib<unit>.so that does not exist and
+	# dies at load. A compile-only row passes that arm.
+	#
+	# FLAG ORDER is why this needs four rows rather than two. PasUnitDirs is
+	# searched in flag order, so `-Fulib/rtl` BEFORE the include roots already
+	# masked the bug -- which is exactly how a survey of the same collision
+	# through gtk's include path came back negative. Rows 3 and 4 pin that the
+	# order no longer decides it.
+	#
+	# Values are FPC 3.2.2's for the same program.
+	# bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
+	./$(COMPILER) test/test_uses_beats_a_c_header_on_the_include_path.pas $(TESTTMP)/test_uses_vs_cinc26
+	tools/expect_same.sh test_uses_vs_cinc26 "$$($(TESTTMP)/test_uses_vs_cinc26)" "$$(printf '3\n4\n1024\nnetdb bound')"
+	./$(COMPILER) -Ilib/crtl/include test/test_uses_beats_a_c_header_on_the_include_path.pas $(TESTTMP)/test_uses_vs_cinc_I26
+	tools/expect_same.sh test_uses_vs_cinc_I26 "$$($(TESTTMP)/test_uses_vs_cinc_I26)" "$$($(TESTTMP)/test_uses_vs_cinc26)"
+	./$(COMPILER) -Ilib/crtl/include -Fulib/rtl test/test_uses_beats_a_c_header_on_the_include_path.pas $(TESTTMP)/test_uses_vs_cinc_IFu26
+	tools/expect_same.sh test_uses_vs_cinc_IFu26 "$$($(TESTTMP)/test_uses_vs_cinc_IFu26)" "$$($(TESTTMP)/test_uses_vs_cinc26)"
+	./$(COMPILER) -Fulib/rtl -Ilib/crtl/include test/test_uses_beats_a_c_header_on_the_include_path.pas $(TESTTMP)/test_uses_vs_cinc_FuI26
+	tools/expect_same.sh test_uses_vs_cinc_FuI26 "$$($(TESTTMP)/test_uses_vs_cinc_FuI26)" "$$($(TESTTMP)/test_uses_vs_cinc26)"
+	# ...and the OPPOSITE polarity, which the fix above broke once before it was
+	# right: a `-Fu`/`-I` search root's C header must still SHADOW the
+	# compiler-anchored one of the same name. Deferring C behind Pascal must not
+	# also defer it behind other C.
+	#
+	# There was no witness for this. -Futest/gtk3stock exists to shadow
+	# lib/pcl/gtk3_c.h and could not see the shadow being defeated, because both
+	# headers now include the installed GTK surface and produce byte-identical
+	# output; it took a `#error` poison probe to find. test/uses_shadow/math_ext.h
+	# declares abs and omits labs, so a program calling labs answers "which file
+	# did the uses resolve to" from outside — and the FAILING row is the one
+	# carrying the information. Confirmed against a rebuild of the broken first
+	# cut, where it wrongly compiles.
+	./$(COMPILER) test/test_uses_shadow_root_beats_the_rtl_header.pas $(TESTTMP)/test_uses_shadow26
+	tools/expect_same.sh test_uses_shadow26 "$$($(TESTTMP)/test_uses_shadow26)" "5"
+	! ./$(COMPILER) -Futest/uses_shadow test/test_uses_shadow_root_beats_the_rtl_header.pas $(TESTTMP)/test_uses_shadow_shad26 > $(TESTTMP)/test_uses_shadow_shad.log 2>&1
+	grep -q "undefined variable (labs)" $(TESTTMP)/test_uses_shadow_shad.log
 	./$(COMPILER) test/test_asm.pas $(TESTTMP)/test_asm26
 	$(TESTTMP)/test_asm26; tools/expect_same.sh test_asm26-rc "$$?" "42"
 	./$(COMPILER) test/test_asm_func.pas $(TESTTMP)/test_asm_func26
@@ -7945,6 +8884,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_math26 "$$($(TESTTMP)/test_math26)" "$$(printf '3.14159265\n1.41421356\n4.00000000\n1.50000000\n2.71828183\n1.00000000\n12.18249396\n0.69314718\n2.30258509\n1.00000000\n0.00000000\n0.84147098\n0.00000000\n1.00000000\n0.54030231\n0.78539816\n0.46364761\n1024.00000000\n1.41421356\n3.50000000\n1.00000000')"
 	./$(COMPILER) examples/sudoku/sudoku.pas $(TESTTMP)/test_sudoku26
 	tools/expect_same.sh test_sudoku26 "$$($(TESTTMP)/test_sudoku26)" "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
+	# One language rule -- both bounds evaluated BEFORE the control variable is
+	# assigned -- across all THREE lowerings that implement it: ir.inc's AN_FOR,
+	# the stackless generator state machine, and the stackful generator. Sits
+	# beside the generator tests because two of the three arms are generators,
+	# and the stackless one had the same defect as the IR arm.
+	./$(COMPILER) test/test_for_bounds_before_control_var.pas $(TESTTMP)/test_for_bounds26
+	$(TESTTMP)/test_for_bounds26 | diff -u test/test_for_bounds_before_control_var.expected -
 	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_stackless_gen26
 	tools/expect_same.sh test_stackless_gen26 "$$($(TESTTMP)/test_stackless_gen26)" "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 \n99 100 10 101 20 21 102 30 103 30 104 30 105 99 106 \n1 20 300 4 50 600 \n0:10:300 0:10:301 2:30:302 2:30:303 53:40:7 ')"
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_scheduler26
@@ -8060,6 +9006,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_local_tc26 "$$($(TESTTMP)/test_local_tc26)" "$$(printf '100\na\nb\nc\n42\n100')"
 	./$(COMPILER) test/test_typed_const_record.pas $(TESTTMP)/test_tc_record26
 	tools/expect_same.sh test_tc_record26 "$$($(TESTTMP)/test_tc_record26)" "$$(printf '7\n10 Z 20\n300\n300')"
+	# Pascal is case-insensitive: a forward decl and a differently-cased body are
+	# ONE routine. Sits beside the typed-const tests because the shape that
+	# survived to LINK is `@Bar` captured in a typed const.
+	./$(COMPILER) test/test_forward_decl_case_insensitive.pas $(TESTTMP)/test_fwd_case26
+	$(TESTTMP)/test_fwd_case26 | diff -u test/test_forward_decl_case_insensitive.expected -
 	./$(COMPILER) test/test_multidim_const_array.pas $(TESTTMP)/test_md_const26
 	tools/expect_same.sh test_md_const26 "$$($(TESTTMP)/test_md_const26)" "$$(printf '1 2 3 4\n10 30 40 60\n1 4 5 8\n7 8 9 10\n7 8 9 10')"
 	./$(COMPILER) test/test_const_set.pas $(TESTTMP)/test_const_set26
@@ -8120,6 +9071,20 @@ test-core: $(COMPILER)
 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/oanl.time | grep -oE '[0-9]+$$'); \
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 10000 ]; then echo "open-array temp leak regressed: RSS $${rss}KB (>10MB over 2M calls)"; exit 1; else echo "open-array-no-leak: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; open-array RSS leak guard skipped"; fi
+	# …and the CONSTRUCTOR twin of that leak. `Take([...])` built a heap dyn-array
+	# temp per call and re-nil'd the handle slot on the next call, orphaning the
+	# block AND every managed element the block owned. Row 3's element is 128
+	# chars because the element half of the leak is PROPORTIONAL TO STRING LENGTH:
+	# a fix that released the block and not the elements halves every short-literal
+	# row and still leaks, so a probe built only from 'x' cannot see it.
+	# Pre-fix 367 MB over these 4M calls; post-fix 392 KB.
+	./$(COMPILER) test/test_array_ctor_no_leak.pas $(TESTTMP)/test_array_ctor_no_leak26
+	tools/expect_same.sh test_array_ctor_no_leak26 "$$($(TESTTMP)/test_array_ctor_no_leak26)" "ok 4000000"
+	@if [ -x /usr/bin/time ]; then \
+	  /usr/bin/time -v $(TESTTMP)/test_array_ctor_no_leak26 2>$(TESTTMP)/acnl.time >/dev/null; \
+	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/acnl.time | grep -oE '[0-9]+$$'); \
+	  if [ -n "$$rss" ] && [ "$$rss" -gt 10000 ]; then echo "array-ctor temp leak regressed: RSS $${rss}KB (>10MB over 4M calls)"; exit 1; else echo "array-ctor-no-leak: OK (RSS $${rss}KB)"; fi; \
+	else echo "/usr/bin/time absent; array-ctor RSS leak guard skipped"; fi
 	./$(COMPILER) test/test_big_static_array_open_param.pas $(TESTTMP)/test_big_static_array_open_param26
 	tools/expect_same.sh test_big_static_array_open_param26 "$$($(TESTTMP)/test_big_static_array_open_param26)" "$$(printf 'small const sum: 6\nsmall var: 0 1 2\nbig const sum (zeros): 0\nbig var writeback correct: TRUE\nbig const sum (filled): 267386880\nleak-loop total: 13369344000')"
 	./$(COMPILER) --debug test/test_big_static_array_open_param.pas $(TESTTMP)/test_big_static_array_open_param_dbg26 > $(TESTTMP)/big_static_open_array.log 2>&1
@@ -8388,6 +9353,20 @@ test-core: $(COMPILER)
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-copy-and-addref"
+	# ...and the same refusal for a GLOBAL array, which WrapMainBodyManagementOps
+	# reaches through a separate call. Added with the fix for
+	# regression-test-core-test-mgmt-operators: the local row above had been
+	# passing FOR THE WRONG REASON — the guard read RecName, which is meaningless
+	# for an array symbol (its record id is ElemRecName), and only ever held the
+	# right value because slots are recycled and the stale one happened to fit.
+	# 4a3c88532 cleared that field and every arm went silent at once. A row that
+	# only asserts "refused" cannot tell a correct guard from a lucky one; two
+	# rows that fail together, across the local and global paths, can.
+	if ./$(COMPILER) test/test_mgmt_operators_global_array_refused.pas $(TESTTMP)/test_mgmt_op_garr26 >/dev/null 2>&1; then \
+	  echo "FAIL: a global array of a managed record compiled"; exit 1; \
+	fi
+	./$(COMPILER) test/test_mgmt_operators_global_array_refused.pas $(TESTTMP)/test_mgmt_op_garr26 2>&1 \
+	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
 	tools/expect_same.sh test_promoint_function_result26 "$$($(TESTTMP)/test_promoint_function_result26)" "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas $(TESTTMP)/test_promoint_parameter_32bit26
@@ -9285,11 +10264,22 @@ test-core: $(COMPILER)
 	grep -q "metaclass type mismatch: TOther is not TBase" $(TESTTMP)/test_metaclass_descendant_error.log
 	! ./$(COMPILER) test/test_metaclass_narrowing_error.pas $(TESTTMP)/test_metaclass_narrowing_error26 > $(TESTTMP)/test_metaclass_narrowing_error.log 2>&1
 	grep -q "metaclass type mismatch: TBase is not TChild" $(TESTTMP)/test_metaclass_narrowing_error.log
-	# object: rooted object-reference type (any instance; cast to touch members)
+	# TObject/TClass as the rooted reference -- what `object` used to mean here until
+	# bug-p-object-value-types-standard-meaning gave the keyword back its real one
 	./$(COMPILER) test/test_object_reference.pas $(TESTTMP)/test_object_reference26
 	tools/expect_same.sh test_object_reference26 "$$($(TESTTMP)/test_object_reference26 | tail -1)" "OK"
 	! ./$(COMPILER) test/test_object_reference_error.pas $(TESTTMP)/test_object_reference_error26 > $(TESTTMP)/test_object_reference_error.log 2>&1
 	grep -q "member access on a bare object reference" $(TESTTMP)/test_object_reference_error.log
+	# object: the STANDARD Pascal old-style object type -- a value type with methods
+	./$(COMPILER) test/test_object_value_type.pas $(TESTTMP)/test_object_value_type26
+	tools/expect_same.sh test_object_value_type26 "$$($(TESTTMP)/test_object_value_type26 | tail -1)" "OK"
+	# ...and the three things it deliberately refuses, loudly (no VMT to hang them on)
+	! ./$(COMPILER) test/test_object_value_ancestor_error.pas $(TESTTMP)/test_object_value_ancestor_error26 > $(TESTTMP)/test_object_value_ancestor_error.log 2>&1
+	grep -q "an object type cannot have an ancestor" $(TESTTMP)/test_object_value_ancestor_error.log
+	! ./$(COMPILER) test/test_object_value_virtual_error.pas $(TESTTMP)/test_object_value_virtual_error26 > $(TESTTMP)/test_object_value_virtual_error.log 2>&1
+	grep -q "an object type cannot have a virtual method" $(TESTTMP)/test_object_value_virtual_error.log
+	! ./$(COMPILER) test/test_object_value_constructor_error.pas $(TESTTMP)/test_object_value_constructor_error26 > $(TESTTMP)/test_object_value_constructor_error.log 2>&1
+	grep -q "an object type cannot have a constructor" $(TESTTMP)/test_object_value_constructor_error.log
 	./$(COMPILER) test/test_case_insensitive.pas $(TESTTMP)/test_case_insensitive26
 	tools/expect_same.sh test_case_insensitive26 "$$($(TESTTMP)/test_case_insensitive26)" "42"
 	./$(COMPILER) test/test_case_sensitive.pas $(TESTTMP)/test_case_sensitive26
@@ -9515,6 +10505,129 @@ test-core: $(COMPILER)
 	# everything passes a sign+verify test and fails these.
 	./$(COMPILER) -Fulib/rtl test/test_ecdsa_sign.pas $(TESTTMP)/sweep_ecdsa26
 	tools/expect_same.sh sweep_ecdsa26 "$$($(TESTTMP)/sweep_ecdsa26)" "$$(printf 'keygen=1 sign+verify=1 reject: msg=1 sig=1 key=1\nECDSA SIGN OK')"
+	# --- chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring
+	# Eleven subjects that no build rule referenced. Nine are the ticket's list;
+	# the two extra o3_* probes landed the DAY AFTER that list was taken, which
+	# is the ticket's own argument in miniature -- the orphan population grows
+	# faster than it drains, so twenty-one was a snapshot and never a census.
+	# tools/test_wiring_gate_devtest.py is what turns it into one -- it runs
+	# tools/check_test_wiring.py and fails, and `tools-devtest` collects it
+	# into testmgr's quick and limited tiers. This line used to say "the
+	# check_test_wiring gate below", and there was no gate below it or
+	# anywhere; three more subjects accumulated behind that sentence.
+	#
+	# EVERY expectation here is an oracle, not a recording. Eight of the eleven
+	# were compiled and run under FPC 3.2.2 (-Mobjfpc) and match byte for byte;
+	# the two softfloat files check themselves against the HARDWARE IEEE unit;
+	# the one file with no oracle says so on its own row. That distinction is
+	# load-bearing here rather than pedantic: none of the eleven had ever run in
+	# a rule, so "it passes today" was never evidence of anything, and two of
+	# them SHIPPED AS THE REGRESSION TEST FOR THEIR OWN FIX (042bcbb32,
+	# 7ee75329e) -- transcribing today's output would have pinned whatever the
+	# fix happened to leave behind, including a bug.
+	./$(COMPILER) test/test_class_arg_to_pointer_param_boundary.pas $(TESTTMP)/sweep_clsptr26
+	tools/expect_same.sh sweep_clsptr26 "$$($(TESTTMP)/sweep_clsptr26)" "$$(printf '11\n22\n11\n22\n-1\n-1\n-2\n-1')"
+	# Was SIGSEGV at the v389 pin and passes at HEAD. A wired rule would have
+	# caught that segfault; nothing ran it, so nothing did.
+	./$(COMPILER) test/test_class_method_to_method_pointer.pas $(TESTTMP)/sweep_clsmeth26
+	tools/expect_same.sh sweep_clsmeth26 "$$($(TESTTMP)/sweep_clsmeth26)" "$$(printf '15\nTRUE\n35\nTRUE\n10\n500\nTRUE')"
+	./$(COMPILER) test/test_generic_delphi_method_header_binds_to_the_generic.pas $(TESTTMP)/sweep_gendelphi26
+	tools/expect_same.sh sweep_gendelphi26 "$$($(TESTTMP)/sweep_gendelphi26)" "$$(printf '100\n100\n10\n10\n7\n2\n4')"
+	./$(COMPILER) test/test_generic_nested_type_field_name.pas $(TESTTMP)/sweep_gennestfld26
+	tools/expect_same.sh sweep_gennestfld26 "$$($(TESTTMP)/sweep_gennestfld26)" "$$(printf '2 one 2\n1 x')"
+	./$(COMPILER) test/test_generic_nested_type_identity.pas $(TESTTMP)/sweep_gennestid26
+	tools/expect_same.sh sweep_gennestid26 "$$($(TESTTMP)/sweep_gennestid26)" "$$(printf '2 one\n1 7\n1 10')"
+	# The ONE row here with no external oracle: the trampoline ABI proof reaches
+	# pxx's own RTTI (GetInstanceRTTI / GetMethInfoByName), which FPC has no
+	# equivalent of, so it cannot be compiled there at all. The values below are
+	# the AUTHOR's, transcribed from the trailing comments on the file's own
+	# writeln lines ({ 32 } { 10 } { 4.00 } { 2.50 }) -- not our output recorded.
+	./$(COMPILER) test/test_pyexec_trampoline_abi.pas $(TESTTMP)/sweep_pyexectr26
+	tools/expect_same.sh sweep_pyexectr26 "$$($(TESTTMP)/sweep_pyexectr26)" "$$(printf 'pop1=32\npop2=10\nfpop1=4.00\nfpop2=2.50\nDONE')"
+	# The soft-float kernels are checked against x86-64's HARDWARE binary64/32,
+	# which is an exact oracle, by the files themselves over a 21x21 encoding
+	# grid plus 200k randomized normals. Asserting the whole counter block and
+	# not just `RESULT: PASS` is deliberate: the single-precision file TOLERATES
+	# 1-ulp division and subnormal flushes, so PASS can coexist with a nonzero
+	# tolerated count and would hide a drift into it.
+	./$(COMPILER) test/test_softfloat_double.pas $(TESTTMP)/sweep_sfdouble26
+	tools/expect_same.sh sweep_sfdouble26 "$$($(TESTTMP)/sweep_sfdouble26 | tail -6)" "$$(printf 'add fails : 0\nsub fails : 0\nmul fails : 0\ndiv fails : 0\ncmp fails : 0\nRESULT: PASS')"
+	./$(COMPILER) test/test_softfloat_single.pas $(TESTTMP)/sweep_sfsingle26
+	tools/expect_same.sh sweep_sfsingle26 "$$($(TESTTMP)/sweep_sfsingle26 | tail -7)" "$$(printf 'add fails : 0\nsub fails : 0\nmul fails : 0\ndiv fails : 0   (1-ulp tolerated: 0)\ncmp fails : 0\nsubnormal flushes (tolerated): 0\nRESULT: PASS')"
+	# The three -O3 residency probes. Each header states the same contract --
+	# "run at -O0/-O1/-O2/-O3, all four must agree" -- so the cross-O rows are
+	# the files' own assertion, and the value row is what stops a differential
+	# from comparing a wrong answer to the same wrong answer.
+	./$(COMPILER) test/test_o3_resident_inplace.pas $(TESTTMP)/sweep_o3inplace_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_o3_resident_inplace.pas $(TESTTMP)/sweep_o3inplace_O3 >/dev/null
+	tools/expect_same.sh sweep_o3inplace_cross "$$($(TESTTMP)/sweep_o3inplace_O0)" "$$($(TESTTMP)/sweep_o3inplace_O3)"
+	# Ten of these eleven rows are FPC 3.2.2's byte for byte. The eleventh is
+	# `Q ovf=`, and the difference is a decided dialect rule, not a defect: the
+	# procedure is wrapped in {$Q+} and adds 100000000 to a LongInt forty times.
+	# pxx evaluates LongInt+LongInt in 32 bits, so {$Q+} sees the overflow and
+	# raises. FPC widens the operands to Int64 first, so no overflow OCCURS and
+	# neither {$Q+} nor -Co fires -- only -Cr does, on the narrowing store back.
+	# Both STORE the same -294967296; only the check differs. (Verified against
+	# a reduced probe under both compilers, 2026-08-29.)
+	tools/expect_same.sh sweep_o3inplace_O3 "$$($(TESTTMP)/sweep_o3inplace_O3)" "$$(printf 'W b=14 sb=-116 w=1464 sw=-31536\nW c=1704 l=-2147482296 q=60 i=-140\nA a=5479449\nS s=1073741824 u=30\nQ ovf=TRUE n<>0=TRUE\nT t=50268\nB g=5055\nP p=2607 r=103\nR sum=285\nU a=20100 b=16077\nO q=1282')"
+	./$(COMPILER) test/test_o3_float_resident.pas $(TESTTMP)/sweep_o3float_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_o3_float_resident.pas $(TESTTMP)/sweep_o3float_O3 >/dev/null
+	tools/expect_same.sh sweep_o3float_cross "$$($(TESTTMP)/sweep_o3float_O0)" "$$($(TESTTMP)/sweep_o3float_O3)"
+	tools/expect_same.sh sweep_o3float_O3 "$$($(TESTTMP)/sweep_o3float_O3)" "$$(printf 'REC zr=0.000000 zi=0.000000 acc=1164.365466\nVAL p=1.964708 q=1.051681\nINT a=1.221281 b=0.443004\nIND a=1.221281 b=0.443004\nMTH a=3.000000 b=280.109344\nEXC a=2.596289\nREF d=2.698505\nNAR s=1.2213 e=1.221281\nGLB g=1.349555')"
+	./$(COMPILER) test/test_o3_resident_exc.pas $(TESTTMP)/sweep_o3exc_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_o3_resident_exc.pas $(TESTTMP)/sweep_o3exc_O3 >/dev/null
+	tools/expect_same.sh sweep_o3exc_cross "$$($(TESTTMP)/sweep_o3exc_O0)" "$$($(TESTTMP)/sweep_o3exc_O3)"
+	tools/expect_same.sh sweep_o3exc_O3 "$$($(TESTTMP)/sweep_o3exc_O3)" "$$(printf 'OUT i=200 acc=20100 seen=9453\nIN  i=200 acc=20100 seen=9453\nMIX i=300 ins=900 out=600 a=633 b=422\nNEST i=120 x=1120 y=1077\nFIN i=90 x=10090 n=90\nPAR i=150 p=1150 seen=1099\nTHR i=60 acc=1830 seen=861')"
+	# The twelve pyeval drivers, wired after
+	# bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed made
+	# them pass again. They cover the host-call ABI, the reflection trampoline
+	# shapes and Variant marshalling -- material the .npy path cannot reach from
+	# Pascal, which is why they were repaired rather than deleted.
+	#
+	# Each one already refuses its own failure: a mismatched Check prints FAIL
+	# and Halt(1)s, so the run line alone asserts the exit code. What the
+	# assertion adds is the `ok` COUNT, and that is the half that matters here.
+	# `ALL PASS` is printed by `if fails = 0`, which is also what a driver that
+	# stopped running cases prints -- a corpus that silently shrinks to zero
+	# assertions passes every check these files make about themselves. The count
+	# is the only thing that can tell the two apart, and these twelve spent
+	# months in exactly the state where nobody would have noticed.
+	./$(COMPILER) test/test_pyeval_bignum.pas $(TESTTMP)/sweep_pyeval_bignum
+	$(TESTTMP)/sweep_pyeval_bignum > $(TESTTMP)/sweep_pyeval_bignum.log
+	tools/expect_same.sh sweep_pyeval_bignum "$$(tail -1 $(TESTTMP)/sweep_pyeval_bignum.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_bignum.log)" "ALL PASS 6"
+	./$(COMPILER) test/test_pyeval_compound.pas $(TESTTMP)/sweep_pyeval_compound
+	$(TESTTMP)/sweep_pyeval_compound > $(TESTTMP)/sweep_pyeval_compound.log
+	tools/expect_same.sh sweep_pyeval_compound "$$(tail -1 $(TESTTMP)/sweep_pyeval_compound.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_compound.log)" "ALL PASS 10"
+	./$(COMPILER) test/test_pyeval_def.pas $(TESTTMP)/sweep_pyeval_def
+	$(TESTTMP)/sweep_pyeval_def > $(TESTTMP)/sweep_pyeval_def.log
+	tools/expect_same.sh sweep_pyeval_def "$$(tail -1 $(TESTTMP)/sweep_pyeval_def.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_def.log)" "ALL PASS 7"
+	./$(COMPILER) test/test_pyeval_fstring.pas $(TESTTMP)/sweep_pyeval_fstring
+	$(TESTTMP)/sweep_pyeval_fstring > $(TESTTMP)/sweep_pyeval_fstring.log
+	tools/expect_same.sh sweep_pyeval_fstring "$$(tail -1 $(TESTTMP)/sweep_pyeval_fstring.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_fstring.log)" "ALL PASS 7"
+	./$(COMPILER) test/test_pyeval_is_in.pas $(TESTTMP)/sweep_pyeval_is_in
+	$(TESTTMP)/sweep_pyeval_is_in > $(TESTTMP)/sweep_pyeval_is_in.log
+	tools/expect_same.sh sweep_pyeval_is_in "$$(tail -1 $(TESTTMP)/sweep_pyeval_is_in.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_is_in.log)" "ALL PASS 7"
+	./$(COMPILER) test/test_pyeval_isinstance_del_dict.pas $(TESTTMP)/sweep_pyeval_isinstance_del_dict
+	$(TESTTMP)/sweep_pyeval_isinstance_del_dict > $(TESTTMP)/sweep_pyeval_isinstance_del_dict.log
+	tools/expect_same.sh sweep_pyeval_isinstance_del_dict "$$(tail -1 $(TESTTMP)/sweep_pyeval_isinstance_del_dict.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_isinstance_del_dict.log)" "ALL PASS 11"
+	./$(COMPILER) test/test_pyeval_m1.pas $(TESTTMP)/sweep_pyeval_m1
+	$(TESTTMP)/sweep_pyeval_m1 > $(TESTTMP)/sweep_pyeval_m1.log
+	tools/expect_same.sh sweep_pyeval_m1 "$$(tail -1 $(TESTTMP)/sweep_pyeval_m1.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_m1.log)" "ALL PASS 23"
+	./$(COMPILER) test/test_pyeval_m2.pas $(TESTTMP)/sweep_pyeval_m2
+	$(TESTTMP)/sweep_pyeval_m2 > $(TESTTMP)/sweep_pyeval_m2.log
+	tools/expect_same.sh sweep_pyeval_m2 "$$(tail -1 $(TESTTMP)/sweep_pyeval_m2.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_m2.log)" "ALL PASS 18"
+	./$(COMPILER) test/test_pyeval_m3.pas $(TESTTMP)/sweep_pyeval_m3
+	$(TESTTMP)/sweep_pyeval_m3 > $(TESTTMP)/sweep_pyeval_m3.log
+	tools/expect_same.sh sweep_pyeval_m3 "$$(tail -1 $(TESTTMP)/sweep_pyeval_m3.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_m3.log)" "ALL PASS 6"
+	./$(COMPILER) test/test_pyeval_memory_bytes.pas $(TESTTMP)/sweep_pyeval_memory_bytes
+	$(TESTTMP)/sweep_pyeval_memory_bytes > $(TESTTMP)/sweep_pyeval_memory_bytes.log
+	tools/expect_same.sh sweep_pyeval_memory_bytes "$$(tail -1 $(TESTTMP)/sweep_pyeval_memory_bytes.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_memory_bytes.log)" "ALL PASS 2"
+	./$(COMPILER) test/test_pyeval_slice.pas $(TESTTMP)/sweep_pyeval_slice
+	$(TESTTMP)/sweep_pyeval_slice > $(TESTTMP)/sweep_pyeval_slice.log
+	tools/expect_same.sh sweep_pyeval_slice "$$(tail -1 $(TESTTMP)/sweep_pyeval_slice.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_slice.log)" "ALL PASS 6"
+	./$(COMPILER) test/test_pyeval_trampoline_shapes.pas $(TESTTMP)/sweep_pyeval_trampoline_shapes
+	$(TESTTMP)/sweep_pyeval_trampoline_shapes > $(TESTTMP)/sweep_pyeval_trampoline_shapes.log
+	tools/expect_same.sh sweep_pyeval_trampoline_shapes "$$(tail -1 $(TESTTMP)/sweep_pyeval_trampoline_shapes.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_trampoline_shapes.log)" "ALL PASS 5"
 	./$(COMPILER) test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives26
 	tools/expect_same.sh test_pascal_directives26 "$$($(TESTTMP)/test_pascal_directives26)" "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_comment_directive.pas $(TESTTMP)/test_comment_directive26
@@ -9599,6 +10712,24 @@ test-core: $(COMPILER)
 	xvfb-run -a $(TESTTMP)/test_c_gtk_types26
 	./$(COMPILER) test/test_c_gtk_window.pas $(TESTTMP)/test_c_gtk_window26
 	xvfb-run -a $(TESTTMP)/test_c_gtk_window26
+	# The same program against the STOCK GTK3 headers instead of a curated
+	# binding: -Futest/gtk3stock shadows lib/pcl/gtk3_c.h with a header that just
+	# includes <gtk/gtk.h>. The -I is load-bearing and is the part still missing
+	# from the defaults -- gtk-2.0 is a system include root and gtk-3.0 is not,
+	# and both answer to `#include <gtk/gtk.h>`, so the root that comes first
+	# decides the GTK version for everyone. Which one that should be is
+	# decide-which-gtk-a-bare-gtk-gtk-h-means.
+	./$(COMPILER) -Futest/gtk3stock -I/usr/include/gtk-3.0/ test/test_c_gtk3_stock.pas $(TESTTMP)/test_c_gtk3_stock26
+	# Asserts the LINK, and only the link. This line was commented as asserting
+	# the VERSION; it does not and structurally cannot -- CHeaderStem maps the
+	# gtk3_c stem to gtk-3, so libgtk-3.so.0 is in DT_NEEDED whatever -I was in
+	# effect, and building this test with the -I removed (GTK2 headers) still
+	# satisfies the grep. Measured, not reasoned. The version is now asserted
+	# where it is visible, in test/gtk3stock/gtk3_c.h itself, which is why the
+	# -I above is load-bearing rather than merely conventional. Keep this line:
+	# a correct link is still worth checking, it is just a different claim.
+	readelf -d $(TESTTMP)/test_c_gtk3_stock26 | grep -q 'libgtk-3.so.0'
+	tools/expect_same.sh test_c_gtk3_stock26 "$$(xvfb-run -a $(TESTTMP)/test_c_gtk3_stock26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
 	./$(COMPILER) test/test_c_header_case_sensitive_import.pas $(TESTTMP)/test_c_header_case_sensitive_import26
 	tools/expect_same.sh test_c_header_case_sensitive_import26 "$$($(TESTTMP)/test_c_header_case_sensitive_import26)" "77"
 	# A C translation unit reached ONLY through a Pascal unit's uses clause: the
@@ -9697,6 +10828,11 @@ test-core: $(COMPILER)
 	# the META word: the ASCII flag, and the reserved low-32 budget
 	./$(COMPILER) test/test_managed_block_meta.pas $(TESTTMP)/test_managed_block_meta26
 	tools/expect_same.sh test_managed_block_meta26 "$$($(TESTTMP)/test_managed_block_meta26)" "managed block meta ok"
+	# a cast through a user type ALIAS narrows exactly as the builtin spelling
+	# does. The .expected file is FPC 3.2.2's own output, not a transcript of
+	# what pxx prints (bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate).
+	./$(COMPILER) test/test_pascal_type_alias_cast.pas $(TESTTMP)/test_pascal_type_alias_cast26
+	tools/expect_same.sh test_pascal_type_alias_cast26 "$$($(TESTTMP)/test_pascal_type_alias_cast26)" "$$(cat test/test_pascal_type_alias_cast.expected)"
 	# UCS4Char: FPC-parity type surface, plus the UTF-8 conversion (a pxx extension)
 	./$(COMPILER) test/test_ucs4char.pas $(TESTTMP)/test_ucs4char26
 	tools/expect_same.sh test_ucs4char26 "$$($(TESTTMP)/test_ucs4char26)" "ucs4char ok"
@@ -9901,7 +11037,7 @@ test-core: $(COMPILER)
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy $(TESTTMP)/test_nilpy_itercur26
-	tools/expect_same.sh test_nilpy_itercur26.2 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y')"
+	tools/expect_same.sh test_nilpy_itercur26.2 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y\n[1, 2, 3]\n[1, 2, 3]\n7\n[8]')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy $(TESTTMP)/test_nilpy_sortpairs26
 	tools/expect_same.sh test_nilpy_sortpairs26.2 "$$($(TESTTMP)/test_nilpy_sortpairs26)" "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins
@@ -11920,11 +13056,34 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_str_length_index.pas $(TESTTMP)/test_rv32x_str_li
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_str_length_index.pas $(TESTTMP)/test_rv32x_str_li_x64
 	tools/expect_same.sh riscv32/test_rv32x_str_li "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_str_li)" "$$($(TESTTMP)/test_rv32x_str_li_x64)"
-	# SKIP test/test_cross_in_operator.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# `x in [consts]` — un-SKIPped: the gap was a missing SPECIAL_IN arm, which
+	# ir_codegen.inc, aarch64, arm32 and i386 all carried and the two 32-bit
+	# cross backends did not. Both were fixed in one change rather than one being
+	# left for the next lane, because the ticket being repaired IS a
+	# fixed-one-arm-only bug.
+	./$(COMPILER) --target=riscv32 test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in
+	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_rv32_in_x64
+	tools/expect_same.sh riscv32/test_rv32_in "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_in; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_in_x64; echo "exit=$$?")"
 	# SKIP test/test_cross_managed_aggregate_locals.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_cross_loadfile.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_cross_sysopen_family.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_cross_string_cow.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# LoadFile: the codegen arm AND the three runtime wrappers landed together --
+	# PXXSysOpenRO/PXXSysLseek/PXXSysClose had arms for four targets and none for
+	# these two. rv32's syscall 62 is _llseek(fd,hi,lo,*result,whence), not plain
+	# lseek: the 3-arg form returns EINVAL, the size comes back -1 and LoadFile
+	# publishes an EMPTY string with no error. Measured under qemu-riscv32
+	# -strace, not inferred.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile_x64
+	tools/expect_same.sh riscv32/test_rv32_loadfile "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_loadfile; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_loadfile_x64; echo "exit=$$?")"
+	# by-value SysOpen/SysRead/SysWrite/SysClose/SysFchmod: the family had no arm
+	# on either 32-bit generic backend. rv32 is asm-generic and has NO plain
+	# open, so SysOpen lowers to openat(AT_FDCWD, path, flags, 0).
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_sysopen_family.pas $(TESTTMP)/test_rv32_sysopen_family
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_rv32_sysopen_family_x64
+	tools/expect_same.sh riscv32/test_rv32_sysopen_family "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_sysopen_family; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_sysopen_family_x64; echo "exit=$$?")"
+	# string COW — same SPECIAL_IN gap; it uses `in [..]` on a character.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_rv32_string_cow_x64
+	tools/expect_same.sh riscv32/test_rv32_string_cow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_string_cow; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_string_cow_x64; echo "exit=$$?")"
 	# SKIP test/test_cross_var_string_param.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string_x64
@@ -12095,6 +13254,616 @@ test-riscv32: $(COMPILER)
 	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cusweep; tools/expect_same.sh riscv32/test_rv32x_cusweep-rc "$$?" "42"
 	# SKIP test/cunsigned_div_mod_b123.c on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery ok"
+
+
+# ---------------------------------------------------------------------------
+# HOSTED XTENSA DIFFERENTIAL — same programs, xtensa vs the x86-64 oracle.
+#
+# New on 2026-08-30, and it is the first time xtensa has EVER been run in this
+# repo. Until feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle landed the
+# IR_SYSCALL lowering, the exit syscall, read/write, and the HeapMmap arm, an
+# xtensa binary either spun in EmitExit's self-loop or faulted at $FFFFFFFF on
+# its first allocation — so every xtensa ticket ended in "do not land this on
+# inspection", and three separate wrong-answer bugs survived in the backend
+# precisely because nothing could run it.
+#
+# TWO COMPILE-TIME FLAGS ARE LOAD-BEARING and neither is cosmetic:
+#
+#   --platform=posix        or the ESP PAL is selected and every syscall lowers
+#                           to PAL_ERR_UNSUPPORTED (-38) instead of trapping.
+#   --xtensa-soft-mulhigh   or ANY numeric output SIGILLs: no qemu-xtensa core
+#                           implements MUL32HIGH (measured, all 8), and integer
+#                           formatting strength-reduces div-by-10 into a 64-bit
+#                           multiply.
+#
+# WHAT A GREEN HERE DOES NOT MEAN. Under --xtensa-soft-mulhigh the emulator is
+# NOT bit-identical to hardware for multiplies — the flag LABELS that
+# divergence, it does not remove it. A verdict from this target must name the
+# flag, and the two tickets that motivated the oracle (div-by-zero-check,
+# int64-to-float) are arithmetic and remain exactly what it cannot answer.
+#
+# THIS IS THE CALL0 ABI ONLY. Windowed (the ESP-IDF ABI) still faults on frozen
+# strings, Copy and dynarray SetLength —
+# bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength.
+#
+# The list is what was MEASURED to match, not what ought to. 64 of the 142
+# sources test-riscv32 uses; the 12 that diverge are filed as
+# bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs and are
+# deliberately NOT listed here — a differential that skips its own failures
+# silently is how xtensa got into this state. The 66 that do not COMPILE for
+# xtensa are a separate scoping job and have not moved.
+#
+# 55/21 at the first sweep on 2026-08-30, then 57/19 (the shared ABI-predicate
+# fix), 63/13 (IR_STORE_MEM gaining the typed stores it never had) and 64/12
+# (IR_INDEX gaining the two managed-string base shapes it never had), then
+# 69/7 (Track A's pointer-aligned array frame slot, 599000083 — not an xtensa
+# change at all), 84/6 (the dyn-array + managed-record IR ops, the whole-array
+# store arm they unmasked, and Halt(n)), 90/7 (rtti_reg, `in`, the set family,
+# and the by-value set parameter), 96/7 (SetLength on a var-array param, the
+# read family and Eof) and 97/8 (xtensa's row of the POSIX syscall table —
+# a lib/rtl change, not a backend one). No sweep has regressed a program.
+# Every one of those fixes was a MISSING ROW of a rule the other five backends
+# already carried — see
+# bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element.
+#
+# The list is the MEASURED matching set, and the counting is against a
+# reconstructed source list: the union of what `test-riscv32` and this target
+# compile, 129 sources. Earlier notes here said 142 and that figure cannot be
+# reproduced from this Makefile — treat the partition as N/matching, not as a
+# fixed denominator.
+#
+# HANDBACK STATE (frankS, 2026-08-30, HEAD fa01f7111, compiler a6b4e6e1816c):
+# Call0 100 match / 7 differ / 21 do not compile, of 129. Over the night 69 -> 100
+# matching and 21 -> 8 diverging across nine changes, no sweep regressing a
+# program. Windowed is 50/55/23 and is a different target in practice. The full
+# partition — all 8 divergences and all 21 compile failures, each with a ticket
+# or marked as needing one — is the HANDBACK section at the bottom of
+# bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs. Two of the
+# eight are wrong-VALUE bugs with no ticket yet and are where to start:
+# test_arm32_record_byval_wide renders a live address as a decimal number, the
+# same signature as the var-string-param bug fixed earlier that night, now on
+# by-value wide records. (The other one named there, test_shortstring_trunc's
+# `b-CLOBBERED`, was NOT memory corruption -- see the row below -- and is fixed.)
+#
+# THE SYSCALL-TABLE SWEEP BOUGHT ONE ROW, and that is the honest number.
+# lib/rtl had per-arch syscall blocks for five arches and no xtensa row, so 14
+# sources died at `undefined variable (SYS_openat)`. Supplying the row moved
+# exactly two of them off CFAIL: this one, and test_cross_float_const, which now
+# compiles, runs, and BUS ERRORS. The other twelve did not become green either —
+# they became five DIFFERENT, individually filed defects:
+#   * 5 x call0 displacement > +-512 KiB, no veneer
+#     (bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer)
+#   * 1 x no IR_SET_SIGNAL arm  (bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does)
+#   * 6 x the scheduler, which needs a CoSwitch xtensa does not have
+#     (feature-a-coswitch-for-xtensa-and-riscv32-...) — deliberately still
+#     failing to COMPILE, because their syscall numbers alone would turn six
+#     honest errors into six jumps into code that was never emitted
+#   * 1 x a Double typed const misaligning the next const array
+#     (bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section)
+# That is the point rather than a disappointment: a missing thing hides every
+# bug in the programs it stops from compiling, and what a sweep like this buys
+# is usually NAMED DEFECTS, not green rows.
+test-xtensa: $(COMPILER)
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/hello.pas $(TESTTMP)/test_xtensa_hello
+	./$(COMPILER) test/hello.pas $(TESTTMP)/test_xtensa_hello_x64
+	tools/expect_same.sh xtensa/hello "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_hello)" "$$($(TESTTMP)/test_xtensa_hello_x64)"
+	# WriteLn of a real: the shape that exposed an unaligned hidden aggregate
+	# temp. SIGBUS on xtensa, silently fine on the five backends whose hardware
+	# or emulator permits an unaligned word store.
+	# bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_write_real_frame_align.pas $(TESTTMP)/test_xtensa_write_real_align
+	./$(COMPILER) test/test_write_real_frame_align.pas $(TESTTMP)/test_xtensa_write_real_align_x64
+	tools/expect_same.sh xtensa/write_real_align "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_write_real_align)" "$$($(TESTTMP)/test_xtensa_write_real_align_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_virtual_wide.pas $(TESTTMP)/test_xtensa_test_arm32_virtual_wide
+	./$(COMPILER) test/test_arm32_virtual_wide.pas $(TESTTMP)/test_xtensa_test_arm32_virtual_wide_x64
+	tools/expect_same.sh xtensa/test_arm32_virtual_wide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_arm32_virtual_wide)" "$$($(TESTTMP)/test_xtensa_test_arm32_virtual_wide_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_async_sl.pas $(TESTTMP)/test_xtensa_test_async_sl
+	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_xtensa_test_async_sl_x64
+	tools/expect_same.sh xtensa/test_async_sl "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_async_sl)" "$$($(TESTTMP)/test_xtensa_test_async_sl_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_const_record_temp.pas $(TESTTMP)/test_xtensa_test_const_record_temp
+	./$(COMPILER) test/test_const_record_temp.pas $(TESTTMP)/test_xtensa_test_const_record_temp_x64
+	tools/expect_same.sh xtensa/test_const_record_temp "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_const_record_temp)" "$$($(TESTTMP)/test_xtensa_test_const_record_temp_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_aggregate_return.pas $(TESTTMP)/test_xtensa_test_cross_aggregate_return
+	./$(COMPILER) test/test_cross_aggregate_return.pas $(TESTTMP)/test_xtensa_test_cross_aggregate_return_x64
+	tools/expect_same.sh xtensa/test_cross_aggregate_return "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_aggregate_return)" "$$($(TESTTMP)/test_xtensa_test_cross_aggregate_return_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_case_range.pas $(TESTTMP)/test_xtensa_test_cross_case_range
+	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/test_xtensa_test_cross_case_range_x64
+	tools/expect_same.sh xtensa/test_cross_case_range "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_case_range)" "$$($(TESTTMP)/test_xtensa_test_cross_case_range_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_const_alias.pas $(TESTTMP)/test_xtensa_test_cross_const_alias
+	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/test_xtensa_test_cross_const_alias_x64
+	tools/expect_same.sh xtensa/test_cross_const_alias "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_const_alias)" "$$($(TESTTMP)/test_xtensa_test_cross_const_alias_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_dynarray.pas $(TESTTMP)/test_xtensa_test_cross_dynarray
+	./$(COMPILER) test/test_cross_dynarray.pas $(TESTTMP)/test_xtensa_test_cross_dynarray_x64
+	tools/expect_same.sh xtensa/test_cross_dynarray "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_dynarray)" "$$($(TESTTMP)/test_xtensa_test_cross_dynarray_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_exception.pas $(TESTTMP)/test_xtensa_test_cross_exception
+	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_xtensa_test_cross_exception_x64
+	tools/expect_same.sh xtensa/test_cross_exception "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_exception)" "$$($(TESTTMP)/test_xtensa_test_cross_exception_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_xtensa_test_cross_frozen_strlen_deref
+	./$(COMPILER) test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_xtensa_test_cross_frozen_strlen_deref_x64
+	tools/expect_same.sh xtensa/test_cross_frozen_strlen_deref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_frozen_strlen_deref)" "$$($(TESTTMP)/test_xtensa_test_cross_frozen_strlen_deref_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_global_init.pas $(TESTTMP)/test_xtensa_test_cross_global_init
+	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/test_xtensa_test_cross_global_init_x64
+	tools/expect_same.sh xtensa/test_cross_global_init "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_global_init)" "$$($(TESTTMP)/test_xtensa_test_cross_global_init_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_heap.pas $(TESTTMP)/test_xtensa_test_cross_heap
+	./$(COMPILER) test/test_cross_heap.pas $(TESTTMP)/test_xtensa_test_cross_heap_x64
+	tools/expect_same.sh xtensa/test_cross_heap "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_heap)" "$$($(TESTTMP)/test_xtensa_test_cross_heap_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_int64.pas $(TESTTMP)/test_xtensa_test_cross_int64
+	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_xtensa_test_cross_int64_x64
+	tools/expect_same.sh xtensa/test_cross_int64 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_int64)" "$$($(TESTTMP)/test_xtensa_test_cross_int64_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_int64_byref.pas $(TESTTMP)/test_xtensa_test_cross_int64_byref
+	./$(COMPILER) test/test_cross_int64_byref.pas $(TESTTMP)/test_xtensa_test_cross_int64_byref_x64
+	tools/expect_same.sh xtensa/test_cross_int64_byref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_int64_byref)" "$$($(TESTTMP)/test_xtensa_test_cross_int64_byref_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_managed_aggregate_locals.pas $(TESTTMP)/test_xtensa_test_cross_managed_aggregate_locals
+	./$(COMPILER) test/test_cross_managed_aggregate_locals.pas $(TESTTMP)/test_xtensa_test_cross_managed_aggregate_locals_x64
+	tools/expect_same.sh xtensa/test_cross_managed_aggregate_locals "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_managed_aggregate_locals)" "$$($(TESTTMP)/test_xtensa_test_cross_managed_aggregate_locals_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_many_params.pas $(TESTTMP)/test_xtensa_test_cross_many_params
+	./$(COMPILER) test/test_cross_many_params.pas $(TESTTMP)/test_xtensa_test_cross_many_params_x64
+	tools/expect_same.sh xtensa/test_cross_many_params "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_many_params)" "$$($(TESTTMP)/test_xtensa_test_cross_many_params_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_multidim.pas $(TESTTMP)/test_xtensa_test_cross_multidim
+	./$(COMPILER) test/test_cross_multidim.pas $(TESTTMP)/test_xtensa_test_cross_multidim_x64
+	tools/expect_same.sh xtensa/test_cross_multidim "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_multidim)" "$$($(TESTTMP)/test_xtensa_test_cross_multidim_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_multidim3d.pas $(TESTTMP)/test_xtensa_test_cross_multidim3d
+	./$(COMPILER) test/test_cross_multidim3d.pas $(TESTTMP)/test_xtensa_test_cross_multidim3d_x64
+	tools/expect_same.sh xtensa/test_cross_multidim3d "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_multidim3d)" "$$($(TESTTMP)/test_xtensa_test_cross_multidim3d_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_named_array.pas $(TESTTMP)/test_xtensa_test_cross_named_array
+	./$(COMPILER) test/test_cross_named_array.pas $(TESTTMP)/test_xtensa_test_cross_named_array_x64
+	tools/expect_same.sh xtensa/test_cross_named_array "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_named_array)" "$$($(TESTTMP)/test_xtensa_test_cross_named_array_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_openarray_string.pas $(TESTTMP)/test_xtensa_test_cross_openarray_string
+	./$(COMPILER) test/test_cross_openarray_string.pas $(TESTTMP)/test_xtensa_test_cross_openarray_string_x64
+	tools/expect_same.sh xtensa/test_cross_openarray_string "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_openarray_string)" "$$($(TESTTMP)/test_xtensa_test_cross_openarray_string_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_param_2darray.pas $(TESTTMP)/test_xtensa_test_cross_param_2darray
+	./$(COMPILER) test/test_cross_param_2darray.pas $(TESTTMP)/test_xtensa_test_cross_param_2darray_x64
+	tools/expect_same.sh xtensa/test_cross_param_2darray "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_param_2darray)" "$$($(TESTTMP)/test_xtensa_test_cross_param_2darray_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_ptr_arith.pas $(TESTTMP)/test_xtensa_test_cross_ptr_arith
+	./$(COMPILER) test/test_cross_ptr_arith.pas $(TESTTMP)/test_xtensa_test_cross_ptr_arith_x64
+	tools/expect_same.sh xtensa/test_cross_ptr_arith "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_ptr_arith)" "$$($(TESTTMP)/test_xtensa_test_cross_ptr_arith_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_record_2darray.pas $(TESTTMP)/test_xtensa_test_cross_record_2darray
+	./$(COMPILER) test/test_cross_record_2darray.pas $(TESTTMP)/test_xtensa_test_cross_record_2darray_x64
+	tools/expect_same.sh xtensa/test_cross_record_2darray "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_record_2darray)" "$$($(TESTTMP)/test_xtensa_test_cross_record_2darray_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_setlen_str.pas $(TESTTMP)/test_xtensa_test_cross_setlen_str
+	./$(COMPILER) test/test_cross_setlen_str.pas $(TESTTMP)/test_xtensa_test_cross_setlen_str_x64
+	tools/expect_same.sh xtensa/test_cross_setlen_str "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_setlen_str)" "$$($(TESTTMP)/test_xtensa_test_cross_setlen_str_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_shortcircuit.pas $(TESTTMP)/test_xtensa_test_cross_shortcircuit
+	./$(COMPILER) test/test_cross_shortcircuit.pas $(TESTTMP)/test_xtensa_test_cross_shortcircuit_x64
+	tools/expect_same.sh xtensa/test_cross_shortcircuit "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_shortcircuit)" "$$($(TESTTMP)/test_xtensa_test_cross_shortcircuit_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_stack_params.pas $(TESTTMP)/test_xtensa_test_cross_stack_params
+	./$(COMPILER) test/test_cross_stack_params.pas $(TESTTMP)/test_xtensa_test_cross_stack_params_x64
+	tools/expect_same.sh xtensa/test_cross_stack_params "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_stack_params)" "$$($(TESTTMP)/test_xtensa_test_cross_stack_params_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_static_open_array.pas $(TESTTMP)/test_xtensa_test_cross_static_open_array
+	./$(COMPILER) test/test_cross_static_open_array.pas $(TESTTMP)/test_xtensa_test_cross_static_open_array_x64
+	tools/expect_same.sh xtensa/test_cross_static_open_array "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_static_open_array)" "$$($(TESTTMP)/test_xtensa_test_cross_static_open_array_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_str_length_index.pas $(TESTTMP)/test_xtensa_test_cross_str_length_index
+	./$(COMPILER) test/test_cross_str_length_index.pas $(TESTTMP)/test_xtensa_test_cross_str_length_index_x64
+	tools/expect_same.sh xtensa/test_cross_str_length_index "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_str_length_index)" "$$($(TESTTMP)/test_xtensa_test_cross_str_length_index_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_string.pas $(TESTTMP)/test_xtensa_test_cross_string
+	./$(COMPILER) test/test_cross_string.pas $(TESTTMP)/test_xtensa_test_cross_string_x64
+	tools/expect_same.sh xtensa/test_cross_string "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_string)" "$$($(TESTTMP)/test_xtensa_test_cross_string_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_strresult.pas $(TESTTMP)/test_xtensa_test_cross_strresult
+	./$(COMPILER) test/test_cross_strresult.pas $(TESTTMP)/test_xtensa_test_cross_strresult_x64
+	tools/expect_same.sh xtensa/test_cross_strresult "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_strresult)" "$$($(TESTTMP)/test_xtensa_test_cross_strresult_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_typed_const.pas $(TESTTMP)/test_xtensa_test_cross_typed_const
+	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/test_xtensa_test_cross_typed_const_x64
+	tools/expect_same.sh xtensa/test_cross_typed_const "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_typed_const)" "$$($(TESTTMP)/test_xtensa_test_cross_typed_const_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_var_string_param.pas $(TESTTMP)/test_xtensa_test_cross_var_string_param
+	./$(COMPILER) test/test_cross_var_string_param.pas $(TESTTMP)/test_xtensa_test_cross_var_string_param_x64
+	tools/expect_same.sh xtensa/test_cross_var_string_param "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_var_string_param)" "$$($(TESTTMP)/test_xtensa_test_cross_var_string_param_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_variant.pas $(TESTTMP)/test_xtensa_test_cross_variant
+	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_xtensa_test_cross_variant_x64
+	tools/expect_same.sh xtensa/test_cross_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_variant)" "$$($(TESTTMP)/test_xtensa_test_cross_variant_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_xtensa_test_cross_variant_payload_widths
+	./$(COMPILER) test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_xtensa_test_cross_variant_payload_widths_x64
+	tools/expect_same.sh xtensa/test_cross_variant_payload_widths "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_variant_payload_widths)" "$$($(TESTTMP)/test_xtensa_test_cross_variant_payload_widths_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_variant_single.pas $(TESTTMP)/test_xtensa_test_cross_variant_single
+	./$(COMPILER) test/test_cross_variant_single.pas $(TESTTMP)/test_xtensa_test_cross_variant_single_x64
+	tools/expect_same.sh xtensa/test_cross_variant_single "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_variant_single)" "$$($(TESTTMP)/test_xtensa_test_cross_variant_single_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_write_pchar.pas $(TESTTMP)/test_xtensa_test_cross_write_pchar
+	./$(COMPILER) test/test_cross_write_pchar.pas $(TESTTMP)/test_xtensa_test_cross_write_pchar_x64
+	tools/expect_same.sh xtensa/test_cross_write_pchar "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_write_pchar)" "$$($(TESTTMP)/test_xtensa_test_cross_write_pchar_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_copy.pas $(TESTTMP)/test_xtensa_test_dynarray_copy
+	./$(COMPILER) test/test_dynarray_copy.pas $(TESTTMP)/test_xtensa_test_dynarray_copy_x64
+	tools/expect_same.sh xtensa/test_dynarray_copy "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_copy)" "$$($(TESTTMP)/test_xtensa_test_dynarray_copy_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_global_after_method.pas $(TESTTMP)/test_xtensa_test_dynarray_global_after_method
+	./$(COMPILER) test/test_dynarray_global_after_method.pas $(TESTTMP)/test_xtensa_test_dynarray_global_after_method_x64
+	tools/expect_same.sh xtensa/test_dynarray_global_after_method "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_global_after_method)" "$$($(TESTTMP)/test_xtensa_test_dynarray_global_after_method_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_frozen_string_cross_b305.pas $(TESTTMP)/test_xtensa_test_frozen_string_cross_b305
+	./$(COMPILER) test/test_frozen_string_cross_b305.pas $(TESTTMP)/test_xtensa_test_frozen_string_cross_b305_x64
+	tools/expect_same.sh xtensa/test_frozen_string_cross_b305 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_frozen_string_cross_b305)" "$$($(TESTTMP)/test_xtensa_test_frozen_string_cross_b305_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_halt_exit_code.pas $(TESTTMP)/test_xtensa_test_halt_exit_code
+	./$(COMPILER) test/test_halt_exit_code.pas $(TESTTMP)/test_xtensa_test_halt_exit_code_x64
+	# EXIT CODE asserted, not just stdout. This row was green for a day while
+	# Halt(5) exited 0 on xtensa, because it compared output only and the output
+	# was right -- bug-a-halt-n-exits-zero-on-hosted-xtensa. riscv32's row had
+	# the `echo "exit=$$?"` all along; xtensa's was written without it.
+	tools/expect_same.sh xtensa/test_halt_exit_code "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_halt_exit_code; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_halt_exit_code_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_arith.pas $(TESTTMP)/test_xtensa_test_i386_arith
+	./$(COMPILER) test/test_i386_arith.pas $(TESTTMP)/test_xtensa_test_i386_arith_x64
+	tools/expect_same.sh xtensa/test_i386_arith "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_arith)" "$$($(TESTTMP)/test_xtensa_test_i386_arith_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_loops.pas $(TESTTMP)/test_xtensa_test_i386_loops
+	./$(COMPILER) test/test_i386_loops.pas $(TESTTMP)/test_xtensa_test_i386_loops_x64
+	tools/expect_same.sh xtensa/test_i386_loops "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_loops)" "$$($(TESTTMP)/test_xtensa_test_i386_loops_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_procs.pas $(TESTTMP)/test_xtensa_test_i386_procs
+	./$(COMPILER) test/test_i386_procs.pas $(TESTTMP)/test_xtensa_test_i386_procs_x64
+	tools/expect_same.sh xtensa/test_i386_procs "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_procs)" "$$($(TESTTMP)/test_xtensa_test_i386_procs_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_varparam.pas $(TESTTMP)/test_xtensa_test_i386_varparam
+	./$(COMPILER) test/test_i386_varparam.pas $(TESTTMP)/test_xtensa_test_i386_varparam_x64
+	tools/expect_same.sh xtensa/test_i386_varparam "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_varparam)" "$$($(TESTTMP)/test_xtensa_test_i386_varparam_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_write.pas $(TESTTMP)/test_xtensa_test_i386_write
+	./$(COMPILER) test/test_i386_write.pas $(TESTTMP)/test_xtensa_test_i386_write_x64
+	tools/expect_same.sh xtensa/test_i386_write "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_write)" "$$($(TESTTMP)/test_xtensa_test_i386_write_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_inheritance_dispatch.pas $(TESTTMP)/test_xtensa_test_inheritance_dispatch
+	./$(COMPILER) test/test_inheritance_dispatch.pas $(TESTTMP)/test_xtensa_test_inheritance_dispatch_x64
+	tools/expect_same.sh xtensa/test_inheritance_dispatch "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_inheritance_dispatch)" "$$($(TESTTMP)/test_xtensa_test_inheritance_dispatch_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_inline_expand.pas $(TESTTMP)/test_xtensa_test_inline_expand
+	./$(COMPILER) test/test_inline_expand.pas $(TESTTMP)/test_xtensa_test_inline_expand_x64
+	tools/expect_same.sh xtensa/test_inline_expand "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_inline_expand)" "$$($(TESTTMP)/test_xtensa_test_inline_expand_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces.pas $(TESTTMP)/test_xtensa_test_interfaces
+	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/test_xtensa_test_interfaces_x64
+	tools/expect_same.sh xtensa/test_interfaces "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces)" "$$($(TESTTMP)/test_xtensa_test_interfaces_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_as.pas $(TESTTMP)/test_xtensa_test_interfaces_as
+	./$(COMPILER) test/test_interfaces_as.pas $(TESTTMP)/test_xtensa_test_interfaces_as_x64
+	tools/expect_same.sh xtensa/test_interfaces_as "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_as)" "$$($(TESTTMP)/test_xtensa_test_interfaces_as_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_inherit.pas $(TESTTMP)/test_xtensa_test_interfaces_inherit
+	./$(COMPILER) test/test_interfaces_inherit.pas $(TESTTMP)/test_xtensa_test_interfaces_inherit_x64
+	tools/expect_same.sh xtensa/test_interfaces_inherit "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_inherit)" "$$($(TESTTMP)/test_xtensa_test_interfaces_inherit_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_is.pas $(TESTTMP)/test_xtensa_test_interfaces_is
+	./$(COMPILER) test/test_interfaces_is.pas $(TESTTMP)/test_xtensa_test_interfaces_is_x64
+	tools/expect_same.sh xtensa/test_interfaces_is "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_is)" "$$($(TESTTMP)/test_xtensa_test_interfaces_is_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_xtensa_test_interfaces_multi_secondary
+	./$(COMPILER) test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_xtensa_test_interfaces_multi_secondary_x64
+	tools/expect_same.sh xtensa/test_interfaces_multi_secondary "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_multi_secondary)" "$$($(TESTTMP)/test_xtensa_test_interfaces_multi_secondary_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_param.pas $(TESTTMP)/test_xtensa_test_interfaces_param
+	./$(COMPILER) test/test_interfaces_param.pas $(TESTTMP)/test_xtensa_test_interfaces_param_x64
+	tools/expect_same.sh xtensa/test_interfaces_param "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_param)" "$$($(TESTTMP)/test_xtensa_test_interfaces_param_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_strlen_deref.pas $(TESTTMP)/test_xtensa_test_managed_strlen_deref
+	./$(COMPILER) test/test_managed_strlen_deref.pas $(TESTTMP)/test_xtensa_test_managed_strlen_deref_x64
+	tools/expect_same.sh xtensa/test_managed_strlen_deref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_managed_strlen_deref)" "$$($(TESTTMP)/test_xtensa_test_managed_strlen_deref_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_methcall.pas $(TESTTMP)/test_xtensa_test_methcall
+	./$(COMPILER) test/test_methcall.pas $(TESTTMP)/test_xtensa_test_methcall_x64
+	tools/expect_same.sh xtensa/test_methcall "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_methcall)" "$$($(TESTTMP)/test_xtensa_test_methcall_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_methodptr.pas $(TESTTMP)/test_xtensa_test_methodptr
+	./$(COMPILER) test/test_methodptr.pas $(TESTTMP)/test_xtensa_test_methodptr_x64
+	tools/expect_same.sh xtensa/test_methodptr "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_methodptr)" "$$($(TESTTMP)/test_xtensa_test_methodptr_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_not_int64_expr.pas $(TESTTMP)/test_xtensa_test_not_int64_expr
+	./$(COMPILER) test/test_not_int64_expr.pas $(TESTTMP)/test_xtensa_test_not_int64_expr_x64
+	tools/expect_same.sh xtensa/test_not_int64_expr "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_not_int64_expr)" "$$($(TESTTMP)/test_xtensa_test_not_int64_expr_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_record_temp_byval_arg.pas $(TESTTMP)/test_xtensa_test_record_temp_byval_arg
+	./$(COMPILER) test/test_record_temp_byval_arg.pas $(TESTTMP)/test_xtensa_test_record_temp_byval_arg_x64
+	tools/expect_same.sh xtensa/test_record_temp_byval_arg "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_record_temp_byval_arg)" "$$($(TESTTMP)/test_xtensa_test_record_temp_byval_arg_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_stackless_gen.pas $(TESTTMP)/test_xtensa_test_stackless_gen
+	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_xtensa_test_stackless_gen_x64
+	tools/expect_same.sh xtensa/test_stackless_gen "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_stackless_gen)" "$$($(TESTTMP)/test_xtensa_test_stackless_gen_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double
+	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double_x64
+	tools/expect_same.sh xtensa/test_u64_to_double "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_u64_to_double)" "$$($(TESTTMP)/test_xtensa_test_u64_to_double_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_uint32_write.pas $(TESTTMP)/test_xtensa_test_uint32_write
+	./$(COMPILER) test/test_uint32_write.pas $(TESTTMP)/test_xtensa_test_uint32_write_x64
+	tools/expect_same.sh xtensa/test_uint32_write "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_uint32_write)" "$$($(TESTTMP)/test_xtensa_test_uint32_write_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_uint64_ops.pas $(TESTTMP)/test_xtensa_test_uint64_ops
+	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_xtensa_test_uint64_ops_x64
+	tools/expect_same.sh xtensa/test_uint64_ops "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_uint64_ops)" "$$($(TESTTMP)/test_xtensa_test_uint64_ops_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_variant_class_cross.pas $(TESTTMP)/test_xtensa_test_variant_class_cross
+	./$(COMPILER) test/test_variant_class_cross.pas $(TESTTMP)/test_xtensa_test_variant_class_cross_x64
+	tools/expect_same.sh xtensa/test_variant_class_cross "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_variant_class_cross)" "$$($(TESTTMP)/test_xtensa_test_variant_class_cross_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op
+	./$(COMPILER) test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64
+	tools/expect_same.sh xtensa/test_variant_self_assign_is_a_no_op "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op)" "$$($(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64)"
+	# +19 on 2026-08-30: five from the pointer-aligned array frame slot (Track A,
+	# 599000083) and fourteen from the dyn-array/managed-record IR ops this
+	# backend never had. test_dynarray_whole_assign is the one to read: it did
+	# not COMPILE for xtensa, and the `b := a` store arm it asserts was ALSO
+	# missing -- a missing op hides every bug in the programs it stops compiling.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_array_of_const_types.pas $(TESTTMP)/test_xtensa_test_array_of_const_types
+	./$(COMPILER) test/test_array_of_const_types.pas $(TESTTMP)/test_xtensa_test_array_of_const_types_x64
+	tools/expect_same.sh xtensa/test_array_of_const_types "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_array_of_const_types)" "$$($(TESTTMP)/test_xtensa_test_array_of_const_types_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_call_result_member.pas $(TESTTMP)/test_xtensa_test_call_result_member
+	./$(COMPILER) test/test_call_result_member.pas $(TESTTMP)/test_xtensa_test_call_result_member_x64
+	tools/expect_same.sh xtensa/test_call_result_member "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_call_result_member)" "$$($(TESTTMP)/test_xtensa_test_call_result_member_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_collections.pas $(TESTTMP)/test_xtensa_test_collections
+	./$(COMPILER) test/test_collections.pas $(TESTTMP)/test_xtensa_test_collections_x64
+	tools/expect_same.sh xtensa/test_collections "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_collections)" "$$($(TESTTMP)/test_xtensa_test_collections_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_conformance_2.pas $(TESTTMP)/test_xtensa_test_conformance_2
+	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_xtensa_test_conformance_2_x64
+	tools/expect_same.sh xtensa/test_conformance_2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_conformance_2)" "$$($(TESTTMP)/test_xtensa_test_conformance_2_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_const_record_temp_managed.pas $(TESTTMP)/test_xtensa_test_const_record_temp_managed
+	./$(COMPILER) test/test_const_record_temp_managed.pas $(TESTTMP)/test_xtensa_test_const_record_temp_managed_x64
+	tools/expect_same.sh xtensa/test_const_record_temp_managed "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_const_record_temp_managed)" "$$($(TESTTMP)/test_xtensa_test_const_record_temp_managed_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_xtensa_test_cross_aggregate_stackargs
+	./$(COMPILER) test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_xtensa_test_cross_aggregate_stackargs_x64
+	tools/expect_same.sh xtensa/test_cross_aggregate_stackargs "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_aggregate_stackargs)" "$$($(TESTTMP)/test_xtensa_test_cross_aggregate_stackargs_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_float_return.pas $(TESTTMP)/test_xtensa_test_cross_float_return
+	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_xtensa_test_cross_float_return_x64
+	tools/expect_same.sh xtensa/test_cross_float_return "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_float_return)" "$$($(TESTTMP)/test_xtensa_test_cross_float_return_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_record.pas $(TESTTMP)/test_xtensa_test_cross_record
+	./$(COMPILER) test/test_cross_record.pas $(TESTTMP)/test_xtensa_test_cross_record_x64
+	tools/expect_same.sh xtensa/test_cross_record "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_record)" "$$($(TESTTMP)/test_xtensa_test_cross_record_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_record_array_store.pas $(TESTTMP)/test_xtensa_test_cross_record_array_store
+	./$(COMPILER) test/test_cross_record_array_store.pas $(TESTTMP)/test_xtensa_test_cross_record_array_store_x64
+	tools/expect_same.sh xtensa/test_cross_record_array_store "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_record_array_store)" "$$($(TESTTMP)/test_xtensa_test_cross_record_array_store_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_copy_nested.pas $(TESTTMP)/test_xtensa_test_dynarray_copy_nested
+	./$(COMPILER) test/test_dynarray_copy_nested.pas $(TESTTMP)/test_xtensa_test_dynarray_copy_nested_x64
+	tools/expect_same.sh xtensa/test_dynarray_copy_nested "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_copy_nested)" "$$($(TESTTMP)/test_xtensa_test_dynarray_copy_nested_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_field.pas $(TESTTMP)/test_xtensa_test_dynarray_field
+	./$(COMPILER) test/test_dynarray_field.pas $(TESTTMP)/test_xtensa_test_dynarray_field_x64
+	tools/expect_same.sh xtensa/test_dynarray_field "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_field)" "$$($(TESTTMP)/test_xtensa_test_dynarray_field_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_whole_assign.pas $(TESTTMP)/test_xtensa_test_dynarray_whole_assign
+	./$(COMPILER) test/test_dynarray_whole_assign.pas $(TESTTMP)/test_xtensa_test_dynarray_whole_assign_x64
+	tools/expect_same.sh xtensa/test_dynarray_whole_assign "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_whole_assign)" "$$($(TESTTMP)/test_xtensa_test_dynarray_whole_assign_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_forin_implicit_field.pas $(TESTTMP)/test_xtensa_test_forin_implicit_field
+	./$(COMPILER) test/test_forin_implicit_field.pas $(TESTTMP)/test_xtensa_test_forin_implicit_field_x64
+	tools/expect_same.sh xtensa/test_forin_implicit_field "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_forin_implicit_field)" "$$($(TESTTMP)/test_xtensa_test_forin_implicit_field_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_forin_member_access.pas $(TESTTMP)/test_xtensa_test_forin_member_access
+	./$(COMPILER) test/test_forin_member_access.pas $(TESTTMP)/test_xtensa_test_forin_member_access_x64
+	tools/expect_same.sh xtensa/test_forin_member_access "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_forin_member_access)" "$$($(TESTTMP)/test_xtensa_test_forin_member_access_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_xtensa_test_forin_member_temp_zeroinit
+	./$(COMPILER) test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_xtensa_test_forin_member_temp_zeroinit_x64
+	tools/expect_same.sh xtensa/test_forin_member_temp_zeroinit "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_forin_member_temp_zeroinit)" "$$($(TESTTMP)/test_xtensa_test_forin_member_temp_zeroinit_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interface_arc.pas $(TESTTMP)/test_xtensa_test_interface_arc
+	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_xtensa_test_interface_arc_x64
+	tools/expect_same.sh xtensa/test_interface_arc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interface_arc)" "$$($(TESTTMP)/test_xtensa_test_interface_arc_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_record_temp_init.pas $(TESTTMP)/test_xtensa_test_managed_record_temp_init
+	./$(COMPILER) test/test_managed_record_temp_init.pas $(TESTTMP)/test_xtensa_test_managed_record_temp_init_x64
+	tools/expect_same.sh xtensa/test_managed_record_temp_init "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_managed_record_temp_init)" "$$($(TESTTMP)/test_xtensa_test_managed_record_temp_init_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_method_implicit_field.pas $(TESTTMP)/test_xtensa_test_method_implicit_field
+	./$(COMPILER) test/test_method_implicit_field.pas $(TESTTMP)/test_xtensa_test_method_implicit_field_x64
+	tools/expect_same.sh xtensa/test_method_implicit_field "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_method_implicit_field)" "$$($(TESTTMP)/test_xtensa_test_method_implicit_field_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_single_in_aggregate.pas $(TESTTMP)/test_xtensa_test_single_in_aggregate
+	./$(COMPILER) test/test_single_in_aggregate.pas $(TESTTMP)/test_xtensa_test_single_in_aggregate_x64
+	tools/expect_same.sh xtensa/test_single_in_aggregate "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_single_in_aggregate)" "$$($(TESTTMP)/test_xtensa_test_single_in_aggregate_x64)"
+	# +7 on 2026-08-30: the set family (SET_LIT / SET_COPY / SET_BINOP /
+	# SET_CMP), the `in` operator, IR_RTTI_REG/IR_RESOURCES, and the by-value
+	# SET PARAMETER marshalling those made reachable. Every one of the last
+	# three was hidden UNDER the one above it: rtti_reg exposed a missing `in`,
+	# `in` exposed a missing set_copy, set_copy exposed a set param passed as
+	# one address word. Peeling, not a list.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_set_param.pas $(TESTTMP)/test_xtensa_test_cross_set_param
+	./$(COMPILER) test/test_cross_set_param.pas $(TESTTMP)/test_xtensa_test_cross_set_param_x64
+	tools/expect_same.sh xtensa/test_cross_set_param "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_set_param; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_cross_set_param_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_sets.pas $(TESTTMP)/test_xtensa_test_cross_sets
+	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_xtensa_test_cross_sets_x64
+	tools/expect_same.sh xtensa/test_cross_sets "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_sets; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_cross_sets_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_lfm.pas $(TESTTMP)/test_xtensa_test_lfm
+	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_xtensa_test_lfm_x64
+	tools/expect_same.sh xtensa/test_lfm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_lfm; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_lfm_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_set_runtime.pas $(TESTTMP)/test_xtensa_test_set_runtime
+	./$(COMPILER) test/test_set_runtime.pas $(TESTTMP)/test_xtensa_test_set_runtime_x64
+	tools/expect_same.sh xtensa/test_set_runtime "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_set_runtime; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_set_runtime_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_streaming.pas $(TESTTMP)/test_xtensa_test_streaming
+	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_xtensa_test_streaming_x64
+	tools/expect_same.sh xtensa/test_streaming "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_streaming_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_streaming_enumset.pas $(TESTTMP)/test_xtensa_test_streaming_enumset
+	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_xtensa_test_streaming_enumset_x64
+	tools/expect_same.sh xtensa/test_streaming_enumset "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_streaming_enumset; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_streaming_enumset_x64; echo "exit=$$?")"
+	# test_rtti prints raw ADDRESSES and a pointer-width InstanceSize, so the
+	# three lines that cannot agree across a 32/64-bit boundary are filtered --
+	# the same filter i386, arm32 and aarch64 already use for this program. The
+	# rest of it (class names, parent chain, PropCount, property values) is a
+	# real differential and it matches.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_xtensa_test_rtti_x64
+	# This row's output is FILTERED, so the exit capture cannot simply be
+	# appended: after a pipe `$$?` is GREP's status, and the row would assert
+	# that the filter ran rather than that the program did -- the exact "anything
+	# appended after the thing you are measuring becomes the thing that reports"
+	# shape this whole check exists to catch. Redirect the run to a file, echo
+	# its status while it is still the last command, then filter the file. The
+	# status line therefore comes FIRST here; both sides are built the same way,
+	# so the comparison is unaffected.
+	tools/expect_same.sh xtensa/test_rtti "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_rtti > $(TESTTMP)/test_rtti_xt.raw; echo "exit=$$?"; grep -vE 'pointer:|RTTI value:|InstanceSize:' $(TESTTMP)/test_rtti_xt.raw)" "$$($(TESTTMP)/test_xtensa_test_rtti_x64 > $(TESTTMP)/test_rtti_n.raw; echo "exit=$$?"; grep -vE 'pointer:|RTTI value:|InstanceSize:' $(TESTTMP)/test_rtti_n.raw)"
+	# +2: IR_CLASSREF. It reported `unsupported node in IR codegen: unknown`,
+	# not `classref` -- IROpName has no entry for seven of the 75 declared ops.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_class_of.pas $(TESTTMP)/test_xtensa_test_class_of
+	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_xtensa_test_class_of_x64
+	tools/expect_same.sh xtensa/test_class_of "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_class_of; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_class_of_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_classref.pas $(TESTTMP)/test_xtensa_test_classref
+	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_xtensa_test_classref_x64
+	tools/expect_same.sh xtensa/test_classref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_classref; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_classref_x64; echo "exit=$$?")"
+	# +2: SetLength on a var-array PARAMETER — one extra deref, refused outright
+	# until now while riscv32 had carried the two-line answer for a while.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_setlen_varparam.pas $(TESTTMP)/test_xtensa_test_cross_setlen_varparam
+	./$(COMPILER) test/test_cross_setlen_varparam.pas $(TESTTMP)/test_xtensa_test_cross_setlen_varparam_x64
+	tools/expect_same.sh xtensa/test_cross_setlen_varparam "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_setlen_varparam; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_cross_setlen_varparam_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen
+	./$(COMPILER) test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64
+	tools/expect_same.sh xtensa/test_nested_dynarray_setlen "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_nested_dynarray_setlen; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_nested_dynarray_setlen_x64; echo "exit=$$?")"
+	# +2: the read family (READLINE / READ_VAR / READ_DISCARD) and bare Eof.
+	# PIPED stdin, exactly as the riscv32 rows do it — the differential sweep
+	# that measured these ran with stdin at /dev/null, where both sides see EOF
+	# immediately and a broken readln would still 'match'. Feeding the same bytes
+	# to both sides is the assertion; an empty stdin is not one.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_readln.pas $(TESTTMP)/test_xtensa_readln
+	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_xtensa_readln_x64
+	tools/expect_same.sh xtensa/test_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_readln; echo "exit=$$?")" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_xtensa_readln_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin
+	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin_x64
+	tools/expect_same.sh xtensa/test_eof_stdin "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_eof_stdin; echo "exit=$$?")" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_xtensa_eof_stdin_x64; echo "exit=$$?")"
+	# `x in [consts]` and the string-COW program that uses it. Same SPECIAL_IN
+	# arm as the riscv32 rows above; xtensa has no conditional execution, so its
+	# version branches over a `movi` where arm32 uses `moveq` and riscv uses slt.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_in_operator.pas $(TESTTMP)/test_xtensa_in
+	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_xtensa_in_x64
+	tools/expect_same.sh xtensa/test_xtensa_in "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_in; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_in_x64; echo "exit=$$?")"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_xtensa_string_cow_x64
+	tools/expect_same.sh xtensa/test_xtensa_string_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_string_cow; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_string_cow_x64; echo "exit=$$?")"
+	# By-value records of 5-8 bytes: BOTH words must cross, on four separate
+	# spots that each counted one word where the type is two -- IR_LOAD_SYM, the
+	# call-arg push (plus its even-word pad), the callee param spill in
+	# ir_codegen.inc, and IR_LOAD_MEM for a record-RETURNING call used directly
+	# as an argument. arm32 and riscv32 already carried all four; xtensa is the
+	# sixth backend and had none of them
+	# (bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address, and the
+	# same defect as bug-arm32-record-byvalue-over-4-bytes-abi-gap /
+	# bug-riscv32-byval-record-param-one-word). Compared against the x86-64
+	# oracle rather than a literal, because the point of the row is agreement
+	# with the other backends, not a transcript.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide
+	./$(COMPILER) test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide_x64
+	tools/expect_same.sh xtensa/test_xtensa_recwide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_recwide; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_recwide_x64; echo "exit=$$?")"
+	# SysOpen/SysRead/SysWrite/SysClose/SysFchmod. xtensa's syscall numbers are
+	# its OWN table (read=12, write=13, close=9, fchmod=52, openat=288) -- neither
+	# x86-64's nor asm-generic's, and a number from the wrong table is not a
+	# compile error, it is a different syscall at runtime. SysOpen lowers to
+	# openat even though xtensa still carries a legacy open(8), so this backend
+	# and riscv32 share one spelling. LoadFile is NOT here: see the riscv32 SKIP.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_sysopen_family.pas $(TESTTMP)/test_xtensa_sysopen_family
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_xtensa_sysopen_family_x64
+	tools/expect_same.sh xtensa/test_xtensa_sysopen_family "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sysopen_family; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_sysopen_family_x64; echo "exit=$$?")"
+	# LoadFile. xtensa has BOTH plain lseek(15) and _llseek(17), so unlike rv32
+	# the ordinary 3-arg path is correct here -- same helper, different call
+	# shape per target, which is exactly why the wrappers are per-arch.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_xtensa_loadfile_x64
+	tools/expect_same.sh xtensa/test_xtensa_loadfile "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_loadfile; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_loadfile_x64; echo "exit=$$?")"
+	# ParamCount / ParamStr / ArgStr. xtensa was the only hosted target whose
+	# entry stub never saved the kernel-provided initial sp to BSS_INITIAL_RSP,
+	# so builtin -55 had no honest arm available -- the stub save and both arms
+	# landed as ONE change, because reading an unset BSS word answers
+	# ParamCount = -1, a plausible wrong value replacing a compile error.
+	# ParamStr is an EXPRESSION that desugars to ArgStr with a hidden frozen
+	# temp, which is why ParamCount alone does not make this test pass.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_arg_runtime.pas $(TESTTMP)/test_xtensa_args
+	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_xtensa_args_x64
+	tools/expect_same.sh xtensa/test_xtensa_args "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_args alpha beta; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_args_x64 alpha beta; echo "exit=$$?")"
+	# ...and the same construct with an argument LONGER than that hidden frozen
+	# temp. The x86-64 fill copied an unbounded strlen with `rep movsb` into a
+	# 264-byte slot, so it wrote through into the neighbouring frame slot -- the
+	# enclosing loop's own counter and bound -- and `for i := 1 to ParamCount`
+	# ran 1.29 MILLION iterations. rc is checked SEPARATELY from the output
+	# because the failure is a runaway, not a wrong string: without the timeout
+	# a regression hangs this suite instead of reporting.
+	# 255 and not LOCAL_STR_CAP is deliberate and is measured, not chosen: it is
+	# what FPC answers for this program (ParamStr returns a ShortString) and what
+	# riscv32/xtensa already produced via PXXCStrToFrozen, so the clamp buys FPC
+	# parity and cross-target agreement together. The managed row must stay 300 --
+	# that path sizes its allocation from the length and must NOT gain a clamp.
+	# bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp
+	./$(COMPILER) test/test_paramstr_long_arg.pas $(TESTTMP)/test_paramstr_long26
+	@long=$$(printf 'x%.0s' $$(seq 1 300)); \
+	  out=$$(timeout 60 $(TESTTMP)/test_paramstr_long26 alpha "$$long" 2>&1); rc=$$?; \
+	  if [ $$rc -ne 0 ]; then echo "test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
+	  tools/expect_same.sh test_paramstr_long26 "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
+	# Frozen-string EQUALITY. The subject is `b = 'BBBB'` for `b: string[4]`,
+	# which answered FALSE while b printed BBBB with Length 4 -- the equality
+	# guard was gated on tyAnsiString only, so both-frozen fell through to the
+	# integer compare and compared buffer ADDRESSES. Note what this row must NOT
+	# be replaced by: a literal-vs-literal check passes on the broken compiler,
+	# because two identical literals intern to one address and address equality
+	# and string equality agree. The variable is the whole test.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_trunc.pas $(TESTTMP)/test_xtensa_shortstring_trunc
+	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_xtensa_shortstring_trunc_x64
+	tools/expect_same.sh xtensa/test_xtensa_shortstring_trunc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_shortstring_trunc; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_shortstring_trunc_x64; echo "exit=$$?")"
+	# The first row the xtensa syscall table unblocked. ASSERTS THE EXIT STATUS,
+	# not stdout: the program's whole subject is dying by SIGTERM (-> 143) once
+	# the dispatch stub restores SIG_DFL and re-raises, and its stdout is one
+	# line that would match whether or not that happened. Same form as the
+	# riscv32/i386/aarch64/arm32 rows for this test, deliberately — a row that
+	# asserts the wrong observable is a green that means nothing.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_xtensa_sigdfl
+	tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigdfl > /dev/null 2>&1; tools/expect_same.sh xtensa/test_xtensa_sigdfl-rc "$$?" "143"
+	# The proc exception CLEANUP FRAME (Call0 only). Neither of these is in the
+	# 129-source cross differential, which has no exception-unwind coverage at
+	# all — so before these two rows existed, xtensa releasing nothing on an
+	# unwind was invisible to every sweep we run.
+	# test_managed_exception_cleanup raises 9000 times through a frame holding a
+	# 64 KiB string: without the frame that is ~590 MB leaked and the program
+	# SEGFAULTED rather than leaking quietly. test_interface_arc_exc prints the
+	# missing release as a number — `unwind freed=2` against the oracle's 3.
+	# bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_exception_cleanup.pas $(TESTTMP)/test_xtensa_managed_exc_cleanup
+	./$(COMPILER) test/test_managed_exception_cleanup.pas $(TESTTMP)/test_xtensa_managed_exc_cleanup_x64
+	tools/expect_same.sh xtensa/test_managed_exception_cleanup "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_managed_exc_cleanup)" "$$($(TESTTMP)/test_xtensa_managed_exc_cleanup_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interface_arc_exc.pas $(TESTTMP)/test_xtensa_interface_arc_exc
+	./$(COMPILER) test/test_interface_arc_exc.pas $(TESTTMP)/test_xtensa_interface_arc_exc_x64
+	tools/expect_same.sh xtensa/test_interface_arc_exc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_interface_arc_exc)" "$$($(TESTTMP)/test_xtensa_interface_arc_exc_x64)"
+	# ---------------------------------------------------------------------
+	# WINDOWED ABI — the executed rows. Everything above this line is Call0.
+	#
+	# Until these landed, `--xtensa-abi=windowed` appeared exactly twice in this
+	# entire Makefile and BOTH rows were compile-only: one grepped a .o header,
+	# the other printed "lowers ok". So the whole windowed backend was gated on
+	# "the compiler did not crash" — a check whose PASS and whose SKIP print the
+	# same thing. What that cost, measured: 41 of 94 windowed programs were dying
+	# on SIGBUS (signal 7, an unaligned l32i on a data section that had never been
+	# aligned), they were repaired as an accidental side effect of a qemu PERF
+	# commit, and no gated suite in this repo could see the breakage or the
+	# repair. The only instrument that ever executed a windowed program was a
+	# scratch harness in one agent's /tmp.
+	#
+	# The comment that kept anyone from asking said "no runner: windowed images
+	# link through xtensa-esp-elf-gcc". True when written, false since the hosted
+	# profile landed: these rows use plain tools/run_target.sh xtensa, the same
+	# runner the 107 Call0 rows above already use. A refusal is a claim with a
+	# date on it, and that one outlived its reason by an unknown margin.
+	#
+	# WHY THESE FIVE AND NOT FIVE OTHERS. Each was measured RED under windowed at
+	# 75d2ba662^ and green at 75d2ba662 — they are 5 of the 41 that flipped, one
+	# per aggregate/RTTI family, chosen because a row that has demonstrably been
+	# red is worth more than five that never have. They are canaries, not a port
+	# of the 129-source differential; that harness is not in this repo and this
+	# is deliberately not it.
+	#
+	# PROVEN ABLE TO GO RED, because a gate row that has never failed is
+	# indistinguishable from one that CANNOT fail — which is the exact defect
+	# these rows exist to remove. Run against the pre-repair compiler
+	# (41e452a55913 = 75d2ba662^) all five die on signal 7 and BOTH slots fire:
+	# the rc slot reports exit 135 and the value slot reports differing output.
+	# Note which one carries the diagnosis — without the rc slot the failure
+	# reads as a value mismatch and the SIGBUS is invisible.
+	#
+	# What did NOT reproduce it, recorded because it is the more useful half:
+	# setting ELF_DATA_ALIGN = 1 at HEAD leaves all five GREEN. The data section
+	# is page-aligned a second time by the PT_LOAD split (3b8d1039e) — readelf
+	# shows data in its own segment at offset 0x30000 — so AlignCodeForData is
+	# currently REDUNDANT on the executable path and CheckDataBaseAligned cannot
+	# fire there. That is belt-and-braces on a property that cost 41 programs,
+	# not a defect; but it means the invariant is not what these rows are
+	# measuring today, and anyone who removes the split must not read their
+	# green as evidence the explicit alignment still holds it up.
+	#
+	# TWO OUTCOME SLOTS PER PROGRAM, because the subject has two outcomes. A
+	# SIGBUS is a STATUS, not a string: the one-line $$(...) form keeps stdout,
+	# silently discards the status, and would report a VALUE MISMATCH for a
+	# signal death — the right verdict for the wrong reason, handed to whoever
+	# reads the failure. The 107 Call0 rows above still have that shape; they
+	# fail on a crash (empty output != oracle) but they misdiagnose it.
+	# bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never
+	# ---------------------------------------------------------------------
+	# records — multi-word descriptors, the shape b4's alignment canary used
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_record.pas $(TESTTMP)/xtw_record
+	./$(COMPILER) test/test_cross_record.pas $(TESTTMP)/xtw_record_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_record > $(TESTTMP)/xtw_record.out; tools/expect_same.sh xtensa-windowed/test_cross_record-rc "$$?" "0"
+	$(TESTTMP)/xtw_record_x64 > $(TESTTMP)/xtw_record_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_record "$$(cat $(TESTTMP)/xtw_record.out)" "$$(cat $(TESTTMP)/xtw_record_x64.out)"
+	# dynamic arrays — the length/refcount header ahead of the payload
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_dynarray.pas $(TESTTMP)/xtw_dynarray
+	./$(COMPILER) test/test_cross_dynarray.pas $(TESTTMP)/xtw_dynarray_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_dynarray > $(TESTTMP)/xtw_dynarray.out; tools/expect_same.sh xtensa-windowed/test_cross_dynarray-rc "$$?" "0"
+	$(TESTTMP)/xtw_dynarray_x64 > $(TESTTMP)/xtw_dynarray_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_dynarray "$$(cat $(TESTTMP)/xtw_dynarray.out)" "$$(cat $(TESTTMP)/xtw_dynarray_x64.out)"
+	# interfaces — vtable and RTTI words reached through two indirections
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_interfaces.pas $(TESTTMP)/xtw_interfaces
+	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/xtw_interfaces_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_interfaces > $(TESTTMP)/xtw_interfaces.out; tools/expect_same.sh xtensa-windowed/test_interfaces-rc "$$?" "0"
+	$(TESTTMP)/xtw_interfaces_x64 > $(TESTTMP)/xtw_interfaces_x64.out
+	tools/expect_same.sh xtensa-windowed/test_interfaces "$$(cat $(TESTTMP)/xtw_interfaces.out)" "$$(cat $(TESTTMP)/xtw_interfaces_x64.out)"
+	# sets — multi-word bitmaps loaded a word at a time
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_sets.pas $(TESTTMP)/xtw_sets
+	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/xtw_sets_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_sets > $(TESTTMP)/xtw_sets.out; tools/expect_same.sh xtensa-windowed/test_cross_sets-rc "$$?" "0"
+	$(TESTTMP)/xtw_sets_x64 > $(TESTTMP)/xtw_sets_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_sets "$$(cat $(TESTTMP)/xtw_sets.out)" "$$(cat $(TESTTMP)/xtw_sets_x64.out)"
+	# variants — a tagged union whose payload word follows a byte tag
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_variant.pas $(TESTTMP)/xtw_variant
+	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/xtw_variant_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_variant > $(TESTTMP)/xtw_variant.out; tools/expect_same.sh xtensa-windowed/test_cross_variant-rc "$$?" "0"
+	$(TESTTMP)/xtw_variant_x64 > $(TESTTMP)/xtw_variant_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_variant "$$(cat $(TESTTMP)/xtw_variant.out)" "$$(cat $(TESTTMP)/xtw_variant_x64.out)"
+	@echo "hosted xtensa: 107 programs Call0 + 5 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
@@ -13135,11 +14904,42 @@ test-chess-perft: $(COMPILER)
 # Host-only checks via binutils readelf; if the ESP cross toolchains are
 # installed (~/.espressif), also proves each .o links against a C shim.
 test-emit-obj: $(COMPILER)
+	# THE x86-64 ROWS COME FIRST because for a year this rule had none, and the
+	# flag it is named for was broken on the DEFAULT target the whole time:
+	# every assertion below targeted riscv32 or xtensa. A Pascal program asked
+	# for an object and got `ok: [... data=2864B bss=42332B procs=132]` over a
+	# file with 4 symbols, none defined, no .data, no .bss and a zero-size
+	# .rela.text -- nothing could link it and nothing said so.
+	# bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations
+	#
+	# 1. It must REFUSE, and the refusal must REPLACE the success line, not
+	#    accompany it. Both halves asserted: non-zero status AND no `ok:`.
+	#    No `|| true` before the capture: that is the face-229 defect itself,
+	#    `$$?` would be TRUE's status and the row would pass on a success.
+	#    `;` is enough -- make sees echo's 0 and the line does not abort.
+	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64.o > $(TESTTMP)/test_emit_obj_x64.log 2>&1; echo "rc=$$?" > $(TESTTMP)/test_emit_obj_x64.rc
+	! grep -q '^rc=0$$' $(TESTTMP)/test_emit_obj_x64.rc
+	grep -q 'emit-obj' $(TESTTMP)/test_emit_obj_x64.log
+	! grep -q '^ok: ' $(TESTTMP)/test_emit_obj_x64.log
+	# 2. ...and it must not leave a half-written object behind for a build
+	#    system to pick up and link.
+	! test -f $(TESTTMP)/test_emit_obj_x64.o
+	# 3. The .asm frontend, which is whose writer that is, keeps working: a
+	#    source needing only text, global labels and extern calls is exactly
+	#    what it can express, so the guard must not fire on it.
+	./$(COMPILER) --emit-obj test/test_asm_obj.asm $(TESTTMP)/test_emit_obj_asm.o
+	readelf -h $(TESTTMP)/test_emit_obj_asm.o | grep -q 'REL (Relocatable file)'
+	readelf -sW $(TESTTMP)/test_emit_obj_asm.o | grep -q 'GLOBAL DEFAULT    1 asm_obj_add'
 	./$(COMPILER) --target=riscv32 test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_rv.o
 	readelf -h $(TESTTMP)/test_emit_obj_rv.o | grep -q 'REL (Relocatable file)'
 	readelf -h $(TESTTMP)/test_emit_obj_rv.o | grep -q 'RISC-V'
 	readelf -s $(TESTTMP)/test_emit_obj_rv.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
 	readelf -s $(TESTTMP)/test_emit_obj_rv.o | grep -q 'UND ext_notify'
+	# bug-a-emit-obj-ignores-external-name: the alias must be the UND symbol,
+	# and the Pascal identifier must appear nowhere. The negative is the half
+	# that catches the bug -- the pre-fix object compiled and was still wrong.
+	readelf -sW $(TESTTMP)/test_emit_obj_rv.o | grep -q 'UND ext_aliased_link'
+	! readelf -sW $(TESTTMP)/test_emit_obj_rv.o | grep -q 'ext_alias_decl'
 	readelf -r $(TESTTMP)/test_emit_obj_rv.o | grep -q 'R_RISCV_32'
 	readelf -r $(TESTTMP)/test_emit_obj_rv.o | grep -q 'ext_notify + 0'
 	./$(COMPILER) --target=xtensa test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_xt.o
@@ -13147,6 +14947,11 @@ test-emit-obj: $(COMPILER)
 	readelf -h $(TESTTMP)/test_emit_obj_xt.o | grep -q 'Xtensa'
 	readelf -s $(TESTTMP)/test_emit_obj_xt.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
 	readelf -s $(TESTTMP)/test_emit_obj_xt.o | grep -q 'UND ext_notify'
+	# bug-a-emit-obj-ignores-external-name: the alias must be the UND symbol,
+	# and the Pascal identifier must appear nowhere. The negative is the half
+	# that catches the bug -- the pre-fix object compiled and was still wrong.
+	readelf -sW $(TESTTMP)/test_emit_obj_xt.o | grep -q 'UND ext_aliased_link'
+	! readelf -sW $(TESTTMP)/test_emit_obj_xt.o | grep -q 'ext_alias_decl'
 	readelf -r $(TESTTMP)/test_emit_obj_xt.o | grep -q 'R_XTENSA_32'
 	readelf -r $(TESTTMP)/test_emit_obj_xt.o | grep -q 'ext_notify + 0'
 	# bug-cfront-no-entry-stub-for-xtensa: C compiles for the ESP ISAs in the only
@@ -13168,7 +14973,21 @@ test-emit-obj: $(COMPILER)
 	readelf -h $(TESTTMP)/test_emit_obj_xt_windowed.o | grep -q 'Xtensa'
 	readelf -s $(TESTTMP)/test_emit_obj_xt_windowed.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
 	readelf -r $(TESTTMP)/test_emit_obj_xt_windowed.o | grep -q 'R_XTENSA_32'
-	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nextern void app_main(void);\nint main(void) { app_main(); return captured; }\n' > $(TESTTMP)/test_emit_obj_shim.c
+	# ext_aliased_link is REQUIRED here, and its absence is what this recipe's
+	# two halves disagreed about. The readelf assertions 20 lines up demand the
+	# object leave `ext_aliased_link` undefined (that is the whole subject of
+	# bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier), and
+	# then this shim linked without providing it, so the link step could only
+	# fail once the compiler started getting it right. The test contradicted
+	# itself inside one target, and the contradiction arrived with the commit
+	# that made the test correct (1a7658326).
+	#
+	# It read as riscv32-specific and is not: all three objects carry
+	# `UND ext_aliased_link` identically, and _xt.o fails the same way against
+	# the old shim at a different .text offset. Only the riscv32 line appeared
+	# in the log because make ABORTS there and never reaches the xtensa links.
+	# regression-test-emit-obj-test-emit-obj
+	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nvoid ext_aliased_link(int v) { (void)v; }\nextern void app_main(void);\nint main(void) { app_main(); return captured; }\n' > $(TESTTMP)/test_emit_obj_shim.c
 	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
 	if [ -n "$$RV" ]; then \
 	  $$RV -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim.c $(TESTTMP)/test_emit_obj_rv.o -o $(TESTTMP)/test_emit_obj_rv.elf && echo "riscv32 .o links ok"; \
@@ -13384,9 +15203,33 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_asm.pas > $(TESTTMP)/test_esp_asm.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_asm.oracle $(TESTTMP)/test_esp_asm.s3; then echo "esp32s3 inline asm ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 inline asm MISMATCH"; exit 1; fi; fi
-	# the windowed ABI picks a7 as the frame pointer, not a15 — it must at least
-	# lower (no runner: windowed images link through xtensa-esp-elf-gcc)
+	# the windowed ABI picks a7 as the frame pointer, not a15 — this row checks it
+	# lowers. It used to say "no runner: windowed images link through
+	# xtensa-esp-elf-gcc", which stopped being true and nothing noticed: a HOSTED
+	# windowed program runs under plain tools/run_target.sh xtensa, the same
+	# runner the 107 Call0 rows here already use. The executed row is below.
 	@./$(COMPILER) --target=xtensa --xtensa-abi=windowed test/test_esp_bare_asm.pas $(TESTTMP)/test_esp_asm_win.o >/dev/null && echo "xtensa windowed inline asm lowers ok"
+	# THE ONE EXECUTED WINDOWED ROW. Every other xtensa row in this file is Call0,
+	# so until this landed the entire windowed backend was gated on "the compiler
+	# did not crash" — a check whose pass and whose skip print the same thing.
+	# What it guards: the data section begins right after code, so its alignment
+	# is whatever CodeLen happens to leave. Xtensa's l32i faults on a misaligned
+	# word (SIGBUS, signal 7); x86-64 and riscv32 do not. 41 of 94 windowed
+	# programs were dying on that and nobody could see it. test_cross_record
+	# reads multi-word record descriptors, which is the shape that faults.
+	# MEASURED, not hopeful: this row SIGBUSes at 75d2ba662^ and passes at
+	# 75d2ba662. AlignCodeForData in elfwriter.inc is what holds it now — verified
+	# by deleting the page pad and re-running this row, which still passed.
+	# bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_record.pas $(TESTTMP)/xt_win_record
+	./$(COMPILER) test/test_cross_record.pas $(TESTTMP)/xt_win_record_x64
+	# Two outcome slots, because the subject has two outcomes: a SIGBUS is a
+	# status, not a string, and the ticket's one-line form would have compared
+	# truncated stdout and called the difference a value mismatch.
+	tools/run_target.sh xtensa $(TESTTMP)/xt_win_record > $(TESTTMP)/xt_win_record.out; tools/expect_same.sh xtensa-windowed/test_cross_record-rc "$$?" "0"
+	$(TESTTMP)/xt_win_record_x64 > $(TESTTMP)/xt_win_record_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_record "$$(cat $(TESTTMP)/xt_win_record.out)" "$$(cat $(TESTTMP)/xt_win_record_x64.out)"
 	# bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c: the
 	# xtensa C ABI starts a 64-bit argument at an EVEN word index; pxx now applies
 	# that rule unconditionally on BOTH sides (caller pad + callee spill), so a
@@ -14489,15 +16332,15 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_exp2.c $(TESTTMP)/crtl_exp2
 	$(TESTTMP)/crtl_exp2; tools/expect_same.sh crtl_exp2-rc "$$?" "42"
 	@if command -v xvfb-run >/dev/null 2>&1 && [ -e /usr/lib/$$(uname -m)-linux-gnu/libtk8.6.so.0 ]; then \
-	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/hello.npy $(TESTTMP)/lib_tk_hello >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/hello.npy $(TESTTMP)/lib_tk_hello >/dev/null && \
 	  tools/expect_same.sh lib_tk_hello "$$(xvfb-run -a $(TESTTMP)/lib_tk_hello)" "ok: nilpy tk window shown and closed" && \
-	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/widgets.npy $(TESTTMP)/lib_tk_widgets >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/widgets.npy $(TESTTMP)/lib_tk_widgets >/dev/null && \
 	  tools/expect_same.sh lib_tk_widgets "$$(xvfb-run -a $(TESTTMP)/lib_tk_widgets | tail -n 4)" "$$(printf 'entry = typed into an entry\ntext  = and into a text widget\nlabel = widgets, one TkEval each\nok: nilpy tk widgets shown and closed')" && \
-	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/kwargs.npy $(TESTTMP)/lib_tk_kwargs >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/kwargs.npy $(TESTTMP)/lib_tk_kwargs >/dev/null && \
 	  tools/expect_same.sh lib_tk_kwargs "$$(xvfb-run -a $(TESTTMP)/lib_tk_kwargs | tr -d '\n')" "get HELLOafter-delete LOvar bkwargs ok" && \
-	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/callbacks.npy $(TESTTMP)/lib_tk_callbacks >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/callbacks.npy $(TESTTMP)/lib_tk_callbacks >/dev/null && \
 	  tools/expect_same.sh lib_tk_callbacks "$$(xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
-	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/htmlview.npy $(TESTTMP)/lib_tk_htmlview >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/htmlview.npy $(TESTTMP)/lib_tk_htmlview >/dev/null && \
 	  tools/expect_same.sh lib_tk_htmlview "$$(xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
@@ -14624,6 +16467,29 @@ else
 	$(PXX_STABLE) --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_ssl.pas $(TESTTMP)/lib_synapse_ssl
 	tools/expect_same.sh lib_synapse_ssl.1 "$$($(TESTTMP)/lib_synapse_ssl | grep -c '=ok')" "3"
 	tools/expect_same.sh lib_synapse_ssl.2 "$$($(TESTTMP)/lib_synapse_ssl | tail -1)" "SYNAPSE-SSL OK"
+	# ...and a real HANDSHAKE, which the line above does not cover: it proves the
+	# loader resolves symbols, not that a conversation completes. Self-exec, so
+	# both ends are ours -- no openssl CLI, no cert file, no fixed port, and no
+	# extra wiring here because the server is this same binary re-run with an
+	# argument. feature-b-a-hermetic-tls-loopback-for-the-ssl-suite
+	#
+	# The arm with teeth is the SECOND handshake, which turns verification ON and
+	# requires the self-signed cert to be REJECTED. A permissive handshake can
+	# complete without X509_verify_cert ever reaching a decision -- and that
+	# function is where the compiler bug this guards actually lived
+	# (bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert),
+	# so without the rejecting arm this test could be green while never entering
+	# the code it exists to protect.
+	#
+	# Measured 80/80 green (40 serial + 40 as eight concurrent) at ~1.2s, on a box
+	# loaded at 13 on 12 cores. Exit 77 = prerequisite absent (no usable libssl at
+	# RUN time, which the compile cannot tell us), reported as a skip rather than
+	# a silent pass.
+	$(PXX_STABLE) --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_tls_loopback.pas $(TESTTMP)/lib_synapse_tls_loopback
+	@rc=0; out=$$($(TESTTMP)/lib_synapse_tls_loopback 2>&1) || rc=$$?; \
+	 if [ $$rc = 77 ]; then echo "SKIP lib_synapse_tls_loopback -- $$out"; echo tls-loopback >> $(TESTTMP)/lib-test.skipped; \
+	 elif [ $$rc != 0 ]; then echo "lib_synapse_tls_loopback: FAIL"; echo "$$out"; exit 1; \
+	 else tools/expect_same.sh lib_synapse_tls_loopback "$$out" "$$(printf 'harness=ok\nssl=ok\ndata=ok\nharness2=ok\nverify-rejects=ok\nverify-reason=ok\nTLS-LOOPBACK OK')"; fi
 endif
 	$(PXX_STABLE) test/lib_dns_cache.pas $(TESTTMP)/lib_dns_cache
 	tools/expect_same.sh lib_dns_cache "$$($(TESTTMP)/lib_dns_cache)" "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok\nv6-hit=ok\nv6-coexist=ok\nv6-expired=ok\nv6-neg=ok\ncn-hit=ok\ncn-coexist=ok\ncn-expired=ok\ncn-ttl-noop=ok')"
@@ -15047,6 +16913,20 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_dom.npy $(TESTTMP)/lib_mimic_xml_dom
 	tools/expect_same.sh lib_mimic_xml_dom.1 "$$($(TESTTMP)/lib_mimic_xml_dom | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_xml_dom.2 "$$($(TESTTMP)/lib_mimic_xml_dom | tail -1)" "MIMIC-XML-DOM OK"
+	# weakref.proxy, and nothing else (feature-b-a-real-minidom-is-an-
+	# implementation-not-a-shim, piece 1). The runtime is refcounted with no weak
+	# references, so `proxy` returns the target itself: identical OUTPUT, and a
+	# strong reference where CPython has a weak one, which leaks one TreeBuilder
+	# per parse in html5lib's dom treebuilder. `ref` and the weak containers are
+	# deliberately ABSENT rather than strong -- `if r() is None:` would take the
+	# wrong branch forever, which is the mimic_xml_dom `0 == 0` failure again.
+	# This differential asserts only what both interpreters AGREE on (forwarding
+	# of reads, writes and calls); the three divergences are in the shim's header
+	# and are deliberately unasserted, so this file still passes unchanged if
+	# proxy ever becomes a real weak reference.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_weakref.npy $(TESTTMP)/lib_mimic_weakref
+	tools/expect_same.sh lib_mimic_weakref.1 "$$($(TESTTMP)/lib_mimic_weakref | grep -c '=ok')" "11"
+	tools/expect_same.sh lib_mimic_weakref.2 "$$($(TESTTMP)/lib_mimic_weakref | tail -1)" "MIMIC-WEAKREF OK"
 	# xml.etree.ElementTree as a TREE MODEL with no XML reader
 	# (feature-b-mimic-xml-etree-elementtree-tree-model). html5lib hands the
 	# module to its treebuilder/treewalker as somewhere to hang a tree and
@@ -15487,7 +17367,7 @@ endif
 	# not cover them". awk dedupes rather than `sort -u`, which merges
 	# distinct identifiers under some locales.
 	@sk="$$(awk '!a[$$0]++' $(TESTTMP)/lib-test.skipped 2>/dev/null | tr '\n' ' ' | sed 's/ *$$//')"; \
-	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
+	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl + tls-loopback) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
@@ -15522,7 +17402,7 @@ demos: pxx-stable-check
 	 for src in `grep -rlE '^[[:space:]]*program[[:space:]]' examples --include='*.pas' | grep -v '/esp32/' | sort`; do \
 	   dir=`dirname $$src`; base=`basename $$src .pas`; n=$$((n+1)); \
 	   ts=; grep -qE '^[[:space:]]*uses.*palparallel|\bpalparallel\b' "$$src" && ts=--threadsafe; \
-	   if $(PXX_STABLE) $$ts -Fu$$dir $$fu -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix "$$src" "$(DEMO_OUT)/$$base" >$(DEMO_OUT)/.build.log 2>&1; then \
+	   if $(PXX_STABLE) $$ts -Fu$$dir $$fu -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) "$$src" "$(DEMO_OUT)/$$base" >$(DEMO_OUT)/.build.log 2>&1; then \
 	     printf '  OK    %s\n' "$$src"; ok=$$((ok+1)); \
 	   else \
 	     printf '  FAIL  %s  -- %s\n' "$$src" "`tail -1 $(DEMO_OUT)/.build.log`"; fail=1; \

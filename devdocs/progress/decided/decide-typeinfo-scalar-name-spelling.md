@@ -69,6 +69,19 @@ not error-handling compliance"* — and this is not even semantics, it is a stri
 
 Implementation: [[feature-a-typeinfo-integer-name-under-strict-fpc]].
 
+**That link resolved to nothing from 2026-08-21 to 2026-08-30** — the ticket was
+named here and never filed, so this decision sat in `decided/` reading as
+discharged with nothing tracking it. Filed 2026-08-30 under exactly this slug,
+after first ruling out the likelier and quieter possibility that it had been
+delivered under another name: measured against `$(PXX_STABLE)`, `TypeInfo` of a
+plain `Integer` rename reports **`Integer`** under default, `--mimic-fpc`,
+`--strict-case` and `--strict-fpc` alike. Undelivered, not undocumented.
+
+The umbrella itself is live — `--strict-fpc` is absent from `--help`, which is
+what makes it look absent, but it is accepted and it changes behaviour
+(`Char(Variant(65))` gives `A` by default and `6` under it). So this is a missing
+arm, not a missing flag.
+
 ## Premise corrected before deciding (measured, FPC 3.2.2 / x86-64)
 
 The ticket's table was right but its framing invited two wrong turns, both taken

@@ -9,9 +9,22 @@ summary: "Mutating a dict while iterating it is silently unobserved; CPython rai
 # Mutating a dict during iteration is silently ignored
 
 - **Type:** bug / divergence (NilPy) — **Track N**
-- **Found:** 2026-08-02, while fixing
-  [[bug-nilpy-for-in-snapshots-the-length-so-mutation-during-iteration-diverges]]
-  (the LIST half, fixed in `4eadf7f54`). Noted in the code at the fix site.
+- **Found:** 2026-08-02, while fixing the LIST half — landed as `4eadf7f54`,
+  *"fix(N): for-in over a list snapshotted the length, so mutation mid-loop
+  diverged"*. Noted in the code at the fix site.
+
+  *(De-linked 2026-08-30. That name was never a ticket: the list half was fixed
+  and committed directly, and the slug was written from memory of the **commit
+  subject**, which it reproduces almost word for word. This is the mechanism
+  [[chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected]]
+  describes — a descriptive slug written from what the work was ABOUT — with the
+  source being a commit rather than another ticket, so no rename can ever fix it.*
+  *Nothing was lost, and that is the point worth keeping: the sha sat beside the
+  slug, and `git show 4eadf7f54` carries the entire finding — both divergence
+  directions, why str keeps the snapshot, and why the DICT case stays unobserved,
+  i.e. the reason THIS ticket exists. **A slug next to its sha is self-repairing;
+  a slug alone is not.** Same rule the pin ledger needed one namespace over: cite
+  the sha, never the name alone.)*
 
 ```python
 d = {"a": 1, "b": 2}

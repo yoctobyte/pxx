@@ -66,6 +66,52 @@ ALLOWED_PATHS = {
         "PINNED: same — test/lua/runner.c and the Makefile share the name",
 }
 
+# ---------------------------------------------------------------------------
+# THE SECOND CHECK: a test that stopped SAYING /tmp but still writes there.
+#
+# The scan above only proves a source contains no `/tmp` literal. That is not
+# the same as isolating, and the gap is not theoretical -- it is what this
+# guard's own advice produced.
+#
+# testmgr launches every job through an environment ALLOWLIST (`ENV_ALLOW`,
+# `ENV_ALLOW_PREFIXES` = PXX_/TESTMGR_/LC_/QEMU_), deliberately, so a job starts
+# from a declared environment. `TESTTMP` is in neither, so it does NOT reach the
+# job. A test that reads only `$TESTTMP` therefore takes its fallback under
+# testmgr -- `/tmp`, or `GetTempDir` which is `/tmp` when TMPDIR is unset -- and
+# lands on exactly the shared path the literal was rejected for. Guard green,
+# collision intact.
+#
+# `TESTMGR_TMP` survives, by the TESTMGR_ prefix, and testmgr already sets it
+# per run to a pid-keyed directory it creates. So the order that works
+# everywhere is TESTMGR_TMP, then TESTTMP (the plain-`make` path), then the
+# default -- which keeps a bare run byte-identical.
+#
+# bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips.
+#
+# WHAT THIS CHECKS, EXACTLY: the ENV READS in a file, in source order. Not bare
+# mentions -- the worked example below discusses both variables at length in a
+# comment and would fail a mention-based test while being the correct pattern.
+# Reads are found by the accessor call, so a comment cannot satisfy or break it.
+ENV_READ_RE = re.compile(
+    r"""(?:GetEnvironmentVariable|GetEnv|getenv|os\.environ\.get|os\.getenv"""
+    r"""|environ\.get|environ)\s*[\(\[]\s*["']([A-Za-z_][A-Za-z0-9_]*)["']""")
+
+# A RATCHET, exactly like KNOWN above, and for the same reason: these five are
+# not defects, they are what this guard ASKED FOR, faithfully. Failing them
+# today would red the fleet over sources that belong to other lanes, and a red
+# ratchet is a disabled ratchet. They are listed, they are green, and anything
+# NEW that reads $TESTTMP without $TESTMGR_TMP fails.
+#
+# The owning lane is named so the fix has an address; each is one line to remove
+# once its lane converts it.
+KNOWN_ENV_ONLY = {
+    "test/lib_ioresult_fpc_codes.pas":       "B (lib_* RTL test)",
+    "test/lib_text_seek_rename.pas":         "B (lib_* RTL test)",
+    "test/lib_textreadnumtok.pas":           "B (lib_* RTL test)",
+    "test/test_read_text_char.pas":          "P (Pascal frontend test)",
+    "test/test_read_text_value_cursor.pas":  "P (Pascal frontend test)",
+}
+
 KNOWN = {
     # test/cdup.c
     ("test/cdup.c", "/tmp/pxx_dup_probe.txt"),
@@ -168,6 +214,63 @@ KNOWN = {
 }
 
 
+def tmp_env_reads(text):
+    """The temp-dir variables this source READS, in source order. -> [str]
+
+    Reads, not mentions: found by the accessor call, so a comment explaining the
+    rule neither satisfies nor breaks it. The worked example discusses both
+    variables at length above the code that reads them.
+    """
+    return [m.group(1) for m in ENV_READ_RE.finditer(text)
+            if m.group(1) in ("TESTTMP", "TESTMGR_TMP")]
+
+
+def isolates(text):
+    """Does this source get a private directory under testmgr? -> bool
+
+    True when it reads no temp variable at all (it is not asking for one), or
+    when the FIRST one it reaches for is TESTMGR_TMP — the only one that
+    survives testmgr's environment allowlist.
+
+    Order is what is checked, not presence: a source that reads TESTTMP first
+    and TESTMGR_TMP as its fallback gets nothing from the first read under
+    testmgr and then does the right thing, which works — but it also works when
+    the order is reversed, and reversed is the order that also works under plain
+    `make`. Requiring TESTMGR_TMP first is therefore the rule that has one
+    answer everywhere, which is the property the allowlist took away.
+    """
+    reads = tmp_env_reads(text)
+    return not reads or reads[0] == "TESTMGR_TMP"
+
+
+# The remedy, in the ONE place authors read it. Order matters and is the whole
+# correction: TESTMGR_TMP survives testmgr's allowlist, TESTTMP survives plain
+# `make`, and the default keeps a bare run byte-identical to the literal.
+ADVICE = """
+Read the directory from the environment, in this order:
+
+  Pascal:  dir := GetEnvironmentVariable('TESTMGR_TMP');
+           if dir = '' then dir := GetEnvironmentVariable('TESTTMP');
+           if dir = '' then dir := '/tmp';          { or GetTempDir }
+
+  C:       const char *dir = getenv("TESTMGR_TMP");
+           if (!dir) dir = getenv("TESTTMP");
+           if (!dir) dir = "/tmp";
+
+  NilPy:   dir = os.environ.get('TESTMGR_TMP') or os.environ.get('TESTTMP') or '/tmp'
+
+TESTMGR_TMP FIRST: testmgr launches jobs through an environment allowlist
+(ENV_ALLOW / ENV_ALLOW_PREFIXES = PXX_ TESTMGR_ LC_ QEMU_), so $TESTTMP alone
+does not reach the job and its fallback is the shared path this guard rejected
+the literal for. TESTMGR_TMP is set per run to a pid-keyed directory testmgr
+creates. TESTTMP second: it is what `make test TESTTMP=$(mktemp -d)` exports.
+The default keeps a bare run byte-identical.
+
+Worked example: test/test_nilpy_class_named_like_an_rtl_record.npy.
+Or add the path to ALLOWED_PATHS with a reason.
+"""
+
+
 def main():
     seen, unlisted = set(), []
     for r in ROOTS:
@@ -193,22 +296,57 @@ def main():
     for rel, q in fixed:
         print("  ok   %s no longer hardcodes %s — remove it from KNOWN" % (rel, q))
 
+    env_only, env_seen = [], set()
+    for r in ROOTS:
+        for p in sorted((ROOT / r).rglob("*")):
+            if p.suffix not in EXTS or not p.is_file():
+                continue
+            rel = str(p.relative_to(ROOT))
+            try:
+                text = p.read_text(errors="replace")
+            except OSError:
+                continue
+            if isolates(text):
+                continue
+            if rel in KNOWN_ENV_ONLY:
+                env_seen.add(rel)
+            else:
+                env_only.append(rel)
+    env_fixed = sorted(set(KNOWN_ENV_ONLY) - env_seen)
+    for rel in env_fixed:
+        print("  ok   %s now reads $TESTMGR_TMP first — remove it from "
+              "KNOWN_ENV_ONLY" % rel)
+
     if unlisted:
         print("\nFAIL: new hardcoded /tmp path(s) in compiled test sources. These "
               "are written at RUNTIME, so no Makefile sweep reaches them and "
               "testmgr cannot privatize them — two concurrent runs share the file:")
         for rel, q in unlisted:
             print("  %-52s %s" % (rel, q))
-        print("\nRead the directory from the environment instead ($TESTTMP, which "
-              "the sweep already exports; default /tmp keeps it byte-identical), "
-              "or add it to ALLOWED_PATHS with a reason.")
+        print(ADVICE)
+        return 1
+
+    if env_only:
+        print("\nFAIL: source(s) that read $TESTTMP but never $TESTMGR_TMP. Under "
+              "testmgr these are as collision-prone as the /tmp literal they "
+              "replaced: the job environment is an ALLOWLIST (PXX_/TESTMGR_/LC_/"
+              "QEMU_ plus a fixed set), TESTTMP is not in it, so the read returns "
+              "nothing and the fallback lands on the shared path:")
+        for rel in env_only:
+            print("  %s" % rel)
+        print(ADVICE)
         return 1
 
     print("\n  ok   no unlisted hardcoded /tmp path (%d known, %d allowed file(s), "
           "%d allowed path(s))" % (len(KNOWN), len(ALLOWED_FILES), len(ALLOWED_PATHS)))
+    print("  ok   no source reaches for $TESTTMP without $TESTMGR_TMP "
+          "(%d known)" % len(KNOWN_ENV_ONLY))
     if fixed:
         print("  NOTE %d KNOWN entr(y/ies) above are stale — delete them so the "
               "ratchet keeps tightening" % len(fixed))
+    if env_fixed:
+        print("  NOTE %d KNOWN_ENV_ONLY entr(y/ies) above are stale — delete "
+              "them too" % len(env_fixed))
     return 0
 
 

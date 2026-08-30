@@ -104,21 +104,14 @@ type
     strokeColour: LongWord;
     lineWidth: Double;
     pageOpen: Boolean;
-    { TWO constructors rather than one with a default, and that is a WORKAROUND
-      (devdocs/dev/track-b-workarounds.md) for
-      bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory: a
-      CONSTRUCTOR with a defaulted Variant parameter smashes the stack when the
-      caller omits it. Deterministic from Pascal, intermittent through NilPy,
-      and it lands as a crash in unrelated code — the original symptom faulted
-      inside printf formatting with the return addresses overwritten by text.
-
-      The one-argument form is `canvas.Canvas("out.pdf")`, reportlab's most
-      common call, so it has to work. Forwarding to the two-argument form with
-      an EXPLICIT 0 avoids the defaulted-parameter path entirely.
-
-      REVERT to a single `pagesize: Variant = 0` when that bug closes. }
-    constructor Create(const afilename: AnsiString);
-    constructor Create(const afilename: AnsiString; const pagesize: Variant);
+    { One constructor with a defaulted Variant, which is the platonic form.
+      This was TWO constructors -- a one-arg form forwarding an EXPLICIT 0 --
+      as a workaround for
+      bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory, where a
+      CONSTRUCTOR with a defaulted Variant parameter smashed the stack when the
+      caller omitted it. That bug is fixed; its own 12-line repro was re-run at
+      this pin, 25/25 clean, before this was collapsed. }
+    constructor Create(const afilename: AnsiString; const pagesize: Variant = 0);
     destructor Destroy; override;
     procedure setFont(const name: AnsiString; size: Double);
     procedure setFillColorRGB(r, g, b: Double);
@@ -168,6 +161,35 @@ begin
   if v < 0.0 then ClampUnit := 0.0
   else if v > 1.0 then ClampUnit := 1.0
   else ClampUnit := v;
+end;
+
+{ ---- every pdfgen call is checked, and this is why ----------------------
+
+  pdfgen returns a code from every entry point and parks a description behind
+  pdf_get_err. This unit used to read both for setFont, stringWidth and save,
+  and DROP them for every drawing call -- so a picture pdfgen refused produced
+  a PDF that was written, saved, and reported OK with the image simply absent,
+  and the caller learned nothing. That is the same defect as a stub lying about
+  its return TYPE, one level down: right shape, wrong content, no diagnostic.
+
+  A subset may refuse to do the work. It may not do nothing and say it worked.
+
+  Free function, not a method, deliberately: nothing a NilPy caller writes can
+  reach it, so it adds no name to the facade's Python-visible surface.
+  bug-b-drawimage-discards-pdfgens-error-and-writes-a-pdf-with-no-image }
+procedure PdfCheck(doc: Pointer; rc: Integer; const what: AnsiString);
+var msg: PChar; detail: AnsiString;
+begin
+  if rc >= 0 then exit;
+  { pdf_get_err answers nil when there is no message, which is not the same as
+    "no error" -- the code is authoritative, the string is the explanation. }
+  msg := pdf_get_err(doc, nil);
+  if msg = nil then detail := 'pdfgen error ' + IntToStr(rc)
+  else detail := StrPas(msg);
+  { acknowledge it, or the NEXT failure reports this one's message and sends
+    the reader to the wrong call }
+  pdf_clear_err(doc);
+  raise Exception.Create('reportlab shim: ' + what + ' -- ' + detail);
 end;
 
 function PdfRGB(r, g, b: Double): LongWord;
@@ -262,15 +284,7 @@ end;
 
 { ===== Canvas ===== }
 
-constructor Canvas.Create(const afilename: AnsiString);
-var none: Variant;
-begin
-  { explicit argument — see the declaration for why this is not a default }
-  none := 0;
-  Create(afilename, none);
-end;
-
-constructor Canvas.Create(const afilename: AnsiString; const pagesize: Variant);
+constructor Canvas.Create(const afilename: AnsiString; const pagesize: Variant = 0);
 var w, h: Single; ps: TPyList;
 begin
   outPath := afilename;
@@ -302,8 +316,10 @@ begin
   fillColour := 0;                 { black }
   strokeColour := 0;
   lineWidth := 1.0;
-  pdf_set_font(doc, PChar(curFont));
-  pdf_append_page(doc);
+  PdfCheck(doc, pdf_set_font(doc, PChar(curFont)),
+           'the default font "' + curFont + '" was refused');
+  if pdf_append_page(doc) = nil then
+    PdfCheck(doc, -1, 'could not open the first page');
   pageOpen := True;
 end;
 
@@ -321,9 +337,9 @@ procedure Canvas.setFont(const name: AnsiString; size: Double);
 begin
   curFont := name;
   curSize := size;
-  if pdf_set_font(doc, PChar(name)) < 0 then
-    raise Exception.Create('reportlab shim: unsupported font "' + name +
-      '" (the PDF standard-14 names only; embedded fonts are not in this subset)');
+  PdfCheck(doc, pdf_set_font(doc, PChar(name)),
+           'unsupported font "' + name + '" (the PDF standard-14 names only; '
+           + 'embedded fonts are not in this subset)');
 end;
 
 procedure Canvas.setFillColorRGB(r, g, b: Double);
@@ -355,14 +371,16 @@ procedure Canvas.drawString(x, y: Double; const text: AnsiString);
 var sz, sx, sy: Single;
 begin
   sz := curSize; sx := x; sy := y;
-  pdf_add_text(doc, nil, PChar(text), sz, sx, sy, fillColour);
+  PdfCheck(doc, pdf_add_text(doc, nil, PChar(text), sz, sx, sy, fillColour),
+           'drawString could not place the text');
 end;
 
 procedure Canvas.line(x1, y1, x2, y2: Double);
 var a, b, c, d, w: Single;
 begin
   a := x1; b := y1; c := x2; d := y2; w := lineWidth;
-  pdf_add_line(doc, nil, a, b, c, d, w, strokeColour);
+  PdfCheck(doc, pdf_add_line(doc, nil, a, b, c, d, w, strokeColour),
+           'line could not be drawn');
 end;
 
 procedure Canvas.rect(x, y, w, h: Double; const stroke: Variant; const fill: Variant);
@@ -371,9 +389,12 @@ begin
   sx := x; sy := y; sw := w; sh := h; bw := lineWidth;
   { reportlab's defaults: stroke on, fill off }
   if FlagOr(fill, False) then
-    pdf_add_filled_rectangle(doc, nil, sx, sy, sw, sh, bw, fillColour, strokeColour)
+    PdfCheck(doc, pdf_add_filled_rectangle(doc, nil, sx, sy, sw, sh, bw,
+                                           fillColour, strokeColour),
+             'rect could not be drawn (filled)')
   else if FlagOr(stroke, True) then
-    pdf_add_rectangle(doc, nil, sx, sy, sw, sh, bw, strokeColour);
+    PdfCheck(doc, pdf_add_rectangle(doc, nil, sx, sy, sw, sh, bw, strokeColour),
+             'rect could not be drawn');
 end;
 
 procedure Canvas.circle(x, y, r: Double; const stroke: Variant; const fill: Variant);
@@ -381,7 +402,8 @@ var sx, sy, sr, bw: Single; fc: LongWord;
 begin
   sx := x; sy := y; sr := r; bw := lineWidth;
   if FlagOr(fill, False) then fc := fillColour else fc := PDF_TRANSPARENT_ARGB;
-  pdf_add_circle(doc, nil, sx, sy, sr, bw, strokeColour, fc);
+  PdfCheck(doc, pdf_add_circle(doc, nil, sx, sy, sr, bw, strokeColour, fc),
+           'circle could not be drawn');
 end;
 
 procedure Canvas.drawImage(const src: Variant; const x: Variant; const y: Variant;
@@ -398,7 +420,12 @@ begin
   sx := pyvar_to_float(x); sy := pyvar_to_float(y);
   if pyvartag(width) = 0 then sw := 0 else sw := pyvar_to_float(width);
   if pyvartag(height) = 0 then sh := 0 else sh := pyvar_to_float(height);
-  pdf_add_image_file(doc, nil, sx, sy, sw, sh, PChar(path));
+  { the arm this ticket was filed for: pdfgen embeds PNG colour types 0/2/3,
+    baseline JPEG and BMP, and refuses everything else -- RGBA included, which
+    is what most screenshots are. Refusing is fine; refusing quietly is not. }
+  PdfCheck(doc, pdf_add_image_file(doc, nil, sx, sy, sw, sh, PChar(path)),
+           'drawImage could not embed "' + path + '" (pdfgen takes PNG colour '
+           + 'types 0/2/3, baseline JPEG and BMP)');
 end;
 
 function Canvas.beginText(x, y: Double): PDFTextObject;
@@ -416,7 +443,8 @@ begin
     drawString(pyvar_to_float(t.xs.at(i)), pyvar_to_float(t.ys.at(i)),
                pystr_of(t.lines.at(i)));
   curFont := savedFont; curSize := savedSize;
-  pdf_set_font(doc, PChar(curFont));
+  PdfCheck(doc, pdf_set_font(doc, PChar(curFont)),
+           'drawText could not restore the font "' + curFont + '"');
 end;
 
 function Canvas.stringWidth(const text: AnsiString; const font: AnsiString;
@@ -426,8 +454,16 @@ begin
   if font = '' then useFont := curFont else useFont := font;
   if size <= 0.0 then sz := curSize else sz := size;
   w := 0.0;
-  { pdfgen returns the width through an out-parameter and 0 on success }
-  if pdf_get_font_text_width(doc, PChar(useFont), PChar(text), sz, @w) < 0 then stringWidth := 0.0
+  { pdfgen returns the width through an out-parameter and 0 on success.
+    This one ANSWERS rather than raising -- reportlab's stringWidth is called
+    speculatively during layout and a zero is a usable answer there -- but it
+    must still ACKNOWLEDGE the error, or the message stays parked and the next
+    genuine failure reports this call's reason instead of its own. }
+  if pdf_get_font_text_width(doc, PChar(useFont), PChar(text), sz, @w) < 0 then
+  begin
+    pdf_clear_err(doc);
+    stringWidth := 0.0;
+  end
   else stringWidth := w;
 end;
 
@@ -435,13 +471,14 @@ procedure Canvas.showPage;
 begin
   { reportlab ends the current page here; the next drawing call starts a new
     one. pdfgen appends eagerly, so the page is opened now. }
-  pdf_append_page(doc);
+  if pdf_append_page(doc) = nil then
+    PdfCheck(doc, -1, 'showPage could not open the next page');
 end;
 
 procedure Canvas.save;
 begin
-  if pdf_save(doc, PChar(outPath)) < 0 then
-    raise Exception.Create('reportlab shim: could not write ' + outPath);
+  PdfCheck(doc, pdf_save(doc, PChar(outPath)),
+           'could not write ' + outPath);
 end;
 
 procedure Canvas.setBlendMode(const mode: Variant);

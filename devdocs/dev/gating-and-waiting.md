@@ -21,8 +21,24 @@ Track T's limited/full tiers, so the coverage is not lost — it is offloaded.
 
 **Which mode to run, and why you must not widen it, is CLAUDE.md's call** — see
 "THE PER-FIX LOOP" there; it is the authority and this file does not restate it.
-The one-liner: `gate.sh quick` per fix, then push; breadth is Track T's, run
-against your exact SHA. `full` is for when T is *proven* down.
+Two things that are safe to say without restating it: breadth belongs to Track T
+and runs against your exact SHA, and `full` is for when T is *proven* down
+(`twatch.py --status` exit 1, or `trackt.py health` reporting DOWN — slow or
+stale is not proven).
+
+> **Corrected 2026-08-30 (frankD).** This paragraph used to end *"The one-liner:
+> `gate.sh quick` per fix, then push"*, which contradicted CLAUDE.md — where
+> `gate.sh quick` is **optional** per fix (run it when you touched something you
+> are nervous about) and **required before a pin**, the one place the proof is
+> mandatory. The line predated the 2026-08-25 change that moved the proof off
+> the critical path; it did not disappear, it moved.
+>
+> Note the shape, because it is the one to watch for in any doc that defers to
+> another: **the sentence declaring "this file does not restate it" was
+> immediately followed by a restatement.** A deferral is not a safeguard — it
+> reads as one, which is why the stale summary underneath it went unread for
+> weeks. The reliable version of this pattern points at the authority and then
+> *stops*.
 
 It prints one line per step with its duration, `GREEN`/`RED` at the end, and exits
 with the gate's status. Logs land in one directory, named per step, and a failing
@@ -116,6 +132,46 @@ and the loop runs forever. This actually happened, twice, and looked exactly lik
 a stuck build. Wait on a marker file or on the job's own exit, not on a pattern
 that your waiting command also matches.
 
+**The trap survives changing the mechanism.** Moving from `pgrep -f` to a
+hand-written `/proc` scanner does not help: any detector whose pattern appears in
+the command that runs it will find itself, and the second implementation feels
+like a fix precisely because it is a different mechanism answering the same wrong
+way. Measured twice in five minutes on 2026-08-30, in two different lanes.
+
+### ...and the log you are told to read instead can be EMPTY (2026-08-30)
+
+The advice above -- *do not ask the process table, read the job's own output* --
+is right, and it has a failure mode that lands exactly when you need it.
+
+**Python block-buffers stdout when it is not a tty.** A long-running tool
+launched in the background, its output redirected to a file, accumulates every
+line in an 8 KB buffer and writes nothing until it exits. Measured: a
+`--minutes 40` fuzz run had **zero lines in its log after an hour**, and would
+have filled in completely the moment the answer stopped mattering.
+
+So the one artifact capable of distinguishing *slow* from *stuck* is empty for
+precisely as long as the question is live. **If you depend on the subject
+emitting, the subject has to be able to emit** -- and buffering is invisible
+interactively, which is the only place anyone would ever notice it missing.
+
+- **Writing a long-running Python tool:** `sys.stdout.reconfigure(line_buffering=True)`
+  before the run starts, and guard it with a test, because it has no local
+  effect. `tools/pasmith_run.py:1056` does this;
+  `tools/pasmith_recheck_units_devtest.py:486` is the guard.
+- **Waiting on someone else's tool:** run it under `python3 -u` or with
+  `PYTHONUNBUFFERED=1` when you control the invocation.
+- **When you control neither:** ask the **workdir**, not the log -- generated
+  artifact count and newest-mtime answer *slow vs stuck* without the subject
+  having to say anything. "196 seeds, newest 1 second old" is a complete answer
+  and needs no cooperation from the process being watched.
+
+The general rule this is an instance of: **ask the subject to emit; do not ask
+the system whether the subject succeeded** -- grep the file for conflict markers
+rather than trusting a resolver's exit status, look for `converged after N
+round(s)` and diff the sha256 rather than trusting `make` to exit 0, which a
+copied-in seed turns into a silent no-op. Each of those has been wrong in this
+repo inside seven days.
+
 ## Match the gate to the situation
 
 `make test` takes roughly three times as long as it looks like it should, because
@@ -192,3 +248,31 @@ tree at the same time and alone explains that RED. Two variables changed, one
 story fit. It was then narrowed away on a search of 105 job logs that found
 nothing — and the signature appeared at log **684**. A correct rule, held for a
 wrong reason, nearly deleted on an incomplete search.
+
+## Do not put a worktree under `/tmp` — testmgr rewrites the path (2026-08-29)
+
+This page already warns that **an expected output must never contain an absolute
+`/tmp` path**, because testmgr rewrites those. The same rewrite bites a worktree
+that is merely *located* there, and the symptom does not look like a path problem:
+
+```
+cannot read input file: /tmp/testmgr-scratch-NNN/<the whole worktree path>/test/...
+```
+
+testmgr mangles its own scratch root together with the worktree path. **The error
+names a missing test file, so it reads as a broken or incomplete checkout rather
+than as "you are standing in the wrong directory"** — which is the expensive part,
+since the natural next move is to re-clone or re-fetch and the second attempt fails
+identically.
+
+Put scratch worktrees under `$HOME` (e.g. `~/pxx-irfix`), not `/tmp`. Found by the
+wasm32 lane while gating the managed-string arg-temp consolidation; it cost a full
+diagnostic detour on a gate that was otherwise clean.
+
+**Companion trap, same session, same family:** starting `gate.sh` with a stale
+`compiler/pascal26` on disk after an A/B build makes the gate compare a
+fixedpoint-from-`pinned` against a binary built from different sources, and it
+correctly reports *"two distinct fixedpoints"*. **The gate is right and you are the
+contamination it names.** It prints the tell itself — `compiler/pascal26 is OLDER
+than the last commit touching compiler/` — so read that note before diagnosing a
+miscompile. Rebuild (`make compiler/pascal26`, ~12s) and re-gate.

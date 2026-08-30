@@ -3,9 +3,9 @@ summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython
 type: bug
 track: O
 prio: 65
-status: working
+status: unfinished
 
-owner: agent-AN
+owner: ""
 ---
 
 # pxx-compiled uforth is 2.1x slower than CPython on `blocktest`
@@ -582,3 +582,326 @@ Two facts that make the eventual implementation safe, both checked here:
   "reserved, unused") and is the natural stamp for "never freed, always COW".
 
 Parked to `unfinished/` with follow-up 2 landed and follow-up 1 sized.
+
+## 2026-08-30 — FOLLOW-UP 1 LANDED behind -O3 (x86-64). A literal is an address now
+
+Landed and measured at `823f1c85b`; the binary those numbers came from is
+sha256 `6a078478d137`. (Both citations were first written as the pre-rebase
+shas out of this session's own reflog, which resolve here and nowhere else —
+`tools/progress.py check` now reports that as DANGLING-SHA.)
+
+The sizing above said the tempting implementation — interning inside
+`PXXStrFromLit`, keyed on `(src, len)` — is unsound, and it is. But the "second
+shim" it recommended instead is not the smallest correct answer either. **The
+literal does not need a shim at all: it needs a header.**
+
+`InternStr` now lays a managed-string header down in FRONT of every pooled
+literal, so the block already IS a managed string. The three words go in
+*before* `Strs[].Offset` is taken, and that is the whole trick:
+
+```
+[allocsize=0][meta][rc=2^30]  [len]  [chars...][nul]
+                              ^Offset (unchanged)
+                                     ^Offset+8 = the managed handle
+```
+
+`Offset` still points at the length prefix, which is exactly what every
+existing consumer of the frozen inline form already reads — and that same
+prefix IS the handle's `len` word at `handle-8`. **No call site changed.** The
+header lives at negative offsets nobody has to know about unless they want the
+handle.
+
+x86-64 codegen then loads that address instead of calling
+`AnsiStrFromLiteralAddr`: the two literal-assignment sites and the six
+inline-string conversions (call args, virtual-call args, variant boxing). No
+`PXXStrFromLit`, no `PXXAlloc`, no copy of bytes that are already in the image,
+and no `PXXFree` when the reference dies.
+
+### Two things it had to get right
+
+**It has to TAKE A REFERENCE.** Every site replaced used to receive a fresh
+block at `rc=1` and take ownership of it — no retain on the store, a release
+when the reference dies. Handing the static block back without the increment
+keeps that release, so each store/overwrite cycle walks the static refcount
+permanently DOWN by one. 2^30 sounds out of reach until you price it against
+this ticket's own subject: ~400s of runtime, and 2.5M literal stores a second
+is an ordinary rate. So `inc qword [rax-16]` — four bytes, no call — and the
+saturated start goes back to doing only the job it was chosen for, keeping
+`PXXStrDecRef`'s `rc = 0` test false.
+
+**The empty literal is not just an address.** Pascal collapses `''` to nil and
+NilPy deliberately does not, so the emitter makes the same split the runtime
+makes.
+
+Every in-place mutation path was read rather than assumed, and each already
+refuses a shared block for its own reasons: `PXXStrUnique` and the inlined
+SetLength fast path both gate on `rc <= 1`; `PXXStrAppend` additionally requires
+`PXX_FLAG_APPENDABLE`, which a static block never carries; `PXXStrDecRef`'s free
+is behind `rc = 0`. The allocator's size word is written as an explicit zero
+anyway — it is unreachable today, and a garbage capacity that only a future flag
+change could reach is the shape this runtime has already been bitten by.
+
+### Measured — and the first reading was the WRONG A/B
+
+The obvious comparison is `-O2` against `-O3`, and it is wrong: `-O3` carries
+every other `-O3`-gated pass too (the whole W1 register-residency set, the
+last-argument collapse). That measures the tier, not the change — the same
+family as the exit-status warning going round the fleet today, a layer between
+the value and the reading of it, quietly answering a different question.
+
+So the A/B is `-O3` against `-O3` **with only this pass's gate raised out of
+reach**, same HEAD, same everything else. Interleaved A/B/A/B against drift,
+min of the reps, on a contended box:
+
+| subject | -O3, pass off | -O3, pass on | wall | workload only |
+| --- | --- | --- | --- | --- |
+| stringtest.fth | 2.215s | 1.915s | -13.5% | **-21.6%** |
+| memorytest.fth | 2.016s | 1.717s | -14.8% | **-26.9%** |
+| coreexttest.fth | 3.217s | 2.817s | -12.4% | **-15.7%** |
+| core.fr | 5.434s | 4.927s | -9.3% | **-10.0%** |
+
+"Workload only" subtracts the fixed prelude, measured separately with a driver
+that INCLUDEs the four harness files and no word set: 1.236s → 1.147s. That
+subtraction is not cosmetic — the raw deltas were suspiciously CONSTANT at
+~0.3s across three subjects of different length, which is the signature of a
+cost that does not scale with the thing you think causes it. It turned out the
+prelude is a large shared fixed chunk and the workload gain is real underneath
+it, but the constant-delta reading had to be chased before it could be trusted.
+
+Absolute times drift run to run here (coreexttest measured 2.514s and 2.817s
+for the *same binary* twenty minutes apart); the deltas are consistent in sign
+and size across four subjects and two independent sittings, and that is what
+the table is for.
+
+### Correctness
+
+- `test_static_string_literals` at -O3 with -O0 as the control, one expectation
+  for both. Every row reads the literal AGAIN after mutating a copy of it, so a
+  mutated static block shows up as the SECOND read being wrong. Wired into the
+  Makefile and the rows were proven to run and to fail (extracted into a scratch
+  makefile so real `make` did the expansion, then broken on purpose).
+- Non-vacuity: `MSTR_STATIC_RC = 0` makes -O3 print `b=Zbcdef` — the static
+  block edited in place — while -O0 stays correct **and the compiler still
+  self-hosts byte-identically**, because it builds at the default -O level. The
+  fixedpoint gate cannot see an -O3-only defect; that is stated in CLAUDE.md and
+  this is another instance of it.
+- Three real uforth word sets (stringtest, memorytest, coreexttest) run
+  differentially at -O3: byte-identical to CPython, and identical to -O2.
+- NilPy literal micro-subject byte-identical to CPython at -O0/-O2/-O3.
+- A compiler built entirely through this path emits a byte-identical compiler.
+
+### Still open
+
+- **Promotion to -O2 is not taken here.** Per the lane rule a new pass promotes
+  only after the full gate, which is Track T's sweep of this sha and not mine to
+  run. The evidence for promoting is strong (a 9.5 MB self-hosting compiler
+  built through the path reproduces itself byte for byte, and three differential
+  corpora agree with CPython) — but it is a separate, deliberate step.
+- **Five backends still call the shim.** i386, aarch64, arm32, xtensa, riscv32
+  are untouched; the pool header is emitted for them too and simply unread. The
+  aarch64 port is the one worth doing per the per-backend rule.
+- **The ticket's own subject is not re-measured.** `blocktest` is ~240s under
+  pxx plus ~80s of CPython oracle on a workstation that is somebody's desk;
+  the small subjects are the proxy the ticket already established for exactly
+  this reason. A blocktest number should come from T's sweep, not from here.
+- `SLOW_SHARDS` still should NOT be dismantled.
+
+## 2026-08-30 — aarch64 ported, and where the next cost is
+
+`89ab3d9d4` ports the same pass to aarch64: one predicate and three emit sites,
+because the header is in the **pool** and not in a per-backend shim, so the
+representation was already shared. `EmitAnsiStringFromNodeA64` is one central
+conversion where x86-64 has eight. Parity counts move together, x86-64 22→23
+and aarch64 10→11 — the gap does not widen. Verified under qemu-aarch64, -O3
+and -O0 byte-identical to each other and to x86-64, and the same
+`MSTR_STATIC_RC = 0` break shows there too.
+
+aarch64 takes its reference by CALLING `PXXStrIncRef` where x86-64 emits a
+four-byte `inc qword [rax-16]`; a hand-emitted aarch64 retain has to reproduce
+the threadsafe arm as well (LSE or ldxr/stxr) and `EmitStrIncRefA64` already
+gets that right. Still a fraction of the allocate-copy-free it replaces.
+
+### Banked, not started: PXXAlloc zeroes a span the caller is about to overwrite
+
+Read while looking for what is left, and worth writing down before it is
+forgotten. `PXXAlloc` is already O(1) — size-class bins, exact-fit head, no
+walk except for the rare large blocks. What it spends its instructions on is
+the **zero-init contract**: a block taken off a free bin is zeroed a machine
+word at a time across its whole size before it is handed back.
+
+For the string path that zeroing is almost entirely a double write.
+`PXXStrFromLit` immediately stamps three header words and then copies `len`
+bytes plus a nul over the rest — every byte of the block except the tail
+padding is written twice, once with zero and once with the answer.
+
+The shape that would fix it is the one this ticket keeps arriving at: not a
+flag on the existing entry point, but a **second entry point** for callers that
+provably overwrite what they are given. Note the contract is deliberately
+global and the comment in `PXXAlloc` says so ("Anything that changes the bump
+path ... must re-produce the guarantee here, not push it back onto callers"),
+so this is an addition beside it, never a relaxation of it.
+
+What has to be established before writing any of it, and none of it is done:
+
+- which callers really do overwrite the WHOLE payload, tail padding included —
+  `PXXStrFromLit` writes up to the nul and not past it, and the block is
+  rounded up to 8, so the padding is stale under a raw alloc;
+- whether anything reads that padding. Nothing should, but "should" is what
+  this runtime's expensive bugs are made of, and `PXXStrAllocSize` already
+  invites an appender into exactly those bytes;
+- and it needs a MEASUREMENT first, which this box cannot currently give:
+  `perf_event_paranoid` is 4 and valgrind is not installed, so the callgrind
+  shares quoted higher up this ticket cannot be reproduced here at all. The
+  numbers in the 2026-08-30 table are wall-clock A/B against a toggled gate,
+  which is enough to size a change already made and NOT enough to rank two
+  changes not yet made.
+
+That missing instrument is the real blocker on the next slice, and it is a
+Track A gap rather than a Track O one: this runtime has `-dPXX_HEAP_DEBUG`,
+`-dPXX_OBJTRACE` and `PXXDBG` for correctness questions and nothing at all for
+"how much does it allocate, and of what size". A census under its own define —
+counts and a size histogram, no call-site attribution — would have answered in
+one run what three sessions have reached for callgrind to learn.
+
+### The zero-init candidate: an experiment that produced a 6x SPEEDUP and was void
+
+Run before writing anything, to price the banked diagnosis above rather than
+rank it on a hunch. The zeroing on `PXXAlloc`'s O(1) reuse path was disabled —
+deliberately unsound, as a measurement only — the compiler rebuilt, uforth
+rebuilt with it, and `core.fr` timed against an unpatched build at the same
+HEAD, interleaved:
+
+```
+uf_zon:  min 4.443s
+uf_zoff: min 0.714s      -83.9%
+```
+
+**That number is not a speedup. It is a segfault at 0.7 seconds.** 66 lines of
+output became 1. The run did not get faster, it stopped doing the work.
+
+This is the fleet's exit-status warning arriving in its predicted form — *a
+silently-red configuration does not merely report success, it reports a
+speedup* — and it is worth being precise about what did and did not catch it.
+The exit status **was** available: `ufrun.sh` propagates the program's rc. The
+timing loop threw it away, by construction:
+
+```sh
+t=$( { TIMEFORMAT=%R; time "$b" ...; } 2>&1 | tail -1 )
+```
+
+That idiom captures the timing and discards the verdict — `$?` is `tail`'s, and
+even without the pipe the assignment's status is the substitution's. **A timing
+harness is the one place the exit status is most load-bearing and the standard
+idiom for timing is the one that drops it.** What actually caught this was the
+output diff against the control run, printed BEFORE the timing loop rather than
+after. That ordering was luck as much as discipline; it is now the rule for
+this ticket's harness, and the loop carries the rc as well.
+
+**The void experiment still produced a finding, and it argues against the
+candidate rather than for it.** The zero-init contract is load-bearing enough
+that the workload dies in under a second without it — so the redundant-write
+story may be true and is certainly not the whole story, and a global switch is
+off the table for real reasons rather than stylistic ones. Anything here has to
+be a second entry point used by individually audited callers, which is what the
+`PXXAlloc` comment already demands. Still not started, now for a measured
+reason.
+
+Note also what did NOT catch it: the compiler self-hosted **byte-identically**
+with the zeroing disabled. A fixedpoint proves the compiler reproduces itself,
+not that the runtime is sound.
+
+### COUNTED at last — 44.5% of every allocation in `core.fr` is gone
+
+Built `-dPXX_ALLOC_CENSUS` first ([[feature-a-allocation-census-define]])
+rather than ranking the next candidate on a hunch, because this ticket has now
+produced two bad rankings from missing instruments in one night. The census is
+a counting instrument, so unlike everything else measured here it is immune to
+the box being busy.
+
+Provenance, because a measurement carries its configuration or it carries
+nothing: taken at HEAD `7dbbab6a2`, compiler sha256 `dfb89430336b`, and
+re-taken there after four intervening compiler builds. **The allocation totals
+reproduced exactly** — 14,482,408 and 8,036,705 both times. The size histogram
+moved by a handful of entries (3 in the 32-byte class, 6 in `live`), so the
+right claim is *reproducible to about 1e-7 and not bit-exact*; some small
+number of allocations depends on the environment the process starts in. That is
+still four orders of magnitude tighter than any timing on this box.
+
+uforth `core.fr`, same driver, `-O2` against `-O3`:
+
+| | allocations | bytes | live | 32-byte class |
+| --- | --- | --- | --- | --- |
+| -O2 | 14,482,408 | 595,241,560 | 441,943 | 11,710,484 |
+| -O3 | **8,036,705** | 384,315,424 | 195,746 | **5,567,269** |
+
+**44.5% fewer allocations, 35% fewer bytes** — and the histogram says where:
+the 32-byte class alone falls by **6.14M**, which is 95% of the entire
+reduction and is exactly a short literal's block (24-byte header + up to 7
+bytes + nul, rounded to 8). The pass is doing what it was designed to do, in
+the size class it was designed to do it in, and this is the first statement
+about it on this ticket that is a mechanism rather than a percentage.
+
+It also explains why the wall-clock win is 10-25% and not 44%: halving the
+allocations leaves the rest of the interpreter — the concatenations, the
+dictionary walk, the inner loop — untouched, and those are now the majority.
+**A halved allocation count is not a halved runtime, and the census is what
+makes the difference legible instead of disappointing.**
+
+The two figures now sit at different confidence levels and should be quoted
+that way: the allocation counts are exact and reproducible on any box, the
+timings are min-of-interleaved-reps on a contended workstation.
+
+## PARKED 2026-08-30 — fleet stood down for a merge and re-pin
+
+Moved `working/` → `unfinished/` by its owner (frank-optimize-b4) because the
+fleet paused and a lock with a stopped owner is unreadable: whoever runs the pin
+cannot tell it from live work. **Bookkeeping, not a rollback.**
+
+**Nothing is half-applied.** Every change is committed and on `origin/master`,
+each one gate-green when it landed: the `-O3` static-literal pass (x86-64 then
+aarch64 `89ab3d9d4`), `-dPXX_ALLOC_CENSUS` (`0f0a5619a`), and the two write-ups
+(`5bb3e120d`, `e61b96811`). There is nothing to revert and nothing to finish
+before the tree is safe to merge or pin.
+
+### Where it actually stands
+
+The ticket's subject — `blocktest` at 2.1x slower than CPython — is **not
+closed**. What has changed is that the two named cost centres are gone (Cause A
+`s[i]` rescan, Cause B concat allocate-and-copy) and the third, string literals
+allocating at runtime, is fixed behind `-O3` on the two backends the lane rule
+covers. Measured effect: **44.5% fewer allocations and 35% fewer bytes** on
+`core.fr`, of which 95% is the 32-byte class, i.e. exactly a short literal's
+block. Wall clock moves 10-25%, not 44%, because what remains is the
+interpreter's own work.
+
+### Resume conditions, in the order they unblock
+
+1. **`-O2` promotion of the static-literal pass — WITHHELD, and it needs Track
+   T's full-tier sweep of the landing sha, not a decision here.** This is the
+   single highest-value next step and it is not mine to take.
+2. **The three unported backends** (i386, arm32, xtensa, riscv32) — but the
+   per-backend rule says x86-64 and aarch64 only, so this is *deliberately* not
+   next. Listed so nobody reads its absence as an oversight.
+3. **The next cost centre is unranked, and that is on purpose.** This ticket
+   produced *two* bad rankings from missing instruments in one night, which is
+   why `-dPXX_ALLOC_CENSUS` exists. Whoever picks it up: **count before you
+   rank.** The census is exact and box-independent; every timing on this ticket
+   is min-of-interleaved-reps on a contended workstation and they are not the
+   same kind of number.
+
+### Two traps banked here, both already paid for once
+
+- **`PXXAlloc`'s zero-init is NOT the next win.** The experiment that priced it
+  reported **−83.9%** and was a **segfault at 0.7 s** — the run did not get
+  faster, it stopped doing the work. A global switch is off the table for
+  measured reasons. Anything here must be a second entry point with individually
+  audited callers. Note also what did not catch it: the compiler self-hosted
+  **byte-identically** with zeroing disabled. *A fixedpoint proves the compiler
+  reproduces itself, not that the runtime is sound.*
+- **`SLOW_SHARDS` still must NOT be dismantled.**
+
+### Do not resume by re-measuring `blocktest` on this box
+
+It is ~240 s under pxx plus ~80 s of CPython oracle on somebody's desk. The
+small subjects are the established proxy, for exactly that reason. A `blocktest`
+number should come from Track T's sweep.

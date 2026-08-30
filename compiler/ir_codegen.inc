@@ -537,7 +537,13 @@ begin
 
   { --- restorer --- }
   SigRestorerAddr := CodeLen;
-  EmitAsmX64(['mov rax, %', 15, 'syscall']);          { rt_sigreturn }
+  { syscall_raw, NOT syscall: rt_sigreturn restores the whole context from the
+    signal frame at a fixed offset from rsp, so it must be the bare instruction
+    even under --rtl-libc, where every other kernel entry becomes a call into
+    the libc thunk. Routing it through the thunk is a SIGSEGV on the first
+    signal delivered, in a build whose hello-world, div0 path and syscall count
+    all look perfect. }
+  EmitAsmX64(['mov rax, %', 15, 'syscall_raw']);      { rt_sigreturn }
 
   { --- dispatch (SA_SIGINFO ABI: edi = sig, rsi = siginfo_t*, rdx = ucontext_t*) --- }
   SigDispatchAddr := CodeLen;
@@ -1394,10 +1400,52 @@ begin
         xtVReg := reg_xtensa_a10;
       end;
       if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
-          (Syms[idx].TypeKind = tyDouble)) and
+          (Syms[idx].TypeKind = tyDouble) or
+          ((Syms[idx].TypeKind = tyRecord) and
+           (RecSize(Syms[idx].RecName) > 4) and
+           (RecSize(Syms[idx].RecName) <= 8))) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
-        { The xtensa C ABI starts a 64-bit argument at an EVEN word index, so an
+        { A 5-8 byte by-value RECORD is spilled by this same two-word path, and
+          it is the third of three spots that each counted 4 bytes where the
+          type is 8 — the other two are IR_LOAD_SYM and the by-value call-arg
+          push loop, both in ir_codegen_xtensa.inc. All three must land
+          together: arm32 recorded for the identical defect that fixing the
+          word count without the slot "turned the data loss into active
+          corruption", and that is exactly what a two-of-three state measures
+          as — the caller pushes two words, this spill consumed one and did
+          Inc(pw, 1), so every parameter AFTER the record shifted by a word and
+          the rows changed value instead of becoming correct.
+          bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address
+
+          The width is asked as RecSize(Syms[idx].RecName), NOT as `sz`. `sz` is
+          ParamSize(idx), and ParamSize answers the SLOT-LAYOUT question through
+          ABIParamSlotIsPointer, which holds tyRecord unconditionally -- so `sz`
+          is TARGET_PTR_SIZE (4 here) for every record regardless of its real
+          width, and a `sz > 4` guard is dead code that compiles, self-hosts and
+          silently never fires. It was written that way first and measured as a
+          byte-identical repro. AllocParam does not have the bug because it asks
+          RecSize(LastTypeRecId) directly; ParamSize and AllocParam therefore
+          disagree about a 5-8 byte by-value record on a 32-bit target, which is
+          filed separately rather than changed here.
+
+          arm32 and riscv32 already spell it RecSize(Syms[idx].RecName) in this
+          same procedure, a few dozen lines up -- this arm is the third copy of
+          a rule two backends had, so it is written to match them exactly rather
+          than to be independently clever. The even-word alignment rule below
+          then applies to it as to an Int64, and the caller's record arm calls
+          XtensaPadTo64Xtensa for exactly that reason -- it did not at first,
+          and the two-of-three state that produced is described above.
+
+          The 64-bit ALIGNMENT skip below is deliberately shared. A record is
+          not a C `long long` and xtensa's C ABI would not align an 8-byte
+          struct to an even word — but this convention is INTERNAL (the arm is
+          guarded to non-external callees on the call side), and the two sides
+          must agree with each other, not with gcc. Sharing the branch is what
+          guarantees they do; a separate record branch here would be a fourth
+          place to count words, which is how this bug got three.
+
+          The xtensa C ABI starts a 64-bit argument at an EVEN word index, so an
           odd index skips one word — the caller's XtensaPadTo64Xtensa emits that
           same skip, and both sides must apply the rule or neither. Without it
           here, a routine CALLED FROM C read the parameter one register early:
@@ -1687,6 +1735,29 @@ begin
       xtensa_beq(reg_xtensa_a8, reg_xtensa_a9, 6);  { core 0: skip the park }
       xtensa_j(0);                                  { any other core: spin }
       EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP);
+    end;
+    { Hosted (qemu-xtensa user mode): save the kernel-provided initial sp, which
+      points at argc, so ParamCount/ParamStr/ArgStr can find argv -- the same
+      thing every other hosted target's stub does, and xtensa was the one that
+      never did, which is why builtin -55 had no arm it could honestly have.
+
+      POSITION IS THE WHOLE CORRECTNESS ARGUMENT and it is why this sits here
+      rather than beside the CPENABLE/ATOMCTL block below:
+        * AFTER the bare-metal branch, which OVERWRITES sp with the SRAM top --
+          reading it before that would be reading the kernel's sp on a path that
+          has no kernel, and reading it after would save the synthetic one.
+        * BEFORE the windowed `entry` below, which rotates the register window
+          and moves sp. Saved after it, this stores a frame pointer and every
+          ParamStr indexes off the wrong base.
+      Skipped entirely on bare metal: there is no argc there, and a zeroed
+      BSS_INITIAL_RSP is what the -55 arm's own PLATFORM_ESP branch keys on.
+
+      a8 is scratch and safe pre-`entry` (no caller window to preserve at
+      process entry). }
+    if not EspBareBoot then
+    begin
+      EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
+      xtensa_s32i(reg_xtensa_sp, reg_xtensa_a8, 0);
     end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin
@@ -2271,6 +2342,217 @@ end;
   Hoisted above IREmitNode so the value-producing compare fold can ask the
   same question: `x = k` as an rvalue and `if x = k` differ only in what
   consumes the flags, and having ONE predicate decide both is the point. }
+const
+  { W1CmpRightInPlace's verdict. Declared here rather than in defs.inc: they are
+    private to this pass and defs.inc is shared ground under A's no-concurrent-
+    edit rule. }
+  W1CMP_NONE = 0;
+  W1CMP_REG  = 1;
+  W1CMP_MEM  = 2;
+  W1CMP_M32  = 3;   { -O3 W1 slice 8: 4-byte both sides -> 32-bit cmp, no REX.W }
+
+{ -O3 W1 slice 7: can a fused compare read its RIGHT operand IN PLACE instead of
+  loading it into rcx first?
+
+  `EmitLoadVarRcx` + `cmp rax, rcx` is two instructions where x86 can often do
+  one, and unlike the register-pressure work this needs NO register — it
+  sidesteps the pressure problem rather than competing with it. It is also
+  PER-ITERATION in a loop condition, not per-entry, which is what makes it worth
+  more than the init-temp elision.
+
+  Returns W1CMP_NONE / W1CMP_REG (reg set) / W1CMP_MEM (memOff set).
+
+  ONLY 8-byte frame locals and params, and that restriction is the whole safety
+  argument rather than a convenience. For an 8-byte symbol the load
+  EmitLoadVarRcx emits is a plain `mov rcx,[rbp+off]` with no extension to
+  reproduce, so `cmp rN,[rbp+off]` is identical instruction-for-instruction.
+  A 4-byte symbol is loaded with `movsxd`, and folding THAT would mean emitting a
+  32-bit compare and assuming the left operand's register holds a properly
+  sign-extended value — an invariant that is true almost always and whose failure
+  is a silently wrong comparison, which in a loop condition is a wrong iteration
+  count. That is the exact class of defect
+  bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned was,
+  and it is not worth 4 bytes. A byte scan of an -O3-built compiler says the safe
+  half is also the bigger one: 2580 8-byte load-then-compare sites against 1271
+  4-byte signed ones, which is the opposite of what I assumed before measuring.
+
+  skGlobal is excluded: its load is a different addressing mode (absolute/RIP),
+  so folding it is a separate proof, not this one.
+
+  LeafSymRcxLoadable is reused for the operand screening it already does —
+  arrays, floats, strings, frozen strings and by-ref params are all out there,
+  and a by-ref param matters here specifically because its slot holds a POINTER,
+  so folding its address would compare the wrong thing. }
+{ PXXDBG=a.w1cmp32 -- slice 8's decline reasons, not just its firings.
+
+  A pass that prints only when it fires cannot report finding nothing, so a
+  slice that never runs and a slice that runs everywhere read identically from
+  the outside. Slice 8 was written, self-hosted clean, and changed the target
+  loop by zero bytes; without this probe the next step would have been a guess
+  about which guard rejected it. Every exit prints, FIRE32 included. }
+procedure W1CmpDecline(const reason: AnsiString; idx, lt, rt: Integer);
+begin
+  if not PxxDbgEnabled('a.w1cmp32') then Exit;
+  Write('PXXDBG a.w1cmp32 ', reason, ' lt=', lt, ' rt=', rt);
+  if CurProc >= 0 then Write(' proc=', Procs[CurProc].Name);
+  WriteLn(' sym=', Syms[idx].Name, ' kind=', Ord(Syms[idx].Kind),
+          ' tk=', Ord(Syms[idx].TypeKind));
+end;
+
+{ -O3 W1 slice 8: the 4-byte arm, and why it needs NO sign-extension invariant.
+
+  Slice 7 folded 8-byte operands only. The obvious widening -- fold a 4-byte slot
+  with the same 64-bit `cmp` -- is wrong twice over: it reads eight bytes from a
+  four-byte slot, and it assumes the left register is properly sign-extended.
+  That second assumption is the dangerous one, because its failure mode is a
+  silently wrong comparison (a wrong loop bound), not a crash.
+
+  A 32-BIT compare removes the assumption instead of proving it. `cmp r12d,
+  DWORD PTR [rbp+off]` reads exactly four bytes of the slot and exactly the low
+  half of the register, so whatever is in the upper half is irrelevant BY
+  CONSTRUCTION. For two operands of the same 4-byte type, the 32-bit comparison
+  is equivalent to the 64-bit comparison of their extended forms under every
+  predicate, signed and unsigned alike -- and the jcc/setcc predicate is chosen
+  from the IR types further down, unchanged by the operand width.
+
+  Both sides must be leaf symbols of the SAME TypeKind, and the same IR type.
+  Identical types is stronger than necessary and deliberately so: it makes the
+  predicate's signedness match by construction rather than by a case analysis of
+  mixed-width promotion, which is where this would otherwise get subtle. }
+function W1CmpRightInPlace(node, leftNode: Integer; var reg: Integer; var memOff: Integer): Integer;
+var idx, lidx: Integer;
+begin
+  W1CmpRightInPlace := W1CMP_NONE;
+  reg := 0; memOff := 0;
+  if OptLevel < 3 then Exit;
+  if not LeafSymRcxLoadable(node) then Exit;
+  idx := IRA[node];
+  reg := ResidentRegOf(idx);
+  if reg <> 0 then begin W1CmpRightInPlace := W1CMP_REG; Exit; end;
+  if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam)) then Exit;
+  if TypeSize(Syms[idx].TypeKind) = 8 then
+  begin
+    memOff := Syms[idx].Offset;
+    W1CmpRightInPlace := W1CMP_MEM;
+    Exit;
+  end;
+  if TypeSize(Syms[idx].TypeKind) <> 4 then
+    begin W1CmpDecline('size', idx, -1, -1); Exit; end;
+  if leftNode < 0 then begin W1CmpDecline('noleft', idx, -1, -1); Exit; end;
+  if IRKind[leftNode] <> IR_LOAD_SYM then
+    begin W1CmpDecline('leftnotsym', idx, -1, -1); Exit; end;
+  lidx := IRA[leftNode];
+  if not LeafSymRcxLoadable(leftNode) then
+    begin W1CmpDecline('leftnotleaf', idx, -1, -1); Exit; end;
+  if Syms[lidx].TypeKind <> Syms[idx].TypeKind then
+    begin W1CmpDecline('typekind', idx, -1, -1); Exit; end;
+  { NOT also gated on IRTk equality, and the reason is worth stating because the
+    guard was there first and looked prudent. Measured with a.w1cmp32: the left
+    node's IRTk is frequently 0 -- unset, not different -- so the guard rejected
+    on missing metadata rather than on a mismatch, and it rejected exactly the
+    for-loop limit compare this arm exists for.
+
+    It is also not load-bearing. The predicate below is computed from IRTk and
+    is UNCHANGED by this fold; only the operand width changes. Sign- and
+    zero-extension from 32 to 64 bits are both strictly monotonic maps, under
+    signed AND unsigned ordering alike (sign-extension sends everything >= 2^31
+    above everything < 2^31, preserving unsigned order). Both operands here have
+    the same TypeKind, so both are extended by the same map -- therefore the
+    32-bit comparison of the low halves agrees with the 64-bit comparison of the
+    extended values under EVERY predicate. The fold preserves whatever semantics
+    the existing code had, correct or not; it cannot introduce a disagreement.
+    That is why identical TypeKind is the real guard and IRTk was noise. }
+  memOff := Syms[idx].Offset;
+  W1CmpDecline('FIRE32', idx, IRTk[leftNode], IRTk[node]);
+  W1CmpRightInPlace := W1CMP_M32;
+end;
+
+{ `cmp <left>, <right>` with both operands in registers. Opcode 3B puts the LEFT
+  in the reg field and the right in r/m, the same way EmitCmpLeftRcx does — so
+  these two agree by construction rather than by coincidence. }
+procedure EmitCmpLeftReg(lreg, rreg: Integer);
+begin
+  EmitB($48 or (Ord(lreg <> 0) shl 2) or Ord(rreg <> 0));
+  EmitB($3B);
+  if lreg = 0 then EmitB($C0 or (rreg - 8))
+  else if rreg = 0 then EmitB($C1 or ((lreg - 8) shl 3))
+  else EmitB($C0 or ((lreg - 8) shl 3) or (rreg - 8));
+end;
+
+{ `cmp <left>, [rbp+off]` — mod=10 rm=101 is rbp+disp32, so the ModRM base is $85
+  and the left register rides the reg field exactly as above. }
+procedure EmitCmpLeftMemRbp(lreg, off: Integer);
+begin
+  if lreg = 0 then EmitB($48) else EmitB($4C);
+  EmitB($3B);
+  if lreg = 0 then EmitB($85) else EmitB($85 or ((lreg - 8) shl 3));
+  EmitI32(off);
+end;
+
+{ `cmp <left32>, DWORD PTR [rbp+off]` -- opcode 3B with NO REX.W, so the compare
+  is 32-bit and reads only the low half of the left register. REX.R appears only
+  to reach r8d..r15d. Sibling of EmitCmpLeftMemRbp; the ModRM byte is identical
+  (mod=10 rm=101 is rbp+disp32) and only the REX differs, which is the entire
+  point -- dropping W is what makes the operand width 32. }
+procedure EmitCmpLeftMemRbp32(lreg, off: Integer);
+begin
+  if lreg <> 0 then EmitB($44);
+  EmitB($3B);
+  if lreg = 0 then EmitB($85) else EmitB($85 or ((lreg - 8) shl 3));
+  EmitI32(off);
+end;
+
+{ -O3 W1 slice 10: does the shift arm OPEN with a `cdqe` on the left operand?
+  That leading widen is the one place in the binop emitter where a resident
+  4-byte read fuses -- `mov rax, rN` + `cdqe` (5 bytes, 2 instructions) is
+  `movsxd rax, rNd` (3 bytes, 1). Both the pre-decision that SKIPS the left
+  load and the emit site that replaces the cdqe call THIS function, so they
+  cannot drift apart: a skip the widen site then failed to honour would leave
+  rax never loaded at all, which is a silently wrong value rather than a
+  crash. One condition, two readers.
+  Deliberately NOT the trailing re-sign in the same arm (that one narrows the
+  RESULT, and its `size(node) < 8` is disjoint from this `= 8`), and not
+  `shl`, which has no leading widen. }
+function W1LeadingCdqe(node, left: Integer; op: TTokenKind): Boolean;
+begin
+  W1LeadingCdqe := False;
+  if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
+  if op = tkIdent then                                        { Pascal `shr` }
+    W1LeadingCdqe := (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+                     TypeSigned(IntToTypeKind(IRTk[left]))
+  else if op = tkShr then                                     { C `>>` }
+    W1LeadingCdqe := True;
+end;
+
+{ -O3 W1 slice 10: can the left operand's load be skipped and carried by the
+  widen? Returns its home register, or 0 for "emit the load normally".
+  WHY NOT the tempting version -- just DELETE the cdqe. It is provably a no-op
+  today, because every write to a 4-byte resident re-normalises the register
+  (the residency init and each store emit their own movsxd). That is an
+  elision resting on an invariant maintained in another file, whose failure
+  mode is a silently wrong value; slice 8 refused the same shape. `movsxd rax,
+  rNd` sign-extends the low 32 bits BY CONSTRUCTION and is correct whatever
+  the upper half holds, for the same instruction count.
+  Exactly-4 is required: a 1- or 2-byte symbol's own load is a movsx from the
+  low 8/16 bits, which movsxd is not. }
+function W1WidenLeftEligible(node, left: Integer; op: TTokenKind): Integer;
+begin
+  W1WidenLeftEligible := 0;
+  if OptLevel < 3 then Exit;
+  if not W1LeadingCdqe(node, left, op) then Exit;
+  if not LeafSymRcxLoadable(left) then Exit;
+  if TypeSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
+  W1WidenLeftEligible := ResidentRegOf(IRA[left]);
+end;
+
+{ movsxd rax, rNd -- REX.W[+B] 63 /r with mod=11, reg=000 (rax), rm=N. }
+procedure EmitMovsxdRaxReg(reg: Integer);
+begin
+  if reg >= 8 then EmitB($49) else EmitB($48);
+  EmitB($63);
+  EmitB($C0 or (reg and 7));
+end;
+
 function CmpFusible(node: Integer): Boolean;
 var opTk: Integer; lt, rt: TTypeKind;
 begin
@@ -2311,7 +2593,7 @@ end;
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
-    pRelNil, pRelLive: Integer;
+    pRelNil, pRelLive, pAsciiSkip: Integer;
 begin
   EmitAnsiStrFromLiteral;
 
@@ -2408,6 +2690,29 @@ begin
   { done }
   Patch8(pDone, CodeLen - (pDone + 1));
   Patch8(pDone2, CodeLen - (pDone2 + 1));
+  { FORGET the cached ASCII answer, exactly as the Pascal PXXStrUnique does at
+    both of its exits. The caller is about to WRITE bytes through the handle we
+    are returning, so a stamped answer stops being true — and the clone path is
+    no better, because AnsiStrFromLiteral stamps the flag from the OLD bytes.
+
+    PXXStrUnique's own comment calls itself "the single choke point for byte
+    mutation, which is what makes the cache sound". It is that on i386 / arm32 /
+    aarch64 / riscv32 / xtensa, which all `FindProc('PXXStrUnique')`. It was
+    never that on x86-64, which reaches this hand-emitted blob instead and for
+    two months returned a writable buffer still advertising the old verdict. So
+    `s := 'abc'; s[1] := Chr(200)` left the block claiming ASCII, and NilPy then
+    indexed a multi-byte string at BYTE offsets and answered a broken character
+    (regression-test-core-test-nilpy-str-ascii-cache).
+
+    rax is the handle at every exit including done_nil, where it is 0 — hence
+    the test. Meta is at [handle-24] (PXX_HDR_META = 0 from the block base, and
+    PXX_HDR_SIZE = 24); PXX_ASCII_CACHE_BITS clears ASCII and ASCII_KNOWN
+    and, being sign-extended, leaves the reserved upper half alone. }
+  EmitAsmX64(['test rax, rax']);
+  EmitB($74); pAsciiSkip := CodeLen; EmitB(0);    { jz skip }
+  EmitB($48); EmitB($81); EmitB($60); EmitB($E8); { and qword [rax-24], imm32 }
+  EmitI32(not PXX_ASCII_CACHE_BITS);
+  Patch8(pAsciiSkip, CodeLen - (pAsciiSkip + 1));
   EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx', 'ret']);
 
   { rsi/lhs data, rdi/lhs length, rdx/rhs data, rcx/rhs length -> rax/string }
@@ -2786,6 +3091,77 @@ procedure EmitAnsiStrFromInlineString;
 begin
   EmitAsmX64(['mov rdi, [rax]', 'lea rsi, [rax+8]']);
   IREmitCodeCall(AnsiStrFromLiteralAddr);
+end;
+
+{ ---- static string literals: an address where there used to be a call -------
+  Every pooled literal is now preceded by a ready-made managed-string header
+  (InternStr, emit.inc), so a literal that has to become an AnsiString ALREADY
+  IS one: no PXXStrFromLit, no PXXAlloc, no copy of bytes that are already in
+  the image, and no PXXFree when the last reference dies — the block's refcount
+  is born saturated (MSTR_STATIC_RC) and no PXXStrDecRef can drive it to zero.
+  PXXStrFromLit was 9.28% of uforth's profile and the allocator around it most
+  of another 19%.
+
+  Why one function DECIDES and EMITS, instead of a predicate the caller checks:
+  the caller then cannot mispredict it. A predicate and an emitter are two
+  readers of one condition, and when they disagree here the destination
+  register is simply never loaded — a wrong VALUE, not a crash. This returns
+  False having emitted nothing, and the caller's `else` is the only other path.
+
+  The empty string is the one shape that is not just an address. A Pascal
+  AnsiString collapses '' to nil (PXXStrFromLit's `len <= 0` arm); a NilPy str
+  does not, deliberately (decide-nilpy-none-str-representation). So the Pascal
+  arm loads zero and the NilPy arm loads the real zero-length block — the same
+  split the runtime makes, made here instead.
+
+  Behind -O3 for now. The REPRESENTATION is emitted unconditionally (the header
+  costs 24 bytes per literal either way, and a pool that changed shape with the
+  optimisation level would be two layouts to keep sound); only its USE is
+  gated, so -O2 keeps calling the runtime and stays the proven default until
+  this has been through a full gate.
+  bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+function EmitStaticLitHandle(node: Integer): Boolean;
+var si: Integer;
+begin
+  EmitStaticLitHandle := False;
+  if OptLevel < 3 then Exit;
+  if node < 0 then Exit;
+  if IRKind[node] <> IR_CONST_STR then Exit;
+  si := InternStr(GetTokenStrFromRaw(IRA[node], IRB[node]));
+  if (Strs[si].Len = 0) and (not isNilPy) then
+    EmitAsmX64(['xor eax, eax'])
+  else
+  begin
+    EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset + 8);   { the handle: Offset is the length prefix, data follows }
+    { AND TAKE A REFERENCE. Every call site this replaces used to receive a
+      FRESH block at rc=1 and take ownership of it — no retain on the store, a
+      release when the reference dies. Handing back the static block without
+      the increment keeps that release, so each store/overwrite cycle walks the
+      static refcount permanently DOWN by one, and a program that assigns
+      literals in a hot loop reaches zero and frees a .data block. 2^30 sounds
+      out of reach until you price it: this ticket's own subject runs for ~400
+      seconds, and 2.5M literal stores a second is an ordinary rate.
+
+      So restore the convention exactly, in four bytes and no call:
+      `inc qword [rax-16]` (48 FF /0, disp8 -16). The saturated start then does
+      the job it was actually chosen for — keeping PXXStrDecRef's `rc = 0` test
+      false — rather than standing in for an increment nobody makes. }
+    if ThreadSafeMode then EmitB($F0);                       { lock }
+    EmitB($48); EmitB($FF); EmitB($40); EmitB($F0);          { inc qword [rax-16] }
+  end;
+  EmitStaticLitHandle := True;
+end;
+
+procedure EmitAnsiStrFromInlineStringOf(node: Integer);
+{ EmitAnsiStrFromInlineString, but told WHICH node produced the address in rax,
+  so a literal can take its static block and never reach the runtime. The dead
+  `mov rax, imm64` the caller already emitted for the literal is left standing:
+  overwriting it costs one instruction against a call, an allocation and a
+  copy, and restructuring eight call sites to hoist the test above IREmitNode
+  is where a wrong value would come from. }
+begin
+  if EmitStaticLitHandle(node) then Exit;
+  EmitAnsiStrFromInlineString;
 end;
 
 { Is this store the accumulation shape `s := s + x`, where the destination IS
@@ -4435,6 +4811,10 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
+    shiftImmCnt: Integer;  { -O1 W1: >= 0 = a constant shift count NOT materialised into rcx }
+    w1LeftReg: Integer;    { -O3 W1 slice 5: 0 = left is in rax, else r12..r15 read in place }
+    w1WidenLeftReg: Integer;  { -O3 W1 slice 10: 0 = left load emitted, else the resident reg the widen must read }
+    w1CmpRightKind, w1CmpRightReg, w1CmpRightOff: Integer;  { -O3 W1 slice 7 }
     strCmpRel: Boolean;    { this comparison releases an owned string operand }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
@@ -4589,6 +4969,11 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
+        { The libc lowering is NOT here. Every caller of EmitSyscall sets up
+          this same raw convention, so converting at that one choke point covers
+          all 43 sites instead of this one, and keeps ONE copy of the sequence
+          rather than a second that has to be kept in step.
+          normalise-dont-special-case. feature-port-rtl-over-libc }
         for i := nArgs - 1 downto 0 do
           case i of
             0: EmitB($58);                        { pop rax }
@@ -4599,7 +4984,7 @@ begin
             5: begin EmitB($41); EmitB($58); end; { pop r8 }
             6: begin EmitB($41); EmitB($59); end; { pop r9 }
           end;
-        EmitB($0F); EmitB($05); { syscall }
+        EmitSyscall;
       end;
 
     IR_COSWITCH:
@@ -4975,12 +5360,29 @@ begin
         { -O3 store->reload elimination: the statement immediately before this
           one stored this very symbol and nothing at all was emitted in
           between, so rax still holds the value — only the width fixup is left.
-          Set by IRMarkRedundantReloads; always False below -O3. }
-        if IRLoadRedundant[node] then
+          Set by IRMarkRedundantReloads; always False below -O3.
+
+          The CodeLen test is not belt-and-braces, it is the SECOND HALF of the
+          premise. The mark is made by IRFirstEvaluated, a hand-maintained mirror
+          of the operand-order guard chain below, and the mirror does not know
+          about every arm — W1 slice 9 evaluates the RIGHT operand first and was
+          added to the emitter only. `ReloadRaxCodeLen` is CodeLen at the start
+          of this statement, so `CodeLen = ReloadRaxCodeLen` says "nothing has
+          been emitted yet in this statement", which is the mark's own claim,
+          verified where it is used instead of predicted where it is made. }
+        if IRLoadRedundant[node] and (CodeLen = ReloadRaxCodeLen) then
         begin
           EmitReExtendRax(IRA[node]);
           Exit;
         end;
+        { PXXDBG=a.reload:* prints the MARKS; this prints the marks the emitter
+          then DECLINED, which is the only visible cost of the check and the
+          number to watch if the mirror drifts further. A decline is not a bug —
+          it is the pass correctly refusing a stale prediction. }
+        if IRLoadRedundant[node] and PxxDbgWants('a.reload', '*') then
+          WriteLn('PXXDBG a.reload DECLINED node ', node, ' sym ',
+                  Syms[IRA[node]].Name, ' (', CodeLen - ReloadRaxCodeLen,
+                  ' bytes already emitted this statement)');
         EmitLoadVar(IRA[node]);
         { EmitLoadVar leaves floats in xmm0, but the IR value model carries
           floats as double bits in rax. Bridge xmm0 -> rax. }
@@ -5068,11 +5470,14 @@ begin
           begin
           if IRKind[valueNode] = IR_CONST_STR then
           begin
-            sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
-            si := InternStr(sVal);
-            EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
-            EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
-            IREmitCodeCall(AnsiStrFromLiteralAddr);
+            if not EmitStaticLitHandle(valueNode) then
+            begin
+              sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
+              si := InternStr(sVal);
+              EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+              EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
+              IREmitCodeCall(AnsiStrFromLiteralAddr);
+            end;
           end
           else
           begin
@@ -5701,11 +6106,14 @@ begin
         begin
           if IRKind[valueNode] = IR_CONST_STR then
           begin
-            sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
-            si := InternStr(sVal);
-            EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
-            EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
-            IREmitCodeCall(AnsiStrFromLiteralAddr);
+            if not EmitStaticLitHandle(valueNode) then
+            begin
+              sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
+              si := InternStr(sVal);
+              EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+              EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
+              IREmitCodeCall(AnsiStrFromLiteralAddr);
+            end;
           end
           else
           begin
@@ -5827,6 +6235,45 @@ begin
           recursive, so a local cannot leak into a nested binop). 0 = the right
           operand is in rcx, which is every path but the one below. }
         w1RightReg := 0;
+        shiftImmCnt := -1;
+        w1LeftReg := 0;
+        w1WidenLeftReg := 0;
+        w1CmpRightKind := W1CMP_NONE; w1CmpRightReg := 0; w1CmpRightOff := 0;
+
+        { PXXDBG=a.w1left -- REPORT ONLY, prices the LEFT half of the operand
+          funnel. W1 slice 4 killed `mov rcx, rN` on the RIGHT; the left still
+          funnels through rax (`mov rax, rN` before every use) because the ALU
+          forms write their result to rax, so a resident left operand cannot
+          simply stay put. The exception is an op with NO destination -- a
+          compare -- which can read the home register directly. Classify the
+          population by op before writing any arm, because "the funnel is 1.21%"
+          does not say which arms could actually drop the move.
+
+          Buckets are what is ACTIONABLE, not what is syntactic:
+            CMP     -- no destination, so the home register can be read in
+                       place: `cmp rN, rcx`. The move is deletable outright.
+            MULIMM  -- `imul rax, rN, imm` is a three-operand form, so this one
+                       is deletable too, by encoding rather than by omission.
+            ALU     -- add/sub/and/or/xor write rax, so a resident left CANNOT
+                       stay put; `lea` could serve the commutative subset but
+                       does not set flags. Counted to price that separately.
+            SHIFT   -- the count is the moving part, already done in slice 1. }
+        if PxxDbgEnabled('a.w1left') and (IRKind[left] = IR_LOAD_SYM) and
+           (ResidentRegOf(IRA[left]) <> 0) then
+        begin
+          if (op = tkEq) or (op = tkNeq) or (op = tkLt) or
+             (op = tkLe) or (op = tkGt) or (op = tkGe) then
+            WriteLn('PXXDBG a.w1left CMP')
+          else if (op = tkStar) and (IRKind[right] = IR_CONST_INT) then
+            WriteLn('PXXDBG a.w1left MULIMM')
+          else if (op = tkPlus) or (op = tkMinus) or (op = tkAnd) or
+                  (op = tkOr) or (op = tkXor) then
+            WriteLn('PXXDBG a.w1left ALU')
+          else if (op = tkIdent) or (op = tkShr) or (op = tkShl) then
+            WriteLn('PXXDBG a.w1left SHIFT')
+          else
+            WriteLn('PXXDBG a.w1left OTHER');
+        end;
 
         { -O3 in-tree XMM fusion: a call-free float arithmetic tree evaluates
           straight into xmm2..xmm6 and bridges to the rax value model once. }
@@ -5848,8 +6295,16 @@ begin
            (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
            CmpFusible(node) then
         begin
-          IREmitNode(left);
-          EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[right]));   { cmp rax, imm32 }
+          { -O3 W1 slice 5: a RESIDENT left operand needs no `mov rax, rN` here
+            either. CmpFusible has already excluded float/string/variant and the
+            right is a constant, so this arm lowers to a bare cmp + setcc with
+            NO alternative path below it -- which is why the eligibility test is
+            just "left is a resident leaf sym" and needs no type whitelist of
+            its own, unlike the register form further down. }
+          if (OptLevel >= 3) and (IRKind[left] = IR_LOAD_SYM) then
+            w1LeftReg := ResidentRegOf(IRA[left]);
+          if w1LeftReg = 0 then IREmitNode(left);
+          EmitCmpLeftImm32(w1LeftReg, Integer(IRIVal[right]));       { cmp rax|rN, imm32 }
           if TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
             case op of
               tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;  { sete   al }
@@ -5983,14 +6438,23 @@ begin
            ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or
             (op = tkAnd) or (op = tkOr) or (op = tkXor)) then
         begin
-          IREmitNode(left);   { rax = left }
+          { -O3 W1 slice 6: `imul` is the ONE form here with a three-operand
+            encoding, so a resident left operand can be its source while rax
+            stays its destination and the `mov rax, rN` goes away. The other
+            five arms are short accumulator encodings that read and write rax,
+            so a resident left has to be moved and this does not help them.
+            Census (PXXDBG=a.w1left): MULIMM is 422 sites in compiler.pas, the
+            second deletable bucket after CMP. }
+          if (OptLevel >= 3) and (op = tkStar) and (IRKind[left] = IR_LOAD_SYM) then
+            w1LeftReg := ResidentRegOf(IRA[left]);
+          if w1LeftReg = 0 then IREmitNode(left);   { rax = left }
           case op of
             tkPlus:  begin EmitB($48); EmitB($05); EmitI32(IRIVal[right]); end;             { add rax, imm32 }
             tkMinus: begin EmitB($48); EmitB($2D); EmitI32(IRIVal[right]); end;             { sub rax, imm32 }
             tkAnd:   begin EmitB($48); EmitB($25); EmitI32(IRIVal[right]); end;             { and rax, imm32 }
             tkOr:    begin EmitB($48); EmitB($0D); EmitI32(IRIVal[right]); end;             { or  rax, imm32 }
             tkXor:   begin EmitB($48); EmitB($35); EmitI32(IRIVal[right]); end;             { xor rax, imm32 }
-            tkStar:  begin EmitB($48); EmitB($69); EmitB($C0); EmitI32(IRIVal[right]); end; { imul rax, rax, imm32 }
+            tkStar:  EmitImulRaxLeftImm32(w1LeftReg, IRIVal[right]);                       { imul rax, rax|rN, imm32 }
           end;
           Exit;
         end;
@@ -6002,8 +6466,49 @@ begin
             reg shuffle per constant operand) collapses to one mov. Register
             contract downstream is IDENTICAL: rax = left value, rcx = right
             value; the constant's evaluation has no side effects. }
-          IREmitNode(left);
-          if (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) then
+          { -O3 W1 slice 5: a RESIDENT left operand feeding a COMPARE does not
+            need `mov rax, rN` at all -- cmp has no destination, so the op arm
+            can read the home register in place. Skipping the load here is what
+            deletes the move; W1CmpLeftEligible is a WHITELIST of operand types,
+            so a compare that could reach one of the string/char arms below (all
+            of which expect rax loaded) is never eligible. The right operand in
+            both of these arms is a constant or a plain load, so nothing between
+            here and the cmp can mutate the left symbol out from under us. }
+          if (OptLevel >= 3) and W1CmpLeftEligible(node, left, right) then
+            w1LeftReg := ResidentRegOf(IRA[left])
+          else
+          begin
+            { -O3 W1 slice 10: a 4-byte resident left feeding a shift's LEADING
+              cdqe needs no load of its own -- `movsxd rax, rNd` at the widen
+              site IS the read and the widen, one instruction instead of two.
+              Safe to defer across the right operand's setup: in both of these
+              arms the right is a constant (no code, or `mov rcx, imm`) or a
+              leaf sym (EmitLoadVarRcx, which writes rcx and nothing else), so
+              nothing between here and the widen touches rax, and nothing can
+              mutate the symbol out from under the deferred read. }
+            w1WidenLeftReg := W1WidenLeftEligible(node, left, op);
+            if w1WidenLeftReg = 0 then IREmitNode(left);
+          end;
+          { A SHIFT by a constant count does not want the count in rcx at all —
+            x86 has an immediate form. The imm-fold arm above deliberately
+            excludes shifts because they carry width fixups it does not
+            reproduce, so this does not fold the whole op: it drops ONLY the
+            `mov rcx, k`, leaves every width fixup exactly where it is, and the
+            arms below emit `shr rax, k` instead of `shr rax, cl`.
+
+            Measured before writing: `acc := acc + j - (i shr 1)` at -O3 emitted
+            `mov rcx,1 / cdqe / shr rax,cl` in a 22-instruction loop body — the
+            cdqe is real (native-width promotion), the mov is not.
+            feature-opt-o3-register-pressure W1.
+            Gated to -O3 even though the arm around it is -O1, per the campaign
+            rule: new work lands at -O3 and is promoted to -O2 per pass after
+            the full gate. That also buys the cleanest possible verification —
+            -O0/-O1/-O2 must come out BYTE-IDENTICAL and only -O3 may differ. }
+          if (OptLevel >= 3) and
+             ((op = tkIdent) or (op = tkShr) or (op = tkShl)) and
+             (IRIVal[right] >= 0) and (IRIVal[right] <= 63) then
+            shiftImmCnt := Integer(IRIVal[right])
+          else if (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) then
           begin
             EmitB($48); EmitB($C7); EmitB($C1); EmitI32(Integer(IRIVal[right])); { mov rcx, imm32 (sign-extended) }
           end
@@ -6021,7 +6526,29 @@ begin
             right. A plain load has no side effects, so evaluating it after the
             left is order-safe; loading directly into rcx (not rax then mov)
             avoids clobbering the left value in rax. }
-          IREmitNode(left);
+          { -O3 W1 slice 5: a RESIDENT left operand feeding a COMPARE does not
+            need `mov rax, rN` at all -- cmp has no destination, so the op arm
+            can read the home register in place. Skipping the load here is what
+            deletes the move; W1CmpLeftEligible is a WHITELIST of operand types,
+            so a compare that could reach one of the string/char arms below (all
+            of which expect rax loaded) is never eligible. The right operand in
+            both of these arms is a constant or a plain load, so nothing between
+            here and the cmp can mutate the left symbol out from under us. }
+          if (OptLevel >= 3) and W1CmpLeftEligible(node, left, right) then
+            w1LeftReg := ResidentRegOf(IRA[left])
+          else
+          begin
+            { -O3 W1 slice 10: a 4-byte resident left feeding a shift's LEADING
+              cdqe needs no load of its own -- `movsxd rax, rNd` at the widen
+              site IS the read and the widen, one instruction instead of two.
+              Safe to defer across the right operand's setup: in both of these
+              arms the right is a constant (no code, or `mov rcx, imm`) or a
+              leaf sym (EmitLoadVarRcx, which writes rcx and nothing else), so
+              nothing between here and the widen touches rax, and nothing can
+              mutate the symbol out from under the deferred read. }
+            w1WidenLeftReg := W1WidenLeftEligible(node, left, op);
+            if w1WidenLeftReg = 0 then IREmitNode(left);
+          end;
           { -O3 W1 slice 4: if that right operand is REGISTER-RESIDENT, the load
             EmitLoadVarRcx would emit is `mov rcx, r12..r15` — a move whose only
             purpose is to satisfy the rcx contract. The ALU can read r12..r15
@@ -6036,7 +6563,21 @@ begin
           if (OptLevel >= 3) and W1AluRightEligible(node, left, right) then
             w1RightReg := ResidentRegOf(IRA[right])
           else
-            EmitLoadVarRcx(IRA[right]);
+          begin
+            { -O3 W1 slice 7, the value-producing twin of the branch fold. Same
+              opportunity, same predicate: a compare can address its right
+              operand in place. Wired here as well because fixing one arm of a
+              double case and leaving the sibling is how the sibling stays
+              broken -- normalise-dont-special-case. CmpFusible is required
+              because only that set reaches the bare `cmp` below; everything
+              else keeps the rcx contract. }
+            w1CmpRightKind := W1CmpRightInPlace(right, left, w1CmpRightReg, w1CmpRightOff);
+            if (w1CmpRightKind = W1CMP_NONE) or not CmpFusible(node) then
+            begin
+              w1CmpRightKind := W1CMP_NONE;
+              EmitLoadVarRcx(IRA[right]);
+            end;
+          end;
         end
         else if (OptLevel >= 2) and (not InLValueWrite) and
                 ((IRKind[left] = IR_CONST_INT) or
@@ -6056,6 +6597,44 @@ begin
             MovRaxImm(IRIVal[left])
           else
             EmitLoadVar(IRA[left]);
+        end
+        else if (OptLevel >= 3) and (not InLValueWrite) and
+                (ScratchDepth < 2) and
+                ScratchSafeSubtree(right) and ScratchSafeSubtree(left) then
+        begin
+          { -O3 W1 slice 9: BOTH subtrees proven pure -> park the RIGHT value in
+            the scratch register instead of the left, and the restore move
+            disappears. The scratch arm below parks left, evaluates right, then
+            needs THREE moves (park, rcx, restore); parking right needs TWO
+            (park, then rcx straight from the scratch reg) because the left
+            value is produced last and is already in rax where it belongs.
+
+            Reorder legality: both subtrees are ScratchSafeSubtree, so neither
+            has an observable effect and neither can read what the other writes
+            -- evaluation order is unobservable. The arm below cannot do this
+            with only `ScratchSafeSubtree(right)`, because a left with side
+            effects must not be moved after a right that could read them.
+
+            WHY NOT the obvious version -- right into rcx, then left into rax,
+            for one move instead of two. Because ScratchSafeSubtree does NOT
+            promise rcx is untouched: its whitelist explicitly admits emissions
+            that use rax/rcx/rdx (a nested BINOP loads its own right operand
+            into rcx). Emitting left after setting rcx would clobber it. That
+            version is only safe for a LEAF left -- which is exactly the case
+            the -O2 mirror above already takes. So this arm is the both-complex
+            remainder, and it is worth one instruction, not two. }
+          IREmitNode(right);
+          if ScratchDepth = 0 then
+            begin EmitB($49); EmitB($89); EmitB($C0); end  { mov r8, rax }
+          else
+            begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9, rax }
+          Inc(ScratchDepth);
+          IREmitNode(left);
+          Dec(ScratchDepth);
+          if ScratchDepth = 0 then
+            begin EmitB($4C); EmitB($89); EmitB($C1); end  { mov rcx, r8 }
+          else
+            begin EmitB($4C); EmitB($89); EmitB($C9); end; { mov rcx, r9 }
         end
         else if (OptLevel >= 3) and (not InLValueWrite) and
                 (ScratchDepth < 2) and ScratchSafeSubtree(right) then
@@ -6437,13 +7016,19 @@ begin
                   result (C, and any dialect that keeps the operand's width)
                   still zero-extends, which is this emitter's original job.
                   bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
-                if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
-                   TypeSigned(IntToTypeKind(IRTk[left])) then
-                  begin EmitB($48); EmitB($98); end           { cdqe (sign-extend) }
+                if W1LeadingCdqe(node, left, op) then
+                begin
+                  { -O3 W1 slice 10: when the left load was skipped above, the
+                    read and the widen collapse into one movsxd. }
+                  if w1WidenLeftReg <> 0 then
+                    EmitMovsxdRaxReg(w1WidenLeftReg)          { movsxd rax, rNd }
+                  else
+                    begin EmitB($48); EmitB($98); end         { cdqe (sign-extend) }
+                end
                 else
                   begin EmitB($89); EmitB($C0); end;          { mov eax, eax (zero-extend) }
               end;
-              EmitB($48); EmitB($D3); EmitB($E8);             { shr rax, cl }
+              EmitShiftRax($E8, True, shiftImmCnt);          { shr rax, cl|imm }
               { A NARROW result of a SIGNED operand keeps the operand's type, so
                 the 32-bit answer must be read back as signed — that is what FPC
                 does (`LongInt shr n` is a LongInt). Only a count of ZERO can
@@ -6462,9 +7047,14 @@ begin
             operand, and `sar` instead of `shr` (ModRM /7 vs /5). }
           tkShr:
             begin
-              if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
-                begin EmitB($48); EmitB($98); end;            { cdqe (sign-extend) }
-              EmitB($48); EmitB($D3); EmitB($F8);             { sar rax, cl }
+              if W1LeadingCdqe(node, left, op) then
+              begin
+                if w1WidenLeftReg <> 0 then                   { -O3 W1 slice 10 }
+                  EmitMovsxdRaxReg(w1WidenLeftReg)            { movsxd rax, rNd }
+                else
+                  begin EmitB($48); EmitB($98); end;          { cdqe (sign-extend) }
+              end;
+              EmitShiftRax($F8, True, shiftImmCnt);          { sar rax, cl|imm }
             end;
           { `shl` in a 64-bit register on a <8-byte operand leaves a value shifted
             into bit 31 looking positive (1 shl 31 read 2147483648, not
@@ -6482,9 +7072,9 @@ begin
                 bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
               if StrictShiftWidth and (TypeSize(IntToTypeKind(IRTk[left])) < 8) and
                  (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
-                begin EmitB($D3); EmitB($E0); end             { shl eax, cl }
+                EmitShiftRax($E0, False, shiftImmCnt)          { shl eax, cl|imm }
               else
-                begin EmitB($48); EmitB($D3); EmitB($E0); end; { shl rax, cl }
+                EmitShiftRax($E0, True, shiftImmCnt);          { shl rax, cl|imm }
               { ...unless the frontend asked for a NATIVE-width result, in which
                 case there is nothing to wrap back to: `1 shl 40` is 2^40 and
                 `1 shl 31` is 2147483648. Pascal-only — C's `<<` keeps its
@@ -6655,7 +7245,14 @@ begin
               end
               else
               begin
-                EmitB($48); EmitB($3B); EmitB($C1); { cmp rax, rcx }
+                if w1CmpRightKind = W1CMP_REG then
+                  EmitCmpLeftReg(w1LeftReg, w1CmpRightReg)      { cmp rax|rN, rM }
+                else if w1CmpRightKind = W1CMP_MEM then
+                  EmitCmpLeftMemRbp(w1LeftReg, w1CmpRightOff)   { cmp rax|rN, [rbp+off] }
+                else if w1CmpRightKind = W1CMP_M32 then
+                  EmitCmpLeftMemRbp32(w1LeftReg, w1CmpRightOff) { cmp eax|rNd, [rbp+off] }
+                else
+                  EmitCmpLeftRcx(w1LeftReg);                    { cmp rax|rN, rcx }
                 if cmpUnsigned then
                 begin
                   case op of
@@ -7177,7 +7774,7 @@ begin
                   if Procs[procIdx].Params[i].TypeKind = tyAnsiString then
                   begin
                     if IntToTypeKind(IRTk[argNodeArr[i]]) = tyString then
-                      EmitAnsiStrFromInlineString
+                      EmitAnsiStrFromInlineStringOf(IRA[argNodeArr[i]])
                     else if IntToTypeKind(IRTk[argNodeArr[i]]) = tyChar then
                     begin
                       EmitB($50);                                     { push rax (char code) }
@@ -7235,7 +7832,7 @@ begin
                 if Procs[procIdx].Params[i].TypeKind = tyAnsiString then
                 begin
                   if IntToTypeKind(IRTk[argNode]) = tyString then
-                    EmitAnsiStrFromInlineString
+                    EmitAnsiStrFromInlineStringOf(IRA[argNode])
                   else if IntToTypeKind(IRTk[argNode]) = tyChar then
                   begin
                     EmitB($50);                                     { push rax (char code) }
@@ -7362,7 +7959,7 @@ begin
                    (Procs[cpi].Params[i].TypeKind = tyAnsiString) then
                 begin
                   if IntToTypeKind(IRTk[argNode]) = tyString then
-                    EmitAnsiStrFromInlineString
+                    EmitAnsiStrFromInlineStringOf(IRA[argNode])
                   else if IntToTypeKind(IRTk[argNode]) = tyChar then
                   begin
                     EmitB($50);                                     { push rax (char code) }
@@ -7786,6 +8383,26 @@ begin
               Patch32(pAnsiNoZeroGrow, CodeLen - (pAnsiNoZeroGrow + 4));
               EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8] = n }
               EmitB($48); EmitB($89); EmitB($56); EmitB($F8);           { mov [rsi-8], rdx }
+              { INVALIDATE the cached ASCII answer: this branch resizes the block
+                IN PLACE and the bytes between the old and new length were
+                written by nobody, so whatever the meta word claimed about them
+                is stale. Clearing both bits returns it to "not looked yet"
+                (PXX_FLAG_ASCII_KNOWN $1000 | PXX_FLAG_ASCII $0400), so the next
+                query rescans instead of trusting a claim made about different
+                bytes. The alloc branch below needs no equivalent — it builds a
+                fresh block through PXXHdrInit, which stamps LEGACY.
+
+                Latent until NilPy strings stopped collapsing: `Result := ''`
+                used to publish NIL, so a SetLength after it always took the
+                alloc branch and got a clean header. With a real zero-length
+                block the in-place branch is reachable, and pystr_repeat --
+                `Result := ''; SetLength(Result, total)` -- inherited "ASCII,
+                known" from when the block was EMPTY. `"é" * 3` then answered
+                isascii()=True and len()=6 (bytes) instead of 3 (characters),
+                because the character path keys on exactly that flag.
+                regression: test_nilpy_str_ascii_cache. }
+              EmitB($48); EmitB($81); EmitB($66); EmitB($E8);           { and qword [rsi-24], ... }
+              EmitB($FF); EmitB($EB); EmitB($FF); EmitB($FF);           { ...NOT (ASCII_KNOWN or ASCII) }
               EmitB($C6); EmitB($04); EmitB($16); EmitB(0);             { mov byte [rsi+rdx], 0 }
               EmitB($58);                                               { pop rax = old data }
               EmitB($59);                                               { pop rcx = n }
@@ -8222,7 +8839,7 @@ begin
           if IRSrcIsCallable(IRB[node]) then size := VT_CALLABLE_TAG;
           IREmitNode(IRB[node]);                 { rax = scalar value (float: double bits) }
           if tk = tyString then
-            EmitAnsiStrFromInlineString
+            EmitAnsiStrFromInlineStringOf(IRB[node])
           else if tk = tyAnsiString then
           begin
             { An lvalue source shares its handle -> retain. A CALL result or a
@@ -8301,7 +8918,7 @@ begin
         if IRSrcIsCallable(IRB[node]) then size := VT_CALLABLE_TAG;
         IREmitNode(IRB[node]);                 { rax = scalar value }
         if tk = tyString then
-          EmitAnsiStrFromInlineString
+          EmitAnsiStrFromInlineStringOf(IRB[node])
         else if tk = tyAnsiString then
           IREmitCodeCall(AnsiStrRetainAddr)
         else if tk = tyClass then
@@ -8797,10 +9414,8 @@ begin
         begin
           if IRA[node] <> -1 then
           begin
-            IREmitNode(IRA[node]);
-            EmitB($48); EmitB($89); EmitB($C7);
-            MovRaxImm(SYS_EXIT);
-            EmitSyscall;
+            IREmitNode(IRA[node]);   { rax = the exit code }
+            EmitExitReg;
           end
           else
             EmitExit(0);
@@ -8833,7 +9448,7 @@ begin
              (Procs[procIdx].Params[pathIdx].TypeKind = tyAnsiString) then
           begin
             if IntToTypeKind(IRTk[argNode]) = tyString then
-              EmitAnsiStrFromInlineString
+              EmitAnsiStrFromInlineStringOf(IRA[argNode])
             else if IntToTypeKind(IRTk[argNode]) = tyChar then
             begin
               EmitB($50);                                     { push rax (char code) }
@@ -9159,12 +9774,18 @@ var i, lblId, pos, targetOffset, f, procIdx, excSkip: Integer;
     condNode, cLeft, cRight: Integer;
     cOp: TTokenKind;
     cmpUns, fused, cmpImmOk: Boolean;
+    w1JccLeftReg: Integer;   { -O3 W1 slice 5: 0 = cLeft is in rax, else r12..r15 }
+    w1JccRightKind, w1JccRightReg, w1JccRightOff: Integer;  { -O3 W1 slice 7 }
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
   { DWARF -g: per-body line-row state, reset before any backend runs (each backend
     calls DbgRecordRow in its statement loop). }
   DwarfLastLine := 0;
   DwarfProcFirstRow := True;
+  { -1 is "no statement has begun", so a redundant-load mark reached from
+    anything emitted before the statement loop (a prologue path) is declined
+    rather than trusted on the previous body's leftover value. }
+  ReloadRaxCodeLen := -1;
 {$ifndef PXX_NO_I386}
   if TargetArch = TARGET_I386 then
   begin
@@ -9270,6 +9891,9 @@ begin
   for i := 0 to IRCount - 1 do
   begin
     DbgRecordRow(i);   { DWARF -g line table }
+    { CodeLen as this statement begins — the redundant-load arm compares against
+      it to confirm the load really is the first thing emitted here. }
+    ReloadRaxCodeLen := CodeLen;
     case IRKind[i] of
       IR_LABEL:
         begin
@@ -9327,8 +9951,21 @@ begin
             cmpImmOk := (OptLevel >= 2) and (IRKind[cRight] = IR_CONST_INT) and
                         (IRIVal[cRight] >= -2147483648) and
                         (IRIVal[cRight] <= 2147483647);
+            { -O3 W1 slice 5, branch twin of the value form above. Same guard
+              (CmpFusible on condNode), same reasoning: this whole block lowers
+              to a bare cmp + jcc, so a resident left can be read in place. Set
+              only for the two arms that reach the cmp with the left still
+              untouched -- the push/pop arm below evaluates cRight between, and
+              cRight there may contain calls that mutate the left symbol. }
+            w1JccLeftReg := 0;
+            w1JccRightKind := W1CMP_NONE; w1JccRightReg := 0; w1JccRightOff := 0;
+            if (OptLevel >= 3) and (IRKind[cLeft] = IR_LOAD_SYM) and
+               (cmpImmOk or LeafSymRcxLoadable(cRight)) then
+              w1JccLeftReg := ResidentRegOf(IRA[cLeft]);
             if cmpImmOk then
-              IREmitNode(cLeft)
+            begin
+              if w1JccLeftReg = 0 then IREmitNode(cLeft);
+            end
             else if IRKind[cRight] = IR_CONST_INT then
             begin
               IREmitNode(cLeft);
@@ -9339,8 +9976,11 @@ begin
             end
             else if LeafSymRcxLoadable(cRight) then
             begin
-              IREmitNode(cLeft);
-              EmitLoadVarRcx(IRA[cRight]);
+              if w1JccLeftReg = 0 then IREmitNode(cLeft);
+              { -O3 W1 slice 7: read the right operand in place where the cmp can
+                address it, instead of staging it through rcx. }
+              w1JccRightKind := W1CmpRightInPlace(cRight, cLeft, w1JccRightReg, w1JccRightOff);
+              if w1JccRightKind = W1CMP_NONE then EmitLoadVarRcx(IRA[cRight]);
             end
             else if (OptLevel >= 2) and (not InLValueWrite) and
                     ((IRKind[cLeft] = IR_CONST_INT) or
@@ -9398,9 +10038,15 @@ begin
               IREmitNode(cRight); EmitB($48); EmitB($89); EmitB($C1); EmitB($58); { mov rcx,rax; pop rax }
             end;
             if cmpImmOk then
-              begin EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[cRight])); end  { cmp rax, imm32 }
+              EmitCmpLeftImm32(w1JccLeftReg, Integer(IRIVal[cRight]))  { cmp rax|rN, imm32 }
+            else if w1JccRightKind = W1CMP_REG then
+              EmitCmpLeftReg(w1JccLeftReg, w1JccRightReg)              { cmp rax|rN, rM }
+            else if w1JccRightKind = W1CMP_MEM then
+              EmitCmpLeftMemRbp(w1JccLeftReg, w1JccRightOff)           { cmp rax|rN, [rbp+off] }
+            else if w1JccRightKind = W1CMP_M32 then
+              EmitCmpLeftMemRbp32(w1JccLeftReg, w1JccRightOff)         { cmp eax|rNd, [rbp+off] }
             else
-              begin EmitB($48); EmitB($3B); EmitB($C1); end;                       { cmp rax, rcx }
+              EmitCmpLeftRcx(w1JccLeftReg);                            { cmp rax|rN, rcx }
             cmpUns := TypeCompareUnsigned(IntToTypeKind(IRTk[cLeft]), IntToTypeKind(IRTk[cRight]));
             cOp := IntToTokenKind(IRC[condNode]);
             EmitB($0F);   { two-byte jcc, inverted (jump when comparison is FALSE) }
@@ -9780,7 +10426,16 @@ end;
 { Is `idx` written anywhere inside a try-protected span of this body?
 
   This is the axis the -O3 item-3 gate actually turns on, and it is finer than
-  the RcProcHasExc gate that stands today. A raise longjmps back to the try's
+  the RcProcHasExc gate that stands today. That gate is ENFORCED IN symtab.inc,
+  not here: `ResidentSlotIsDead` and `FloatResidentSlotIsDead` each open with
+  `if RcProcHasExc then Exit`. This file only sets the flag (UnifiedResidencyAssign
+  below) and prints it (the a.resid probe), so a grep confined to ir_codegen.inc
+  finds a variable that is assigned and displayed and never tested -- the exact
+  shape of a gate someone forgot to wire. It was read that way once; hence this
+  sentence. NOTE this function itself is instrumentation for now: the a.resid
+  WriteLn is its only consumer. That is not a hole, because the coarse gate is
+  strictly STRONGER -- it refuses the whole body, this would refuse only symbols
+  written inside the span -- so wiring it can only ever relax, never tighten. A raise longjmps back to the try's
   ExcSetJmp, which restores r12-r15 (aarch64 x19-x28) from the jmp_buf — so a
   resident register is ROLLED BACK to its value at try-entry. If the symbol was
   written inside the protected region, that rolled-back register is stale and
@@ -9845,7 +10500,8 @@ begin
   { Before any early exit: the exception landing pad refreshes residents FROM
     their frame slots, so it is the one slot reader that residency cannot see
     through. Anything that stops keeping the slot current must refuse a body
-    that has one. Conservative default is True. }
+    that has one -- and the two things that do are in symtab.inc, not here:
+    ResidentSlotIsDead and FloatResidentSlotIsDead. Conservative default is True. }
   RcProcHasExc := False;
   for k := 0 to IRCount - 1 do
     if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
@@ -10815,19 +11471,145 @@ begin
   if TargetArch = TARGET_XTENSA then
   begin
 
-    { Release local managed strings before returning (ARC scope-exit DecRef).
-      Must precede the result load: each DecRef call clobbers a2. The returned
-      Result handle is skipped (ownership transfers to the caller). }
+    { Release local managed values before returning (ARC scope exit). Must
+      precede the result load: each helper call clobbers a2. The returned Result
+      is skipped (ownership transfers to the caller).
+
+      SIX OF SEVEN MANAGED KINDS, and until now it was one. This arm released a
+      scalar AnsiString and nothing else, so a COM-interface local, a static
+      array of string, a Variant, a promotable int, and a record with managed
+      fields each leaked on every call on xtensa alone — silently, because a
+      leak prints nothing and the cross-target differential asserts printed
+      output. The other five backends have carried these arms for weeks; this is
+      a port of riscv32's chain below, kind for kind, not a new design.
+      bug-a-xtensa-scope-exit-releases-one-of-seven-managed-kinds
+
+      The SEVENTH — a local dynamic array — is deliberately still absent, and
+      that is the same call riscv32's own arm records: a scope-exit release is
+      safe only once EVERY store that can publish a handle into the local
+      retains it, and xtensa is still the one target that takes the
+      non-retaining IR_STORE_MEM share path for `obj.f := a`. Adding the release
+      half alone converts a silent leak into a double free, which is how it was
+      measured on aarch64. It lands with IR_STORE_DYN, on
+      feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45. }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
+          { COM/ARC interface local: _Release the held reference (nil-safe). }
+          procIdx := FindProc('PXXIntfRelease');
+          if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);       { arg0 = slot address }
+          EmitLoadConstXtensa(XtensaArgRegN(1), SymTR[i].RecId - REC_UCLASS_BASE);
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+        begin
+          { STATIC array with MANAGED ELEMENTS: release EVERY element. N-D
+            arrays are stored flat, so ArrLen is the right count. }
+          procIdx := FindProc('PXXArrayReleaseImmediate');
+          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);       { arg0 = &arr }
+          EmitLoadConstXtensa(XtensaArgRegN(1), Syms[i].ArrLen);
+          mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+          EmitLoadConstXtensa(XtensaArgRegN(2), mek);
+          if mek = 3 then
+            EmitLoadDataRefXtensa(XtensaArgRegN(3),
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
+          else  { kinds 1/4: immediate — 0, or the interface id }
+            EmitLoadConstXtensa(XtensaArgRegN(3),
+              ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        begin
+          { A SCALAR AnsiString local. `not IsArray` is load-bearing: an array's
+            TypeKind IS its element kind, so without it a local `array of
+            string` would hand its DATA POINTER to the string releaser. }
           EmitLoadVarXtensa(i);                  { a2 = handle }
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
           if XtensaABI = XTENSA_ABI_WINDOWED then
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+        begin
+          { Variant local: clear (releases any managed payload). arg0 = address. }
+          procIdx := FindProc('PXXVarClear');
+          if procIdx < 0 then Error('compiler error: PXXVarClear not found');
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+        begin
+          { Promotable-int local/temp: release a heap-tier payload at scope exit
+            (bug-a-runtime-variant-heap-grows-unbounded). Absent on profiles
+            built without promocore, where FindProc simply answers -1. }
+          procIdx := FindProc('PXXPromoClear');
+          if procIdx >= 0 then
+          begin
+            EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+            EmitCallProc(procIdx);
+          end;
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+                RecordHasManagedFields(SymTR[i].RecId) then
+        begin
+          { Record-with-managed-fields local: release each managed field via the
+            portable helper. arg0 = record address, arg1 = layout descriptor.
+            COM interface members first, through their own pass (absent on the
+            ESP profile, where FindProc simply answers -1). }
+          if RecordHasComIntfFields(SymTR[i].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+              EmitLoadDataRefXtensa(XtensaArgRegN(1),
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+            end;
+          end;
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+          EmitLoadDataRefXtensa(XtensaArgRegN(1),
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        begin
+          { LOCAL DYNAMIC ARRAY — the seventh kind, and it was held back one
+            commit rather than skipped. The rule (riscv32's arm below states it
+            at length): a scope-exit release is safe only once EVERY store that
+            can publish a handle into this local RETAINS it, and there are two —
+            `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
+            (IR_STORE_DYN). Xtensa had NEITHER until
+            feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45,
+            and releasing before the retains land turns a silent leak into a
+            double free (measured as a SIGSEGV on aarch64 when it was tried
+            there). Both arms exist now, so this one is safe.
+
+            UNLOCKED on purpose, as on the other cross backends:
+            EmitAcquireHeapLock is the x86-64 codegen BSS spinlock and does not
+            exist here, so ManagedElemKindLocked's --threadsafe refusal has
+            nothing to protect.
+            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          { Pointer-width load by hand: EmitLoadVarXtensa sizes by the symbol's
+            TypeKind, which for an array is its ELEMENT kind. }
+          EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+          xtensa_l32i(XtensaArgRegN(0), XtensaArgRegN(0), 0);   { arg0 = handle }
+          EmitLoadDataRefXtensa(XtensaArgRegN(1), GetOrAllocSymRTTI(i));
           EmitCallProc(procIdx);
         end;
     Exit;
@@ -10994,15 +11776,26 @@ end;
   are the same frame with different landing pads. What follows is those two
   pieces called from the proc driver instead of from the statement lowering.
 
-  xtensa is deliberately absent: it is the one target whose exception runtime
-  exists only under the Call0 ABI, and its managed-local arm handles AnsiString
-  alone. That is ESP-campaign work, tracked on the ticket, not a silent skip. }
+  xtensa is in under CALL0 ONLY, and the ABI is the whole of the condition. Its
+  exception runtime does not exist under the windowed ABI at all -- IR_EXC_ENTER
+  and IR_RAISE both refuse there, because a longjmp-style unwind needs the
+  register windows spilled first and bare-metal has no handler for that -- so
+  under windowed this predicate stays false and a proc keeps leaking its managed
+  locals on an unwind, as it always has.
+
+  The OTHER half of xtensa's old exclusion is gone and this comment used to
+  assert it: "its managed-local arm handles AnsiString alone" was true until
+  e1d7977a2 took EmitManagedLocalCleanupForTarget's xtensa block from one
+  managed kind to six and 3a1c1dc73 added the seventh. The landing pad a cleanup
+  frame needs is that block, and it has been complete for a while.
+  bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa }
 
 function TargetHasProcCleanupFrame: Boolean;
 begin
   Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or
             (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_AARCH64) or
-            (TargetArch = TARGET_RISCV32);
+            (TargetArch = TARGET_RISCV32) or
+            ((TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_CALL0));
 end;
 
 procedure EmitProcCleanupFrameLeaveForTarget;
@@ -11021,6 +11814,7 @@ begin
   else if TargetArch = TARGET_AARCH64 then IREmitLeaveExceptionFramesAarch64(1)
 {$endif}
   else if TargetArch = TARGET_RISCV32 then IREmitLeaveExceptionFramesRISCV32(1)
+  else if TargetArch = TARGET_XTENSA then IREmitLeaveExceptionFramesXtensa(1)
   else Error('compiler error: no proc exception cleanup frame for this target');
 end;
 
@@ -11107,6 +11901,29 @@ begin
     landPatch := CodeLen; EmitI32(EncodeRISCVJAL(reg_zero, 0));
     Exit;
   end;
+  if TargetArch = TARGET_XTENSA then
+  begin
+    { Byte-for-byte the IR_EXC_ENTER arm in ir_codegen_xtensa.inc, which is the
+      point: a try frame and a proc cleanup frame are the same frame, so the two
+      cannot drift if the second is a transcription of the first. The one
+      difference is the landing pad it branches to. }
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -EXC_FRAME_SIZE_XT);
+    EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+    xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
+    xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
+    { EmitXtensaCallToCode, not xtensa_call0: the helper may be more than
+      512 KiB behind us, and this is the call form that survives that. }
+    EmitXtensaCallToCode(ExcSetJmpAddr);
+    { beq skips the j on the NORMAL return (a2 = 0); the j is the taken edge, so
+      the landing pad may sit anywhere within J's reach. Offset 6 clears the
+      three-byte j that follows. }
+    xtensa_movi(reg_xtensa_a4, 0);
+    xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);
+    landPatch := CodeLen; xtensa_j(4);
+    Exit;
+  end;
   Error('compiler error: no proc exception cleanup frame for this target');
 end;
 
@@ -11145,6 +11962,14 @@ begin
     CheckProcCleanupBranchRange(CodeLen - landPatch, 1048576);
     Patch32(landPatch, EncodeRISCVJAL(reg_zero, CodeLen - landPatch));
   end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    { J's imm18 is a BYTE offset, so the reach is +-128 KiB -- four times
+      tighter than the aarch64/riscv32 limits above, and the reason this arm
+      states its own number instead of copying theirs. }
+    CheckProcCleanupBranchRange(CodeLen - landPatch, 131072);
+    Patch24(landPatch, EncodeXtensaJ(CodeLen - landPatch));
+  end
   else
     Error('compiler error: no proc exception cleanup frame for this target');
 end;
@@ -11161,6 +11986,8 @@ begin
     begin skipPatch := CodeLen; EmitI32($14000000); end
   else if TargetArch = TARGET_RISCV32 then
     begin skipPatch := CodeLen; EmitI32(EncodeRISCVJAL(reg_zero, 0)); end
+  else if TargetArch = TARGET_XTENSA then
+    begin skipPatch := CodeLen; xtensa_j(4); end
   else
     Error('compiler error: no proc exception cleanup frame for this target');
 end;
@@ -11177,6 +12004,11 @@ begin
   begin
     CheckProcCleanupBranchRange(CodeLen - skipPatch, 1048576);
     Patch32(skipPatch, EncodeRISCVJAL(reg_zero, CodeLen - skipPatch));
+  end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    CheckProcCleanupBranchRange(CodeLen - skipPatch, 131072);
+    Patch24(skipPatch, EncodeXtensaJ(CodeLen - skipPatch));
   end
   else
     Error('compiler error: no proc exception cleanup frame for this target');
@@ -11202,6 +12034,8 @@ begin
 {$endif}
   else if TargetArch = TARGET_RISCV32 then
     EmitI32(EncodeRISCVJAL(reg_ra, ExcRaiseAddr - CodeLen))
+  else if TargetArch = TARGET_XTENSA then
+    EmitXtensaCallToCode(ExcRaiseAddr)
   else
     Error('compiler error: no proc exception cleanup frame for this target');
 end;

@@ -1,0 +1,40 @@
+# time.time() and os.listdir() -- the two names in the stdlib-coverage sweep
+# that needed a PAL syscall rather than a shim.
+# feature-nilpy-stdlib-coverage-gaps-measured
+#
+# Both are asserted by PROPERTY, not by value: a clock reading and a directory
+# listing are not reproducible, so pinning either literally would pin the
+# machine that ran it. Paths are repo-relative for the same reason -- an
+# absolute /tmp path in an expectation is rewritten by testmgr.
+import os
+import time
+
+# --- time.time(): a float of epoch seconds, and it moves forward -------------
+t = time.time()
+print(type(t).__name__)
+print(t > 1750000000.0)          # after 2025-06; a stopped or zeroed clock fails
+print(t < 4000000000.0)          # before 2096; a garbage read fails
+print(time.time() >= t)
+
+# --- os.listdir: this repo's own test/ directory, ~3000 entries, which takes
+# --- many getdents64 fills and so exercises the buffer walk, not just one call
+xs = os.listdir("test")
+print(len(xs) > 500)
+print("test_nilpy_re.npy" in xs)
+print("." in xs, ".." in xs)     # CPython excludes both; so must we
+print(sorted(xs) == sorted(os.listdir("test")))
+
+# --- a small directory, listed exactly ---------------------------------------
+print(sorted(os.listdir("test/nilpylib")))
+
+# --- the two error shapes ----------------------------------------------------
+try:
+    os.listdir("test/there_is_no_such_directory_here")
+    print("no raise -- WRONG")
+except OSError:
+    print("a missing directory raises OSError")
+try:
+    os.listdir("Makefile")
+    print("no raise -- WRONG")
+except OSError:
+    print("listdir of a FILE raises OSError")

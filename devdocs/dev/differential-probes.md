@@ -1,7 +1,7 @@
 # Differential probes — the bug generator
 
-Four standing harnesses that run small programs under pxx **and** under a
-reference implementation, diff the output, and report divergences. They are the
+Standing harnesses that run small programs under pxx **and** under a reference
+implementation, diff the output, and report divergences. They are the
 most productive bug-finding method in this repo: the night of 2026-08-05, five
 of seven fixed bugs came from adding case batches to two of them, including two
 silent-wrong-value bugs in the backends.
@@ -10,7 +10,32 @@ This page is the **index and the shared rules**. Each script's own header is the
 authority on its specifics and is worth reading before you add to it — they
 record traps that cost real sessions.
 
-## The four
+## The parity probes — ours against somebody else's
+
+**This index is not self-maintaining; enumerate before you trust it — and the fast
+enumeration is a whitelist, so it under-reports by construction.**
+
+*Fast path, for "is there a probe for X":*
+`ls tools/ | grep -iE 'diff|probe|oracle|sweep'`, minus `*_devtest.py` (those test the
+tools, not the compiler). **It is a whitelist of words someone already thought of.**
+`docsnip.py`, `doclinks.py`, `pasmith_run.py` and `optfuzz.sh` match none of them and are
+all real probes — so a negative from this grep is not an answer.
+
+*Audit path, for "what is missing from this page" — run this, not the grep:*
+
+```sh
+LC_ALL=C comm -13 \
+  <(grep -oE 'tools/[A-Za-z0-9_]+\.(py|sh)' devdocs/dev/differential-probes.md | sort -u) \
+  <(ls tools/*.py tools/*.sh | sort -u) | grep -v devtest
+```
+
+**Measured 2026-08-30: 15 indexed, 210 tools, 195 unindexed, 71 after dropping
+`devtest`** — mostly installers, generators and `gate.sh`, which is why this is the audit
+path and not the daily one. **That noise found three real omissions the whitelist grep
+could not**, including a script whose own docstring says *"differential driver"*. Read the
+71, do not filter it cleverly; the filter is what created the blind spot. Run it before
+concluding no probe exists for your question — see the audit note at the bottom
+of this page for what happened the last time nobody did.
 
 | tool | oracle | answers | lane that owns the TOOL |
 | --- | --- | --- | --- |
@@ -19,6 +44,8 @@ record traps that cost real sessions.
 | `tools/pydiff.py` | CPython | does NilPy agree with CPython? | N |
 | `tools/lib_cross_sweep.sh` | **pxx on x86-64** | does a cross target agree with the native build? | B |
 | `tools/crtl_decl_probe.sh` | — (census) | is a declared crtl function actually IMPLEMENTED, or silently binding to libc? | B |
+| `tools/c_array_shape_census.py` | gcc | does every way C can *reach* an array agree with every way it can *use* one? | C |
+| `tools/c_strlit_decay_census.py` | gcc | does every way to *wrap* a C string literal agree with every site that *consumes* one? | C |
 
 `crtl_decl_probe` is the odd one out: it has no oracle. It answers *"is the
 symbol there at all"*, which is the question **before** `gcc_diff_probe`'s
@@ -30,9 +57,208 @@ that script automates it.
 output, which `lib-test` already proves green. Anything a cross target prints
 differently is a target-dependent bug.
 
-**Fuzzers** (`tools/fuzz.sh`, `tools/pasmith*.py`, Csmith) are the same idea with
-a generated corpus instead of a curated one, and they belong to Track T — see
-`devdocs/dev/track-t.md`.
+`c_array_shape_census.py` is a **matrix**, not a corpus, and it exists for a
+failure mode the others cannot reach. It crosses every way C can REACH an array
+— a global ident, a local, `s.m`, `p->m`, `s.in.m`, `arr[i].m` — with everything
+C can DO with one: decay stride, partial index, no-op deref, `sizeof`, pointer
+difference, assignment to an `int (*)[4]`, passing to a function, load width,
+and the 3-D forms. One standalone program per cell, gcc deciding each.
+
+**Why a matrix rather than reading the code.** The routines that answer these
+questions are written as an `AN_IDENT` branch beside an `AN_FIELD` branch, and
+the failure mode is not a branch that *drifted* but one that was never finished.
+*A search for duplicated logic cannot find the place where the logic is missing*
+(frankS, 2026-08-29) — grep-for-the-sibling finds divergent copies and returns
+clean when every arm is wrong together. A behavioural cell is wrong whether the
+handling code is divergent **or absent**, and cannot tell the difference, which
+is precisely the property needed. On its first run it found `sizeof(m[0])`
+answering 4 instead of 16 on a *plain global array* — so
+`memcpy(dst[1], src[1], sizeof(src[1]))` copied one element and returned — a bug
+with no correct sibling arm anywhere to be noticed against.
+
+**Report the cells that PASS.** A construct confirmed correct across all six
+spellings is the only thing that stops the same ground being swept a fifth time,
+and it is worth more than the failures: four of the six spellings had never been
+probed at all before the census, and two same-day fixes were shown to generalise
+to them unaided rather than assumed to.
+
+**What it is blind to, and the first one bit immediately:**
+
+- **One spelling per cell.** The harness parenthesises every `sizeof`, so its
+  `sizeof` row read as one universal defect when it was **two** mechanisms with
+  two different wrong answers — `sizeof(m[0])` = 4 everywhere, `sizeof gs.m[0]`
+  = 8 through a field. An isolated hand probe disagreed with the grid and both
+  were right. **A census cell that disagrees with a hand probe is a signal to
+  vary the shape, not to pick a winner.**
+- **The enumeration is only as complete as your model of the language.** It is
+  closed and countable in principle — defined by C, not by the codebase — but a
+  construct nobody listed is invisible, and it will not tell you it is missing.
+- **A wrong answer that coincides with the right one passes.** `char` rows are
+  8 bytes and so is a pointer, so the char column looked correct while measuring
+  entirely the wrong thing; only running `int`, `char` **and** `double` showed
+  it. Two element types would have blessed it.
+- **It localises nothing.** A cell names a construct and a spelling, never a
+  routine. That is the price of asking about behaviour, and the reason it pairs
+  with a grep rather than replacing one.
+- **Every cell is a MULTI-dimensional array.** Rank 1 is not measured at all,
+  so a change that is correct for rows and wrong for `int v[8]` reads clean.
+  This is not hypothetical: during
+  `refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs` the
+  obvious tidy-up — routing `CNodeDecaysToPointer` through the same shape
+  reader as its four siblings — would have broken every 1-D field decay in the
+  C frontend, and the grid would have stayed green through it. The reader was
+  spared by reading it, not by measuring it.
+- **A string literal is a seventh spelling, and there isn't a column for it.**
+  The six spellings are all ways of naming an array *object*; `"abc"` decays
+  too. So a clean grid says nothing about
+  `refactor-c-string-literal-decay-belongs-at-the-producer`, however much it
+  looks like it should. This is the previous bullet's abstract warning arriving
+  as a specific one — which is the only form it is useful in.
+- **Native x86-64 at the default `-O` only**, and gcc is the judge, so anything
+  C leaves implementation-defined or undefined is not adjudicated.
+
+`c_strlit_decay_census.py` is the array-shape census's sibling, one axis over.
+It crosses **every way to wrap a C string literal** — parenthesised, comma,
+nested comma, both ternary arms, cast, and the pairwise combinations — with
+**every site that consumes one**: assignment, `return`, call argument, static
+initializer, direct use. gcc decides each cell.
+
+**Why a matrix and not a reading of the consumers.** In C a literal IS a
+`char *`, but it lowers to a frozen-string HANDLE: an 8-byte length prefix,
+then the data. Consumers that add the 8 themselves have to recognise the
+literal — and the ones keyed on `ASTKind[<their own operand>] = AN_STR_LIT` are
+asking *what node produced this operand*, so **any** node in between defeats
+them. Reading those sites tells you nothing about which wrappers exist;
+enumerating the wrappers does. Every one of the five live wrong values it found
+was a **comma operator** — not an exotic construct, just a shape nobody had
+written a test for.
+
+The failure it catches is silent and looks benign: the pointer lands on the
+length prefix, whose first byte is the length and whose remainder is zero, so
+the program prints an **empty string** rather than crashing. `return (1, "s")`
+returned `""`.
+
+**It also demonstrated the value-vs-node rule this index should carry.** The
+call-argument row was green across all thirteen wrappers while the `return` and
+assignment rows were not — because that path keys on the **lowered value's**
+type (`IRTk = tyString`), not the node kind. *Asking what a value IS cannot be
+defeated by wrapping it; asking what node produced it always can.* When two
+sites answer one question and only one of them is robust, the robust one is
+usually already there.
+
+**Blind spots:**
+
+- **It is an enumeration of one person's model of C.** A wrapper nobody listed
+  is invisible and it will not say so. Closed and countable in principle;
+  incomplete in practice.
+- **`n/a` cells are ones gcc itself rejects** (a static initializer must be a
+  constant expression) — neither passes nor failures. The first version scored
+  them as failures and reported **11 wrong where 5 was right**. A skip counted
+  as a verdict is a lie in whichever direction you count it, and the fix is a
+  third symbol, not a choice between the two.
+- One literal, one element type, native x86-64 at the default `-O`.
+- **It says nothing about Pascal.** The producer arm it exercises is guarded by
+  `CProgramMode`; the Pascal claim needs a separate instrument, and for that one
+  **binary** equality is the right test rather than output equality, because
+  Pascal's emitted code must be unchanged rather than merely equivalent.
+
+## Self-differential probes — pxx against pxx under a changed condition
+
+These have no external oracle. Their reference is **our own output under a
+different setting**, which makes them the right instrument for a class the
+parity probes are slow to reach: an optimisation that changes behaviour has no
+FPC or gcc to disagree with, because the reference implementation was never
+asked the same question.
+
+**They also inherit the blind spot in full, and harder** — see *AGREEMENT IS NOT
+EVIDENCE* below. Both arms here are not merely pxx, they are pxx built from the
+*same source*, differing only in a flag. A defect that does not depend on that
+flag makes both sides wrong identically and the probe is green. `-O0` and `-O3`
+agreeing tells you the `-O` axis is sound; it tells you nothing whatever about
+whether the answer is right.
+
+| tool | the two sides | answers | run it |
+| --- | --- | --- | --- |
+| `tools/selfcompile_odiff.sh` | the compiler built at `-O0` / `-O1` / `-O2` / `-O3` | do the resulting compilers **emit identical bytes**? | `make test-selfcompile-odiff` (~200s), or the script directly |
+| `tools/optdiff.sh` | every standalone-runnable test program, at each `-O` level | same stdout+stderr and exit code at every level? A DIFF is the **silent-miscompile class**, the highest severity Track T can detect | `testmgr --tier opt`; `--shard i/N` to split |
+
+**`selfcompile_odiff.sh` closes the hole CLAUDE.md names in its own claims
+section**, and its header quotes that section verbatim as its reason for
+existing: the self-host fixedpoint proves byte-identity **at one optimisation
+level**, and *"a `-O0`-only self-compile failure passed the entire gate on
+2026-08-19 and was found by a benchmark."* If you are about to lean on "it passes
+the self-host gate", this is the probe that says how far that claim reaches.
+
+## Measure at the LAYER you changed, not several layers downstream
+
+The probes above compare a program's *behaviour*. When what you changed is a
+stage the program passes through rather than the program, there is usually a
+cheaper and strictly stronger instrument: **compare that stage's own output.**
+
+**The C preprocessor case, and reach for it by default.** `--dump-cpp` prints
+the preprocessed translation unit. For any change to `cpreproc.inc` — the
+include search, macro expansion, the `#if` evaluator, line markers — run it over
+a handful of named C files with the two compilers and diff:
+
+```sh
+./compiler/pascal26                 --dump-cpp test/cmath_constants.c /tmp/a > head.cpp
+./stable_linux_amd64/default/pinned --dump-cpp test/cmath_constants.c /tmp/b > pin.cpp
+# normalise each binary's OWN install-path prefix before diffing:
+sed 's#\./compiler/\.\./#ROOT/#; s#\./stable_linux_amd64/default/\.\./\.\./#ROOT/#' ...
+```
+
+That normalisation is the detail that makes it usable: the two binaries sit in
+different directories, so the crtl anchor resolves through different `..`
+chains and every `# 1 "<path>"` line marker differs for a reason that has
+nothing to do with the change. Without the `sed` every file reports DIFFERS and
+the probe is useless; with it, equality is exact.
+
+Measured 2026-08-30 on the `__has_include` change, which lifted the include
+search out of `CPInclude` into a shared `CPSearchInclude`: **11,832 lines across
+four files, byte-identical.** Four compiles, a few seconds. The alternative
+being considered at the time was a build-and-run differential over the whole C
+corpus — ten minutes, and it could only ever have *inferred* that the
+preprocessor was unchanged from the fact that programs behaved the same.
+
+**The general rule.** An extraction or refactor of an intermediate stage is
+exactly the case where behavioural equality is weak evidence: it passes as long
+as nothing downstream happens to notice, and downstream stages routinely
+normalise differences away. Ask what artefact the stage produces and compare
+that:
+
+| you changed | dump the stage, not the program |
+| --- | --- |
+| the C preprocessor | `--dump-cpp` |
+| what the frontend inferred | `PXXDBG=n.locals`, `n.ctorargs`, `a.ast:<proc>` |
+| what the IR looks like | `PXXDBG=a.ir:<proc>` |
+| the backend | the emitted binary itself — that is what the self-host fixedpoint is |
+
+And the counterweight, because this cuts the other way too: a stage-output
+diff proves the stage is unchanged, **not that it is right**. It is the correct
+instrument for *"I refactored this and nothing should move"*; it is the wrong
+one for *"I fixed this and something should"*. The `__has_include` change needed
+both — the stage diff for the extraction, and a gcc differential for the new
+operator, because for that half identical output would have meant failure.
+
+## Library-specific probes
+
+| tool | oracle | answers | lane |
+| --- | --- | --- | --- |
+| `tools/libm_diff_sweep.c` | glibc's libm | do crtl's `exp`/`log`/`pow`/`cbrt` agree with glibc? | B |
+| `tools/reportlab_diff.py` | **real** reportlab | does `lib/pcl`'s reportlab mimic put glyphs in the same place? Compares extracted text + per-word bounding boxes via `pdftotext -bbox`, deliberately **not** byte-identical PDFs | B |
+| `tools/gen_arch_probe.py` | — (environment check) | does the QEMU user-mode environment actually **execute** foreign code? An emulator can be installed yet broken by binfmt; `--version` proves nothing | T |
+
+**Read `libm_diff_sweep.c`'s header before filing anything from it.** crtl's
+`exp`/`log`/`pow`/`cbrt` are correctly rounded and **glibc is not** — its
+documented >0.5-ulp bounds misround roughly 6e-4 of random args for `exp`, 1e-4
+for `log`, 9e-4 for `pow` and **~55% for `cbrt`**. A nonzero diff count is the
+expected result, not a bug report: judge each diff against a high-precision
+reference (Python `decimal`, 80+ digits) first. In the 2026-07 sweeps every diff
+was glibc's.
+
+**Fuzzers** (`tools/fuzz.sh`, `tools/pasmith*.py`, Csmith via
+`tools/csmith_fuzz.py`) are the same idea with a generated corpus instead of a
+curated one, and they belong to Track T — see `devdocs/dev/track-t.md`.
 
 **`PXXDBG=a.poisonslot` is a fifth shape and is documented in the playbook, not
 here**, because it has no external oracle at all: it compares a program against
@@ -43,6 +269,51 @@ the blocker is an audit with no completion criterion rather than a wrong value.
 It poisons the storage so a surviving reader returns garbage instead of a
 plausible value. Full note, including the rule that the probe must call the same
 predicate as the change it is testing, in `devdocs/dev/debugging-playbook.md`.
+
+## Fuzzers — differentials whose CASES are generated, not written
+
+Named in CLAUDE.md's Track T section and **absent from this index until 2026-08-30**, which
+is how they were found (see the audit-method note below).
+
+| tool | oracle | answers | lane that owns the TOOL |
+| --- | --- | --- | --- |
+| `tools/pasmith.py` | — (generator) | random Object Pascal programs, the case source for the driver below | T |
+| `tools/pasmith_run.py` | **FPC** | *"differential driver for `tools/pasmith.py`"* — does our Pascal agree with FPC on generated programs? | T |
+| `tools/optfuzz.sh` | **pxx at another `-O`** | *"O-level SELF-differential fuzzer"* — belongs to the self-differential family above | T |
+| `tools/fuzz.sh` | mutation + cross-target | already indexed above | T |
+
+**A fuzzer is a differential whose cases are generated rather than written**, so everything
+on this page applies to them — the agreement-is-not-evidence blind spot most of all, since
+a generator can produce a whole population the compiler happens to get right.
+
+**Ownership rule, from CLAUDE.md: T owns the TOOL, never the bug.** A divergence goes to
+the lane that owns the file — IR/codegen → A, dialect/frontend → P, RTL → B.
+
+## Docs-verification probes — the published claim against the thing it claims
+
+Track D's instruments. Same shape as everything above — a claim checked against an
+oracle that is not the claim's author — but the subject is **prose** rather than a
+compiler, so they were easy to miss when enumerating this page.
+
+| tool | oracle | answers | lane that owns the TOOL |
+| --- | --- | --- | --- |
+| `tools/docsnip.py` | `$(PXX_STABLE)` | does every code snippet in `docs/**` actually compile and print what the page says? | D |
+| `tools/doclinks.py` | the published site | do the external links in `docs/**` resolve, **and does the page behind each one still contain the marker the prose relies on?** | D |
+
+**`doclinks.py`'s second column is the whole point of it.** A plain link check answers
+404-versus-200; this one also asserts a content marker, so it catches the
+**200-but-wrong** case — a status page that still resolves but no longer carries the
+numbers `docs/**` delegates to it. That failure is invisible to any check keyed on
+status codes, and it is the one the tool exists for. All four paths are exercised
+(404 → BROKEN/exit 1; 200-but-wrong → BROKEN/exit 1; offline → SKIP/exit 0), which is
+why it will still be trustworthy in a month.
+
+**Indexed here on 2026-08-30 because they were named in NO reference doc** — not this
+page, not the README, not CLAUDE.md — and nothing ran them but their author. frankD
+reported that itself, on parking, having spent the same night documenting how unowned
+things rot: *"Two unowned tools shipped in a night I spent documenting how unowned
+things rot. They are fine today because I am the only reader."* Indexing them is the
+whole fix; there is nothing else wrong with them.
 
 ## The rules every one of these shares
 
@@ -254,6 +525,71 @@ and that scope is honest. The failure mode is in the reading — taking a green
 cross-target sweep as coverage of *the compiler* rather than of *the part below
 the frontend*.
 
+### …and when it goes RED, it does not say WHICH ARM is wrong
+
+The paragraphs above are about a green. The complement bites harder, because a
+red *feels* like an answer:
+
+> **A self-differential's reference is not an oracle.** Naming one arm "the
+> oracle" is a **role assignment, not a measurement** — and the role goes to
+> whichever arm was written first. When the two arms disagree, *which one is
+> wrong* is precisely the question a two-arm comparison cannot answer.
+
+The cross-target suites compare each cross build against the **x86-64 build**.
+So the x86-64 side cannot be wrong *by construction* — it is the reference —
+and any divergence is reported as the cross target's fault.
+
+**Measured, 2026-08-30.** After the hidden-temp alignment fix let
+`test_cross_float` run on xtensa at all, it still diverged, and the write-up
+that nearly went into the ticket read *"xtensa diverges from the x86-64
+oracle"* — true-sounding, publishable, and **backwards on two of three rows**.
+Putting FPC beside both reversed it:
+
+| expression | FPC | x86-64 | xtensa |
+| --- | --- | --- | --- |
+| `s1+s2` (Single op Single) | Single | **Double** | Single |
+| `i * s1` | Single | **Double** | Single |
+| `i / 2` | Double | Double | **Single** |
+
+Both targets pick float widths for `Write` that FPC does not, in **opposite
+directions on different lines**
+(`bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc`).
+The x86-64 half had been reachable on every run of the suite since the test was
+written, and was invisible to it for the whole of that time.
+
+**A second instance, and it is the stronger one, because the reference arm was
+wrong for a documented stretch of time rather than for one measurement.**
+`Int()` of a large double was broken on the 32-bit targets *and* on x86-64, in
+different ways, and the two halves were fixed months apart:
+
+| | i386 / arm32 | x86-64 |
+| --- | --- | --- |
+| `Int(1.0e300)` | saturated to 32 bits | `INT64_MIN` |
+| fixed in | [[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]] | [[bug-a-int-of-a-large-double-is-int64-min-on-x86-64]], later |
+
+The second ticket states the window in its own summary: *"the i386/arm32 half of
+this was fixed under [the other]; **x86-64 was never in scope and is still
+wrong**."* So there was a real period in which the **cross targets were correct
+and the reference was not** — and a cross-target red in that window, read by the
+rule above, would have been attributed exactly backwards. Note also that the
+x86-64 defect was found by **Track B, from a library**, not by the cross sweep
+that ran over it the whole time.
+
+**So: a red self-differential is a signal to add a THIRD arm, not to blame the
+non-reference side.** For a Pascal cross-target red, FPC is that arm and it is
+one `fpc -o` away; for C it is gcc. Reach for it *before* writing a cause into
+a ticket, not after — the wrong attribution is cheap to publish and expensive
+to retract, and it points the next agent at the innocent backend.
+
+**One more, from the same measurement: vary the SHAPE before you trust an
+isolated probe.** `WriteLn(s)` for a plain `s: Single` agrees across FPC,
+x86-64 and xtensa, so the first probe reached for reported everything fine. The
+divergence needs the **expression** (`s1+s2`, `i*s1`), not the type. An
+isolated probe that clears a construct has cleared *that spelling of it*, which
+is the same lesson the array-shape census learned from its parenthesised
+`sizeof` row — and it is why *a cell that disagrees with a hand probe is a
+signal to vary the shape, not to pick a winner*.
+
 **And the same test applies to how you VERIFY, not just to what you run.** Two checking
 methods can share an upstream as easily as two test arms:
 
@@ -274,3 +610,49 @@ feel.
 treat everything above that line as untested by it.** For anything at or above
 the frontend the oracle has to be foreign — FPC, gcc, CPython — which is
 precisely what the four probes at the top of this file are for.
+
+
+---
+
+## Audit note, 2026-08-30 (frankD), measured at `9899bf1ab`
+
+This page opened *"Four standing harnesses"* over a table of **five**, and
+listed **six** of the ten probe-shaped tools in `tools/`. The four it omitted are
+now above. What makes the omission worth recording rather than just fixing:
+
+- **`selfcompile_odiff.sh` was built specifically to close a hole CLAUDE.md
+  documents, quotes that hole in its own header, is wired into the Makefile and
+  scheduled by testmgr — and was not in the index the fleet reads to find
+  probes.** A tool being in CI does not answer *"is there already a probe for
+  this?"*, which is the question this page exists to answer.
+- **`libm_diff_sweep.c`'s absence had a sharper edge than the others.** Its
+  header carries the warning that a nonzero diff against glibc is *expected*
+  because crtl is correctly rounded and glibc is not. An index that omits the
+  tool also omits the warning, and the failure mode is not a missing check — it
+  is a **confidently filed bug against correct code**.
+
+The generalisable part: **a count in a prose header is a claim that goes stale in
+silence, because nothing re-derives it.** *"Four standing harnesses"* was true
+when written and the table under it had already grown to five without anyone
+noticing the sentence above it. That is why the enumeration command now sits at
+the top of this page instead of a number — the same substitution CLAUDE.md's
+claims section makes for the two byte-identicals, applied to an index.
+
+### Two lanes found this page stale within the same hour, independently
+
+Worth recording as evidence rather than coincidence. On 2026-08-30 Track D hit
+this page on a dispatched audit of the live references and found it listing six
+of ten probes; **Track C hit it within the hour from the opposite direction**,
+while adding its own census probe, and found the heading miscounting the table
+directly beneath it. Neither knew the other was here.
+
+**A defect two lanes rediscover independently in sixty minutes is a measurement
+of the seam, not a fluke.** An index nobody can trust gets re-derived by whoever
+needs it, and the re-derivation is invisible — it looks like ordinary work. The
+cost is not the wrong number; it is every agent that quietly does the
+enumeration itself and throws the result away.
+
+Which is also the argument for the line at the top of this page. A corrected
+count would have been true on 2026-08-30 and stale at the next probe; the
+enumeration command makes the count **unnecessary** rather than **correct**, and
+only one of those survives the next tool landing.

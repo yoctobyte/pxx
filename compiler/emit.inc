@@ -6,6 +6,9 @@ procedure EmitLoadImmArm32(rd: Integer; v: Int32); forward;
 procedure EmitLoadImmA64(rd: Integer; v: Int64); forward;
 procedure EmitwriteSyscallArm32(dataOff, len: Integer); forward;
 procedure xtensa_j(offset: Integer); forward;
+procedure xtensa_movi(t, imm12: Integer); forward;
+procedure xtensa_mov(dst, src: Integer); forward;
+procedure xtensa_syscall; forward;
 procedure XtensaEmitLitHeader; forward;
 
 { Kept out of EmitB so the hot inline path stays a compare and a store. The
@@ -187,7 +190,37 @@ procedure MovRdiImm(v: Int64); begin EmitB($48); EmitB($BF); EmitI64(v); end;
 procedure MovRsiImm(v: Int64); begin EmitB($48); EmitB($BE); EmitI64(v); end;
 procedure MovRdxImm(v: Int64); begin EmitB($48); EmitB($BA); EmitI64(v); end;
 
-procedure EmitSyscall; begin EmitB($0F); EmitB($05); end;
+{ The ONE place the x86-64 kernel-entry instruction is emitted, which is what
+  lets --rtl-libc convert all 43 sites without touching a single caller: every
+  caller has already set up the RAW convention (rax = nr, then rdi/rsi/rdx/r10/
+  r8/r9), and the thunk converts from that. Emitting a 5-byte call rather than
+  the ~140-byte body inline is not a size preference -- inlining it overflows
+  rel8 jump patches that span a syscall, silently.
+  feature-port-rtl-over-libc }
+procedure EmitSyscall;
+begin
+  if RtlOverLibc and (TargetArch = TARGET_X86_64) then
+  begin
+    { REFUSED rather than emitted wrong: at -O3 EmitExternalIndirectCall wraps
+      the call in FloatPoolSave/Restore, which address the float-resident pool
+      at [rbp + FxSaveBase] -- and FxSaveBase is PER FUNCTION. In a shared
+      out-of-line thunk rbp belongs to whichever caller jumped in, so those
+      stores would land in that caller's frame at another function's offset and
+      silently corrupt it. A loud refusal now beats a wrong value later; lifting
+      it means saving the pool at the call site rather than in the thunk. }
+    if OptLevel >= 3 then
+      Error('--rtl-libc is not supported with -O3 yet: the shared syscall thunk '
+            + 'cannot carry -O3''s per-function float-register pool (FxSaveBase '
+            + 'is frame-relative). Build the libc-mode program at -O2 or lower.');
+    if LibcSyscallCallCount >= MAX_CALLFIX then
+      Error('too many --rtl-libc syscall sites');
+    EmitB($E8);                                   { call rel32 -> thunk }
+    LibcSyscallCallPos[LibcSyscallCallCount] := CodeLen;
+    Inc(LibcSyscallCallCount);
+    EmitI32(0);                                   { patched by EmitLibcSyscallThunk }
+  end
+  else begin EmitB($0F); EmitB($05); end;
+end;
 
 procedure EmitDataRef(dataOff: Integer);
 { Absolute data-address placeholder; width follows the target's pointer size
@@ -370,8 +403,36 @@ procedure EmitExit(code: Int64);
 begin
   if TargetArch = TARGET_XTENSA then
   begin
-    { Bare-metal: no exit syscall — park in a self-loop. }
-    xtensa_j(0);
+    if TargetPlatform = PLATFORM_ESP then
+      { Bare metal / IDF: no kernel, so no exit syscall — park in a self-loop. }
+      xtensa_j(0)
+    else
+    begin
+      { Hosted linux (qemu-xtensa user mode): exit_group(119).
+
+        119 IS exit_group and 118 is plain exit — VERIFIED, not read off the
+        table: qemu-xtensa -strace names them, printing `exit(7)` for 118 and
+        `exit_group(7)` for 119. That distinction is load-bearing here, not
+        pedantic: this routine wants exit_group ON PURPOSE (see the header
+        note and bug-b-concurrent-halt-from-several-threads-exits-0), because
+        a plain exit ends only the CALLING thread, so Halt(216) from a worker
+        left the process running and the status was silently lost as 0. A
+        single-threaded probe cannot tell the two apart, and hosted xtensa has
+        no threads yet (--threadsafe is x86-64/i386/aarch64/arm32 only), so
+        -strace is what settled it.
+
+        The numbering is XTENSA'S OWN unistd.h, not the generic table riscv32
+        uses five lines below: there write is 64, here write is 13 (measured
+        against qemu). Do not carry a number across these two arms.
+
+        a2 = syscall number, arg0 = a6 -- NOT a2..a7 in order; see the
+        IR_SYSCALL arm in ir_codegen_xtensa.inc for the full register map.
+        movi's imm12 covers the 0..255 exit-code range.
+        feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+      xtensa_movi(2, 119);                        { a2 = __NR_exit_group }
+      xtensa_movi(6, Integer(code and $FF));      { a6 = arg0 = exit code }
+      xtensa_syscall;
+    end;
     Exit;
   end;
   if TargetArch = TARGET_RISCV32 then
@@ -410,6 +471,94 @@ begin
   MovRaxImm(SYS_EXIT_GROUP); MovRdiImm(code); EmitSyscall;
 end;
 
+procedure EmitExitReg;
+{ EmitExit for a RUNTIME code — `Halt(n)` where n is an expression. The caller
+  has already evaluated it into the target's natural result register (rax / eax /
+  x0 / r0 / a0); this moves it into place if the ABI needs that and issues the
+  same exit_group EmitExit issues, for the same reason: a bare exit ends only the
+  CALLING THREAD, so in a threaded program the process status is decided by
+  whichever thread exits last — and threads finishing normally exit 0. A fatal
+  then reports SUCCESS at random.
+
+  This routine exists because that rule was previously restated by hand in each
+  backend's AN_HALT arm, six copies of one concept, and TWO of them drifted:
+  x86-64 emitted SYS_EXIT (60) and arm32 `mov r7,#1`, both thread-exit, while
+  i386/aarch64/riscv32 were right and three of those even named exit_group in a
+  comment. The correct answer was sitting one line below the x86-64 bug, in the
+  no-argument branch's call to EmitExit, whose comment above says exactly this.
+  bug-b-concurrent-halt-from-several-threads-exits-0
+
+  The riscv32 arm had already noticed the gap — "EmitExit's own encodings only
+  cover a constant" — and hand-rolled around it rather than closing it. That note
+  is what a missing abstraction looks like from inside the fifth copy.
+
+  Kept deliberately adjacent to EmitExit and NOT merged into it: the constant
+  form can materialise the code itself, this one must not touch the register the
+  caller just filled. Two behaviours, one rule, and the rule is now written once. }
+begin
+  if TargetArch = TARGET_XTENSA then
+  begin
+    if TargetPlatform = PLATFORM_ESP then
+      { Bare metal / IDF: no kernel, so no exit syscall and no status to report
+        it with -- park in a self-loop. }
+      xtensa_j(0)
+    else
+    begin
+      { Hosted linux (qemu-xtensa user mode). This arm used to park
+        UNCONDITIONALLY, treating xtensa as bare metal in a routine whose
+        sibling EmitExit had already learnt the difference twenty lines up --
+        the same shape as the riscv32 bug this whole routine was extracted to
+        stop (bug-a-halt-n-exits-zero-on-hosted-riscv32), one target later.
+
+        a2 holds the code (xtensa's natural result register). Move it to a6
+        FIRST: the xtensa syscall map is nr->a2 and arg0->a6, so loading the
+        number before the move would overwrite the code with 119.
+        bug-a-halt-n-exits-zero-on-hosted-xtensa }
+      xtensa_mov(6, 2);                              { a6 = arg0 = the code }
+      xtensa_movi(2, 119);                           { a2 = __NR_exit_group }
+      xtensa_syscall;
+    end;
+    Exit;
+  end;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    if EspBareBoot then
+      EmitI32($0000006F)                             { jal zero, 0 — park }
+    else
+    begin
+      { a0 already holds the code. Load a7 AFTER it, so computing the code
+        cannot clobber the syscall number. }
+      EmitI32($05E00893);                            { addi a7, x0, 94 }
+      EmitI32($00000073);                            { ecall }
+    end;
+    Exit;
+  end;
+  if TargetArch = TARGET_I386 then
+  begin
+    EmitB($89); EmitB($C3);                          { mov ebx, eax }
+    EmitB($B8); EmitI32(252);                        { mov eax, 252 (exit_group) }
+    EmitB($CD); EmitB($80);                          { int 0x80 }
+    Exit;
+  end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    { r0 already holds the code. }
+    EmitI32($E3A070F8);                              { mov r7, #248 (exit_group) }
+    EmitI32($EF000000);                              { svc #0 }
+    Exit;
+  end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    { x0 already holds the code. }
+    EmitI32($D2800BC8);                              { movz x8, #94 (exit_group) }
+    EmitI32($D4000001);                              { svc #0 }
+    Exit;
+  end;
+  EmitB($48); EmitB($89); EmitB($C7);                { mov rdi, rax }
+  MovRaxImm(SYS_EXIT_GROUP);
+  EmitSyscall;
+end;
+
 { ===== String table ===== }
 
 function InternKey(const s: AnsiString): Integer;
@@ -429,8 +578,29 @@ begin
   Inc(KeyCount);
 end;
 
+{ One 8-byte little-endian word into Data[], from a value that fits in 32 bits.
+  The high dword is written as four explicit zero bytes and never as `v shr 32`:
+  the 32-bit self-hosts shift a 32-bit register there and would store garbage,
+  which is the same trap the string-table length prefix below already dodges. }
+procedure EmitDataWord32Zx(v: Int64);
+var j: Integer;
+begin
+  for j := 0 to 3 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := Byte((v shr (j * 8)) and $FF);
+    Inc(DataLen);
+  end;
+  for j := 0 to 3 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+end;
+
 function InternStr(const s: AnsiString): Integer;
-var i, j: Integer; len: Int64; match: Boolean;
+var i, j: Integer; len, orAll, meta: Int64; match: Boolean;
 begin
   for i := 0 to StrCount-1 do
   begin
@@ -444,6 +614,51 @@ begin
   end;
   if StrCount >= MAX_STRS then Error('string table overflow');
   Strs[StrCount].Text   := s;
+
+  { ---- the static managed-string header, laid down BEFORE Offset is taken ----
+    Three words go in front of the length prefix, so that the char data at
+    Offset+8 is simultaneously a frozen inline string's payload (what every
+    existing consumer of Offset already reads) and a fully formed managed
+    handle: the runtime's [meta][rc][len] sit at handle-24, -16 and -8, and the
+    length prefix this table has always written IS the -8 word. Nothing about
+    the old layout moves, which is why no call site changes.
+
+    Offset is recorded AFTER the header, still pointing at the length prefix.
+    That keeps `Offset` meaning exactly what it meant, and puts the header at
+    negative offsets nobody has to know about unless they want the handle.
+
+    The word before the header is the allocator's size word, which
+    PXXStrAllocSize reads for spare capacity. It is written as an explicit ZERO
+    rather than left to be whatever the previous entry's padding holds: an
+    in-place append needs PXX_FLAG_APPENDABLE as well as room, and a static
+    block never carries it, so this word is unreachable today — but a garbage
+    capacity that only a future flag change could reach is the kind of latent
+    wrong value this runtime has already been bitten by, and eight bytes per
+    literal is not worth arguing about.
+
+    Alignment first: the header is read a word at a time, and the 32-bit
+    targets fault on an unaligned word. The table already ended each entry
+    8-aligned, so this loop is a no-op in practice — it is here so that the
+    property is stated rather than inherited. }
+  while (DataLen mod 8) <> 0 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  EmitDataWord32Zx(0);                       { allocator size word: no capacity }
+
+  { The ASCII answer, computed here because the bytes are right here. The
+    runtime pays a per-byte OR inside PXXStrFromLit for exactly this; a literal
+    can have it for free and for good. Same encoding as PXXStrMeta: KNOWN is
+    set either way, because this loop is authoritative. }
+  orAll := 0;
+  for j := 1 to Length(s) do orAll := orAll or Ord(s[j]);
+  meta := MSTR_KIND_LEGACY or MSTR_FLAG_STATIC or MSTR_FLAG_ASCII_KNOWN;
+  if (orAll and $80) = 0 then meta := meta or MSTR_FLAG_ASCII;
+  EmitDataWord32Zx(meta);                    { handle - 24 }
+  EmitDataWord32Zx(MSTR_STATIC_RC);          { handle - 16 }
+
   Strs[StrCount].Offset := DataLen;
   Strs[StrCount].Len    := Length(s);
   

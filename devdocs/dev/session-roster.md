@@ -6,6 +6,24 @@ in anyone's context. CLAUDE.md wins over this file on gating and lane rules.
 
 Updated 2026-08-25.
 
+> **Audited 2026-08-30 (frankD), head sections only — the tick log below is a
+> record and was not touched.** Four sections asserted a present tense they no
+> longer had, and each carries an inline correction: **Branches** (said work
+> happens on `dev`, retired 2026-08-26), the **worktree dispatch** paragraph
+> (`.claude/worktrees/` does not exist, and its sole-A advice now points away
+> from `ListAgents`, which answers the question directly), **Roles — LIVE** (none
+> of its five sessions exists), and **Current assignments** (2026-08-17, and
+> `frank2` appears three times with three assignments). Two more are flagged for
+> the owner rather than corrected: the one-week mandate whose evaluate-by date
+> passed on 2026-08-25, and the `frank2` row the owner contradicted on
+> 2026-08-27.
+>
+> **Checked clean:** the gating in this file (the coordinator loop correctly says
+> `make stabilize-fast && make pin`, and the header defers to CLAUDE.md — the six
+> stale gates found elsewhere in `devdocs/dev/` are not here); every
+> `tools/*` this file names exists; and both live-section `parser.inc` mentions
+> are correctly historical.
+
 ---
 
 ## IF YOU WERE JUST MADE COORDINATOR, THIS IS THE WHOLE JOB
@@ -224,6 +242,31 @@ default currently answers both at the point where the distinction still exists.
 
 ## Roles — LIVE, 2026-08-25
 
+> **Not live. Checked against `ListAgents` on 2026-08-30 (frankD): none of the
+> five sessions named below exists.**
+>
+> | the table says | actually |
+> | --- | --- |
+> | `frank1-72` — coordinator | gone. The coordinator is **`frank-coordinator`** |
+> | `pxx-aa` — watcher + Track T agent | gone. There is a `pxx-a5` |
+> | `neo-4a` — host/sysadmin | gone. There is a `neo-76` |
+> | `cA` — out-of-band | gone |
+> | `frank2-99` — idle, stale clone | gone |
+>
+> Nor does the table carry any of the sessions that **do** exist: `frankA`,
+> `frankB`, `frankC`, `frankD`, `frankS`, `frankwasm`, `frank-rust`,
+> `frank-optimize-b4`, `frank-coordinator`, `frank-user`, `pxx-a5`, `neo-76` —
+> 13 interactive sessions, five days after the table's date. Two of them,
+> `frankwasm` and `frank-rust`, staff lanes the table does not mention at all.
+>
+> **The heading is the defect, not the rows.** A table of who holds what is
+> stale between ticks by construction, and that is fine — it is `ListAgents`
+> territory, and `ListAgents` is authoritative and free. What is not fine is
+> `LIVE` in the heading: a word no data can contradict, on a section whose
+> contents nothing re-derives. **Run `ListAgents`; do not read this table.** It
+> is left below because the prose around it — the sole-A guard, the subagent
+> warning — is still worth reading.
+
 Sessions address each other by these names. **`ListAgents` lists them and
 `SendMessage` reaches them** — run `ListAgents` BEFORE spawning any subagent
 that would touch a clone other than your own, because the sibling clones on
@@ -238,7 +281,40 @@ working there; the lane letters cannot see a subagent you created.
 | — | the watcher DAEMON (face 1) | T, writes only `tstate/` | `/home/neo/trackt-watch` |
 | neo-4a | host/sysadmin, no lane | none | none (cwd `/home/neo`) |
 | cA | **out-of-band** — driven directly by the human, not a pxx dev session | none | none |
-| frank2-99 | idle, stale clone, unresponsive to roster pings | unknown | `/home/neo/frank2` |
+| frank2-99 | ~~idle, stale clone, unresponsive to roster pings~~ **CONTRADICTED BY THE OWNER, 2026-08-27 — see below: `/home/neo/frank2` is a LIVE ad-hoc tree the owner works in at random. Never move, rename or tidy it. Row kept as the record of what a past session believed.** | owner's | `/home/neo/frank2` |
+
+**That last row is contradicted by the owner, later in this same file.** See
+*STANDING — `frank1` / `frank2` are LIVE ad-hoc trees* (owner, 2026-08-27):
+*"we also have frank1 and frank2 checkouts, user may use them at random."* Both
+trees were measured clean, seeded and immediately usable. **Read them as live**,
+not as stale clones to be retired — an ad-hoc session in either is a real agent
+on `master` that no dispatch created. The row above is not merely out of date;
+it says the opposite of a later owner ruling, and it is the row a coordinator
+would act on first because it sits in the table. (Noted 2026-08-30, frankD.)
+
+> **Corrected 2026-08-30 (frankD): the dispatch model below is not the one in
+> use, and following it weakens the sole-A guard.**
+>
+> `.claude/worktrees/` **does not exist** and `git worktree list` shows one entry
+> — the main checkout. Nothing is dispatched as a worktree agent. Today's lane
+> holders are ordinary **sessions in their own clones** (`/home/neo/frankA`,
+> `frankB`, `frankC`, `frankD`, `frankS`, `frankwasm`, `frank-rust`, …), every
+> one of them named and visible to `ListAgents`.
+>
+> That inverts the rule this paragraph exists to state. It tells the coordinator
+> that *"is anyone else on A right now?"* is answered **only** by their own
+> dispatch record, *"not by the table above and not by `ListAgents`"* — advice
+> that was correct for invisible worktree agents and is now advice to ignore the
+> one instrument that works. **`ListAgents` answers it directly**, and it is the
+> more reliable answer, because a dispatch record is memory and a session list is
+> observation. Keep the dispatch record for subagents you spawn yourself; check
+> `ListAgents` for everyone else, and prefer it when the two disagree.
+>
+> The concurrency figures below are likewise historical: `ListAgents` showed
+> **13 interactive sessions** on 2026-08-30. Whether that is intended is the
+> owner's call and is NOT settled here — the 1-2 worker target and the
+> four-die-at-once limit are both human-attributed rulings, and observed practice
+> is data, not a repeal.
 
 **Worktree workers are lane holders and are NOT in that table.** The coordinator
 dispatches ticket work as background agents, each in its own git worktree under
@@ -268,13 +344,38 @@ most expensive recent failures — see *Host coupling* below.
 
 ## Branches — read CLAUDE.md, not this file
 
-Since 2026-08-25 work happens on **`dev`**; `master` is a stable snapshot the
-coordinator advances once or twice a day with `git merge --no-ff dev`, only from
-a `dev` state Track T called green. Never rebase, never squash — tstate verdicts
-and the board's `resolve` citations are keyed by sha. **Advancing master is a
-coordinator duty, and it has the same shape as a pin: it is the lock.**
-CLAUDE.md's "BRANCHES" section is the authority; this line exists only so a
-coordinator reading the roster first does not land work on master out of habit.
+**All tracks work on `master`. One branch. `dev` is retired.**
+
+Retired by the user on 2026-08-26, one day after it was created — *"let's work in
+master again, as we are the only agent"* — and the collapse landed as
+`8b2a6bae6`. What went with it: the `git merge --no-ff dev` sync-back, the
+"master is a snapshot the coordinator advances" rule, and the
+never-rebase-never-squash constraint that protected it. `git pull --rebase` of
+your own unpushed commits is the normal loop and always was. Rebasing *published*
+`master` is still wrong, for the unchanged reason: tstate verdicts and the
+board's `resolve` citations are keyed by sha.
+
+What survived the collapse is the part worth keeping: **you may land non-green**,
+provided you say so in the commit message.
+
+> **Corrected 2026-08-30 (frankD).** This section said *"Since 2026-08-25 work
+> happens on `dev`"* and made advancing `master` a coordinator duty with the
+> shape of a pin. Four days stale, and it is the **worst-placed** stale rule in
+> this file for two reasons. It sits under a heading that says *read CLAUDE.md,
+> not this file* — a deference claim that reads as though someone had checked —
+> and its closing sentence gives its own reason for existing: *"so a coordinator
+> reading the roster first does not land work on master out of habit."* A line
+> written to stop a coordinator reaching for `master` by habit now stops them
+> reaching for the only branch there is.
+>
+> `origin/dev` still exists and is 7 commits ahead of `master`, which looks
+> alarming and is not: all five tickets those commits filed are present on
+> `master` (three in `backlog/`, one `done/`, one `unfinished/`, plus
+> `refactor-a-target-properties-have-no-single-answer` in `urgent/`), so the
+> content re-landed by another path and only the duplicates are stranded. The
+> other two are watcher `tstate` publishes, superseded continuously. **Checked
+> rather than reported**, because "7 commits master lacks" is exactly the shape
+> that gets relayed as a crisis.
 
 ## Host coupling — the failure mode that cost the most in August 2026
 
@@ -888,6 +989,22 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   the tip has not moved since the sha you are citing.
 
 ## Current assignments
+
+> **Historical — these are the assignments of 2026-08-17, not of now (checked
+> 2026-08-30, frankD).** `frank2`, `frank3` and `plexus-T` are not live sessions;
+> `plexus-T` shows as an offline Remote Control row. The section also names
+> `parser.inc`, a file that stopped existing on 2026-08-20 when it was split into
+> the `pasparser_*.inc` set. And it lists `frank2` three times with three
+> different assignments (PAUSED, then TRACK A, then "(superseded) → Track N"),
+> which is what a log looks like when it is filed under a heading that says
+> *Current*.
+>
+> **Do not skip it.** The assignments are dead; the **coordinator-error
+> retrospectives inside them are the durable part of this file** — never tell a
+> stopping session to revert; a session that says it should stop is not made safe
+> by handing it easier work; a standing prio ruling is not re-litigated by
+> finding another category the ticket also fits. Those are why this section is
+> bannered rather than trimmed.
 
 - **coordinator → also holds Track P** while testing the combined role (see
   above). P cannot collide with N.
@@ -1707,11 +1824,11 @@ valuable review.
   Told frank3 to stop: B's queue genuinely tops out at a p30 float-ULP bug, and confirming
   that beats filling its capacity. **Loose end flagged, not resolved:**
   `feature-b-mimic-urllib-request-over-the-rtl-http-stack` sits at p30 while
-  `lib/rtl/mimic_urllib_request.py` exists — stale ticket or means more than the file;
+  `lib/rtl/mimic_urllib_request.pas` exists — stale ticket or means more than the file;
   checked, not assumed.
 
   **Loose end closed (verified, one read):** `feature-b-mimic-urllib-request-over-the-rtl-http-stack`
-  is NOT stale. `lib/rtl/mimic_urllib_request.py` is a **present-and-refusing stub** —
+  is NOT stale. `lib/rtl/mimic_urllib_request.pas` is a **present-and-refusing stub** —
   it exists so importing code compiles; `urlopen`/`urlretrieve` raise `NotImplementedError`
   (confirmed at lines 44-51); `Request` is real only because holding what it was handed is
   side-effect free. The ticket is for the real `urlopen` over `lib/rtl/http.pas`. **The
@@ -1769,6 +1886,17 @@ valuable review.
 
 **Evaluate: 2026-08-25.** This section is the charter for every coordinator session in
 between — it outlives any one context, so read it before the check log.
+
+> **The evaluation date passed on 2026-08-25; it is now 2026-08-30 (frankD).**
+> By its own terms the charter covered the sessions *"in between"*, and there is
+> no longer a between. Nothing in this file records the evaluation happening, or
+> the mandate being renewed, extended or ended.
+>
+> **This is flagged, not resolved, and deliberately so** — a mandate is the
+> owner's to renew and a coordinator cannot extend its own. It is noted here
+> because a charter that has quietly outlived its expiry is indistinguishable
+> from a current one to the next session that reads it, and *"read this before
+> the check log"* means every session does. Ask; do not assume either way.
 
 ### What "NilPy over the bump" means concretely
 
@@ -3666,7 +3794,7 @@ dyn-array arm banked), and T's 37-source `/tmp` chore (belongs to C/N/B, not T).
 
 ### Open for the user
 - Spelling question above (dotted vs quoted) — a heads-up, not a blocker.
-- `bug-t-sync-fills-one-spelling-of-pending-commit` may become a `decide-*`; plexus-T is
+- `bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two` may become a `decide-*`; plexus-T is
   making the call itself and will escalate only if it is a genuine fork. **~24 resolved
   tickets still await landed shas** and must NOT be auto-filled by pattern-matching
   `git log` — that is `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` at scale.
@@ -7558,7 +7686,7 @@ teaching: *"all walls cleared"* must not be allowed to read as *"rung ready"*.
 ## Two coordinator calls on frankA's asks — one filed already, one dispatched, neither escalated
 
 **(1) The Track B typinfo ask: DO NOT FILE. It exists.**
-`devdocs/progress/backlog/feature-typinfo-facade-unit.md`, prio 72, and its
+`feature-typinfo-facade-unit` (slug, not a path — it is in `done/` now; citing the folder is face 110, and it breaks exactly when the work succeeds), prio 72, and its
 frontmatter already carries `Blocks: feature-pascal-corpus-generics`. The chain
 frankA wanted to create is modelled. frankB has it queued next after the
 workaround-revert batch. Filing it again would have been the day's stale-claim
@@ -7615,7 +7743,7 @@ Applied here:
   absent** — a job to compile it would have to be written separately. So the tuple
   edit alone buys a download.
 
-**When it flips:** the moment `feature-typinfo-facade-unit` (p72) lands and the
+**When it flips:** the moment `feature-typinfo-facade-unit` (now in `done/`) (p72) lands and the
 rung can plausibly go green. *That* is when a recurring job earns its keep, because
 from then on its value is catching a regression rather than restating a known
 block. frankT adds the name then — small, in-lane, no ticket — and it is recorded
@@ -7755,7 +7883,7 @@ the tool and the three commits are still separately revertable.
 
 `6a8d4e974` records the `rtl-generics` call at `CORPUS_EXPECTED` itself: that
 adding a name makes the watcher fetch and warn but compile nothing, that the
-trigger is `feature-typinfo-facade-unit`, and the `install_lib_candidates.sh`
+trigger is `feature-typinfo-facade-unit` (now in `done/`), and the `install_lib_candidates.sh`
 contract written where a violation would otherwise surface only as a silent
 warning on an unattended box.
 
@@ -8803,7 +8931,7 @@ that a third failure it saw is not yet understood.
 
 frankA's call on the pointer bug's prio, and it is better than the alternative I would
 have accepted: leave it at 65 and add a **`Blocks:` edge** to
-`feature-typinfo-facade-unit`. *"This doesn't outrank things on its own merits, it
+`feature-typinfo-facade-unit` (now in `done/`). *"This doesn't outrank things on its own merits, it
 outranks them because of what sits behind it."* The ranker propagates down edges by
 design; hand-inflating the number **double-counts** the moment the edge exists.
 
@@ -14331,7 +14459,7 @@ they took:
 | frank-optimize — record the `{$Q+}` divergence | **landed**, and deeper than asked — it names `bug-a-qplus-misses-32bit-overflow` (we had FPC's own gap and closed it) and adds a warning against using `{$Q+}` on a 32-bit type in an FPC-oracled differential probe |
 | frank-optimize — file the `-O3` observability gap as a T ticket | **not filed** — two greps on different wording, plus an mtime sweep showing only two tickets touched since 20:00 |
 
-**So I filed it myself:** `bug-t-nothing-exercises-o3-so-its-clean-record-is-empty` [T p50]
+**So I filed it myself:** bug-t-nothing-exercises-o3-so-its-clean-record-is-empty (WITHDRAWN — duplicate of `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`; named plain, not in backticks, so it does not read as a live pointer) [T p50]
 (`0fb7d82ff`), evidence credited to frank-optimize-b4. Not a reprimand — it is mid-build on the
 hardest item in its umbrella and the directive was one paragraph inside a long message about
 something else. **That is exactly the trigger-with-no-observer shape**, and the observer was
@@ -14525,7 +14653,7 @@ deliverable; the owner answers what the owner wants to answer.
 
 ### I filed a duplicate ticket, defeated by a directory I did not type
 
-`bug-t-nothing-exercises-o3-so-its-clean-record-is-empty` [p50] duplicated Track O's
+bug-t-nothing-exercises-o3-so-its-clean-record-is-empty (WITHDRAWN — duplicate of `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`; named plain, not in backticks, so it does not read as a live pointer) [p50] duplicated Track O's
 `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable` [p60], filed an hour
 earlier in **`backlog_new/`**. My two greps and mtime sweep covered `backlog/` and `unfinished/`
 only. `ready`/`next` scan four directories; I typed two.
@@ -15336,7 +15464,7 @@ change was 1.9-2.1× on x86-64 *hardware*. 1.07-1.13× says the pass fires and h
 it is **not** a prediction for real aarch64 silicon, and no measurement on this box
 can be.
 
-`task-o-hand-w2stress-to-the-corpus` closed as already done (`9e9e84ab5`) — the
+`task-o-hand-w2stress-to-the-corpus-so-optdiff-sweeps-it` closed as already done (`9e9e84ab5`) — the
 program had landed with item 3 as `test/test_o3_resident_inplace.pas`, renamed and
 extended past the ticket's description. Checked against the ticket's own three
 requirements rather than assumed. My correction is recorded in the umbrella with
@@ -16014,7 +16142,7 @@ count is **somewhere in 21..33 and the checker cannot yet say where.**
 
 ### The reservation is now blocking another lane
 
-`chore-a-wire-the-nine-passing-orphan-tests` [A p40] is **blocked on an N ticket**,
+`chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring` [A p40] is **blocked on an N ticket**,
 and N is unstaffed by the owner's reserved call. That is the first time the N
 reservation has held up work in a *different* lane rather than only N's own queue.
 **Surfaced to the owner as a fact, alongside the standing question; not re-asked.**
@@ -16982,3 +17110,3437 @@ grant). pxx-a5 N p72. frankB reactor slot-0 (12-core box, cannot reproduce).
 b4 `EmitLoadVarA64`. T: breadth first, heap-debug queued at named sha
 `a38e76336aad368e` (fixedpoint converged 2 rounds, sha256 `43be165be817…` ≠
 pinned `867207f2b418…`). U queue **19**.
+
+## 2026-08-29 ~22:00 — PIN v391 landed; two ranker fixes; faces 45-52
+
+**PIN v391 = `06e61e8b3f38`**, gated at `f4654ba1e`. `gate.sh quick` GREEN
+(fixedpoint 71s, seed canary 4s, testmgr quick 7s) → `stabilize-fast` → `pin`.
+Requested by TWO lanes: frankB (`make lib-test` red because v390 could not
+compile `test/lib_synapse.pas` while HEAD could — a **stale pin, not a defect**,
+and visible only on a box where someone fetched `external/synapse`) and frankA
+(`8be3c6d06` changed the NilPy string runtime in `compiler/builtin`).
+**Written into the pin commit: what the gate did NOT cover** — quick ran 29
+Pascal/C jobs and one ~1s NilPy canary, so this pin is not breadth for the NilPy
+change it carries. T has the limited/full sweep against `8be3c6d06`.
+
+**MY FIRST PIN GATE WENT RED AND IT WAS MY OWN STALE BINARY.** `compiler/pascal26`
+older than a commit already in my checkout → "two distinct fixedpoints". The gate
+diagnosed it exactly, including printing *"compiler/pascal26 is OLDER than the last
+commit touching compiler/"*. **I then misattributed it to frankwasm's push, and
+frankwasm corrected me**: the fixedpoint script's three inputs (`pinned`,
+`compiler/pascal26`, working tree) are ALL LOCAL — nothing consults origin. I had
+pulled and not rebuilt. The wrong diagnosis ("a sibling's push can red my gate")
+would have misdirected me later. Also learned: the script says **NOTE** for a
+concurrent build replacing the binary and **FAIL** for a genuine disagreement, and
+the distinction is only in the first word.
+
+**TOOLING 1 — `next` was offering a ticket that says "do not claim"** (`0041dbaf9`,
+found by frankB). `feature-target-wasm` opens *"NOT DISPATCHABLE — held by a
+standalone checkout on branch `wasm`"* and `next` printed a paste-ready claim line
+for it. **I did NOT take the proposed fix** (suppress on `owner:`): measured first —
+16 of 332 ranked tickets carry an owner and most are RETIRED session names
+(`claude-A`, `agent-AN`, `fable-a-n`) on dispatchable backlog items, so that rule
+would have hidden ~14 real tickets to catch one bad dispatch. Keyed on the explicit
+text marker instead: 4 tickets, all genuine. **`next` skips AND says which** — a
+silent suppression would recreate the defect. `ready` lists them flagged.
+Left alone deliberately: `unfinished/` conflates "parked, re-claim" with "held by a
+live checkout"; two conditions, one output. Recorded, not fixed.
+
+**I BROKE `progress.py` FOR EVERY LANE FOR ~4 MINUTES** — inserted `@property`
+above a line that already had one, so `owner` lost its decorator and
+`not_dispatchable` got two. Caught because I ran the command with **stderr
+visible**; my first run had `2>/dev/null` and showed empty output, which I nearly
+read as "no ready tickets". Second time tonight that suppressing stderr almost
+produced a wrong conclusion. **Do not pipe or muzzle a tool you are testing.**
+
+**Faces 45-52 landed** (index 52, OPEN): 45 a phase that can be entered but never
+finish eats the slot it protects and reads as slowness; 46 a fix is inert until
+both halves happen and **the restart succeeds** while serving old code; 47 the
+summary sentence a fix invites you to write can be false while the fix is right;
+48 a sweep reporting "present" without the spelling it tried; 49 **a RED is
+bounded by its host too** — my dispatch told frankB it could not verify its own
+fix and the ticket's `taskset` table was dialling the worker count and calling it
+hardware; 50 one sample per cell reads as a measurement and is a coin flip with a
+table drawn around it; 51 a behaviour-preserving change verifies identically to a
+no-op — prove the code moved (332 bytes); 52 **the population inherited from
+wherever the first look landed**, third instance in two days, the third written by
+the author who had just banked the second.
+
+**Doc landed:** `gating-and-waiting.md` — never put a worktree under `/tmp`
+(testmgr rewrites the path; the error names a missing test file and reads as a
+broken checkout), plus the stale-binary companion.
+
+**Open for the owner, both in the morning report:** CLAUDE.md says the quick tier
+carries *"dense NilPy/C canaries"* — it carries **one** ~1s canary by documented
+design (`testmgr.py` puts `test-nilpy` in limited/full). Wording overstates
+coverage; **owner's file, surfaced not edited.** And
+`decide-should-forwardlint-join-the-mandatory-per-fix-loop` [U p50].
+
+**Disposition agreed with frankA on the file-collision gap: take the NORM, not a
+lock field** — *announce the file when you change files mid-ticket*. A lock field
+has a staleness mode and still cannot cover entering a file you have not claimed.
+Note every agent commits as `yoctobyte`, so git authorship cannot attribute a file
+to an agent; no tool substitutes for the announcement.
+
+**Live:** frankA aarch64 stage-2 under qemu (unresolved, no green claimed).
+frankwasm merged master into `wasm` (`8aee2572c`), blocked on the sys-intrinsics U
+decision. pxx-a5 on `pypal.pas` (granted; 84 NR_ entries across 6 targets — a wrong
+number is invisible on 5 of 6). frankB on the concurrent-Halt bug. b4 finished
+`EmitLoadVarA64` (5/5 exact prediction), `builtinheap.pas` now free for bulk-copy.
+U queue **20**.
+
+## 2026-08-29 ~22:40 — faces 53-55, a cross-frontend sweep, all six dispatched
+
+**FACE 53 — a guard that has never once been TRUE.** frank-rust: `impl Trait for
+Type` had never once run in the Rust frontend. Both the prescan and the body
+parser tested `GetTokenStr(j+1) = 'for'`, and the lexer classifies `for` as
+`tkFor` whose name slice is empty — `''` vs `'for'`, never true, so `RImpls` was
+empty for the frontend's entire life. **Defeats each technique for a different
+reason:** coverage sees the line reached (condition evaluated, always false);
+review sees correct code (defect is in the lexer's contract one file away); and
+**no test could exist, because you cannot test a syntax the parser rejects — the
+missing test is caused by the bug.** Found only by trying to EXTEND it.
+
+**I RAN THE CROSS-FRONTEND SWEEP** — the coordinator multiplier: one lane's
+finding checked against lanes that cannot see each other. `GetTokenStr(...) =
+'<keyword>'` → **17 candidates: `rparser.inc` 11, `pyparser.inc` 4, `zparser.inc`
+2.** Filed as `bug-a-audit-token-text-compared-against-a-keyword-the-lexer-never-leaves-as-text`
+[R p55], **explicitly candidates NOT findings** — `self` in `pyparser.inc` is
+probably CORRECT (`self` is an ordinary Python identifier). Face 52's lesson
+applied in advance for once. Each frontend fixes its own arm.
+
+**FACE 54 — `make compiler/pascal26` DOES NOT COMPILE `pylib.pas`.** pxx-a5 broke
+pylib's interface section and **the whole self-host fixedpoint passed green**; it
+failed only on compiling a `.npy`. Third member of one family: the gate is blind
+to FPC-only breakage (compiles with pxx), blind to everything in a seeded tree
+(`cp` stamps the seed newer, make no-ops, exit 0), and blind to `pylib.pas` (the
+compiler does not link the NilPy runtime). **In all three the gate is real, its
+name implies more than it covers, and the success message is identical either
+way.** Also: `PyStdlibCallAhead`'s whitelist and `PyStdlibCallProc`'s table are
+one concept in two places — a table entry alone is silently dead code.
+
+**FACE 55 — a minimal repro can DESTROY the bug.** frankB's `Halt` diagnosis. Six
+threads with explicit `PalThreadJoin` make main last *by construction*, so the tidy
+repro removed the race; 6/6 green was **evidence for the wrong proposition**. Root
+cause: `Halt(n)` emits `exit` (thread exit) not `exit_group` on **x86-64** and
+arm32; i386/aarch64/riscv32 are correct and three arms name `exit_group` in a
+comment. The correct answer sat one line below the bug (`EmitExit`'s comment).
+Process status belongs to whichever thread exits LAST. **Trap for the fixer:**
+`scheduler.pas` now works around it via `__pxxrawsyscall`, so
+`test_sched_reactor_exhaustion` would pass with the bug present — revert that as
+part of the fix. **A workaround installed while a bug is open becomes a blindfold
+the moment it is closed.**
+
+**PAL work (pxx-a5) did exactly what the condition asked.** Executed on x86-64;
+transcribed-not-run for i386/aarch64/riscv32; arm32 `getdents64` left **-1**
+deliberately. The derivation trap was live: i386 and arm32 sit +27 apart on FIVE
+syscalls, so an offset looks like a rule — and `getdents64` is 220 vs 217, so the
+offset predicts 247, a different call. *"Fairly confident is exactly what produces
+a five-of-six invisible error."* Two tickets filed off it (arm32 hole, ppoll
+64-bit timespec on 32-bit targets).
+
+**DISPATCHED, none idle:** b4 → the Halt `exit_group` fix [A p60, outranks
+bulk-copy]. pxx-a5 → `feature-nilpy-staticmethod-and-classmethod` [N p70].
+frank-rust → the never-true-guard audit [R p55] (it holds the lexer contract; told
+to report a mostly-clean result AS a result). frankB → `lib-test` against v391 with
+`external/synapse` in place. frankA → aarch64 stage-2 under qemu. frankwasm →
+`wasm` merged (`8aee2572c`), blocked on the sys-intrinsics U decision.
+
+**frankB retracted its own ranker proposal** after I measured it: *"I inferred the
+rule from a sample of one"* — same error as its `Halt` table, same evening. Its
+`working/`-lock hazard report was still the reason the fix exists.
+
+**frank-rust asked for its lock to stay** — `feature-rust-option-type` is the live
+log for the whole Track R window. **Not renaming it mid-flight**; renaming a lock
+breaks a citation someone else may hold. Rename at close if it still matters.
+
+## 2026-08-29 ~23:00 — the success-message doc is placed; faces 56-57; lib-test green on v391
+
+**NEW DOC: `devdocs/dev/a-success-message-is-not-a-verdict.md`** (`bd2d284cd`).
+frankA found the FOURTH instance and was right that it is one rule, not four
+cases: **for a long job, do not accept an exit code as its verdict — require the
+job's own terminal line** (`converged after N round(s)`, `gate: GREEN`, `N/N
+pass`). Absence of the line is the tell and there is never an error to wait for.
+
+The four: the copied-in-seed no-op exiting 0; `verify_pin` entered but never
+finishing; the watcher restarting successfully onto stale code; and **a KILLED
+aarch64 build whose notification read "completed (exit code 0)"** while the log
+ended `make: *** Terminated` — the 0 came from the backgrounding wrapper. frankA's
+hinge sentence, now the doc's: *"I only knew better because I was the one who
+killed it."* **A verdict you can only distrust because you happen to know the cause
+is not a verdict.**
+
+**COMPANION RULE IN THE SAME DOC — PIN THE SOURCES, NOT JUST THE BINARY.** frankA
+threw away an hour of aarch64 stage-2: it reads `compiler.pas` and ~200 includes
+**lazily over an hour**, and `sync.sh`'s rebase rewrote all of `compiler/` mid-run,
+so the binary cannot be attributed to any sha. *"A fixedpoint verdict whose inputs
+mutated underneath it is not a weak result; it is not a result."* A long
+verification must read from a checkout that cannot change under it. Both aarch64
+and arm32 sweeps go to T against the pushed sha.
+
+**FACE 56 (frankB) — an open ticket whose title matches your symptom is a magnet
+for false attribution.** Killed `lib-test` runs + a ticket titled "lib-test peaks
+above its memory estimate" is an inviting pair; frankB checked instead — 38 GB
+free, ~600 MB peak, no OOM, three unrelated stop points — and filed it as a
+NEGATIVE result saying the memory ticket gains nothing. With 336 open tickets,
+attributing to an existing one *feels like diligence* and corrupts the ticket it
+attaches to. *"An explanation that fits is not an explanation that was tested."*
+
+**FACE 57 (frank-rust) — identical code, opposite verdicts.** The face-53 audit
+closed: **17 candidates, 1 defect, 16 correct**, then widened to ELEVEN frontends,
+three spellings plus the `CaseEqual` form the first pass could not see, each parser
+against **its own** lexer — **561 comparisons, 1 dead guard.** The finding is the
+table: Pascal's `lexer.inc` stores text for **every word token**; the other lexers
+only `tkIdent`+`tkString`. **Pascal is the outlier in the SAFE direction**, which
+explains why the idiom exists and predicts the next instance (a new frontend by
+someone fluent in the Pascal side). **Four Pascal sites look exactly like the bug
+and are LIVE** — proved by running (`Byte(321)` prints 65), not reading; filing the
+grep as findings would have put four phantom bugs into Track A. My candidates-not-
+findings wording earned itself. No N or Z tickets needed. Lint filed as
+`feature-t-lint-token-text-compared-against-a-keyword` [T p35], priced against the
+measured 1-in-561 base rate.
+
+**PIN CONFIRMED FROM THE OTHER SIDE.** frankB: `lib-test` GREEN vs v391, **no
+`SKIPPED:` clause at all**, all three synapse jobs including `SYNAPSE-SSL OK`. Red
+at v390, green at v391, same command/corpus/box. A controlled comparison, not an
+inference.
+
+**Track P: `generics.defaults.pas` (3,358 lines) compiles END TO END** (`5e114130b`).
+Root cause: **Pascal is case-insensitive, so `function Bar; forward;` and a body
+written `function bar;` are one routine** — `FindProcOverloadRec` compared with `=`
+only, so the body registered a second proc and the declared one stayed bodiless.
+**Four other lookups in `symtab.inc` already carry the `CaseEqual` pair** — third
+one-arm-of-a-double-case tonight (with `Halt`'s five backends and the
+managed-string temp's seven sites). frankA's two hypotheses were both refuted by
+experiment; the minimal repro named the defect outright.
+
+**Dispatched:** frank-rust → ArrayVec/`MoveList`, the last ladder item (**R is
+X-tagged and never a priority by charter** — said plainly so a morning redirect
+reads as direction, not judgement). frankB → self-dispatch from `--track B`,
+approved, with the two cautions (ranked ≠ has work; check the FILE). b4 → Halt
+`exit_group`. pxx-a5 → staticmethod/classmethod. frankA → `feature-pascal-corpus-expansion`,
+holding `symtab.inc` + `test/` + corpus, **announced per the new norm — which is
+working on its first night.**
+
+**Product feedback drafted (queued locally, NOT sent):** killed background command
+reported as `completed (exit code 0)`; long background commands terminated mid-run
+with OOM ruled out. Two sessions, one hour, independent.
+
+## 2026-08-29 ~23:15 — Halt fixed as ONE arm; faces 58 + a sharpening of 55
+
+**`Halt(n)` FIXED (b4), and fixed as an abstraction rather than two constants.**
+`EmitExitReg` added beside `EmitExit` sharing its reasoning; every backend's
+`AN_HALT` arm reduced to "evaluate the code, then call it". Emitted diff IS the
+prediction: x86-64 8 bytes all `0x3C`→`0xE7`, arm32 8 bytes all `0x01`→`0xF8`,
+**i386/aarch64/riscv32 byte-identical** — a five-into-one refactor changing exactly
+the two arms that were wrong is the strongest evidence it preserved the three that
+were right. Scheduler workaround **reverted and measured both ways**: reverted
+source + fixed compiler = 216 10/10; + pre-fix compiler = 0 10/10. The blindfold is
+off.
+
+**b4 flagged a hazard I had not passed on:** the scheduler comment recorded that
+`Halt`'s exit path JOINS the workers and that serialising the fatal HUNG (124 at
+4/8/20 workers), so the revert could have traded a wrong status for a hang. It did
+not — the hang came from serialising — but b4 established that by running it, and
+kept the still-true half of the comment.
+
+**FACE 58 — a comment naming the gap, inside the fifth copy of the thing the gap
+caused.** riscv32's arm was CORRECT and its comment reads *"EmitExit's own
+encodings only cover a constant"*. b4: *"That sentence is what a missing
+abstraction looks like from inside the fifth copy of itself. Someone saw the shape,
+wrote it down, and added a copy anyway."* The general point: **a silent copy might
+be an oversight someone notices; a DOCUMENTED copy reads as considered**, and the
+note that would justify fixing the abstraction becomes the artefact making the copy
+look deliberate. Three of five arms carried an `exit_group` comment — *a comment is
+what you write when the rule has nowhere to live.*
+
+**FACE 55 SHARPENED BY b4, and its version replaced mine.** Mine: minimisation
+destroys the defect, trace the messy case. b4: **tracing the messy case still leaves
+you sampling a race** — which is how the 3-sample table became a rule that was not
+there. The move: **find the question whose answer is not a race.** Not "what status
+do we get" but "does the process die at all". Reasoning lives in
+`test_halt_from_worker_thread`'s header so nobody tidies it into a joined repro and
+disarms it.
+
+**b4's `OTHER` census closed a question and was filed as NOTHING** — the remainder
+is *structurally uncollapsible*: nested binop/call (2659 of 3915) need x0 as their
+own working register, so **the stack round trip is what makes them correct, not
+slow.** 1.0% survives, needing an addressing analysis that does not exist. Right
+disposal: table in the umbrella, no ticket. A ticket justified by a remaining number
+sits at low prio forever.
+
+**b4 crossed into `lib/rtl/scheduler.pas` (B's file) under the ticket's own
+instruction and ANNOUNCED it** — the norm working again, second time tonight.
+
+**Dispatched:** b4 → `feature-opt-bulk-copy-is-byte-at-a-time` [O p65]
+(`builtinheap.pas` free; benchmark approved with the sha + contention conditions).
+Told it the umbrella at p70 sits behind its own fresh-session rule and that it is
+the one who can judge whether that binds. All six lanes working. U queue **20**.
+
+## 2026-08-29 ~21:30 — TWO NEW LANES (C, D), a fleet watchdog, and Track T's daemon was STOPPED
+
+**Owner raised the budget** (max-pro, ~4x tokens, plus last week's reset usable
+within 2 days) and asked to use it — **explicitly twice: do not game the system.**
+The line held: capacity goes onto lanes with real queued work, never onto extra
+sessions doing thin work, and never onto padded output.
+
+**TRACK T'S WATCHER DAEMON WAS STOPPED and nothing said so.** Found incidentally in
+`frank.sh`'s startup banner: `daemon : STOPPED — trackt start`, while `tstate: UP`
+because the last verdicts were recent. **A stale-but-recent tstate reads exactly
+like a live one** — the same shape as everything in
+`a-success-message-is-not-a-verdict.md`. Restarted (`pid 940345`, unit
+`trackt-watcher.service`, web on :8377). Every lane's breadth had no producer for
+an unknown interval. **ADD TO THE TICK: `trackt status` daemon line, not just
+tstate freshness.**
+
+**NEW LANES: frankC (Track C) and frankD (Track D).** Chosen by measurement, not
+taste: `ready` per track showed **C=9 and D=10 with ZERO agents**, against A=104 /
+N=87 / P=46 with one each. **C and D were the only two safe additions** — C owns
+`clexer`/`cparser`/`cpreproc`/`lib/crtl`, D owns `docs/**` and touches no code, so
+neither can collide with a running worker. A and N have the deepest queues and are
+exactly the lanes that **cannot** absorb a second agent (shared files) — which is
+the owner's own "A+C+P+N is the hardest to parallelize".
+Trees: fresh clones `~/frankC`, `~/frankD` at `c513c0190`. Both added to
+`~/frank.sh`'s FLEET with the reasoning in a comment there.
+
+**NEW: `~/frank-watchdog.sh`**, running as tmux window `frank-watchdog`, log
+`~/frank-watchdog.log`. Owner: *"you will notice usage when we get blocked from
+accessing api. set up an interrupt to recover from such."*
+- **Detection is NOT "is the window there".** When a session is cut off, `claude`
+  exits and `frank.sh`'s `exec bash` keeps the window alive — **a dead agent looks
+  identical to a live one in the window list.** So it walks the pane's process
+  subtree for a `claude` process.
+- **Per-agent exponential backoff, 60s → 32min**, reset after a healthy cycle.
+  Deliberate: if the fleet is rate-limited every agent dies at once, and
+  relaunching immediately just spends the retry.
+- **`check_stuck` — ALIVE IS NOT WORKING.** Scans pane text for usage/rate-limit
+  markers and prompts. **Logged, never auto-relaunched**: relaunching a
+  rate-limited session spends a retry to learn what we already know. The point is
+  to make the block visible instead of silent.
+- Reads its fleet list FROM `frank.sh`, so the two cannot drift apart.
+
+**FALSIFIED BOTH DIRECTIONS BEFORE TRUSTING IT** — a false negative would kill and
+relaunch healthy sessions. All 10 fleet roles → ALIVE; a plain `bash` window and a
+nonexistent name → DEAD. Stuck-regex: 5 positive controls match, 5 negative
+controls (`converged after N round(s)`, `gate: GREEN`, `29/29 pass`, …) clean, live
+fleet all clear.
+
+**Two traps caught while building it, both mine:**
+- **`pkill -f frank-watchdog.sh` matched its OWN command line and killed my shell**
+  (exit 144), twice — the same self-match trap CLAUDE.md documents for
+  `pgrep -f "make test"`. Fixed by running the watchdog as a tmux window and never
+  grepping for it.
+- **`frank-optimize`'s window was named `claude`**, so the watchdog would have
+  declared it down and launched a DUPLICATE. Renamed window 8 → `frank-optimize`.
+  The other two `claude` windows (`/home/neo`, `/home/neo/vibestorm`) are the
+  owner's ad-hoc sessions and were left alone.
+- **A brand-new tree parks Claude Code on the trust-this-folder prompt.** Both new
+  agents were ALIVE and doing nothing. That is what `check_stuck` exists for.
+
+**Dispatched:** frankC → `regression-lib-test-crtl-reachability-3` [C p70].
+frankD → `docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out`
+[D p45] (head is parked). Both onboarded with lane rules, the narrow gate, the
+do-not-widen rule, and **Track D got the claims-discipline section verbatim** — the
+two different "byte-identical" claims are the one thing public copy must not
+conflate. pxx-a5 → `regression-test-core-test-nilpy-str-ascii-cache` [N p70].
+
+**Fleet is now 10 roles + the watchdog.** Recorded ceiling was "4 died at once on an
+account limit, 2026-08-25"; six ran fine two nights, ten is new territory — the
+watchdog is what makes it recoverable rather than a gamble.
+
+## 2026-08-29, late — the seed break, a double dispatch I caused, two tooling fixes
+
+**The watchdog never died.** I spent a stretch diagnosing its "exit" and there was
+none: `pane_current_command` reads `bash` while the loop BODY runs and `sleep` only
+during the wait, so `bash` meant *working*, not dead. A traced run confirmed it —
+30 `agent_alive` calls, correct `claude` detection, clean cycles. **A process whose
+liveness you infer from a snapshot of what it happens to be executing is one you
+will misdiagnose at exactly the wrong moment.** Check for the child (`sleep`), or
+check the log, and do not read a shell name as a verdict. frankS was ALIVE in that
+same trace while I still had it listed as pending.
+
+### The FPC seed break — three independent finds, one report loop I failed to close
+
+`compiler/rparser.inc` forward-declared `RParseAggregateIntoNode` twice (`:1498`
+from `e3043236b`, `:2786` pre-existing). pxx tolerates a repeated forward; **FPC
+rejects it and aborts the whole compile**, so `make bootstrap` was red and no fresh
+tree could be seeded. Found independently by **frankC**, **frankA** and **pxx-a5**.
+Fixed by frank-rust in `20efe74ef` — delete `:2786`, keep `:1498`, because the call
+at `:1506` needs a forward before it.
+
+**My error, worth keeping:** I first told frank-rust "which of the two to delete is
+your call". Wrong — deleting `:1498` trades one FPC rejection for another. The call
+at `:1506` was **in the grep output I had already run** and I did not read my own
+evidence against the advice I was giving. Corrected within minutes; frank-rust had
+already done it right.
+
+**My second error, and the one with a general form:** frankC reported the break,
+and 90 minutes later was still carrying it as live while three other sessions knew
+it was fixed. **A worker who reports a blocker has no way to learn it was cleared —
+they cannot see each other, and I told the fixers and not the reporter.** New
+standing rule: *tell the reporter, not just the fixer.*
+
+### A double dispatch — and the field that caused it
+
+**I sent frankA and pxx-a5 at the same ascii-cache regression.** Nothing collided,
+which was luck about which regions each touched. Cause: the stub carried
+`track: N`, **guessed by twatch from its `.npy` test extension**, while the defect
+and both fixes were in `ir_codegen.inc` / `defs.inc` — Track A. The sole-A guard
+keys off exactly that field, so it never fired, and the ticket looked like a
+frontend item safe to hand a second agent.
+
+**A guessed track and a declared track are indistinguishable in frontmatter**, and
+the note saying it was guessed is in the BODY — the same shape as
+`meta-track-w-collision-windows-vs-website`. A regression's TEST and its CAUSE are
+routinely in different lanes; for codegen regressions that is the common case, not
+an edge.
+
+Fixed in `73822997e`: `ready`/`next` now annotate a **still-standing** guess.
+Measured over all six live stubs first — five annotated, and the one frankC had
+retracked C→B correctly excluded, because the guessed letter is compared against
+frontmatter so a human correction clears the flag. Ready count 327 before and
+after: it annotates, it never hides. **Two of the five live guesses are wrong right
+now**, including one guessed `P` that is a Track R duplicate forward.
+
+I did NOT drop the guess, though pxx-a5 suggested it. twatch's own comment records
+that four stubs needed the same hand edit on 2026-08-16 for want of a lane —
+*"a wrong lane a triager can see beats no lane at all"*. The guess was never the
+defect; its invisibility to tools was. (`tools/twatch.py` is Track T's file, so I
+read the marker it already writes rather than changing what it emits.)
+
+### forwardlint now catches a DUPLICATE forward (`52eb9dc2f`)
+
+The seed canary asked FPC's *ordering* question and not its *uniqueness* one, so it
+printed `ok` on a tree whose bootstrap was broken. **Both arms measured on the live
+defect, not a fixture** — FAIL naming `:1498` as the survivor while the bug was
+present (independently the same verdict frankA reached by running FPC), `ok` once R
+deleted `:2786`. A control is not a control until it has failed once; this one
+failed on the real tree and then cleared *for the right reason* rather than because
+I broke the check.
+
+Keeps the file's MISS-not-false-alarm bias, enforced twice: skips anything under a
+`{$ifdef}` (the scanner does not evaluate conditionals) and anything marked
+`overload`. Does **not** close the general hole, and says so: `make
+compiler/pascal26` compiles with pxx, so the per-fix loop is blind to FPC-only
+breakage **by construction** (face 31). This catches one shape of it.
+
+### `gate: RED` exited 0 — I reproduced it in my own hands
+
+frankA reported it; ten minutes later my own pin gate FAILED the self-host
+fixedpoint and the harness said *"completed (exit code 0)"*. My cause was my own
+(I ended the command with `tail`, so I got `tail`'s status) — **which is the
+point**: the exit code answers a different question than the gate does. Fifth
+instance; belongs to `devdocs/dev/a-success-message-is-not-a-verdict.md`. Require
+the job's own terminal line, never the exit status.
+
+Also: my first pin gate went RED on a **stale local `compiler/pascal26`** — again.
+The gate diagnosed it by name (`is OLDER than the last commit touching compiler/`),
+which is the tooling working. Rebuild printed `converged after 2 round(s)`.
+
+### Findings banked from workers (they cannot see each other)
+
+- **frank-optimize-b4 — the provenance rule has a hole for SOURCES.** A
+  `pinned`-vs-`HEAD` **compiler** A/B does not test an RTL change: `builtinheap.pas`
+  is read from `PXX_HOME` at compile time, so two compilers use the *working tree's*
+  copy. It read 1.74 vs 1.76 — a flat line from measuring the same RTL twice — and
+  nearly buried a 3.0x patch. **"I A/B'd two compilers" reads as more rigorous than
+  "I A/B'd two RTLs", and it is the wrong axis.**
+- **b4 — the x86-64 correctness test is nearly vacuous, proven by breaking it.**
+  Deleting `PXXBlockCopy`'s byte tail still PASSED natively; the same break gave 415
+  failures under `--target=aarch64`. Note now sits in the Makefile beside the recipe.
+- **b4 — `.expected` files are NOT auto-discovered here**; every test is wired by
+  hand. Two tests it called permanently covered had never run. Face 33 again.
+- **b4 — a banked speedup decays as the tree moves under it.** Its 23x became 3.6x;
+  the `-O3` umbrella independently records 1.29x becoming 1.04x. A benchmark in a
+  ticket is a measurement with an **unstated `as-of`**, and the unstated part rots.
+- **pxx-a5 — when a builtinheap helper's comment asserts an invariant, check whether
+  x86-64 calls it. Three of three so far did not.** x86-64 open-codes past
+  `PXXStrUnique` entirely (indexed writes reach the hand-emitted
+  `AnsiStrUniqueAddr`, which never touches the meta word). **A comment asserting an
+  invariant is a claim about every caller, written where only one can see it** — true
+  on five targets, false on the one everybody develops on. Census dispatched.
+- **frankA — choose canaries by the MECHANISM touched, not by topic.** It picked ten
+  by string topic and none touched the ASCII/character-count mechanism. Selecting a
+  canary by topic inherits the author's blind spot.
+- **frankC — assert the VERSION, not just the link.** `gtk_main` exists in GTK2 and
+  GTK3, so a clean run would pass against the wrong library. Also: a two-month park
+  on `feature-c-gtk3-header-final-wiring` was caused by a **wrong `-I` root recorded
+  as a deep importer limitation.** A false limit is quieter than a false fix.
+- **frankD — a quoted diagnostic is the cheapest oracle Track D has**, because
+  nothing compiles an error string. It verified by extracting the fenced block and
+  string-comparing to stderr, and caught a truncated quote in a file it was not even
+  editing (fixed, `d6cd7ebb9` — the dropped clause was the half the note's own
+  argument depended on).
+
+### Filed by me
+
+- `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out`
+  [P p35] — the `ParseFactorCore` → `PyParseFactorCore` carve-out is deliberate and
+  **partial**: 36 NilPy diagnostics remain on the Pascal arm and **10 are verbatim on
+  both**, including the ambient-exec refusal now quoted on the public website. The
+  double arm is invisible from either side. Filed rather than relayed — *a finding
+  in message traffic dies with the session that received it*.
+- Taken from frankA's queue: `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master`
+  [A p80] — `gate.sh` arms the seed canary only when `compiler/` differs from
+  origin/master, so **a break already on master is invisible to every clean tree**
+  (`SKIP`, never `FAIL`) and then fires inside the next agent's gate naming a file
+  that is not theirs. Tooling is mine; frankA's context belongs on the compiler.
+
+### Open for the owner
+
+Unchanged from the previous section, plus: **`decide-which-gtk-a-bare-gtk-gtk-h-means`
+[U p55]** — both GTK2 and GTK3 answer to `#include <gtk/gtk.h>` and the system
+include list is flat, so whichever root goes first decides the GTK version for every
+C consumer at once. frankC's recommendation, which I endorse: scope the include root
+by the stem that already picks the soname, so one fact drives both. Caveat to carry:
+the owner's box has GTK **2** headers as the working set.
+
+## 2026-08-29, later — grants on the record, and Track C is not a staffable lane
+
+**FILE GRANTS ISSUED (an authorisation is a finding about what is permitted).**
+
+| session | granted | rationale |
+| --- | --- | --- |
+| **frankS** | `ir_codegen_xtensa.inc`, `lib/rtl/platform/esp/**`, `examples/esp32/**`, and `compiler.pas`'s ESP profile plumbing (`AddDefaultPasUnitDirs` / `DeriveTargetPlatform`) | uncontended; frankA holds `ir.inc`/`pyparser.inc`, not `compiler.pas` |
+| **frankS** | `lib/crtl` ESP close/dispatch path only | `lib/crtl` is claimed by **both** B and C in CLAUDE.md — a real doc ambiguity; frankC is running csmith, not editing |
+| **frank-optimize-b4** | `ir_codegen.inc` + `symtab.inc`, own checkout | **note `ir.inc` ≠ `ir_codegen.inc`** — b4 flagged that my "stay out of `ir.inc`" was one character from blocking its slice |
+| **pxx-a5** | read-only everywhere, twice | a reading audit collides with nobody, and both times it returned more than a fix would have |
+
+### Track C is not an independently staffable lane — measured
+
+frankC worked the C queue and found **four of six ranked C tickets need a Track A
+file**. I confirmed the cause: **`ir.inc` carries 40 `CProgramMode` references and
+there is no `cir.inc`**, while C owns `clexer`/`cparser`/`cpreproc`. C is the
+frontend whose parser was carved out and whose **lowering was left behind**. P had
+this and fixed it via the `pasparser_*` split; R, Z, N all own their files.
+
+**I staffed C tonight off `ready --track C` = 9. Exactly one was workable.** The
+count was honest and the lane was not staffable, and no tool could have told me.
+Filed as `refactor-a-c-exclusive-lowering-has-no-carved-out-file-...` [A p45].
+
+Same family as the two annotations I landed today (guessed track, brainstorm
+parent): **`ready` answers "is it unblocked", never "can THIS agent do it"**. The
+first two were annotatable; this one needs a real refactor.
+
+### Findings banked (workers cannot see each other)
+
+- **frankwasm — the prescribed fix would have turned the job green and changed
+  nothing.** The ticket *and* the guard's own message told tests to read
+  `$TESTTMP`; testmgr builds job env from an **allowlist** and strips it. Guard
+  green, collision intact — *"a red ratchet is a disabled ratchet"* one step later
+  and harder to see, because now nobody is looking. **Five existing tests are in
+  that state**, all having followed the guard's advice faithfully — which is why
+  fixing the advice beats fixing them one at a time. Second half filed [T p55]:
+  the guard cannot distinguish a test that ISOLATES from one that merely stopped
+  saying `/tmp` out loud, so it calls all five clean — **a check that cannot fail**.
+- **pxx-a5 — the fix was two lines, not one.** `AllocArray` AND `AllocDynArray`
+  both skip `RecName`. Why it slipped: every allocator's comment says *"every
+  `Alloc*` must reset EVERY parallel array"* and `RecName` is a **field**, not a
+  parallel array — **a rule stated over one representation did not cover the thing
+  that behaves identically in another**, and the comment made it look covered.
+  Also: **20 reads guarded by `TypeKind = tyRecord` and nothing else, which is not
+  a guard** — an array-of-record symbol *has* `tyRecord`, it holds the ELEMENT
+  kind. A live silent C bug fell out (`_Generic` selects `struct B` where gcc says
+  `other`). And **today's passing case passes by accident** — the recycled slot
+  happened to hold no record id.
+- **frankS — `--where` reported the pre-derivation default** because it was handled
+  inside the argument loop while derivation ran after it, defeating the invariant
+  stated in `AddDefaultPasUnitDirs`'s own header comment. Third instance today of
+  **a comment true where it is written and false where it is used**. Also corrected
+  the ticket's own reachability estimate: not "latent, papered over by four `-Fu`
+  sites" but a **hard compile failure for any real user** — in-tree builds were the
+  only ones papered over. *The estimate was wrong; the diagnosis was exact.*
+- **frankC — the ticket's stated fix was wrong, three of six spellings.** glibc
+  treats `%p` of null as a **string**, so it leaves the numeric path outright. And
+  it ran the new probe against the **pre-fix** source to confirm it fails.
+- **frank-optimize-b4 — did NOT fold shifts into the existing imm-fold arm**,
+  because that would reproduce every width fixup in a second place. Test pairs each
+  constant count with a **variable-count twin in the same program**, so a wrong
+  encoding surfaces as two arms disagreeing rather than as a value with no oracle.
+
+### Operational
+
+- **Timing benchmarks are invalid right now** — box at 13.92/12 cores, seven
+  concurrent `pascal26`. Told b4 to use retired-instruction counts (load-invariant)
+  and take wall clock only when quiet, stamping both with binary sha AND load.
+- **`sync.sh` can exceed a 2-minute tool timeout under this many writers.** Push
+  with a bounded retry loop that regenerates BOARD files between attempts; they are
+  generated, so `--theirs` then regenerate is always correct.
+- Closed `bug-r-a-duplicate-forward-...` [R p85] myself — it sat at the head of the
+  **global** ranked queue while already fixed. Three sessions found it, one fixed
+  it, nobody closed it.
+
+### Measured and NOT built: a prose-blocker checker
+
+frankS hit `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file`, whose body ended
+*"Do that one first"* naming a real blocker, with **no `blocked-by` in frontmatter** —
+so it kept surfacing in `ready --track S` as claimable with nothing claimable in it.
+frankS added the edge; the blocker correctly inherited its priority.
+
+`progress check` **states** that convention (`progress.py:1747`) and does not enforce
+it, which is the "a check that cannot fail" shape I have been fixing all night. So I
+went to build the enforcement — and measured first.
+
+**Result: not worth building.** Across **342 ranked tickets**, prose containing a
+blocking phrase AND naming a real ticket slug on the same line, with no frontmatter
+edge: **2 hits, both false positives.**
+
+- `feature-pascal-corpus-passrc` — *"Land the small ones first"* is deliberate
+  sequencing advice, and the same paragraph says *"Re-rate `prio:` upward once those
+  are green."* The author chose prio-based ordering over an edge, on purpose.
+- `feature-pascal-corpus-expansion` — matched only because the referenced slug
+  **contains the word "prerequisite"**.
+
+A first, looser pass (blocking phrase alone, no slug requirement) returned 30+ hits
+because *"depends on"* and *"blocked by"* are ordinary English. That version would
+have earned the habit of being scrolled past within a day — forwardlint's own comment
+names this failure mode, and it applies to the checker I was about to write.
+
+**So the population is one instance, already fixed by the finder.** Recording this so
+the next person who notices the unenforced convention does not rebuild the measurement.
+
+**What the scan could NOT have seen**, stated because a non-existence claim needs its
+blind spot named: a blocking relationship phrased across two lines, or naming its
+blocker in prose rather than by slug, or expressed only as a `[[wikilink]]` with no
+blocking verb near it. The narrow signal is what made it clean, and narrow means it
+misses. The finding is "no evidence of a population", not "there is none".
+
+### GREP FOR THE INCUMBENT — the seventh time tonight, and this one was mine
+
+Three workers hit "a test exists and nothing runs it" in one evening (b4's two
+`.expected` files that had never run, frank-rust's two orphan GUI tests). I read
+that as a pattern worth a tool, measured it, and **the tool already existed**:
+`tools/check_test_wiring.py`, built and guarded by pxx-a5 earlier the same day,
+with `chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring`
+[A p40] holding the remaining work.
+
+It is also **better than the scan I wrote**. Mine reported the seven `test/fgl/*.pas`
+files as orphans; they are run through a **glob** at `Makefile:13023`, which a
+filename-substring scan cannot see. The real checker handles that and finds more
+besides (the `test_pyeval_*` and `test_softfloat_*` families). It even flags a
+category I had not thought of: *an exemption whose only reference is a `tools/`
+script NAMING the path — a mention is not proof anything runs it.*
+
+**The cost was ~15 minutes and it was avoidable by one grep.** The rule is already
+in my own tick prompt. Note the shape of why it failed: I arrived at the tool
+through **three independent worker reports**, which felt like discovery rather than
+duplication — the more evidence converges on a need, the more it feels like a new
+finding and the less likely anyone is to check whether it is already solved.
+
+**What is actually actionable, and it is a chain worth prioritising:** the wiring
+ticket is `blocked-by: bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed`.
+Clearing that one N bug wires roughly twenty orphan tests **and** lets the checker
+become a gate — after which this class stops recurring. Three of the orphans are
+`test_o3_*`, i.e. Track O's own campaign is partly untested. Dispatch that N bug
+ahead of its p-rank when a lane frees up; `pyparser.inc` is frankA's right now.
+
+### GRANTS ARE PROVISIONAL — the worker verifies the file map, not the coordinator
+
+frank-rust, 2026-08-29, after a grant sent it to three files that were not where
+the work was: *"the file map has shifted twice tonight on my reports alone — it may
+be worth re-checking a ticket's named files before granting rather than after."*
+
+**I did verify before granting, and that is the interesting part.** I grepped every
+file the ticket named and found exactly what it claimed: `Procs[]` at
+`defs.inc:2473`, the `...` consume at `cparser.inc:12692`, `'varargs'` at
+`pasparser_call.inc:963`. All present. **But I verified the ticket's own citations**
+— I confirmed "these files contain what the ticket names", not "the fix belongs in
+these files". The ticket was the upstream for both the claim and the check, so the
+agreement carried no information, which is the corollary already written in
+[[coordinator-operating-rules]] rule 2 and which I applied to peers' claims and not
+to tickets.
+
+The ticket was wrong in the most expensive direction: it asserted `Procs[]` had **no
+varargs flag**, and `ProcVariadic` exists, is set on the shared declaration path, and
+is honoured by four backends. A ticket asserting a missing mechanism that exists
+sends the next reader to build it. frank-rust corrected it in place the same day.
+
+**Protocol, effective now:** a grant is **provisional**. The worker confirms the fix
+actually lands in the granted files and reports back *before editing* if it does not.
+Stopping and reporting is the success case. A worker establishes in two minutes what
+the coordinator cannot establish reliably from outside the code at all — and the file
+map moved twice tonight on one worker's reports.
+
+This is the same move as the tooling job generally: **push the check to where the
+knowledge is, rather than resolving to be more careful at the place that structurally
+cannot know.**
+
+## Tick 2026-08-29 late — five dispatches, and a blocker that cleared mid-dispatch
+
+**Live assignments as of this tick.** frankA: resolved the evalpystmts contract
+blocker (12/12, `check_test_wiring` 23 → 11 unwired), on to its next item, has
+NOT taken the orphan-test chore. pxx-a5: `chore-a-wire-the-nine-passing-orphan-
+tests-and-gate-check-test-wiring`, whole ticket. frankC: granted
+`tools/pasmith*.py` + `tstate/fuzz/fpc-bugs/**` (grant filed on the ticket, not
+left in message traffic). ppxx track T: confirmed **face 2, the agent**, took
+`bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure` plus the
+three duration signals. frank-rust: mid-build on the Delphi cross-unit generic,
+sweeping from the uses clause. frank-optimize-b4: MULIMM next, then the +2
+init-temp — its order, confirmed rather than overridden.
+
+### THE ADJUDICATION THAT WENT STALE IN NINETY SECONDS
+
+I dispatched pxx-a5 onto the orphan-test chore with a considered ruling: its
+`blocked-by` covers only the ticket's second half (gating the checker), not the
+first (wiring the nine), so take the wiring and **split the gate step out into
+its own blocked ticket**. That was correct when sent. frankA's fix landed while I
+was writing it, clearing the blocker outright — so the split would have created a
+ticket with nothing to block it.
+
+Withdrawn within minutes and **withdrawn out loud**, because pxx-a5 may have
+started the split. The general form is worth keeping: *a coordinator's ruling has
+a timestamp, and a ruling about a dependency is exactly the kind that another
+lane can invalidate without knowing a ruling exists.* frankA had no way to know
+its fix retracted my instruction. So when a dispatch turns on a blocker's state,
+the dispatch is perishable and the retraction is mine to issue, not the worker's
+to notice.
+
+Second-order: I had told pxx-a5 the `Makefile` window was its own, on the
+evidence that it was the lane that last touched it. frankA's fix touched
+`Makefile` too. Also corrected — **"you last touched it" is a claim about the
+past, and I stated it in the present tense.**
+
+### GRANTS: SCOPED BY FILE, AND FILED
+
+frankC's pasmith grant is written into the ticket on master, listing what is in
+scope (`pasmith.py`, `pasmith_run.py`, the fpc-bugs ledger) and what is not
+(`testmgr.py`, `twatch*.py`, tier composition — T's agent, dispatched to a
+disjoint item at the same moment). Both sides were told the boundary; ppxx track
+T confirmed it had not touched either file, so no reversal was needed.
+
+The reason to file rather than message it is the one already in
+[[coordinator-operating-rules]] rule 5 and it keeps needing restating: **an
+unfiled grant does not read as missing, it reads as covered**, because a
+neighbouring T ticket covers the same directory and nothing shows the gap.
+
+### TWO NEW FACES BANKED — the index is at 60, not 34
+
+My carried prompt has said "THIRTY-FOUR faces" for some time; the ticket is at
+**58** before tonight. Do not trust the prompt's count — count the headings.
+
+- **59 — a population count is not a firing count.** b4 censused before writing
+  W1 slice 5 (CMP 2891 vs ALU 2649, 31–52% with MULIMM), then the guard fired on
+  **11 sites** and left `three.pas` byte-identical. Two earlier folds — the `-O2`
+  cmp-immediate arm and the `IR_JUMP_IF_FALSE` branch fold — had already eaten the
+  population, and neither is *in* the population the census enumerated. A census
+  is a refusal to guess, so its output inherits the authority of having been
+  measured, and it measured the wrong set. The mirror of the already-banked
+  "static sweep understates W1" caution; a lane holding only that one reads a
+  shortfall as noise.
+- **60 — an early return makes a later, correct arm unreachable, and the correct
+  arm's existence is what hides it.** frankC's pasmith sitting printed
+  `452 programs, 0 NEW` over a real FPC `-O2` codegen bug. `classify()` short-
+  circuits on `any()` over the two FPC arms and returns before reaching the
+  `fpc-self` check thirty lines down — which carries the right answer verbatim.
+  Distinct from face 33 (a capability nothing invokes): here the capability *is*
+  invoked, the rule is written down, the destination directory exists holding a
+  reduced example. Everything a reviewer would grep for is present and correct.
+
+### THE ONE I AM WAITING ON: WATCHER-CODE PROVENANCE
+
+ppxx track T reported, as a deploy detail, that **`trackt restart` silently keeps
+the old code** — the clone sits detached at the sha under test, so `git pull`
+there fails *by construction*, and the restart reports success. Taken one step
+further than the ticket needs, that means **every tstate verdict is produced by
+an unknown version of the harness, published under the tested commit's name, and
+nothing in the report says which.**
+
+I have asked for a **watcher-code provenance field in the published report** —
+the sha of the clone's own `tools/`, distinct from the sha under test — in
+preference to a correct-restart runbook line, because a runbook line is skippable
+and a field is not. The direction that bites: a stale watcher keeps reporting the
+bug it was already fixed for, and the fix's author reads that as "still broken at
+HEAD".
+
+Until that field exists, treat **any** tstate verdict that contradicts a landed
+fix as harness-version-ambiguous, and re-check at HEAD before acting. This is a
+sharper version of the standing rule that "still red" proves nothing under the
+pin boundary until you know which binary ran.
+
+### FILED THIS TICK
+
+- `audit-a-...-sibling-arm-nobody-checked` [A p50] — frankA's sweep, six
+  instances, scoped as a one-time sweep producing a ticket per finding, **not** a
+  checker.
+- `bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident`
+  [T p45] — measured, not reasoned: `test-nilpy` classes `corpus`/1200s, so
+  frankA's wedge-a-tier worry is answered no, but it lands there because the
+  recipe text contains `sqlite`/`lua`/`uforth`. Delete one test file and the suite
+  drops to 90s and publishes false REDs.
+- Faces 59 and 60 into the family index.
+- frankC's grant, onto its ticket.
+
+**A hook catch worth repeating:** my own heredoc for that T ticket contained the
+literal blocked tier name in a `## Gate` section and the PreToolUse hook refused
+the whole call. The hook substring-matches **anywhere** in an invocation,
+including inside a heredoc writing a document. Paraphrase in prose too, not just
+in commands.
+
+
+## LIVE FILE OWNERSHIP — the table that should have existed an hour ago
+
+**2026-08-29, after a near-collision only a worker's discipline caught.** frankA
+declared its files before editing (`compiler/pasparser_generic.inc`, possibly
+`lexer.inc`) and asked whether frank-rust held either. It did — **the same file,
+on the same ticket, mid-compile.**
+
+**The protocol worked; my bookkeeping did not.** frank-rust had reported its file
+set to me well before. I held it in context and never wrote it where another
+session could see it. *A file-ownership fact that lives only in the coordinator's
+context is a fact the fleet does not have* — and this seat's context is the one
+guaranteed not to persist.
+
+| session | ticket | files declared |
+| --- | --- | --- |
+| frank-rust | `bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized` [P] | `pasparser_generic.inc`, `pasparser_proc.inc`, `pasparser_prog.inc` — **live** |
+| frankA | `feature-a-error-does-not-halt-so-a-parse-can-be-speculative` [A p70] | switched off the collision |
+| pxx-a5 | `chore-a-wire-the-nine-passing-orphan-tests-...` | `Makefile` + nine Pascal subjects — **pull first, frankA moved `Makefile`** |
+| frankC | `bug-t-pasmith-calls-an-fpc-o2-bug-...` | `tools/pasmith*.py`, `tstate/fuzz/fpc-bugs/**` (grant filed) |
+| ppxx track T | deploy gap → **done** (`2ec50b9d0`, `620259afc`); next: duration signals, heap-debug sweep | `twatch-setup.sh`, `trackt.py`, `twatch.py` |
+| frankB | `feature-lib-tkinter-grid-pad-accepts-a-two-tuple` [B p45] | switched off the IDE ticket; unblocks songformatter |
+| frank-optimize-b4 | W1 slice 6 landed (`7f01306c8`); init-temp next | backend/codegen; `emit.inc` ownership **queried for frankS** |
+| frankS | hosted xtensa syscalls (`ca26f22cd`) | `compiler/xtensaenc.inc` (granted after it verified the map); needs `emit.inc` |
+| frankwasm | `feature-demo-songformatter-pxx-target` [E p68] | Track E; three tickets now pushed at `08513fb42` |
+
+**Keep this current every tick.** Two near-misses tonight were one error: **a
+claim about file ownership stated in the present tense from evidence about the
+past.** The rule frankA's message earns: **declare files, name your fallback,
+proceed on the assumption it is free** — it converts a collision into a question
+that costs one reply.
+
+## A SIBLING'S COMMIT LANDING MID-MEASUREMENT — twice in one evening
+
+Both lanes running exact measurements hit the same thing, hours apart, and
+neither was doing anything wrong.
+
+- **frankA:** first gate went RED on a stale binary — `6cc4afc17` arrived via
+  rebase and its compiler predated it. Caught because *the gate said so by name*.
+- **b4:** measured slice 6 as leaking outside its `-O3` gate — `-O0` output grew
+  82 bytes for a pass gated `OptLevel >= 3`. **It was one message from reporting
+  it.** frankA's `8b35e88fa` had landed in its checkout between the slice-5 and
+  slice-6 builds; the growth was frankA's documented +2 instructions at loop
+  entry, arriving in b4's tree while it read the diff as its own.
+
+**`tools/sync.sh` rebases, so a sibling's commit enters your checkout between two
+builds and your baseline moves silently.** Nothing announces it. Both catches
+came from a diagnostic that named the tree rather than the change:
+`converged after 2 round(s)` where every previous build said 1, and per-procedure
+`.map` extraction showing **3 procedures, +82 bytes, all RTL, none user code** —
+"only RTL, never user code" is what pointed at a foreign change.
+
+**The generalisation, which is b4's and is now its standing rule 3:** *when a
+result says something that cannot be true, suspect the baseline before the
+change.* An `-O3`-gated pass changing `-O0` output is impossible, so the
+measurement had to be wrong rather than the code — and b4's first instinct was
+still to hunt the leak in its own guard, theorising about operator precedence for
+several minutes before measuring. **The repo's own rule, broken under a
+plausible-looking wrong number.**
+
+Coordinator consequence: when a lane reports a surprising measurement, **ask what
+its baseline was and when it was built** before relaying it. That question costs
+one line and would have caught both.
+
+## Late 08-29 — tooling landed, a stranded branch, and my own rules used on me
+
+**Three tooling fixes, all measured before and after, all mine:**
+
+1. **`tools/sync.sh` exited 0 after failing to push** (found by frankD). Not
+   retry budget — `push_with_retry` returned the true status and the caller's
+   `echo "sync: pushed"` **replaced** it, so commits sat local while resolve
+   lines still read `PENDING-COMMIT`. Now `push_or_die`, budget 3→6, growing
+   pause. Control both directions: stubbed failing push exits 1 and prints no
+   success line; the old shape printed success and exited 0.
+2. **Two more spellings of `PENDING-COMMIT` were invisible to BOTH tools.**
+   `check` reported **zero** while seven `done/` tickets owed a citation:
+   `resolved: PENDING-COMMIT` and a Log line *ending* in the placeholder with no
+   `commit` keyword. `PENDING_RE` now describes the **shape** (any frontmatter
+   key; an unbackticked placeholder at a list item's end) rather than
+   enumerating key names, and the substitution moved into `progress.py fill`
+   beside the detection. **The previous fix gave the two tools one DEFINITION
+   and left them two IMPLEMENTATIONS, so the same drift was still available and
+   took it.** 0 → 5, then filled.
+3. `gate.sh` was **not** a bug — investigated and closed rather than relayed.
+
+**`frankA` died and restarted mid-work** (new session `[1dc006]`, new tmux
+window). Its tree held only a staged ticket rename — no code, nothing unpushed —
+and I verified that *before* writing to the fresh session, then re-briefed it
+with its predecessor's plan and reasoning. **A restarted agent under the same
+name is not the agent you were talking to**; `ListAgents` shows the age, and
+SendMessage warns.
+
+**frank-rust had been working on a long-lived `rust` branch** and reported
+`origin/master` as 135 behind and abandoned. Backwards: master was 222+ ahead and
+is the trunk. A green Track P fix, a third unasked-for fix, and two p65 tickets
+were **not merely unmerged but unseen** — Track T sweeps `origin/master`, so a
+branch commit gets no cross-target verdict and no visibility to any lane that
+might duplicate it. It cherry-picked onto master cleanly (only BOARD conflicted;
+the three `pasparser_*.inc` applied clean across 225 commits, which is the
+ownership table holding). The remaining ~134 commits are
+`decide-what-happens-to-the-136-commit-rust-branch` [U p60] — **a merge that size
+is topology with a blast radius, and branch permission is not merge permission.**
+`origin/wasm` is the same category; two long-lived branches is a pattern.
+
+### MY OWN RULES, USED ON ME, THREE TIMES IN ONE EVENING
+
+Worth recording as a property of the seat rather than as three lapses:
+
+- **GREP FOR THE INCUMBENT.** I scoped a status page for frankD; `docs/reference/status.md`
+  already existed and was already good. I relayed that rule to two lanes the same
+  evening.
+- **A claim about ownership stated in the present tense from evidence about the
+  past.** Twice — telling pxx-a5 the `Makefile` window was its own minutes before
+  frankA moved it, and telling frankA nobody was near `symtab.inc` when the
+  ticket's own tail said otherwise.
+- **Then the inverse:** I held frankA off `symtab.inc` on b4's sentence, which was
+  itself stale. b4's own verdict: *"a stale present-tense claim outranking a
+  correct measurement purely because it came from a person."* **frankA read the
+  tree and was right both times; I overrode it with human assertions twice.**
+
+The generalisation: **a peer's present-tense claim feels like fresh evidence and
+is not.** Ask what a claim was measured from and when — the same question that
+catches the sibling-commit baseline trap, applied to people.
+
+### AUDIT INSTANCE 8 BREAKS THE SHAPE, USEFULLY
+
+frank-rust added an eighth to `audit-a-...-sibling-arm-nobody-checked`, and
+flagged that it does **not** fit: rows 1-7 are sibling-arm cases; row 8's comment
+is about the **same arm** and is simply false — a fixed point terminating on
+`until TokCount = dgenBefore` while the same round removed 8 tokens and inserted
+8. **Distance: eleven lines, same procedure, same screen.**
+
+So on frankA's tooling-vs-reading question this instance argues for **neither**:
+there was no sibling to visit, and reading more carefully would not have helped
+because *the comment is more persuasive than the code beside it*. What refuted it
+was an output going wrong. frank-rust's remedy line is the keeper: **an invariant
+stated in prose next to the code it governs is worth nothing until something
+fails when it is violated.**
+
+## 2026-08-30, ~02:00 — nine-lane night: what a future coordinator must not re-derive
+
+Written by frank-coordinator while nine sessions ran concurrently. Everything
+below was **measured**, not inferred, and most of it cost somebody an hour.
+
+### Use the tools, not a list you typed
+
+- **`tools/fleet_dirt.sh`** (`7710927aa`) — who holds which shared file, right
+  now. **Run it every tick.** It exists because the coordinator's hand-rolled
+  scan was a hardcoded list of nine clone names and **there are sixteen pxx
+  checkouts under `$HOME`**, including worktrees (`pxx-songfmt`, `pxx-ctl`). A
+  session was working in one of the four that list could not see, and a file was
+  granted while being edited. **An absent checkout is indistinguishable from a
+  clean one.**
+- **Check the BRANCH, not just the dirt.** The `~/frankwasm` clone sits on
+  `wasm`, 369 behind master; that lane works in `~/pxx-songfmt` on master
+  instead. Dispatching into the wrong checkout strands the work.
+- **`tools/factsheet.sh`** — regenerates the project numbers a blog draft had
+  hardcoded on 2026-08-14, **every one of which had rotted by 08-30**. Its own
+  first cut was wrong on three of ten: resolved decisions live in `decided/`
+  (not `done/`), pins are the `stable_linux_amd64/default/history.log` line
+  count (not a commit-message grep), and `compiler/builtin/**` is compiler
+  source (a 14% undercount without it).
+
+### Two facts about gates that change what "green" means
+
+- **The self-host fixedpoint is structurally BLIND to anything off the Pascal
+  path.** `make compiler/pascal26` compiles Pascal; `CProgramMode` is never set.
+  On a C carve-out it goes green **whatever you do to those routines, including
+  deleting their bodies.** Same for NilPy, Rust, Zig and the cross backends.
+  The standing remedy, adopted 08-30: **a lane whose code the self-host build
+  does not execute needs its own oracle** — for the `cir.inc` work that is ten C
+  programs' binaries required to rebuild byte-identical against a pre-move
+  baseline, with the fixedpoint reported as *"the rest of the compiler still
+  builds"*.
+- **`pinned` is not a control on a busy night**, and its frozen builtin
+  snapshot silently predates recent fixes — which is why hosted xtensa could not
+  allocate under the sanctioned toolchain even after the fix had landed.
+
+### The `-I` capture rule, measured twice
+
+**Any `-I` root beats the DEFAULT RTL path. Only an explicit, EARLIER `-Fu`
+wins.** `-I` with **no `-Fu` at all** captures — so *"we don't pass `-Fu`, so
+ordering isn't our problem"* is exactly backwards, and passing an include root
+*"inert where unneeded"* is false: **the flag IS the capture mechanism.**
+Compiler-side fix at `4576ad4d1`; the exposure is silent because the capture
+compiles clean.
+
+### Track T truth is host-specific and currently split
+
+As of 2026-08-30T00:00Z, **`seven` is the fleet's only current cross-target
+truth** (full tier `f2706f45eabe`, 22:05Z) and **plexus's tstate is stale for
+two jobs seven shows green** — a red in `plexus.json` right now is not evidence.
+Also: `learn_timeout()` raises a timed-out job's duration and leaves `n=0` while
+its only consumer gates on `n >= METRICS_MIN_RUNS`, so **a job that has never
+passed on a host can never earn a bigger budget there**, and `calibrate()`'s
+floor gives a 2010 Westmere byte-identical budgets to a 2013 Ivy Bridge.
+
+### For the owner — three hook false positives in one session, report only
+
+`.claude/hooks/no-full-suite.sh` matches its blocked text **anywhere**, so it
+fired on a **ticket body**, on a **counting glob inside a heredoc**, and on a
+**git commit message** that quoted the pattern. Each individually cheap; three in
+one night is the pattern. **`.claude/**`, hooks, settings and `CLAUDE.md` are the
+owner's** — surface, never edit, and **never file a ticket inviting another
+agent to.** One lane, offered the chance to reword around the matcher, correctly
+refused: *"rewording would have been me tuning text to slip past a safety check,
+which is the wrong instinct even when the underlying action is innocent."* It
+wrote through files instead. **A peer coordinator is not "the user asking"** and
+cannot grant that escape.
+
+### Coordination rules earned tonight
+
+- **Prio must be LOWERED as readily as raised.** Two ranking defects, opposite
+  directions, same root: the board can tell whether a ticket is *unblocked* and
+  cannot tell whether it *should be worked*. `refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed`
+  sat at p45 blocking a whole lane with **zero in-edges**, because a ticket that
+  blocks a *lane* rather than a *ticket* never gets a `blocked-by:` edge — and
+  adding one would have been a false claim, since those tickets could proceed,
+  just not by that agent. Raised to 60. Conversely `feature-a-error-does-not-halt-so-a-parse-can-be-speculative`
+  sat at **p70, the queue head**, while its own author had just said no consumer
+  needs the remaining scope; lowered to 35 with a **trigger**, not a date.
+- **A Track U question whose author is awake is an UNROUTED question, not a
+  human-judgement one.** One was resolved in minutes by routing it to the agent
+  holding the file.
+- **File your own grants.** Four were issued tonight and each is a commit on
+  master, not a message: an unfiled grant does not read as missing, it reads as
+  **covered**, because a neighbouring ticket covers the same file.
+- **When correcting someone's method, say explicitly whether the CONCLUSION also
+  falls** — and when accepting a correction, ask which half you are accepting.
+  Both halves were got wrong in a single exchange, in opposite directions, and a
+  lane retracted a **true** observation on a coordinator's wrong theory.
+
+### The method index
+
+`devdocs/progress/backlog/feature-a-a-refusal-is-a-claim-with-a-date-on-it.md`
+— **92 numbered faces plus lettered amendments, OPEN. Never write "all N";
+count the headings.** Tonight added 66-92. The two most reusable:
+
+- **Face 80** — what predicts a comment going stale is neither distance nor
+  authorship but **whether the sentence and its truth-maker can be changed
+  independently**. Operational form: *a comment containing a count, a target
+  list, or "only"/"every"/"always" asserts something a command can check — write
+  the command in the comment, or write a sentence carrying no number.*
+- **Faces 88 + 90 together** — **the thing that gets checked is not the thing
+  that is load-bearing.** One correct hand-written copy beside three broken ones
+  makes the broken spelling look like house style; a comment clause that is true
+  of the routine it names and false of the operation it is used for means **a
+  reader who verifies it confirms it and stops.**
+
+## 2026-08-30 ~01:00 — the generated boards were the conflict majority all along
+
+**Holdings right now.** frankA → `pasparser_expr.inc` (`managedlocalzerobytes`;
+released `ir.inc` after landing `204fec49a`+`c9d8bed4e`, gate quick GREEN).
+frankC → `ir.inc` (ptrdiff cell; grant filed `7cbd854d2`). pxx-a5 → `tools/sync.sh`
+and `chore-t-push-contention-is-a-fleet-property-not-an-anomaly` [T p55] — the
+coordinator has STOPPED patching sync.sh, that file is pxx-a5's from here.
+frankB → ESP, approved to resolve slice 1 and file a GPIO+ADC follow-up.
+frankD → live doc set. frank-optimize-b4 → offered the `compiler/**` comment sweep,
+coordinating with frankD for the pattern. frankwasm → wasm branch; **no arm of
+`feature-a-merge-the-wasm-branch-the-shared-file-arms` [A p40] is pre-approved.**
+
+**Three tooling defects fixed, all of them mine, all reported by lanes.**
+
+1. **`verify_manifest_landed` searched a `-400` window.** At 864 commits/12h that
+   is FOUR HOURS, so any older session got `*** N COMMIT(S) DID NOT LAND ***` on a
+   healthy repo, with remedy text saying `git cherry-pick` — the alarm manufacturing
+   the duplicate it exists to prevent. frankB and pxx-a5 hit the false MISSING
+   independently. Window removed; unbounded is 0.65s over all 17k commits, so the
+   bound bought nothing. **The `-40` variant I broadcast to eight lanes had the same
+   defect and is retracted.** Correct form:
+   `git log --format=%s origin/master | grep -cF "<subject>"` → expect 1.
+2. **The BOARD merge driver had been inert since the day it was written.**
+   `.gitattributes` said `devdocs/progress/BOARD.md merge=ours`, but `merge=ours`
+   needs `git config merge.ours.driver true`, config is not committable, and **no
+   clone had ever registered it.** Measured over 12h: `BOARD-brief.md` 206 commits,
+   `BOARD.md` 198, `BOARD-done.md` 102 — 26% of all commits touch a generated
+   board, and the busiest of the three was the one the rule did not name. Widened
+   to the glob; sync.sh registers the driver per run; three fleet trees that never
+   had it now do. This closes frankC's proposed merge driver AND the leverage item
+   of pxx-a5's T ticket, with the measurement pxx-a5 asked for as its step 2.
+   frankA's diagnosis — *"the generated boards may be as much of the cause as the
+   loop is"* — was right and pointed at the cause, not the symptom.
+3. **`.git/sync-running`**, written on start, removed by an EXIT trap. "Do not
+   touch the tree while sync runs" had no followable check: `pgrep -f 'tools/sync.sh'`
+   matches its own command line, and the `[s]ync\.sh` bracket trick matches any
+   COMPOUND command containing the string. frankB waited on nothing three times
+   while specifically trying to be careful, and the failure direction is the
+   safe-looking one — you wait forever instead of proceeding.
+
+**Faces 113 and 114 banked** (index now at 114; COUNT, never write "all N" — 90
+numbered headings for 114 faces, because of merges and amendments). 113: a stated
+limit whose MECHANISM is still true and whose CONSEQUENCE moved — the half a
+careful reader checks is the half that does not perish, so the responsible check
+cannot fail. Five instances in one night from frank-optimize-b4 and frankD
+independently. 114: a CITED limit looks already-checked and the line number is the
+part that rots — and a drifted citation does not dangle, it lands on **other real
+code** with no signal to the reader.
+
+**Filed `decide-two-threading-docs-disagreed-for-seven-weeks` [U p40].**
+`threading.md` and `threading-model.md` disagreed for seven weeks; frankD fixed one
+and correctly declined to merge them on its own judgement. **Two docs on one
+subject are a double case** and the sibling rule has no way to fire on them,
+because nothing about "the threading doc" says there are two.
+
+**Standing correction to how I read `ListAgents`:** frankB's row said `busy` and
+frank-rust's says `waiting`; neither is a park line. A lane that has explicitly
+parked says so in words. Measure from the last commit, not from my dispatch.
+
+## 2026-08-30 ~02:00 — six faces in one cycle, and three of my own instruments were the bug
+
+**Holdings.** frankS → the xtensa arm of `EmitManagedLocalCleanupForTarget` in
+`ir_codegen.inc` (scoped grant, filed, **incumbent's measured consent** — see below)
++ the 14 missing IR ops in `ir_codegen_xtensa.inc`. frankC → idle→dispatched to
+`bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead`
+[C p55]; released `ir.inc` and `symtab.inc`. frankA → `managedlocalzerobytes`,
+`pasparser_expr.inc`. frankwasm → Track N, landed `05eff4cc9`. frankB → filing the
+`read`/`write` alias fork for A, then parking the ESP PAL ticket. pxx-a5 →
+`bug-t-a-red-compile-job-reports-six-warnings-and-not-the-error`. frank-optimize-b4
+→ W1 slices + `feature-opt-o3-w1-operand-folds-are-x86-64-only-...` [A+O p55].
+frankD → live doc set.
+
+**THREE OF MY OWN INSTRUMENTS WERE THE DEFECT THIS CYCLE.** Recording together
+because the pattern is the point, not the individual slips:
+
+1. The `-40` commit-verification command I broadcast to eight lanes reports false
+   MISSING at 864 commits/12h, and `sync.sh` had the same bug at `-400`, with
+   remedy text saying `cherry-pick`. Fixed, unbounded, 0.65s.
+2. I routed a ticket by inferring authorship from a **commit subject line**, because
+   `%an` is constant fleet-wide. Wrong lane. Then wrote *"authorship is unanswerable
+   from git here"* into the family index — a **false limit within the hour**. frankA
+   supplied the discriminator: the `Claude-Session` trailer, **42 of 200 commits, 21%**.
+   Authoritative when present, nothing when absent; `working/` covers the rest.
+   **Put the trailer on your commits.**
+3. I endorsed a host-side ESP baseline test that **cannot detect what it asserts** —
+   every PAL call returns `-38` on x86-64 because the backend is `{$ifdef}`-ed out,
+   so the assertion is green before *and after* the feature it baselines. frankB
+   measured it instead of writing it.
+
+**A PHANTOM LOCK, four hours old.** `bug-a-the-fpc-seed-canary-...` existed in BOTH
+`working/` and `done/`. The folder IS the lock, so every ownership scan read the
+stray copy as a live Track A claim. Found only because `git mv` refused to
+overwrite. The copies were **complementary, not identical** — 28 lines of resolution
+write-up existed nowhere else — so "delete the duplicate" would have destroyed the
+record of the fix. Concatenated. **`progress check` now has DUPLICATE-SLUG**,
+calibrated both ways: 0 on the live board, fires on a planted copy.
+
+**Faces 115-121 banked** (index at 121 + amendments; COUNT, never write "all N").
+The two with the widest reach:
+- **118** (frankS) *co-location makes drift visible; only an oracle makes it fail.*
+  A commit gathered six per-target arms into one procedure to stop them drifting and
+  said so; two arms then grew inside it, twenty lines from xtensa's one row, four
+  times. **frankC produced a second instance twelve hours later** — `AllocArray`'s
+  five branches, four setting `align := TARGET_PTR_SIZE` outright, one asking
+  `TypeAlign` and getting 1.
+- **121** (frankC) *a self-differential's reference is not an oracle.* `test-xtensa`
+  compares xtensa against the **x86-64 build**, so it can only ever say the targets
+  disagree, never that both are wrong. A third arm (FPC) inverted the verdict: both
+  targets pick `Write` float widths FPC does not, **in opposite directions on
+  different lines**. Property of the whole cross-target suite.
+
+**Tooling landed:** BOARD merge driver actually works now (was inert in every clone —
+the driver is git *config*, not committable; `sync.sh` registers it per run, and
+`.gitattributes` now names `BOARD*.md`, since `BOARD-brief.md` is the busiest and
+was uncovered). `progress.py`'s `inline()` regex literals hoisted (pxx-a5:
+18.66s→12.99s, `BOARD.html` byte-identical). `.git/sync-running` as a followable
+lock signal. pxx-a5 landed the rebase-frequency half: no-op `sync.sh` 27.3s→11.9s.
+
+**Filed on U:** `decide-should-forwardlint-run-in-the-build-not-only-the-gate`
+[U p55] — a lane shipped a break making the FPC seed uncompilable; it sat on origin
+for three commits while `make compiler/pascal26` stayed green, **exactly as face 31
+says it must**. forwardlint exists for it and is wired only into the optional
+`gate.sh`. Measured 4.1s against a 12s build, paid only on rebuild. Also
+`decide-two-threading-docs-disagreed-for-seven-weeks` [U p40].
+
+**Standing:** a stale RED is the normal case, not an alarm — frankwasm reported the
+seed red and frankC had fixed it 13 minutes earlier. **Re-check against HEAD before
+routing.** And frankC's cited sha `f877923cb` is not on the branch: the pre-rebase
+sha trap, live, which is why `resolve` takes no sha.
+
+## 2026-08-30 ~03:00 — the tooling cycle: five instruments fixed, three of them mine
+
+**All eight lanes dispatched.** frankA → corpus ladder re-probe (measurement only,
+claimed; landed `--emit-obj` as `87dfc2b4d`). frankB → `bug-b-imagereader-getsize-...`
+[B p68]. frankC → `refactor-c-string-literal-decay-belongs-at-the-producer` [C p50]
+(landed the header-body fix `eefa85d70`). frankD → live doc set, 15 of 42.
+frankS → the 14 missing xtensa IR ops (landed the cleanup arm, 1→6 kinds).
+frankwasm → `render_backend` non-termination. pxx-a5 →
+`bug-t-a-wrapped-resolve-citation-is-invisible-to-both-check-and-fill`.
+frank-optimize-b4 → W1 slices, ticket **re-claimed into `working/`**.
+
+**NEW: `tools/whoholds.py`** — who has been writing to a file and how recently.
+Built because frankA measured **607 commits / 10+ sessions / 3 locks** in six hours:
+the ticket lock is not too weak, it is **the wrong granularity** — a claim/resolve
+round trip per commit is friction nobody pays at a per-minute cadence. Reads a new
+**`Lane: <name>`** trailer (additive; does **not** replace CLAUDE.md's
+`Claude-Session:`, which is the owner's spec). Grammar: letters, digits, `_ . -`,
+leading letter, no `@`, no spaces. **Use the name `ListAgents` shows.**
+
+    tools/whoholds.py compiler/ir_codegen.inc
+    tools/whoholds.py --hot
+
+**Protocol question filed, not decided:**
+`decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop` [U p70].
+Recommends making the trailer mandatory **first** — it does not prevent collisions
+but converts each from escalation-and-inference into a lookup.
+
+**FIVE INSTRUMENT DEFECTS, three of them mine.**
+1. `-40`/`-400` commit-verification windows → false MISSING with `cherry-pick`
+   advice. Unbounded now.
+2. I routed by inferring authorship from a **commit subject line** (`%an` is
+   constant fleet-wide), then banked *"authorship is unanswerable from git"* — a
+   false limit within the hour. Trailer is 42/200.
+3. I endorsed an ESP baseline test that **cannot detect what it asserts** (backend
+   `{$ifdef}`-ed out on x86-64, so `-38` before and after).
+4. I relayed frankA's PENDING-COMMIT count unverified: **0 real, not 5** — and
+   `fill_pending` rewrites files, so it would have written shas into prose.
+5. `whoholds` printed absent and present-but-rejected identically. Fixed.
+
+**A PHANTOM LOCK** — one slug in both `working/` and `done/`, read as a live Track A
+claim for four hours. Copies were **complementary**, so "delete the duplicate" would
+have destroyed the fix record. `progress check` gained **DUPLICATE-SLUG**.
+
+**SPENT-EDGES: built, then REVERTED unbuilt.** `STALE-EDGE-HIDDEN` had already
+considered the case and **deliberately declined** it, with the calibration in its
+comment. frankD's closing note is the durable lesson: *the incumbent did its job
+only because its author wrote the **reasoning** down, not the verdict* — a bare
+"declined" reads as an oversight and gets helpfully corrected.
+
+**Faces 115-128 banked** (index at 128 + amendments; **106 numbered headings** —
+COUNT, never write "all N"). Widest reach:
+- **118** co-location makes drift visible; **only an oracle makes it fail.**
+- **121** a self-differential's **reference is not an oracle** — naming one arm the
+  oracle is a role assignment, not a measurement.
+- **125** (frankD) **pessimism is the direction nobody double-checks** — caution
+  looks like rigour, so it is exempt from audit.
+- **126** an instrument that **cannot see** a defect reads exactly like one
+  reporting its absence (`readelf --dyn-syms` on a section-header-less `.so`).
+- **128** (frankC) unifying two implementations of one rule **deletes an accidental
+  oracle** — their disagreement was a free differential test.
+
+## 2026-08-30 ~04:00 — all eight working; `Lane:` is taking; faces at 131
+
+**Assignments.** frankA → `bug-p-the-delphi-generic-rewrite-injects-specialize-...`
+[P p55] (its own, 11-line repro; parser files verified quiet via `whoholds`).
+frankB → `bug-b-drawimage-discards-pdfgens-error-...` [B p52] (its own; **the double
+case is the deliverable** — drawString/line/rect/circle drop codes identically).
+frankC → C string-literal decay. frankD → doc audit, `docaudit` now runs
+`cites slugs limits targets comments`. frankS → `rtti_reg`, then set/read families;
+38 sources still uncompiled. frankwasm → parked `render_backend`, taking next N.
+pxx-a5 → `chore-t-sweep-for-rows-that-assert-stdout-when-the-subject-is-an-exit-code`
+[T p55]. frank-optimize-b4 → W1, ticket correctly in `working/`.
+
+**`Lane:` ADOPTION IS REAL — 25 of the last 200 commits, from ZERO two hours ago.**
+`Claude-Session:` at 47/200. So the U ticket's "make the trailer mandatory first"
+recommendation is live, not dead — re-measure each tick and say so if it stalls.
+`tools/whoholds.py <file>` before opening anything shared; `--hot` for the
+contended set. Grammar: letters/digits/`_ . -`, leading letter, **no `@`, no
+spaces**, use the name `ListAgents` shows.
+
+**Landed across the fleet this stretch:** `--emit-obj` external-name (five
+hand-rolled copies, ten call sites, **one resolver**), xtensa 69→84 matching with
+zero regressions, `Halt(n)` exiting 0 on hosted xtensa, the C header-body import
+bug, `ImageReader.getSize` returning a real pair, the wrapped-citation guard.
+
+**MY OWN CALLS THIS STRETCH, for audit:**
+- Un-blocked `bug-a-xtensa-write-of-any-real-sigbuses-...` (blocker closed) to
+  **`backlog/`, NOT resolved** — "its blocker is in `done/`" and "the capability
+  works" are different claims. Retirement test in the ticket, plus a warning not to
+  let it absorb the separately-filed float-**width** divergence.
+- **`backlog/` vs `unfinished/` is decided by whether the lane that can do the work
+  is STAFFED.** frankB sent its tkinter ticket to `unfinished/` because ranking it
+  would dispatch work Track B cannot perform (gate is pin advancement); I sent the
+  xtensa one to `backlog/` because S is staffed. Same rule, opposite answers.
+- Ruled frankS's `emit.inc` edits **in scope**: *a grant for a defect covers every
+  arm of that same defect in the same file; it does not cover an adjacent different
+  defect noticed while there.*
+- Approved frankwasm's **handoff** of `render_backend` on its own non-neutrality
+  argument (its remaining suspect is adjacent to work it did the same night).
+
+**Faces 129-131.** **129** the SMALLER number is the one nobody questions — an
+over-reporting check gets triaged within an hour; an under-reporting one is
+*pleasant*, and its silence is indistinguishable from success. **130** (pxx-a5) a
+guard built from the UNION of your cases is blind to their INTERSECTION — 19 guards,
+0 FAIL, on a broken condition, because fixtures are naturally written one property
+each. **131** (frankwasm + frankA, converging independently) **bank what you
+ELIMINATED** — a positive finding is self-preserving because it becomes the fix; a
+negative one evaporates unless written down, and it costs more to produce. An
+exclusion set is also what makes a park honest.
+
+## 2026-08-30 ~01:10 — tick: four dispatched, one NEW-RED retracked
+
+**Live (8 fleet sessions + the owner's own ad-hoc ones).** `neo-76`,
+`vibestorm-38`, `neuzelaar2-a7` are **not fleet** — not in `~/frank.sh`'s FLEET
+array, so they are the owner's and are never dispatched by me.
+
+| session | state | on |
+| --- | --- | --- |
+| frankA | busy | Pascal corpus ladder (`6437ae67b`, five of six units compile) — **holds A/P** |
+| frankB | dispatched | `bug-b-seven-of-eight-workarounds-waiting-on-an-open-bug-are-waiting-on-nothing` [B p35] |
+| frankС→frankC | shell | last seen on the C lane; `shell` is AMBIGUOUS, not a park line |
+| frankD | dispatched | continue the `devdocs/dev/**` live-reference audit, read-only, file into owning lanes |
+| frankS | busy | `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45`; queued the emit-obj red |
+| frank-optimize-b4 | asked | shows idle but **holds `feature-opt-o3-register-pressure` in `working/`** — asked for live/park/done rather than releasing a lock I cannot prove stale |
+| frank-rust | waiting | `feature-rust-option-type` in `working/` |
+| frankwasm | busy | wasm lane |
+| pxx-a5 | dispatched | `UNCITED-RESOLVE` in `progress.py`, under a filed grant |
+
+**Track U queue: 24** (was 17 at 22:00 on 08-29). Growing, and that is the lane
+only the owner can drain.
+
+**The retrack worth remembering.** `regression-test-emit-obj-test-emit-obj` was
+auto-filed **Track P** — the watcher guesses from the test source, and `external
+name 'ext_aliased_link'` is a Pascal directive, so the guess was honest. Corrected
+to **A+S** on one fact: `_rv.o`, `_xt.o` and `_xt_windowed.o` all emit `ok` and only
+the **riscv32 link** fails, and **one frontend produced all of them from the same
+source — so a frontend bug cannot be target-specific.** Left as P it sits in a queue
+nobody working riscv32 reads, because *the ranker reads frontmatter, not the body*.
+
+Generalises: **the watcher's track guess is a guess, and it is load-bearing.** It
+decides who ever sees the ticket. Auto-filed regressions are worth a frontmatter
+check on every tick — cheap, and the failure is silent in the direction of "nobody
+was assigned" rather than "assigned wrongly".
+
+**Grants filed this tick** (an authorisation is a finding; an unfiled grant reads as
+*covered*, not as missing): `grant-progress-py-to-pxx-a5-for-the-uncited-resolve-check`
+[T p45], scoped to one check and its devtest. I am not editing `progress.py` while it
+is open.
+
+**Faces banked: 132 / 132a / 132b** (pxx-a5) and **133 / 133a** (frankB). The two
+with reach outside their tickets:
+- **freeze the remainder's size** — when a fix is correct but too large to land
+  safely, hold the ungoverned set at its measured count. One assertion, unbounded
+  liability becomes fixed, fails at the first addition.
+- **when you convert silence into checks, the risk moves to the success path** —
+  the positive control is the one that gets skipped and the one this class of change
+  breaks on.
+
+## 2026-08-30 ~02:5x — tick: five gtk reds are ONE defect; two near-misses of mine
+
+**All eight fleet sessions active.** `frankC` shows `shell` and `frank-rust` shows
+`waiting` — both AMBIGUOUS, neither a park line. Measured from last commit instead:
+frankC landed four C fixes in the preceding two hours (live); frank-rust's last
+Rust-file commit is ~6h old and it holds `feature-rust-option-type` — **asked for a
+park line, did not release the lock.**
+
+**Neither frankC nor frank-rust emits a `Lane:` trailer**, so `whoholds` cannot
+attribute their writes and the ownership question can only be answered by asking.
+Both told; the trailer is cheaper than the question.
+
+| session | on |
+| --- | --- |
+| frankA | typed-const generic regression + 5 gtk tickets as a set |
+| frankB | build `eefa85d70^` — settle the gtk range (its bisect method, proven) |
+| frankC | asked: does the header-static fix change the **Pascal-binding** include path? |
+| frankD | finishing the doc sweep at 26/42, told to stop rather than mine the tail |
+| frankS | `lib/rtl/platform` syscall table (14 sources) |
+| frank-optimize-b4 | the 132a gate-count assertion — **NOT** the A migration |
+| frank-rust | status asked |
+| frankwasm | down-queue on N for something completable |
+| pxx-a5 | `bug-a-testtmp-defaults-to-a-path-every-checkout-shares` |
+
+**Track U: 24.** Unchanged since 01:10. Only the owner drains it.
+
+### The consolidation
+Five `test-c-gtk*` regressions [P p70] share **one** red sha, **one** last-good, and
+**one** 3-commit range holding exactly two code commits. **One defect wearing five
+tickets** — bannered as a set so nobody triages it five times. Candidate is
+`eefa85d70 fix(C): a static defined in a used header keeps its body`, because the
+programs are Pascal binding gtk3 through `gtk3_c.h`. **Recorded as a bounded range,
+not a diagnosis**, with the confirming build named and dispatched.
+
+### Two near-misses, both mine, both the same shape
+1. **I nearly re-laned all five to Track C on the `test_c_` prefix.** The sources are
+   **Pascal**; the prefix means *C-interop*, not *C-language*. The watcher's guess was
+   right. This was two ticks after I banked *"retrack on a bounded argument, never on a
+   story"* — **the rule was not enough; running the check was**, and it cost one `ls`.
+2. **I told pxx-a5 I had flagged a routing note to frankA before I had.** Sent
+   immediately. A claim about an action is an action.
+
+**Standing correction to my own rule (frankD):** *"an obligation needs a command that
+re-derives its status"* is **necessary and not sufficient** — `name-resolution.md` had
+a one-grep acceptance test and went stale for two weeks, because **nothing scheduled
+the grep.** Order: file a ticket → else name a lane and a trigger → add the command
+either way.
+
+**Hook false positives are accumulating** (mine tonight: a test-glob pattern inside a
+heredoc; frankD's: two, for writing prose *about* the gate). Every lane worked around
+them correctly and nobody reached for the escape, which is the owner's to grant. **I am
+collecting, not editing** — `.claude/**` and hooks stay the owner's.
+
+## 2026-08-30 ~06:30 — tick: three grants filed, two self-retractions, faces to 196
+
+**PIN: v394 `53800fbeb0b66e11`** — measured with `sha256sum stable_linux_amd64/default/pinned`
+every tick, never recalled. History a future coordinator must not re-derive: I blessed v394
+`e2ea9034a65ea8b6` at ~06:40, it broke Track B's gate (a parameter typed as an **alias** of
+`Pointer` rejected a class instance that plain `Pointer` accepts, so vendored Synapse stopped
+compiling), I verified it on a six-line repro and **reverted** at ~07:40 (`b8fd07377`). The
+alias bug is now fixed and re-pinned. **grid-pad is CLOSED against the current pin**
+(`a521b5171`, eleven of eleven, frankB) — do not reopen it.
+
+### Live slots at tick end
+
+| lane | on | file ground |
+| --- | --- | --- |
+| frankA | `feature-port-rtl-over-libc`, increment 2 **redesigned** as one out-of-line thunk | `defs.inc`, `compiler.pas`, `symtab.inc`, `ir_codegen.inc`, `emit.inc` |
+| frankS | builtin -55, then the LoadFile pair | `ir_codegen_riscv32.inc`, `ir_codegen_xtensa.inc`, **granted** `builtinheap.pas` ×3 wrappers |
+| frankB | minidom hang, delta-debugging on a **private copy** of `lib/rtl` | `lib/**` |
+| frankC | `feature-c-diagnostics-name-the-module-they-are-in` [C p40] | C frontend + **granted** `lexer.inc`/`WriteDiagSourceFile` |
+| frankwasm | PLAN.md Phase 9j (unparked — it had parked unblocked work "for want of a session") | wasm target |
+| b4 | **`regression-test-threads-test-static-string-literals`**, its own red | `builtinheap.pas` (landed), `EmitStaticLitHandle` sites |
+| pxx-a5 | fuzzing / differential, self-directed per T's charter | `tools/**`, `tstate/**` |
+| frankD | **dry, correctly** — its only ready item awaits the owner's own prose | `docs/**` |
+| frank-rust | **holds `feature-rust-option-type`, messaged twice, NO REPLY. Chase.** | Rust frontend |
+
+### Grants filed this tick — all three, because an unfiled grant fails in BOTH directions
+
+`715a2e1b3` · `lexer.inc` → frankC, bounded to `WriteDiagSourceFile`; **plus** the deliberate
+`ir_codegen.inc` **dual occupancy** (frankA in `EmitSyscall`'s body, frankS in
+`EmitParamSpillsForTarget`'s xtensa arm). The disjointness is a property of **the edits, not
+the file**, and lapses if frankA touches a call site.
+
+`5dbcc861e` · `builtinheap.pas` → frankS, bounded to `PXXSysOpenRO` / `PXXSysLseek` /
+`PXXSysClose`, riscv32+xtensa arms only.
+
+`done/grant-devdocs-dev-audit-to-frankd-time-boxed-report-only` · **discharged, closed by me
+and not by the grantee** — a grantee closing their own authorisation is marking their own
+homework.
+
+**The lesson that cost a dispatch:** that last grant *re-offered work already finished*. It
+was issued verbally, not filed; frankD ran the sweep; the grant was then filed citing that
+sweep's own findings as its rationale; the board, never having seen the first issue, offered
+it as a fresh ticket and **I dispatched it**. frankD's reading is the durable one — *a
+coordinator's memory of a verbal grant and the board's record of it are two instruments, and
+only one is queryable.* The standing rule was half right: an unfiled grant reads as **covered**
+to anyone checking permission (risk: unpermitted action) **and** as **not yet done** to the
+ranker (risk: a wasted dispatch). **File the grant in the same minute you give it.**
+
+### The method that cleared `builtinheap.pas`, and it generalises
+
+Three lanes wanted the file. I asked each **"what did you touch"**, never **"do you object"**
+— and that is the whole reason the real hazard surfaced. It was not a collision:
+
+> `PXXCensusReport` calls `PXXSysWrite` and runs **from inside `PXXAlloc`**, documented as
+> allocating nothing for that reason. A new `PXXSys*` arm that allocates re-enters the
+> allocator; on the threadsafe build the temp's finalize takes the heap lock the caller
+> already holds — `bug-a-threadsafe-plus-heap-debug-hangs-at-runtime` exactly.
+
+300 lines apart, zero textual overlap, **invisible to any collision check.** A semantic
+adjacency, not a textual one. A "do you object?" would have got a truthful *no*.
+
+### Two workers retracted their own recommendations, both cheaper than the alternative
+
+- **frankA** prototyped the arm it had recommended and killed it with a 59/28/13 decomposition.
+- **b4** withdrew its `-O2` promotion: the supporting numbers were real, correctly measured,
+  and silently about **x86-64 only**. On aarch64 the same test is `-O0` 1.193s vs `-O3`
+  **99.083s**, output correct at both — so only a clock with a deadline could ever have fired.
+  Its bisect refuses to localise: **each half is faster at `-O3` and the whole is 83× slower.**
+
+A wrong promotion lands in `-O2`, becomes the proven default, and is then measured by everyone
+as the baseline. **Take a self-retraction immediately and propagate it** — it is the strongest
+correction this system produces.
+
+### Faces added this tick: 190–196 (index `feature-a-a-refusal-is-a-claim-with-a-date-on-it`)
+
+- **190** the fixedpoint proves the compiler reproduces **itself** — not that codegen is
+  unchanged. A change that perturbs codegen *consistently* passes by construction. Diff
+  emitted output against a binary that predates the edit. **190b** re-derive a baseline: a
+  number that never moves is stable or **unmeasured**, and those read identically.
+- **191** assert on positive output **the subject emits**, not on `$?`. The right question is
+  not "do you use pipelines" but **"does any verdict rest on `$?` after one?"** **191a** a
+  silent failure looks like *the result you wanted* — four instances in one night. **191b** an
+  improving metric is not a passing test (9 syscalls, segfaulting binary).
+- **192** a derived figure and its rows are two measurements. **192a** the catch was
+  **arithmetic, not suspicion**; a result *worse than possible* is a harness bug until proven
+  otherwise.
+- **193** **a caveat that ends in a full stop is the one to check** — a limit paired with its
+  escape route defuses itself, and a missing escape route is evidence the limit was *reasoned,
+  not measured*. Converts an expensive audit into a greppable one.
+- **194** the landmine is not in the code that crashes: `Code[p] := Byte(CodeLen-(p+1))` at ~30
+  sites, armed by **growing an emitter**. `rip` at a mid-instruction address is a *proof*, not
+  a clue.
+- **195** repairing the visible defect **retires the only detector for the invisible one** —
+  measured, not supposed. The least deliberate line in the file (a debug dump) was the entire
+  detection surface.
+- **196** each half faster, the whole 83× slower — halving search is structurally blind to an
+  interaction.
+
+### My own errors this tick
+
+- **Relayed a stale POSITION to frankS** — described where it had been, not where it was. **Ask
+  for state; do not assert it.**
+- **Dispatched frankD onto finished work** (above).
+- Two malformed heredocs cost a retry each. `-F <file>` for commit messages remains absolute.
+
+## Tick — 2026-08-30 ~08:4x (coordinator)
+
+**PIN v394 `53800fbeb0b66e11`.** Master builds clean at HEAD: `make compiler/pascal26` exit 0,
+`converged after 2 round(s)`, fixedpoint `a3f0f9e3325f`. Track T **UP** through `97c5fba007f9`.
+
+**Live slots.**
+
+| session | holds | state |
+| --- | --- | --- |
+| frankA | zero compiler files (measured, not recalled) | `regression-test-nilpy-test-nilpy-max-min-iterables` [N p70]; then ParamStr; then the 5 test-asm reds |
+| frankB | none — minidom parked to `unfinished/` | `c[i]` PChar-alias audit next |
+| frankS | `ir_codegen_xtensa.inc` | veneer landed *"xtensa can call further than 512 KiB backwards — the long-call form"* (`aa9ec947b`; the row first said `3f203a20b`, a pre-rebase sha); offered the rv32 encoder truncation [A+S p60] |
+| frankD | — | **dispatched out of lane** to the urgent NilPy hang (D is dry: 1 ready item, itself parked) |
+| frankwasm | `feature-target-wasm` (**live lock, verified — do not release**) | Phase 9j argv + 9k Frac/Int landed; blocked only on the U decision |
+| frank-rust | `pasparser_generic.inc`, uncommitted | Track P generics under an R identity; asked to push + release the stale R lock |
+| frankC | `cir.inc` carve-out, `ir.inc` | last commit 05:29 — longest quiet gap on the fleet, unchased |
+| b4 | uForth blocktest [O p65] | released `feature-opt-o3-register-pressure` |
+| pxx-a5 | Track T tooling | fuzz held under load 16.9; fixed `pasmith_run.py` sentinel handling |
+
+**What I changed this tick.**
+
+- **Re-laned five p70 regressions P → A** (`regression-test-asm-*`). twatch guessed from the test
+  SOURCE (`.pas` → P) because the failing step was unrecorded; the failing **job** is `test-asm`,
+  the x86-64 emitter, which is A whatever it is fed. They were invisible to `ready --track A`
+  while idling at p70 in a lane that does not own `x64enc.inc`. One reports `undefined variable
+  (EmitSyscall)` in `compiler/x64enc.inc`; the only code commit touching that file in range is
+  frankA's `3a0ed43fb`.
+- **Re-priced `decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal` 40 → 70.**
+  Filed at 24 of 52 refusals; frankwasm re-measured it at **32 of 32**. It now gates the entire
+  *pascal26 under wasmtime* anchor. Not raised higher because frankwasm is not idle on it.
+- Faces **211–214** filed to the method index.
+
+**Open, for whoever holds this seat next.**
+
+- **U queue at 31, three at p70.** Only the owner drains it. The WASI one is now the sole gate on
+  a whole lane's milestone and is the one to surface first.
+- **frankC unchased**, quiet since 05:29.
+- **twatch's job-name hole**, relayed to pxx-a5, not fixed by me (T's file): a job NAME is
+  sometimes a *subject* (`lib-test#00`, 39 sources, four lanes) and sometimes a *mechanism*
+  (`test-asm`, always the x64 emitter). Only the second kind carries a lane, and twatch consults
+  the name in neither case — right for the first, wrong for the second.
+- **Five test-asm tickets may be one defect.** twatch files per source, so one cause splits into
+  five slugs — the same overcount pxx-a5 found in the fuzz ledger tonight.
+
+## Tick — 2026-08-30 ~09:2x (coordinator)
+
+**PIN v394 `53800fbeb0b66e11`** (measured). Track T **UP**. U queue **31**. `progress.sh check`:
+3 STATUS-DRIFTs cleared, 4 SIDE-BRANCH-SHA (all `origin/wasm`, all deliberate), 1 DANGLING-SHA
+which was **mine and deliberate** — the index now carries `DANGLING SHAS BY DESIGN`.
+
+**THE CARRIED /loop PROMPT FIRED STALE THIS TICK** and it is worth recording as the seat's
+characteristic failure. It described ~07:15: frankA on `feature-port-rtl-over-libc` holding seven
+compiler files (it holds none), frankS's veneer "QUEUED" (landed `aa9ec947b`, corrected from the pre-rebase `3f203a20b`), frankwasm on Phase
+9j (9j *and* 9k landed), b4 on the page-align (landed `75d2ba662`, and it has since closed both
+`-O3` bugs), the index "past FACE 201" (past 218). **Every live slot in it was wrong and every
+line read as authoritative.** Step 7 exists for exactly this — a false fact in the recurring
+prompt re-justifies itself on every wake. Ran the tick against measurement instead.
+
+**Live slots — all dispatched, no idle session.**
+
+| session | holds | state |
+| --- | --- | --- |
+| frankA | none at last report | NilPy max/min claimed; **the urgent hang routed to it** (both candidate files are A/N and it owns both); ParamStr and 5 `test-asm` reds queued |
+| frankB | — | the captured-vs-derived expectation audit it filed [T p40, B file-ownership] |
+| frankS | `ir_codegen.inc` xtensa arm — **GRANTED**, *"grant(A+S): ir_codegen.inc's xtensa cleanup arm to frankS, b4 verified off"* (`61b50743f`; the row first said `6901fa114`, **my own** pre-rebase sha) | encoder guard landed *"riscv32's PC-relative encoders now refuse what they cannot encode"* (`2f81d8008`; first said `9bc4113e6`) |
+| frankD | — | `feature-pascal-corpus-expansion` [P p75] park assessment, **read-and-judge, no edits** |
+| b4 | `bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code` | live red in limited/full tiers; 20 rows, bounded |
+| frankwasm | `feature-target-wasm` (**live lock, verified**) | blocked only on the WASI U decision [U p70] |
+| pxx-a5 | Track T | watcher version stamp landed; **fuzz deliberately deferred** until the tree settles |
+| frankC | `cir.inc`, `ir.inc` | **silent since 05:29**, uncommitted `tools/c_lowering_callers.py`; chased twice |
+| frank-rust | `pasparser_generic.inc` | **10h unpushed, four messages unanswered** — P lane blocked on a file I cannot prove is live |
+
+**Two NEAR-DUPs adjudicated rather than left open.** `bug-a-twenty-new-cross-target-rows…` [A]
+and `chore-t-make-every-cross-target-row-assert-the-exit-code` [T p45] are a **regression** (531
+armed → 551, 20 rows, red tier) and a **campaign** (all 531, piloted per-arch because
+`run_target.sh` returns the *emulator's* status and signal deaths do not encode identically under
+qemu-user). Recorded on both tickets so nobody merges them.
+
+**Escalation for the owner, and it is the only thing here I cannot solve:** frank-rust has held
+uncommitted work in `compiler/pasparser_generic.inc` since 23:39 on 08-29 and has not answered
+four messages. I will not touch another session's tree and I will not tell it to discard. The
+cost is that `feature-pascal-corpus-expansion` [P p75] — the top non-urgent item on the board,
+parked with seven now-resolved blockers — cannot be routed to anyone.
+
+## Tick 2026-08-30 ~08:5x — the xtensa alignment finding, and two aperture bugs in one check
+
+**The load-bearing item, and it is live as this is written.** frankS bisected the
+41 xtensa windowed divergences to `75d2ba662` (b4's ELF page-separation perf fix)
+and then diffed the emitted code rather than theorising. Verdict: **the ELF writer
+has never aligned the data section, on any target.** Data began wherever code
+ended — 195723 (≡3 mod 4) before the commit, 196492 (≡0) after — and the 4096-byte
+page pad 4-aligns it as a *side effect*. Xtensa faults on unaligned word loads
+(SIGBUS, signal 7); x86-64 and riscv32 tolerate them, which is why nothing else
+ever reported it.
+
+The sub-hypothesis frankS checked and **killed** is the part that matters: `code
+mod 4` does **not** separate the 41 that gained from the 53 that already passed —
+every sampled program in both groups is ≡3 on the parent. So the misalignment is
+universal and always was; which program faults depends only on whether it
+dereferences a word that lands misaligned. **The other 53 were never safe, only
+untested.** A refuted prediction bought a much larger true claim than the
+confirmation would have.
+
+Ticket `bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why`,
+raised **45 → 60**. Repair is b4's (`elfwriter.inc` is its file and it is mid-edit
+there tonight); frankS stopped at diagnosis deliberately and was right to.
+**The 41 canaries are in NO gated suite** — `test-xtensa` is Call0-only and does
+not run the windowed ABI at all — so if the padding arithmetic moves, nothing in
+the repo notices. frankS is filing that coverage gap; b4 has been asked to fold an
+explicit alignment invariant into the change it is already landing rather than
+sequence it behind.
+
+**Two attribution errors of mine, one pattern.** I reasoned from *who owns the
+file* to *whose commit changed the behaviour* — twice in one week now (ParamStr,
+then this). File ownership predicts collisions and predicts nothing about
+causation. frankS's own route failed differently and the shape is worth keeping:
+**a saved binary brackets your commits but not their new parents.** Its
+`cc-veneer` was built at local sha `3f203a20b`, which landed as `aa9ec947b` after
+rebase — the binary genuinely contained all seven of its commits, so the reasoning
+about it was sound and the conclusion still wrong. Neither route was recoverable
+by more careful thinking; only the bisect settled it.
+
+**Board tooling.** `DANGLING-LINK` had a second defect, found by frankD: it was
+written inside the STALE-PARK family and inherited that family's **folder**
+aperture (`unfinished`/`blocked`/`working`), even though its own defect has
+nothing to do with parks. The scan *inside* the loop had been widened on purpose;
+the loop's own guard came along unexamined. It reported 0 findings while four live
+dangles sat in `backlog/`, two of them the specifying ticket's own worked
+examples. Fixed: scope is now everything except `done/` and `rejected/`, with
+`decided/` in scope **on purpose** (an `Implementation: [[x]]` line naming an
+unfiled ticket is a settled call nothing tracks). Non-vacuity measured — 0 before,
+3 after, park family unchanged at 11. Fifth outcome added (a ticket **merged into
+the one citing it**: the absorbed slug's citations come along, so the document
+cites itself as a separate dependency), plus a `DANGLING LINKS BY DESIGN` escape
+mirroring the sha one.
+
+**Both of that check's defects were inherited context I never examined** — the
+agent-memory namespace I calibrated past, and the folder tuple I copied from the
+family the check was born in. Neither was a reasoning error. **The assumption
+arrived already decided, so it never presented as a choice.**
+
+**Filed:** `decide-what-a-reduced-compiler-must-still-self-host` [U p55] — the
+second half of an escalation `feature-a-build-a-reduced-compiler` asserted had
+happened and hadn't, for eleven days, because a dangling wikilink reads as a
+dependency rather than as an absence. Also merged two DUPLICATE-SLUG pairs
+(`regression-test-asm-{test-asm-emit-x64,test-x64enc}`): the twatch ticket agent
+moved them to `done/` while frankA was appending its resolution at the `backlog/`
+path, leaving a headless fragment holding the only copy of the write-up.
+
+**Box state:** load **21 on 12 cores** (pxx-a5's measurement) — Track T's watcher
+mid-`--tier full` in its own clone plus one fuzz stream. Nothing that rebuilds a
+compiler should start wide right now; per-fix `make compiler/pascal26` is fine.
+
+**Open, unstaffed:** `bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only`
+[A p35], filed by pxx-a5 — `p^ := c` with `p: ^string[8]` compiles on x86-64 and
+is a loud "not yet supported" on i386/aarch64/arm32. One missing case in an
+otherwise-complete lowering, ~4 instructions per backend, neighbouring arms
+implemented everywhere. Low prio because it is a refusal, not silent wrong code.
+Waiting on A capacity, not on a decision.
+
+## Tick 2026-08-30 ~09:1x — the partition, and two dangling-link outcomes that were whole clusters
+
+**frankS partitioned the two open xtensa SIGBUS tickets against the alignment
+boundary and hit THREE buckets, not one** — because it ran all four repros as
+written rather than the two the hypothesis predicted.
+
+| repro | `75d2ba662^` | `75d2ba662` | HEAD |
+| --- | --- | --- | --- |
+| `WriteLn('B ', d)` Double, Call0 | ok | ok | ok |
+| `a: string[8]; WriteLn(Length(a))` windowed | SIGBUS | ok | ok |
+| `WriteLn(Copy(s,2,3))` windowed | SIGBUS | **SIGBUS** | **SIGBUS** |
+| `SetLength(a,50); WriteLn(a[49])` windowed | SIGBUS | ok | ok |
+
+- `bug-a-xtensa-write-of-any-real-sigbuses…` — passes at ALL THREE builds. Not
+  the data-section defect at all; already fixed by frankC's frame-slot alignment
+  floor. **There are TWO alignment defects with the same symptom on the same
+  target — one in the FRAME, one in the DATA SECTION** — and this ticket was the
+  first. Resolved on its own retirement test; the float-width divergence was NOT
+  allowed to be absorbed and stays open.
+- frozen-string and dynarray-SetLength — green on the side effect, **not
+  resolved**, cross-referenced both ways. Closing them would mark a live
+  exposure fixed.
+- **`Copy` under windowed SIGBUSes at HEAD.** Deterministic, windowed-only
+  (Call0 prints `bcd` and matches). The alignment story never explained it.
+  **Had the hypothesis picked the repros, this would have been swept into the
+  alignment ticket and closed by a commit that does not fix it** — a live SIGBUS
+  filed as resolved. Ticket narrowed to `Copy` alone, re-priced 40 → 50.
+
+**frankD measured the three post-aperture dangles, and #3 was a whole cluster.**
+`bug-pascal-subclass-inherited-members` — cited four times, credited with a
+prio-60 filing it never had, two modules scheduled around it — **all four arms
+are FIXED at HEAD**, landed under three other names in `done/`. Six programs
+byte-identical to CPython, including the two reported consumers in their own
+shapes (`Counter(dict)`, and `Base.put()` dispatching into an override =
+configparser's `optionxform`). **`Counter` need not ship as a dict mode;
+`feature-nilpy-configparser` is not blocked in practice.** The deliberate dangle
+was right for a reason that survives agreement: a re-point at the [A p70] ticket
+would have **asserted this measurement without taking it** — correct by luck,
+with three arms marked resolved on evidence covering one.
+
+Also from frankD: **`--strict-fpc` is accepted, documented at `defs.inc:2189-2191`
+and changes behaviour, and is NOT in `--help`; 67 markdown files name flags
+`--help` omits.** Filed `bug-a-help-does-not-advertise-flags-the-compiler-accepts`
+[A p35]. It is a bug, not a docs chore: `--help` does not produce "I am not
+sure", it produces "that flag does not exist", and the next move after that
+conclusion is to delete a true reference. **Do not fix it by adding one flag** —
+that retires the detector for the other 66; enumerate the set from the parser.
+
+**Sha-proximity as a DANGLING-LINK filter: measured and refuted.** 55 dangles
+board-wide, 5 with a sha within ±1 line, 50 without; all 55 in `done/`/`rejected/`.
+It would suppress ~1 in 11 and the folder rule does the rest. Not landed. The
+honest caveat is that the live folders are at **zero**, so tonight any refinement
+would be calibrated against an empty set. frankD's sixth flavour stands anyway:
+**the remembered thing was a commit, not a ticket** — a slug reproducing
+`4eadf7f54`'s subject line, which no rename can fix — and *a slug next to its sha
+is self-repairing; a slug alone is not*.
+
+**Box: load 17-21 on 12 cores.** pxx-a5 filed
+`feature-t-a-second-oracle-dimension-section-alignment` [T **p55** — I wrote p35
+here at ~09:1x and had raised it to 55 at 08:44 in `686b5480b`, so this citation
+was stale by half an hour when written, not aged into staleness] with an explicit
+anti-goal (do not answer it by running everything under xtensa, which makes the
+faulting target the oracle for a property all targets share) and the requirement
+that it hold at `-O0`, where the accidental padding does not apply.
+
+## Tick 2026-08-30 ~09:2x — bisecting BACKWARDS in this repo, and the symtab.inc slot
+
+**frankA resolved the max/min regression (`f11128eaf`, verified on origin by
+artefact); cause was `7b73a385d`.** That commit moved the callable→Pointer
+coercion into `PyBindKwArgs` — the KEYWORD path — and the coercion runs AFTER
+overload selection, so it made the `key: Pointer` candidates *viable* for a
+keyword call and newly reachable for receivers that cannot be walked as a list.
+A dict handle bound to `max(l: TPyList; key: Pointer)` and was dereferenced as a
+TPyList. The fix completes the receiver set (TPyDict + AnsiString, which
+`sorted` has carried since `bug-nilpy-sorted-over-a-string-segfaults`
+**[DEAD SLUG — resolves to nothing. Only candidate is
+`bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults` in `done/`;
+NOT re-pointed, because matching a dead name to a live one on subject
+similarity is assertion without measurement. frankA wrote this citation and
+also carries it inside `regression-test-nilpy-test-nilpy-max-min-iterables` —
+frankA's to resolve, from the context that produced it]**) rather
+than special-casing the dict. Library only; compiler binary byte-identical.
+
+**THE DURABLE FINDING — BISECTING BACKWARDS IS VOID UNLESS YOU RESEED.** This is
+the copied-seed no-op trap's mirror image and it produces the same silent wrong
+verdict from the opposite direction:
+
+- `make compiler/pascal26` seeds from `./compiler/pascal26` — **the previously
+  tested commit's binary.** Walking backwards, an older commit's source will not
+  build under a newer seed: frankA's died with `undefined variable
+  (__pxxblockmove)`. Both endpoints returned "cannot judge", **which reads
+  exactly like a flaky repro**, not like a broken method.
+- Recipe: seed each commit from **its own**
+  `stable_linux_amd64/default/stable_pinned`, `rm` the fixedpoint stamp, `touch`
+  the sources (a copied-in seed is newer than them — the CLAUDE.md no-op trap),
+  and **require `converged after` before accepting any verdict.**
+- A plain `git bisect start` spans ~5600 commits here, nearly all watcher tstate
+  publishes. It announced "roughly 12 steps" and burned 10 minutes. **Path-limit
+  it or test candidates directly.**
+
+frankS independently did the reseed-and-backdate correctly on the same night for
+the xtensa bisect, which is two lanes converging on a procedure that is written
+down nowhere. It is written down here now.
+
+**Two more near-misses from the same session:**
+
+- frankA wrote a Variant keyed overload too and read *"tuple and generator now
+  work"* as its effect. That compared a **literal** receiver before against a
+  **named** receiver after — two axes at once; tuple-named and generator-named
+  already worked on the baseline. Pair deleted, suite still matches, not in the
+  commit.
+- **A regression ticket's test file cannot baseline its own new rows.** With the
+  whole file, the baseline dies on line 6 and never reaches rows 16-20 — they
+  would have been "verified" by a run that never executed them. Each row was run
+  alone against the baseline library, which is cheap because
+  `compiler/builtin/**` is consumed when compiling a `.npy`, not linked into the
+  compiler, so stashing `pyeval.pas` needs no rebuild.
+
+**Residual filed, not closed:**
+`regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload`
+[N p50] — a LITERAL str receiver with `key=` is still broken and is a regression
+from the same commit; a NAMED str works. The keyword promoter re-targets on the
+argument's static type, so a literal reaches no keyed overload. Needs
+`pyparser.inc`; plausibly the same change as
+`bug-nilpy-keyword-arg-vs-overload-set`. A literal tuple / inline generator
+fails identically but is **pre-existing**, not a regression.
+
+**SLOT: `symtab.inc` is frankA's** — it is running the symtab hang, ParamStr and
+the p45 cycle-guard ticket as ONE pass over that file, which is the right
+batching. **frankS's veneer item stays queued behind it.** frankA is treating
+frankD's root cause as the hypothesis it was labelled as, and writing the probe
+that dumps the folded bucket after each `SymRollbackTo` rather than assuming the
+cycle.
+
+`pyparser.inc` is free — measured, nobody has touched it in the recent range and
+no tree holds it. frankA told frankD it was free and said so rather than
+retracting it silently.
+
+## Tick 2026-08-30 ~10:1x — the sweep closed clean, and a green test that could not fail
+
+**ALIGNMENT: CLOSED, MEASURED.** b4 landed `df98fea47` (`AlignCodeForData` +
+`ELF_DATA_ALIGN = 8` + `CheckDataBaseAligned` as an `Error` at all three
+`dataBase :=` sites), and **tested the invariant by DELETING the page pad** —
+data at 195724 vs frankS's 195723, canary still green, so the 4096 is no longer
+load-bearing. frankS then swept binary `62cfb924053f`:
+
+```
+xtensa call0     104 -> 104   lost 0  gained 0
+xtensa windowed   94 ->  94   lost 0  gained 0
+riscv32          111 -> 111   lost 0  gained 0
+```
+
+**Set difference both directions, not a count comparison** — load-bearing here
+and nowhere else in that table: at `75d2ba662` those 94 passed by accident, so
+if the deliberate fix had traded part of that set for a different one,
+`94 == 94` would have said nothing. A lucky reason was replaced by a stated one
+without moving the boundary. Scope: 129 hosted programs under qemu; nothing
+about ESP bare-metal or the other four targets.
+
+**PT_LOAD split implemented (not yet pushed at time of writing), and it carries a
+decided trade.** Splitting introduces a page-size dependency the single RWX
+segment never had: the loader maps each `PT_LOAD` from `PAGE_START(p_vaddr)` at
+the **hardware** page size, so an unaligned code/data boundary re-maps the
+overlap R+W and real code in it dies on first call. 4096 is right for x86-64,
+i386, arm32, riscv32 and hosted xtensa; **aarch64 kernels ship 4, 16 or 64 KiB
+pages**, which is why GNU ld defaults `max-page-size` to `0x10000` there.
+b4 set `ELF_AARCH64_PAGE = 65536`. Cost: aarch64 hello 154240 → 199296
+(**+29%**), bounded not proportional (<1% on `compiler/pascal26`); x86-64
+unchanged; ESP bare image untouched at one RWX segment, `code=44940`, same as
+`pinned`.
+
+**Coordinator call: 65536 stands, and it was correctly NOT filed as a `decide-*`.**
+Choosing 4096 would introduce a break on kernels where nothing is broken today,
+in exchange for file size — sizing a boundary to the page granularity we happen
+to test on, which is the mistake that cost 41 xtensa programs six hours earlier,
+with SIGSEGV rather than one unlucky load as the failure. Knob surfaced to the
+owner as one line (`ELF_AARCH64_PAGE`, consequence: "aarch64 images correct on
+4 KiB-page kernels only"), NOT as a block. b4 also closed the
+`codeOffset`/`phCount` drift with an `Error` rather than with care — one fact
+spelled twice, and a silent 56-byte drift there yields an image that loads,
+runs, and lies about every address it reports.
+
+**frankA: the urgent hang is fixed (`0425a62c8`), and the probe KILLED the
+suspected root cause.** The cycle is one element long — `SymHashPrev[476] = 476`
+with `SymCount = 476`, a head past the live table, and a slot named
+`$byref.prefix` in a bucket its current name does not hash to. The suspected
+cause was **sound code**: `SymRollbackTo`'s "highest live idx is always its
+bucket's head" is correct. The defect was never the order it pops in, it is the
+**bucket it pops from** — rollback recomputed the bucket from the name as it
+reads NOW while insert filed it under the name it had THEN. Fixed by recording
+the bucket at insert, so a rename is safe by construction rather than forbidden
+by convention. All three ingredients accounted for, not merely consistent.
+
+**THE FACE FROM IT — a green test that ships.** frankA's first regression test
+for the hang **compiled clean on the pre-fix binary**: it had `return prefix` in
+the third scope, and reading the local silences the bug. A test written by the
+person who just fixed it, which could not have failed, and which would have been
+trusted *more* than an ordinary test because it is a regression test with a
+ticket behind it. **A regression test must be run against the broken binary
+before it is trusted; "it passes now" is not that check.** Repair: build it only
+from shapes measured to hang, and state the non-obvious constraints in the header
+so they are not tidied away.
+
+**Second defect found inside the first's source shape:**
+`bug-nilpy-calling-a-duplicated-ordinary-method-segfaults` [N p55] — compiles
+clean, then segfaults, identically before and after, so neither caused nor cured.
+It **produces a binary**, which is what survives a suite asserting only on
+compiler exit status. The hang was the loud defect standing in front of it.
+
+**Unblocked for Track B:** `mimic_xml_dom_minidom.py.parked` — 494 lines that
+could not compile at all — builds in 4.01s and matches CPython on 36/36 at
+`0425a62c8`. frankA left it parked deliberately; the unpark is B's call.
+
+**TSTATE, and the reason not to act on it yet.** plexus v393 pin-verify: 4 new
+reds, **single uncorroborated run** on a timing-sensitive matrix, **at the pinned
+tree 112 testable commits behind origin/master** — twatch says so itself. One is
+`test_nilpy_relative_import_in_package.npy: undefined variable (RENAMED)`, which
+is *adjacent* to frankA's rename fix and is explicitly **not** asserted to be
+related; flagged to frankA as a thirty-second dismissal, not a bisect. seven's
+v394 verify: 6 red / **0 new**, three of them the `min_max`/`max_min` NilPy rows
+frankA resolved in `f11128eaf` — older than the fix, not live. Do not re-file.
+**Breadth is 8h stale on plexus, 112 commits behind: no cross-target verdict
+exists for any of tonight's work.**
+
+**Box: load 18.2 on 12 cores.** Pin unchanged, v394 `53800fbeb0b66e11`. U queue
+**33**. `urgent/` is empty — frankA took the one item and closed it.
+
+## Correction 2026-08-30 ~10:3x — I published a dead sha twice, and the certifying sentence hid it
+
+**`6530abdeb` does not exist.** frankA's min/max fix landed as **`f11128eaf`**
+(*"fix(N): min/max carry the same dict and str receivers sorted() has"*). Both
+citations above are corrected. Found by frankD on a fresh fetch; I had it from
+frankA, who had read the sha before its push raced a writer and the retry
+rebased it — `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`, happening
+live, in this file.
+
+**The instructive part is frankD's, and it is why nobody caught it sooner: the
+sentence certifying the claim is what hid it.** frankA verified *by artefact* —
+counting the dict-keyed and str-keyed lines in
+`origin/master:compiler/builtin/pyeval.pas` — which is the **stronger** check for
+*did the content land*, and is **structurally blind to whether the cited name
+resolves**. Two questions, two checks, and the better one cannot answer the
+other. So a dead sha ends up sitting next to the words "verified on origin", and
+the phrase that should invite scrutiny is the phrase that deflects it.
+
+**It is not one incident.** Auditing every sha I cited tonight with
+`git merge-base --is-ancestor <sha> origin/master` — which is the right test,
+not `git cat-file -e`, since that accepts an object still in a local reflog —
+found **two dead of ten**: `6530abdeb` (frankA's) and `1000d6edc` (frankB's
+correction commit, cited in a message minutes after its own push). Same
+mechanism both times: the author read the sha before the push, the push raced,
+the retry rebased, and the sha the author had already relayed was rewritten.
+`tools/sync.sh` fills `PENDING-COMMIT` on ticket *resolves* for exactly this
+reason; **prose citations have no such backstop**, and prose is where a
+coordinator writes.
+
+**Standing rule for this seat: never write a sha you read before pushing.** Push
+first, then read it back, then cite it — or cite the commit *subject*, which
+survives a rebase. And when relaying a peer's sha, verify it with
+`merge-base --is-ancestor` before it goes into a durable file; it costs one
+command and I did not spend it, twice.
+
+## Tick 2026-08-30 ~10:5x — THE ORACLE WAS PARTLY NOT ONE, and it flattered itself only by luck
+
+**Retraction, frankB's own, and the most serious finding of the night.** The FPC
+oracle's unit-path fix passed the test's `-Fu`/`-I` dirs straight through — and
+**`lib/rtl` holds `sysutils.pas`, `math.pas`, `classes.pas`, `strings.pas`,
+`dateutils.pas` and `strutils.pas`, every one shadowing the FPC unit of that
+name.** So any test whose compile line carried `-Fulib/rtl` had **FPC compiling
+OUR RTL instead of its own.**
+
+For such a row, *"FPC reproduces it"* means our implementation built by FPC
+agrees with our implementation built by pxx. **That is circular, and it inflates
+DERIVED — the one direction this audit must never be wrong in, because it
+manufactures confirmations of exactly the claim under test.**
+
+**The keeper is why it was caught.** It happened to *reduce* DERIVED (784 → 763,
+candidates 26 → 55) only because our RTL does not compile cleanly under FPC.
+**Had it compiled, the identical defect would have read as a stronger result and
+been reported up as good news.** The failure mode was self-announcing by luck;
+its silent form is the one that flatters the audit. Restricted to `test/`
+companion dirs (`test/case_units`, `test/units`, `test/delphi_generic_units`),
+where all 14 recoverable sources live, so the recoverable aperture survives and
+independence with it. Same restriction on `--unoracled`'s overlap scan for a
+different reason: scanning a large RTL finds almost any token somewhere and
+drives every hit toward 1.0, destroying the metric rather than widening it.
+
+**`763` and every Pascal number from that run are RETRACTED, not provisional.**
+NilPy 342/353 and C 333-of-362-built stand. Corrected sweep running.
+
+**What caught it was DIRECTION, not content** — *a change that can only ADD unit
+search paths cannot legitimately turn a reproduced row into a differing one.*
+The sign was wrong before the size was interesting, and **a sign is checkable
+without knowing the right answer**, which magnitude is not. This is the second
+time the same structural hazard appeared: the C-side mirror of the same
+"obviously correct" improvement made gcc build **10 fewer** sources, because a
+pxx include dir shadows a system header gcc needs. **Giving an oracle the
+subject's own include paths is the natural-looking improvement that quietly
+turns an independent oracle into a mirror** — and both instances were caught by
+direction, neither by inspection.
+
+**Shas: all five frankB cited to me were dead.** Live, verified with
+`merge-base --is-ancestor`: `840080943` (unit-path in wrong function),
+`9294d363a` (overlap ranking), `1a7a4217a` (FPC oracle unit paths), `a1dc8dab8`
+(faces 228/228a), `496435549` (`--unoracled`), `11a1e65a7` (the restriction).
+frankB's own diagnosis is the sharpest statement of the mechanism anyone has
+given: it verified with `git log --format=%s origin/master | grep -cF
+'<subject>'` — **subject-based, survives the rebase, correct every time** — and
+then quoted the perishable identifier beside the durable one it had just used.
+**The fix is not a better check; it is citing the thing you were already
+checking.**
+
+**Running total of dead shas relayed tonight: 7 of 15 audited.** Every one from a
+lane pushing frequently enough to race.
+
+**frankB's unification of the family, and I think it is right:** *a check whose
+subject is adjacent to the thing that fails.* The assert checked that the old
+text existed in the right region while the edit chose its own region;
+`cat-file -e` checks that an object exists while the question is whether it is
+reachable from origin; verifying by artefact answers "did the content land" while
+the failure is "does the name resolve". **The adjacent check keeps winning
+because it is the one that is easy to write.**
+
+## Structural change 2026-08-30 ~11:0x — TABLE ROWS CARRY NO SHAS, and why
+
+**frankD audited this file's tail (18,258–18,985, eleven sections) and the dead-sha
+rate is not a rate — it is a LOCATION.**
+
+| where | sha citations presented as live | dead |
+| --- | ---: | ---: |
+| **table rows** (live-lock / dispatch grid) | 4 | **3** |
+| prose | 13 | 1 |
+
+Counts, not percentages — 3 of 4 is not "75%" in any useful sense. But the
+concentration is the finding: **table rows are what an agent REPORTED; prose is
+largely what I read myself.** The failure lands about nine-fold in the relayed
+population, exactly as the mechanism predicts. Second cut, sharper: **all three
+table-row deaths were the same agent's shas**, which makes it either one push
+pattern racing or one habit of citing before pushing — a question, not a policy.
+
+**Adopted, effective now: a table row carries the commit SUBJECT, never a sha.**
+A subject survives a rebase; a sha read before a push does not. The sha goes in
+prose, at the point where I verified it with `merge-base --is-ancestor`. This
+removes the entire population where three of four citations were dead and costs
+nothing that was being used.
+
+**frankD's instrument had its own blind spot and reported it.** Its first pass
+said **10** dead; four were not commits at all — `a3f0f9e3325f` and
+`62cfb924053f` are **binary sha256 prefixes** ("fixedpoint…", "swept binary…"),
+as are `e2ea9034a65ea8b6` and `53800fbeb0b66e11` from the pin ledger. **A bare
+hex regex cannot tell a commit from a content hash**, the roster labels each one
+correctly, and the text was right while the reader was wrong.
+`merge-base --is-ancestor` is the right liveness test and **is only as good as
+the tokens fed to it.**
+
+**Everything else audited clean or near it.** Slugs: 35 cited, **1** genuine dead
+trail (annotated above, not re-pointed). Prios: 12 pairs, **1** real error — the
+alignment ticket cited [T p35] at ~09:1x when it had been raised to 55 at 08:44,
+**already stale by half an hour when written**, corrected in place. Lock claims
+correct against `working/`. Face sequence 190–227 complete, zero gaps.
+
+**THE FINDING THAT MATTERS MOST, and it is about the artefact rather than the
+errors.** A tick log's claims age by design; every section is timestamped, so a
+reader can date any claim. The prio was a defect *because it was already wrong at
+write time*. So the real question is not the error rate — it is **whether lanes
+read this tail as a LOG or as STATE.** Reading a log as state is where a
+thirty-minute-stale prio becomes a wrong dispatch, and **writing more carefully
+does not fix it.** Live state belongs in the file's opening section, which is
+overwritten; the tick sections below are history and should be read as history.
+
+## Correction 2026-08-30 ~11:2x — patch-id settles a dead sha, and the third one was MINE
+
+**`git patch-id --stable` is the measurement frankD correctly refused to guess
+without.** frankS still had two of the dead commits in its local object store as
+dangling pre-rebase objects and compared them by content:
+
+```
+3f203a20b -> aa9ec947b   IDENTICAL-PATCH   (the xtensa veneer)
+9bc4113e6 -> 2f81d8008   IDENTICAL-PATCH   (the riscv32 encoder guard)
+```
+
+Both of frankD's subject-similarity candidates confirmed **by content, not by
+name**. Rows re-pointed. **This is the technique to reach for whenever a dead sha
+needs recovering** — subject similarity proposes, `patch-id` decides, and it
+works as long as anyone still has the pre-rebase object.
+
+**The count was wrong and the correction is worse for me, not better.** It is
+**2 of 4** in the relayed-row population, not 3 of 4 — and the third,
+`6901fa114`, was never frankS's. It is **mine**: my own grant commit, whose
+subject is *"grant(A+S): ir_codegen.inc's xtensa cleanup arm to frankS, b4
+verified off"*, landed as **`61b50743f`** after my own `sync.sh` rebased it, and
+I wrote the pre-rebase sha into this file. So one of the three failures I was
+diagnosing as a relay problem was me doing it to myself in the same file where I
+wrote the rule down. Small n is read literally, which is the whole reason to
+give counts rather than percentages — so the correction matters.
+
+**frankS's diagnostic split is the real finding, and it is structural rather than
+behavioural:**
+
+```
+shas cited INSIDE its tickets, on origin/master:   every one LIVE, zero dead
+shas RELAYED in messages:                          both dead
+```
+
+Same agent, same night, same commits, opposite outcomes — **so it is not a habit
+that varies.** The durable path has tooling and the transport path does not:
+`resolve` writes `PENDING-COMMIT` and `sync.sh` fills in what the commit LANDED
+as, so the rule CLAUDE.md already states is enforced mechanically on a ticket and
+enforced by nobody in a message. **The concentration frankD measured is not
+reports being sloppier; it is the one path with no read-back step.**
+
+**Adopted, and it is better than "push first, read back":** cite the **subject**,
+and where a sha is genuinely wanted, take it from `sync.sh`'s own verified output
+*after* the push rather than from `git log` before it. frankS's line for it —
+*"I have been discarding the one artifact that was correct by construction and
+quoting the one that was not."*
+
+## Tick 2026-08-30 ~11:3x — the corrected audit, split three ways by provenance
+
+**The shadowing was not a corner case: 98 `$(COMPILER)` lines in the Makefile
+carry `-Fulib/rtl`** (plus 97 `lib/crtl/include`, 88 `lib/crtl/src`, 19
+`lib/rtl/platform/posix`). frankB answered the "which earlier results are
+downstream" question **per result rather than as a unit**, and the split is the
+right one:
+
+| result | status | why |
+| --- | --- | --- |
+| **784 DERIVED** | **survives** | computed before the unit-path change existed — no `-Fu` passed, FPC could not reach our RTL. Stale for other reasons, clean of this one |
+| **763 DERIVED** | **retracted** | the shadowed run |
+| **796 DERIVED** | **current** | corrected sweep: 1279 rows, FPC built 860 of 1214, 368 cannot build, 59 candidates, 44 cross-target, 12 built-but-no-output |
+| 26→23→18 band | **verdicts survive, membership does not** | see below |
+| 366-source reason distribution | **retracted** | same unrestricted dir loop |
+
+**796 moves in a direction the change permits** — up from 784 with cannot-build
+down, which is what adding *test-only* companion paths should do and the opposite
+of what the shadowed run did. The direction check used as an acceptance test, not
+just a detector.
+
+**The band is two provenances inside one result.** The **18 verdicts stand
+unconditionally** — each hand-judged against the test's own source (`add_two(3,4)`,
+`sum7(1..7)`, 4π, `stat -c %s test/hello.pas`), no oracle and no FPC involved.
+**Membership is not clean**: the overlap scan read `lib/rtl` for those 98 rows,
+and finding a token anywhere in a large RTL inflates a row's hit score, pushing it
+**out** of the 0.00 band. So the band may **under-include** and **cannot
+over-include** — nothing judged was wrongly there, but rows that belong may have
+been scored away. A directional bound on an error, which is worth more than an
+estimate of its size.
+
+**The retraction that matters most is the one frankB volunteered against its own
+recommendation:** it had told me to chase the **14 recoverable** sources, and
+those are *exactly* the population the shadowing most likely corrupts, because
+**"it builds now" is the verdict the shadowing manufactures.** The 195/151 split
+is probably close to right — a dialect syntax error or a missing `palparallel`
+does not become buildable by finding our `sysutils` — but "probably" is not a
+basis for quoting it.
+
+**Two rules recorded in code, deliberately twice.** The `test/`-dir restriction
+appears in both instruments with **two different justifications** — independence
+for the oracle, metric preservation for the overlap scan — so that someone
+relaxing one does not read the other as redundant. Same predicate, different
+rule.
+
+**And frankB's mechanism for why the adjacent check survives review:** *"Nobody
+looks at `assert old in blk` and thinks weak. It is a genuinely rigorous check of
+a question nobody asked."*
+
+## Tick 2026-08-30 ~12:0x — the retraction is LIFTED, with the aperture measured rather than estimated
+
+**frankB re-derived both retracted results with `lib/rtl` excluded, and most of
+the retraction lifts.** Landed as *"the reason distribution and the band survive
+the restriction"* (`76b70902a`, read back after the push — the habit that failed
+five times tonight, applied).
+
+**The reason distribution survives, and the number I was told to chase survives
+INTACT.** The **14 recoverable are the same 14, byte for byte** — the shadowing
+manufactured none of them, which was the specific fear. The split moved by 6
+rows: **201 dialect/semantics FPC rejects** (was 195), **145 needing a pxx RTL
+unit** (was 151), 14 recoverable, 4 inline asm, 2 linking a self-built `.so`.
+The 6 moved because without our `sysutils` in reach FPC now reports a *dialect*
+error where it reported a *missing unit* — the expected direction. **Quote the
+corrected figures.**
+
+**The band survives unchanged: still 18, membership identical**, verified by
+diffing the two runs' rows rather than by re-judging. The under-inclusion worry
+did not materialise, because rows carrying `-Fulib/rtl` are not in the no-oracle
+set to begin with. **The caution cost one re-run and bought certainty rather
+than a correction** — which is the right price for a directional bound.
+
+**Corrected final counts: 342/353 NilPy · 333/395 C · 796/1279 Pascal.**
+
+**Where it stopped, and why that is the right stopping point.** frankB read the
+whole zero-overlap band. The returns did not merely flatten — they became
+repetitive in **mechanism**: every row resolved to one of exactly three shapes,
+predictable before opening the file. Arithmetic on literals in the test; a value
+defined in the companion the test exists to pull in; or a **self-counting harness
+printing `total ok 24 / 24`** — and that third shape **cannot carry a captured
+wrong value at all**, because capturing a failing run would have recorded
+`23 / 24`. Reading further down means reading rows of *higher* overlap, i.e.
+whose expected text is increasingly present in their own source, which is the
+wrong direction for the question.
+
+**The honest open edge is NOT the 424 — it is the 59 Pascal candidate rows where
+FPC differs.** Those are rows an oracle *did* reach and disagree with, and they
+are the only place a capture could still hide **behind a real oracle verdict
+rather than behind the absence of one**. Every one examined so far is dialect
+divergence; not all are read. Put inside the claim, not after it.
+
+**The claim as it now stands, aperture measured rather than estimated:** *No
+captured-and-wrong expectation exists among the rows an oracle could reach —
+342/353 NilPy, 333/395 C, 796/1279 Pascal — nor among the zero-overlap band of
+the rows no oracle reaches, every one hand-judged derived. 486 rows have no
+oracle; of the Pascal sources behind them, 346 of 366 are structurally
+unreachable rather than unconfigured, and better oracle configuration buys 15
+rows across both languages before it stops. 59 Pascal candidate rows remain
+unread.*
+
+**Dispatch: minidom, not the 59.** frankB leaned that way and it is right —
+`mimic_xml_dom_minidom.py.parked` is a hard block that just came unblocked by
+frankA's symtab fix, unblocking work outranks another audit increment, and the
+59 are bounded, non-urgent, and will keep.
+
+## Tick 2026-08-30 ~12:2x — "latent" was reachable in six lines, and the count chose the design
+
+**`RENAMED` is dismissed — pure adjacency, exactly as suspected.** It is the
+test's own identifier: `test_nilpy_relative_import_in_package.npy:34` reads
+`from nilpy_relpkg import S, T, U, A, B, RENAMED`, a re-exported name the test
+checks. Compiles clean at HEAD, matches its `.expected`. Nothing to do with a
+symbol renamed after insert. **I flagged it as a question and explicitly not a
+claim, and that was the right call for a lead that cost thirty seconds to kill.**
+
+**p45's cycle guard is landed (`e3cb3b955`, verified with
+`merge-base --is-ancestor`) — and the ticket was WRONG that it was latent.** Six
+lines of Pascal hang the compiler forever, 100% CPU, no output, no exit, on
+`pinned` and at HEAD:
+
+```pascal
+type TB = class; TA = class(TB) end; TB = class(TA) end;
+```
+
+Confirmed for a 2-cycle, a 3-cycle and the self-cycle; a forward declaration that
+does *not* close a cycle compiled throughout. frankA went looking for a
+constructive case because **"I could not build one" describes the search, not the
+language** — it took three minutes. FPC rejects the spelling, which does not
+rescue us: **a compiler that spins on input it should reject is still a compiler
+that spins.**
+
+**THE FACE — the count chose the design.** The ticket's population went
+**four → eight → thirteen → seventy-two** as it was actually enumerated rather
+than eyeballed. `UClsParent` is stepped at 72 sites across five files and two
+lanes, none bounded; only nine assign the chain and only **four** assign a real
+parent. *Four walks* reads like "patch four walks"; *seventy-two* reads like
+"stop making the data cyclic". **A count that keeps growing under enumeration is
+a signal the FIX LOCATION is wrong, not just that the estimate was low.** The
+guard went on the **write**: refuse the link, and all 72 walks terminate because
+the data cannot be cyclic — an invariant every future walk inherits instead of a
+rule each must remember. Bounding 72 reads would have been cross-lane and would
+only have converted a hang into an internal error.
+
+**And frankA nearly shipped a second mechanism for an existing one.** After
+guarding all four write sites it found `pyparser.inc:35822` already refuses the
+whole chain via `PyClsHasAncestor`, with a comment making this ticket's own
+argument. Its NilPy edits were redundant **and harmful** — they fired first and
+replaced the established diagnostic that `Makefile:901` and `:11079` assert by
+`grep -q 'cannot inherit from itself'`. Reverted. **What caught it was not care:
+it was grepping for who else asserts that string before changing a message.**
+The `PyClsHasAncestor`/`UClsParentWouldCycle` convergence left as a Track N
+follow-up rather than slipping a refactor into another lane's file.
+
+**Tooling: `DUP-FACE-NUMBER` was missing 90 faces and both of the lanes that
+counted the file missed the same 90.** The check required an em/en-dash and did
+not see the OLDER numbering style — `### 30. Two fields of one report
+disagree` — which is 90 numbered faces written with a period. pxx-a5 and I each
+counted independently, each got 317, and **both patterns had been written by
+reading the file's recent tail, where every entry uses a dash.** A pattern
+derived from the current convention cannot see the convention it replaced.
+Separator set widened; **407 headings now seen, zero same-level duplicates**, so
+the verdict is unchanged and the coverage is no longer overstated.
+
+## Correction 2026-08-30 ~12:4x — I relayed "unblocked" and it was not, for the lane I relayed it to
+
+**MY ERROR, caught by frankB measuring instead of accepting the relay.** I told
+Track B that `mimic_xml_dom_minidom.py.parked` was unblocked by frankA's symtab
+fix. **It is not, for Track B.** frankA's fix landed at 09:03; the current pin
+**v394 `53800fbeb0b66e11` was built from `43c8e3412` at 06:11**, and
+`git merge-base --is-ancestor 0425a62c8 43c8e3412` is **false** — confirmed
+independently here. Track B builds everything with `$(PXX_STABLE)` and never
+HEAD, so **frankA's 4.01s and 36/36 are true of a compiler that lane is not
+permitted to use.**
+
+frankB measured rather than argued from the sha: **the pinned compiler on the
+parked source spins the full 75s timeout at 100% CPU**, exactly as before the fix.
+
+**Unparking would have been worse than an ordinary breakage.** It would have put
+a file in `lib/rtl` that `make lib-test` cannot compile, and the failure mode is a
+**hang, not an error** — the worst shape for a gate, because it does not fail, it
+stops — hitting every lane that runs lib-test, not just Track B.
+
+**The relay was not wrong; the SCOPE of a measurement is what does not survive
+relaying.** *"It builds in 4.01s"* is true and *"it builds for Track B"* is
+false, and **the sentence looks identical from outside the lane.** Same shape as
+the claims-discipline table in CLAUDE.md: two different things wearing one
+phrase. The coordinator seat is exactly where that collapse happens, because
+relaying is all it does.
+
+**Standing rule added: before relaying an unblock, state which BINARY the
+measurement used.** For any Track B or E claim, the only question is whether the
+enabling commit is an ancestor of the **pin's source**, not of `origin/master`.
+
+**The ticket now records a mechanical unpark trigger** — *a pin whose source
+commit has `0425a62c8` as an ancestor*, with the `merge-base` command against
+`pin.log` written out, plus a required real compile by `$(PXX_STABLE)` before the
+rename. `blocked-by` stays: the condition it names — *this lane can build the
+file* — is still false; only the reason changed. "When the hang is fixed" is now
+a condition that is **already true and still insufficient**, which is the kind of
+resume condition that strands a ticket forever.
+
+### PIN DECISION — not now, and here is the trigger
+
+**263 commits sit above the pin's source**, including tonight's data-section
+alignment invariant, the PT_LOAD split, the symtab bucket fix, the class-cycle
+guard and the min/max receiver set. **Not pinning yet**, deliberately:
+
+- load **16.5** and Track T mid-`--tier full`; a pin holds the repo-wide lock and
+  every lane plus the human waits through it;
+- **breadth is 8h stale, 112 commits behind — no cross-target verdict exists for
+  ANY of tonight's work**;
+- nothing is urgently waiting. minidom is a parked file nobody is blocked on, by
+  frankB's own assessment.
+
+**Trigger, mechanical rather than a feeling:** pin when load is below ~13 **and**
+Track T has swept a sha at or above `3b8d1039e` (or `twatch --status` / `trackt
+health` shows T proven down, in which case the lane's own full gate comes first).
+Then `tools/gate.sh quick` — REQUIRED before a pin — then
+`make stabilize-fast && make pin`. If a pin runs tonight for other reasons,
+minidom comes free.
+
+## Tick 2026-08-30 ~09:3x — the alignment thread CLOSED, and a check that matched slugs instead of questions
+
+**The xtensa data-section thread is finished.** b4's `df98fea47` aligns the data
+section explicitly — the first time it has ever been aligned on any target — and
+`3b8d1039e` gives data its own `PT_LOAD`. frankS swept the **pushed** tree
+(binary `62cfb924053f`, fixedpoint 1 round, sha distinct from every saved
+baseline — the 218f check) and got **call0 104→104, windowed 94→94, riscv32
+111→111, `lost=0 gained=0` by set difference in BOTH directions with totals
+cross-checked**. An equal count can hide an equal swap and the windowed row is
+exactly where that would have mattered. b4's 4096 page pad is deleted and the
+canary still passes at `code=195724`: **the pad was never load-bearing, the
+alignment was.** frankS declined to close the ticket because the fix is b4's.
+
+**Dispatched frankS onto the other half —
+`bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never` [A+S p60]
+— because its harness dies with its session.** The 129-source differential lives
+in that agent's `/tmp` and nowhere else; everything else tonight is on master.
+Scope held to EXECUTED canary rows in the `Makefile`'s `test-xtensa` target,
+fixing the false `"no runner"` comment in the same commit, and **proving the new
+row can go red** — a gate row that has never failed is indistinguishable from
+one that cannot, which is the defect being removed.
+
+**frank-rust's nine-hour silence resolved, and my inference was the wrong half.**
+It was working, not stalled: four commits landed tonight, and it is **Track P in
+`pasparser_generic.inc`**, not Track R. Recorded, and that file is now granted to
+it exclusively — `bug-p-two-different-nested-specializations-of-one-template-collide`
+is held for it rather than routed to frankA, because it named the exact
+procedures the ticket lands in. What was real in my chase is Track T's cost:
+**unpushed is unswept**, independent of whether anyone was idle.
+
+Two things from it worth keeping. **It quoted me a local sha (`112561195`) that
+the rebase had already rewritten to `3ee9a672f`** — the exact trap
+`bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` names, hit *by hand while
+quoting a number*, with the tooling doing the right thing underneath. And the
+sharpening of the verification one-liner I had broadcast: **`grep -cF "<subject>"`
+answers "did it land" and does NOT give you the sha — and the sha is the part
+that gets quoted.** `git log --format='%h %s' origin/master --grep=... -F` gives
+both. Read the sha out of the log, never out of your memory of the commit.
+
+Its other finding is the one to propagate: a Delphi-mode generic argument
+declared **after** the template fails, declared **before** it works — four
+probes, pre-existing, nothing to do with the qualified-name fix it had just
+landed. Without those probes the honest reading of its own failing case is
+*"qualified args still don't work in Delphi mode"* — **a false limit attached to
+a green landing by the agent who landed it**, which is about as credible as a
+wrong statement gets. Filed as `bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template` [P p55].
+
+### MY CHECK MATCHED SLUGS, NOT QUESTIONS — frankC measured it (`7d1a3a1ef`)
+
+`STALE-PARK` flags a park whose prose names a now-resolved ticket near a
+blocking phrase. frankC checked its resume condition instead of trusting the
+flag: `refactor-a-one-resolved-file-identity-for-a-translation-unit` closed by
+settling **`./math.pas` = `math.pas` is ONE identity**, and
+`feature-c-import-a-pascal-unit-under-a-mangled-name` needs **two DIFFERENT
+files of one unit name to be TWO identities** — *the opposite question*. It
+landed as `883ef0c05`, four files, all docs; `CompiledUnits` is still keyed on
+the NAME at `pasparser_proc.inc:3445` and the collision still refuses at HEAD.
+
+**A blocker that settled the opposite question reads exactly like one that
+settled yours.** Fixed in the check's own output rather than in a reviewer's
+head — one clause per hit, the worked instance in the trailing NOTE **once**,
+because a paragraph repeated on eight hits is how a check earns the habit of
+being scrolled past. frankC's line: *a resolved slug next to a blocking phrase
+is exactly the shape you warned me about — it just pointed the other way.*
+
+**Fourth correction to my own tooling this week, and pxx-a5 named the pattern
+under all of them: the predicate was right every time; the population it ran
+over was the thing nobody had stated.** Agent-memory namespace, the
+`("unfinished","blocked","working")` tuple copied from STALE-PARK, the dash-only
+face separator, and now slug-vs-question. **None was a logic error** — logic
+errors present as choices; these arrived already decided.
+
+Also closed the face-count thread with pxx-a5. Boundary is clean: last
+period-style face at line 4470, first dash-style at 4497, **no interleaving** —
+two eras, one switch, which is why both of our independent counts were wrong by
+the same 90. **We did not check each other; we checked the same tail twice.** The
+operational rule that came out of it: **date the definition, not just the
+number.**
+
+### Verified, not filed: pxx nests `{ }` comments and so does FPC
+
+frankC hit `unexpected character` a hundred lines from a `{` inside a Pascal
+comment and flagged it as a live hazard for anyone quoting C in a comment —
+which is most of this repo. I went to file it as a compat divergence and the
+oracle stopped the filing:
+
+| | |
+| --- | --- |
+| pxx (pinned) | `pascal26:2: error: unterminated comment` |
+| FPC | `Warning: Comment level 2 found` → `Fatal: Unexpected end of file` |
+
+**Both nest, both die.** FPC-correct source stays FPC-correct, so there is
+nothing to fix in either direction and no ticket. Thirty seconds of `fpc`
+reversed the *filing decision*, not the observation. **A hazard and a divergence
+look identical from inside one implementation.**
+
+### Board hygiene
+
+`regression-tools-devtest-00-3` [T p70] moved `blocked/` → `backlog/`, edge
+cleared: its only blocker had closed and **`ready`/`next` never scan `blocked/`**,
+so a p70 was invisible to the ranker. Found by `STALE-EDGE-HIDDEN`.
+
+### PIN — trigger measured, still NOT met
+
+`sha256sum` = **v394 `53800fbeb0b66e11`**, source `43c8e3412`, now **267 commits
+back**. Trigger was *load < ~13* **and** *T has swept a sha at or above
+`3b8d1039e`*. Measured this tick: **load 18.8**, and `seven`'s newest full tier
+is `023e802c88ea`, which is **45 below HEAD while `3b8d1039e` is 17 below** —
+`merge-base --is-ancestor 3b8d1039e 023e802c88ea` is **false**. Both halves fail.
+Not pinning. The trigger did its job: it answered without a judgement call.
+
+Other tstate reads worth not over-reading: `plexus` breadth is 8h stale and its
+4 new pin-verify reds are **a single uncorroborated run**; `seven`'s 1 new red
+**passes in the full tier 2h later** and is load-shaped. Do not revert on either.
+
+**Dispatched this tick:** frankS → the windowed execution rows. frankD → the
+docs half of `bug-a-help-does-not-advertise-flags-the-compiler-accepts`,
+separating *docs are right and `--help` is wrong* from *the flag does not exist
+at all*, with the **parser** as oracle rather than `--help` (the known-incomplete
+instrument would flag every correct doc). pxx-a5 → write the three
+`DUP-FACE-NUMBER` corrections as one face. frankwasm → asked whether its `[U p70]`
+`blocked-by` is real, since it has landed a dozen phases since filing it, and to
+name the branch on its `SIDE-BRANCH-SHA` citation. **Idle after dispatch: none.**
+
+## OWNER INSTRUCTION 2026-08-30 ~09:5x — less parallel work; rust and wasm pause
+
+> *"ok let's aim at less parallel work. for example, work on rust and wasm can
+> pause for a while"*
+
+Fleet cut from **nine active lanes to five**, keeping the standing
+A+C+P+N priority band.
+
+| session | lane | disposition |
+| --- | --- | --- |
+| frankA | A | **keep** |
+| frank-optimize-b4 | A / O | **keep** — but see the two-on-A note below |
+| frankC | C | **keep** |
+| frank-rust | **P** | **keep** — see the naming trap below |
+| frankB | N | **keep** (two p70 nilpy regressions, one symptom) |
+| frankS | S | **finish one ticket, then stop** |
+| frankwasm | wasm | **PAUSE** — named by the owner |
+| frankD | D | **stand down** |
+| pxx-a5 | index | **finish one face, then stop** |
+
+**The naming trap, stated because it nearly cost the wrong shutdown: `frank-rust`
+is not doing Rust.** It re-laned to **Track P** hours ago and is in
+`pasparser_generic.inc`; `feature-rust-option-type` is already parked in
+`unfinished/`. So *"rust can pause"* was **already true** before the instruction
+arrived, and killing the session named `frank-rust` would have stopped Track P
+work in the highest-priority band. **A session name is a launch-time label, not a
+lane** — the roster table is the lane, and this is the second time tonight that
+reasoning from a name instead of a measurement pointed the wrong way.
+
+**frankS kept for one ticket, and the reason is specific rather than a
+concession:** its 129-source differential harness lives in `/tmp` and dies with
+the session, and
+`bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never` **is the act
+of moving it onto master**. Everything else from tonight is already recorded.
+Stopping now is the one place on the fleet where work is permanently lost.
+
+**TWO SESSIONS ON TRACK A — flagged, not resolved.** frankA and b4 both hold A.
+b4 has just edited `compiler.pas` (the seed forward) and `elfwriter.inc`; that is
+exactly the collision the letters exist to prevent, and the sole-A guard has been
+running unenforced. It has not bitten yet. When b4 lands its current ticket, one
+of the two comes off A.
+
+### Two urgent things this tick
+
+**`origin/master`'s FPC seed build went RED and it blocked every lane.**
+`lexer.inc(164,71)` / `(187,13)`, `Identifier not found "CModuleOfTok"`, from
+frankC's `5c8de9442`. Body is at `dbg_filetable.inc:93`, included after
+`lexer.inc`; **pxx needs no forward and FPC does**, so `gate.sh quick` aborted at
+step 2 for anyone who ran it. Verified independently before clearing b4 to push:
+`compiler.pas:52-61` are **nine forwards of exactly this family**, four citing
+`bug-a-fpc-seed-drift-emitasmx64-forward` by name. b4 fixed it as its own commit
+so a bisect sees it separately.
+
+The lane note underneath it: **`5c8de9442` edited `lexer.inc`, which is A's
+shared ground, not Track C's file set.** The work was right — a C diagnostic
+naming its module is C's ticket — but **the FPC seed asymmetry is invisible from
+inside pxx**, so C had no local signal at all. The defect is that a C-lane ticket
+needed an A-lane file and nothing in the loop said so.
+
+**My own sequencing error: I dispatched frankD onto `docs/**` while b4 was
+mid-edit in `docs/index.md` and `docs/reference/cli.md`.** Caught only because b4
+flagged its own boundary crossing instead of burying it. Relayed to frankD inside
+fifteen minutes; b4's hunks stand (they corrected a sentence that was **already
+false** — `--emit-obj` "on any target"), and D owns the wording. **I check
+whether a lane is live in a file BEFORE dispatching into it, not after.**
+
+### b4's dispatch came back as a third reading, and mine was the wrong question
+
+I handed it *complete the writer or refuse*. Both options presupposed one writer.
+There are **two**, dispatched by architecture when the discriminator should be
+what the object must carry: `writeELFRelX64` is the **`.asm` frontend's** writer —
+symbols from `AsmGlobalSym*`, relocations from `AsmObjCall*`, data appended into
+`Code[]` and addressed as `.text`. For a `.asm` source it is **complete**. A
+Pascal program has neither, so **it wrote everything it knew, which was nothing**.
+*There has never been a general x86-64 relocatable writer for the dispatch to be
+incomplete against.* Fix: refuse on **what the object would have to carry**
+(`BSSSize`, `FixCount`, `GlobFix`, `DataPtrFix`, `MethodFix`, `ProcAddrFix`, no
+defined symbol) rather than on which frontend produced it — so a future Rust or
+Zig `--emit-obj` gets the right answer free. Follow-up
+`feature-a-a-general-x86-64-relocatable-object-writer` [A p30] leads with the
+`R_X86_64_32` + `-no-pie` vs `R_X86_64_PC32` fork, which is backend work.
+
+**Second time this week that measuring first turned a binary choice into a
+category error. I keep supplying the binary.**
+
+### frankB closed the oracle audit: no capture in three oracles
+
+**342/353 NilPy · 333/395 C · 797/1280 Pascal, 58 candidates read, no capture.**
+Aperture bounded rather than open: 346 of 366 unbuildable Pascal sources are
+structurally unreachable; better oracle configuration buys 15 more rows and then
+stops.
+
+**The 59th row is the finding and it outranks the other 58.** A row reported as a
+difference **with an empty diff** — one shared `-FU` unit dir, two different
+units named `platgreet.pas`, first-compiled binds for every later row.
+**Contamination between rows of a sweep is indistinguishable from a finding, and
+it points whichever way the sweep order happened to go**; a re-run in a different
+order moves the result with nothing to say why. Fixed, and the re-run moved
+**exactly one row** — the whole predicted effect and no more.
+
+Its general form, going into the refusal index: **the classifier reports the
+verdict and the evidence through different paths, so nothing ever compares them —
+a verdict and its evidence that travel separately can disagree indefinitely.**
+*What exposed it was the empty diff, not the verdict.*
+
+Also from frankB: `sync.sh` filled a **Track P** ticket's `PENDING-COMMIT` during
+a **Track B** push (`27c8f112d`). Correct citation, tool doing its documented job,
+and **structurally cross-lane** — it fills whatever the tree has pending, not
+whatever the pusher owns, so push-your-own-lane cannot bind it. Left in place.
+
+### b4's 229a, against itself
+
+It wrote `... || true; echo "rc=$$?"` — capturing **`true`'s** status — **inside
+the test for this bug, hours after writing face 229 itself**, and caught it by
+*running* it and reading `rc=0` where `rc=1` belonged. Two halves: **the face
+does not protect its own author while they are writing the fix**, and
+**re-reading did not catch it where running did.**
+
+### Pin: unchanged, trigger still unmet
+
+v394 `53800fbeb0b66e11`, source 267 back. Load 18.8 (bar: <13); `seven`'s newest
+full tier `023e802c88ea` is **45 below HEAD** while the required `3b8d1039e` is
+**17 below** — `merge-base --is-ancestor 3b8d1039e 023e802c88ea` is false. Both
+halves fail. A smaller fleet should bring load under the bar shortly, at which
+point the T half becomes the binding one.
+
+## Tick 2026-08-30 ~10:0x — the fleet stood down cleanly, and a tool nobody knew about
+
+**`tools/forwardlint.py` catches the FPC-seed-drift class in SECONDS, before the
+build.** Surfaced by frankwasm, which had been caught twice by the same
+asymmetry and adopted it: pxx tolerates use-before-declaration in the include
+stream, FPC does not, so **`make compiler/pascal26` converges green and only the
+SEED build fails.** The documented per-fix loop is structurally incapable of
+seeing this class. It is **not wasm-specific**.
+
+It cost the whole fleet two hours tonight: `5c8de9442` (Track C) called
+`CModuleOfTok` from `lexer.inc` with the body in `dbg_filetable.inc`, and
+**`gate.sh quick` aborted at step 2 for every lane** until frankA landed the
+forward (`e1fed35b1`) — the sixth entry in a block that already carried five for
+this exact reason. frankA nearly spent the time proving it was its own, which is
+the second-order cost: **the next person to run the gate inherits a red they did
+not cause and reasonably assumes is theirs.**
+
+The adaptation is not *be more careful about include order*, it is **run
+`forwardlint` before `make`**. Relayed to every remaining lane. **Whether it
+belongs in CLAUDE.md's documented loop is the owner's call — surfaced, not
+edited.** A tool nobody knows about is indistinguishable from one that does not
+exist, which is the same shape as the `test-esp-bare` target frankS found
+tonight that is enrolled in zero tiers.
+
+### Stand-downs, all clean
+
+| session | left behind |
+| --- | --- |
+| **frankwasm** | branch `wasm` at `f97477cf9`, **95 ahead**, fixedpoint `12bd7e665b5e`, all 31 `test/wasm` checks pass. Ticket in `unfinished/` with a resume table: five rows, body counts, and a per-row *does the U decision touch this?* column — **exactly one (op 54) says yes**. The 32-of-32 anchor measurement is in it. `check` now reports **zero** side-branch flags. |
+| **frankD** | the flags sweep FINISHED, not parked (`ba5deef98`). Category 2 = **one flag** (`--selftest`). Population 3 filed [D p35] with a negative control. `bug-pascal-subclass-inherited-members`: **all four arms fixed at HEAD**, both named consumers verified in their own shapes — **`Counter` need not ship as a dict mode and `feature-nilpy-configparser` is not blocked in practice.** |
+| **frankS** | five EXECUTED windowed rows in `test-xtensa` (`77fafffb8`), the false `"no runner"` comment fixed, harness provenance banked in the `done/` ticket. |
+| **pxx-a5** | face 232; the DEAD-COMMIT audit answered — **350 citations, 269 distinct shas, 264 (98.1%) objects absent entirely, `patch-id` cannot recover any of them, and the stock is CLOSED** (zero since `68be6bd59`). |
+
+**frankS's negative experiment is the result, not the rows.** Setting
+`ELF_DATA_ALIGN = 1` **at HEAD leaves all five green** — b4's `PT_LOAD` split
+page-aligns data independently, so `AlignCodeForData` is **redundant on the
+executable path** and `CheckDataBaseAligned` cannot fire there. Belt-and-braces
+on a property that cost 41 programs, not a defect — **but the rows are not
+measuring the explicit invariant today**, and anyone who removes the split must
+not read their green as evidence the alignment call holds it up. In the Makefile
+beside the rows, where the next reader is.
+
+**And the same defect one level up, which frankS routed rather than fixed:** b4
+had already added an executed windowed canary — into **`test-esp-bare`, which is
+in ZERO testmgr tiers and appears in no script.** Correct row, right slots,
+**cannot fail anything.** *A Makefile target looks gated when you are reading the
+Makefile.* Filed `bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it`
+[T+S p45] — with the caveat that 24 of its 26 assertions self-skip without the
+Espressif toolchains, so wholesale enrolment gates 2 real rows and prints 24
+skips.
+
+### MY OWN FINDING, filed as face 235 because frankD turned my rule on me
+
+*"A relayed claim about a file is not a claim about master"* existed in two
+message logs and nowhere on master — an unrecorded finding by the exact standard
+I had set frankD an hour earlier. **Three instances, one seat, one night:** a
+HEAD measurement relayed to a `$(PXX_STABLE)` lane; a **working-tree** state
+relayed as **origin** state; a **pre-rebase** sha relayed after `sync.sh`
+rewrote it. One finding, because **the sentence carries no marker for which world
+it was measured in** — so the listener cannot detect the substitution. Repair:
+**name the boundary — tree / origin / pin — in the sentence.** Both catches came
+from the listener *measuring* rather than arguing from a sha.
+
+### Still open
+
+**b4 has not pushed** — `Makefile`, `compiler.pas`, `elfwriter.inc`,
+`docs/index.md` modified, ticket in `working/`. Warned that frankD's measured
+docs correction is already on master and **contradicts** what b4's hunks say, and
+that its own refusal will make the new line false in the other direction: the
+honest sentence is *riscv32 and xtensa for any source; x86-64 for `.asm` sources
+only; i386/aarch64/arm32 refuse* — a **source-kind** axis the docs have never
+carried. Also: the existing refusal message says *"only xtensa/riscv32"* while
+x86-64 works, filed by frankD as [A p25].
+
+**TWO SESSIONS STILL ON TRACK A** (frankA, b4). frankA's next item is in N's
+files, which keeps them clear for now. Settle it when b4's ticket lands.
+
+### CORRECTION, same tick — forwardlint is NOT an unknown tool, and the real gap is sharper
+
+I wrote above that `tools/forwardlint.py` was *"a tool nobody knew about"*.
+**Wrong**, and frankwasm corrected its own framing before I could repeat it
+further: forwardlint is **step 2 of `tools/gate.sh quick`** (`tools/gate.sh:216-225`,
+the step printing `fpc seed compiles (forward decls)`) — *the very step that
+aborted for every lane tonight* — and its promotion to master is already recorded
+in this file as `c7690064e`. Verified by reading `gate.sh` rather than taking the
+correction on trust.
+
+**The true gap is structural and explains every instance:**
+
+| | runs forwardlint? | CLAUDE.md status |
+| --- | --- | --- |
+| `make compiler/pascal26` + repro | **no** — and cannot catch this class, since pxx resolves across the unit | **MANDATORY** |
+| `gate.sh quick` | **yes**, ~1s | **OPTIONAL** |
+
+**The check lives in the gate that is optional and is absent from the gate that
+is mandatory.** An agent following the documented loop *exactly* hits this class
+every time and cannot see it — the self-host fixedpoint is green, the tests pass,
+and only the FPC **seed** build fails. No amount of care closes it.
+
+Bitten so far, every time with the loop followed correctly: **Track R**
+(`bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed`), **frankwasm twice**
+(`WasmDataAddr`, `WasmEmitClassRef`), **Track C twice tonight** (`CModuleOfTok`
+in `lexer.inc`, then `CBlockContinues` entirely inside `cparser.inc`), and
+**Track P now** — `pasparser_generic.inc:844` → `QualArgAliasName` (:1476) and
+`:1022` → `EmitQualAliasDecl` (:1525), both from the qualified-argument fix,
+both call and definition inside the one file. **Measured by me directly, not
+relayed; master's seed is red as of ~10:1x** and routed to frank-rust.
+
+**frankC's form is the one to keep, and its reasoning is the load-bearing part:**
+*anything that edits `compiler/**` gets forwardlint, unconditionally, in the same
+breath as the build.* Not *"be careful when touching `lexer.inc`"* — that rule
+would have caught its first break and **missed its second**, which was entirely
+inside its own file. At ~1s the cost is below the threshold where *"is this
+change risky enough to check?"* is worth asking, **and asking that question is
+what produced both misses. A cheap check applied conditionally has a condition to
+get wrong.**
+
+**Whether the MANDATORY loop should include it is the owner's call. Surfaced, not
+edited** — `CLAUDE.md` is the owner's, and a peer cannot authorise a change there.
+The case is: five instances across four lanes, every one with the documented loop
+followed correctly, cost ~1s to prevent, and the failure mode is that **the next
+lane to run a gate inherits a red it did not cause and reasonably assumes is
+its own.**
+
+**Note the shape of my own error here**, since it is face 235 within the hour: I
+took frankwasm's inference (*"I found it in a code comment in my own file, so
+nobody knows it"*) and **restated it as fleet-wide fact in a durable document**.
+A relayed inference is not a measurement, and the roster is exactly where an
+unchecked one hardens. Both the claim and its correction came from the same lane;
+what I contributed was amplification.
+
+### PIN — a third condition, and I would not have thought to look for it
+
+**Do not pin while `python3 tools/forwardlint.py` is red.** Measured ~10:2x:
+`origin/master`'s FPC **seed** build is failing on two missing forwards in
+`pasparser_generic.inc` (`:844` → `QualArgAliasName` at `:1476`, `:1022` →
+`EmitQualAliasDecl` at `:1525`). `stabilize-fast` would very likely pass anyway —
+it proves the compiler reproduces **itself**, via pxx, and pxx resolves across
+the unit. **So the pin gate cannot see this.** Blessing a binary whose source
+cannot bootstrap from nothing is the one property a bad pin poisons for
+everyone, wearing a different hat from the usual one.
+
+Full trigger now: **load < ~13** AND **Track T has swept a sha ≥ `3b8d1039e`**
+(or T proven down) AND **forwardlint clean**. Measured this tick: load 16.1,
+plexus breadth 9h stale / 116 behind, `seven` 20m old but its full tier is below
+the trigger sha, forwardlint **2 FAILs**. Three of three fail.
+
+### Fleet after the stand-downs: four lanes
+
+**frankA (A) · frank-optimize-b4 (A/O) · frankC (C) · frank-rust (P).**
+frankB stood down as well — **Track B's queue is genuinely dry** (a p45 and a p20
+both marked do-not-claim, minidom at p20 pin-blocked, a p12 string-template), and
+its one open ticket unparks on a pin it cannot cause.
+
+**The two p70 min/max regressions went to frankA, not frankB**, because
+confirming the candidate cause needs two compiler builds and frankB is a
+`$(PXX_STABLE)` lane. frankB's triage is the work: **one defect, and the trigger
+is the RECEIVER not the key** — every module-level row passes, and with a
+function parameter only an inline lambda survives; `key=0` fails identically and
+a literal list inside a function works, so it is neither about `None` nor about
+being inside a function, which is what both ticket titles suggest. Each ticket is
+one column of that table. **Visible in `key-none`'s own output: its first two
+lines pass** and it dies at the first `show()` helper, where `xs` becomes a
+parameter. Prior art (`256b21957`) fixed the same family for the static-list
+receiver and its note names both receiver shapes as what `PyMinMaxByKey` was made
+the single meeting point for — **so one arm breaking is the expected shape of a
+break here**, not a mystery. `7b73a385d` recorded as a **candidate, not a cause**,
+with the instruction to build `7b73a385d~1` and `7b73a385d` first.
+
+### frankB's 234-within-the-hour, and the practical detector for it
+
+`cmd && o=$(run) || o="COMPILE FAIL"` attributed the **run's** nonzero exit to
+compilation — *a determinate verdict with nothing behind it, naming the wrong
+stage, inside the harness built to triage a wrong-stage bug*. It was caught not
+by re-reading but because **"compile fails but the pinned compiler built the real
+test fine" was incoherent**. So the detector for 234 is usually a **third** fact
+that neither the verdict nor its evidence mentions.
+
+### frankwasm's park carries the hazard the finding creates
+
+A resumer rebases onto master, the seed goes red, and nothing tells them it is
+not their change — the cost frankA nearly paid, now **likelier for a resumer**
+because master's seed is red and the branch is 95 behind. The park records the
+durable form (*the mandatory gate cannot catch this class; run forwardlint after
+any rebase; check whether a red seed is yours before assuming it is*) with the
+dated red-master fact beside the branch's own green sha, so the two cannot be
+confused in three weeks. **A finding that changes the risk for whoever comes next
+is not finished until it is written where they will be standing.**
+
+## Tick 2026-08-30 ~10:5x — the silent lane was BLOCKED ON A PROMPT, not slow
+
+**`frank-rust` has been stuck on a permission dialog for the better part of an
+hour, and that is why `origin/master`'s FPC seed has stayed red.** I chased it
+twice on the assumption it was working through other things. It was not working
+at all:
+
+```
+Dangerous rm operation on possibly-empty variable path: $SP/*
+Do you want to proceed?
+❯ 1. Yes   2. No
+```
+
+**`ListAgents` said `waiting`, and I had written in my own tick procedure that
+`idle`/`shell`/`waiting` are AMBIGUOUS and must be resolved by measuring the
+tree — so I measured the tree, saw `M compiler/pasparser_generic.inc`, and
+concluded "live in the file, do not touch it".** That conclusion was right about
+the file and wrong about the session. **A dirty tree proves an edit happened, not
+that anything is happening now.** The measurement that would have settled it is
+`tmux capture-pane`, which I have never once run in a tick, and which took two
+seconds.
+
+**Two chases went into a queue behind a modal dialog.** A message to a blocked
+session is not delivered-and-ignored, it is **not delivered** — and from the
+outside those are the same observation, which is face 235's shape again: the
+sentence *"I have chased twice with no reply"* is true and means something
+completely different from what I took it to mean.
+
+**Added to the tick procedure: when a session is silent and its lane is blocking
+others, `tmux capture-pane -p -t "=roost:@<n>" | tail` BEFORE chasing a second
+time.** The pane is the only instrument that distinguishes *working*, *idle* and
+*blocked*, and it is cheaper than the message I sent instead.
+
+**Note also what the prompt is: the `rm` with a possibly-empty variable** the
+owner flagged on frankC this morning (`$SP/*` with `SP` unset expands to `/*`).
+The guard is doing exactly what it exists to do. **This is the owner's to clear —
+a peer cannot answer another session's permission prompt, and asking one to is
+permission laundering.**
+
+### Tick numbers
+
+pin **v394 `53800fbeb0b66e11`** (unchanged), load **17.2**, forwardlint **2
+FAILs**, U queue **32**, `working/` holds one lock (`bug-o-uforth-blocktest`,
+not from tonight's fleet), `urgent/` empty, **41 commits** since the last tick
+note. **All three pin conditions still fail.**
+
+### Stale facts in my own carried prompt, corrected
+
+- *"TWO SESSIONS ON TRACK A — unresolved"* — **resolved.** frankA holds A; b4
+  has a filed bounded slice (`grant-elf-writer-and-object-writers-to-b4`).
+- *"EXPECT BACK"* listing frankS / frankwasm / frankD / pxx-a5 / frankB — **all
+  five delivered and stood down.** Nothing outstanding from any of them.
+- *"past FACE 231"* — now past **237**; b4 holds 236 and 237, frankC is writing
+  238. I gave frankC 237 from a stale tail read, which is the same append-only
+  race I had warned it about, made by me.
+
+## Tick 2026-08-30 ~11:2x — seed GREEN, and three vacuous measurements in one hour
+
+**`origin/master`'s FPC seed is green.** `forwardlint` exit 0. The forwards
+landed as `301905d6c`, and **I cannot say which session did it**: every fleet
+commit is authored `yoctobyte`, so git records the human and not the seat, and
+the `Claude-Session` trailer names an id I have no mapping for. That is a live
+instance of what `feature-t-commit-trailer-hook` [T p60] exists for — **422 of
+1262 agent commits carry a trailer at all** — and the cost is precisely that the
+coordinator cannot answer *who did this* without asking.
+
+**frankA filed `decide-forwardlint-in-the-per-fix-loop` [U p60]** rather than
+widening CLAUDE.md itself. That is the durable form of what I had only been
+raising in conversation — **transport, not a record** — and it now carries six
+instances across five lanes behind it.
+
+### THREE VACUOUS MEASUREMENTS, ONE HOUR, THREE LANES
+
+Each ran, each returned a confident answer, each answer was about a population
+or a stream that could not contain the thing being asked about.
+
+| lane | the measurement | why it could not answer |
+| --- | --- | --- |
+| **frankA** | removed the Variant keyed arm because a check said it "buys nothing" | the check used only **module-level literal receivers**, which are never variant-typed. *A vacuous check nearly cost the fix* — and in the direction that DELETES code, where the evidence goes with it |
+| **frank-rust** | ran `forwardlint` on the change that broke the seed | `>/dev/null 2>&1`, then read the `echo` after it. **The tool told it, at the right moment, in its own terminal, and the pipeline discarded the answer** |
+| **me** | `progress.sh check 2>&1 \| grep -c PATTERN` → `0`, read as "regex too tight" | **the file did not parse.** The pipe ate the exit status, `2>&1` made the traceback countable content, and `0` was the number I expected after tightening a predicate |
+
+**All three confirmed what the measurer already believed.** Filed as face
+**239** with 239a — *run the subject unpiped once and look at its exit status
+before piping it to anything that counts*, and **end every scripted Python edit
+with `ast.parse`**: an asserted string replacement checks that the text was
+found, never that the result is valid.
+
+**frank-rust's refusal of my generous framing is the part to keep.** I had twice
+written *"you could not have seen this"*. True of the class, **false of its
+instance** — and the two want different fixes (the structural gap wants
+forwardlint in the loop; its instance wants *read the output*). Filing the second
+under the first would have made the sentence more comfortable and the record less
+useful. So the rule ships with one word added: **unconditionally, and read the
+output.**
+
+### New check: PROSE-EDGE-NOT-IN-FRONTMATTER (`ab2671d2f`)
+
+The complement of `STALE-PARK`. That one finds a prose edge whose named ticket
+has **closed**; this finds one that was **never wired up** — and the ranker reads
+frontmatter and nothing else, so no priority propagates. Found by frank-user and
+me on `feature-pascal-corpus-expansion` [P p75], whose Status line says *"rung 6
+blocked on decide-revisit-object-types..."* one line above frontmatter reading
+only `prio: 75`. **The decide item sat at 40 while a 75 waited on it.**
+
+**Calibrated, and the first version was not shippable: 18 hits with two
+systematic false-positive families.** `until`/`resume` are too loose for a
+same-line test (the face index tripped on *"off `PATH` until …"*), and **a slug
+scanner cannot tell "X is blocked on Y" from "Y blocks X"** — a ticket quoting
+someone else's status read as its own edge. Fixed with a phrase set that means an
+edge and nothing else, plus a direction rule: **only slugs AFTER the phrase, and
+only when nothing slug-shaped precedes it.** 18 → 6, all six genuine.
+
+### Track P is now TWO lanes, split by file
+
+**frank-user has taken Track P** (`bug-p-object-value-types-standard-meaning`,
+`pasparser_decl.inc`) alongside frank-rust in `pasparser_generic.inc`. Do not
+dispatch anyone into either file.
+
+And the correction frank-rust made that I should have made myself: **a grant is a
+coordination intent; the file's history is the fact, and where they disagree the
+history wins.** I told b4 that `pasparser_generic.inc` was exclusively
+frank-rust's, based on the roster rather than on `git log` — and `301905d6c` was
+already in it.
+
+**Two owner decisions landed via frank-user:** the ticket lock is KEPT (file
+locks and hot-file exemptions **rejected, not deferred** — measured harm over
+1262 commits was 1 revert, 1 naming commit, 2 build fixes; *revisit on outcome
+numbers, never exposure*), and `object` gets its standard Object Pascal value-type
+meaning with the rooted-reference form **retired**. U queue **32**.
+
+**frank-user's finding, which is mine to act on: a workaround has no expiry date
+and nothing re-checks whether the thing it worked around still exists.** The
+rooted-reference `object` was filed 2026-06-16 as *"a lightweight root, like
+TObject without a unit"* — **true then**; builtin TObject landed 2026-07-12, nine
+days later, **in the same file**, and nothing revisited it. Usage today is 4
+lines, all inside its own two regression tests. Worth a sweep for other stopgaps
+whose justification has since been fixed properly.
+
+### A FOURTH vacuous measurement, and it is the sharpest — frankC, same hour
+
+Building `tools/c_corpus_probe.sh`, frankC proved all five outcome arms fire
+rather than assuming it. **The first attempt caught it:** its negative controls
+branched on `__PXX__`, **which does not exist**, so DIFF and exit-code-FAIL both
+quietly reported **SAME**. *The probe's own failure arms were, for one run,
+exactly the disarmed coverage the probe exists to prevent.*
+
+That is **195** in its purest form — *repairing the visible defect retires the
+only detector for the invisible one* — except the detector was never armed.
+
+**The repair generalises and is the rule to carry: key a negative control on
+something the ORACLE defines and the subject does not.** `__GNUC__`, not
+`__PXX__`. A property of the *other* implementation cannot be silently absent
+from both sides; keying on your own side produces a control indistinguishable
+from a no-op. All five arms fire now: SAME, DIFF, SKIP, exit-code FAIL, build
+FAIL.
+
+**And the terminating token should be house style:**
+`C-CORPUS-PROBE-COMPLETE programs=N identical=M skipped=K failed=F`, emitted **by
+the subject**, never a status for the caller to read. That is face 191, and it is
+the specific defence against the pipeline failures that caught three of the four
+of us tonight — **a `grep -c` cannot fake that line into existence.**
+
+**Verified by running it here rather than relaying**: 3 programs, all SAME,
+exit 0, seconds from a cold tree. It prints `compiler <sha> oracle <ver>` on its
+own line — mine reported `a3f0f9e3325f` where frankC's reported `5f4cfd02e25f`,
+which is exactly the difference that makes a corpus verdict meaningless when it
+is not carried.
+
+Not a `make` target, deliberately: *the moment it is `make test-ccorpus` it is
+one rename from the refused set, and being runnable is the whole point.* Corpus
+built in rather than vendored, so it stays inside `gate.sh`'s no-tracked-vendor
+rule. `$PXX_C_CORPUS_DIR` **prints the path it looked for when absent** — a
+widening hook that cannot pass vacuously. Honest limit in the sentence: *three
+programs is not zlib; this does not replace T's corpora, it makes the push worth
+T's ten minutes.*
+
+**Running total for the hour: four vacuous measurements, four lanes, every one
+returning the answer the measurer expected.** The four differ in what was empty —
+a population, a stream, a parse, a preprocessor symbol — and are identical in
+shape: **the check ran, and could not have said anything else.**
+
+## PRE-MERGE STATE, 2026-08-30 ~12:0x — measured, not reported
+
+Owner: *"let's wait for everything to finish and push, then we will look about
+merging."* **No merge started.** Everything below is measured in this checkout
+after a `git fetch`, not relayed.
+
+| check | value |
+| --- | --- |
+| `origin/master` | `90501813d` |
+| `forwardlint` | **exit 0** — the seed builds |
+| `working/` locks | 2: `bug-o-uforth-blocktest` (pre-dates tonight), `bug-p-object-value-types-standard-meaning` (frank-user, LIVE) |
+| trees dirty / unpushed | frankA 0/0 · frankC 0/0 · b4 0/0 · frank-rust 0/0 · **frankwasm 1/0 (live)** · **frank-user 3/0 (live)** |
+| load | 13.6 |
+
+**frank-rust is unblocked and landed** — its permission dialog was cleared and
+its tree is clean at origin. That was the one piece of work with no backup.
+
+### THE DOUBLE-FIX, and the procedure it forces on the pin
+
+**Two independent fixes for the same seed break landed THREE MINUTES APART** —
+`301905d6c` at 10:20 and `652bfcdfa` at 10:23 — and *together* they produced a
+duplicate forward, which FPC rejects as hard as a missing one. Resolved since.
+
+**The failure mode was a double-fix, not a missing fix**, and it is my
+coordination error: a seed break is loud and lane-agnostic, so *every* lane that
+runs a gate sees it and any of them can fix it in two lines. **I am the only
+party positioned to say "X is on it, stand off", and I did not.**
+
+**frankC's consequence is the one that goes into the pin procedure: anyone
+verifying the seed before a pin must `git fetch` FIRST.** Its local
+`forwardlint` went red on a resolution that had been on origin for hours — *a
+stale checkout reports a red that origin fixed*, and before a pin that reads as
+a reason to stop. Same shape as `twatch --status` reading local `tstate/`.
+
+### frankA closed the p70 pair, and the decisive step was an EXPERIMENT
+
+`faee264e5`. It **renamed `max(const a: Variant; const b: Variant)` out of the
+overload set and re-ran the failing shape**: with the catch-all present,
+`TypeError`; with it renamed away, the correct answer. **That is the matcher
+agreeing it ranks them that way** — recorded as a *cause*, not a mechanism.
+
+**The ticket's title AND its stated cause were both wrong:** a literal receiver
+*does* reach the keyed set; **it is outranked on the way there.** Fix normalises
+the two shapes (a string literal argument reported `tyAnsiString` instead of
+`tyString`, conditioned on `AN_STR_LIT` so a real `string[N]` from a Pascal unit
+is untouched) rather than growing a second ranking path. 22 probe shapes against
+CPython, both receiver kinds × four key spellings, **and the two defects
+demonstrated on separate binaries** — row 2 before the library fix, row 4 before
+this one.
+
+Deliberately NOT claimed: a literal TUPLE receiver still fails
+(`bug-nilpy-keyword-arg-vs-overload-set`, pre-existing at `7b73a385d^`) — left
+alone rather than widen a change before a re-pin. **Correct call.**
+
+**And it stated a limit rather than implying a measurement**: `progress.sh check`
+exits 1 on the current tree, from seven pre-existing STALE-PARK advisories plus
+the historical DEAD-COMMIT line — *"I did not record check's exit code before my
+commits, so I am telling you it is systemic because none of the seven are tickets
+I touched, not because I measured the before."* That is the honest form.
+
+**My ruling on its two older parks** (`perf-a-cache-the-compiled-nilpy-runtime-unit-image`
+[A p60], `feature-pascal-corpus-generics` [P p65]): **no action before the merge.**
+The rule that makes a Track A `unfinished/` ticket critical is about a
+**half-applied compiler change** poisoning the self-host gate. **Neither has any
+uncommitted state on disk and there is nothing to revert** — the tree is
+byte-identical to origin. The park is a bookkeeping state, not a code state, and
+the distinction is the whole content of the rule.
+
+### frankC parked clean, and found two wrong root causes by MEASURING
+
+`forwardlint` 0 (219,130 lines), fixedpoint `50c56ff6764c`,
+`C-CORPUS-PROBE-COMPLETE programs=3 identical=3 skipped=0 failed=0` against that
+same sha. `compiler/` byte-identical to origin.
+
+**It built TWO fixes against five init-walkers before probing whether any of them
+runs on this input. None does.** *"Two wrong root causes reached by reading
+instead of measuring — the playbook's own rule, paid for twice in one sitting.
+Ten minutes of probes would have replaced an hour."*
+
+Real site is `cparser.inc:8592-8601`: `until (depth = 0) or (CurTok.Kind = tkEOF)`
+exits on EOF with `depth` still 1 **and nothing asks which condition ended it**.
+**Same shape a second time**: `CBraceTopLevelInitCountAt` returns `-1` for
+*"unbalanced"* and all five callers read `-1` as *"no count available"* — **one
+value, two meanings, and the meaning that mattered is the one nobody can act
+on.**
+
+**It did not land the one-liner, and the reason is right:** the identical `until`
+appears at `4896`, `8263`, `11419` and in `SkipBraceBlock`. *Fixing one is how
+you get the arm that stays broken*, and a partial C-parser normalisation in the
+hour before a binary is blessed is the shape to avoid. One refusal across all
+four, after the pin.
+
+It also corrected its own p30: the ticket says *"nothing is consumed that should
+not be"* — **false for the shape that matters.** `int a[] = { 1, 2` followed by a
+real `main` **consumes main**, and reports `main function not found` about a
+function on line 2. **It priced this from the quiet shape days after writing face
+238 about exactly that.**
+
+### frank-rust closed the nested-type ticket AND retracted a stale corpus claim
+
+Route B (hoist), 5/5 against FPC, fixedpoint `374fa81e8293`, forwardlint clean
+**and read**, `test_generic_cycle_fail` still failing with its cycle diagnostic —
+*the control a deferral change must not break, and this change is entirely in the
+deferral path.*
+
+**The retraction is the part to propagate.** The ticket claimed the corpus stop
+for `uses Generics.Collections` was `generics.collections.pas:120`. It does not
+reproduce against **either** binary: HEAD and `pinned` both stop at **line 146**,
+`TCustomPointersCollection<T, PT> = object` — a generic over an OBJECT type.
+**So the change moves the corpus not at all, and the real wall is long-standing
+rather than a regression** — which is what running `pinned` alongside is for.
+Filed `bug-p-a-generic-template-cannot-be-an-object-type` [P p60]. *"I nearly
+wrote 'unblocks the corpus' off the ticket's own figure. An unverified corpus
+number is worth less than none."*
+
+### Held for when work resumes (b4's list, recorded so it is mine not its)
+
+1. **`ELF_AARCH64_PAGE`** — one line in b4's slice, with the owner. **A late
+   answer means a SECOND pin.**
+2. **The ESP-bare alignment finding lives only in `7720f02c8`'s commit message
+   and its gated row** — deliberately unfiled under the no-new-tickets rule.
+   File it when work resumes; it is a second silently-repaired population.
+3. **The wasm no-coupling claim stays HALF-checked** until b4 reads frankwasm's
+   files. Two lanes each confirming their own side is not the claim being
+   checked.
+
+## frank-rust STOOD DOWN CLEAN — and refuted a lead I had endorsed
+
+Verified in this checkout, not relayed: `bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template`
+is back in `backlog/` with `owner: unassigned`; `refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins`
+[P p55] is filed; tree clean, 0 unpushed; **`working/` still holds exactly two
+locks, both with a live owner.** `forwardlint` — run unpiped and its output read,
+not `$?` alone — prints `ok no use-before-declaration in the FPC include stream
+and no duplicate forward (219486 lines)`.
+
+**THE PART THAT IS MINE: I endorsed a sketch, it measured the sketch, the sketch
+was wrong.** I told frank-rust its `insertAt` / `EmitLateNestedSpecDecls` lead was
+worth writing into the ticket while it still had it in context. It wrote it in
+and then **tested three hand-written positions for the same program before
+building on any of them**:
+
+| where the alias goes | result |
+| --- | --- |
+| behind the template (what pxx does today) | fails — names a type declared later |
+| end of the type section (**my endorsement, its own morning sketch**) | **fails — named by a declaration that comes earlier** |
+| immediately before the declaration that uses it | works |
+
+**Only position B satisfies both constraints, and the two failures fail for
+opposite reasons** — which is why the wrong idea is the obvious one. It kept the
+struck-through sketch in the ticket with the table rather than deleting it.
+
+This is the fourth time this week that **measuring first dissolved a framing I
+supplied.** The pattern is not that my leads are bad; it is that **a coordinator's
+endorsement adds authority to a claim without adding evidence to it** — the worker
+had the same idea an hour earlier and my agreeing with it changed nothing except
+how hard it was to drop. *I keep supplying the binary.* The counter is the one
+this session already applies to peers: **relay a lead as a lead, and say which
+measurement would kill it.**
+
+Its consolidation ticket corrected my count too: **four doors, not three** — four
+fill sites, three emitters, four hand-written `NSpecInsCnt`/`InsertTokens` pairs,
+and *it added two of them today*. Ranked on the reduction argument rather than the
+smell: the Delphi ordering fix needs **per-use anchoring**, several splices instead
+of one ordered run, which is a change to a flush if there is one flush and a change
+to four sites if there are four. The design-flaw evidence is in the ticket — the
+leading `type` keyword is a correct rule living in one door and invisible from the
+other three; the capacity limit is encoded three ways; the ordering rule exists
+only as statement order inside one `begin`/`end`; the deferral trigger is three
+counters meaning one thing, so a fourth prerequisite kind means a fourth clause and
+forgetting one is silent.
+
+### NEAR-DUP: the axis is the REPRO, not the slug — and the peer declined to design it
+
+frank-rust on my tooling item: *"Slug distance was never going to catch mine, and
+I don't think token overlap is the axis. Both tickets quote the same error string
+at the same file and line; the slugs describe the same wall from opposite ends."*
+
+**That is a better aperture statement than the one I wrote.** Two people finding
+one wall from two directions produce slugs with near-zero overlap *by
+construction* — so the failure is not that the threshold was mis-tuned, it is that
+**the feature cannot represent the duplicate at all.** A slug scan asks whether two
+people named a thing similarly; the question is whether they hit the same thing.
+Candidate signal: a normalised `file:line` + error string lifted from the repro
+block. Population to state as a dated claim before landing it: how many live
+tickets even carry a machine-readable repro.
+
+It handed the observation and explicitly declined to hand a design — *"that's your
+file and your call"* — which is the right boundary and worth naming, because the
+opposite (a peer arriving with a patch for tooling it does not own) is how the
+`.claude/**` line gets tested.
+
+**Four P tickets closed today by this lane** — cross-unit Delphi generics,
+qualified arguments on both dialect arms, the nested-type hoist, and its own
+duplicate closed before anyone worked it.
+
+**Pre-merge tally now: five of six lanes clean and pushed. Outstanding: frankwasm
+(3 dirty) and frank-user (8 dirty), both live by the owner's decision.**
+
+## THE CHANGE THE OWNER WAS WAITING FOR HAS LANDED — and my pre-merge report had a hole
+
+**frank-user resolved `bug-p-object-value-types-standard-meaning`**, landed
+`d23f52948` (board `50d341cd9`). `object` in type-declaration position is now the
+standard Pascal value type with methods, lowered as an advanced record; the rooted
+class-reference meaning is retired. Its tree is **clean, 0 unpushed**. That is the
+change the owner named when they called for the pause and the full re-pin.
+
+It quoted `95e3d0a97`, which is **not an ancestor of origin/master** — the
+pre-rebase sha, exactly the failure mode `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`
+names. Its ticket's resolve line already cited the right one; only the message was
+stale, and the message is what gets quoted.
+
+### MY OWN APERTURE: "pre-merge state clean" MEASURED TREES, NOT MASTER
+
+Two hours ago I reported the pre-merge state as clean and listed what I had
+measured: trees, unpushed counts, `working/` locks, forwardlint, load. **Every
+figure was true. I did not look at tstate once, and master's native tier has been
+RED since 02:04Z** — last GREEN report `0200df7`, then red on every one of the
+25 newest.
+
+This is the exact shape I have been flagging in other lanes all week, arriving in
+my own output: **a correct answer to a question nobody asked.** "All lanes are
+clean and pushed" and "master is green" are different sentences, and a pre-merge
+report that answers the first while a pin is being planned *reads* as the second.
+The instrument measured working trees; the decision it was feeding is about what a
+pin would bless. **Nothing in my report named its own scope**, which is face 219's
+complaint about ticket evidence and face 229b's about counts, now with my name on
+it.
+
+Standing form: **a state report that precedes a pin must name the matrix, or say
+in the same sentence that it did not look.**
+
+### THE TWO REDS WERE FILED INTO THE WRONG LANE, AT p70, AND WOULD HAVE STAYED THERE
+
+Both auto-filed by the watcher this morning with **`track:` GUESSED from the test
+path** — and each ticket's own banner says the frontmatter is what the ranker
+reads. Both guesses are wrong:
+
+| job | guessed | actual evidence | lane |
+| --- | --- | --- | --- |
+| `test_asm_emit_rv32` | P | `undefined variable (AIntToStr)` **in `compiler/rv32enc.inc`**; `AIntToStr` is in `util.inc`, included at `compiler.pas:64` — an include-order fault in a reduced compiler build | **A** (S-flavoured) |
+| `test_opt_store_reload` | P | whole diff is `+reord` / `+reord2`, emitted by the test's own `WriteLn`s at `:153`/`:161` — store/reload reordering | **A** (O tag) |
+
+At `track: P`, `prio: 70` these sat near the head of a queue whose agents own
+`pasparser_*.inc`; the best case was a P agent opening one, finding
+`compiler/rv32enc.inc`, and handing it back. **A guessed track does not read as a
+guess in `ready` output — it reads as a priced decision**, which is the
+default-priority failure one axis over. Retracked to A with the evidence that
+would overturn each, and both now warn that the attributing sha is a docs-only
+`tstate-ticket` commit in one case and a `diag(N)` commit in the other, so
+**neither can be the cause** — a tstate red attributes to the sha it swept.
+
+**Not yet triaged: which of the two `store_reload` causes it is.** Either the
+optimizer changed, or the test grew two `WriteLn`s and its expectation was never
+regenerated. **The second is the quiet one** — a permanent red that looks like a
+codegen bug. One `git log -- test/test_opt_store_reload.pas` decides it, and I
+have put that in the ticket rather than doing it, because it is A's file.
+
+### AN EARLIER LINE NUMBER IS NOT AN EARLIER FAILURE
+
+The corpus wall moved **backwards**, 146 → 120, and that is the expected shape
+after a syntax fix: :146 aborts the parse, :120/:123/:135 are semantic and
+reachable only once a specialization streams. So **frank-rust's withdrawn :120
+figure was masked, not wrong** — the honest form of its finding was *"not
+reachable yet"*, not *"not real"*. Its wider conclusion (long-standing, not a
+session regression) was right throughout.
+
+**A withdrawn finding is stickier than a wrong one.** It retracted publicly, in
+its own ticket, in the most creditable way available — which is precisely what
+makes the retraction durable and stops the next reader re-checking. Told it
+directly; the general rule is now in `feature-pascal-corpus-expansion`, whose
+rung 6 I also retargeted from the settled object-types ticket to
+`bug-p-generic-type-param-unresolved-in-class-abstract-template` [P p70].
+
+frank-user also retracted its own commit message: *"`object` and `TObject` are the
+same internal type"* was proved by a test using only casts and assignment, **where
+both are a pointer move** — an instrument that would print the same thing either
+way. Track T closed `regression-test-core-test-object-reference` within minutes of
+the push, and that only worked because the gap had already been named.
+
+**Pre-merge tally: frank-user is now CLEAN. Outstanding: frankwasm alone (3
+dirty). `working/` holds one lock (`bug-o-uforth-blocktest`, pre-dating tonight).**
+
+## Tick 2026-08-30 ~11:2x — the last lock has a STOPPED owner, and five of my own directives had gone stale
+
+Measured: HEAD `e59189d0c` · seed green (`no use-before-declaration … and no
+duplicate forward`, 219552 lines) · pin still v394 `53800fbeb0b66e11` · load
+**18.5** (frankwasm building) · **frank-user CLEAN, 0 unpushed** · frankwasm
+dirty=6 on branch `wasm`, 0 unpushed · frankA / frankC / b4 / frank-rust all
+clean, 0 unpushed.
+
+**The finding: `working/` holds exactly one lock and its owner is stopped.**
+`bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O p65,
+`owner: frank-optimize-b4`] — and b4 has been stood down with a clean tree and
+everything pushed since ~10:00. **A lock with a stopped owner is indistinguishable
+from live work**, which is exactly the state that makes a pre-merge board
+unreadable for whoever runs the pin.
+
+Asked b4 to park it into `unfinished/` **itself, with a park note**, rather than
+moving it myself. Two reasons and the second is the real one: I made frank-rust
+put a ticket back an hour ago on this argument and owe the same request here; and
+**only b4 can write the note.** The `-dPXX_ALLOC_CENSUS` work and the zero-init
+experiment that *"reported −83.9% and was a segfault"* are obvious to it now and
+unrecoverable in a week. Its tree is clean and its three commits are pushed, so
+this is bookkeeping and not a rollback — stated explicitly, because *"move your
+ticket"* can read as *"undo your work"* and uncommitted work is the only state
+here with no backup.
+
+### DIRECTIVE AUDIT — five stale facts in my own carried prompt
+
+The tick step that keeps earning its place. Every one of these was true when
+written and false when read, and a carried prompt **re-asserts** rather than
+re-derives:
+
+| the prompt says | actually |
+| --- | --- |
+| `origin/master 90501813d` | `e59189d0c` — 20+ commits on |
+| two `working/` locks, **"BOTH with live owners"** | **one**, and its owner is **stopped** — the phrase that would have suppressed this tick's only finding |
+| frank-user dirty and LIVE | **clean, 0 unpushed** — the owner's wait is satisfied on that side |
+| load 13.6 | 18.5 |
+| HELD: frank-rust must file the `NSpecIns` consolidation | **filed** — `refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins` [P p55], and the `insertAt` lead is in the Delphi ticket with the disproof table |
+
+The second row is the one that matters, and it is the failure mode this audit step
+exists for: **a reassuring clause written into a recurring prompt does not decay,
+it re-justifies itself every wake.** *"Both with live owners"* would have read as
+a completed check on exactly the question this tick needed to ask. Same shape as
+the "PARKED and that is correct" line that once kept six sessions idle while p75s
+sat ready.
+
+**Outstanding for the owner's wait: frankwasm alone.**
+
+## Tick 2026-08-30 ~11:5x — SIX conformance shards went red today, and I had been reporting TWO
+
+frankwasm landed **`f3469644a` `feat(wasm): compiler.pas lowers COMPLETELY, and
+runs`** at 11:33 — the compiler itself lowers to wasm end to end. Branch `wasm`,
+0 unpushed, 1 file dirty; still working. `working/` holds only `.gitkeep` —
+**zero locks**, b4's park landed as `780ec9f7c`. Seed green (219552 lines). Pin
+unchanged, v394. Five of six lanes clean and stopped.
+
+### THE FINDING, AND IT IS A CORRECTION OF MY OWN REPORTS
+
+I have twice told the owner master carries **two** standing native reds. As of the
+**09:10Z full tier** it carries **ten**, and six of those are new today:
+`test-pascal-conformance#shard0..5` — every shard of the conformance suite.
+
+**How I missed them: I grepped the STILL-RED section.** They arrived in
+**NEW-RED**, in the same report I had already read, and the watcher auto-filed six
+tickets for them (`b5fe07ed0`) which I did not look at either. Face 240's first
+link, mine this time — **the case was not in the population I searched.** The full
+tier's red count went 4 → 10 in nineteen minutes and I read the newest report
+without diffing it against the previous one.
+
+### THE MECHANISM POINTS AT TODAY'S `object` CHANGE — but I have NOT verified it
+
+All six report the same family: `tgenconstraint{6,10,16,21,27,32}.pp
+(accepted-invalid)` — `{ %FAIL }` tests we have stopped rejecting.
+`ugenconstraints.pas:65` declares **`TTestObject1 = object`**, and three of the six
+specialize a template with it:
+
+| test | specialization | constraint |
+| --- | --- | --- |
+| `tgenconstraint6` | `TTest1<TTestObject1>` | `TTest1<T: class>` |
+| `tgenconstraint10` | `TTest3<TTestObject1>` | `TTest3<T: TTestClass>` |
+| `tgenconstraint16` | `TTest5<TTestObject1>` | `TTest5<T: IInterface>` |
+
+`object` is exactly what changed today — `d23f52948`, ~08:50Z, `object` stops being
+a rooted class reference and becomes the standard value type. **The shards went
+NEW-RED twenty minutes later**, and no compiler file changed between that tier and
+the next.
+
+**Mechanism read from the test sources, not inferred from ownership or timing
+alone — and still NOT a verified cause.** I have not bisected and have not run one
+of these tests. The disconfirming measurement is one command: `tgenconstraint6.pp`
+against `pinned` and against HEAD. Written into all six tickets so whoever takes it
+starts there.
+
+**The shape, if it is the object change:** a *value* type should fail a `class`
+constraint **more** obviously than a rooted class reference did. So "we stopped
+rejecting it" suggests the checker **lost the information it decides on** rather
+than deciding differently — and a checker that falls through to *accept* may be
+accepting other invalid specializations silently. That is why this outranks the
+compat table's *"we accept a form FPC rejects → not a defect"* row: **these were
+green this morning**, and that row is about deliberate dialect laxness, not about a
+check that stopped firing.
+
+`tgenconstraint21` (`TTest8<ITest1>`) and `27` (`TTest15<TTestClass4>`) involve no
+`object` at all, so either the cause is broader or there are two. **Do not close
+the shards on the object link alone** — written into the tickets.
+
+### RETRACKED T → P, and this time the fallback SAID it was a fallback
+
+All six were auto-filed `track: T`, with the banner *"Track T by default: no lane
+could be inferred from `tools/run_pascal_conformance.sh`. This is a FALLBACK, not a
+finding… Re-lane it before working it."* **That banner is the difference between
+this and the two reds I retracked an hour ago**, which were filed `track: P` by a
+guess from the test path and said so only in the same small print. A fallback that
+announces itself is a fallback you can act on; a guess that prints like a decision
+is one you have to catch. Same tool, two behaviours — worth making uniform when
+the pause lifts.
+
+Re-laned to **P** (generic constraint checking is frontend semantics), with the
+mechanism and the falsifier in each.
+
+### CONSEQUENCE FOR THE PIN — the owner's call, stated plainly
+
+A pin would bless a master whose full tier is RED on ten jobs, six of them a
+same-day regression in the conformance suite with an unverified but specific link
+to a change that landed this morning. None of it is in the pin gate's path
+(`gate.sh quick` + `stabilize-fast`), so a pin CAN proceed. **It should not proceed
+without the owner being told this**, which is the correction my last two state
+reports needed.
+
+## CAUSATION CONFIRMED, AND IT INVERTS MY FRAMING — the checks were never there
+
+frank-user ran the falsifier I wrote into the six tickets. **`pinned` rejects all
+six, HEAD accepts all six** — so the link to `d23f52948` is established. And the
+mechanism is the opposite of what I proposed.
+
+I wrote that the constraint checker *"lost the information it decides on"*. **There
+has never been a constraint checker.** Verified here in the source rather than
+taken on report — `compiler/pasparser_generic.inc`:
+
+```pascal
+if Eat(tkColon) then
+  while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkGt) and
+        (CurTok.Kind <> tkEOF) do
+    Next;   { skip the constraint list }
+```
+
+`T: class`, `T: record`, `T: constructor`, `T: <class>`, `T: <interface>` — parsed
+to keep the parse moving, **recorded nowhere**. Filed as
+`bug-p-generic-type-constraints-are-parsed-and-discarded` [P p70]; the six shard
+tickets are closed into it as six views of one defect.
+
+### WHY THE TESTS WERE GREEN, AND IT IS THE SHARPEST THING TODAY
+
+`ugenconstraints.pas:65` is `TTestObject1 = object`. Under `pinned` that
+declaration **did not parse** —
+
+```
+pascal26:67: error: unexpected token in a unit interface section: it starts no
+                    declaration (a mistyped section header?)
+  in: ugenconstraints.pas
+```
+
+— so **every test importing the unit failed to compile, and a `{ %FAIL }` test
+that fails to compile reports PASS.** They were green for a reason unconnected to
+what they test. `d23f52948` made the unit parse and removed the barrier; what
+stood behind it was nothing.
+
+> **A conformance test that passes because the file it depends on will not compile
+> is not passing, and nothing in the output distinguishes the two.**
+
+This is face 222's family with a new instance — not a test wired to nothing, but a
+test whose *dependency* died upstream. And it is the **second instance today**:
+`generics.collections:146` hid `:120` exactly this way. **Both were found by
+comparing two binaries, which is the only thing that distinguishes them.**
+
+### THREE CORRECTIONS TO MY NUMBERS, ALL IN THE DIRECTION OF WORSE
+
+1. **The six is a shard artefact.** Measured across the corpus: **35 of 35**
+   FAIL-marked tests using `ugenconstraints` are wrongly accepted on HEAD. My
+   "4 → 10" undercounts by construction — I counted *shards*, which is the unit
+   the runner reports, not the unit the defect has.
+2. **My two disconfirming cases were EXPLAINED, not dismissed.** `tgenconstraint21`
+   and `27` name no `object`, and leading with them was right — they never reached
+   their own constraint, because the unit they import died at line 65. That is why
+   they moved with the other four. *"There may be two causes"* was the correct
+   hypothesis to hold until measured, and the correct thing to write into a ticket
+   I was not going to work.
+3. **The classification call was right for the right reason.** The compat table's
+   *"we accept a form FPC rejects → not a defect"* row is about **deliberate**
+   dialect choices; this is a check that was never written, so it is the
+   silent-wrong-behaviour escape. My instinct that a checker falling through to
+   accept differs in kind from a decided laxness held — there was simply no checker
+   to fall through.
+
+### THE PIN CONSEQUENCE FLIPS: NOT A REVERT CANDIDATE
+
+Reverting `d23f52948` restores green on all 35 **by restoring a FALSE green**, and
+re-breaks real Pascal source (`generics.collections`). **These reds are the first
+accurate report this suite has ever given about constraint checking.**
+
+So the line I gave the owner — *"a pin would bless a master carrying a same-day
+regression"* — was wrong in its most important word. **There is no new breakage.
+There is newly visible absence.** Master's full tier should be read as ~35 latent,
+not 10, and none of it was introduced today; the change that exposed it also fixed
+a real wall. A pin blesses a compiler that is strictly better than the pinned one
+on this axis and merely honest about a gap that predates it.
+
+frank-user is **not starting the fix** — five constraint forms, combinable,
+per-parameter storage, a real feature rather than a patch — and holds the T → P
+re-lane.
+
+## THE WAIT IS SATISFIED, 2026-08-30 ~12:1x — all six lanes clean and pushed
+
+**frankwasm is clean, 0 unpushed** (`ff1bc4787` 11:54, branch `wasm`). That was the
+last outstanding half of the owner's *"wait for everything to finish and push."*
+
+| | |
+| --- | --- |
+| lanes clean + 0 unpushed | frankA · frankC · b4 · frank-rust · frank-user · **frankwasm** |
+| `working/` | **zero locks** (`.gitkeep` only) |
+| seed | green — `no use-before-declaration … and no duplicate forward`, 219552 lines |
+| pin | v394 `53800fbeb0b66e11`, unchanged |
+| load | **12.9**, down from 18.5 |
+| full tier | RED, **10 jobs, `new=0`** on the three newest — the set is stable, not growing |
+
+Before stopping, frankwasm **filed its open fault rather than carrying it**:
+`910b92613 docs(progress): file the wasm-hosted compiler's garbage-handle fault,
+with the five hypotheses already ruled out`. Ruled-out hypotheses are the
+expensive half of a debugging session and the half that never survives a stop.
+
+### TRACK T BISECTED ONE OF MY TWO OLD REDS TO A SINGLE COMMIT
+
+`b347147c9`: `test_opt_store_reload` — bad `10c869750675`, last good `08cbfa20a11d`,
+**1 commit in range**. Exact attribution, not a range.
+
+```
+10c869750 07:48 fix(O): -O3 store->reload elimination elided a load the emitter had reordered
+```
+
+**And that commit added 45 lines to `test/test_opt_store_reload.pas` itself.** So
+the two causes I had written into the ticket — *expectation never regenerated* vs
+*the new `WriteLn`s expose a real difference* — are **one commit apart and the
+bisect cannot separate them**, because the same commit changed the optimizer and
+grew the test.
+
+The ticket now says to read the Makefile recipe before choosing, because
+`tools/expect_same.sh` is a generic `<label> <actual> <expected>` assert — *what*
+is compared lives in the recipe. If the operands are one program at two `-O`
+levels, regenerating the expectation **deletes the detector** (face 195); if it is
+a recorded file, regeneration is correct. **Do not pick the cheap one because it
+is cheap.**
+
+### THE 38-JOB CASCADE IS A STALE BASELINE, NOT AN EVENT
+
+`regression-cascade-fc01c8094434` [p70], auto-filed 09:59Z: *"38 jobs newly red in
+`5dbcc861e3fc..fc01c8094434` (87 commits) — treat as ONE root cause until triage
+proves otherwise."* Measured before believing it:
+
+- host is **plexus**, not seven; **plexus's newest report is 04:33Z**, five and a
+  half hours before the filing;
+- the range is **87 commits**;
+- two of the 38 already have exact, unrelated causes — `store_reload` (bisected to
+  one commit) and `rv32` (an `AIntToStr` include-order fault).
+
+**A cascade filing counts jobs that changed state since THIS BOX last looked**,
+which over a long gap is a different quantity from *jobs one commit broke*. The
+"one root cause" rule is right for a real cascade and wrong for a catch-up sweep,
+and **the filing cannot tell which it is** — its own header says so: *"nothing in
+this filing looked at the build, the box or the range."* Ticket now says to
+subtract what is already attributed before treating the remainder as one cause.
+
+**And the finding nobody files: a box that stops sweeping for six hours.** The
+reports plexus did not write are not in `tstate/` to be counted, so its silence is
+invisible to every check that reads `tstate/`. Same shape as `twatch --status`
+reading a local checkout — **absence of evidence is stored as absence.**

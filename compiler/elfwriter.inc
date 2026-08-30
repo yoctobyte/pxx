@@ -116,6 +116,20 @@ begin
   DataPutU64(value);
 end;
 
+
+{ The LINK symbol for external index `extIdx`: the `external name 'sym'` alias
+  when the declaration carried one, else the Pascal identifier. EVERY writer
+  that names an undefined symbol must go through here. The dynamic-import paths
+  resolved the alias and the three --emit-obj writers did not, which is
+  `bug-a-emit-obj-ignores-external-name`; sizing a string table and writing it
+  are two separate callers of this, so they cannot drift apart either. }
+function ExternalLinkName(extIdx: Integer): AnsiString;
+begin
+  if ProcExtName[ExternalProc[extIdx]] >= 0 then
+    Result := Strs[ProcExtName[ExternalProc[extIdx]]].Text
+  else
+    Result := Procs[ExternalProc[extIdx]].Name;
+end;
 procedure PrepareDynamicData;
 var
   i, j, libIdx, relType: Integer;
@@ -156,10 +170,7 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     nameOff[i] := DataLen - DynamicStrOff;
-    if ProcExtName[ExternalProc[i]] >= 0 then
-      DataPutZ(Strs[ProcExtName[ExternalProc[i]]].Text)
-    else
-      DataPutZ(Procs[ExternalProc[i]].Name);
+    DataPutZ(ExternalLinkName(i));
   end;
   DynamicStrSize := DataLen - DynamicStrOff;
   while (DataLen mod 8) <> 0 do DataPutB(0);
@@ -266,10 +277,7 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     nameOff[i] := DataLen - DynamicStrOff;
-    if ProcExtName[ExternalProc[i]] >= 0 then
-      DataPutZ(Strs[ProcExtName[ExternalProc[i]]].Text)
-    else
-      DataPutZ(Procs[ExternalProc[i]].Name);
+    DataPutZ(ExternalLinkName(i));
   end;
   DynamicStrSize := DataLen - DynamicStrOff;
   while (DataLen mod 4) <> 0 do DataPutB(0);
@@ -728,7 +736,10 @@ end;
   PXX is its own linker, so it writes every .debug_* byte itself. Everything
   below builds the section content into the shared DbgBuf byte buffer (no file
   IO, no $ifdef — pure byte math) so both writeELF variants can append it with
-  their own primitives. x86-64 only for Tier 1. }
+  their own primitives. Tier 1 covers x86-64, aarch64, i386 and arm32 -- the set
+  DbgArchSupported names below; esp xtensa/riscv32 are excluded (windowed /
+  no-frame-pointer ABI, no gdb-over-qemu line path). Corrected 2026-08-30: read
+  "x86-64 only for Tier 1". }
 
 procedure DbgPutB(v: Integer);
 begin
@@ -1525,6 +1536,161 @@ begin
   DbgShStrSecSize := DbgLen - DbgShStrSecOff;
 end;
 
+{ ---- page-separate CODE from DATA ------------------------------------------
+  Pad Code[] until the data section starts on a page of its own.
+
+  THE PADDING GOES INTO Code[], NOT INTO dataBase, and that distinction is the
+  whole correctness of this. There is ONE PT_LOAD with p_offset 0, so a virtual
+  address IS `LOAD_ADDR + a file offset` — `dataBase := LOAD_ADDR + codeOffset +
+  CodeLen`, and the data's file offset is `codeOffset + CodeLen`. Aligning
+  dataBase on its own would desynchronise the two and every emitted data
+  reference would read 0..4095 bytes early. That version would also pass the
+  self-host fixedpoint, because a uniformly-wrong compiler reproduces itself
+  perfectly — the gate proves reproduction, not correctness.
+
+  Why it is worth up to 4 KiB per binary: with code and data adjacent, the
+  boundary page holds both, and a hot write to a mutable word on that page makes
+  a qemu-user-style emulator invalidate the translations it made from that page,
+  on every store. Measured 83x on aarch64 and, for the SAME binary that runs in
+  0.009s natively, 1600x on x86-64 under qemu-x86_64. The controls that make it
+  a mechanism: removing the mutable word removes it, and so does moving the word
+  off the shared page while keeping everything else.
+  bug-a-a-hot-write-to-a-data-page-that-shares-with-code-costs-1600x-under-qemu
+
+  Fixed HERE rather than in the pass that first put a mutable word beside code
+  (a string literal's refcount, feature-opt-o3-static-string-literals), because
+  the hazard belongs to the layout and not to that pass: it is any mutable word
+  beside code, and the next one would be found the same expensive way.
+
+  4096 IS WHAT THE MEASURED CASES NEED, NOT A PROOF. An emulator's granularity
+  follows the target page size, and a host configured for 16 KiB pages would
+  still leave a residual shared page. Stated rather than left for a reader to
+  take "page-aligned" as "solved everywhere".
+
+  The padding is APPENDED and never inserted: the out-of-line import thunk is
+  placed just before this dispatch and its rel32 call sites are already patched
+  against its position, so anything but a tail append moves every one of them.
+  Appending at the tail is also the one growth that cannot arm the rel8
+  truncation of bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows,
+  since it lengthens no span between a patch site and its target.
+
+  Zero-filled and unreachable: the bytes sit past the last emitted instruction
+  and nothing falls through to them, and zero is `udf #0` on aarch64 and faults
+  on x86-64 — so a stray jump into the padding dies loudly instead of running.
+
+  EMIT THE BYTES WITH EmitB. `Code` is a DYNAMIC array grown on demand by
+  GrowCode, so `Code[CodeLen] := 0; Inc(CodeLen)` writes past CodeCapacity the
+  moment the padding crosses it — out of bounds, into whatever heap block
+  follows. The first version did exactly that and the symptom was nowhere near
+  the cause: it landed in GlobFix, whose entries came back ZEROED, so the ELF
+  writer then patched every 4-byte global reference with `bssBase + 0` at code
+  offset 0 instead of at its own site. The binary died with SIGILL on its first
+  instruction, with a fixup array that had been correct 200 lines earlier
+  (measured: gf0.pos 1 before the loop, 0 after). MAX_CODE (32 MiB) is NOT the
+  bound that matters here — CodeCapacity is, and it starts at 64 KiB. }
+const
+  ELF_DATA_PAGE = 4096;
+  { aarch64 kernels ship with 4, 16 or 64 KiB pages; 64 KiB covers all three.
+    See ElfSegAlign below for why the loader's page and not ours decides this. }
+  ELF_AARCH64_PAGE = 65536;
+
+{ THE DATA SECTION MUST BE WORD-ALIGNED, AND FOR YEARS IT ONLY WAS BY LUCK.
+
+  Every executable writer here places data immediately after code --
+  `dataBase := LOAD_ADDR + codeOffset + CodeLen` -- so the data section began
+  wherever the last instruction happened to end. Code lengths are byte-granular,
+  so that is an arbitrary residue: measured across a 129-source differential,
+  EVERY program sampled started its data three bytes past a word boundary.
+
+  x86-64 and riscv32 absorb an unaligned word load. Xtensa's l32i/s32i does not
+  -- it raises an alignment fault, which surfaces under qemu as
+  `uncaught target signal 7 (Bus error)`. So whether a given program died came
+  down to whether it happened to dereference a word that landed misaligned: 41
+  of 94 windowed-ABI programs did. The other 53 were never safe, only untested.
+
+  The one line that has been holding this up since 75d2ba662 is
+  PadCodeToPageBoundary below, which pads to 4096 and therefore to 8 as a side
+  effect -- a constant introduced for an unrelated qemu translation-cache
+  reason, in a writer under active edit, propping up a correctness property
+  nothing asserts. Four routes take it away with no diagnostic: a second
+  PT_LOAD, a 16 KiB-page host, `--emit-obj`, and any bare-metal ESP image
+  (which skips the page pad outright and so has been misaligned all along).
+
+  Hence this: an explicit, unconditional, stated invariant, and an Error rather
+  than a silent miscompile if it is ever violated. Diagnosed by frankS,
+  bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why.
+
+  8 and not 4: the same width bssBase has always used two lines below, for the
+  same reason plus aarch64's 64-bit exclusives, and a typed constant can be a
+  qword. There is no target on which 4 is enough and 8 is too much. }
+const
+  ELF_DATA_ALIGN = 8;
+
+procedure AlignCodeForData(codeOffset: Int64);
+begin
+  { Record where filler starts so `-S` can stop there -- see CodePadStart in
+    defs.inc. First padder wins: this runs before the page pad, so the listing
+    stops at the first byte that is not an instruction, not at the last. }
+  if CodePadStart < 0 then CodePadStart := CodeLen;
+  while ((codeOffset + CodeLen) mod ELF_DATA_ALIGN) <> 0 do
+    EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note below }
+end;
+
+{ The invariant checked where it is USED, not where it is established -- the
+  loop above cannot fail, but a writer that computes dataBase without calling
+  AlignCodeForData can, and so can a load base that is not itself aligned
+  (SocIramBase is a per-chip constant, not something this file controls). An
+  Error here is a build that stops; the alternative is a program that faults on
+  xtensa and runs everywhere else. }
+procedure CheckDataBaseAligned(dataBase: Int64);
+begin
+  if (dataBase mod ELF_DATA_ALIGN) <> 0 then
+    Error('internal: data section base is not 8-byte aligned -- xtensa l32i '
+          + 'will fault on it');
+end;
+
+{ THE PAD IS NOW A SEGMENT BOUNDARY, AND ITS SIZE IS THE LOADER'S PAGE, NOT OURS.
+
+  With code and data in separate PT_LOADs the loader maps each one from
+  PAGE_START(p_vaddr) at the HARDWARE page size, whatever that is -- p_align is
+  a congruence requirement, not a promise about granularity. If the boundary
+  between the two segments is not aligned to the loader's page, the data
+  segment's mapping starts BELOW the end of the code segment and re-maps that
+  overlap R+W. The content stays correct (our p_vaddr = LOAD_ADDR + p_offset
+  identity guarantees the same file bytes land at the same addresses either
+  way); the PERMISSIONS do not. Real code in the overlap becomes
+  non-executable and the program dies on its first call into it.
+
+  4096 is right for x86-64, i386, arm32, riscv32 and hosted xtensa: their Linux
+  base page is 4 KiB. It is NOT right for aarch64, whose kernel may be built
+  for 4, 16 or 64 KiB -- so aarch64 gets 65536, which is exactly why GNU ld
+  defaults `max-page-size` to 0x10000 on that architecture. The cost is up to
+  64 KiB of zero padding in an aarch64 image and it buys the property that the
+  image is correct on a kernel we have never run it on.
+
+  This is the same lesson as AlignCodeForData above, one level up: the data
+  section was word-aligned for years by a coincidence nobody tested, and 41
+  xtensa programs were the bill. Sizing this pad to the page size we happen to
+  test on would be the identical mistake with a bigger blast radius, because a
+  wrong answer here is a SIGSEGV on the first instruction of the overlap rather
+  than on one unlucky load. }
+function ElfSegAlign: Int64;
+begin
+  if TargetArch = TARGET_AARCH64 then
+    ElfSegAlign := ELF_AARCH64_PAGE
+  else
+    ElfSegAlign := ELF_DATA_PAGE;
+end;
+
+procedure PadCodeToPageBoundary(codeOffset: Int64);
+var segAlign: Int64;
+begin
+  if CodePadStart < 0 then CodePadStart := CodeLen;
+  segAlign := ElfSegAlign;
+  while ((codeOffset + CodeLen) mod segAlign) <> 0 do
+    EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note above }
+end;
+
 {$ifdef FPC}
 procedure writeELF(const outPath: AnsiString);
 var f: File; i: Integer;
@@ -1537,15 +1703,24 @@ begin
     machine := 183
   else
     machine := 62;
-  phCount := 2;   { PT_LOAD + PT_GNU_STACK }
+  phCount := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK }
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
   begin
     PrepareDynamicData;
-    phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
+    phCount := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
+  { Code starts immediately after the program headers, so the constant and the
+    header count are one fact spelled twice and drift silently: the image still
+    loads, every address it reports is off by 56, and nothing fails. Checked
+    here because this file keeps two parallel copies of this writer. }
+  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
+    Error('internal: CODE_OFFSET disagrees with the program-header count');
+  AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
+  PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
+  CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
     per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
@@ -1635,9 +1810,19 @@ begin
     writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
   end;
 
-  writeU32(f,1);writeU32(f,7);  { PT_LOAD, RWX }
+  { PT_LOAD #1 -- headers + code, R+X. p_filesz = p_memsz: nothing in this
+    segment is zero-filled at load, the page pad is real bytes in the file. }
+  writeU32(f,1);writeU32(f,5);  { PT_LOAD, R+X }
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
-  writeU64(f,filesz);writeU64(f,memsz);writeU64(f,$200000);
+  writeU64(f,codeOffset + CodeLen);writeU64(f,codeOffset + CodeLen);
+  writeU64(f,ElfSegAlign);
+  { PT_LOAD #2 -- data + bss, R+W and NO X. p_memsz runs to the end of bss,
+    which the kernel zero-fills past p_filesz. bssBase is dataBase + DataLen
+    rounded up to 8, so the gap is inside this segment and is zeroed too. }
+  writeU32(f,1);writeU32(f,6);  { PT_LOAD, R+W }
+  writeU64(f,codeOffset + CodeLen);writeU64(f,dataBase);writeU64(f,dataBase);
+  writeU64(f,DataLen);writeU64(f,(bssBase - dataBase) + BSSSize);
+  writeU64(f,ElfSegAlign);
   if ExternalCount > 0 then
   begin
     writeU32(f,3);writeU32(f,4); { PT_INTERP, R }
@@ -1679,15 +1864,24 @@ begin
     machine := 183
   else
     machine := 62;
-  phCount := 2;   { PT_LOAD + PT_GNU_STACK }
+  phCount := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK }
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
   begin
     PrepareDynamicData;
-    phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
+    phCount := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
+  { Code starts immediately after the program headers, so the constant and the
+    header count are one fact spelled twice and drift silently: the image still
+    loads, every address it reports is off by 56, and nothing fails. Checked
+    here because this file keeps two parallel copies of this writer. }
+  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
+    Error('internal: CODE_OFFSET disagrees with the program-header count');
+  AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
+  PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
+  CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
     per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
@@ -1696,9 +1890,16 @@ begin
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := (bssBase - LOAD_ADDR) + BSSSize;
 
-  { DWARF -g: Tier 1 is x86-64 only. Build the .debug_* bytes, then place a
-    section-header table after them (the load image is unchanged — debug sections
-    live past p_filesz, unmapped). }
+  { DWARF -g. Build the .debug_* bytes, then place a section-header table after
+    them (the load image is unchanged — debug sections live past p_filesz,
+    unmapped).
+
+    Corrected 2026-08-30: this said "Tier 1 is x86-64 only", ONE LINE above a
+    condition that also tests aarch64, and Tier 1 in fact covers FOUR targets --
+    the 32-bit writer below (~line 1895) gates i386 and arm32 the same way.
+    Measured, not read: `-g` on all four emits 4 .debug sections. Reading only
+    the condition under this comment gives the answer "two", which is what makes
+    this worth a note rather than a silent edit. }
   doDebug := DebugInfo and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64));
   shoff := 0;
   if doDebug then
@@ -1782,9 +1983,19 @@ begin
     writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
   end;
 
-  writeU32(f,1);writeU32(f,7);  { PT_LOAD, RWX }
+  { PT_LOAD #1 -- headers + code, R+X. p_filesz = p_memsz: nothing in this
+    segment is zero-filled at load, the page pad is real bytes in the file. }
+  writeU32(f,1);writeU32(f,5);  { PT_LOAD, R+X }
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
-  writeU64(f,filesz);writeU64(f,memsz);writeU64(f,$200000);
+  writeU64(f,codeOffset + CodeLen);writeU64(f,codeOffset + CodeLen);
+  writeU64(f,ElfSegAlign);
+  { PT_LOAD #2 -- data + bss, R+W and NO X. p_memsz runs to the end of bss,
+    which the kernel zero-fills past p_filesz. bssBase is dataBase + DataLen
+    rounded up to 8, so the gap is inside this segment and is zeroed too. }
+  writeU32(f,1);writeU32(f,6);  { PT_LOAD, R+W }
+  writeU64(f,codeOffset + CodeLen);writeU64(f,dataBase);writeU64(f,dataBase);
+  writeU64(f,DataLen);writeU64(f,(bssBase - dataBase) + BSSSize);
+  writeU64(f,ElfSegAlign);
   if ExternalCount > 0 then
   begin
     writeU32(f,3);writeU32(f,4); { PT_INTERP, R }
@@ -1861,14 +2072,30 @@ begin
       same as i386/arm32. Nothing esp-specific remains. }
   end;
 
-  phnum := 2;   { PT_LOAD + PT_GNU_STACK }
-  codeOffset := CODE_OFFSET32;
+  { A bare-metal ESP image keeps the original SINGLE RWX PT_LOAD: it loads into
+    SoC SRAM as one region, no loader enforces a second segment's permissions,
+    and the split would cost a page of padding in a memory measured in hundreds
+    of KB to buy nothing. Everything hosted gets code and data separated. }
+  if EspBareBoot then
+  begin
+    phnum := 2;   { PT_LOAD (RWX) + PT_GNU_STACK }
+    codeOffset := ESP_CODE_OFFSET32;
+  end
+  else
+  begin
+    phnum := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK }
+    codeOffset := CODE_OFFSET32;
+  end;
   if isDyn then
   begin
     PrepareDynamicData32;          { appends interp/dynstr/dynsym/hash/rel/dynamic }
-    phnum := 4;   { + PT_INTERP + PT_DYNAMIC }
+    phnum := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET32;
   end;
+  { See the same check in writeELF: the constant and the header count are one
+    fact spelled twice, and drift produces an image that loads and lies. }
+  if codeOffset <> ELF32_HEADER_SIZE + phnum * PROG32_HEADER_SIZE then
+    Error('internal: CODE_OFFSET32 disagrees with the program-header count');
   { Bare-metal ESP image loads into the SoC SRAM (one RWX region under qemu);
     everything else uses the classic i386 ET_EXEC base. }
   if EspBareBoot then
@@ -1879,7 +2106,15 @@ begin
     loadBase := SocIramBase(TargetSoc);
   end
   else loadBase := LOAD_ADDR32;
+  { NOT for a bare-metal ESP image: it loads into SoC SRAM measured in
+    hundreds of KB, where 4 KiB is a real cost — and nothing is translating
+    from that page there, so the hazard does not exist to be avoided. }
+  { Unconditional, ESP included: the bare image skips the page pad, so this is
+    the ONLY thing aligning its data -- and xtensa is the target that faults. }
+  AlignCodeForData(codeOffset);
+  if not EspBareBoot then PadCodeToPageBoundary(codeOffset);
   dataBase := loadBase + codeOffset + CodeLen;
+  CheckDataBaseAligned(dataBase);
   { BSS holds word-sized globals laid out with AlignTo offsets, so the base
     itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on
     misaligned word access. Code+data lengths are byte-granular, so pad. }
@@ -1997,11 +2232,27 @@ begin
     writeU16(f,phnum);writeU16(f,0);writeU16(f,0);writeU16(f,0);
   end;
 
-  { phdr32 (32 bytes): PT_LOAD RWX, whole file at loadBase }
-  writeU32(f,1);writeU32(f,0);                          { type, offset }
-  writeU32(f,loadBase);writeU32(f,loadBase);
-  writeU32(f,filesz);writeU32(f,memsz);
-  writeU32(f,7);writeU32(f,$1000);                      { flags, align }
+  { phdr32 (32 bytes each). The ESP bare image is one RWX segment covering the
+    whole file, as it has always been; every hosted image is code R+X then
+    data+bss R+W. }
+  if EspBareBoot then
+  begin
+    writeU32(f,1);writeU32(f,0);                        { PT_LOAD, offset 0 }
+    writeU32(f,loadBase);writeU32(f,loadBase);
+    writeU32(f,filesz);writeU32(f,memsz);
+    writeU32(f,7);writeU32(f,$1000);                    { flags RWX, align }
+  end
+  else
+  begin
+    writeU32(f,1);writeU32(f,0);                        { PT_LOAD, offset 0 }
+    writeU32(f,loadBase);writeU32(f,loadBase);
+    writeU32(f,codeOffset + CodeLen);writeU32(f,codeOffset + CodeLen);
+    writeU32(f,5);writeU32(f,ElfSegAlign);              { flags R+X }
+    writeU32(f,1);writeU32(f,codeOffset + CodeLen);     { PT_LOAD, data offset }
+    writeU32(f,dataBase);writeU32(f,dataBase);
+    writeU32(f,DataLen);writeU32(f,(bssBase - dataBase) + BSSSize);
+    writeU32(f,6);writeU32(f,ElfSegAlign);              { flags R+W, no X }
+  end;
   if isDyn then
   begin
     { PT_INTERP (R): the dynamic loader path. }
@@ -2119,7 +2370,7 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     ObjExtStrOff[i] := strSize;
-    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+    strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
 
   firstGlobal := 5 + numProcSyms;        { null + 4 section syms + procs }
@@ -2215,7 +2466,7 @@ begin
     if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
   writeStrZ(f, 'app_main');
   for i := 0 to ExternalCount-1 do
-    writeStrZ(f, Procs[ExternalProc[i]].Name);
+    writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text — only relocs whose CodePos stays in flash .text.
@@ -2332,8 +2583,17 @@ var
   f: Integer;
 {$endif}
 begin
+  { Name the WHOLE truth, not this writer's half of it. This message said
+    "only xtensa/riscv32" while x86-64 had a writer of its own, so the
+    diagnostic and the docs were both wrong about the same flag in opposite
+    directions -- the docs said "any target", this said three fewer than there
+    are, and the truth was in neither.
+    bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 }
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
-    Error('--emit-obj: only xtensa/riscv32 targets are supported');
+    Error('--emit-obj: a general relocatable object (code, data, bss, '
+        + 'relocations, exported symbols) is emitted for --target=xtensa and '
+        + '--target=riscv32; x86-64 emits objects for .asm sources only; '
+        + 'i386, arm32 and aarch64 have no object writer');
   { Programs with `iram;` procedures need the two-text-section writer, which also
     handles @proc (ProcAddrFix) relocs — dispatch BEFORE the guard below. }
   for i := 0 to ProcCount-1 do
@@ -2371,7 +2631,7 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     ObjExtStrOff[i] := strSize;
-    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+    strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
 
   firstGlobal := 4 + numProcSyms;  { null + .text/.data/.bss section syms + procs }
@@ -2435,7 +2695,7 @@ begin
     if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
   writeStrZ(f, 'app_main');
   for i := 0 to ExternalCount-1 do
-    writeStrZ(f, Procs[ExternalProc[i]].Name);
+    writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text: literal slots -> .data / .bss / undefined externals.
@@ -2525,6 +2785,46 @@ var
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('--emit-obj: .asm frontend object output is x86-64 only');
+
+  { THIS WRITER IS THE .asm FRONTEND'S, AND THE DISPATCH SENDS IT EVERYTHING.
+
+    Read what it emits below: `.text`, a symbol per `global <label>` from the
+    .asm frontend (AsmGlobalSym*), the UND externs, and one relocation per
+    `call <extern>` (AsmObjCall*). There is no `.data`, no `.bss`, and no
+    relocation kind for anything a compiler BACKEND produces. That is correct
+    for a .asm source, where data is appended into Code[] and addressed as part
+    of .text (`dataBase := CodeLen`, asmfront.inc) -- and it is why the guard
+    below is about the program, not about the frontend.
+
+    compiler.pas dispatches `--emit-obj` by ARCHITECTURE: x86-64 comes here,
+    everything else to writeELF32Rel, which is the GENERAL object writer (procs
+    as symbols, .data, .bss, .rela.data) and refuses anything but xtensa and
+    riscv32. So a Pascal, C or NilPy program on x86-64 -- the DEFAULT target --
+    landed here and this writer faithfully wrote everything it knew, which was
+    nothing: 4 symbols, none of them defined, a zero-size .rela.text, no data
+    and no bss, for a program with 132 procedures. The `ok:` line downstream
+    then reported `data=2864B bss=42332B procs=132` about a file containing
+    none of it.
+
+    There is no general x86-64 relocatable writer to route those programs to.
+    Until there is (feature-a-a-general-x86-64-relocatable-object-writer), REFUSE
+    -- an unlinkable object reported as success is strictly worse than an error,
+    because the failure surfaces at someone else's link step with no cause
+    attached. The test is what the object would have to CARRY, so a .asm source
+    that only needs text, globals and extern calls still works exactly as before.
+    bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations }
+  if (BSSSize > 0) or (FixCount > 0) or (GlobFixCount > 0) or
+     (DataPtrFixCount > 0) or (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
+    Error('--emit-obj: this program needs a general relocatable object (data, '
+        + 'bss or backend relocations) and the x86-64 object writer only '
+        + 'handles .asm-frontend output (text, global labels, extern calls). '
+        + 'Emitting one would silently drop them. Build an executable instead, '
+        + 'or use --target=xtensa/riscv32 --platform=esp for object output');
+  if (AsmGlobalSymCount = 0) and (ProcCount > 0) then
+    Error('--emit-obj: the x86-64 object writer exports symbols only for .asm '
+        + '`global` labels, so this object would define nothing and could not '
+        + 'be linked against');
+
   machine := 62;   { EM_X86_64 }
 
   { .strtab layout: 0 = empty, then global-label names, then extern names }
@@ -2537,7 +2837,7 @@ begin
   for i := 0 to ExternalCount - 1 do
   begin
     ObjExtStrOff[i] := strSize;
-    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+    strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
 
   firstGlobal := 2;   { null sym + .text section sym }
@@ -2587,7 +2887,7 @@ begin
   { .strtab }
   writeU8(f, 0);
   for i := 0 to AsmGlobalSymCount - 1 do writeStrZ(f, AsmGlobalSymName[i]);
-  for i := 0 to ExternalCount - 1 do writeStrZ(f, Procs[ExternalProc[i]].Name);
+  for i := 0 to ExternalCount - 1 do writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text: one R_X86_64_PLT32 per `call <extern>` site. addend -4:
@@ -2686,7 +2986,7 @@ begin
   for i := 0 to ExternalCount - 1 do
   begin
     strOffImport[i] := dynstrSize;
-    dynstrSize := dynstrSize + Length(Procs[ExternalProc[i]].Name) + 1;
+    dynstrSize := dynstrSize + Length(ExternalLinkName(i)) + 1;
   end;
 
   { DT_NEEDED: one per distinct imported library (Strs[] index dedup, same
@@ -2789,7 +3089,7 @@ begin
   { .dynstr }
   writeU8(f, 0);
   for i := 0 to AsmGlobalSymCount - 1 do writeStrZ(f, AsmGlobalSymName[i]);
-  for i := 0 to ExternalCount - 1 do writeStrZ(f, Procs[ExternalProc[i]].Name);
+  for i := 0 to ExternalCount - 1 do writeStrZ(f, ExternalLinkName(i));
   for i := 0 to neededCount - 1 do writeStrZ(f, Strs[neededLibStr[i]].Text);
   writePad(f, dynsymOff - (dynstrOff + dynstrSize));
 

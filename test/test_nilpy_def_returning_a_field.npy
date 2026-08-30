@@ -111,3 +111,112 @@ print(Node("s").field(), type(Node("s").field()).__name__)
 # the result is usable as its real type, not just printable
 print(unannotated() + 1, annotated_str() + "y", f_str() + "!")
 print(sum([f_list()[0], f_list()[1]]))
+
+
+# --- the METHOD sibling of every row above -------------------------------
+# `def a(): q = Item(5); return q.n` was fixed; `return q.get()` was not, and
+# the two shapes of one concept then answered differently. The call form is the
+# WORSE half: a field read printed the right value because an int renders
+# through the int path, while a method returning a str handed back a string
+# handle the caller read as an object pointer and SEGFAULTED — no wrong value
+# to notice first. It reproduces with no inheritance, no name collision and no
+# None: one local, one method. The two-statement spelling `t = q.get(); return
+# t` was correct throughout, which is what identifies this as the return-type
+# scan rather than the call.
+# regression-test-nilpy-test-nilpy-parent-call-after-instantiation
+
+
+class Box:
+    def __init__(self, n):
+        self.n = n
+
+    def get_int(self):
+        return self.n
+
+    def get_str(self):
+        return "b" + str(self.n)
+
+    def get_inner(self):
+        return Inner()
+
+    def plus(self, k):
+        return self.n + k
+
+
+class SubBox(Box):
+    def get_str(self):
+        return "sub:" + Box.get_str(self)
+
+
+def make_box():
+    return Box(3)
+
+
+def m_int():
+    q = Box(3)
+    return q.get_int()
+
+
+def m_str():
+    q = Box(3)
+    return q.get_str()
+
+
+def m_cls():
+    q = Box(3)
+    return q.get_inner()
+
+
+def m_args():
+    q = Box(3)
+    return q.plus(4)
+
+
+def m_from_def():
+    q = make_box()          # receiver bound from a DEF, not a constructor
+    return q.get_str()
+
+
+def m_inherited():
+    q = SubBox(3)
+    return q.get_str()
+
+
+def m_via_local():
+    q = Box(3)
+    t = q.get_str()         # the spelling that always worked — the control
+    return t
+
+
+print(type(m_int()).__name__, m_int(), m_int() + 1)
+print(type(m_str()).__name__, m_str(), m_str().upper())
+print(type(m_cls()).__name__, m_cls().v, m_cls().get())
+print(type(m_args()).__name__, m_args(), m_args() * 2)
+print(type(m_from_def()).__name__, m_from_def(), m_from_def() + "!")
+print(type(m_inherited()).__name__, m_inherited())
+print(type(m_via_local()).__name__, m_via_local())
+
+
+# controls: a MODULE-qualified call and a builtin conversion are not method
+# calls on a local and must keep their own routes — the exact pair the
+# intrinsic-collision fixes had to protect.
+import math
+
+
+def c_mod():
+    return math.sqrt(9.0)
+
+
+def c_conv():
+    x = 7
+    return str(x)
+
+
+def c_strmeth():
+    s = "abc"
+    return s.upper()
+
+
+print(type(c_mod()).__name__, c_mod())
+print(type(c_conv()).__name__, c_conv())
+print(type(c_strmeth()).__name__, c_strmeth())

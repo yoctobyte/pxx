@@ -90,4 +90,8 @@ idle box. Still open on
 waiting on a box that is not the owner's workstation under load.
 
 ## Log
-- 2026-08-29 — fixed with guards; resolved.
+- 2026-08-29 — fixed with guards; resolved, commit 62dd38d65 (`fix(T): the
+  breadth banner reads the full TIER, not the last replacing run`). The ticket
+  move landed separately as 0d0230593; the fix is cited here because that is
+  what a reader needs — see the ruling in
+  bug-t-a-resolve-that-never-wrote-a-placeholder-is-uncited-and-nothing-says-so.

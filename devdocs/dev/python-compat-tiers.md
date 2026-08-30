@@ -104,19 +104,67 @@ is the coordination point every program already names.
   "mimic-reportlab", "a reportlab-compatible canvas" — never "reportlab".
 
 Bare-name shims already in the tree (`re`, `configparser`, `tkinter`) are named
-directly, which was the quick path. They should move behind the same mapping when
-it lands, so the rule is one rule.
+directly, which was the quick path. They should move behind the same mapping so
+the rule is one rule.
 
-## Concrete blocker for T1-by-naming
+> **Status checked 2026-08-30 (frankD), at `ea5d7c6e7`.** *"When it lands"* has
+> happened — [[feature-nilpy-dotted-package-imports]] is in `done/` and the
+> resolver tries `<name>` first, then falls back to `mimic_<name>`
+> (`pyparser.inc`, `grep -n 'mimic_reportlab_lib'`). The three units have **not**
+> moved: `lib/rtl/re.pas`, `lib/rtl/configparser.pas` and `lib/pcl/tkinter.pas`
+> are still bare, next to `lib/pcl/mimic_tkinter_font.pas` — the convention is
+> applied inconsistently inside one package family.
+>
+> **The alarming reading was tested and is false, which is the part worth
+> recording.** A bare-named shim looks like it could shadow a user's own module,
+> since the resolver's *first* probe is the bare name. It does not: with a local
+> `re.py` defining `compile()` beside a program that does `import re`, the
+> compiled binary prints `USER-RE`. The user's module wins. Compiled with
+> `$(PXX_STABLE)`, two minutes, and it is the reason this is not a bug ticket.
+>
+> What is left is the naming rule's *other* purpose, from the section above —
+> **a reader who opens `mimic_reportlab.pas` knows it is a subset shim, and a
+> reader who opens `re.pas` has no such signal.** That is an expectation cost,
+> not a correctness one, and no compiling program behaves differently either
+> way. Deliberately **not** filed: a ticket that cannot name a program whose
+> behaviour changes is one that sits in the ranker's scan forever at zero value.
+> Recorded here instead so the next person to read this paragraph does not
+> re-run the shadowing test.
 
-`from reportlab.pdfgen import canvas` is a DOTTED module path. NilPy maps `import X`
-onto the Pascal unit resolver, and a unit name cannot contain a dot, so a unit
-called `reportlab` alone does not satisfy that import. A package convention is
-needed — a `lib/py/reportlab/pdfgen.pas` layout with dotted paths resolved onto it,
-or a documented mangling. Until then, T1 shims only work for modules imported by a
-single bare name (`re`, `configparser`, `tkinter`, `json`).
+## The blocker for T1-by-naming — RESOLVED 2026-07/08, kept for the reasoning
 
-Tracked as `feature-nilpy-dotted-package-imports`.
+**This section described a live blocker until 2026-08-30 and no longer does.**
+Read it as the argument that produced the design, not as a limit.
+
+The problem was real: `from reportlab.pdfgen import canvas` is a DOTTED module
+path, NilPy maps `import X` onto the Pascal unit resolver, and a unit name cannot
+contain a dot — so a unit called `reportlab` alone does not satisfy that import.
+Two ways out were offered above: a `lib/py/reportlab/pdfgen.pas` package layout
+with dotted paths resolved onto it, **or a documented mangling.**
+
+**The mangling shipped**, exactly as this page proposed it —
+`reportlab.pdfgen` → `mimic_reportlab_pdfgen`. `feature-nilpy-dotted-package-imports`
+is in `done/`, named for this page's own example, and the corpus uses the feature
+routinely: `import xml.etree.ElementTree as ET`, `from urllib.request import
+Request, urlopen`, `from six.moves import urllib_parse` all resolve today onto
+`mimic_xml_etree_elementtree`, `mimic_urllib_request`, `mimic_six_moves`. The
+package-directory layout was **not** built, which is why `lib/py/` does not exist
+— that path above is the road not taken, not a stale citation.
+
+> **Corrected 2026-08-30 (frankD), measured at `ea5d7c6e7`.** The sentence that
+> mattered was *"Until then, T1 shims only work for modules imported by a single
+> bare name (`re`, `configparser`, `tkinter`, `json`)."* **That limit has been
+> false for weeks**, and it is the second one this audit found with the same
+> signature: it does not merely assert the limit, it **explains** it — *a unit
+> name cannot contain a dot* — and a reader who accepts the mechanism stops
+> testing the conclusion. A false limit with a mechanism attached is the most
+> durable wrong thing a doc can carry, because the mechanism is still true and
+> only the consequence has moved.
+>
+> Verify rather than trust either version:
+> `ls devdocs/progress/*/feature-nilpy-dotted-package-imports.md` says where the
+> work sits, and `grep -l '^import [a-z_]*\.' test/*.npy` says whether the corpus
+> actually uses it.
 
 ## Where the current shims stand
 

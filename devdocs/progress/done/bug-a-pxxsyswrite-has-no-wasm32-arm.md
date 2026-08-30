@@ -6,7 +6,8 @@ blocked-by: []
 summary: "PXXSysWrite in compiler/builtin/builtinheap.pas is a chain of per-target {$ifdef}s over __pxxrawsyscall with no wasm32 arm, so on wasm32 it returns 0 having written nothing. Every console path bottoms out there — writeln, the RTL error reporters, PXXDbg — so a wasm32 program compiles, lowers correctly, runs, and is silent. Fix is one additive arm behind {$ifdef CPU_WASM32} calling a WASI fd_write import; the wasm backend already lowers `external 'lib' name 'sym'` to a wasm import. VERIFIED: with the patch below applied, a Pascal program compiled to wasm32 prints under node's WASI and its output is byte-identical to the native build. The compiler's own self-host fixedpoint sha is UNCHANGED with and without the patch (c9817ce01cbc both ways), because CPU_WASM32 is never defined while building for any other target."
 status: done
 owner: "wasm32 lane (narrow grant)"
-resolved: PENDING-COMMIT
+commit: b78e8f9bc
+resolved: 1a0ab35b3
 ---
 
 # `PXXSysWrite` has no wasm32 arm, so a wasm32 program is silent
@@ -178,3 +179,14 @@ p70) is the third instance and was deliberately **not** granted: its fix adds a
 BSS arena and a size constant — new storage in a file every target compiles —
 so the sha-identity argument would be a weaker claim about a larger change. The
 line was drawn at the strength of the evidence, not the ticket's priority.
+
+## Log
+- 2026-08-29 — fix landed as commit b78e8f9bc (`fix(A): PXXSysWrite gets its
+  wasm32 arm — a WASI fd_write import`); the ticket move landed separately as
+  commit 1a0ab35b3. Both are ancestors of origin/master, verified with
+  `git merge-base --is-ancestor`.
+- 2026-08-29 — this ticket spent a day citing `resolved: PENDING-COMMIT`, a
+  field **no tool reads**: the citation machinery's frontmatter spelling is
+  `commit:` (`progress.py:99`), and only 16 of 2642 done tickets ever used
+  `resolved:`. So `progress.py pending` never listed this file and
+  `sync.sh fill_pending_commits` never filled it. Corrected to `commit:` above.

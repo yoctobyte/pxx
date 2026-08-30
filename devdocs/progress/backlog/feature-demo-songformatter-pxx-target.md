@@ -3,7 +3,7 @@ summary: "songformatter as a pxx compile target (nilpy) — GUI editor + live pr
 type: feature
 track: E
 prio: 68
-blocked-by: [feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade]
+blocked-by: [bug-nilpy-render-backend-py-compile-does-not-terminate]
 ---
 
 # songformatter as a pxx compile target (GUI editor + live preview)
@@ -198,11 +198,68 @@ and as `re.findall` results with 2+ groups (where the `re` module returns lists
 today — see that unit's header). One feature, three consumers.
 
 Two findings filed from this pass, both beyond songformatter:
-- [[bug-pascal-subclass-inherited-members]] — subclassing is half-wired FOUR ways
+
+> **RESOLVED 2026-08-30 by measurement: `bug-pascal-subclass-inherited-members`
+> was never filed, and all four arms it describes are FIXED at HEAD.** The
+> subclassing work landed under three other names — `bug-a-nilpy-subclass-overlays-parent-layout`
+> [A p70], `bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override`
+> and `bug-n-a-builtin-subclass-subscript-operator-skips-the-override`, all three
+> in `done/`. **So both consumers below are unblocked**: `Counter` need not ship
+> as a dict mode, and `feature-nilpy-configparser` is not blocked in practice by
+> this. Measured against `$(PXX_STABLE)`, no rebuild, every program byte-identical
+> to CPython:
+>
+> | arm | probe | pxx | CPython |
+> | --- | --- | --- | --- |
+> | inherited **field** unqualified | `self.n` set in `A.__init__`, read in `B` | `7 / 7` | `7 / 7` |
+> | inherited **method** unqualified | `B.twice()` calls inherited `get()` | `7 / 14` | `7 / 14` |
+> | wrong `Create` | `B.__init__` → `super().__init__(n*10)` | `40 / 3` | `40 / 3` |
+> | inherited default property, subscript **assign** | `class C(dict)`, `c["x"]=5` and `self[k]=1` in a method | `5 / 1 / 2` | `5 / 1 / 2` |
+>
+> **And the two named consumers, in their reported shapes rather than mine** —
+> because four minimal cases built from a description can only confirm the
+> description: a `Counter(dict)` that counts, indexes and iterates itself
+> (`3 / a / 3`), and a `Base.put()` calling an overridable `xform()` that a
+> subclass replaces — configparser's `optionxform` exactly — giving
+> `['keyone']` then `['KeyOne']`. Both match CPython.
+>
+> **Limits, stated because six programs are not a proof.** This establishes that
+> the four described arms and the two consumers work, not that nothing in the
+> cluster is broken. The way to falsify it is to try the real code: put `Counter`
+> back on a subclass and unblock configparser, and file what breaks under a name
+> that says what broke.
+>
+> **This is the never-filed-but-already-delivered bucket again, and this time it
+> is a whole cluster.** A blocker cited four times, credited with a prio it never
+> had, scheduling two modules around itself — while three tickets quietly fixed
+> it. Nothing could have told anyone: there is no `done/` entry to find under this
+> name, and the link went on advertising it as live.
+>
+> *(Historical note, kept: the link was left dangling on 2026-08-30 rather than
+> re-pointed at the [A p70] ticket, because that one covers the LAYOUT arm alone
+> and a re-point would have marked three arms resolved on evidence covering one.
+> The measurement above is what a re-point would have asserted without checking —
+> it happens to agree, and it could not have been known to.)*
+
+> **Superseded context — what the dangle looked like before it was measured.**
+> It is cited four times in this file, described below as
+> *"on the critical path for two modules"* and as having a *"prio-60 filing"* —
+> so this is not a stray reference, it is a dependency this ticket schedules
+> around. **Not de-linked and not re-pointed, because guessing would be worse than
+> the dangle:** the nearest candidate, `bug-a-nilpy-subclass-overlays-parent-layout`
+> [A p70], is **done** and covers the *layout* arm only, while the text below names
+> four arms (unqualified inherited members, wrong `Create`, inherited default
+> property losing subscript assignment). Re-pointing at it would silently mark
+> three arms resolved. **The owning lane must decide whether the other three
+> survive at HEAD, then either file the remainder or close this out** — it is the
+> difference between "Counter can stop being a mode flag" and "still blocked".
+
+- ~~`bug-pascal-subclass-inherited-members`~~ — subclassing is half-wired FOUR ways
   (inherited fields and methods invisible unqualified, wrong `Create`, inherited
   default property loses subscript assignment). It forced Counter to ship as a
   dict mode instead of a subclass, and it blocks the natural shape for
-  configparser's `optionxform` override.
+  configparser's `optionxform` override. **All four arms measured FIXED at HEAD,
+  2026-08-30 — see the block above.** Never filed; landed under three other names.
 - [[feature-nilpy-augmented-subscript-assign]] — `d[k] += 1` and `xs[i] += 5` are
   "not an lvalue". Pre-existing, reproduced on the pinned stable, and the most
   common counting idiom in Python.
@@ -238,7 +295,8 @@ Filed on the way, both pre-existing:
   `Optional[str]` PARAMETER does not match the overload (reproduces on the pinned
   stable with the Optional spelling, so unions inherit it, not introduce it).
 - [[feature-nilpy-augmented-subscript-assign]] and
-  [[bug-pascal-subclass-inherited-members]] from the previous pass.
+  `bug-pascal-subclass-inherited-members` (the latter measured fixed, 2026-08-30)
+  from the previous pass.
 
 ## Wall catalog, fifth pass (2026-07-26 — dict.fromkeys)
 
@@ -253,12 +311,17 @@ for this module, and it is a real feature rather than a shim.
 it is `class CasePreservingConfigParser(configparser.ConfigParser)`, which needs a
 dotted base class AND working subclass overrides. So
 [[feature-nilpy-configparser]] is blocked in practice by
-[[bug-pascal-subclass-inherited-members]]. That bug is now on the critical path for
+`bug-pascal-subclass-inherited-members`. That bug is now on the critical path for
 two modules, which raises its value above its prio-60 filing.
+**No longer true as of 2026-08-30** — the four arms are measured fixed and this
+prose is kept only to show what the ticket believed. `feature-nilpy-configparser`
+is not blocked by subclassing, and the *"prio-60 filing"* never existed.
 
 Recommended order from here:
-1. [[bug-pascal-subclass-inherited-members]] — unblocks configparser, and pylib
-   types can stop working around it (Counter is a mode flag because of it).
+1. ~~`bug-pascal-subclass-inherited-members`~~ — **done, under other names
+   (measured 2026-08-30)**. Configparser is unblocked and pylib types can stop
+   working around it: Counter no longer needs to be a mode flag. Step 1 of this
+   order is already paid for.
 2. [[feature-nilpy-runtime-method-dispatch-on-variant]] — finishes key_analysis.py.
 3. [[feature-nilpy-configparser]] — then settings.py.
 4. [[feature-nilpy-tkinter-facade]] — convertrawtext.py and the GUI (the big one).
@@ -569,6 +632,21 @@ Two things had to be true for that, and only one of them was about this app:
    `-Ilib/crtl/include …` is the interim; **any measurement of this app must
    pass it** or it is measuring glibc's headers.
 
+   > **SUPERSEDED 2026-08-29 — DO NOT PASS `-I` ANY MORE.** The bug above is
+   > done, so the workaround is obsolete, and it is no longer merely
+   > unnecessary: `-Ilib/crtl/include` makes `uses strings` bind to that
+   > directory's `strings.h` instead of `lib/rtl/strings.pas`, so three of the
+   > five modules die with `undefined variable (StrPas)` raised from inside
+   > `lib/pcl/tk.pas` — which reads as a broken Tk facade and is nothing of the
+   > kind. `math` and `netdb` collide the same way. Filed as
+   > [[bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import]].
+   > Measure with no flags at all; the modules compile that way.
+   >
+   > The general lesson, since this cost the first hour of the 08-29 pass: **a
+   > workaround that outlives the bug it worked around does not go quiet, it
+   > starts lying** — and it lies inside the measurement it was written to
+   > protect, which is the one place nobody re-checks.
+
 ### Where it stops now
 
 `Unhandled exception: TypeError: expected a number, got object`, with no other
@@ -597,3 +675,38 @@ and find which coercion sees an object. Do NOT edit the app to get past it.
 variable" on the RHS of a later top-level assignment. It hides in this app
 because the same lines sit inside `def load_session()`, which is the working
 case; a three-line probe reproduces it.
+
+
+---
+
+## Status 2026-08-30 (frankwasm): the key_analysis wall is CLEARED; the wall moved
+
+**`blocked-by` corrected in the same pass.** It listed
+`feature-lib-pxxpdf-reportlab-compat`, `feature-nilpy-re-module` and
+`feature-nilpy-tkinter-facade` — **all three are `done/`**, so this ticket read
+as unblocked while its real blocker sat unlinked at prio 55 and never inherited
+this ticket's 68. That is why `ready --track N` pointed elsewhere: the ranker
+propagates prio down dependency edges, and the edge was missing, not the
+ranking wrong. Replaced with the blocker measured today.
+
+`05eff4cc9` fixed the str/helper collision that stopped every module importing
+`key_analysis`. Measured now, same binary:
+
+| module | before | now |
+| --- | --- | --- |
+| `settings.py` | compiles | compiles |
+| `key_analysis.py` | compiles | compiles |
+| `convertrawtext.py` | `key_analysis.py:82 unexpected token` | reaches `render_backend.py:114` |
+| `SongFormatter.py` | same | reaches `render_backend.py:114` |
+| `render_backend.py` direct | does not terminate | does not terminate (unchanged) |
+
+Both blocked modules now stop at the SAME new place, in `render_backend.py`:
+`w, h = img.getSize()` -> "cannot unpack this value into several names -- it is
+not a list, tuple or variant". So the remaining blocker is
+[[bug-nilpy-render-backend-py-compile-does-not-terminate]], updated with the
+new failure; the key_analysis wall is closed as
+[[bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter]].
+
+Warnings seen on the way (both modules, not blocking, not investigated here):
+C-vs-Pascal declaration disagreements for `floor`, `ceil` and `pow` on result
+or parameter types, resolved by binding to the C declaration.

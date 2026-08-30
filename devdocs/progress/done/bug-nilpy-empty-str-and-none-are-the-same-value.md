@@ -532,3 +532,27 @@ block* and so can use it.
 
 ## Log
 - 2026-08-29 — resolved, commit 8be3c6d06.
+
+### Cross-check: the helper arm is measured, not just argued (added same day)
+
+The claim above that "five of six backends route through `PXXStrSetLen`, so the
+`{$ifdef}` arms cover them" is architectural. It is now measured on one of them:
+**arm32 produces byte-identical, fully-correct output for all 12 rows** under
+`qemu-arm`. arm32 never executes site 3 — it reaches the empty-string decision
+only through the two `{$ifdef PXX_NILPY_STR}` arms in builtinheap — so the two
+halves of the fix are each verified on a target that exercises it:
+
+| target | sites exercised | result |
+| --- | --- | --- |
+| x86-64 | 1, 2 (`{$ifdef}`) **and** 3 (inline codegen) | 12/12 match CPython |
+| arm32 | 1, 2 (`{$ifdef}`) only | 12/12 match CPython |
+
+**But the coverage stops there, and that is worth stating rather than implying:**
+NilPy today reaches only x86-64 and arm32. aarch64 and riscv32 fail in
+`pylib.pas` with *"aggregate result with more than 8 params not supported"*, and
+i386 with *"symbol kind not supported yet (load)"* in `pyeval.pas` — all three
+**identically under `pinned`**, so pre-existing and not from this change, and
+already tracked as [[bug-a-nilpy-on-cross-targets-four-remaining-walls]]. So
+"five of six backends are covered" is true of the code and moot in practice:
+four of those six cannot run a NilPy program at all yet. When those walls come
+down, this fix's helper arm is the thing that should be re-checked first.

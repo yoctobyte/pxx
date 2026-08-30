@@ -84,3 +84,94 @@ Adding `TARGET_WASM32` to `TargetHasProcCleanupFrame` without implementing
 `else Error('compiler error: no proc exception cleanup frame for this target')`
 arm and breaks every wasm build that owns a managed local. The predicate is the
 last line of the change, not the first.
+
+## Update 2026-08-30 (frankS): ONE OF XTENSA'S TWO BLOCKERS IS GONE
+
+This ticket, and the comment above `TargetHasProcCleanupFrame` that it quotes,
+both give two reasons for xtensa's exclusion:
+
+> *xtensa is out because its exception runtime exists only under the Call0 ABI
+> **and its managed-local arm handles `AnsiString` alone***
+
+**The second half is no longer true.** `e1d7977a2` took that arm from one
+managed kind to six and `3a1c1dc73` added the seventh, so
+`EmitManagedLocalCleanupForTarget`'s xtensa block now releases all 7 — COM
+interface, static array of managed, scalar `AnsiString`, `Variant`, promo-int,
+record-with-managed-fields, and local dynamic array. Verified at HEAD, and both
+downstream divergences that work was filed against (`test_managed_local_release_reuse`,
+`test_interface_arc`) now MATCH the x86-64 oracle.
+
+So the release SEQUENCE a cleanup frame would need as its landing pad already
+exists on xtensa and is complete. What remains is only the first reason: the
+exception runtime is Call0-only (`IR_EXC_ENTER` and `IR_RAISE` both `Error` out
+under `--xtensa-abi=windowed`). That makes the remaining xtensa work narrower
+than this ticket describes — **wire the existing enter/leave under Call0 and
+keep the predicate false for windowed**, rather than "ESP-campaign work" of
+unstated size.
+
+Not re-priced here; p25's argument (it needs a raise crossing a frame that owns
+a managed local) is unaffected by which blocker remains.
+
+### A source comment now states something false
+
+`ir_codegen.inc`, immediately above `TargetHasProcCleanupFrame`, still asserts
+*"its managed-local arm handles AnsiString alone"*. That line should go when
+someone next holds the file. **Not fixed here:** the Track S grant covering this
+area is scoped to the `TargetArch = TARGET_XTENSA` block inside
+`EmitManagedLocalCleanupForTarget` and nothing else in `ir_codegen.inc`, and
+this comment sits outside it. A one-line comment fix is exactly the size of
+edit a grant boundary looks silly around, which is the point of having one.
+
+## Update 2026-08-30 (frankS): THE XTENSA HALF IS DONE. wasm32 remains.
+
+Landed under the narrowed analysis in the update above: `TargetHasProcCleanupFrame`
+now answers true for xtensa **under Call0 only**, and the six emitters
+(`Enter` / `Leave` / `PatchLanding` / `Skip` / `PatchSkip` / `ReRaise`) have
+xtensa arms transcribed from that backend's own `IR_EXC_ENTER` / `IR_EXC_LEAVE`.
+Under windowed the predicate stays false and a proc still leaks on an unwind —
+`IR_EXC_ENTER` and `IR_RAISE` refuse there outright, so there is nothing to hang
+a frame on. The stale comment clause is deleted.
+
+**Keeping the two halves separate, as this ticket instructed.** wasm32 is
+untouched and the ticket stays open for it; nothing here changes what that half
+needs.
+
+### This ticket's central claim needs one correction
+
+> *"The failure mode is the reason this is worth a ticket rather than a comment:
+> an unwind leak prints nothing."*
+
+True of a leak and **false of this corpus**, which already held the proof:
+
+| test | x86-64 | xtensa before |
+| --- | --- | --- |
+| `test_managed_exception_cleanup` | `1` | **SEGFAULT** |
+| `test_interface_arc_exc` | `unwind freed=3` | `unwind freed=2` |
+
+The first raises 9000 times through a frame holding a 64 KiB string and a
+dynamic array — roughly 590 MB never released, which is not a quiet refcount but
+a crash. The second prints the missing release **as a number**. Both now MATCH.
+
+So the defect was observable all along; what was missing was anything that
+looked. **Neither test is in the 129-source cross differential** — that corpus
+has no exception-unwind coverage at all, which is why every sweep run against
+xtensa this month was green on a target that released nothing on an unwind. Both
+are now rows in `test-xtensa` (101 → 103 programs).
+
+That is the reusable part: p25's "not on the path of any current milestone" was
+argued from reachability, and reachability was right — but the two programs that
+DO reach it were already written, already passing on five backends, and simply
+not wired to this target.
+
+### Measured
+
+At the SAME HEAD with and without the change, which is the only baseline worth
+quoting in a repo where every lane pushes to master:
+
+- call0 **104 MATCH**, lost=0 gained=0 · windowed **94 MATCH**, lost=0 gained=0
+- x86-64 emitted output byte-identical, 6/6
+- `gate.sh quick` GREEN, self-host fixedpoint converged
+
+Both sweeps had moved substantially against my *earlier* baselines (call0
+103→104, windowed 53→94) and none of that is this change — rebuilding the same
+HEAD without the diff reproduces both numbers exactly.

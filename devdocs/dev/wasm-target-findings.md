@@ -17,6 +17,20 @@ standalone checkout. What is here is the part every track should be able to read
 without leaving `dev`: the numbers, and the two places the work escapes a
 backend file.
 
+> **Every wasm source path below is on `origin/wasm`, not on `master`** —
+> `compiler/ir_codegen_wasm32.inc`, `compiler/wasmenc.inc`,
+> `compiler/asmtext_wasm.inc` and `devdocs/dev/wasm/PLAN.md` included. Verified
+> 2026-08-30: all four resolve under `git cat-file -e origin/wasm:<path>` and
+> none exists on `master`. Read one with `git show origin/wasm:<path>`.
+>
+> Stated because the failure mode is silent and points the wrong way: an agent
+> on `master` greps for a path this page cites, finds nothing, and concludes
+> **the page is stale or the work was lost** — when the work is fine and only
+> the checkout is different. That is the same false-negative-about-finished-work
+> shape as a ticket cited by its `backlog/` path after it moved to `done/`, and
+> both mislead in the direction nobody double-checks, because "it's gone" is the
+> conservative-sounding conclusion.
+
 `devdocs/developer/frontends-and-targets-strategy.md` has the older
 *rationale* for wasm ("reloop + emit + WASI, bounded, park it"). It is still
 right about the shape and it undercounts two things. Those two are the point of

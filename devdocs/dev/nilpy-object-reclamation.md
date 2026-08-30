@@ -1,8 +1,19 @@
 # NilPy object reclamation — design note
 
-Companion to the ticket `feature-nilpy-object-reclamation` (Track A, p55).
+Companion to the ticket [[feature-nilpy-object-reclamation]] (Track A, p55).
 Written 2026-07-22 with the whole leak investigation warm; the five fixed
-layers of `bug-a-runtime-variant-heap-grows-unbounded` are the context.
+layers of [[bug-a-runtime-variant-heap-grows-unbounded]] are the context.
+
+> **This page is the DESIGN, frozen at 2026-07-22. It is not a status report,
+> and the slice ladder below is not a to-do list.** Slices 1-4 landed the same
+> night; the ticket is in `unfinished/` and its "Progress" section is the
+> state-of-record — what landed, what the doloop RSS actually measures, and
+> which arms are still x86-64-only. Read that before acting on anything here.
+> Checked 2026-08-30 (frankD): the division is working — the ticket even flags
+> its own pre-work section as STALE — so this note exists only because the design
+> page is what `valgrind.md` links to, which means a reader can arrive here
+> **first** and meet a five-step plan with no marker saying four of them are
+> done.
 
 ## Problem statement
 

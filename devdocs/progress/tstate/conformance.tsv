@@ -203,46 +203,46 @@ skip	tforin6.pp	tforin	gap	`operator enumerator` for a class, returning an `obje
 skip	tforin7.pp	tforin	gap	`enumerator MoveNext` / `enumerator Current` method+property directives
 skip	tforin8.pp	tforin	gap	IEnumerable/IEnumerator interfaces driving for-in
 skip	tforin9.pp	tforin	gap	`enumerator MoveNext/Current` directives + operator Enumerator
-pass	tgenconstraint10.pp	tgenconstraint	-	
-pass	tgenconstraint11.pp	tgenconstraint	-	
-pass	tgenconstraint12.pp	tgenconstraint	-	
-pass	tgenconstraint13.pp	tgenconstraint	-	
-pass	tgenconstraint14.pp	tgenconstraint	-	
-pass	tgenconstraint15.pp	tgenconstraint	-	
-pass	tgenconstraint16.pp	tgenconstraint	-	
-pass	tgenconstraint17.pp	tgenconstraint	-	
-pass	tgenconstraint18.pp	tgenconstraint	-	
-pass	tgenconstraint19.pp	tgenconstraint	-	
+fail	tgenconstraint10.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint11.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint12.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint13.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint14.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint15.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint16.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint17.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint18.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint19.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
 skip	tgenconstraint1.pp	tgenconstraint	gap	Delphi generic constraint syntax (class/record/constructor/interface constraints)
-pass	tgenconstraint20.pp	tgenconstraint	-	
-pass	tgenconstraint21.pp	tgenconstraint	-	
-pass	tgenconstraint22.pp	tgenconstraint	-	
-pass	tgenconstraint23.pp	tgenconstraint	-	
-pass	tgenconstraint24.pp	tgenconstraint	-	
-pass	tgenconstraint25.pp	tgenconstraint	-	
-pass	tgenconstraint26.pp	tgenconstraint	-	
-pass	tgenconstraint27.pp	tgenconstraint	-	
-pass	tgenconstraint28.pp	tgenconstraint	-	
-pass	tgenconstraint29.pp	tgenconstraint	-	
-pass	tgenconstraint2.pp	tgenconstraint	-	
-pass	tgenconstraint30.pp	tgenconstraint	-	
-pass	tgenconstraint31.pp	tgenconstraint	-	
-pass	tgenconstraint32.pp	tgenconstraint	-	
-pass	tgenconstraint33.pp	tgenconstraint	-	
-pass	tgenconstraint34.pp	tgenconstraint	-	
-pass	tgenconstraint35.pp	tgenconstraint	-	
-pass	tgenconstraint36.pp	tgenconstraint	-	
+fail	tgenconstraint20.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint21.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint22.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint23.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint24.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint25.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint26.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint27.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint28.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint29.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint2.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint30.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint31.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint32.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint33.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint34.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint35.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint36.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
 skip	tgenconstraint37.pp	tgenconstraint	gap	generic constraints on forward-declared class/interface (T: IInterface)
 skip	tgenconstraint38.pp	tgenconstraint	wontfix	dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
 skip	tgenconstraint39.pp	tgenconstraint	wontfix	dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
-pass	tgenconstraint3.pp	tgenconstraint	-	
+fail	tgenconstraint3.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
 pass	tgenconstraint40.pp	tgenconstraint	-	
-pass	tgenconstraint4.pp	tgenconstraint	-	
-pass	tgenconstraint5.pp	tgenconstraint	-	
-pass	tgenconstraint6.pp	tgenconstraint	-	
-pass	tgenconstraint7.pp	tgenconstraint	-	
-pass	tgenconstraint8.pp	tgenconstraint	-	
-pass	tgenconstraint9.pp	tgenconstraint	-	
+fail	tgenconstraint4.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint5.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint6.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint7.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint8.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
+fail	tgenconstraint9.pp	tgenconstraint	-	accepted-invalid: %FAIL test compiled
 pass	tgeneric100.pp	tgeneric	-	
 pass	tgeneric101.pp	tgeneric	-	
 skip	tgeneric102.pp	tgeneric	gap	specialize of generic class declared in another unit (inline class funcs)

@@ -1,0 +1,19 @@
+sig=pxx-self_unitrec
+seed=92001
+sha=5dd25e789
+compiler=/home/neo/pxx/compiler/pascal26
+note=pxx CONTRADICTS ITSELF across -O levels -- it produces different output; an optimiser bug (Track A/O); FPC not involved
+
+fpc-O0       3653758041056268102
+fpc-O2       3653758041056268102
+pxx-O0       3653758041056268102
+pxx-O2       3653758041056268102
+pxx-O3       9983639770458157842
+
+first divergence at checkpoint 6 of 11 -- a `unitrec` statement
+    fpc-O0     17098249382344224682
+    pxx-O3     17098249382343663142
+    (checkpoint N = the Nth statement of the traced program;
+     everything before it agrees, so the bug is AT that statement)
+
+repro: tools/pasmith.py --seed 92001 --units 2

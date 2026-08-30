@@ -159,6 +159,9 @@ nothing.
 | `far`, `near` | 16-bit memory models. There is nothing to address far |
 | `local` | FPC's unit-private visibility. PXX is whole-program and has no separate unit output, so a routine is local exactly when nothing else names it |
 
+Rather than consulting this table, ask the compiler: `--warn-ignored-directives`
+names the inert ones at the point of use, with the reason — see below.
+
 `overload` is a case of its own: **inert by default**, required under
 `--strict-overload`. PXX resolves overloads without it; the flag makes the
 missing directive an error, the way FPC has it.
@@ -175,11 +178,48 @@ arm32 and riscv32 targets. Accepting one and ignoring it would compile something
 other than what was written, which is worse than refusing it. FPC sources using
 them need the directive removed, or the behaviour implemented.
 
-### On unfulfillable directives
+### Finding out which ones are inert here: `--warn-ignored-directives`
 
-PXX does not currently warn when a directive is accepted but cannot be honored —
-`iram` on x86-64 compiles silently. Only `interrupt` errors. A uniform
-"this directive is ignored here" diagnostic is a known gap.
+The table above tells you which directives are inert in general. The compiler
+will tell you which are inert **at a particular declaration**, with the reason,
+under an opt-in flag:
+
+```pascal
+program x;
+procedure P; cdecl;
+begin end;
+procedure R; iram;
+begin end;
+function Big(a,b,c,d,e,f,g: Integer): Integer; inline;
+begin Big := a+g; end;
+begin P; R; WriteLn(Big(1,2,3,4,5,6,7)); end.
+```
+
+```
+$ pxx -O2 --warn-ignored-directives x.pas x
+pascal26:3: warning: directive 'cdecl' ignored here: the calling convention is the target's and is not selectable per routine, so P already uses it; the marker is documentation only
+pascal26:5: warning: directive 'iram' ignored here: IRAM placement exists on the ESP targets (xtensa, riscv32) only; this target has no separate instruction RAM to place R in
+pascal26:7: warning: directive 'inline' ignored here: the inliner takes at most six by-value scalar parameters and Big has 7
+```
+
+It covers `cdecl`, `register`, `iram` off the ESP targets, `stackful`,
+`reintroduce`, and `inline` when the routine cannot be inlined. **Default
+behaviour is unchanged and silent** — this reports, it never changes what is
+compiled.
+
+Hint directives (`deprecated`, `platform`, …) are deliberately excluded. They
+are meant to be inert until usage warnings exist, so warning on them would fire
+on ordinary FPC source.
+
+**What the `inline` reason does *not* claim.** It reports only causes knowable
+at the declaration — optimisation level, procedure vs function,
+`assembler`/`generator`/`async`/`stackless`, and more than six parameters. It
+never says the body is too complex, because the body has not been parsed at that
+point. So silence about a routine is not a promise that it will be inlined.
+
+`interrupt` remains the one directive that is an **error** rather than a warning
+where it cannot be honored, because ignoring it would produce a working build
+that does the wrong thing.
 
 ## Source compatibility posture
 

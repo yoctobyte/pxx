@@ -1,5 +1,5 @@
 ---
-prio: 30  # ESP parked (user 2026-07-12): Pascal has prio
+prio: 30
 ---
 
 # --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered

@@ -62,14 +62,20 @@ def read_exemptions():
     return out, bad
 
 
-def wired_paths(prov=None):
+def wired_paths(prov=None, dir_refs=None):
     """Every test/ path mentioned by the Makefile or by a tools/ script.
 
     One pass over each file, collecting `test/...` tokens. Deliberately textual:
     the question is whether anything REFERENCES the file, and a reference is
     textual regardless of which variable expands around it.
+
+    `dir_refs`, if given, is filled with the tokens that genuinely name a
+    DIRECTORY whose whole contents are reached -- see the classifier below.
+    consumed_by() uses that set instead of re-deriving one from the token text,
+    which is what let a truncated path blanket a directory it never ran.
     """
     seen = set()
+    var_dirs = set()
     pat = re.compile(r"test/[A-Za-z0-9_./+-]+")
     # A COMMENT IS NOT WIRING. The scan below is textual on purpose (a
     # reference is a reference regardless of which variable expands around
@@ -90,10 +96,19 @@ def wired_paths(prov=None):
     # quoting, so cutting at one would drop real references, and dropping a
     # real reference is the worse direction here. Prose inside a Python
     # docstring is likewise still counted as a reference.
+    #
+    # A TOOL MUST NOT BE ITS OWN WITNESS. This file is in tools/ and scans
+    # tools/, so its own SKIP_DIRS literal -- `("test/pascal-conformance/",
+    # "test/c-conformance/", ...)` -- was collected as a reference and credited
+    # those directories. Nothing was lost, because SKIP_DIRS excludes them from
+    # the subject list anyway, so the credit was granted to files that were
+    # never going to be reported. But the check was reading its own
+    # documentation as evidence, and the next path someone writes into a
+    # literal here would silently widen the blanket with no rule behind it.
     files = [os.path.join(ROOT, "Makefile")]
     tools = os.path.join(ROOT, "tools")
     for fn in sorted(os.listdir(tools)):
-        if fn.endswith((".sh", ".py")):
+        if fn.endswith((".sh", ".py")) and fn != os.path.basename(__file__):
             files.append(os.path.join(tools, fn))
     for path in files:
         try:
@@ -104,15 +119,115 @@ def wired_paths(prov=None):
         for n, line in enumerate(text.splitlines(), 1):
             if line.lstrip().startswith("#"):
                 continue
-            for tok in pat.findall(line):
+            for m in pat.finditer(line):
+                tok = m.group(0)
                 seen.add(tok)
                 if prov is not None:
                     prov.setdefault(tok, []).append(
                         (os.path.relpath(path, ROOT), n))
+                if dir_refs is not None:
+                    d = classify_dir_ref(tok, line, m.end())
+                    if d:
+                        dir_refs.add(d)
+                    elif tok.endswith("/") and os.path.isdir(
+                            os.path.join(ROOT, tok.rstrip("/"))):
+                        var_dirs.add((tok.rstrip("/"), path))
+    # A path built around a variable -- `$ROOT/test/gui/$name.pas` -- does not
+    # blanket its directory (that is the bug this classifier exists to stop),
+    # but it is not nothing either: the script that writes it supplies `$name`
+    # somewhere, and in every instance in this tree it does so as a bare word
+    # (`run_gui_test test_pcl_click`). So credit exactly the files in that
+    # directory whose STEM the same file names, and no others. That is what
+    # separates the ten test_pcl_* cases gui_suite.sh really runs from the five
+    # beside them that it does not -- a distinction the blanket erased in the
+    # direction that hides work.
+    for d, path in sorted(var_dirs):
+        try:
+            with open(path, errors="replace") as f:
+                text = "\n".join(l for l in f.read().splitlines()
+                                 if not l.lstrip().startswith("#"))
+        except OSError:
+            continue
+        for rel in git_ls(d):
+            # DIRECT children only. `test/gui/$name.pas` can name a file in
+            # test/gui; it cannot reach one in a subdirectory, because the
+            # token ends at the variable and `.pas` follows it. Without this,
+            # tools/check_test_wiring_devtest.py -- which carries `test/gui/`
+            # inside a FIXTURE string and defines its own `def main()` --
+            # credited test/gui/helloworld/main.pas on the strength of that
+            # `main`. Measured, and it is the same shape as everything else in
+            # this file: a mention that describes the check was read as
+            # evidence about the tree.
+            if os.path.dirname(rel) != d:
+                continue
+            stem = os.path.splitext(os.path.basename(rel))[0]
+            # The lookbehind excludes `/` on purpose: gui_suite.sh names
+            # `$ROOT/apps/ide/eliah/main.pas`, and without it that credited
+            # test/gui/helloworld/main.pas -- a DIFFERENT file with the same
+            # stem, reached through a path component. A bare word is the
+            # evidence; a path component naming something else is not.
+            if re.search(r"(?<![\w./-])%s(?![\w-])" % re.escape(stem), text):
+                seen.add(rel)
+                if prov is not None:
+                    prov.setdefault(rel, []).append(
+                        (os.path.relpath(path, ROOT), 0))
     return seen
 
 
-def consumed_by(wired, subject_paths):
+def git_ls(d):
+    """Tracked paths under a directory, relative to ROOT."""
+    out = subprocess.run(["git", "ls-files", d], cwd=ROOT,
+                         capture_output=True, text=True)
+    return [l for l in out.stdout.splitlines() if l.strip()]
+
+
+def classify_dir_ref(tok, line, end):
+    """Is this token a reference that reaches a whole DIRECTORY's contents?
+
+    `-Futest/case_units` names a directory and never the unit inside it, so
+    crediting every file under it is right. The old rule inferred that from the
+    token alone -- a `/` and no extension -- and a truncated path satisfies it
+    just as well as a real one, because the collector's pattern excludes `$`:
+
+        tools/gui_suite.sh:28   local src="$ROOT/test/gui/$name.pas"
+
+    yields the token `test/gui/`, which rstrips to a directory with no
+    extension and blanketed all 26 files under test/gui. The line that caused
+    it is the line proving only SOME of them run: five files there were run by
+    nothing while the report read zero. The failure is one-directional -- it can
+    only ever remove entries from the report, never add one -- which is what
+    makes it a false all-clear rather than noise, and a green that is wrong
+    waits years where a red is triaged within the hour.
+
+    So the trailing `/` is the tell, and it separates the two cases exactly:
+
+      * `test/fgl`, `test/case_units`, `test/nilpy_units/pkgcorpus` -- the token
+        ENDS at the directory name because the text did. A real reference.
+      * `test/gui/` -- the token ends at a `/` because the pattern hit something
+        it cannot match, i.e. a variable. Truncated; it names a file we cannot
+        see, not the directory.
+
+    The one truncation that IS a directory reference is a glob over its
+    contents (`for p in test/lua/*.lua`), which does run them all, so a `*`
+    immediately after the token keeps the credit.
+
+    Finally the token must actually BE a directory. `test/test_asm_emit_$$t.pas`
+    truncates to `test/test_asm_emit_`, which has a `/` and no extension and is
+    not a directory at all.
+    """
+    d = tok.rstrip("/")
+    if "/" not in d or os.path.splitext(d)[1]:
+        return None
+    if d == "test":                      # names everything; never a reference
+        return None
+    if tok.endswith("/") and line[end:end + 1] != "*":
+        return None                      # truncated at a variable, not a dir
+    if not os.path.isdir(os.path.join(ROOT, d)):
+        return None
+    return d
+
+
+def consumed_by(wired, subject_paths, dir_refs=None):
     """Paths reached INDIRECTLY from something already wired.
 
     A bare "is this path in the Makefile" test has two large false-positive
@@ -127,11 +242,11 @@ def consumed_by(wired, subject_paths):
     train people to ignore the check, which costs more than the gaps it finds.
     """
     reached = set()
-    # 1. directory references: any test/ subdir named anywhere counts for its
-    #    contents. `test/` itself is excluded -- it names everything.
-    dirs = {w.rstrip("/") for w in wired
-            if w.count("/") >= 1 and not os.path.splitext(w)[1]}
-    dirs.discard("test")
+    # 1. directory references, as classified by classify_dir_ref() -- NOT
+    #    re-derived from the token text here. Deriving them from "has a slash
+    #    and no extension" is what let `test/gui/`, truncated at a shell
+    #    variable, blanket 26 files of which five were run by nothing.
+    dirs = set(dir_refs or ())
     for p in subject_paths:
         d = os.path.dirname(p)
         while d and d != "test":
@@ -206,9 +321,10 @@ def main():
         return 1
 
     prov = {}
-    wired = wired_paths(prov)
+    dir_refs = set()
+    wired = wired_paths(prov, dir_refs)
     subs = subjects()
-    reached = consumed_by(wired, subs)
+    reached = consumed_by(wired, subs, dir_refs)
     unwired = [p for p in subs
                if p not in wired and p not in reached and p not in exempt]
 
@@ -244,10 +360,20 @@ def main():
     advisory = [p for p in exempt
                 if p in wired and p not in stale and not _mk_backed(p)]
 
+    # THE POPULATION IS PRINTED ON EVERY PATH, not only the silent one.
+    # It used to be part of the all-clear line, so the one number that says
+    # whether this check LOOKED AT ANYTHING appeared precisely when there was
+    # nothing else to say -- and vanished the moment the output was non-trivial
+    # (today: one advisory, so no count at all). A scanner that reports "no
+    # findings" without the size of the population it searched cannot be
+    # distinguished from a scanner whose scan stopped matching, and the two
+    # read identically. Measured 2026-08-30: `tools/test_wiring_gate_devtest.py`
+    # passed against a tree containing ZERO test files.
+    print("check-test-wiring: scanned %d test subject(s) against %s"
+          % (len(subs), os.path.relpath(EXEMPT, ROOT)))
+
     if not unwired and not stale and not advisory:
-        print("check-test-wiring: OK — %d test subject(s), all referenced by a "
-              "rule or explained in %s"
-              % (len(subjects()), os.path.relpath(EXEMPT, ROOT)))
+        print("check-test-wiring: OK — all referenced by a rule or explained")
         return 0
 
     if unwired:

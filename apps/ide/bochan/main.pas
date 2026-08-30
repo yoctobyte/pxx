@@ -202,20 +202,41 @@ begin
 
   { scenario 9: builder diagnostic parser }
   writeln('-- builder.TDiagList.Parse --');
+  { The `in:`/`near:` continuations are copied from real pinned-compiler output
+    (test_incdiag_inc_fail), not composed here, so the fixture cannot drift into
+    a shape the compiler never emits. A diagnostic with no `in:` keeps file='',
+    which is the main unit -- the compiler does not name it and neither do we. }
   diagOut :=
     'ok: ignore this line'                          + #10 +
     'pascal26:3: error: undefined variable (x)'     + #10 +
     'some banner without the shape'                 + #10 +
-    'pascal26:24: error: unit source not found'     + #10;
+    'pascal26:24: error: unit source not found'     + #10 +
+    'pascal26:63: error: expected expression'       + #10 +
+    '  in: test/incdiag/badinc.inc'                 + #10 +
+    '  near:  procedure Bogus  begin if >>> then  end' + #10;
   diags := TDiagList.Create;
   diags.Parse(diagOut);
-  CheckInt(e, 'two diagnostics parsed', diags.Count, 2);
+  CheckInt(e, 'three diagnostics parsed', diags.Count, 3);
   CheckInt(e, 'first diag line', diags.DiagLine(0), 3);
   CheckStr(e, 'first diag msg', diags.DiagMsg(0), 'error: undefined variable (x)');
   CheckInt(e, 'second diag line', diags.DiagLine(1), 24);
   CheckStr(e, 'second diag msg', diags.DiagMsg(1), 'error: unit source not found');
+  { the continuation must ATTACH, not become a diagnostic of its own: `in:` and
+    `near:` both contain a colon and would be parsed as one by a looser reader }
+  CheckInt(e, 'third diag line', diags.DiagLine(2), 63);
+  CheckStr(e, 'third diag msg', diags.DiagMsg(2), 'error: expected expression');
+  CheckStr(e, 'third diag file', diags.DiagFile(2), 'test/incdiag/badinc.inc');
+  { and the ones without an `in:` must stay '' -- an inherited path would send
+    the editor into the wrong file, which is the whole bug this fixes }
+  CheckStr(e, 'first diag has no file', diags.DiagFile(0), '');
+  CheckStr(e, 'second diag has no file', diags.DiagFile(1), '');
   diags.Clear;
   CheckInt(e, 'clear resets', diags.Count, 0);
+
+  { a stray `in:` with no diagnostic above it is dropped, not turned into one }
+  diags.Parse('  in: orphan.inc' + #10);
+  CheckInt(e, 'orphan in: makes no diagnostic', diags.Count, 0);
+  diags.Clear;
 
   { scenario 10: project model — build inputs -> compiler argv + text round-trip }
   writeln('-- project.TProject --');

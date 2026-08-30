@@ -1208,7 +1208,55 @@ def load_state(clone, host):
             "open_regressions": [], "history": []}
 
 
+def file_id(path):
+    """A short content hash of a source file, or "?" if it cannot be read."""
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()[:12]
+    except OSError:
+        return "?"
+
+
+# The code THIS PROCESS is running, hashed once at import — which is the only
+# moment it can be captured, and the point.
+#
+# A published report already names the sha it TESTED. It said nothing about the
+# code that produced it, and those two diverge at exactly one moment: when a
+# watcher fix lands. A daemon holds its code from start, so `git pull` in the
+# clone does not change what is running; the clone can be current while the
+# process is hours behind, and every report it writes looks entirely healthy.
+#
+# Measured 2026-08-30: the step-routing fix landed at ae26693a3 (05:06) and IS
+# an ancestor of the tested sha; at 05:28 the daemon filed five regressions with
+# no failing step and a wrong lane, because the running process predated it. Two
+# agents then spent an hour reasoning about whether the CLONE was behind — which
+# is the only staleness the reports could express. You reason inside the failure
+# modes your instrument can name, and the one it cannot name does not read as an
+# omission, it reads as not having happened.
+#
+# Hashing __file__ rather than asking git: git answers what is ON DISK, and the
+# whole failure is on-disk disagreeing with in-memory. Only the bytes this
+# interpreter loaded can answer it, and only at import.
+#
+# NOT stamped with a start time, deliberately. This field must change when the
+# CODE changes and at no other moment: a restart on identical code then produces
+# no diff and no publish, while a restart on new code produces exactly one. A
+# timestamp would make every restart a state change and turn the signal into
+# churn.
+WATCHER_CODE = file_id(os.path.abspath(__file__))
+
+
 def save_state(clone, host, st):
+    # Stamped here rather than at the call sites: one writer, so no publish path
+    # can forget it, including ones added later.
+    st["watcher"] = {
+        "twatch": WATCHER_CODE,
+        # testmgr is re-invoked as a subprocess from the clone on every run, so
+        # it is NOT subject to the daemon's in-memory staleness — it is recorded
+        # because a report should name every producer, not because it can drift
+        # the same way.
+        "testmgr": file_id(os.path.join(clone.path, "tools/testmgr.py")),
+    }
     os.makedirs(os.path.dirname(state_path(clone, host)), exist_ok=True)
     with open(state_path(clone, host), "w") as f:
         json.dump(st, f, indent=1, sort_keys=True)
@@ -1822,7 +1870,17 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              "tier: %s" % report["tier"],
              "wall: %s" % report["wall"],
              "scale: %s" % report["scale"],
+             # The two ratios behind that scale, when the harness published
+             # them. A `scale: 1.0` has two causes -- the box IS the reference
+             # speed, or the probe measured nothing -- and only these separate
+             # them. Absent on reports from an older harness, and absent is
+             # rendered as absent rather than as a zero.
+             "probe: %s" % probe_line(report.get("probe")),
              "verdict: %s" % report["verdict"],
+             # ...and which HARNESS, not only which tree. A verdict whose
+             # harness predates the fix it appears to contradict can then be
+             # discarded on sight instead of investigated.
+             "code_fp: %s" % (CODE_FP or "unknown"),
              # WHICH binary produced this verdict. The json has carried it since
              # the mid-run-change check; the markdown is what a human reads days
              # later, and "verify against a KNOWN sha" is unusable if the report
@@ -1834,6 +1892,16 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              "skips: %s" % ((report.get("skips") or {}).get("count", "unknown")),
              "skip_holes: %s" % ((report.get("skips")
                                   or {}).get("coverage_holes", "unknown")),
+             # Jobs that FAILED and then passed on a retry. testmgr has always
+             # recorded these ("flaky" in its result JSON) and this publisher
+             # dropped them, so 1155 reports carried not one mention of a retry
+             # -- and the retries are real: RUN_RETRY_SIGNATURES exists
+             # precisely to absorb "Text file busy". A suppression with no
+             # counter makes its own population unmeasurable: any question of
+             # the form "has this race ever fired?" gets a confident NO from a
+             # record that could not have said otherwise.
+             # bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets
+             "flaky: %s" % len(report.get("flaky") or []),
              "---", ""]
     if report.get("timed_out") or report.get("verdict") == "TIMEOUT":
         lines += ["> **THIS RUN HAS NO VERDICT.** It hit its %s-second deadline "
@@ -1883,6 +1951,19 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
             more = "" if len(names) <= 12 else " …+%d more" % (len(names) - 12)
             lines += ["- **%s** — %s%s" % (why, shown, more)]
         lines += ["", "</details>", ""]
+
+    # ...and the jobs that DID run, failed, and passed on a retry. A green
+    # verdict is correct for them and incomplete: something made them fail
+    # once, and the retry is what stops it reaching the verdict, not what
+    # explains it. Named rather than counted only, because the NAMES are what
+    # let a reader ask whether one path keeps recurring.
+    flaky = report.get("flaky") or []
+    if flaky:
+        shown = " ".join(flaky[:12])
+        more = "" if len(flaky) <= 12 else " …+%d more" % (len(flaky) - 12)
+        lines += ["> **%d job(s) failed and passed on a RETRY.** They are green "
+                  "above and they are not nothing: %s%s"
+                  % (len(flaky), shown, more), ""]
 
     # -O3 coverage: the breadth note's question, one tier over. `opt` is
     # DISJOINT from the quick<native<limited<full chain and runs only as idle
@@ -2021,6 +2102,21 @@ def diagnostic_lines(body):
             if len(hits) >= DIAG_MAX:
                 break
     return "\n".join(hits)
+
+
+# How much of a red job's recorded reason a cascade stub prints next to its
+# name. Bounded because a stub is a signal, not a log: 18 jobs x 200 chars is
+# ~3.6 KB, and the untruncated text is in `tstate/<host>.json` and the per-job
+# report either way.
+CASCADE_REASON_MAX = 200
+
+
+def stub_reason(text):
+    """One line of WHY, to sit under a job name in a cascade stub. -> str."""
+    one = " ".join((text or "").split())
+    if len(one) > CASCADE_REASON_MAX:
+        one = one[:CASCADE_REASON_MAX - 1].rstrip() + "\u2026"
+    return one
 
 
 def ticket_suppression(had_baseline, n_new_red, n_jobs):
@@ -2226,6 +2322,86 @@ def testable_behind(repo, sha, ref, cap=500):
     return sum(1 for ln in out.split() if needs_test(repo, ln))
 
 
+def iso_secs_ago(date, now=None):
+    """Seconds since an ISO-8601 Z timestamp, or None if it cannot be read.
+
+    None is "unknown", never "recent" — every caller here decides whether to
+    warn, and a missing date that reads as fresh is the failure mode this whole
+    section is about.
+    """
+    try:
+        seen = calendar.timegm(time.strptime((date or "").strip(),
+                                             "%Y-%m-%dT%H:%M:%SZ"))
+    except (ValueError, TypeError):
+        return None
+    return max(0.0, (now if now is not None else time.time()) - seen)
+
+
+def cross_currency_block(fulls, now=None):
+    """The WHICH-HOST-DO-I-READ section of the tstate index. -> [str]
+
+    A host's `jobs` map is only as current as THAT HOST's own last full tier:
+    quick, native and limited run no cross target at all, so every i386 /
+    arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its
+    last FULL run, however recently the host published something else. The
+    index has always shown each host's full-through sha; what it never showed
+    is that the shas are of different ages, which is the fact a reader needs.
+
+    Measured 2026-08-30 and this is not a hypothetical: plexus.json said `fail`
+    for `test-emit-obj#cxtensa_obj.c` and
+    `test-nilpy#parent_call_after_instantiation` while seven's newer full tier
+    showed both green — and both tickets were already in done/. Anyone reading
+    the staler map would have re-triaged fixed work.
+
+    `fulls` is [(host, last_full_dict)] for live hosts only; retired and
+    never-ran hosts are dropped by the caller, because "no full tier" and
+    "an old full tier" are different sentences and only the second is a warning.
+    """
+    dated = [(h, lf, iso_secs_ago(lf.get("date"), now)) for h, lf in fulls]
+    dated = [(h, lf, age) for h, lf, age in dated if age is not None]
+    if not dated:
+        return []
+    dated.sort(key=lambda r: r[2])
+    newest_host, newest_lf, newest_age = dated[0]
+    out = ["## Cross-target currency — which host's map to read", "",
+           "A host's `jobs` map is only as current as **that host's own last "
+           "FULL tier**. `quick`, `native` and `limited` run no cross target, "
+           "so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a "
+           "host's state dates from its last full run — however recently that "
+           "host published something else.", "",
+           "**Newest full tier in the fleet: `%s` on %s, %s (%s ago).**"
+           % ((newest_lf.get("sha") or "")[:12], newest_host,
+              newest_lf.get("date", "?"), fmt_age(newest_age)), "",
+           "| host | full through | verdict | age | behind the newest by |",
+           "|------|--------------|---------|-----|----------------------|"]
+    for h, lf, age in dated:
+        out.append("| %s | `%s` | %s | %s | %s |"
+                   % (h, (lf.get("sha") or "")[:12], lf.get("verdict", "?"),
+                      fmt_age(age),
+                      "— (newest)" if h == newest_host
+                      else fmt_age(age - newest_age)))
+    out += ["",
+            "Reading a staler host's map for a cross-target job answers a "
+            "question about an OLDER tree, and it is what makes an "
+            "already-fixed job still read `fail`.", ""]
+    return out
+
+
+def probe_line(probe):
+    """The calibration ratios, for the report header. -> str
+
+    "unpublished" when the harness that produced the report did not carry them,
+    "no opinion" when a probe declined to measure. Neither is a number, and
+    neither may be rendered as one.
+    """
+    if not probe:
+        return "unpublished (older harness)"
+    def one(v):
+        return "no opinion" if v is None else ("%.2f" % v)
+    return "native=%s emulated=%s" % (one(probe.get("native")),
+                                      one(probe.get("emulated")))
+
+
 def fmt_age(secs):
     """An age a reader can act on, at whatever scale it happens to be.
 
@@ -2245,6 +2421,7 @@ def fmt_age(secs):
 def regen_index(clone):
     tdir = os.path.join(clone.path, TSTATE_REL)
     rows, regs, held = [], [], []
+    fulls = []
     for fn in sorted(os.listdir(tdir)):
         if not fn.endswith(".json"):
             continue
@@ -2255,6 +2432,8 @@ def regen_index(clone):
         last = st.get("last") or {}
         lf = st.get("last_full") or {}
         quiet = host_quiet_secs(st)
+        if lf.get("date") and not st.get("retired_at"):
+            fulls.append((st["host"], lf))
         if st.get("retired_at"):
             # Retired: one row for the record, and NOTHING in the regression or
             # held sections — it holds no entries and can never clear any.
@@ -2305,6 +2484,7 @@ def regen_index(clone):
     out = ["# TSTATE — Track T watcher index (generated by tools/twatch.py)", "",
            "| host | last tested | date | verdict | wall | full through |",
            "|------|-------------|------|---------|------|--------------|"] + rows + [""]
+    out += cross_currency_block(fulls)
     out.append("## Open regressions")
     out += regs if regs else ["- none"]
     out.append("")
@@ -3070,10 +3250,30 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # A summary that omits the field determining its meaning is the same defect
     # as a report that omits what it never reached: the reader is left to infer
     # from a number what a field could have told them.
+    # `code_fp` below is WHICH HARNESS produced this verdict, distinct from the
+    # sha under test. It is published in watch.json already, but that file lives
+    # INSIDE the clone and no remote consumer can read it -- so until now a
+    # tstate row was a verdict from an unknown version of the harness, presented
+    # under the tested commit's name, with nothing in it saying which.
+    #
+    # Not cosmetic. A daemon holds the code it STARTED with, and `trackt
+    # restart` alone does not update it: the clone sits detached at the sha
+    # under test, so a `git pull` there fails by construction while the restart
+    # reports success. A watcher that has not picked up a fix keeps reporting
+    # the bug it was fixed for, and the fix's author reads that as "still broken
+    # at HEAD". A runbook line for the restart is skippable; a field in the
+    # artefact is not.
+    #
+    # The prose sits ABOVE the assignment rather than inside it deliberately:
+    # twatch_timeout_verdict_devtest asserts this summary's shape by slicing a
+    # fixed window after the marker, and a comment block inside the literal
+    # pushes the later fields out of that window. Widening the window to fit a
+    # comment would weaken a guard to accommodate its own subject.
     st["last"] = {"sha": sha, "date": utcnow(), "verdict": report["verdict"],
                   "wall": report["wall"], "tier": report["tier"],
                   "timed_out": bool(report.get("timed_out")),
                   "deadline": report.get("deadline"),
+                  "code_fp": CODE_FP,     # which harness; see above
                   "unreached": report.get("unreached")}
     # Newest COMPLETE run at each tier, so a consumer can ask "did tier X see
     # this tree?" without a cross-file join into runs-<host>.ndjson. Written
@@ -3196,6 +3396,8 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             # without replaying every row before it. Four
                             # consecutive full runs on 2026-08-16 looked exactly
                             # like that while their reports each listed two.
+                            # the harness that produced the row; see st["last"]
+                            "code_fp": CODE_FP,
                             "still_red": still_red}, sort_keys=True) + "\n")
     record_host_epoch(clone, host)
     regen_index(clone)
@@ -3893,7 +4095,21 @@ def file_cascade_ticket(clone, host, st, sha, new_red, report, parent=None):
         return
     roots = [j for j in new_red
              if any(j.startswith(r) for r in CASCADE_ROOT_JOBS)]
-    joblist = "\n".join("- `%s`" % j for j in sorted(new_red))
+    # WHY, on the same screen as the name. Without this the stub carries the
+    # incriminating half of the evidence and omits the exculpating half: the
+    # Range section is machine-derived and authoritative in tone, and on
+    # regression-cascade-154d1aa3fba6 it named twelve innocent Track R commits
+    # while `qemu-i386: Could not open '/lib/ld-linux.so.2'` sat in the JSON one
+    # fetch away. Two fields of one report disagreed and the layout gave no hint
+    # that the lower-status field was the right one; a reader who trusted the
+    # range would have spent an afternoon bisecting for a missing loader.
+    #
+    # A cascade whose reasons are visible is triaged by READING. One whose
+    # reasons are a fetch away is triaged by bisection.
+    why = {job_key(j): stub_reason(j.get("reason")) for j in report["jobs"]}
+    joblist = "\n".join(
+        ("- `%s`\n  - %s" % (j, why[j])) if why.get(j) else "- `%s`" % j
+        for j in sorted(new_red))
     # The ledger entry this filing corresponds to — it is the only thing that
     # carries good/range, and the cascade branch in test_sha appended it just
     # above. Looked up rather than passed so the signature (shared with
@@ -3944,6 +4160,12 @@ there — even when the Range section says it cannot be the CAUSE. Reproducing
 and blaming are different questions and this line answers the first.)
 
 ## Newly red jobs
+> Each job's own recorded failure REASON is printed under its name. **When the
+> reasons and the Range section disagree, the reasons win.** The range is
+> computed from what CHANGED, not from what the job can SEE — a missing guest
+> loader, an absent dev package or a job that has never once passed on this box
+> all produce a red that no commit in the range caused.
+
 %s
 
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
@@ -4033,6 +4255,30 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         # timeout is Track T's until someone shows otherwise, and leaving the
         # track unset does exactly that.
         track, track_note = stub_track(j)
+        # THE H1 IS THE BOARD LINE. A stub carries no `summary:` frontmatter,
+        # and progress.py falls back to the first `# ` heading -- so this
+        # sentence is literally what `ready`/`next` print and what a dispatcher
+        # routes on. Two of the four things it could not say are free here.
+        #
+        # `first-ever red`, not `regression`: a job whose first run is red is
+        # not a regression from anything, and range_note() has said so in the
+        # body for a while -- in a paragraph three sections down that a board
+        # reader never reaches. The SLUG still begins `regression-` and must:
+        # it is the dedupe key (stub_slug_for_filing) AND the close key
+        # (close_stub_tickets recomputes it from the job alone), and
+        # progress.py derives a ticket's `type` from that same prefix. So the
+        # heading is where the correction can live, and the disagreement
+        # between it and the slug is the honest state of affairs.
+        head_kind = ("advisory red" if job in advisory
+                     else "first-ever red" if reg.get("first_seen")
+                     else "regression")
+        # NOT `st` -- that is this function's state-dict parameter, and
+        # shadowing it here would crash the SECOND job of the batch on
+        # `st["open_regressions"]`.
+        hstep = step_fields(j)
+        head_step = ((" in step %d/%d, `%s`"
+                      % (hstep[0] + 1, hstep[1], (hstep[2][:56] or "?")))
+                     if hstep else "")
         refusals = refusal_markers(clone, j.get("src"))
         immune = pin_immune(clone, dict(reg or {}, pin_built=j.get("pin_built")))
         body = ("""---
@@ -4040,11 +4286,12 @@ prio: %d
 %s---
 
 %s%s
-# %s: %s red at %s (auto-filed by twatch)
+# %s: %s at %s%s (auto-filed by twatch)
 
-- **Type:** %s (auto-filed by Track T watcher, host %s). Untriaged.
+- **Type:** %s (auto-filed by Track T watcher, host %s, twatch `%s`).
+  Untriaged.
 - **Found:** %s
-- **Test source:** %s
+- **Test source:** %s%s
 
 ## Repro
 `tools/testmgr.py --tier %s --job '%s'` at %s
@@ -4076,9 +4323,10 @@ takes it from the repro line.*
                     "verdict; the tool cannot decide this one.\n\n"
                     % ", ".join(sorted(refusals)[:4])) if refusals else ""),
                 staleness_note(clone, sha, parent),
-                "advisory" if job in advisory else "regression",
-                job, sha[:12], kind, host, utcnow(),
+                head_kind, job, sha[:12], head_step, kind, host,
+                WATCHER_CODE, utcnow(),
                 j.get("src") or "unknown (see repro commands)",
+                step_note(j),
                 report["tier"], job, sha,
                 range_note(reg), tail))
         write_ticket(os.path.join(clone.path, rel), body)
@@ -4114,8 +4362,66 @@ TRACK_BY_SRC = (
     (".npy", "N"), ("test_nilpy", "N"), ("pylib", "N"),
     ("lib/crtl", "C"), ("crtl_", "C"), (".c", "C"),
     ("lib/rtl", "B"), ("lib/pcl", "B"), ("lib_", "B"), ("examples/", "B"),
+    # The frontends' own carved-out files, BEFORE the `compiler/` sweep below --
+    # they live under compiler/ and are emphatically not A's. Order is the whole
+    # correctness argument here, so do not sort this tuple.
+    ("pasparser", "P"), ("pylexer", "N"), ("pyparser", "N"),
+    ("clexer", "C"), ("cparser", "C"), ("cpreproc", "C"),
+    # Everything else under compiler/ is Track A (CLAUDE.md: A owns compiler/**,
+    # the shared internals). This entry exists because the `.pas` catch-all below
+    # was routing `compiler/compiler.pas` to P -- the compiler's own source is
+    # not frontend work, and a test whose subject is a compiler file is A's.
+    ("compiler/", "A"),
     ("test/pascal-conformance", "P"), (".pas", "P"),
 )
+
+
+# Job names that name a MECHANISM rather than a SUBJECT.
+#
+# The distinction, and it is the whole reason this table is explicit rather than
+# a heuristic: most job names describe what a job is ABOUT, so their lane depends
+# on the source (`test-core` runs the whole corpus across every lane, and naming
+# it would be a guess). A few name one machine-level mechanism, and then the lane
+# is a property of the NAME and the source is irrelevant -- `test-asm` is the
+# x86-64 text assembler/encoder, so `test-asm#src:test/hello.pas` is Track A
+# precisely BECAUSE hello.pas has nothing to do with what is being tested.
+#
+# Measured cost of not having it: five p70 regressions auto-filed as `track: P`
+# on 2026-08-30 (regression-test-asm-*), one of them reporting `undefined
+# variable (EmitSyscall)` in compiler/x64enc.inc. All five were the test-asm job;
+# none was frontend work; all were invisible to the lane that owns the file until
+# a human re-laned them by hand. Note also five tickets for one cause -- twatch
+# files per source, so one defect became five slugs.
+#
+# KEPT DELIBERATELY SHORT. An entry here overrides evidence, so a wrong one is
+# silent and permanent, where the path guess at least prints "guessed" for a
+# reader to correct. Only names whose lane the SOURCE cannot supply are listed:
+# `test-nilpy` and `test-c-conformance` are absent because their sources (.npy,
+# .c) already answer correctly, and adding them would buy nothing while growing
+# the surface. If a name's lane is arguable, leave it out.
+TRACK_BY_JOB = {
+    # x86-64 emitters and the object/debug writers: A's ground, whatever .pas
+    # file is fed through them.
+    "test-asm": "A", "test-emit-obj": "A", "test-debug-g": "A",
+    # the optimizer and the self-compile -O differential
+    "test-opt": "A", "test-selfcompile-odiff": "A",
+    # cross-target backends -- a test that passes on x86-64 and fails here is a
+    # backend fact, and CLAUDE.md puts cross-target work in A
+    "test-aarch64": "A", "test-arm32": "A", "test-i386": "A",
+    "test-riscv32": "A", "test-xtensa": "A",
+    # Track T's own tooling
+    "tools-devtest": "T", "tools-devtest-sh": "T",
+}
+
+
+def job_family(j):
+    """The job's NAME, without its per-source selector suffix.
+
+    `test-asm#src:test/hello.pas` -> `test-asm`. Falls back to `name` because a
+    cascade entry carries no selector.
+    """
+    s = str(j.get("job") or j.get("name") or "")
+    return s.split("#", 1)[0].strip()
 
 
 # A REFUSAL expectation -- one that records an error rather than a value --
@@ -4181,6 +4487,17 @@ def stub_track(j):
         # timed-out job did not fail in any of its sources — it ran out of
         # budget. Guessing a lane from the path is the wrong turn
         # bug-t-a-timeout-bisects-to-an-innocent-commit was filed to stop.
+        #
+        # The lane stays T; what changes is that the ticket can now say WHERE
+        # it was when the budget ran out. A timeout is the case where the log
+        # says LEAST -- the job was still running, so there is no error line at
+        # all -- and script() writes the step marker before each line rather
+        # than on failure precisely so this arm has an answer.
+        st = step_fields(j)
+        hung = ("\n>\n> It was executing line %d of %d when the budget ran "
+                "out: `%s`. That is where to look; it is not an accusation "
+                "against that line." % (st[0] + 1, st[1], st[2][:120] or "?")
+                ) if st else ""
         return "T", (
             "> **Track T by default, because this job TIMED OUT.** The source "
             "path says what a job compiles, not what went wrong, and a timeout "
@@ -4188,13 +4505,83 @@ def stub_track(j):
             "Guessing a lane from the path is the wrong turn "
             "`bug-t-a-timeout-bisects-to-an-innocent-commit` was filed to stop, "
             "so a timeout stays T's until someone shows otherwise. Re-lane it "
-            "if the budget was not the problem.\n\n")
+            "if the budget was not the problem.%s\n\n" % hung)
+    named = TRACK_BY_JOB.get(job_family(j))
+    if named:
+        # BEFORE the step and the src, because for these jobs both are noise:
+        # the sources are whatever .pas file the mechanism was fed. Deliberately
+        # AFTER the timeout arm above -- a timeout is a budget fact, and nothing
+        # about a mechanism's name says its budget is that mechanism's fault.
+        return named, (
+            "> **Track %s from the job NAME `%s`**, not from its source. This "
+            "job names a MECHANISM rather than a subject — the source it was "
+            "fed (`%s`) is what the mechanism was run ON, not what is being "
+            "tested, so a lane guessed from it would be wrong by construction. "
+            "The ranker reads frontmatter, so this line decides who works it; "
+            "re-lane it if this job has changed what it covers.\n\n"
+            % (named, job_family(j), str(j.get("src") or "none").split()[0]))
+    # THE FAILING STEP FIRST, and it is not the same evidence as the job's
+    # `src`. A job is one script of up to ~200 recipe lines; `src` is every
+    # file the whole script mentions, truncated to the first two. So `src`
+    # describes the job's SUBJECT and the guess built on it answers "what is
+    # this job about", never "what broke". `lib-test#00` names 39 sources
+    # across four lanes, and its first is `tools/crtl_reachability.py` -- so
+    # three separate reds in that one job were filed `track: C` and worked by
+    # the C lane while the red was a GTK3 guard in lib/pcl (Track B) twenty
+    # lines further down.
+    # bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step.
+    st = step_fields(j)
+    if st:
+        i, n, line, ssrc = st
+        guessed = guess_track(ssrc)
+        if guessed:
+            return guessed, (
+                "> **Track guessed as %s from the FAILING STEP** — line %d of "
+                "%d, `%s`, which names `%s`. Not from the job's name or its "
+                "`src`: those describe what the job is ABOUT, and this job's "
+                "recipe spans %d source file(s). The ranker reads frontmatter, "
+                "so this line — not the body — decides who works it; correct "
+                "it if the guess is wrong.\n\n"
+                % (guessed, i + 1, n, (line[:120] or "?"), ssrc.split()[0],
+                   job_source_count(j.get("src"))))
+        # The step named no lane. Falling back to the job's `src` is exactly
+        # the move this ticket exists to stop -- BUT only where it is actually
+        # a guess about somebody else's file. A job that names ONE source has
+        # no "first source" problem: the first and the only are the same file,
+        # and no other lane is in frame. So the refusal is bounded to the
+        # multi-source case rather than applied to every job, which would have
+        # sent the whole single-test majority (`compile foo.pas` then `diff -u
+        # foo.expected -`, whose failing step names only the .expected) to T.
+        if job_source_count(j.get("src")) <= 1:
+            guessed = guess_track(j.get("src"))
+            if guessed:
+                return guessed, (
+                    "> **Track guessed as %s** from the test source. The "
+                    "failing step (line %d of %d) named no source of its own, "
+                    "but this job has only ONE source — so first-source and "
+                    "only-source are the same file here and there is no other "
+                    "lane in frame. The ranker reads frontmatter, so this "
+                    "line — not the body — decides who works it; correct it "
+                    "if the guess is wrong.\n\n" % (guessed, i + 1, n))
+        return "T", (
+            "> **Track T by default: the FAILING STEP named no owner.** Line "
+            "%d of %d is `%s`. The job's own `src` (`%s`, %d file(s)) is NOT "
+            "used here on purpose: it is what the job compiles, not what "
+            "broke, and guessing a lane from it is what sent three reds in one "
+            "job to the wrong lane. This is a FALLBACK, not a finding — "
+            "nothing says the defect is Track T's. Re-lane it before working "
+            "it.\n\n" % (i + 1, n, (line[:120] or "?"),
+                          str(j.get("src") or "none").split()[0],
+                          job_source_count(j.get("src"))))
     guessed = guess_track(j.get("src"))
     if guessed:
         return guessed, (
-            "> **Track guessed as %s** from the test source. The ranker reads "
-            "frontmatter, so this line — not the body — decides who works it; "
-            "correct it if the guess is wrong.\n\n" % guessed)
+            "> **Track guessed as %s** from the test source, because the "
+            "failing step was not recorded (an older watcher clone). The job's "
+            "`src` is what it COMPILES, not what broke — for a multi-step job "
+            "the two are unrelated. The ranker reads frontmatter, so this "
+            "line — not the body — decides who works it; correct it if the "
+            "guess is wrong.\n\n" % guessed)
     where = (" (the job reported no test source)" if not j.get("src")
              else " from `%s`" % str(j.get("src")).split()[0])
     return "T", (
@@ -4215,7 +4602,122 @@ def guess_track(src):
     return None
 
 
+def job_source_count(src):
+    """How many sources the job's `src` field accounts for.
+
+    `src` is TRUNCATED by testmgr's extract_src(): two paths, then `+N` for the
+    rest. So the count is not len(split()) -- it is the paths plus whatever the
+    `+N` stands for, and `lib-test#00` reads `a.py b.py +37`, i.e. 39.
+    """
+    n = 0
+    for tok in (src or "").split():
+        n += int(tok[1:]) if tok.startswith("+") and tok[1:].isdigit() else 1
+    return n
+
+
+def step_fields(j):
+    """(i, n, line, src) for the recipe line that went red, or None.
+
+    None means the reporting testmgr did not record one -- an older watcher
+    clone, or a job that never launched. Never an exception and never a guess:
+    a consumer that cannot tell "step 3 of 198" from "we do not know" would
+    write the first when it means the second.
+    """
+    i = j.get("step_i")
+    if i is None:
+        return None
+    return (int(i), int(j.get("step_n") or 0),
+            (j.get("step_line") or "").strip(), (j.get("step_src") or "").strip())
+
+
+def step_note(j):
+    """The stub's `- **Failing step:**` bullet, or "" when unrecorded.
+
+    Deliberately a SEPARATE bullet from `Test source:` rather than a
+    replacement for it. The two answer different questions -- what the job
+    compiles, and where it stopped -- and a reader who has only ever seen the
+    first has no way to know the second exists. Keeping both, adjacent, is
+    also what makes the gap visible when they disagree, which is the whole
+    finding: `test/crtl_reachability.c` sitting one line above a GTK3 guard in
+    `lib/pcl` says more than either line alone.
+    """
+    st = step_fields(j)
+    if not st:
+        return ""
+    i, n, line, src = st
+    where = ("it names `%s`" % src) if src else \
+        ("it names no source file of its own — so it is the JOB's sources, "
+         "one line up, that are unproven here, not this step's")
+    return ("\n- **Failing step:** line %d of %d of the job's recipe; %s.%s"
+            % (i + 1, n, where,
+               ("\n  ```\n  %s\n  ```" % line) if line
+               else " (the line text was not recorded)"))
+
+
 STUB_MARKER = "auto-filed by twatch"
+
+
+# Auto-close is sound for a DETERMINISTIC test and unsound for a racy one.
+# Build, run, compare: a pass genuinely refutes the red. For anything whose
+# failure is probabilistic -- threads, sockets, scheduling, allocator order --
+# one green is what a live bug produces most of the time, and the close is not
+# a misfire, it is what the rule yields on that input. It happened:
+# test-threads#src:test/test_sched_reactor_exhaustion.pas was auto-closed TWICE
+# on 2026-08-29 while the defect was live (~12% failure at 24 workers).
+#
+# THE TICKET'S OWN PROPOSED FIX DOES NOT WORK, and that is worth stating rather
+# than half-adopting. It suggested reusing RUN_RETRY_CLASSES -- but that set is
+# {qemu, corpus, conformance, opt}, which is about runtime variance from the
+# ENVIRONMENT (emulation, corpora, big sweeps), not about a test's own
+# concurrency. classify() puts the reactor recipe in `unit`: measured, not
+# assumed. So the class rule would not have caught the very incident that
+# produced the ticket. It is kept below as one arm because it is still right
+# about what it covers -- it is simply not the arm that matters.
+#
+# "N consecutive greens" does not work either, and the arithmetic is the whole
+# argument: at the measured ~12% failure rate, three greens still leaves a 68%
+# chance (0.88**3) the bug is live, and driving that under 5% needs ~24 -- a
+# number no sweep cadence can pay. Absence of a failure is not evidence for a
+# race at any affordable N, so the answer cannot be a bigger N.
+#
+# What DOES discriminate is evidence already in the record, and both arms are
+# free:
+#
+#   * the closing green was itself FLAKY -- the job failed and passed on a
+#     retry IN THIS RUN. That is not an inference about the test, it is the
+#     race firing while we watched. (The field existed in testmgr's result
+#     JSON and was dropped by this publisher until 2026-08-30, which is why
+#     this arm could not have been written before.)
+#   * the stub is a REPEAT. stub_slug_for_filing() opens `<base>-2`, `-3` when
+#     a resolved predecessor exists, so a variant suffix is a structural record
+#     that this job already went red, was closed, and came back. That is the
+#     definition of intermittent-or-never-fixed, it needs no new state, and it
+#     is the arm that catches the reactor case.
+#
+# Refusing is NOT silent and NOT a leak: the ticket is annotated with the green
+# and the reason, so whoever closes it by hand has the evidence rather than an
+# older ticket that simply stopped moving.
+def one_green_cannot_close(base, slug, job_rec):
+    """Why a single green must not auto-close this stub, or None if it may."""
+    if job_rec and job_rec.get("flaky"):
+        return ("the job FAILED and passed on a retry in this very run, so "
+                "this green is the race firing rather than evidence against it")
+    if slug != base:
+        return ("this is a repeat stub (`%s`, not `%s`) — the job already went "
+                "red, was closed, and came back, so one green is the outcome a "
+                "live intermittent bug produces most of the time" % (slug, base))
+    cls = (job_rec or {}).get("cls")
+    if cls in RETRY_CLASSES:
+        return ("the job's class is `%s`, which testmgr treats as runtime-"
+                "nondeterministic (RUN_RETRY_CLASSES) — a single pass does not "
+                "refute a red there" % cls)
+    return None
+
+
+# Mirrors testmgr's RUN_RETRY_CLASSES. Duplicated rather than imported because
+# twatch does not import testmgr, and guarded by
+# tools/twatch_autoclose_race_devtest.py so the copy cannot drift silently.
+RETRY_CLASSES = frozenset({"qemu", "corpus", "conformance", "opt"})
 
 
 def close_stub_tickets(clone, host, closed, sha, report):
@@ -4252,7 +4754,7 @@ def close_stub_tickets(clone, host, closed, sha, report):
     red_srcs = {(j.get("src") or "").strip() for j in report["jobs"]
                 if j.get("status") in ("fail", "timeout")}
     red_srcs.discard("")
-    paths, slugs = [], []
+    paths, slugs, annotated = [], [], []
     for r in closed:
         base = ("regression-cascade-" + (r.get("bad") or "")[:12]
                 if r.get("cascade") else reg_slug(r["job"]))
@@ -4281,6 +4783,29 @@ def close_stub_tickets(clone, host, closed, sha, report):
             print("twatch: %s's job is green, but %s is still red in another "
                   "job — keeping the stub open (it is that source's only "
                   "ticket)" % (slug, m.group(1).strip()), flush=True)
+            continue
+        job_rec = next((j for j in report["jobs"]
+                        if (j.get("sel") or j.get("name")) == r.get("job")
+                        or j.get("name") == r.get("job")), None)
+        why_not = one_green_cannot_close(base, slug, job_rec)
+        if why_not:
+            if sha[:12] in body:
+                print("twatch: %s stays open (%s) — already annotated at %s"
+                      % (slug, why_not.split(" \u2014 ")[0], sha[:12]), flush=True)
+                continue
+            if "\n## Log\n" not in body:
+                body = body.rstrip("\n") + "\n\n## Log\n"
+            body = (body.rstrip("\n") + "\n- %s — the %s watcher saw `%s` GREEN "
+                    "at %s (tier %s) and did NOT close this: %s. The green is "
+                    "recorded because it is evidence and because a ticket that "
+                    "stops moving with no reason reads as forgotten; closing "
+                    "this one is a human's call.\n"
+                    % (utcnow()[:10], host, r.get("job") or slug, sha[:12],
+                       report["tier"], why_not))
+            with open(src, "w") as f:
+                f.write(body)
+            annotated.append((slug, os.path.relpath(src, clone.path)))
+            print("twatch: %s stays open — %s" % (slug, why_not), flush=True)
             continue
         if "\n## Log\n" not in body:
             body = body.rstrip("\n") + "\n\n## Log\n"
@@ -4327,6 +4852,13 @@ def close_stub_tickets(clone, host, closed, sha, report):
         os.unlink(src)
         paths += [os.path.relpath(p, clone.path) for p in (src, dst)]
         slugs.append(slug)
+    if annotated:
+        clone.publish("tstate-ticket(%s): %s green but NOT closed (%s)"
+                      % (host, ", ".join(s for s, _ in annotated),
+                         "race-unsafe on one green"),
+                      paths=[p for _, p in annotated])
+        print("twatch: %d stub(s) green but left open — annotated, not closed"
+              % len(annotated), flush=True)
     if slugs:
         # Both paths go to publish(): `git add -- <gone> <new>` is what records
         # the move; staging only the destination leaves the stub in backlog on
@@ -4422,8 +4954,23 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
         set_phase(clone, host, "fuzz-recheck", sha=sha)
         clone.checkout(sha)
         try:
+            # --cross on the RECHECK, not on the fuzz loop. The daemon has
+            # never fuzzed cross targets, so every cross finding in the ledger
+            # arrived from a manual run — and without cross oracles here the
+            # recheck cannot judge them, so they would sit unjudgeable forever
+            # and the "could not be judged" count would never reach zero. A
+            # permanently-nonzero counter stops being read, which is how the
+            # next dead proxy starts.
+            #
+            # Bounded and safe: a recheck files no findings, it only closes
+            # them, so the worst a flaky emulator can do is fail to mark
+            # something fixed. On a host with no qemu the oracles are skipped
+            # and those findings report CANNOT JUDGE, which is the truth.
+            # Whether the daemon should also FUZZ cross is a separate question
+            # with real cost — not decided here.
             r = subprocess.run(
-                [sys.executable, runner, "--recheck", "--ledger", ledger_loc,
+                [sys.executable, runner, "--recheck", "--cross",
+                 "--ledger", ledger_loc,
                  "--ledger-inplace", "--sha", sha[:12]],
                 cwd=clone.path, env=env, text=True, capture_output=True, timeout=1800)
             tail = (r.stdout or "").strip().split("\n")[-1]

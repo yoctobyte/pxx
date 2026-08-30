@@ -57,6 +57,7 @@ function GetTokenStr(idx: Integer): AnsiString; forward;   { real body in ast_sy
 function PasSrcOfTok(t: Integer): AnsiString; forward;                          { ditto }
 procedure CMarkTokModule(startTok: Integer; const path: AnsiString); forward;    { real body in parser.inc; clexer.inc/cparser.inc call it (bug-a-fpc-seed-drift-emitasmx64-forward) }
 function CPathIsCModule(const path: AnsiString): Boolean; forward;   { ditto }
+function CModuleOfTok(t: Integer): Integer; forward;   { real body in dbg_filetable.inc; lexer.inc asks which C translation unit a token came from, and lexer.inc is included first (ditto) }
 procedure MarkUnitPxxDialect(unitIdx: Integer); forward;   { real body in symtab.inc; lexer.inc's {$MODE PXX} handler calls it (ditto) }
 function IsNilLiteralNode(node: Integer): Boolean; forward;   { real body in ast_arena.inc; symtab.inc's overload matcher asks it about a call argument (ditto) }
 {$include lexer.inc}
@@ -147,6 +148,13 @@ procedure BuildCSysIncludeDirs; forward;    { the host `<>` fallback table — c
 {$include pasparser_proc.inc}
 {$include pasparser_prog.inc}
 {$include ir.inc}
+{ Track C's C-EXCLUSIVE lowering, carved out of ir.inc (slice 1 of
+  refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed).
+  AFTER ir.inc, not before: cir.inc calls IRLowerAST, which ir.inc already
+  forward-declares -- putting cir.inc first would need a second forward for it
+  and that is a duplicate the FPC seed rejects. So ir.inc carries five forwards
+  for what it calls the other way. }
+{$include cir.inc}
 function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
 function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 { "does this operand already own its +1" — the ONE predicate for managed-string
@@ -160,6 +168,14 @@ function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
   after the cross backends. Forwarding is what this file already does for that
   situation — a second mechanism would be the special case. }
 function IRTopLevelStmt(k: Integer): Boolean; forward;
+{ "does this comparison reach the bare integer cmp" — the ONE predicate for
+  which ops the -O3 W1 operand folds may touch, body in ir_codegen.inc.
+  Forwarded here for the same reason as the line above, and with the same
+  history behind that reason: aarch64's port of W1 slices 5+7 needs it, the
+  cross backends are included BEFORE ir_codegen.inc, and a second hand-rolled
+  copy of "which comparisons are safe to fold" is how the string arms get
+  quietly included on one target and not another. }
+function CmpFusible(node: Integer): Boolean; forward;
 {$ifndef PXX_NO_AARCH64}{$include ir_codegen_aarch64.inc}{$endif}
 {$ifndef PXX_NO_I386}{$include ir_codegen386.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include ir_codegen_arm32.inc}{$endif}
@@ -204,16 +220,40 @@ function IRTopLevelStmt(k: Integer): Boolean; forward;
   They answer before any source file is required — `pxx --where` with no
   arguments is exactly the case someone reaches for when units are not found. }
 
+procedure DeriveTargetPlatform;
+{ Settle TargetPlatform from the target, unless --platform= set it explicitly.
+
+  Shared by the real compile path and by `pxx --where` for the same reason
+  AddDefaultPasUnitDirs itself was extracted: --where must report the list a
+  real compile builds, and the way that promise breaks is a second copy of the
+  rule. --where answers from INSIDE the argument loop (it Halts there), so
+  without this call it saw the pre-derivation default POSIX and reported the
+  posix PAL for `--target=xtensa`, which really compiles against the esp one.
+
+  Idempotent: PlatformExplicit gates it, and re-deriving yields the same value.
+
+  bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets }
+begin
+  if PlatformExplicit then Exit;
+  { riscv32 is dual-role: bare ESP32-C3 (--esp-profile=bare) OR hosted linux
+    (qemu-user) -- only the bare profile is esp. xtensa has no hosted leg. }
+  if EspBareBoot or (TargetArch = TARGET_XTENSA) then
+    TargetPlatform := PLATFORM_ESP
+  else
+    TargetPlatform := PLATFORM_POSIX;
+end;
+
 procedure AddDefaultPasUnitDirs;
 { The PAL search roots the default RTL needs (platform_backend lives under
   lib/rtl/platform/<pal>/), appended AFTER any user -Fu so an explicit override
-  still wins. ESP targets pick their own backend and are excluded.
+  still wins. BARE ESP targets have no RTL at all and are excluded; every other
+  platform gets the PAL its TargetPlatform names -- see the `pal` note below.
 
   Extracted from the main body so `pxx --where` reports the same list a real
   compile builds — a diagnostic that re-derives the search path is a diagnostic
   that goes stale silently (feature-toolchain-cli-ux). Idempotent enough for
   --where's purposes: it is called once per process either way. }
-var libpath, one, home: AnsiString;
+var libpath, one, home, pal: AnsiString;
     i: Integer;
 begin
   { Tier 2a: PXX_LIBPATH — colon-separated extra unit roots. Added HERE, which
@@ -246,6 +286,24 @@ begin
 
   if NoDefaultRtl or TargetIsEspClass then Exit;
 
+  { WHICH PAL this platform wants. The axis is TargetPlatform; it is NOT
+    TargetIsEspClass, which has meant "bare metal, no RTL" since cbfdb5de8.
+    The two agree everywhere except the non-bare ESP profile -- xtensa under
+    IDF, riscv32 --platform=esp -- which wants the esp backend and was
+    silently handed the posix one, whose raw Linux syscalls under FreeRTOS are
+    the failure bug-esp-idf-heap-linux-mmap-ecall already recorded once.
+
+    Selected once into `pal` rather than branched at each of the four
+    spellings below: the four are the same decision, and the way this stays
+    correct is that there is one place to change, not four that can drift
+    (devdocs/dev/normalise-dont-special-case.md).
+
+    Bare ESP never reaches here -- it took the Exit above -- so this is only
+    ever choosing between a hosted-POSIX and an ESP-platform build.
+
+    bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets }
+  if TargetPlatform = PLATFORM_ESP then pal := 'esp/' else pal := 'posix/';
+
   { Tier 2b: PXX_HOME's PAL dir, matching ResolveToolchainDirs' override. Same
     all-or-nothing rule — when PXX_HOME is set, the exe-dir guesses below are
     not appended as a silent second chance. }
@@ -254,7 +312,7 @@ begin
   if Length(home) > 0 then
   begin
     if home[Length(home)] <> '/' then home := home + '/';
-    AddPasUnitDir(home + 'lib/rtl/platform/posix/');
+    AddPasUnitDir(home + 'lib/rtl/platform/' + pal);
     Exit;
   end;
 
@@ -264,16 +322,16 @@ begin
     with CWD at the repo root, so ExeDir-relative ('/tmp/../lib/...') misses. }
   if ExeDir <> '' then
   begin
-    AddPasUnitDir(ExeDir + '../lib/rtl/platform/posix/');
+    AddPasUnitDir(ExeDir + '../lib/rtl/platform/' + pal);
     { The STABLE binary lives at <root>/stable_linux_amd64/<profile>/, two
       levels down, so its '../lib' misses. Add the two-levels-up spelling as
       well rather than probe: an extra non-existent search dir costs one
       failed open, and getting this wrong made `uses SysUtils` resolve and
       then die on its own `uses platform_backend`
       (bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path). }
-    AddPasUnitDir(ExeDir + '../../lib/rtl/platform/posix/');
+    AddPasUnitDir(ExeDir + '../../lib/rtl/platform/' + pal);
   end;
-  AddPasUnitDir('lib/rtl/platform/posix/');
+  AddPasUnitDir('lib/rtl/platform/' + pal);
 end;
 
 procedure PrintVersionInfo;
@@ -413,6 +471,10 @@ begin
   ShowWhereDir(cdir, '[compiler-local units]');
   WriteLn;
 
+  { Settle the platform first: --where runs from inside the argument loop,
+    before the main body's derivation, so without this it reports the PAL
+    of a pre-derivation default rather than the one a compile would use. }
+  DeriveTargetPlatform;
   AddDefaultPasUnitDirs;
   WriteLn('Pascal unit search roots, in order (-Fu goes in FRONT of these):');
   if PasUnitDirCount = 0 then
@@ -706,6 +768,9 @@ begin
   WriteLn('  -d<NAME> -u<NAME>     define / undefine a conditional symbol');
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
   WriteLn('  --emit-obj            emit a relocatable .o instead of an executable');
+  WriteLn('                        general objects: --target=xtensa|riscv32 only.');
+  WriteLn('                        on x86-64 only .asm sources (text + global');
+  WriteLn('                        labels + extern calls); anything else is refused');
   WriteLn('  --shared              emit a shared library');
   WriteLn('  --threadsafe          lock the heap and the I/O paths');
   WriteLn;
@@ -795,6 +860,7 @@ begin
   TargetArch := TARGET_X86_64;
   XtensaABI := XTENSA_ABI_CALL0;
   XtensaSoftDivide := False;
+  XtensaSoftMulHigh := False;
   XtensaHasFpu := False;
   XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;
@@ -802,6 +868,7 @@ begin
   TlsMainInstalled := False;
   EmitSharedMode := False;
   EmitAsmTextMode := False;
+  CodePadStart := -1;   { no ELF page padding until the writer appends it }
   EspBareBoot := False;
   NoDefaultRtl := False;
   StrictIR := True;   { DEFAULT ON since 2026-07-11: IRVerify rejects any IR_UNSUPPORTED
@@ -811,6 +878,16 @@ begin
                         frontend work. feature-selfhost-guard-ir-unsupported. }
   TargetPlatform := PLATFORM_POSIX;
   PlatformExplicit := False;
+  RtlOverLibc := False;
+  LibcSyscallProcIdx := -1;
+  LibcErrnoProcIdx := -1;
+  LibcSyscallCallCount := 0;
+  LibcSyscallThunkAddr := -1;
+  { Hand the pure byte encoder our lowering. x64enc.inc cannot reference
+    EmitSyscall itself: it is also included by the standalone asm harnesses,
+    which mock the byte sink and have no compiler policy at all. Nil there
+    means "emit the two bytes", which is exactly what they want. }
+  X64SyscallHook := @EmitSyscall;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   SocExplicit := False;
@@ -925,8 +1002,11 @@ begin
     end
     else if option = '-g' then
     begin
-      { DWARF Tier 1: emit .debug_line + a minimal CU stub (x86-64 only).
-        Off by default → self-host / bootstrap byte-identical path untouched. }
+      { DWARF Tier 1: emit .debug_line + a minimal CU stub, on x86-64, aarch64,
+        i386 and arm32 (esp xtensa/riscv32 excluded — see DbgArchSupported in
+        elfwriter.inc, whose comment is the correct statement of the set).
+        Off by default → self-host / bootstrap byte-identical path untouched.
+        Corrected 2026-08-30: said "x86-64 only". }
       DebugInfo := True;
       Inc(i);
     end
@@ -1028,6 +1108,15 @@ begin
       else TargetArch := TARGET_RISCV32;
       Inc(i);
     end
+    else if option = '--rtl-libc' then
+    begin
+      { Reach the kernel through libc's syscall(3) rather than the raw
+        instruction. Opt-in and x86-64 only for now; raw-syscall stays the
+        default because the libc-free Linux build is the identity the self-host
+        gate rests on. feature-port-rtl-over-libc }
+      RtlOverLibc := True;
+      Inc(i);
+    end
     else if option = '--platform=posix' then
     begin
       TargetPlatform := PLATFORM_POSIX;
@@ -1062,6 +1151,16 @@ begin
       { ESP32 classic (LX6): no hardware divide option. Route div/mod through
         the software shift-subtract helpers. }
       XtensaSoftDivide := True;
+      Inc(i);
+    end
+    else if option = '--xtensa-soft-mulhigh' then
+    begin
+      { No qemu-xtensa core implements MUL32HIGH (all 8 SIGILL on `muluh`),
+        though all 8 DO have the divide option — so this is a peer of
+        --xtensa-soft-divide above and deliberately does not touch it. A
+        capability, not a part: the emulator is the only thing it is true of.
+        A verdict produced under it must name it. }
+      XtensaSoftMulHigh := True;
       Inc(i);
     end
     else if option = '--xtensa-fpu' then
@@ -1544,10 +1643,21 @@ begin
         + '(--target=esp32c3, esp32s3, ...) or the generic --target=riscv32 / '
         + '--target=xtensa, which mean esp32c3 / esp32s3'); Halt(1); end;
   { The thread-safe runtime (heap/ARC locks, statement-atomic I/O) exists on
-    x86-64 (hand-emitted lock blobs) and i386 (Pascal softlock in builtinheap
-    via PXX_TS_SOFTLOCK + the 386 I/O lock stubs); on other targets
-    --threadsafe would silently emit an UNLOCKED runtime. Fail clearly instead
-    (feature-threadsafe-heap-contract / feature-i386-threadsafe-locks). }
+    x86-64 (hand-emitted lock blobs), i386 (Pascal softlock in builtinheap via
+    PXX_TS_SOFTLOCK + the 386 I/O lock stubs), and aarch64/arm32 (IR_ATOMIC
+    lowered to the load-exclusive/store-exclusive loop, plus each backend's own
+    port of EmitIoLockStubs). On other targets --threadsafe would silently emit
+    an UNLOCKED runtime, so fail clearly instead
+    (feature-threadsafe-heap-contract / feature-i386-threadsafe-locks).
+
+    THE CONDITION BELOW IS THE AUTHORITY on which targets are supported, and
+    the only place that list should be written down. Corrected 2026-08-30: this
+    comment named two targets while the code three lines under it admitted
+    four, and two other sites had copied the older, narrower answer
+    (builtinheap.pas PXXStrIncRef, ir_codegen_aarch64.inc EmitHeapAllocLockedA64
+    -- the latter inside the very backend that implements it). A target list
+    duplicated into a comment rots the moment a target is added, which is the
+    expected direction of travel; pointing here does not. }
   if ThreadSafeMode and (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386)
      and (TargetArch <> TARGET_AARCH64) and (TargetArch <> TARGET_ARM32) then
   begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet'); Halt(1); end;
@@ -1557,15 +1667,7 @@ begin
     esp targets (xtensa/riscv32) and bare-metal profiles are esp; all else is
     posix. The platform axis stays independent: an explicit --platform overrides
     this (e.g. a hosted RTOS on xtensa later). }
-  if not PlatformExplicit then
-  begin
-    { riscv32 is dual-role: bare ESP32-C3 (--esp-profile=bare) OR hosted linux
-      (qemu-user) — only the bare profile is esp. xtensa has no hosted leg. }
-    if EspBareBoot or (TargetArch = TARGET_XTENSA) then
-      TargetPlatform := PLATFORM_ESP
-    else
-      TargetPlatform := PLATFORM_POSIX;
-  end;
+  DeriveTargetPlatform;
   PasApplyTargetDefines;
   PasApplyPlatformDefines;
   { AFTER PasApplyTargetDefines and after the target is settled: the compiler
@@ -1686,7 +1788,8 @@ begin
     platform_backend from the PAL dir. Anchor the POSIX backend dir to the
     compiler binary so a plain `pxx foo.pas` finds it with no -Fu. Appended
     last, so an explicit user -Fu (e.g. a per-platform override) still wins.
-    ESP targets select their own backend and are excluded from default RTL. }
+    BARE ESP targets have no RTL and are excluded; a non-bare ESP platform
+    gets the esp PAL rather than this one. }
   AddDefaultPasUnitDirs;
   { lib/asmcore resolution (asmcore_base/asmcore_x64, both for the compiler's
     own .asm frontend / inline-asm branches and for any user program) is now a
@@ -1783,6 +1886,10 @@ begin
     program IS the emitted bytes and whose entry point is overridable
     (AsmEntryOff). x86-64 only, inside the emitter. }
   if not isAsm then EmitTlsMainInstall;
+
+  { Before ANY frontend runs -- see ResetDeclScopeSentinels. Only ParseProgram
+    set these, so every non-Pascal driver started inside class 0's body. }
+  ResetDeclScopeSentinels;
 
   if isNilPy then
   begin
@@ -1959,6 +2066,14 @@ begin
     DbgMarkTokFile(TokCount, 1);
     TokPos := 0;
     Next;
+    { Register the two libc imports BEFORE the frontend runs, not lazily at the
+      first syscall. Registering them last put their Procs[] rows after every
+      unit's externals and the emitted DT_NEEDED came out as a UNIT name
+      ("builtinheap") rather than libc.so.6 -- the program then failed at LOAD,
+      not at run. Creating them up front keeps the import table's order the same
+      as it is for any ordinary `external` declaration.
+      feature-port-rtl-over-libc }
+    if RtlOverLibc and (TargetArch = TARGET_X86_64) then EnsureLibcSyscallProcs;
     ParseProgram;
   end;
 
@@ -2114,6 +2229,12 @@ begin
             ' eligible-param-loads+stores=', RegcallEligibleUses);
   end;
   if MeasureInline then InlineMeasureSummary;
+  { All code is emitted and CodeLen is final; the ELF writer below derives
+    dataBase from it. This is the one point where the libc syscall thunk can be
+    appended -- EmitSyscall fires mid-routine, so the body cannot be emitted
+    where it is first needed without execution falling into it.
+    feature-port-rtl-over-libc }
+  EmitLibcSyscallThunk;
   if EmitSharedMode then
     writeELFSharedX64(outFile)
   else if EmitObjMode then

@@ -67,9 +67,9 @@ failed — is `math-implemented-twice.md`. Read it first if the rule looks like
 needless duplication: `Round(2.5)` is 2 in Pascal and 3 in C, both correct, and
 no single implementation can serve both.
 
-**Status: `feature-a-own-language-first-symbol-resolution` (Track A, unfinished)
-— NO LONGER BLOCKED.** The design fork was decided 2026-08-14 (user) as a RULE
-SET rather than one rule:
+**Status: BUILT. [[feature-a-own-language-first-symbol-resolution]] is in
+`done/`.** The design fork was decided 2026-08-14 (user) as a RULE SET rather
+than one rule:
 
 1. **own-language-first** is the principle (above);
 2. **a cross-language name match must agree on CASE** — this is the mechanism,
@@ -91,19 +91,51 @@ writes an ambiguous bare call owns that outcome: the compiler's obligation is to
 warn, not to guess right. See
 `decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language`.
 The acute cause is gone — `pxxcio.pas` no longer does `uses math`, so the Pascal
-RTL is no longer in scope for every C program by default. What remains is a
-standing workaround: ten functions in `lib/crtl/src/math.c` are deliberately
-misnamed to dodge Pascal, reached through `#define`s in crtl's `math.h`:
+RTL is no longer in scope for every C program by default.
 
-```c
-/* NOT named `exp`: collides case-insensitively with Pascal Exp. */
-double __crtl_exp(double x) { ... }
+### The acceptance test this section set for itself — it passed, on 2026-08-16
+
+This paragraph used to say ten functions in `lib/crtl/src/math.c` were *"still"*
+misnamed `__crtl_exp`, `__crtl_log2`, `__crtl_log10`, `__crtl_sin`, `__crtl_cos`,
+`__crtl_tan`, `__crtl_sinh`, `__crtl_cosh`, `__crtl_tanh`, `__crtl_hypot`, and
+named the fix as its own acceptance test: *"Those ten going back to their real
+names, with the `#define`s deleted, is the acceptance test for the rule."*
+
+**All ten are back to their real names** (`grep -n '^double exp(' lib/crtl/src/math.c`
+— it is `exp`, at :282), the `#define`s are gone, and
+[[task-c-retire-the-crtl-name-dodge-prefixes]] is in `done/`. The only
+`__crtl_` names left in `lib/crtl/include/math.h` are an internal NAN bit-union.
+One dodge does survive elsewhere and is unrelated to this ten:
+`__crtl_time` in `lib/crtl/include/time.h` / `src/time.c`.
+
+**Verified by behaviour, not by ticket state**, because the whole point of the
+rule is which of two *different* functions a call binds — and the pair that
+discriminates is the flagship divergence from `math-implemented-twice.md`:
+
+```pascal
+program olf3;
+uses math, './cr2.c';          { cr2.c: #include <math.h>
+                                 double c_round_call(double x){ return round(x); } }
+begin
+  Writeln('Pascal Round(2.5)  = ', Round(2.5));        { 2    — banker's }
+  Writeln('C      round(2.5)  = ', c_round_call(2.5):0:1);  { 3.0  — away from zero }
+end.
 ```
 
-`__crtl_exp`, `__crtl_log2`, `__crtl_log10`, `__crtl_sin`, `__crtl_cos`,
-`__crtl_tan`, `__crtl_sinh`, `__crtl_cosh`, `__crtl_tanh`, `__crtl_hypot`.
-**Those ten going back to their real names, with the `#define`s deleted, is the
-acceptance test for the rule.**
+Compiled with `$(PXX_STABLE)` on 2026-08-30, that prints `2` and `3.0` from one
+program: the Pascal call got Pascal's `Round`, the C call got C's `round`. Rule 3
+is live too — the same compile emits
+`warning: C declaration of 'nan' does not match the Pascal routine 'NaN' … binding
+to the C declaration, not the Pascal routine`, which is exactly "warn where a
+genuine ambiguity survives, naming what was picked".
+
+> **Corrected 2026-08-30 (frankD).** Three claims here read as open work and all
+> three were finished: the status line ("unfinished"), the ten-name workaround,
+> and the built column in §4. Note what makes this one different from the usual
+> stale status — **the doc wrote down its own acceptance test, in an imperative a
+> grep can answer, and still went stale for two weeks.** A checkable obligation
+> is cheaper to recover than an uncheckable one, but it is not self-executing: it
+> still needs someone to run it, and nothing here scheduled that.
 
 The `__pxx_*` PAL entry points are *not* a counter-example: they are declared in
 C headers and defined in Pascal — one symbol with two halves, not two competing
@@ -220,11 +252,21 @@ to the normal quick-only loop, and it is written into the tickets.
 | --- | --- | --- |
 | module resolution per frontend extension | yes | yes |
 | explicit foreign-path import overrides | yes | yes |
-| own language first (symbols) | yes, 2026-08-10 | **no** — `feature-a-own-language-first-symbol-resolution` |
+| own language first (symbols) | yes, 2026-08-10 | **yes** — [[feature-a-own-language-first-symbol-resolution]], `done/`; verified by behaviour 2026-08-30 (§2.1) |
 | scope hiding, routines | yes | yes, `ea0e20254` |
 | scope hiding, types/classes | yes (same rule) | **no** — `bug-p-scope-hiding-covers-routines-but-not-types-and-classes` |
 | qualified reference bypasses hiding | yes | yes (routines); classes fixed on the exception branch |
 
 The user-facing half of this — "your own language wins, and an explicit import
-overrides it" belongs in the language reference — is **not** written yet and is a
-Track D job; this page is the internal map.
+overrides it" — **is written**: `docs/language/name-resolution.md`, 303 lines,
+landed 2026-08-14 in `6ae11f9fc` ("the cross-language name-resolution page,
+measured not re-derived"), with `docs/language/name-collisions.md` beside it.
+This page is the internal map; that one is the programmer's.
+
+> **Corrected 2026-08-30 (frankD).** This said the page was *"not written yet and
+> is a Track D job"*. It was written on the day the fork was decided — the same
+> 2026-08-14 — and the sentence outlived it by sixteen days. It is the fourth
+> claim on this page that read as outstanding work and was finished, and the only
+> one that would have **created** work: a Track D reader following it writes a
+> document that already exists, and the duplicate is discovered by whoever
+> reviews it, not by whoever writes it.

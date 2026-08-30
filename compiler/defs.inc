@@ -54,6 +54,17 @@ const
     bug-a-cross-bootstrap-aarch64-overflows-max-code }
   MAX_CODE      = 33554432;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
+  { Longest C string copied into a FROZEN string slot. 255 and not
+    LOCAL_STR_CAP: this mirrors PXXCStrToFrozen in builtin/builtinheap.pas,
+    which riscv32 and xtensa call for the same construct and which stops at
+    `len < 255`. The slot really does hold LOCAL_STR_CAP data bytes, so 255
+    leaves one unused — but the two paths disagreeing by one byte would make a
+    256-byte argv entry render differently per target, which is a cross-target
+    divergence a differential run would later file as its own bug. One limit,
+    shared, is worth more than the byte; raising BOTH to LOCAL_STR_CAP is a
+    single follow-up rather than two independent ones.
+    bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp }
+  FROZEN_CSTR_CAP = 255;
   DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 2097152;      { 2 MB }
@@ -69,6 +80,35 @@ const
     Cost is ~24 B/entry of BSS, ~1.4 MB, virtual only — the same cost model as
     MAX_CODE above. bug-a-string-table-cap-refuses-a-14k-line-c-program }
   MAX_STRS    = 65536;
+
+  { ---- the STATIC managed-string block, built at compile time ----------------
+    Mirrors the runtime header in compiler/builtin/builtinheap.pas
+    ([meta:8][rc:8][len:8][data][nul], handle = base + 24). InternStr lays one
+    of these down in front of every pooled literal, so a literal that has to
+    become a managed AnsiString is an ADDRESS, not a call to
+    AnsiStrFromLiteralAddr that allocates and copies the same bytes again on
+    every evaluation (PXXStrFromLit was 9.28% of uforth's profile —
+    bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython).
+
+    These duplicate builtinheap.pas's constants rather than sharing them,
+    because that file is COMPILED by this compiler, not included into it. The
+    two copies are pinned together by test_static_string_literals: it asserts
+    the runtime's view of a compile-time-built block (length, ASCII answer,
+    copy-on-write) rather than the constants themselves, so a drift shows up as
+    a wrong value and not as a silent agreement. }
+  MSTR_HDR_SIZE        = 24;      { handle = block base + this }
+  MSTR_KIND_LEGACY     = $0000;
+  MSTR_FLAG_STATIC     = $0100;   { never freed, never appended in place }
+  MSTR_FLAG_ASCII      = $0400;
+  MSTR_FLAG_ASCII_KNOWN= $1000;
+  { The refcount a static block is born with. It has to satisfy three things at
+    once, and 2^30 is the smallest round number that does:
+      > 1   so PXXStrUnique and the inlined SetLength fast path both take their
+            copy-on-write arm and a literal can never be mutated in place;
+      far from 0 so no amount of PXXStrDecRef ever reaches the free;
+      inside 32 bits so the 32-bit targets, whose refcount word is four bytes,
+            read the same value the 64-bit ones do. }
+  MSTR_STATIC_RC       = $40000000;
   { The compiled-unit ceiling, enforced at `if CompiledUnitCount < 256` in
     ParseUnit. Named here because VisCacheVis is sized by it and USED to be
     sized by MAX_STRS — see the note on that array. }
@@ -806,7 +846,7 @@ const
   IR_ATOMIC       = 63;  { IRIVal = op (ATOMIC_XCHG/CAS/ADD); IRA = IR_ARG chain (addr, then operands). x86-64 emits a 32-bit lock-prefixed read-modify-write on addr^ and returns the OLD value in the accumulator. Substrate for futex mutexes/atomic counters. }
   IR_EXC_MATCH_HIT = 64; { Positive-polarity sibling of IR_EXC_MATCH: IRA = label, IRIVal = class id; jumps to the label when the raised class EQUALS the id (vs. IR_EXC_MATCH's jump-away-on-mismatch). Used to chain "raised class is any descendant of the handler's target class" checks -- see IsClassDescOrSelf's usage in AN_TRY_EXCEPT lowering. }
   IR_SET_SIGNAL    = 65; { SetSignalHandler(sig, @proc): IRA = signal-number value node, IRB = handler-address value node (0/nil = revert to default on next delivery). Lowers to a call of the emitted SigSetHook stub (store hook slot + rt_sigaction install). x86-64 Linux only; other targets Error at codegen. }
-  IR_IO_LOCK       = 66; { --threadsafe statement-atomic console I/O: acquire the reentrant owner-tid I/O spinlock (BSS_IO_OWNER/BSS_IO_DEPTH). Emitted by AN_WRITE/AN_WRITELN/AN_READ* lowering around the whole statement, x86-64 + ThreadSafeMode only. Reentrant so a write-arg calling a writing function cannot self-deadlock. }
+  IR_IO_LOCK       = 66; { --threadsafe statement-atomic console I/O: acquire the reentrant owner-tid I/O spinlock (BSS_IO_OWNER/BSS_IO_DEPTH). Emitted by AN_WRITE/AN_WRITELN/AN_READ* lowering around the whole statement, on every --threadsafe target (see the ThreadSafeMode gate in compiler.pas, the authority) -- x86-64 hand-emits it, and i386/aarch64/arm32 each have their own EmitIoLockStubs port. Corrected 2026-08-30: said "x86-64 + ThreadSafeMode only" (bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july). Reentrant so a write-arg calling a writing function cannot self-deadlock. }
   IR_IO_UNLOCK     = 67; { release the I/O statement lock (depth-counted; owner cleared at depth 0). }
   MAX_LOOPSYM_SCAN = 64; { -O3 loop-residency: cap on distinct syms tallied inside a body's loop ranges (UnifiedResidencyAssign); overflow just means later syms are not residency candidates. }
   RC_RESIDENT_SLOTS = 6;  { GPR residency table size — the LARGEST pool any backend assigns from (aarch64 x19..x24; x86-64 uses 4 of them, r12..r15). See the RcResident* declarations: sizing it by x86-64's pool is what made aarch64 -O3 write past the end of three parallel arrays. }
@@ -1072,6 +1112,18 @@ const
     (feature-nilpy-object-reclamation). }
   PXX_OBJ_MAGIC_TAG = $505942F1;
 
+  { The cached-ASCII bits of the managed-block meta word — MUST match
+    PXX_FLAG_ASCII ($0400) and PXX_FLAG_ASCII_KNOWN ($1000) in
+    compiler/builtin/builtinheap.pas. Meta sits at [handle-24] (PXX_HDR_META = 0
+    from the block base, PXX_HDR_SIZE = 24).
+
+    The compiler needs them because x86-64 does not CALL the two Pascal helpers
+    that keep the cache sound — it inlines both PXXStrUnique (the byte-mutation
+    choke point) and the symbol-target SetLength — so the emitted code has to
+    forget the cache itself. Every other backend routes through the helpers and
+    needs nothing here. }
+  PXX_ASCII_CACHE_BITS = $1400;
+
   { PROMOTABLE INT tag block (feature-a-promotable-int). The whole family claims
     a CONTIGUOUS block up front, while it is free, rather than being scattered
     into whatever gaps exist when each class lands.
@@ -1305,10 +1357,15 @@ const
   LOAD_ADDR        = $400000;
   ELF_HEADER_SIZE  = 64;
   PROG_HEADER_SIZE = 56;
-  { PT_LOAD + PT_GNU_STACK (bug-elf-missing-pt-gnu-stack: every image we emit
-    carries a GNU_STACK header now, RW/no-X, so newer kernels don't refuse to
-    load it for wanting an executable stack). }
-  CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE + PROG_HEADER_SIZE;
+  { THREE program headers on a hosted image: PT_LOAD(code, R+X),
+    PT_LOAD(data+bss, R+W), PT_GNU_STACK (RW/no-X --
+    bug-elf-missing-pt-gnu-stack: newer kernels refuse an image that asks for
+    an executable stack). It was two until the code/data split, and the code
+    started right after the headers then as it does now -- so THIS CONSTANT AND
+    THE PHDR COUNT ARE ONE FACT SPELLED TWICE, and the writers assert they
+    agree rather than trusting it. feature-a-second-pt-load-so-data-is-not-executable }
+  CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE + PROG_HEADER_SIZE +
+                     PROG_HEADER_SIZE;
 
   { Compile targets. x86-64 is the native/self-host target; others are
     cross-only and grow op-by-op (unsupported constructs error, never
@@ -1411,15 +1468,22 @@ var
 const
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
-  { PT_LOAD + PT_GNU_STACK, see CODE_OFFSET above. }
-  CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE + PROG32_HEADER_SIZE;
-  { Dynamic i386: ehdr + PT_LOAD + PT_INTERP + PT_DYNAMIC + PT_GNU_STACK. }
+  { 2 x PT_LOAD + PT_GNU_STACK, see CODE_OFFSET above. }
+  CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE +
+                       PROG32_HEADER_SIZE + PROG32_HEADER_SIZE;
+  { A bare-metal ESP image keeps the ORIGINAL single RWX PT_LOAD (+ GNU_STACK):
+    it loads into SoC SRAM as one region and there is no loader to enforce a
+    second segment's permissions, so the split would buy nothing and cost a
+    page of padding in a memory measured in hundreds of KB. }
+  ESP_CODE_OFFSET32  = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE +
+                       PROG32_HEADER_SIZE;
+  { Dynamic i386: ehdr + 2 x PT_LOAD + PT_INTERP + PT_DYNAMIC + PT_GNU_STACK. }
   DYNAMIC_CODE_OFFSET32 = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE +
                           PROG32_HEADER_SIZE + PROG32_HEADER_SIZE +
-                          PROG32_HEADER_SIZE;
+                          PROG32_HEADER_SIZE + PROG32_HEADER_SIZE;
   DYNAMIC_CODE_OFFSET = ELF_HEADER_SIZE + PROG_HEADER_SIZE +
                         PROG_HEADER_SIZE + PROG_HEADER_SIZE +
-                        PROG_HEADER_SIZE;
+                        PROG_HEADER_SIZE + PROG_HEADER_SIZE;
 
   INTBUF_OFFSET   = 0;
   INTBUF_SIZE     = 24;
@@ -1668,8 +1732,15 @@ type
     RecId     : Integer;    { record/class id when Kind is a record/class kind, REC_NONE otherwise }
     ElemTk    : Integer;    { array ELEMENT's TTypeKind ordinal, tyUnknown if not an array }
     ElemRec   : Integer;    { array ELEMENT's record id, REC_NONE if not set }
+    { NOTE: these two are named `Base` and currently hold the IMMEDIATE pointee,
+      which is the same thing only at depth <= 1. `^PChar` has PtrBaseTk =
+      tyPointer here while its real base is tyChar. Re-pointing them at the
+      ultimate base is decide-typeref-gains-a-pointer-depth-field's fold and
+      needs ir.inc's char-pointer check to guard on PtrDepth in the same change;
+      until then, read them as "immediate pointee" regardless of the name. }
     PtrBaseTk : Integer;    { typed pointer's pointed-at TTypeKind ordinal, tyUnknown if unset }
     PtrBaseRec: Integer;    { typed pointer's pointed-at record id, REC_NONE if unset }
+    PtrDepth  : Integer;    { typed pointer nesting: PChar = 1, ^PChar / char** = 2. 0 = unknown/not a pointer }
     ProcSig   : Integer;    { procedural-type signature: Procs[] index (BodyAddr=-1), -1 if not proc-typed }
     DynDepth  : Integer;    { dynamic-array nesting depth: 0 = not dynamic, 1 = array of T, 2 = array of array of T, ... }
     ArrLen    : Integer;    { fixed-array element count, -1 = not a fixed array }
@@ -1753,7 +1824,10 @@ const
   { distinct nested generic uses (`class(specialize TBase<T>)`, a field of a
     generic type) inside ONE template body -- see the nested-specialization
     note in pasparser_*.inc. The +1 slot holds the declaration being deferred. }
-  MAX_NESTED_SPECS = 24;
+  MAX_NESTED_SPECS = 96;   { was 24 -- MEASURED insufficient: rtl-generics' generics.collections
+                             exhausts 24 at line 1313 and compiles past it at 96. Not a runaway;
+                             raising it moved the frontier ~1200 lines further into the unit.
+                             Cost is 96 AnsiStrings x2 + 96*MAX_TEMPLATE_PARAMS TRawTokens. }
   MAX_OP_OVERLOADS = 64;
 
 type
@@ -2086,7 +2160,7 @@ var
     where r14/r15 still hold the caller's pristine values. See
     bug-a-o2-miscompiles-disassembler. }
   RcSuppressAssign  : Boolean;
-  RcProcHasExc      : Boolean;  { this body contains an IR_EXC_ENTER. The exception landing pad re-syncs every resident FROM its frame slot (RegcallRefreshResident), so it is the one reader of a resident's slot that is NOT residency-aware -- which makes it the gate on any pass that stops keeping that slot current. Measured, not assumed: with PXXDBG=a.poisonslot the only two programs of 19 that changed behaviour were the two with try/except in a loop, and both read back $5EEDADAD. Set per body at the top of UnifiedResidencyAssign, before its early exits. }
+  RcProcHasExc      : Boolean;  { this body contains an IR_EXC_ENTER. The exception landing pad re-syncs every resident FROM its frame slot (RegcallRefreshResident), so it is the one reader of a resident's slot that is NOT residency-aware -- which makes it the gate on any pass that stops keeping that slot current. Measured, not assumed: with PXXDBG=a.poisonslot the only two programs of 19 that changed behaviour were the two with try/except in a loop, and both read back $5EEDADAD. Set per body at the top of UnifiedResidencyAssign, before its early exits. READ by ResidentSlotIsDead and FloatResidentSlotIsDead in symtab.inc -- the flag is set in ir_codegen.inc and enforced in symtab.inc, so neither file shows the whole gate on its own. }
   { --measure-inline: phase-0 opportunity probe for feature-inline-routines /
     auto-inline. Per compiled body records size + leaf/early-exit/addr-taken-param
     facts; per direct call target counts the call sites. Summary printed at end of
@@ -2264,6 +2338,19 @@ var
   Code    : array of Byte;
   CodeLen : Integer;
   CodeCapacity : Integer;   { allocated bytes of Code[] — see GrowCode in emit.inc }
+  { Offset at which the ELF writer's page padding begins, or -1 if the writer
+    has not run / did not pad. The padding is zero bytes appended to Code[] so
+    the data that follows starts on a fresh page (PadCodeToPageBoundary in
+    elfwriter.inc); it is alignment filler, not instructions. `-S` runs AFTER
+    writeELF -- deliberately, so the listing shows displacements the writer has
+    already patched -- and so it would otherwise disassemble the filler and end
+    the file with a `db 00` line. That trips the test-asm-hello-2 /
+    test-asm-compiler-2 assertion `! grep -q "^    db "`, which exists to catch
+    codegen emitting bytes the disassembler cannot decode. Exempting a trailing
+    pad in the ASSERTION would blunt it for every future real case, so the
+    listing stops at the pad instead: the assertion keeps meaning exactly what
+    it says, and the pad is not code, so nothing true is being hidden. }
+  CodePadStart : Integer;
 
   Data    : array[0..MAX_DATA-1] of Byte;
   DataLen      : Integer;
@@ -2475,6 +2562,9 @@ var
     never hold dead indices. }
   SymHashHead : array[0..SYM_HASH_SIZE-1] of Integer;
   SymHashPrev : array of Integer;   { next-older same-bucket idx }
+  SymHashBkt  : array of Integer;   { the bucket the slot was FILED in, which
+                                      is not always the one its CURRENT name
+                                      hashes to -- see SymHashInsert }
   ProcOverloadDirective : array of Boolean;
   ProcFlexColumn : array of Boolean; { `flexcolumn` directive: call args accept write-style `:width[:decimals]` modifiers; each value arg expands to three actuals (value, width, decimals; defaults 0 / -1), so the routine declares (v; w, d) triples. }
   ProcCount : Integer;
@@ -2586,6 +2676,8 @@ var
   CProcHasLocalDef : array of Boolean;   { a local (in-TU) function body for this proc was seen in pass 1; a later redundant prototype (guardless header re-included by several .c) must NOT re-mark it external — keeps the pass-2 forward call internal, not a dynamic import }
   ProcRetPtrElemRec : array of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
   ProcParamPtrDepth : array of Integer; { C interop: pointer depth for parameters }
+  ProcParamPtrElemTk : array of Integer;  { pointed-at TTypeKind ord when the PARAMETER is a typed pointer (tyUnknown otherwise) -- the parameter mirror of ProcRetPtrElemTk, and durable for the fourth statement of the same reason ProcParamRecId/ProcParamSetEnumId/ProcParamProcSig give: a param symbol does not outlive the callee's scope. Reading it from Syms[Params[j].SymIdx] instead is not merely unreliable, it is reliably WRONG once any later scope reuses the slot -- measured: GetPropInfo's `cls` at sym 363 read back as the caller's own variable `o`. And because tyUnknown doubles as the untyped-pointer sentinel, the stale read fails OPEN. bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching }
+  ProcParamPtrElemRec : array of Integer; { rec id of the pointee when ProcParamPtrElemTk is a record/class/interface; REC_NONE otherwise }
   ProcParamRecId : array of Integer; { record/class/interface rec id per param (param syms are reused across procs, so this must persist); REC_NONE if not a record/class }
   ProcParamSetEnumId : array of Integer; { `set of TEnum` param: the element enum type index, -1 otherwise. A PARALLEL ARRAY rather than a TParam field, and durable for the same reason ProcParamRecId is: RegisterProc leaves Params[].SymIdx = -1 and a param symbol does not outlive the callee's scope, so a CALLER parsing `f([...])` cannot ask the symbol what the set's element type is. Read by the set-literal element check. }
   ProcParamDynDepth : array of Integer; { named dynamic-array param: dyn nesting depth (>0); 0 = not a named dynarray param. Persists because param syms are reused across procs. Distinguishes a resizable `TDynArr=array of T` param from an open `array of T` param at the call site. }
@@ -3354,6 +3446,30 @@ var
     overrides. Set explicitly = PlatformExplicit True (suppresses derivation). }
   TargetPlatform : Integer;
   PlatformExplicit : Boolean;
+  { RTL-over-libc lowering mode (--rtl-libc). Routes IR_SYSCALL through libc's
+    syscall(3) instead of emitting the raw `syscall` instruction, so the binary
+    reaches the kernel only through the system C library -- the supported
+    boundary on every mainstream OS except Linux. OPT-IN: raw-syscall stays the
+    default and must stay bit-identical, because it is what the self-host gate
+    and the libc-free Linux identity rest on.
+    The two synthetic imports the lowering needs. They are ordinary external
+    Procs[] entries manufactured by EnsureLibcSyscallProcs -- no Pascal source
+    declares them -- so the existing ExternalProc[]/ProcLibrary[] path emits the
+    DT_NEEDED and PLT slot with no elfwriter change. -1 = not yet created.
+    feature-port-rtl-over-libc }
+  RtlOverLibc : Boolean;
+  LibcSyscallProcIdx : Integer;
+  LibcErrnoProcIdx : Integer;
+  { --rtl-libc emits `call <thunk>` at each syscall site and appends the ONE
+    thunk after all code is emitted, patching these rel32 fields. Out-of-line
+    rather than inline because the sequence is ~140 bytes: inlining it grew
+    EmitSyscall from 2 bytes to ~140 and silently overflowed unrelated rel8 jump
+    patches that span a syscall (bug-a-a-rel8-jump-patch-truncates-silently-
+    when-its-span-grows). A 5-byte call moves no span, and the body exists once
+    instead of at 43 sites. }
+  LibcSyscallCallPos : array[0..MAX_CALLFIX-1] of Integer;
+  LibcSyscallCallCount : Integer;
+  LibcSyscallThunkAddr : Integer;
   { Xtensa ABI selector. Call0 remains the bare-target default; ESP-IDF uses
     the windowed ABI. }
   XtensaABI : Integer;
@@ -3362,6 +3478,27 @@ var
     software shift-subtract helpers __pxx_divsi3/__pxx_modsi3 for ESP32 classic
     (LX6), which has the multiply option but not the divide option. }
   XtensaSoftDivide : Boolean;
+  { Xtensa 32-bit multiply-high policy, and a SIBLING of XtensaSoftDivide
+    rather than a facet of it — that pairing is the finding, not a filing
+    convenience. Default False = native `muluh` (the MUL32HIGH option, present
+    on every shipping ESP32 LX6/LX7 part). True (via --xtensa-soft-mulhigh)
+    expands high(a*b) into a shift/mask/mull sequence.
+
+    It exists because NO qemu-xtensa core implements MUL32HIGH: measured
+    2026-08-29 against qemu-xtensa 10.2.1, all EIGHT cores it exposes SIGILL on
+    `muluh` while all eight run quos/rems. So the two gaps are INDEPENDENT, and
+    that is why this is a capability flag and not a value on the --xtensa-cpu=
+    axis. A cpu= value asserts a package of capabilities by naming a part, and
+    the package is exactly what is false here — a bundled flag would have
+    claimed something about divide that no core it named actually lacks. The
+    next capability that splits would have wanted to attach to the same value
+    and claimed more than was measured.
+
+    Opt-in, because it is a property of the EMULATOR and of no chip: under it
+    the oracle is not bit-identical to hardware for multiplies, so any verdict
+    produced with it set must name the flag.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  XtensaSoftMulHigh : Boolean;
   { Xtensa single-precision hardware FPU. Default False = single-width float ops
     go through the soft kernels (correct on EVERY xtensa part, incl ESP32-S2
     which has NO FPU). True (via --xtensa-fpu) lowers single +,-,* to the
@@ -4093,6 +4230,24 @@ var
     IR_LOAD_SYM arm, which re-extends rax to the symbol's width instead of
     loading. Always False below -O3 and on every non-x86-64 backend. }
   IRLoadRedundant : array of Boolean;
+  { The mark above is a PREDICTION of emitter behaviour; this is the check that
+    the prediction held. IREmitMachineCode sets it to CodeLen at the top of every
+    IR node's iteration, so inside a statement it holds "CodeLen when this
+    statement began emitting". The redundant-load arm elides only when CodeLen is
+    still equal to it — i.e. when the load really is the first thing this
+    statement emits, which is exactly the premise the mark asserts.
+
+    It exists because IRFirstEvaluated is a hand-maintained MIRROR of
+    IREmitNode's operand-order guard chain, and a mirror drifts: the -O3 W1
+    slice 9 arm (both subtrees pure -> park the RIGHT value and evaluate it
+    FIRST) was added to the emitter and not to the mirror, so `h := h * 31 xor
+    qword(c)` marked the load of h redundant, the emitter evaluated qword(c)
+    into rax first, and the load vanished into a value that was never loaded.
+    Four oracles said 635218 and -O3 alone said 222, silently
+    (bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements).
+    With this check a mirror that drifts costs a MISSED optimisation instead of
+    wrong code, which is what the mirror's own comment already claimed. }
+  ReloadRaxCodeLen : Integer;
   IRLine  : array of Integer; { source line of this IR instr (from CurLowerLine), 0 if unknown — DWARF -g }
   IRFile  : array of Integer; { .debug_line file index of that line (from CurLowerFile) }
   IRCount : Integer;

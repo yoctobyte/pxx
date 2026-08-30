@@ -2,15 +2,13 @@
 #ifndef GL_C_H
 #define GL_C_H
 
-/* GtkGLArea widget — requires GTK 3.16+, linked via libgtk-3.so.0 */
-void* gtk_gl_area_new(void);
-void  gtk_gl_area_set_required_version(void* gl_area, int major, int minor);
-void  gtk_gl_area_set_use_es(void* gl_area, int use_es);
-void  gtk_gl_area_make_current(void* gl_area);
-void* gtk_gl_area_get_error(void* gl_area);
-void  gtk_gl_area_queue_render(void* gl_area);
-int   gtk_widget_get_allocated_width(void* widget);
-int   gtk_widget_get_allocated_height(void* widget);
+/* The GtkGLArea widget and gtk_widget_get_allocated_width/height used to be
+   re-declared here as well. They are GTK, not GL -- they live in
+   libgtk-3.so.0, which the comment above them already said -- so they come
+   from the stock GTK3 headers via the `gtk3_c` unit now, and gtk3gl.pas uses
+   both units. Two headers declaring the same eight functions with different
+   types is the exact hazard the gtk3_c migration exists to remove; leaving
+   them here would have kept one arm of it. */
 
 /* ------------------------------------------------------------------ */
 /* OpenGL 3.3 core — dispatched by libepoxy (loads GL entry points     */

@@ -87,6 +87,16 @@ RUN_TIMEOUT = 5
 COMPILE_TIMEOUT = 30
 
 CROSS_ARCHS = ["i386", "aarch64", "arm32"]
+# The user-mode emulator each cross oracle needs, mirroring run_target.sh's
+# `need` calls. run_target.sh exits 2 when one is missing, which is
+# indistinguishable from a program that exits 2 — so availability is checked
+# here, up front, instead of being inferred from a return code.
+QEMU_BIN = {"i386": "qemu-i386", "aarch64": "qemu-aarch64", "arm32": "qemu-arm"}
+
+
+def qemu_for(arch):
+    """The emulator binary for `arch` if it is on PATH, else None."""
+    return shutil.which(QEMU_BIN[arch])
 
 # Result sentinels, kept distinct from any real checksum so they can never
 # silently compare equal to one.
@@ -130,14 +140,27 @@ def build_oracles(cross):
     ]
     if cross:
         for a in CROSS_ARCHS:
+            if not qemu_for(a):
+                # Degrade HONESTLY rather than silently. Without its emulator a
+                # cross oracle cannot run the binary at all, so every finding
+                # would come back as a sentinel, every comparison would read as
+                # a disagreement, and nothing could ever be marked fixed — the
+                # throttle would latch on a host that simply lacks a package.
+                # Leaving the oracle OUT instead means oracle_gap() reports a
+                # cross finding as CANNOT JUDGE, which is the truth, and native
+                # findings still recheck and still close.
+                print("pasmith_run: no %s — skipping the %s oracle"
+                      % (QEMU_BIN[a], a), file=sys.stderr)
+                continue
             o.append(Oracle("pxx-%s" % a, "pxx", ["--target=%s" % a], arch=a))
     return o
 
 
-def run(cmd, timeout, cwd=None):
+def run(cmd, timeout, cwd=None, env=None):
     try:
         p = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, timeout=timeout)
+                           stderr=subprocess.STDOUT, timeout=timeout,
+                           env=(dict(os.environ, **env) if env else None))
         return p.returncode, p.stdout.decode("utf-8", "replace")
     except subprocess.TimeoutExpired:
         return 124, ""
@@ -198,7 +221,20 @@ def classify(results):
     # A program FPC cannot compile is a pasmith bug (its contract is to emit
     # only valid objfpc), and we cannot judge pxx against a broken oracle --
     # so report it as its own class, loudly, rather than as a "divergence".
-    if any(results.get(n) == COMPILE_FAIL for n in ("fpc-O0", "fpc-O2")):
+    #
+    # ALL, not ANY, and the difference is the whole of
+    # bug-t-pasmith-calls-an-fpc-o2-bug-a-generator-contract-violation. The
+    # contract this claims was violated is "emit valid objfpc" -- and if ONE FPC
+    # level compiles the program, that contract was KEPT: the program is valid,
+    # provably, by the oracle's own -O0. A single level rejecting it is FPC
+    # disagreeing with itself, which is an FPC bug and is what `fpc-self` below
+    # already exists to say. With `any` this returned first and stole the case,
+    # so compile-time FPC self-contradiction was labelled a generator bug while
+    # the identical contradiction at RUNTIME was labelled correctly. Both
+    # examples the signature ever recorded (seeds 362, 85029) were FPC -O2 bugs
+    # where pxx was right, filed as "our generator is broken".
+    fpc_arms = [n for n in ("fpc-O0", "fpc-O2") if n in results]
+    if fpc_arms and all(results[n] == COMPILE_FAIL for n in fpc_arms):
         return (True, groups,
                 "FPC REJECTED THE PROGRAM -- pasmith contract violation (see ticket triage)",
                 "fpc-reject")
@@ -208,7 +244,16 @@ def classify(results):
     # COMPILE_FAIL group was filtered out and the remaining oracles all agreed,
     # so the program was scored clean. A compiler that cannot build valid objfpc
     # is exactly what this tool exists to catch.
-    if any(v == COMPILE_FAIL for k, v in results.items() if k.startswith("pxx")):
+    #
+    # ALL here too, for the same reason and found by the same rule (fix one arm,
+    # grep for the sibling). "pxx cannot build valid objfpc" is a frontend gap
+    # only if EVERY pxx level fails. If -O0 builds it and -O2 does not, the
+    # frontend plainly accepted the program and the optimiser broke it -- an
+    # optimiser bug (Track A/O), which `pxx-self` below already says. Routing
+    # that to Track A/P as a frontend gap would send someone to the parser for a
+    # bug that is not there.
+    pxx_arms = [k for k in results if k.startswith("pxx")]
+    if pxx_arms and all(results[k] == COMPILE_FAIL for k in pxx_arms):
         return (True, groups,
                 "pxx REJECTED a program FPC accepts -- frontend gap or regression (Track A/P)",
                 "pxx-reject")
@@ -220,19 +265,38 @@ def classify(results):
                     "by construction, so this is never the program's fault" % v,
                     "pxx-" + ("timeout" if v == TIMEOUT else "crash"))
 
-    real = {k: v for k, v in groups.items() if k != COMPILE_FAIL}
-    if len(real) <= 1:
+    # A COMPILE_FAIL that got this far is a PARTIAL one -- some arm built the
+    # program and some did not -- so it is a disagreement like any other and the
+    # checks below read it correctly without knowing it is special (COMPILE_FAIL
+    # is just a value they compare unequal to). This used to drop the
+    # COMPILE_FAIL group first and then ask whether the survivors agreed, which
+    # answered "yes, clean" for exactly the case the guards above had stopped
+    # catching: one FPC level failing while everything else agreed collapsed to
+    # a single group and was scored as NO divergence at all. Silently losing the
+    # finding is worse than mislabelling it, so the two must change together.
+    if len(groups) <= 1:
         return False, groups, "", ""
 
     note, cls = "", "unknown"
     f0, f2 = results.get("fpc-O0"), results.get("fpc-O2")
     if f0 is not None and f2 is not None and f0 != f2:
-        note = "FPC CONTRADICTS ITSELF (-O0 vs -O2) -- an FPC bug, no judgement needed; pxx is not involved"
+        # COMPILE_FAIL reaches here now, so name which kind it is: "FPC will not
+        # BUILD at one level" and "FPC builds at both and prints different
+        # answers" are both FPC bugs and both belong in tstate/fuzz/fpc-bugs/,
+        # but a reader chasing one should not have to open the program to learn
+        # which they have.
+        how = ("REFUSES TO COMPILE at one level"
+               if COMPILE_FAIL in (f0, f2) else "produces different output")
+        note = ("FPC CONTRADICTS ITSELF (-O0 vs -O2) -- it %s; an FPC bug, no "
+                "judgement needed; pxx is not involved" % how)
         cls = "fpc-self"
     pxxv = {k: v for k, v in results.items() if k.startswith("pxx-O")}
     if len(set(pxxv.values())) > 1:
+        how = ("REFUSES TO COMPILE at some level"
+               if COMPILE_FAIL in pxxv.values() else "produces different output")
         note = (note + " | " if note else "") + \
-            "pxx CONTRADICTS ITSELF across -O levels -- an optimiser bug (Track A/O); FPC not involved"
+            ("pxx CONTRADICTS ITSELF across -O levels -- it %s; an optimiser bug "
+             "(Track A/O); FPC not involved" % how)
         cls = "pxx-self" if cls == "unknown" else cls + "+pxx-self"
     arch = {k: v for k, v in results.items()
             if k.startswith("pxx-") and not k.startswith("pxx-O")}
@@ -291,25 +355,86 @@ def localize(src, workdir, oracles, groups):
     # needs to be threaded here -- the source is self-describing.
     seed = seed_of(src)
     gargs = gen_args_of(src)
-    if "--units" in gargs:
-        # The whole SET has to be re-emitted in trace mode, into its own
-        # directory: the units are where the behaviour lives, and a traced
-        # program linked against untraced units would compile and mislead.
-        tdir = os.path.join(workdir, "traced_u%d" % seed)
-        shutil.rmtree(tdir, ignore_errors=True)
-        rc, _ = run([sys.executable, PASMITH, "--seed", str(seed), "--trace",
-                     "--outdir", tdir] + gargs, 60)
-        traced = os.path.join(tdir, "pasmith_%d.pas" % seed)
-    else:
-        traced = os.path.join(workdir, "traced.pas")
-        rc, _ = run([sys.executable, PASMITH, "--seed", str(seed),
-                     "--trace", "-o", traced] + gargs, 60)
+    rc, _, traced = emit(gargs, workdir, seed, trace=True, tag="traced_")
     if rc != 0:
         return None, None
     kinds = checkpoint_kinds(traced)
 
     ta = evaluate(by[a_name], traced, workdir)
     tb = evaluate(by[b_name], traced, workdir)
+    return diff_traces(ta, tb, a_name, b_name, kinds)
+
+
+def sentinel_kind(t):
+    """The symptom name for a non-trace result, or None if `t` is a real trace.
+
+    A crash keeps its rc: an unhandled exception (217) and a segfault (139) are
+    different symptoms, and merging them would be the coarseness this file argues
+    for applied one step too far. Everything else is one bucket per sentinel.
+    """
+    if t == COMPILE_FAIL:
+        return "compile-fail"
+    if t == TIMEOUT:
+        return "timeout"
+    if t.startswith(CRASH):
+        m = re.search(r"rc=(\d+)", t)
+        return "crash-rc%s" % m.group(1) if m else "crash"
+    return None
+
+
+def diff_traces(ta, tb, a_name, b_name, kinds):
+    """Localise a divergence between two traces. Pure: no compiling, no I/O.
+
+    THE BUG THIS EXISTS TO PREVENT. `evaluate()` returns a SENTINEL for a run
+    that crashed, timed out, or failed to compile -- one line, with the program's
+    partial output discarded. Feeding that to a positional trace diff made
+    `min(len(la), len(lb))` equal 1, so the loop compared index 0 only, always
+    differed there, and reported
+
+        first divergence at checkpoint 1 of 1 -- a `assign` statement
+        (everything before it agrees, so the bug is AT that statement)
+
+    for a program with 27 checkpoints that crashed somewhere else entirely. Two
+    separate falsehoods: the named statement is the program's FIRST one rather
+    than the guilty one, and nothing was compared, so "everything before it
+    agrees" is a claim about an empty set stated as evidence.
+
+    It also poisoned the dedup key, which is the expensive half. The signature is
+    `<class>_<kind>`, so one crashing bug split into as many signatures as its
+    seeds had distinct first statements -- `fpc-self_assign`, `fpc-self_case`,
+    `fpc-self_forvarlimit` are three ledger entries, three sets of example seeds,
+    and three recheck costs for what is very likely one FPC -O2 defect. Measured
+    2026-08-30 with FPC alone, which needs no pxx build: all three die
+    `EAccessViolation` at rc=217 under -O2 and run clean under -O0, with
+    byte-identical generator args, differing only in the seed.
+
+    That is CONSISTENT WITH one defect and does not establish it — three
+    distinct -O2 optimizer bugs could each fault. The wording here said "what
+    the evidence says is one defect" until the measurement was actually taken,
+    which was an overclaim of exactly the kind this file keeps catching
+    elsewhere. What the evidence does establish is that the three signatures
+    carry no information distinguishing them, which is the only claim the dedup
+    key needs.
+
+    And the coarse key is right either way, by this file's own stated rationale:
+    a second bug hiding inside the first surfaces the moment the first is fixed
+    and the entry reopens. Splitting on the program's first statement is not a
+    hedge against that — it splits one bug three ways while merging nothing.
+
+    The tell was in the reports all along: `of 1` is `min(len(la), len(lb))`, not
+    the checkpoint count, so a truncated side prints "of 1" for a 27-checkpoint
+    program. Nobody reads a denominator that agrees with its numerator.
+    """
+    for t, who in ((ta, a_name), (tb, b_name)):
+        sk = sentinel_kind(t)
+        if sk:
+            return ("no localisation: %s produced %s, not a trace -- the run has "
+                    "no checkpoints to compare, so the guilty statement is "
+                    "UNKNOWN.\n    %-10s %s\n    %-10s %s\n"
+                    "    (a crashing run discards its partial output, so this is "
+                    "a symptom, not a location)"
+                    % (who, t, a_name, ta.split("\n")[0], b_name,
+                       tb.split("\n")[0]), sk)
     la, lb = ta.split("\n"), tb.split("\n")
     for i in range(min(len(la), len(lb))):
         if la[i] != lb[i]:
@@ -408,7 +533,36 @@ def ledger_open(led):
             if e.get("status") in ("open", "ticketed")}
 
 
-def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha):
+# Must equal twatch.NONACTIONABLE_CLASSES, which is the DECIDING half: the
+# backoff is applied by twatch.open_actionable_count(), and it already discounts
+# these. This copy is the REPORTING half, and the two are guarded equal by
+# tools/pasmith_ledger_throttle_devtest.py because nothing else couples them --
+# twatch does not import this module, so a class added on one side is silently
+# absent on the other.
+NONACTIONABLE_CLASSES = {"fpc-self"}
+
+
+def ledger_throttling(led):
+    """The open findings that ACTUALLY hold the fuzzer back.
+
+    `ledger_open()` answers "can the fuzzer still trip over this", which is the
+    right population to RECHECK -- fpc-self_trace-length was marked fixed from
+    exactly that path, so dropping them from recheck would lose a real transition.
+    It is the wrong population to REPORT as a throttle, because an external bug
+    can never be resolved locally and would pin the fuzzer in permanent backoff;
+    twatch discounts them for precisely that reason.
+
+    Measured 2026-08-30: every throttle-relevant entry in the published ledger is
+    class `fpc-self`, so the deciding half computed 0 while the status line said
+    "7 open. Fuzzing is throttled while any are open". Both halves of that
+    sentence were false, and it was false in the direction that creates work --
+    a reader triages five FPC bugs to un-throttle a fuzzer already at full speed.
+    """
+    return {s: e for s, e in ledger_open(led).items()
+            if e.get("class") not in NONACTIONABLE_CLASSES}
+
+
+def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha, oracles=None):
     """Fold one divergence into the ledger. Returns True if the SIGNATURE is new
     (or has reopened after being marked fixed) -- i.e. if this is news."""
     e = led["findings"].get(sig)
@@ -420,6 +574,10 @@ def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha):
             "examples": [{"seed": seed, "args": gen_args, "sha": sha}],
             "hits": 1, "note": note, "ticket": None,
             "reopened_from_fixed": False,
+            # WHICH oracles saw it. Without this a cross-only finding rechecked
+            # by a native-only run trivially "no longer reproduces" — a green
+            # verdict from a comparison that could not have gone red.
+            "oracles": list(oracles or []),
         }
         return True
 
@@ -478,6 +636,57 @@ def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha):
     return news
 
 
+def oracle_gap(e, oracles):
+    """Oracle names the finding needs that this run does not have.
+
+    Exact when the entry records its oracle set. Legacy entries (everything
+    filed before 2026-08-30) do not, so fall back to a HEURISTIC: if the
+    signature, kind or note names a cross architecture and this run has no
+    cross oracles, the finding is unjudgeable here.
+
+    The heuristic is deliberately biased. It can only ever produce a CANNOT
+    JUDGE, never a FIXED, so its failure mode is a finding re-measured later
+    instead of a finding closed wrongly. A heuristic that errs toward "I did
+    not manage to look" is safe in a way one that errs toward "clean" is not.
+    """
+    have = {o.name for o in oracles}
+    want = set(e.get("oracles") or [])
+    if want:
+        return sorted(want - have)
+    if any(o.arch for o in oracles):
+        return []                      # this run HAS cross oracles: nothing to miss
+    blob = " ".join(str(e.get(k, "")) for k in ("sig", "kind", "note")).lower()
+    hits = sorted(a for a in CROSS_ARCHS if a in blob)
+    return ["pxx-%s" % a for a in hits]
+
+
+def ledger_recheckable(led):
+    """The findings worth RE-MEASURING — a different question from ledger_open().
+
+    ledger_open() answers "what throttles fuzzing?", and it is right that a
+    `dodged` finding does not: the generator avoids the shape, so the fuzzer
+    cannot trip over it. But recheck() used that same set as "what should be
+    re-measured", and those two questions have different answers. A dodged
+    finding can be FIXED and nothing will ever notice, because the arm that
+    would notice is the arm that never runs — the entry is latched, exactly the
+    way a false "still reproduces" was latched before it regenerated properly.
+
+    The cost is visible in pasmith.py: three NO_* dodge constants, each
+    hand-annotated `FIXED: <sha>`. Every one of those was a human remembering to
+    go and look, which is the precise property recheck's own docstring claims
+    nobody should need.
+
+    Measured 2026-08-30: pxx-reject_store-through-pointer-cross had sat `dodged`
+    since 2026-07-14 with its ticket in done/ and its repro compiling on all
+    four targets.
+
+    Everything except `fixed`, then — re-measuring something already fixed is
+    the only genuinely wasted work here.
+    """
+    return {sig: e for sig, e in led["findings"].items()
+            if e.get("status") != "fixed"}
+
+
 def recheck(led, oracles, workdir, sha=None):
     """Re-run every open signature's example seeds against the CURRENT compiler.
 
@@ -487,23 +696,71 @@ def recheck(led, oracles, workdir, sha=None):
     notices, unprompted, that it has been fixed. Nobody has to remember to
     re-enable the fuzzer.
 
-    Returns (n_fixed, n_still_open).
+    THREE outcomes, not two. A seed that cannot be REGENERATED has not been
+    measured at all, and printing "still reproduces" for it reports a failure to
+    measure as a measurement -- it reads as "the bug is alive" and is
+    indistinguishable in the output from a genuine reproduction. That case gets
+    its own word here, and it does NOT mark the entry fixed either: unknown is
+    unknown in both directions, so the entry stays open and the throttle stays
+    on, but nobody is told a false verdict.
+
+    Regeneration goes through generate(), which is the single place that knows a
+    unit set needs --outdir rather than -o. Hand-rolling `-o` here is what made
+    every --units finding permanently un-closeable: pasmith REJECTS
+    `--units N -o FILE`, so regeneration failed on every tick forever, the
+    entry could never be marked fixed, and the throttle it fed never let go.
+    Measured 2026-08-30 on pxx-self_unitrec, which had been fixed by 10c869750
+    and was still being reported as reproducing.
+
+    Returns (n_fixed, n_still_open, n_unknown).
     """
-    fixed = still = 0
-    for sig, e in sorted(ledger_open(led).items()):
+    fixed = still = unknown = 0
+    # Own subdirectory: recheck may share a workdir with a live fuzz round, and
+    # generate() names files by seed alone.
+    rdir = os.path.join(workdir, "recheck")
+    os.makedirs(rdir, exist_ok=True)
+    for sig, e in sorted(ledger_recheckable(led).items()):
         reproduces = False
-        for ex in e.get("examples", []):
-            src = os.path.join(workdir, "recheck_%d.pas" % ex["seed"])
-            rc, _ = run([sys.executable, PASMITH] + ex["args"] + ["-o", src], 60)
+        why = ""
+        # A dodge REMOVES the shape from the generator, so a dodged entry can
+        # only be measured with dodges forced off — otherwise the regenerated
+        # program never had the chance to fail and "no longer reproduces" is a
+        # green verdict from no data.
+        genv = {"PASMITH_NO_DODGES": "1"} if e.get("status") == "dodged" else None
+        missing = oracle_gap(e, oracles)
+        if missing:
+            # Refuse rather than guess. A finding only i386/aarch64/arm32 could
+            # see cannot be judged by a native-only recheck: every oracle that
+            # disagreed is absent, so the comparison comes back clean for a
+            # reason that has nothing to do with the compiler. Widening the
+            # recheck population to include `dodged` is what made this
+            # reachable — the cross findings parked there had never been
+            # re-measured at all before today.
+            unknown += 1
+            print("  %-28s CANNOT JUDGE -- needs oracle(s) this run lacks: %s"
+                  % (sig, ", ".join(missing)))
+            continue
+        examples = e.get("examples", [])
+        if not examples:
+            # Zero measurements is not evidence of a fix. Never silently pass an
+            # entry that has nothing to run.
+            why = "no example seeds recorded"
+        for ex in examples:
+            rc, out, src = emit(ex["args"], rdir, ex["seed"], env=genv)
             if rc != 0:
-                reproduces = True      # cannot judge: keep it open, loudly
+                last = ((out or "").strip().splitlines() or [""])[-1][:120]
+                why = "seed %s would not regenerate (rc=%d): %s" % (
+                    ex["seed"], rc, last)
                 break
             res = {o.name: evaluate(o, src, workdir) for o in oracles}
             bad, _, _, cls = classify(res)
             if bad:
                 reproduces = True
                 break
-        if reproduces:
+        if why:
+            unknown += 1
+            print("  %-28s CANNOT JUDGE -- %s" % (sig, why))
+        elif reproduces:
             still += 1
             print("  %-28s still reproduces" % sig)
         else:
@@ -513,7 +770,7 @@ def recheck(led, oracles, workdir, sha=None):
             fixed += 1
             print("  %-28s FIXED (%d example seed(s) now agree)"
                   % (sig, len(e.get("examples", []))))
-    return fixed, still
+    return fixed, still, unknown
 
 
 def ledger_status(led):
@@ -526,10 +783,23 @@ def ledger_status(led):
         print("%-28s %-7s %6d  %-20s %s"
               % (sig, e.get("status", "?"), e.get("hits", 0),
                  (e.get("opened") or "")[:19], e.get("ticket") or "-"))
-    n_open = len(ledger_open(led))
-    print("\n%d finding(s), %d open. Fuzzing is throttled while any are open; each "
-          "is rechecked\nat every new sha and reopens the tap by itself once it stops "
-          "reproducing." % (len(fs), n_open))
+    n_open = sum(1 for e in fs.values() if e.get("status") == "open")
+    n_tick = sum(1 for e in fs.values() if e.get("status") == "ticketed")
+    n_thr = len(ledger_throttling(led))
+    ext = len(ledger_open(led)) - n_thr
+    print("\n%d finding(s): %d open, %d ticketed." % (len(fs), n_open, n_tick))
+    if n_thr:
+        print("Fuzzing is THROTTLED by %d of them; each is rechecked at every new sha "
+              "and\nreopens the tap by itself once it stops reproducing." % n_thr)
+    else:
+        print("Fuzzing is at FULL SPEED -- nothing throttling.")
+    if ext:
+        # Say why the two numbers differ, or the next reader re-derives it. These
+        # are the oracle's own bugs; no pxx commit can retire them, so counting
+        # them as a throttle would mean permanent backoff.
+        print("%d unfixed finding(s) are class %s -- the oracle's own bugs, which "
+              "no\npxx commit can retire, so they are rechecked but never throttle."
+              % (ext, "/".join(sorted(NONACTIONABLE_CLASSES))))
     return 0
 
 
@@ -579,14 +849,22 @@ def check(nseeds, args):
     bad = []
     t0 = time.time()
     for seed in range(1, nseeds + 1):
-        src = os.path.join(workdir, "c%d.pas" % seed)
-        rc, out = run([sys.executable, PASMITH] + gen_args_for(args, seed)
-                      + ["-o", src], 60)
+        # emit(), not a hand-rolled -o: this was the FOURTH site that knew a
+        # unit set is written with --outdir, and like recheck() it had it wrong,
+        # so `--check --units N` could not generate a single seed.
+        rc, out, src = emit(gen_args_for(args, seed), workdir, seed, tag="chk_")
         if rc != 0:
             bad.append((seed, "generator crashed: %s" % out.strip()[:120]))
             continue
         outbin = os.path.join(workdir, "c%d" % seed)
-        rc, txt = run(["fpc", "-Mobjfpc", "-vw", "-O-", "-o" + outbin, src],
+        # -Fu the program's OWN directory, unconditionally, exactly as evaluate()
+        # does and for the same reason: with --units that is how the unit set is
+        # found, without it the directory holds no units and the flag is inert.
+        # A unit path that depends on a mode is a way for two modes to diverge
+        # for a reason that is not a generator bug.
+        rc, txt = run(["fpc", "-Mobjfpc", "-vw", "-O-",
+                       "-Fu" + os.path.dirname(os.path.abspath(src)),
+                       "-o" + outbin, src],
                       COMPILE_TIMEOUT, cwd=workdir)
         if rc != 0:
             errs = [l for l in txt.split("\n") if "Error:" in l or "Fatal:" in l]
@@ -631,21 +909,43 @@ def gen_args_for(a, seed):
     return args
 
 
-def generate(gen_args, workdir, seed):
-    """Emit one subject and return its path — a single file, or a unit set.
+def emit(gen_args, workdir, seed, trace=False, tag="", env=None):
+    """Emit one subject; returns (rc, output, the .pas to compile).
 
-    Both shapes end up as "a .pas to compile with its directory on the unit
+    THE one place that knows a unit set is written with --outdir and a single
+    file with -o. Three call sites used to know that independently — generate(),
+    localize() and recheck() — and the third had it WRONG: it passed -o with
+    --units, which pasmith rejects, so every multi-unit finding failed to
+    regenerate on every tick and was then reported as still reproducing. Three
+    mechanisms serving one concept was the design flaw; teaching the third the
+    rule would have made it a fourth. Add a caller here, never another copy.
+
+    Both shapes end up as "a .pas to compile with its own directory on the unit
     path", so everything downstream (evaluate, localize, the ledger) is
-    unchanged; only the writing differs.
+    unchanged; only the writing differs. `tag` namespaces the output so a traced
+    rebuild cannot overwrite the subject it is tracing.
     """
-    if "--units" in gen_args:
-        udir = os.path.join(workdir, "u%d" % seed)
-        shutil.rmtree(udir, ignore_errors=True)
-        rc, out = run([sys.executable, PASMITH] + gen_args + ["--outdir", udir], 60)
-        return (rc, out, os.path.join(udir, "pasmith_%d.pas" % seed))
-    src = os.path.join(workdir, "p%d.pas" % seed)
-    rc, out = run([sys.executable, PASMITH] + gen_args + ["-o", src], 60)
+    args = list(gen_args)
+    if "--seed" not in args:
+        args = ["--seed", str(seed)] + args
+    if trace:
+        args = args + ["--trace"]
+    if "--units" in args:
+        # The whole SET goes into its own directory: the units are where the
+        # behaviour lives, and a traced program linked against untraced units
+        # would compile and mislead.
+        d = os.path.join(workdir, "%su%d" % (tag, seed))
+        shutil.rmtree(d, ignore_errors=True)
+        rc, out = run([sys.executable, PASMITH] + args + ["--outdir", d], 60, env=env)
+        return rc, out, os.path.join(d, "pasmith_%d.pas" % seed)
+    src = os.path.join(workdir, "%sp%d.pas" % (tag, seed))
+    rc, out = run([sys.executable, PASMITH] + args + ["-o", src], 60, env=env)
     return rc, out, src
+
+
+def generate(gen_args, workdir, seed):
+    """The fuzz loop's subject for one seed. See emit()."""
+    return emit(gen_args, workdir, seed)
 
 
 # --intfs is deliberately NOT here: the interface rung diverges on ~100% of seeds
@@ -745,6 +1045,17 @@ def main():
                          "not fixed yet -- but says triage is done and who has it.")
     ap.add_argument("--sha", default="", help="commit under test (stamped into findings)")
     add_gen_flags(ap)
+    # Line-buffer stdout. Python block-buffers when it is not a tty, so a
+    # --minutes 40 run redirected to a log printed NOTHING for an hour: the
+    # header, every divergence and every progress line sat in a 8 KB buffer
+    # until exit. That makes the one artifact that could distinguish "slow" from
+    # "stuck" empty for exactly as long as the question is live — and the
+    # fallback, reading the process table, self-matches (CLAUDE.md's pgrep -f
+    # trap). Ask the subject to emit; do not ask the system whether it is alive.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass                      # older Python, or a stdout that cannot be reconfigured
     a = apply_wide(ap.parse_args())
 
     if not os.path.exists(PXX):
@@ -791,14 +1102,18 @@ def main():
         if led is None:
             print("--recheck needs --ledger PATH", file=sys.stderr)
             return 2
-        n = len(ledger_open(led))
-        print("pasmith_run: rechecking %d open finding(s) against %s" % (n, PXX))
-        fixed, still = recheck(led, oracles, workdir, a.sha)
+        n = len(ledger_recheckable(led))
+        print("pasmith_run: rechecking %d unfixed finding(s) against %s" % (n, PXX))
+        fixed, still, unknown = recheck(led, oracles, workdir, a.sha)
         save_ledger(led, os.path.join(FINDINGS, "LEDGER.json"))
         if a.ledger_inplace:
             save_ledger(led, a.ledger)
-        print("pasmith_run: %d fixed, %d still open" % (fixed, still))
-        return 0
+        tail = ", %d could not be judged" % unknown if unknown else ""
+        print("pasmith_run: %d fixed, %d still open%s" % (fixed, still, tail))
+        # Non-zero when something could not be measured: a caller that treats a
+        # recheck as a verdict must be able to tell "nothing to close" from
+        # "I did not manage to look".
+        return 3 if unknown else 0
 
     if a.seed is not None:
         seeds = [a.seed]
@@ -841,11 +1156,21 @@ def main():
             if "REJECTED" in note and cls == "fpc-reject":
                 fpc_reject += 1
             loc = kind = None
-            if cls in ("fpc-reject", "pxx-reject"):
+            failed = sorted(groups.get(COMPILE_FAIL, []))
+            if failed:
                 # A rejection localises itself: the diagnostic IS the signature.
                 # Tracing it would be pointless -- the program never ran.
-                who = "fpc-O0" if cls == "fpc-reject" else "pxx-O0"
-                kind = LAST_ERR.get(who) or "compile-fail"
+                #
+                # Keyed on "did an arm fail to compile", not on the class name,
+                # and on the arm that ACTUALLY failed rather than a hardcoded
+                # -O0. Since partial compile failures now reach fpc-self and
+                # pxx-self, the old `cls in (...)` test would have sent them to
+                # localize(), which trace-diffs two RUNNING programs: the
+                # non-compiling arm's trace is the single line "<compile-fail>",
+                # so every one of them would have reported a confident, wrong
+                # "first divergence at checkpoint 0". And the hardcoded fpc-O0
+                # would have looked up the diagnostic of the arm that SUCCEEDED.
+                kind = LAST_ERR.get(failed[0]) or "compile-fail"
             elif not a.no_localize:
                 loc, kind = localize(src, workdir, oracles, groups)
             sig = signature(cls, kind)
@@ -854,7 +1179,8 @@ def main():
             # a report. It is the whole point -- 639 files, one bug.
             fresh = True
             if led is not None:
-                fresh = ledger_record(led, sig, cls, kind, seed, gen_args, note, a.sha)
+                fresh = ledger_record(led, sig, cls, kind, seed, gen_args, note,
+                                      a.sha, oracles=[o.name for o in oracles])
                 dups += 0 if fresh else 1
                 save_ledger(led, os.path.join(FINDINGS, "LEDGER.json"))
                 if a.ledger_inplace:

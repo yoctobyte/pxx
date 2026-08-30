@@ -33,23 +33,38 @@ procedure ParseFactor; forward;
   fall through every arm at once
   (bug-a-a-for-in-container-temp-is-not-zero-initialised). }
 function ManagedLocalZeroBytes(i: Integer): Integer;
-var zeroBytes: Integer;
+var zeroBytes, elemCount: Integer;
 begin
-  { Fixed array whose elements are dynamic-array handles (`array[..] of TA`):
-    nil every pointer-sized slot so SetLength on an element does not release
-    a garbage "old" handle. }
+  { ASK IsArray ONCE. Every arm below answers PER ELEMENT and the count is
+    applied at the end, because nine arms each remembering to multiply is how
+    three of them shipped without it -- interfaces, then Variants, then promo
+    ints, each found from the outside as a use-after-free far from its cause.
+    A new arm that supplies only a per-element size is now correct for arrays
+    by construction rather than by remembering; that is the point
+    (devdocs/dev/normalise-dont-special-case.md -- the second path is the one
+    that stays broken, and here there were nine).
+
+    The two HANDLE-level shapes come FIRST and are deliberately NOT
+    per-element: those slots hold a pointer, not a payload, so they answer in
+    full and keep elemCount at 1. Everything after them is per-element. }
   zeroBytes := 0;
+  elemCount := 1;
   if Syms[i].IsArray and (Syms[i].ArrLen <> -1) and (SymElemDynDepth[i] > 0) then
+    { Fixed array whose elements are dynamic-array HANDLES (`array[..] of TA`):
+      nil every pointer-sized slot so SetLength on an element does not release
+      a garbage "old" handle. Answers in full — the count is the array's, but
+      the size is a pointer, not the element type's. }
     zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE
   else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
     zeroBytes := TARGET_PTR_SIZE                          { dyn-array handle }
-  else if Syms[i].TypeKind = tyAnsiString then
+  else
   begin
-    if Syms[i].IsArray then
-      zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE       { static array of AnsiString }
-    else
-      zeroBytes := TARGET_PTR_SIZE;                       { scalar AnsiString }
-  end
+    { From here every arm answers PER ELEMENT. count = elements in a STATIC
+      array, else 1; applied once, at the bottom. }
+    if Syms[i].IsArray and (Syms[i].ArrLen <> -1) then elemCount := Syms[i].ArrLen;
+
+    if Syms[i].TypeKind = tyAnsiString then
+    zeroBytes := TARGET_PTR_SIZE
   else if Syms[i].TypeKind = tyVariant then
   begin
     { STATIC ARRAY of Variant -- `av: array[0..3] of Variant`. Exactly the
@@ -74,10 +89,7 @@ begin
       unrelated routine changes the frame in front of it -- which is why it
       surfaced as a NilPy regression with no NilPy change behind it.
       regression-test-nilpy-test-nilpy-star-operand-in-a-variant }
-    if Syms[i].IsArray then
-      zeroBytes := Syms[i].ArrLen * TypeSize(tyVariant)
-    else
-      zeroBytes := TypeSize(tyVariant);
+    zeroBytes := TypeSize(tyVariant);
   end
   { RecordNeedsZeroInit, not RecordHasManagedFields: an interface FIELD is
     excluded from the finalization predicate on purpose (releasing it under
@@ -93,7 +105,11 @@ begin
     zeroBytes := RecSize(Syms[i].RecName)
   else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
           RecordNeedsZeroInit(Syms[i].ElemRecName) then
-    zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName)
+    { The record arms keep their own IsArray test, and must: they differ in
+      WHICH rec id they read (RecName vs ElemRecName), not merely in count --
+      and each falls THROUGH to the COM arms when RecordNeedsZeroInit says no,
+      which a merged arm would swallow. }
+    zeroBytes := RecSize(Syms[i].ElemRecName)
   else if SymIsComInterface(i) then
     { COM/ARC interface fat pointer: must start nil so the ARC release at
       first overwrite / scope exit sees an empty slot, not stale stack bytes
@@ -116,14 +132,13 @@ begin
       invisible because the garbage happens to be zero. A constant index and
       a global array both "worked" for the same accidental reason.
       bug-a-a-local-array-of-interfaces-is-not-zero-initialised }
-    zeroBytes := Syms[i].ArrLen * RecSize(SymTR[i].ElemRec)
-  else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-          NilPyUserCode then
+    zeroBytes := RecSize(SymTR[i].ElemRec)
+  else if (Syms[i].TypeKind = tyClass) and NilPyUserCode then
     { NilPy-user class local: refcounted binding — must start nil so the
       rebind release and the scope-exit release see an empty slot
       (feature-nilpy-object-reclamation slice 4). }
     zeroBytes := TARGET_PTR_SIZE
-  else if TypeIsPromoInt(Syms[i].TypeKind) and (not Syms[i].IsArray) then
+  else if TypeIsPromoInt(Syms[i].TypeKind) then
     { Promotable int: a {tag, payload} pair whose tag MUST start
       PROMO_TAG_INLINE (0). The scope-exit cleanup calls PXXPromoClear on
       every promo local unconditionally (EmitManagedLocalCleanup), and that
@@ -144,8 +159,62 @@ begin
       `word.native(vm)` through that object jumped into the string data —
       three layers and thousands of lines from the cause, with the object
       still refcount-alive the whole time.
-      bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field }
+      bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field
+
+      ...and the ARRAY shape, which this arm refused with `not IsArray` — the
+      THIRD arm of this chain to ship without asking. `promoint64` is a
+      spellable Pascal type name (pasparser_decl.inc:543), so
+      `a: array[0..3] of promoint64` is an ordinary Pascal local and the guard
+      was an omission, not the deliberate decision it was left as. It zeroed
+      NOTHING for the whole array — not one element's worth, as the Variant arm
+      had — while EmitManagedLocalCleanup's promo arm, which has the same
+      missing IsArray, still called PXXPromoClear on the slot address at scope
+      exit. So element 0 was cleared from stack garbage, and PXXPromoClear
+      releases the payload as a managed string whenever the tag reads
+      PROMO_TAG_HEAP: a frame carrying {1, <pointer-shaped bytes>} freed a
+      block the slot never owned. test_promoint_local_array_zero_init
+      segfaults on the pre-fix compiler.
+      bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice }
     zeroBytes := TypeSize(Syms[i].TypeKind);
+
+  end;
+
+  { Apply the count ONCE, here, for every per-element arm above. }
+  zeroBytes := elemCount * zeroBytes;
+
+  { PXXDBG a.mlzero -- the chain above is nine independent arms, each of which
+    has to remember to ask IsArray for itself, and two have already SHIPPED
+    without it (interfaces, then Variants). Both were found from the outside,
+    as a use-after-free three layers from the cause, because a missed zero is
+    invisible on a clean stack. This channel makes the table answer for itself
+    instead: every local the chain looked at, what it decided, and -- the line
+    that matters -- MISS, for a local of a kind the chain HANDLES that still
+    came out zeroBytes=0. A third omission is one grep of this output away
+    rather than one memory-corruption report away.
+    bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice }
+  if PxxDbgEnabled('a.mlzero') then
+  begin
+    if (zeroBytes = 0) and
+       ((Syms[i].TypeKind = tyAnsiString) or (Syms[i].TypeKind = tyVariant) or
+        (Syms[i].TypeKind = tyClass) or TypeIsPromoInt(Syms[i].TypeKind) or
+        SymIsComInterface(i) or SymElemIsComInterface(i) or
+        ((Syms[i].TypeKind = tyRecord) and Syms[i].IsArray) or
+        ((Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray)) then
+    begin
+      Write('PXXDBG a.mlzero MISS sym=', Syms[i].Name, ' tk=', Ord(Syms[i].TypeKind));
+      if Syms[i].IsArray then Write(' ARRAY len=', Syms[i].ArrLen)
+      else Write(' scalar');
+      if TypeIsPromoInt(Syms[i].TypeKind) then Write(' promoint');
+      if Syms[i].TypeKind = tyClass then Write(' class nilpyuser=', NilPyUserCode);
+      if (Syms[i].TypeKind = tyRecord) then
+        Write(' recname=', Syms[i].RecName, ' elemrec=', Syms[i].ElemRecName);
+      WriteLn(' -> zeroBytes=0');
+    end
+    else
+      WriteLn('PXXDBG a.mlzero sym=', Syms[i].Name, ' tk=', Ord(Syms[i].TypeKind),
+              ' isarray=', Syms[i].IsArray, ' arrlen=', Syms[i].ArrLen,
+              ' -> ', zeroBytes);
+  end;
   ManagedLocalZeroBytes := zeroBytes;
 end;
 
@@ -390,7 +459,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     bcN: Integer;            { element count of a `[..]` open-array constructor operand }
     copyElemRec: Integer;    { element rec of a dynamic-array Copy's source, for a `[i]` suffix }
     mrefNode: Integer;       { a `@`-less method reference inside a method-pointer cast, or -1 }
-    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
@@ -1959,6 +2028,25 @@ begin
         intBaseArg := TokPos;            { rewind point: CurTok = pystr_of }
         { park the hoist queue across the TRIAL parse — see the len() intercept
           below for what a discarded parse's leftover hoists do }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -2010,6 +2098,10 @@ begin
           end;
         end;
         { no class rewrite: rewind and take the ordinary overload path }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       { ...unless the program declares its own `len`, which REPLACES the
@@ -2056,6 +2148,25 @@ begin
           reason PyParseMethod records: PySeqAppend mutates the saved chain's
           tail in place, so a plain restore cannot unlink anything.
           bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -2134,6 +2245,10 @@ begin
         end;
         { a pylib container class, or a non-class argument: rewind and take
           the ordinary overload path, unchanged byte for byte }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       { hex/bin/oct of an ARBITRARY-PRECISION int. Python's take any width, while
@@ -2163,6 +2278,25 @@ begin
       begin
         intBaseArg := TokPos;
         { same parked TRIAL parse as the two intercepts above }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -2195,6 +2329,10 @@ begin
           Exit;
         end;
         { a machine-width argument: rewind, take the ordinary overload }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       if NilPyUserCode and (name = 'int') and (not PyUserShadowsProc(name)) then
@@ -6521,6 +6659,88 @@ begin
             ASTTk[CurASTNode] := Ord(tyRecord);
             LastExprTk := tyRecord;
             LastTypeRecId := AliasElemRec[aliasIdx];
+            Exit;
+          end;
+          { ORDINAL-typed alias cast — `type TaByte = byte; TaByte(c)`. Without
+            this the alias fell into the POINTER fall-through below, which
+            reinterprets at pointer width and never narrows: with c = $12345678,
+            `Byte(c)` gave 120 and `TaByte(c)` gave 305419896. Same for word,
+            shortint, smallint, longword, integer — every narrowing spelling —
+            and `TaChar(65)` SEGFAULTED, because a pointer-typed cast of an
+            ordinal is not a thing any consumer downstream expects.
+
+            The alias is not exotic: FPC's own idiom for a compile-time-selected
+            mask is `type ToByte = byte`, and rtl-generics' hash mixer indexes
+            `crc32ctab[0, ToByte(crc)]` with it. Unnarrowed that index reached
+            ~4.3e9 into a [0..3, byte] table, so `uses Generics.Hashes` died in
+            its unit initialization with nothing reporting anything
+            (bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate).
+
+            The node built here is the SAME one every other spelling of an
+            ordinal cast builds — AN_PTR_CAST with ASTIVal = -1, the
+            width-truncating value cast — so this arm adds a spelling, not a
+            mechanism. tyPointer is excluded explicitly because TypeIsOrdinal
+            INCLUDES it (the trap IRLowerCallArg's promo arms document), and a
+            pointer alias must keep the reinterpret below. }
+          if TypeIsOrdinal(IntToTypeKind(AliasTk[aliasIdx])) and
+             (IntToTypeKind(AliasTk[aliasIdx]) <> tyPointer) then
+          begin
+            { demote a promotable operand BEFORE narrowing, or the cast
+              truncates the SLOT ADDRESS — see PromoDemoteToInt64, and the
+              identical line at every sibling cast site. }
+            CurASTNode := PromoDemoteToInt64(CurASTNode);
+            { a VARIANT operand converts rather than reinterpreting its record,
+              exactly as the builtin-named spellings do. See VariantCastToTemp. }
+            vcNode := VariantCastToTemp(CurASTNode, IntToTypeKind(AliasTk[aliasIdx]));
+            if vcNode >= 0 then CurASTNode := vcNode;
+            node := AllocNode(AN_PTR_CAST);
+            ASTLeft[node] := CurASTNode;
+            ASTIVal[node] := -1;
+            ASTTk[node]   := AliasTk[aliasIdx];
+            { an alias OF AN ENUM keeps the enum identity, or WriteLn prints the
+              ordinal — the same line the builtin-cast arm carries. }
+            if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
+              ASTEnumId[node] := FindEnumType(name);
+            CurASTNode := node;
+            LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
+            Exit;
+          end;
+          { FLOAT-typed alias cast — `type TaD = double; TaD(d)`. The sibling of
+            the ordinal arm above, and it was broken the same way and found by
+            looking rather than by a second report: the pointer fall-through
+            yielded the operand's raw IEEE bits, so `TaD(3.75)` printed
+            4615626668101337088.
+
+            NOT Track F. The subject is the CAST mechanism, and the fact that
+            the target is a float is incidental — "rank the mechanism, never the
+            datatype" (CLAUDE.md). A float alias cast that answers a bit pattern
+            is the same defect as an ordinal one that answers an unnarrowed int.
+
+            A float cast is a real CONVERSION rather than a reinterpret
+            (int->float, or double->single narrowing), so this mirrors the
+            `Single(expr)`/`Double(expr)` keyword arm exactly: a hidden temp of
+            the CAST's type, the ordinary store into it (which coerces), and the
+            temp read as the value. Building it any other way reintroduces
+            bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting,
+            which is why the temp's kind comes from the alias table and never
+            from LastExprTk. }
+          if TypeIsFloat(IntToTypeKind(AliasTk[aliasIdx])) then
+          begin
+            castTk := IntToTypeKind(AliasTk[aliasIdx]);
+            op := AllocVar('', castTk);
+            node := AllocNode(AN_STR_FROM_CHAR);
+            argSeq := AllocNode(AN_IDENT);             { store LHS = the temp }
+            ASTIVal[argSeq] := op; ASTTk[argSeq] := Ord(Syms[op].TypeKind);
+            left := AllocNode(AN_ASSIGN);
+            ASTLeft[left] := argSeq; ASTRight[left] := CurASTNode;
+            ASTTk[left] := Ord(Syms[op].TypeKind);
+            ASTLeft[node] := left;
+            identNode := AllocNode(AN_IDENT);          { yielded value = the temp }
+            ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
+            ASTRight[node] := identNode;
+            ASTTk[node] := Ord(Syms[op].TypeKind);
+            CurASTNode := node;
+            LastExprTk := castTk;
             Exit;
           end;
           node := AllocNode(AN_PTR_CAST);

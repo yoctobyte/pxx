@@ -1,0 +1,156 @@
+# list.sort(key=...) -- the IN-PLACE method. `sorted(xs, key=f)` had supported
+# every callable spelling for a long time while `xs.sort(key=f)` did not compile
+# at all ("TPyList.sort has no parameter named 'key'").
+#
+# Two things were missing, and the second is the one worth a test this wide.
+#
+#   1. pylib's TPyList.sort had no `key` parameter. It was left out because
+#      calling a key needs PyCallKey1, which lives in pyeval -- a unit pylib
+#      cannot call. pyeval installs PyCallKey1 into PyIterCallHook precisely to
+#      invert that dependency (map/filter cursors had the same problem), so the
+#      key goes through the SAME dispatcher sorted() uses and no callable shape
+#      can diverge between the two.
+#
+#   2. The frontend never coerced the callable into the raw `Pointer` the slot
+#      wants. A callable VALUE is a 16-byte variant; the plain coercion took its
+#      first word -- the TAG -- as a code address, so the program jumped to 8,
+#      9, 10 or 12. Only an inline lambda survived, because that one lowers to a
+#      proc address already. Five of the six spellings below SEGFAULTED while
+#      the `sorted()` twin of each printed the right answer.
+#
+# Hence the shape matrix: each row is a different callable REPRESENTATION, and
+# each was independently broken. The receiver matrix underneath it is the same
+# hazard one level up -- the coercion now lives in the one procedure every
+# argument loop funnels through, and these rows are what proves that, since a
+# per-loop fix made a local and a field receiver work while `nested[0]` still
+# crashed.
+#
+# feature-nilpy-list-sort-inplace-key-reverse
+
+def namedfn(w):
+    return len(w)
+
+class K:
+    def meth(self, w):
+        return len(w)
+
+obj = K()
+heldvar = lambda w: len(w)
+
+# --- callable shapes -------------------------------------------------------
+a = ["pear", "fig", "banana"]
+a.sort(key=lambda w: len(w))
+print(a)
+
+b = ["pear", "fig", "banana"]
+b.sort(key=namedfn)
+print(b)
+
+c = ["pear", "fig", "banana"]
+c.sort(key=heldvar)
+print(c)
+
+d = ["pear", "fig", "banana"]
+d.sort(key=obj.meth)
+print(d)
+
+e = ["pear", "fig", "banana"]
+e.sort(key=len)
+print(e)
+
+# a builtin TYPE in the slot: its payload is a small CODE, not an address
+f = [10, 9, 100]
+f.sort(key=str)
+print(f)
+
+# key=None is CPython's own spelling of "no key function", not an error
+g = [3, 1, 2]
+g.sort(key=None)
+print(g)
+
+# --- a lambda that CAPTURES, and a closure returned from a def -------------
+# The shapes the lambda lifter refuses fall back to pyeval's source closure --
+# the representation a pylib-side reimplementation would have got wrong.
+off = 10
+h = [3, 1, 2, 4]
+h.sort(key=lambda v: (v + off) % 4)
+print(h)
+
+def make_key(m):
+    return lambda v: (v * m) % 7
+
+i = [1, 2, 3, 4, 5]
+i.sort(key=make_key(3))
+print(i)
+
+# --- receivers -------------------------------------------------------------
+class Box:
+    def __init__(self):
+        self.items = ["pear", "fig", "banana"]
+    def go(self):
+        self.items.sort(key=namedfn)
+        return self.items
+
+print(Box().go())
+
+nested = [["pear", "fig", "banana"]]
+nested[0].sort(key=namedfn)
+print(nested)
+
+dd = {"k": ["pear", "fig", "banana"]}
+dd["k"].sort(key=namedfn)
+print(dd["k"])
+
+def viaparam(lst):
+    lst.sort(key=namedfn)
+    return lst
+print(viaparam(["pear", "fig", "banana"]))
+
+# --- key with reverse ------------------------------------------------------
+j = ["pear", "fig", "banana"]
+j.sort(key=namedfn, reverse=True)
+print(j)
+
+# keyword ORDER must not matter
+k2 = ["pear", "fig", "banana"]
+k2.sort(reverse=True, key=namedfn)
+print(k2)
+
+# --- the plain forms still work -------------------------------------------
+m = [3, 1, 2]
+m.sort()
+print(m)
+m.sort(reverse=True)
+print(m)
+
+# --- STABILITY, in both directions ----------------------------------------
+# Equal keys keep input order -- and reverse=True is NOT "sort then reverse",
+# so ("b",1) still precedes ("a",1) there too.
+pairs = [("b", 1), ("a", 1), ("c", 0)]
+pairs.sort(key=lambda t: t[1])
+print(pairs)
+
+pairs2 = [("b", 1), ("a", 1), ("c", 0)]
+pairs2.sort(key=lambda t: t[1], reverse=True)
+print(pairs2)
+
+# --- the key is called ONCE per element -----------------------------------
+# An insertion sort that re-derived the key inside the comparison would call it
+# O(n^2) times, which a key with a side effect can see.
+calls = []
+def counting_key(v):
+    calls.append(v)
+    return v
+
+n = [3, 1, 2, 5, 4]
+n.sort(key=counting_key)
+print(n)
+print(len(calls))
+
+# --- IN PLACE, and returns None -------------------------------------------
+p = ["pear", "fig", "banana"]
+q = p
+p.sort(key=namedfn)
+print(q)
+print(p is q)
+print([9, 8].sort() is None)

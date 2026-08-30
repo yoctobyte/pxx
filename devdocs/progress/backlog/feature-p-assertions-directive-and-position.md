@@ -40,7 +40,7 @@ FPC appends the position:
 pxx omits it. Needs the source position threaded into `__pxxAssert`
 (`compiler/builtin/builtin.pas`), which already takes the message and already
 routes through `AssertErrorProc` when `sysutils` is used
-([[bug-p-assert-does-not-raise-eassertionfailed]], done).
+([[compat-pascal-assert-halts-instead-of-raising-eassertionfailed]], done).
 
 ## Note
 

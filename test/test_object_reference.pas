@@ -1,6 +1,7 @@
 program test_object_reference;
 
-{ `object` — a rooted object-reference type: pointer-sized, holds ANY class
+{ `TObject` — the rooted object-reference type (was spelled `object` until
+  2026-08-30; that keyword now carries its standard value-type meaning): pointer-sized, holds ANY class
   instance, no specific class bound. Widening assignment from any class ref;
   member access requires an explicit cast to a concrete class. }
 
@@ -17,7 +18,7 @@ type
     function Speak: AnsiString; override;
   end;
   THolder = record
-    Item: object;          { object as a record field }
+    Item: TObject;          { object as a record field }
     Kind: Integer;
   end;
 
@@ -42,16 +43,16 @@ begin
 end;
 
 { object as a parameter; cast back inside }
-function Describe(o: object): AnsiString;
+function Describe(o: TObject): AnsiString;
 begin
   Describe := TAnimal(o).Speak;
 end;
 
 var
-  o: object;
+  o: TObject;
   d: TDog;
   c: TCat;
-  zoo: array of object;    { mixed instances }
+  zoo: array of TObject;    { mixed instances }
   h: THolder;
   i: Integer;
 begin

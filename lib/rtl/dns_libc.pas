@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit dns_libc;
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
+{$ifdef PXX_ESP_IDF}{$define PXX_DNS_LWIP}{$endif}
 { getaddrinfo backend for the `dns` facade (feature-dns-libc-backend). Selected
   with -dPXX_DNS_LIBC; without it nothing here is reached and `dns_wire` remains
   the zero-dependency default.
@@ -29,9 +30,39 @@ unit dns_libc;
   glibc's layout under pxx's natural alignment; verified identical to gcc on
   x86-64 and to the expected 32-bit layout on i386/arm32. }
 
+{ ESP/lwIP ARM (feature-dns-esp-backend, 2026-08-30). On ESP-IDF this same
+  backend resolves through **lwIP's** getaddrinfo instead of glibc's. The user's
+  ruling that shaped it: an ESP program links the IDF/lwIP stack for networking
+  anyway and that stack already ships a resolver holding the DHCP-supplied
+  nameservers and lwIP's cache, so DNS on ESP is a BINDING difference at this
+  layer -- not a new backend below the PAL. Only how the symbol is acquired
+  differs; the list walking, family filtering and TCAddrInfo decoding below are
+  shared verbatim, which is the whole point of putting it here.
+
+    glibc     dlopen("libc.so.6") + dlsym -- the syscall-only core is
+              deliberately libc-free, hence -dPXX_DYNLIB_LIBC.
+    lwIP/ESP  a direct `external 'lwip_getaddrinfo'`, statically linked by
+              idf.py. No loader, and -dPXX_DYNLIB_LIBC is NOT required (dns.pas
+              relaxes that guard under PXX_ESP_IDF for exactly this reason).
+
+  The symbol is `lwip_getaddrinfo`, not `getaddrinfo`: the plain name is a
+  #define in lwip/netdb.h, so an external naming it would not resolve.
+
+  ABI: VERIFIED against the installed IDF's own headers rather than assumed --
+  lwip/src/include/lwip/netdb.h:103 and sockets.h:78. `struct addrinfo` has
+  glibc's field order exactly, ai_addr before ai_canonname included. sockaddr_in
+  differs in shape yet AGREES in the one offset this file reads: lwIP is
+  BSD-style with a leading u8_t sin_len that glibc lacks, but its sa_family_t is
+  also u8_t, so sin_len(1)+sin_family(1)+sin_port(2) puts sin_addr at 4 -- the
+  same place glibc's family(2)+port(2) puts it. sin6_addr coincides at 8 the
+  same way. That is a COINCIDENCE, not a shared layout: it breaks the moment
+  lwIP widens sa_family_t, and it breaks silently, shifting every resolved
+  address by one byte. test/lib_dns_lwip_abi.pas asserts it rather than
+  trusting it. }
+
 interface
 
-uses platform, dynlibs, dns_wire_core;
+uses platform, {$ifndef PXX_DNS_LWIP} dynlibs, {$endif} dns_wire_core;
 
 const
   DNS_ERR_LIBC_UNAVAIL = -22;  { no loader, no libc, or getaddrinfo unresolved }
@@ -77,11 +108,30 @@ const
   AF_INET6_C  = 10;
   SOCK_STREAM_C = 1;
 
+{$ifdef PXX_DNS_LWIP}
+  { lwIP's getaddrinfo error codes -- POSITIVE 200-204, not glibc's negative
+    -2..-5, and the set is different: lwIP has no EAI_AGAIN and no EAI_NODATA.
+    Read from the installed IDF at lwip/src/include/lwip/netdb.h:68-72.
+
+    This is the one place the shared decode path below would have been silently
+    WRONG if the binding had reused glibc's numbers: EAI_NONAME is 200 there, so
+    a genuine NXDOMAIN would miss every arm of EaiToRcode, fall out as
+    DNS_ERR_LIBC_UNAVAIL, and make the facade FALL BACK to dns_wire -- which on
+    ESP has no nameserver configuration and answers DNS_ERR_NOCONFIG. A caller
+    asking for a name that does not exist would be told the resolver is
+    unavailable. Plausible, wrong, and nowhere near the cause. }
+  EAI_NONAME  = 200;
+  EAI_SERVICE = 201;
+  EAI_FAIL    = 202;
+  EAI_MEMORY  = 203;
+  EAI_FAMILY  = 204;
+{$else}
   { getaddrinfo's own error codes (glibc values, from the oracle) }
   EAI_NONAME = -2;
   EAI_AGAIN  = -3;
   EAI_FAIL   = -4;
   EAI_NODATA = -5;
+{$endif}
 
 type
   PByteArr = ^Byte;
@@ -89,9 +139,18 @@ type
   TGetAddrInfo  = function(node, service, hints: Pointer; res: Pointer): Integer; cdecl;
   TFreeAddrInfo = procedure(res: Pointer); cdecl;
 
+{$ifdef PXX_DNS_LWIP}
+{ Statically linked by idf.py; no loader is involved. The `lwip_` prefix is the
+  real symbol -- plain `getaddrinfo` is a #define in lwip/netdb.h. }
+function lwip_getaddrinfo(node, service, hints: Pointer; res: Pointer): Integer; cdecl; external 'lwip_getaddrinfo';
+procedure lwip_freeaddrinfo(res: Pointer); cdecl; external 'lwip_freeaddrinfo';
+{$endif}
+
 var
   LibcTried: Boolean;
+{$ifndef PXX_DNS_LWIP}
   LibcHandle: TLibHandle;
+{$endif}
   FnGetAddrInfo: TGetAddrInfo;
   FnFreeAddrInfo: TFreeAddrInfo;
 
@@ -104,6 +163,12 @@ begin
   LibcTried := True;
   FnGetAddrInfo := nil;
   FnFreeAddrInfo := nil;
+{$ifdef PXX_DNS_LWIP}
+  { Nothing to load: bind the statically-linked lwIP entry points directly. The
+    two callers below still check for nil, so the shared path is unchanged. }
+  FnGetAddrInfo := TGetAddrInfo(@lwip_getaddrinfo);
+  FnFreeAddrInfo := TFreeAddrInfo(@lwip_freeaddrinfo);
+{$else}
   if not PalHasDynlib then Exit;
   LibcHandle := LoadLibrary(LIBC_SONAME);
   if LibcHandle = NilHandle then Exit;
@@ -114,6 +179,7 @@ begin
     FnGetAddrInfo := nil;
     FnFreeAddrInfo := nil;
   end;
+{$endif}
 end;
 
 function DnsLibcAvailable: Boolean;
@@ -129,9 +195,23 @@ end;
   facade falls back instead of reporting a lookup result we did not get. }
 function EaiToRcode(e: Integer): Integer;
 begin
+{$ifdef PXX_DNS_LWIP}
+  { lwIP's smaller set, mapped on the same principle as the glibc arm: only a
+    genuine DNS verdict becomes an RCODE, everything else stays a backend error
+    so the facade falls back rather than reporting a lookup result we did not
+    get. NONAME is "no such record" (NXDOMAIN's 3); FAIL is server-side
+    (SERVFAIL's 2). SERVICE/MEMORY/FAMILY are not DNS answers at all -- FAMILY
+    in particular is what lwIP built without IPv6 returns for an AF_INET6 query,
+    which is a build-configuration fact about the device, not a fact about the
+    name. }
+  if e = EAI_NONAME then EaiToRcode := 3
+  else if e = EAI_FAIL then EaiToRcode := 2
+  else EaiToRcode := DNS_ERR_LIBC_UNAVAIL;
+{$else}
   if (e = EAI_NONAME) or (e = EAI_NODATA) then EaiToRcode := 3
   else if (e = EAI_AGAIN) or (e = EAI_FAIL) then EaiToRcode := 2
   else EaiToRcode := DNS_ERR_LIBC_UNAVAIL;
+{$endif}
 end;
 
 { One getaddrinfo call for `family`. On success `res` holds the list head and

@@ -81,11 +81,22 @@ dynamic` diagnostic.
 
 ## Regression Tests
 
-Run the focused frontend suite with:
+The focused frontend suite is `test/test_nilpy_*.npy`, and **Track T sweeps it
+against every pushed sha**. Do not hand-run it: `.claude/hooks/no-full-suite.sh`
+refuses `make test-nilpy` (and a shell loop over the same glob, which is the
+same ten minutes wearing a hat). It was 625 of `gate.sh quick`'s former 649
+seconds, which is why the quick tier dropped it in favour of dense NilPy
+canaries.
+
+Per change, build and run your own repro:
 
 ```sh
-make test-nilpy
+make compiler/pascal26      # the build -- and the byte-identical self-host fixedpoint
+compiler/pascal26 yourtest.npy && ./yourtest
 ```
+
+**Superseded 2026-08-30**; the instruction here used to be `make test-nilpy`.
+**CLAUDE.md's "THE PER-FIX LOOP" is the authority on gating**; this page is not.
 
 The suite compiles and runs the core and Variant programs, including widening a
 slot from integer to string, then verifies the `/` rejection path.

@@ -104,4 +104,4 @@ The 480 conversions. Track A's file-lane, mechanical, and per the parent's own
 gate must not land concurrently with other A edits to `Makefile`.
 
 ## Log
-- 2026-08-29 — helper landed with guards; resolved.
+- 2026-08-29 — helper landed with guards; resolved, commit b194ef7ec.

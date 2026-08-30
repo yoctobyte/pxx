@@ -43,8 +43,11 @@ documentation first.
   indexed/default), managed strings, dynamic arrays, exceptions, and more.
 - **More than "just an executable."** Besides a normal linked binary, PXX can
   also emit a relocatable object (`--emit-obj`, `.o`) for linking with other
-  toolchains, and — for its own assembly-source frontend — an ET_DYN shared
-  library (`--shared`, `.so`). See the [command-line reference](./reference/cli.md).
+  toolchains — on `riscv32` and `xtensa` for compiled sources, and on x86-64
+  for assembly sources — and, for its own assembly-source frontend, an ET_DYN
+  shared library (`--shared`, `.so`). The
+  [command-line reference](./reference/cli.md) has the exact target and
+  source-kind rules.
 
 ## Where to go next
 

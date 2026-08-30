@@ -50,21 +50,45 @@ pull --rebase
 next --track <X>          # highest effective-prio ready ticket in the lane
 claim <slug> <agent-id>
   ... do the work ...
-land green                # the lane's gate: A = make test + self-host byte-identical;
-                          # B = lib-test/demos; C/Z = tests + self-host + cross; etc.
+land green                # SUPERSEDED -- see the note below. The gate is now
+                          # `make compiler/pascal26` + your repro, for every lane.
 resolve <slug>            # no sha: sync.sh records the one it LANDED as
 board-md ; commit the move ; tools/sync.sh
 loop
 ```
 
+> **Corrected 2026-08-30 (frankD): both lines above are superseded by CLAUDE.md's
+> per-fix loop, and one of them names a command the repo now refuses.**
+>
+> `make test` is **denied by a PreToolUse hook** (`.claude/hooks/no-full-suite.sh`),
+> along with `gate.sh full|limited` and `testmgr --tier full|limited`. An agent
+> following the ladder above hits a hook denial, not a gate. The loop is
+> `make compiler/pascal26` (~12s, and it *is* the byte-identical self-host
+> fixedpoint) plus your repro; `gate.sh quick` is optional per fix and required
+> only before a pin. Breadth is Track T's job, swept against your pushed sha.
+>
+> **"Land only green" is likewise no longer the rule** — the 2026-08-26 collapse
+> of the `dev` branch kept its one real contribution: *you may land non-green.*
+> Read, analyse, fix, commit, push, next; do not wait for tests. The obligation
+> that replaced it is narrower and sharper: **never push something you know is
+> broken without saying so in the commit message**, because with no sync-back
+> gate left, that message is the only warning anyone gets.
+>
+> CLAUDE.md's precedence rule is what makes this an edit rather than a flag: *"If
+> a live reference doc (`devdocs/dev/*.md`) contradicts this section, that doc is
+> the bug: fix the doc, not the loop."* Note which direction the rot ran — this
+> page is **stricter** than the rule it predates, so following it costs ten
+> minutes and a hook denial rather than producing anything wrong. That is why it
+> survived: a gate that is too tight never fails in a way anyone reports.
+
 Two hard guardrails make this safe to run unattended:
 
-1. **Land only green.** The gates already exist (self-host fixedpoint, quick tier,
-   the pin boundary, push-your-own-lane). An agent that can't get green **reverts
-   or parks to `unfinished/` and files a Track U/A ticket** — it never pushes a
-   broken or half-refactored state. A Track A ticket parked in `unfinished/` is
-   critical (it can break the stable-binary gate) and `progress.sh check` fails
-   until resolved — that failure is itself a signal to the human.
+1. **Land only what you are willing to describe.** Push early and often — Track T
+   cannot see unpushed work, so an unpushed fix is an untested fix. An agent that
+   cannot finish **parks to `unfinished/`** rather than leaving a half-applied
+   change in the tree. A Track A ticket parked in `unfinished/` is critical (it
+   can break the stable-binary gate) and `progress.sh check` fails until it is
+   resolved — that failure is itself a signal to the human.
 2. **Escalate, don't guess** (Track U, above).
 
 Track T's watcher already embodies this for testing/fuzzing: it runs 24/7 in its
@@ -106,6 +130,20 @@ concurrent lane-workers that finish sooner in wall-clock but exhaust the block e
 Reserve genuine concurrency for when wall-clock latency actually matters (a release
 crunch), and spend the cap knowingly. The `claudecap blocks` view measures per-block
 peak/mean concurrency so you can see the cost against ground-truth `/usage` pastes.
+
+> **`claudecap` is not reachable from this repo (checked 2026-08-30, frankD).**
+> Not in `tools/`, not on `PATH`; the only copy on this box is under
+> `/data/borg-rescue/`, and `autonomy.md` is the only file in the tree that
+> mentions it. So the instrument this section defers to cannot be run by anyone
+> reading this page, and the hypotheses below have stayed "working" for four
+> weeks by default rather than by evidence.
+>
+> Whether the serial-handoff rule still reflects practice is a **Track U**
+> question, not a documentation one, and it is not settled here: the repo is
+> currently worked by several concurrent supervised sessions, which the rule
+> below advises against — but it addresses *background and scheduled* workers
+> against a usage cap, and a supervised fleet is a different case. Recorded so
+> the next reader sees the gap rather than assuming one side won.
 
 **Working hypothesis (adopt as a safe default until `claudecap` confirms):**
 - *H1* — a single session at a time is effectively unlimited (a lone worker rarely

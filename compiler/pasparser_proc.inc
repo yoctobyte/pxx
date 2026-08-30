@@ -389,9 +389,35 @@ begin
     end;
 end;
 
+{ The record id a symbol's management operators would belong to.
+
+  For a plain record variable that is `RecName` (mirrored as `SymTR[].RecId`).
+  For an ARRAY of records it is `ElemRecName` — `RecName` is meaningless there,
+  because only AllocVar/AllocParam ever write it.
+
+  Split out because reading `RecId` for an array symbol was wrong in the way
+  that hides: symbol slots are RECYCLED, so an array's `RecName` held whatever
+  the previous occupant left behind, and for `var arr: array[0..1] of TFoo`
+  inside a proc that was reliably TFoo itself. The refusal below therefore
+  fired, correctly, for the wrong reason — until `4a3c88532` cleared the field
+  on recycle and the refusal went silent, letting an array of a managed record
+  compile with an Initialize that never runs. That commit did not cause this;
+  it removed the accident this was standing on, and named the class in its own
+  message: twenty more `RecName` reads guarded by `TypeKind = tyRecord`, which
+  is not a guard at all for an array symbol, since that field carries the
+  ELEMENT kind.
+  regression-test-core-test-mgmt-operators
+  bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot }
+function SymManagedRecId(idx: Integer): Integer;
+begin
+  if Syms[idx].IsArray then SymManagedRecId := SymTR[idx].ElemRec
+  else SymManagedRecId := SymTR[idx].RecId;
+end;
+
 function WrapManagementOpsRange(loSym, hiSym, retSym: Integer; wantGlobal: Boolean;
                                bodyNode: Integer): Integer;
 var i, ip, fp, callNode, headInit, tailInit, headFin, tailFin, newSeq, tryNode: Integer;
+    mrec: Integer;
     isTarget: Boolean;
 begin
   Result := bodyNode;
@@ -404,13 +430,14 @@ begin
       whose declared invariant simply never runs. An array needs a loop and a
       nested field needs a path, both of which FPC gets free from recursive RTTI
       and this pass does not have. }
-    if isTarget and (SymTR[i].RecId <> REC_NONE) and
+    mrec := SymManagedRecId(i);
+    if isTarget and (mrec <> REC_NONE) and
        (Syms[i].TypeKind in [tyRecord, tyClass]) then
     begin
-      if Syms[i].IsArray and RecHasManagementOp(SymTR[i].RecId) then
+      if Syms[i].IsArray and RecHasManagementOp(mrec) then
         Error('an array of a record with a management operator is not supported yet '
               + '(feature-pascal-management-operators-nested-and-array)');
-      if RecContainsManagementOp(SymTR[i].RecId, 0) then
+      if RecContainsManagementOp(mrec, 0) then
         Error('a field of a record with a management operator is not managed yet '
               + '(feature-pascal-management-operators-nested-and-array)');
     end;
@@ -2003,6 +2030,24 @@ begin
       SetSymPointerType(idx, ptypesPtrElemTk[i], ptypesPtrElemRec[i],
                         ptypesPtrDepth[i], ptypesPtrBaseTk[i],
                         ptypesPtrBaseRec[i]);
+      { Persist the param's POINTEE, for the same reason the rec id below is
+        persisted and stated in the same words: param sym slots are reused
+        across procs, so a caller's overload matching cannot read it back from
+        the sym. It does not read a stale value -- it reads whatever the next
+        scope allocated there, which for this field is tyUnknown, the
+        untyped-pointer sentinel, so the narrowing guard fails OPEN. }
+      if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then
+      begin
+        ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i] := Ord(ptypesPtrElemTk[i]);
+        ProcParamPtrElemRec[procIdx * MAX_PROC_PARAMS + i] := ptypesPtrElemRec[i];
+      end;
+      if PxxDbgEnabled('p.ptrparam') then
+        writeln('PXXDBG p.ptrparam REG proc=', Procs[procIdx].Name,
+                ' i=', i, ' sym=', idx,
+                ' elemtk=', Ord(ptypesPtrElemTk[i]),
+                ' stored=', Ord(Syms[idx].PtrElemTk),
+                ' durable=', ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i],
+                ' symcount=', SymCount);
       SymProcSig[idx] := ptypesProcSig[i];
     end
     else if (ptypes[i] = tyRecord) and (ptypesProcSig[i] >= 0) then
@@ -3182,6 +3227,10 @@ var
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
+  { A C candidate found in a -I/-Fu search root, HELD BACK until the Pascal
+    chain has had its turn. See the deferral note at the search-root loop. }
+  deferredCPath, deferredCContent: AnsiString;
+  deferredCIsHeader: Boolean;
   guardIdx: Integer;   { CompiledUnitKey — see the note at its assignment }
   gPath: AnsiString;   { …the normalised path a path-form reference keys on }
   realIdx: Integer;    { alias-resolved unit for the already-compiled edge }
@@ -3401,6 +3450,9 @@ begin
 
   isCUnit := False;
   isCHeader := False;
+  deferredCPath := '';
+  deferredCContent := '';
+  deferredCIsHeader := False;
   savedCurrentCLibrary := CurrentCLibrary;
   CurrentCLibrary := '';
   UnitContent := '';
@@ -3649,7 +3701,34 @@ begin
     after the including file's own directory and before the compiler-anchored
     builtin/RTL/LCL dirs, so a project or per-platform dir (e.g.
     lib/rtl/platform/posix/) can supply or override a unit by name — the PAL
-    backend-selection mechanism. Dirs carry a trailing '/' (AddPasUnitDir). }
+    backend-selection mechanism. Dirs carry a trailing '/' (AddPasUnitDir).
+
+    A C CANDIDATE FOUND HERE IS HELD BACK, not taken. `-I<dir>` adds a root for
+    BOTH `#include` and `uses` (compiler.pas, feature-dynamic-include-paths-
+    config), so `-Ilib/crtl/include` put twenty-seven C headers on the Pascal
+    unit path — three of which, math.h / netdb.h / strings.h, share a basename
+    with an RTL unit. Taking the header here meant it beat lib/rtl/math.pas,
+    which is searched further down, and the damage went two ways:
+
+      * the loud one, when the header lacks the symbol: `uses strings` +
+        `-Ilib/crtl/include` gives `undefined variable (StrPas)`, pointing at
+        the use rather than at the flag;
+      * the SILENT one, when the header HAS it: the reference binds, `ok:`
+        prints, and the `uses` becomes a dynamic import — the binary carries a
+        DT_NEEDED on `libstrings.so` and dies at load. Nothing in the build
+        says so.
+
+    So the rule is namespace ordering, not a special case for these three
+    names: a Pascal unit ANYWHERE on the chain outranks a C header found in a
+    search root. The header is still reachable — it is adopted below if the
+    whole Pascal chain misses — which is what keeps a real FFI `uses <header>`
+    working when no `.pas` of that name exists.
+
+    NOT extended to the SourceFileDir probes above: a `.c`/`.h` sitting next to
+    the program you are compiling is an explicit local choice, and the reported
+    defect is about a root reached through a flag. Different question, left
+    alone deliberately.
+    bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import }
   i := 0;
   while (Length(UnitContent) = 0) and (i < PasUnitDirCount) do
   begin
@@ -3660,17 +3739,25 @@ begin
       ConcatThree(PasUnitDirs[i], lo, '.pp', path);
       LoadFileCI(path, UnitContent);
     end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(PasUnitDirs[i], cName, '.c', path);
-      LoadFile(path, UnitContent);
-      if Length(UnitContent) > 0 then isCUnit := True;
+      LoadFile(path, deferredCContent);
+      if Length(deferredCContent) > 0 then
+      begin
+        deferredCPath := path;
+        deferredCIsHeader := False;
+      end;
     end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(PasUnitDirs[i], cName, '.h', path);
-      LoadFile(path, UnitContent);
-      if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+      LoadFile(path, deferredCContent);
+      if Length(deferredCContent) > 0 then
+      begin
+        deferredCPath := path;
+        deferredCIsHeader := True;
+      end;
     end;
     Inc(i);
   end;
@@ -3728,7 +3815,14 @@ begin
       ConcatThree(rtldir, lo, '.pp', path);
       LoadFileCI(path, UnitContent);
     end;
-    if Length(UnitContent) = 0 then
+    { A C candidate already held back from a search root OUTRANKS this one:
+      the deferral reorders C behind Pascal, never behind other C. Without
+      this guard `-Futest/gtk3stock`'s gtk3_c.h lost to lib/pcl/gtk3_c.h and
+      the shadow was silently defeated — and the test that shadow exists for
+      could not see it, because both headers now include the installed GTK
+      surface and produce byte-identical output. Found with a `#error` poison
+      probe, not by reading. }
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(rtldir, cName, '.h', path);
       LoadFile(path, UnitContent);
@@ -3749,13 +3843,15 @@ begin
       ConcatThree(lcldir, lo, '.pp', path);
       LoadFileCI(path, UnitContent);
     end;
-    if Length(UnitContent) = 0 then
+    { A held-back search-root C candidate outranks these too — see the note at
+      the RTL .h probe above. }
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(lcldir, cName, '.c', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(lcldir, cName, '.h', path);
       LoadFile(path, UnitContent);
@@ -3793,18 +3889,38 @@ begin
     if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/asmcore/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree('lib/rtl/', cName, '.h', path); LoadFile(path, UnitContent);
       if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', cName, '.h', path); LoadFile(path, UnitContent); end;
       if Length(UnitContent) = 0 then begin ConcatThree('compiler/', cName, '.h', path); LoadFile(path, UnitContent); end;
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree('compiler/', cName, '.c', path); LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
+  end;
+
+  { The held-back C candidate from a `-I`/`-Fu` search root, adopted now that
+    every Pascal probe has missed. This is the second half of the deferral
+    above and the reason it is an ORDERING change rather than a removal: a real
+    FFI `uses <header>` still resolves exactly as before whenever no `.pas` of
+    that name exists anywhere on the chain, which is every case in the tree
+    except math / netdb / strings.
+
+    Placed after the CWD-relative fallback so no other C probe can be reordered
+    by this. That was checked rather than assumed: the only `.h`/`.c` files the
+    later blocks can reach are lib/pcl/gl_c.h, lib/pcl/gtk3_c.h and
+    lib/rtl/math_ext.h, and none of them shares a basename with anything a
+    search root is likely to carry. }
+  if (Length(UnitContent) = 0) and (Length(deferredCContent) > 0) then
+  begin
+    UnitContent := deferredCContent;
+    path := deferredCPath;
+    isCUnit := True;
+    isCHeader := deferredCIsHeader;
   end;
 
   { AN IMPORT THAT PINNED ANOTHER LANGUAGE does not get a Pascal source. Tested
@@ -4503,6 +4619,26 @@ begin
   end;
 end;
 
+{ `uses a, b, c;` -- one shape, three sites (program decl part, unit interface,
+  unit implementation), which is why it is a procedure: the Delphi-generics
+  desugar below has to run at the END of every one of them, and a fourth copy is
+  how the third site would have been the one that stayed broken. }
+procedure ParseUsesClause;
+var doneUses: Boolean;
+begin
+  Next;   { consume `uses` }
+  doneUses := False;
+  while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
+  begin
+    ParseUsesEntry;
+    if not Eat(tkComma) then doneUses := True;
+  end;
+  Eat(tkSemicolon);
+  { Every template the clause just imported is registered now, and every use of
+    one lies ahead of this point. See DesugarImportedDelphiGenericUses. }
+  DesugarImportedDelphiGenericUses;
+end;
+
 { Compile a unit's `initialization` section into a synthesized parameterless
   proc and register it in InitProcs[]. The dialect has no real init execution,
   so ParseUnit used to drop these tokens; this emits a normal proc body that the
@@ -4727,7 +4863,7 @@ end;
 procedure ParseUnit;
 var
   uname: AnsiString;
-  doneUses, savedInterface, doneImp, savedPreScan, savedPass2Active: Boolean;
+  savedInterface, doneImp, savedPreScan, savedPass2Active: Boolean;
   savedBase, afterImpTok, ii, savedPass2BodyTok: Integer;
 begin
   { A used unit parses in its own normal (single-pass) mode: its interface is
@@ -4759,17 +4895,7 @@ begin
   while (CurTok.Kind <> tkEOF) and not ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'implementation') or (CurTok.SVal = 'Implementation'))) do
   begin
     case CurTok.Kind of
-      tkUses:
-      begin
-        Next;
-        doneUses := False;
-        while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
-        begin
-          ParseUsesEntry;
-          if not Eat(tkComma) then doneUses := True;
-        end;
-        Eat(tkSemicolon);
-      end;
+      tkUses:     ParseUsesClause;
       tkVar:      ParseVarSection;
       tkConst:    ParseConstSection(-1, 0, False);
       tkType:     ParseTypeSection;
@@ -4833,17 +4959,7 @@ begin
     else
     begin
       case CurTok.Kind of
-        tkUses:
-        begin
-          Next;
-          doneUses := False;
-          while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
-          begin
-            ParseUsesEntry;
-            if not Eat(tkComma) then doneUses := True;
-          end;
-          Eat(tkSemicolon);
-        end;
+        tkUses:     ParseUsesClause;
         tkVar:      ParseVarSection;
         tkConst:    ParseConstSection(-1, 0, False);
         tkType:     ParseTypeSection;

@@ -892,11 +892,20 @@ end;
   large program's disassembly text can run to tens of MB, past STRING_CAP. }
 procedure WriteDisassemblyX64(const outPath: AnsiString);
 var
-  fd, pos, consumed, i, brTarget: Integer;
+  fd, pos, consumed, i, brTarget, textEnd: Integer;
   line, labelText: AnsiString;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('-S: textual emit mode is x86-64 only');
+
+  { Stop at the ELF writer's page filler rather than disassembling it -- the
+    filler is zero bytes, not instructions, and decoding it appends a `db 00`
+    line that reads as an undecodable-byte finding when it is nothing of the
+    kind. See CodePadStart in defs.inc for why the trim lives here and not in
+    the test's assertion. The bound still comes from CodeLen when no writer has
+    run (CodePadStart = -1), which is every non-ELF path. }
+  textEnd := CodeLen;
+  if (CodePadStart >= 0) and (CodePadStart < textEnd) then textEnd := CodePadStart;
 
   { O(1) "does a proc start/does a branch land here" lookup, built once --
     a per-instruction or per-branch linear scan over ProcCount would be
@@ -916,7 +925,7 @@ begin
   DisWriteStr(fd, '; unrecognized byte sequences fall back to a raw "db 0xNN" line' + Chr(10) + Chr(10));
 
   pos := 0;
-  while pos < CodeLen do
+  while pos < textEnd do
   begin
     if AsmDisProcAtPos[pos] >= 0 then
       DisWriteStr(fd, Procs[AsmDisProcAtPos[pos]].Name + ':' + Chr(10));

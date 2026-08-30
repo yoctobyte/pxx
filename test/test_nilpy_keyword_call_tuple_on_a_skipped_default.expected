@@ -1,0 +1,11 @@
+grid  row=1 sticky=[] padx=<object> pady=None
+grid  row=-1 sticky=[] padx=<object> pady=None
+grid  row=-1 sticky=[e] padx=<object> pady=None
+grid  row=1 sticky=[] padx=None pady=<object>
+grid  row=1 sticky=[we] padx=8 pady=<object>
+grid  row=1 sticky=[e] padx=<object> pady=2
+grid  row=1 sticky=[] padx=<object> pady=None
+grid  row=1 sticky=[] padx=8 pady=None
+grid  row=1 sticky=[] padx=<object> pady=None
+free  row=1 sticky=[] padx=<object> pady=None
+done

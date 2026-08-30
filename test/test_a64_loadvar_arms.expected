@@ -1,0 +1,23 @@
+globals    -100 200 -30000 60000
+globals    -2000000000 4000000000 -9000000000000000000
+globals    1.2500 2.5000
+globals    TRUE Z global
+globals    11 22
+globals    dyn len=4 [3]=300
+binops     -1340232225128743148
+byref int  -2000000000 -9000000000000000000
+byref int  -1999999999 -8999999999999999999
+byref narrow -100 200 -30000 60000
+byref narrow -101 201 -30001 60001
+byref single 1.2500 2.5000
+byref single 2.5000 5.0000
+byref dyn len=4 [0]=0
+byref str  global
+byref str  global!
+locals     3.5000 4.5000
+byref single 3.5000 4.5000
+byref single 7.0000 9.0000
+locals     7.0000 9.0000
+after      -101 201 -30001 60001 -1999999999 -8999999999999999999
+after      2.5000 5.0000 global!
+binops     -1340232225128743154

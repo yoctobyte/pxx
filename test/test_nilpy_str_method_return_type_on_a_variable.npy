@@ -1,0 +1,157 @@
+# regression-test-nilpy-test-nilpy-startswith-tuple
+#
+# A str method whose return type is NOT a string, called on a receiver that is
+# a VARIABLE, and whose value is RETURNED from a def: the def's result was
+# typed from the receiver (tyAnsiString) instead of from the method, so
+# $pyresult got a managed zero-init while the call handed back an Integer or a
+# Boolean. The caller then read a small integer as a string handle and
+# SEGFAULTED, with no diagnostic anywhere.
+#
+# PyRetMethodType resolves USER-CLASS methods only. For a string receiver it
+# answers tyUnknown AND leaves recvCi2 = -1, so neither arm of its caller fired
+# and the expression chase claimed the receiver's own type — the exact failure
+# that function's own header comment warns about, one type-family over.
+# PyStrMethodInfo already tabulated the right answers and was never asked.
+#
+# THE RECEIVER'S BINDING FORM IS THE WHOLE POINT OF THIS TEST. The commit that
+# introduced the defect shipped a control named "a str method on a literal",
+# and a literal receiver is the one str-receiver shape that still worked —
+# it never reaches the broken arm. Present, plausible, and incapable of
+# failing. So every row below is spelled twice where it matters: once on a
+# LOCAL, once on a PARAMETER, with the literal kept only as a control.
+#
+# The str->str rows are controls in the weak sense and are marked as such:
+# they passed throughout, but only because the wrong answer (the receiver's
+# type) happened to equal the right one. They cannot detect this bug and are
+# here to catch a fix that over-reaches.
+#
+# Do NOT reduce this to `startswith`. The ticket is named after the tuple form
+# and neither the tuple nor startswith is involved — a fix keyed on that name
+# passes test_nilpy_startswith_tuple.npy and leaves find and count broken.
+#
+# Expectations are CPython's own output.
+
+
+# --- str -> int, the arm that segfaulted ---
+def find_local():
+    y = "abcabc"
+    return y.find("b")
+
+
+def find_param(x):
+    return x.find("b")
+
+
+def count_param(x):
+    return x.count("a")
+
+
+def index_param(x):
+    return x.index("c")
+
+
+print("find      ", find_local(), find_param("abcabc"))
+print("count     ", count_param("abcabc"))
+print("index     ", index_param("abcabc"))
+
+# --- str -> bool, same arm, different result kind ---
+def starts_param(x):
+    return x.startswith("ab")
+
+
+def ends_local():
+    y = "abcabc"
+    return y.endswith("bc")
+
+
+print("startswith", starts_param("abcabc"), ends_local())
+
+# --- str -> str: control. Passed before the fix too, for the wrong reason. ---
+def upper_param(x):
+    return x.upper()
+
+
+def replace_local():
+    y = "abcabc"
+    return y.replace("a", "z")
+
+
+print("str->str  ", upper_param("abc"), replace_local())
+
+# --- literal receiver: control. The shape that never reproduced. ---
+def find_literal():
+    return "abcabc".find("b")
+
+
+print("literal   ", find_literal())
+
+# --- module-qualified calls must keep their route. A module name is not a
+#     receiver with members, and a module function may share a str method's
+#     name, so this is what stops the fix from claiming them. ---
+import math
+import json
+
+
+def sqrt_call():
+    return math.sqrt(4.0)
+
+
+def dumps_call():
+    return json.dumps([1, 2])
+
+
+print("module    ", sqrt_call(), dumps_call())
+
+# --- a user class defining a method that SPELLS a str method keeps resolving
+#     as its own method, not as the str one. ---
+class Holder:
+    def find(self, s):
+        return 99
+
+
+def user_class_find():
+    h = Holder()
+    return h.find("b")
+
+
+print("userclass ", user_class_find())
+
+# --- the result must still be usable as its own type, not merely non-crashing ---
+def arith(x):
+    return x.find("b") + 1
+
+
+def negated(x):
+    return not x.startswith("zz")
+
+
+print("usable    ", arith("abcabc"), negated("abcabc"))
+
+
+# --- str methods whose row is a CLASS, not a scalar ---
+#
+# The arm above pairs `cur := smRetTk` with `PyInferLastCi := -1`, which is
+# right for a scalar (there is no class identity to carry) and destroys the
+# answer for a list or tuple (there is). Claiming these rows regressed a def
+# returning s.rsplit(...) to a bare handle printed as an integer, while the
+# same call OUTSIDE a def stayed correct -- only the def-return path goes
+# through that arm, so nothing else in this file could have caught it.
+#
+# Both spellings are here on purpose: `split` also collides with sysutils'
+# TStringHelper.Split and is guarded elsewhere, so on its own it could pass for
+# the wrong reason. `rsplit` has no Pascal helper and no other guard, which
+# makes it the row that actually pins this arm.
+def ret_rsplit(x: str):
+    return x.rsplit(" ", 1)
+
+
+def ret_split(x: str):
+    return x.split(" ", 1)
+
+
+# `partition` belongs in this family and is deliberately ABSENT: returned from
+# a def it prints raw memory, on `pinned` as well as here, so it is pre-existing
+# and not this arm's. Filed as
+# bug-n-a-tuple-returning-str-method-prints-raw-memory-when-returned-from-a-def.
+# Asserting it here would make this test fail for a reason it does not test.
+print("class-ret ", ret_rsplit("C minor"), ret_split("C minor"))

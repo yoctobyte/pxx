@@ -1,0 +1,10 @@
+# lwIP loopback interface (127.0.0.1) so the resolver smoke needs no Wi-Fi /
+# Ethernet bring-up: getaddrinfo on a numeric literal converts locally, and
+# esp_netif_init only needs the TCP/IP task up. Mirrors net-c3.
+CONFIG_LWIP_NETIF_LOOPBACK=y
+CONFIG_LWIP_LOOPBACK_MAX_PBUFS=8
+# IPv6 on, so the sin6_addr@8 arm of the ABI check is actually exercised rather
+# than skipped. It is default-y in IDF; pinned so the smoke does not depend on
+# the default tracking. With this set to n the v6 row reports EAI_FAMILY and is
+# still not a failure -- see main.pas.
+CONFIG_LWIP_IPV6=y

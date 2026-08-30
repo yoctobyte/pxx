@@ -1,0 +1,24 @@
+# Importing a unit that declares `Text = class` must NOT change what `Text`
+# means inside a DIFFERENT, later-compiled unit that never names it.
+#
+# It did, and it did so SILENTLY: SizeOf went 4128 (the RTL file record) -> 8
+# (a class pointer) and the program still compiled. The trigger was import
+# ORDER, and the cause was not the class-visibility machinery, which returned
+# the correct verdict throughout.
+#
+# ParsingClassBodyCi ("no class scope is open" = -1) was initialised only in
+# ParseProgram, the PASCAL entry point. Every other frontend started with the
+# BSS default 0 -- a VALID class index -- so the compiler believed it was
+# inside class 0's body for the whole compilation, and AddClassLikeType duly
+# registered every top-level class of every imported unit as a NESTED type of
+# it. ParseTypeKind consults FindNestedType BEFORE IsClassType, and class-scope
+# lookup is deliberately not visibility-gated, so `Text` resolved to whichever
+# unit got there first.
+#
+# The Pascal control (`uses` in both orders) passed throughout and is not a
+# regression risk; this file is the arm that was broken.
+# bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit
+import 'importordertextcls.pas'
+import 'importordertextuse.pas'
+
+ShowTextSize()

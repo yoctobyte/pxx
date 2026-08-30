@@ -13,3 +13,8 @@ c a
 [1, 2] [3]
 7 3 2.5 a
 ValueError: max() iterable argument is empty
+b b
+b b
+b b
+b z
+[1, 2] [3]

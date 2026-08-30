@@ -203,7 +203,16 @@ const
   PXX_KIND_MASK    = $FF;
 
   { Flags, bits 8-15 }
-  PXX_FLAG_STATIC   = $0100;   { .rodata, never freed — reserved, unused }
+  { Built by the COMPILER, not by this allocator: the block lives in the data
+    section in front of a pooled string literal (InternStr, emit.inc), its
+    refcount is born saturated so no PXXStrDecRef can reach the free, and it
+    carries no PXX_FLAG_APPENDABLE and no allocator size word worth trusting.
+    Nothing here BRANCHES on it — every in-place path already refuses a shared
+    block on its own terms (rc <= 1, plus APPENDABLE for the append). The flag
+    is what makes such a block identifiable in a dump or a debugger, and the
+    reason a `p` that never came from PXXAlloc can be sitting in this heap's
+    protocol at all. bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+  PXX_FLAG_STATIC   = $0100;
   PXX_FLAG_INTERNED = $0200;   { reserved, unused }
   PXX_FLAG_ASCII    = $0400;   { verified: no byte >= $80 }
   { The ASCII bit ANSWERED. Without this, 0 means both "scanned, has high bytes"
@@ -577,8 +586,19 @@ begin
 end;
 
 const
-{$ifdef PXX_ESP}
+{$if defined(PXX_ESP)}
   HEAP_ARENA = 65536;       { single 64 KiB static arena (fits ESP SRAM) }
+{$elseif defined(CPU_WASM32)}
+  { MUST equal the WasmArena byte size below. PXXAlloc rounds any request up to
+    HEAP_ARENA and then sets HeapEnd := HeapPtr + arena, so a HEAP_ARENA larger
+    than the real buffer would hand out a HeapEnd past its end and bump straight
+    through it — the 256 MiB default would have done exactly that on a 1 MiB
+    arena, reintroducing the corruption this arm exists to remove.
+    1 MiB, not "a few": BSS feeds the module's declared minimum memory
+    (WasmFinishMemory), builtinheap links into every program, and the wasm32
+    lane measured hello-world at (memory 2) = 128 KiB today. 16 pages is
+    headroom without taxing every module for space nobody is using. }
+  HEAP_ARENA = 1048576;     { 1 MiB static arena; see WasmArena }
 {$else}
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
 {$endif}
@@ -666,6 +686,33 @@ var
   EspArena     : array[0..8191] of Int64;
   EspArenaUsed : Integer;
 {$endif}
+{$ifdef CPU_WASM32}
+  { 1 MiB static arena, Int64 cells so the base is 8-aligned. Same shape as the
+    ESP arena above, for a different reason: wasm has no mmap to fail, and
+    linear memory has NO PAGE PROTECTION -- address 0 is legal and reads as
+    zero -- so an unassigned Result here does not fault, it hands out 8, 32,
+    56... and silently overwrites the globals at WASM_BSS_BASE once ~1 KB has
+    been allocated. The arena must be real storage, not a syscall result.
+    Declaring it in BSS is also what makes the memory exist: the backend derives
+    the module's declared page count from BSSSize (WasmFinishMemory), and BSS is
+    never emitted into the file, so this costs declared address space at
+    instantiation and not one byte of .wasm.
+    bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero }
+  WasmArena     : array[0..131071] of Int64;   { 131072 * 8 = HEAP_ARENA }
+  WasmArenaUsed : Integer;
+{$endif}
+
+{$ifdef CPU_WASM32}
+{ The wasm arena's base, as one named thing. HeapMmap's wasm arm calls this
+  instead of inlining @WasmArena[0] so the eventual memory.grow arm replaces a
+  single expression rather than a use site buried in a conditional chain.
+  Defined ABOVE its caller, not merely somewhere in the file: FPC resolves in
+  source order and the bootstrap seed build is the only thing that checks. }
+function WasmArenaBase: Int64;
+begin
+  Result := Int64(@WasmArena[0]);
+end;
+{$endif}
 
 { Anonymous mmap of len bytes; returns the base address (or the kernel's
   negative errno, which a subsequent access would fault on). }
@@ -677,27 +724,19 @@ var
 begin
   { mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
     via the raw-syscall intrinsic so every target lowers it natively.
-    32-bit targets use mmap2 (offset in pages; 0 either way). }
-{$ifdef CPUX86_64}
-  Result := __pxxrawsyscall(9, 0, len, 3, 34, -1, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
-{$endif}
-{$ifdef CPU_ARM32}
-  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
-{$endif}
-{$ifdef CPU_I386}
-  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
-    prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
-  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
-{$endif}
-{$endif}
-{$ifdef PXX_ESP}
+    32-bit targets use mmap2 (offset in pages; 0 either way).
+
+    ONE exhaustive chain with a terminal arm, not a run of independent
+    {$ifdef}/{$endif} blocks: as separate blocks a target matching none of them
+    fell through to whatever the pre-chain default was -- here nothing at all,
+    so Result was NEVER ASSIGNED and the function returned the return slot's
+    leftover contents, which on wasm32 read as 0. Same defect and same fix as
+    the five PXXSys* chains below (1ea3bdb85); this one is the instance with the
+    largest blast radius, because its wrong answer is the base of the heap.
+
+    PXX_ESP is tested FIRST: bare riscv32 defines both PXX_ESP and CPU_RISCV32,
+    and the static arena is the arm it wants. }
+{$if defined(PXX_ESP)}
   { Static arena: hand out the fixed buffer once (len is HEAP_ARENA here, so
     HeapEnd lines up). A second request means the arena is exhausted -> 0,
     which faults on the next access, signalling out-of-memory.
@@ -718,10 +757,89 @@ begin
       espZ := espZ + SizeOf(NativeInt);
     end;
   end;
-{$endif}
-end;
+{$elseif defined(CPU_WASM32)}
+  { wasm32: BSS arena, same shape as PXX_ESP above, with two deliberate
+    differences -- both of which are the whole reason this arm exists.
 
-{$ifdef PXX_ESP_IDF}
+    NO ZEROING. wasm linear memory is zero at instantiation, so PXXAlloc's
+    zero-init contract is satisfied for free. The ESP arm cannot assume that
+    (it does not know whether startup zeroed .bss); we can. This is the one
+    line that differs from the ESP shape and would otherwise read as an
+    omission, so: it is deliberate.
+
+    EXHAUSTION RETURNS -1, NOT 0. The ESP arm returns 0 because on that target
+    0 faults on the next access and so reports out-of-memory for free. On wasm
+    that idiom is precisely the bug -- 0 is a legal address, reads as zero, and
+    has no page protection, so returning it hands out a heap that overwrites
+    the globals and only traps thousands of allocations later, once the bump
+    pointer leaves the declared memory. -1 is out of bounds on the first touch,
+    which is the loud failure this target has no other way to produce.
+
+    WasmArenaBase is a named expression rather than @WasmArena[0] inlined at
+    the use site so that the eventual memory.grow arm replaces ONE thing.
+    Growth is not blocked by the module declaration -- the backend already
+    writes the no-maximum limits form, so memory.grow is legal on these modules
+    today; the only missing piece is an intrinsic to reach it from Pascal, which
+    is the wasm32 lane's half and deliberately NOT this ticket. }
+  if WasmArenaUsed <> 0 then
+    Result := -1
+  else
+  begin
+    WasmArenaUsed := 1;
+    Result := WasmArenaBase;
+  end;
+{$elseif defined(CPUX86_64)}
+  Result := __pxxrawsyscall(9, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPUAARCH64)}
+  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_ARM32)}
+  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_I386)}
+  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_RISCV32)}
+  { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
+    prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
+  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_XTENSA)}
+  { hosted linux (qemu-user). TWO numbers differ from every arm above and BOTH
+    were measured under qemu-xtensa 10.2.1, not read off a table:
+
+      mmap2 = 80.  Xtensa has its OWN syscall numbering, the same one that puts
+      read at 12 and write at 13 rather than the generic 63/64. Generic 222 --
+      the number the riscv32 arm three lines up uses -- is `Unknown syscall 222`
+      here; qemu names 80 as mmap2.
+
+      MAP_ANONYMOUS = $800, so flags = MAP_PRIVATE|MAP_ANONYMOUS = $802 = 2050,
+      NOT the 34 every other arm passes. Xtensa is one of the architectures with
+      non-standard MAP_* values. This is the half that fails QUIETLY-ish: with
+      34 the kernel sees MAP_PRIVATE|0x20 with no ANONYMOUS bit, tries to map
+      fd -1, and returns EBADF -- a negative errno that PXXAlloc deliberately
+      does not check, so it becomes the heap base and faults later.
+
+    Until this arm existed xtensa fell through to the terminal `Result := -1`
+    below, which is exactly what it looks like: SIGBUS at $FFFFFFFF on the first
+    allocation. No hosted xtensa program that allocated anything had ever run.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Result := __pxxrawsyscall(80, 0, len, 3, 2050, -1, 0);
+{$else}
+  { No arm for this target. -1, not 0: every caller reaches this through
+    PXXAlloc, which does NOT check the result (deliberately -- on a hosted
+    target a failed mmap returns a negative errno and the next access faults),
+    so the returned value IS the base of the heap. 0 is the one value that
+    fails silently on a target with no page protection, which is how wasm32
+    shipped a heap at address zero.
+
+    NOT {$error}, and this was measured rather than assumed: HeapMmap is
+    compiled unconditionally -- it is NOT inside {$ifndef PXX_ESP_IDF} -- while
+    the ESP-IDF profile redefines PXXAlloc to use calloc/free and never calls
+    it. A compile-time refusal here would therefore break every xtensa and
+    riscv32 IDF build over a function they do not use, and Track S is a live
+    campaign. Terminal arms are chosen by reachability: {$error} where a
+    missing arm cannot be reached at run time, a defined failure value where
+    the routine is compiled into everything and called by almost nothing. }
+  Result := -1;
+{$endif}
+end;{$ifdef PXX_ESP_IDF}
 { ESP-IDF profile (relocatable .o linked by idf.py): the pxx heap is backed by
   the IDF heap — calloc/free externals resolve to newlib/heap_caps at IDF link
   time. The hosted branch's linux mmap is an ecall that panics FreeRTOS
@@ -1224,23 +1342,17 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;      { refcount }
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;          { length }
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
-  i := 0;
-  while i < newLen * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := 0;
-    i := i + 1;
-  end;
+  { Same two calls as the hosted PXXDynSetLen below, for the same reason. Both
+    helpers are forward-declared at the top of this unit, so the ESP arm is not
+    obliged to hand-roll what the hosted one calls.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXMemZero(newArrData, newLen * elSize);
   if oldData <> nil then
   begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen * elSize do
-    begin
-      PByte(Int64(newArrData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
   end;
   PWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayReleaseEsp(oldData);
@@ -1257,7 +1369,17 @@ function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 var
   base, s, d, i, orAll, b: Int64;
 begin
+{$ifdef PXX_NILPY_STR}
+  { NilPy string model (decide-nilpy-none-str-representation): a zero-length
+    NilPy string is a REAL block, so nil goes back to meaning only None and
+    `"" is None` stops answering True. The define is set only for a NilPy
+    compilation, so a Pascal program -- the self-host binary included --
+    compiles the `len <= 0` arm below and keeps FPC's collapse untouched BY
+    CONSTRUCTION rather than by audit. }
+  if len < 0 then
+{$else}
   if len <= 0 then
+{$endif}
   begin
     Result := nil;
     Exit;
@@ -1504,21 +1626,29 @@ end;
 
 function PXXSysRead(fd, buf, count: NativeInt): Int64;
 begin
-  Result := 0;   { xtensa (bare-only): no read syscall — dead stub there }
-{$ifdef CPUX86_64}
+{$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(0, fd, buf, count);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(3, fd, buf, count);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(3, fd, buf, count);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(63, fd, buf, count);
-{$endif}
-{$ifdef CPU_RISCV32}
+{$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(63, fd, buf, count);   { hosted linux (qemu-user) }
+{$elseif defined(CPU_XTENSA)}
+  { Track S's call, made 2026-08-29: 12 is __NR_read in XTENSA'S OWN table,
+    measured under qemu-xtensa — not the generic numbering riscv32 uses two
+    arms up, where read is 63. The previous `Result := 0` was the pre-chain
+    default inherited by every unnamed target, and as that comment warned, 0
+    here reads as EOF: a hosted xtensa program saw every file as empty and no
+    error was raised. Bare/IDF xtensa never reaches this — the ESP PAL owns
+    file I/O there.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Result := __pxxrawsyscall(12, fd, buf, count);
+{$else}
+  { No arm. -1 is the POSIX failure value; a fall-through 0 would report EOF. }
+  Result := -1;
 {$endif}
 end;
 
@@ -1538,8 +1668,7 @@ function PXXSysWrite(fd, buf, count: NativeInt): Int64;
 var iov: array[0..1] of Integer; nw: Integer;
 {$endif}
 begin
-  Result := 0;
-{$ifdef CPU_WASM32}
+{$if defined(CPU_WASM32)}
   { One iovec: [ptr, len]. WASI returns an ERRNO, not a byte count — the count
     is written to *nwritten — so the two are not interchangeable and a caller
     reading the return value as a length would get 0 on success. }
@@ -1548,21 +1677,26 @@ begin
   nw := 0;
   if __wasi_fd_write(fd, @iov[0], 1, @nw) = 0 then Result := nw
   else Result := -1;
-{$endif}
-{$ifdef CPUX86_64}
+{$elseif defined(CPUX86_64)}
   Result := __pxxrawsyscall(1, fd, buf, count);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(4, fd, buf, count);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(4, fd, buf, count);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(64, fd, buf, count);
-{$endif}
-{$ifdef CPU_RISCV32}
+{$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(64, fd, buf, count);   { hosted linux (qemu-user) }
+{$elseif defined(CPU_XTENSA)}
+  { As in PXXSysRead, and the same call: 13 is __NR_write in xtensa's own
+    table (measured), NOT the 64 riscv32 uses two arms up. The previous
+    `Result := 0` meant "wrote nothing, successfully", which is why a hosted
+    WriteLn emitted its string through the inline syscall in codegen and then
+    silently dropped the newline PXXWriteNL sends through here. }
+  Result := __pxxrawsyscall(13, fd, buf, count);
+{$else}
+  { No arm. See PXXSysOpenRO. }
+  Result := -1;
 {$endif}
 end;
 
@@ -1814,12 +1948,7 @@ begin
     while (PByte(Int64(src) + len)^ <> 0) and (len < 255) do len := len + 1;
   PWord(dst)^ := len;
   PWord(Int64(dst) + 4)^ := 0;     { high half of the 8-byte length prefix }
-  i := 0;
-  while i < len do
-  begin
-    PByte(Int64(dst) + 8 + i)^ := PByte(Int64(src) + i)^;
-    i := i + 1;
-  end;
+  PXXBlockCopy(Int64(dst) + 8, Int64(src), len);
 end;
 
 { Publish a managed handle into a string slot, releasing the old one. }
@@ -1860,49 +1989,55 @@ end;
   ESP has no filesystem here, so the whole group is excluded. }
 function PXXSysOpenRO(path: Pointer): Int64;
 begin
-{$ifdef CPUX86_64}
+{$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(2, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(5, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(5, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$else}
+  { NO ARM FOR THIS TARGET — see the group comment above. Returning the POSIX
+    failure value is the whole point: before this was one chain it was four
+    separate {$ifdef}/{$endif} blocks with no terminal else and no pre-chain
+    default, so an armless target left `Result` NEVER ASSIGNED and
+    PXXStrLoadFile's `if fd < 0 then Exit` tested the return slot's leftover
+    contents. }
+  Result := -1;
 {$endif}
 end;
 
 function PXXSysLseek(fd, offset, whence: NativeInt): Int64;
 begin
-{$ifdef CPUX86_64}
+{$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(8, fd, offset, whence);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(19, fd, offset, whence);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(19, fd, offset, whence);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(62, fd, offset, whence);
+{$else}
+  { No arm — see PXXSysOpenRO. A garbage size here is the worse half of the
+    defect: PXXStrLoadFile feeds it straight to PXXAlloc(size + hdr + 1). }
+  Result := -1;
 {$endif}
 end;
 
 function PXXSysClose(fd: NativeInt): Int64;
 begin
-{$ifdef CPUX86_64}
+{$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(3, fd);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(6, fd);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(6, fd);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(57, fd);
+{$else}
+  { No arm — see PXXSysOpenRO. }
+  Result := -1;
 {$endif}
 end;
 
@@ -1937,9 +2072,16 @@ end;
 
 { Managed-string refcount retain/release for targets without the hand-emitted
   atomic blob (i386 and other cross targets). p = data pointer; refcount lives
-  at [p-16], length at [p-8]. NON-atomic — threadsafe mode is x86-64 only and
-  keeps its lock-prefixed inline version. PXXStrDecRef frees the block (base =
-  p-16) when the count reaches zero. nil is ignored. }
+  at [p-16], length at [p-8]. PXXStrDecRef frees the block (base = p-16) when
+  the count reaches zero. nil is ignored.
+
+  Non-atomic in the DEFAULT build; under --threadsafe (PXX_TS_SOFTLOCK) the
+  increments below use __pxxatomic_add. Corrected 2026-08-30: this said
+  "NON-atomic — threadsafe mode is x86-64 only", and both halves had stopped
+  being true — the ifdef'd body twelve lines down is atomic, and --threadsafe
+  covers more than x86-64. For WHICH targets, see the gate in compiler.pas
+  (the ThreadSafeMode target check); that condition is the authority and this
+  comment deliberately does not repeat the list. }
 procedure PXXStrIncRef(p: Pointer);
 var rcAddr: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
@@ -2499,10 +2641,30 @@ begin
   { Whichever path runs, the caller is about to WRITE bytes through the handle
     we return, so any cached ASCII answer stops being true. rc<=1 hands back the
     same block (mutated in place); the COW path copies through PXXStrFromLit,
-    which stamps the flag from the OLD bytes. Both must forget it — this is the
-    single choke point for byte mutation, which is what makes the cache sound.
-    PXXStrSetLen needs no such call: it always allocates a fresh block and
-    PXXHdrInit zeroes its meta. }
+    which stamps the flag from the OLD bytes. Both must forget it.
+
+    This is ONE of several sites that mutate bytes, not the only one — the
+    sentence that used to stand here said "the single choke point for byte
+    mutation, which is what makes the cache sound", and on 2026-08-29 three
+    separate bugs were fixed that had all been caused by believing it
+    (8be3c6d06, df19c72a7, b71690c40). The invariant is per-site, so state it
+    that way: EVERY site that mutates bytes in place must forget the answer.
+    The current list is `grep PXXStrForgetAscii` plus the two hand-emitted
+    x86-64 paths in ir_codegen.inc — the AnsiStrUniqueAddr blob, and the
+    in-place SetLength resize that clears both bits itself. Run the grep; do not
+    trust a count in a comment, this one's included.
+
+    A note on the clause that also used to stand here, because it is the subtler
+    trap: "PXXStrSetLen needs no such call: it always allocates a fresh block."
+    That is TRUE of this Pascal routine — every non-collapsing path really does
+    PXXAlloc + PXXHdrInit — and it was still the premise of a real bug, because
+    x86-64 does not CALL PXXStrSetLen: it inlines the symbol-target resize, and
+    that inline has an in-place arm (df19c72a7). A reader who checked the claim
+    against PXXStrSetLen confirmed it and stopped. **The thing that gets checked
+    was not the thing that was load-bearing** — so when a comment justifies an
+    invariant by naming a routine, check the OPERATION's other implementations,
+    not the routine.
+    bug-a-the-comment-that-caused-three-bugs-survived-all-three-fixes }
   rc := PWord(oldHandle - 16)^;
   if rc <= 1 then
   begin
@@ -2549,12 +2711,23 @@ end;
   (length, data) operand shape so managed handles and inline strings share it.
   Returns -1, 0 or +1.
 
-  It exists because the four cross backends had NO ordered-string arm at all:
-  only `=` / `<>` were special-cased, so `a < b` fell through to the ordinary
-  integer compare and compared the two heap HANDLES. That is a silent wrong
-  answer — `'zzz' < 'aaa'` reported by allocation order — on i386, arm32,
-  aarch64 and riscv32 alike.
+  It exists because the cross backends that do not call it have NO
+  ordered-string arm at all: only `=` / `<>` were special-cased, so `a < b`
+  fell through to the ordinary integer compare and compared the two heap
+  HANDLES — a silent wrong answer, `'zzz' < 'aaa'` reported by allocation
+  order.
   bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+
+  THE COUNT USED TO BE IN THIS SENTENCE AND THE COUNT WAS WRONG. It said "the
+  four cross backends", meaning i386, arm32, aarch64 and riscv32 — and there
+  were five. **Xtensa was never visited**, kept the bug for months, and was
+  found only once a hosted xtensa profile could run a program and print the
+  wrong answer. The count is deliberately gone rather than corrected to five:
+  a number in a comment is a claim that goes stale silently, and the next
+  target to land would have made "five" wrong the same way. Say which backends
+  by the property that matters — whether they call this helper — so the
+  sentence stays true as the set changes.
+  bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle
 
   Bytes are compared UNSIGNED (x86-64's inline sequence uses repe cmpsb + the
   unsigned setcc family), and the shorter string sorts first when one is a
@@ -3134,12 +3307,9 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := len;
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
-  i := 0;
-  while i < len * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := PByte(Int64(arrData) + i)^;
-    i := i + 1;
-  end;
+  { The copy-on-write duplicate — every write to a shared dyn array lands here.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXBlockCopy(Int64(newArrData), Int64(arrData), len * elSize);
 
   depth := PInt32(Int64(desc) + 8)^;
   baseKind := PInt32(Int64(desc) + 12)^;
@@ -3243,24 +3413,24 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
-  i := 0;
-  while i < newLen * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := 0;
-    i := i + 1;
-  end;
+  { PXXMemZero / PXXBlockCopy, not a byte loop. Both are defined above and both
+    already move a machine word at a time (PXXMemZero is `rep stosb` on x86-64),
+    so this is one call replacing a loop, not a new primitive.
+
+    The old loops were worse than "one byte per iteration": each recomputed
+    `newLen * elSize` in its own condition, so every byte cost a multiply as well
+    as a load, a store and a compare. This is on the `Copy(arr)` path -- Copy
+    lowers to SetLength-then-PXXMemCopy, so the zero-fill here ran byte-by-byte
+    immediately before a `rep movsb` overwrote every byte of it.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXMemZero(newArrData, newLen * elSize);
 
   if oldData <> nil then
   begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen * elSize do
-    begin
-      PByte(Int64(newArrData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
     PXXDynArrayRetainImmediate(newArrData, copyLen, depth, baseKind, baseRecDesc);
   end;
 
@@ -3284,7 +3454,12 @@ begin
   if strSlot = nil then Exit;
   oldData := Pointer(PWord(strSlot)^);
 
+{$ifdef PXX_NILPY_STR}
+  { see PXXStrFromLit: NilPy zero-length strings do not collapse to nil. }
+  if newLen < 0 then
+{$else}
   if newLen <= 0 then
+{$endif}
   begin
     PWord(strSlot)^ := 0;
     PXXStrDecRef(oldData);
@@ -3303,20 +3478,14 @@ begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen do
-    begin
-      PByte(Int64(newData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    { SetLength(s, n) on a string, on every target — the site this ticket's
+      original list missed entirely, and plausibly the hottest of them.
+      feature-opt-bulk-copy-is-byte-at-a-time }
+    PXXBlockCopy(Int64(newData), Int64(oldData), copyLen);
   end;
 
-  i := copyLen;
-  while i < newLen do
-  begin
-    PByte(Int64(newData) + i)^ := 0;
-    i := i + 1;
-  end;
+  if newLen > copyLen then
+    PXXMemZero(Pointer(Int64(newData) + copyLen), newLen - copyLen);
   PByte(Int64(newData) + newLen)^ := 0;       { nul terminator }
 
   PWord(strSlot)^ := Int64(newData);

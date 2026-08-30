@@ -64,6 +64,9 @@ procedure EmitManagedRecordIntfWalk(recId: Integer; const helper: AnsiString); f
 procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 {$ifndef PXX_NO_AARCH64}procedure EmitLoadVarA64(idx: Integer); forward;{$endif}
+{ Same loader, any destination register except x9 (its scratch). The
+  no-destination form above is this with rd = 0. }
+{$ifndef PXX_NO_AARCH64}procedure EmitLoadVarA64Dest(idx: Integer; rd: Integer); forward;{$endif}
 {$ifndef PXX_NO_AARCH64}procedure EmitLoadDataRefA64(rd, dataOff: Integer); forward;{$endif}
 {$ifndef PXX_NO_AARCH64}procedure EmitA64CopyBytes(countReg, srcReg, dstReg: Integer); forward;{$endif}
 {$ifndef PXX_NO_ARM32}procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;{$endif}
@@ -232,11 +235,45 @@ begin
   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := tk;
-  AliasElemTk[AliasCount] := tk;
-  AliasElemRec[AliasCount] := rec;
-  AliasPtrDepth[AliasCount] := 0;
-  AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
-  AliasPtrBaseRec[AliasCount] := REC_NONE;
+  { `AliasElemTk := tk` is the shortcut this used to take for every alias, and it
+    is a CONFLATION of two different questions: "what kind is T?" and "what does T
+    point AT?". For a non-pointer alias the element is never consulted, so the
+    shortcut was invisible. For a POINTER alias it says `SslPtr = Pointer` has a
+    Pointer element -- i.e. that it is `^Pointer` -- and every general pointer
+    alias collapsed to the same recorded element regardless of its target:
+    `= Pointer`, `= PChar` and `= PRec` all recorded tyPointer, which is correct
+    only for the one spelling `^Pointer` and correct there by coincidence.
+
+    Two measured symptoms, one cause. `p^.field` through an alias of a
+    pointer-to-record failed to compile at all ("a pointer has no members" -- the
+    pointee was erased); and a `Pointer` alias stopped accepting a class instance
+    that plain `Pointer` accepts, because the overload narrowing in
+    MatchParamCompatible permits the untyped sentinel (tyUnknown) and a class
+    element, and an alias presented neither.
+
+    ParseTypeKind has just run for the right-hand side -- the same reason
+    LastTypeStrCap is readable below -- so the TARGET's own pointer facts are
+    live in the LastTypePointer* globals. Record those. Non-pointer aliases keep
+    the previous behaviour exactly; the subrange call site never reaches here
+    with tyPointer.
+    bug-p-a-pointer-type-alias-rejects-a-class-instance-that-plain-pointer-accepts }
+  if tk = Ord(tyPointer) then
+  begin
+    AliasElemTk[AliasCount] := Ord(LastTypePointerElemTk);
+    AliasElemRec[AliasCount] := LastTypePointerElemRec;
+    AliasPtrDepth[AliasCount] := LastTypePointerDepth;
+    AliasPtrBaseTk[AliasCount] := LastTypePointerBaseTk;
+    AliasPtrBaseRec[AliasCount] := LastTypePointerBaseRec;
+    AliasPtrElemArrAi[AliasCount] := LastTypePointerElemArrAi;
+  end
+  else
+  begin
+    AliasElemTk[AliasCount] := tk;
+    AliasElemRec[AliasCount] := rec;
+    AliasPtrDepth[AliasCount] := 0;
+    AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
+    AliasPtrBaseRec[AliasCount] := REC_NONE;
+  end;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := -1;
@@ -1094,6 +1131,49 @@ begin
   UClsAliasNLen[UClsAliasCount] := nlen;
   UClsAliasCi[UClsAliasCount]   := ci;
   Inc(UClsAliasCount);
+end;
+
+{ Would linking ci -> parentCi close a cycle in the class-parent chain?
+
+  THE GUARD GOES ON THE WRITE, NOT ON THE WALK. Seventy-two sites across five
+  files step `UClsParent`, in symtab, ir, rtti_emit and the Pascal parser, and
+  none of them is bounded — but only NINE assign the chain and only FOUR of those
+  assign a real parent. Bounding the reads would mean 72 edits across two lanes
+  and would turn a hang into an internal error; refusing the link here costs four
+  and means the cycle never exists, so every one of those walks terminates
+  because the data cannot be cyclic. That is the difference between a rule every
+  future walk must remember and an invariant it inherits.
+
+  Reachable, not theoretical — six lines of Pascal hung the compiler forever at
+  100% CPU with no output, and a three-class cycle did the same:
+
+      type TB = class; TA = class(TB) end; TB = class(TA) end;
+
+  FPC rejects that spelling, but a compiler that SPINS on input it should reject
+  is still a compiler that spins: the failure has no message, no exit status and
+  no end. NilPy already refuses the one-step case at its declaration site
+  ("class X cannot inherit from itself"); this is the same refusal for a chain of
+  any length, and for Pascal, which had none.
+
+  The walk here is itself bounded by UClsCount, so it stays finite even if a
+  cycle somehow predates it.
+  bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard }
+function UClsParentWouldCycle(ci, parentCi: Integer): Boolean;
+var curr, hops: Integer;
+begin
+  Result := False;
+  if (ci < 0) or (parentCi < 0) then Exit;
+  curr := parentCi;
+  hops := 0;
+  while curr >= 0 do
+  begin
+    if curr = ci then begin Result := True; Exit; end;
+    Inc(hops);
+    { already cyclic, or longer than every class in the program: either way,
+      refusing is right and walking further would not terminate }
+    if hops > UClsCount then begin Result := True; Exit; end;
+    curr := UClsParent[curr];
+  end;
 end;
 
 function FindIMT(classCi, intfCi: Integer): Integer;
@@ -3668,6 +3748,18 @@ procedure SymHashInsert(idx: Integer);
 var b: Integer;
 begin
   b := SymNameFoldHash(Syms[idx].Name);
+  { Remember WHICH bucket, rather than recomputing it from the name at unlink
+    time. A symbol's Name is not immutable: NilPy renames a rebound parameter to
+    `$byref.<name>` to hide it from ordinary lookup
+    (bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list), and the
+    C frontend rewrites names too. A rename after this point moves nothing --
+    the slot stays linked in the bucket it was filed in -- so a later
+    SymNameFoldHash(Syms[idx].Name) names a DIFFERENT bucket and unlinks the
+    wrong chain, leaving a dead head that the next allocation of this index
+    links to itself. That self-loop hung the compiler forever at 100% CPU with
+    flat RSS and no output:
+    bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever }
+  SymHashBkt[idx] := b;
   SymHashPrev[idx] := SymHashHead[b];
   SymHashHead[b] := idx;
 end;
@@ -3695,7 +3787,11 @@ begin
   keepTo := newCount;
   for i := SymCount - 1 downto newCount do
   begin
-    SymHashHead[SymNameFoldHash(Syms[i].Name)] := SymHashPrev[i];
+    { SymHashBkt, NOT SymNameFoldHash(Syms[i].Name): the name may have been
+      rewritten since the slot was filed, and recomputing here unlinks a bucket
+      this slot was never in while leaving a dead head in the one it was. }
+    if SymHashBkt[i] >= 0 then
+      SymHashHead[SymHashBkt[i]] := SymHashPrev[i];
     if SymStaticLocal[i] and (i >= keepTo) then keepTo := i + 1;
   end;
   SymCount := keepTo;
@@ -3877,6 +3973,7 @@ begin
     SymTR[idx].ArrLen := -1;
   SymTR[idx].ProcSig  := SymProcSig[idx];
   SymTR[idx].DynDepth := SymDynDepth[idx];
+  SymTR[idx].PtrDepth := SymPtrDepth[idx];
 end;
 
 procedure EnsureSymCapacity(need: Integer);
@@ -3884,7 +3981,7 @@ procedure EnsureSymCapacity(need: Integer);
   bounds. Called at each Alloc* chokepoint; doubling from 16384; capacity never shrinks
   across the per-frontend SymCount reset. ALL parallel arrays grow in lockstep — a
   missed one is a silent out-of-bounds. See feature-dynamic-compiler-tables. }
-var n: Integer;
+var n, i: Integer;
 begin
   if need <= SymCapacity then Exit;
   if SymCapacity = 0 then n := 16384 else n := SymCapacity;
@@ -3902,11 +3999,16 @@ begin
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
+  SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   { the two per-DIMENSION tables ride the same index, MAX_ARR_DIMS to a symbol }
   SetLength(SymArrDimLo, n * MAX_ARR_DIMS);   SetLength(SymArrDimSpan, n * MAX_ARR_DIMS);
+  { -1, not SetLength's zero-fill: 0 is a VALID bucket, so an uninserted slot
+    would otherwise claim bucket 0 and a rollback over it would corrupt that
+    chain. SymHashInsert overwrites this the moment the slot becomes visible. }
+  for i := SymCapacity to n - 1 do SymHashBkt[i] := -1;
   SymCapacity := n;
 end;
 
@@ -3921,13 +4023,25 @@ procedure SetSymPointerType(idx: Integer; elemTk: TTypeKind; elemRec, depth, bas
   needs both halves.
 
   The Alloc* chokepoints write all five together. Twenty-one sites outside
-  symtab.inc write PtrElemTk after creation, and measured 2026-08-24 only nine
-  of them (all in cparser.inc) touch depth at all -- so twelve symbols carried
-  an immediate pointee over depth 0 and base tyUnknown, which reads as "not a
-  typed pointer" to the predicates that consult the triple. That is the
-  "one of six parallel arrays not written" class this file's SymTR comment names,
-  and it is why feature-a-typeref-migrate-consumers cannot re-point
-  TTypeRef.PtrBaseTk at the real base yet.
+  symtab.inc used to write PtrElemTk after creation, and measured 2026-08-24 only
+  nine of them (all in cparser.inc) touched depth at all -- so twelve symbols
+  carried an immediate pointee over depth 0 and base tyUnknown, which reads as
+  "not a typed pointer" to the predicates that consult the triple. That is the
+  "one of six parallel arrays not written" class this file's SymTR comment names.
+
+  THAT IS HISTORY, not the current state -- re-measured 2026-08-30, and the
+  correction matters because the stale version was the stated reason the
+  migration could not proceed. All 21 sites now go through this helper:
+  `Syms[..].PtrElemTk :=` and `SymPtrDepth[..] :=` outside this file both return
+  ZERO, against a live population of 21 helper calls (ast_syminfer 6, cparser 9,
+  pasparser_decl 2, pyparser 2, pasparser_proc 1, pasparser_stmt 1) -- so the
+  zero means "converted", not "no such sites". The write side is in lockstep.
+
+  What still blocks re-pointing TTypeRef.PtrBaseTk at the real base is therefore
+  NOT the write side: it is that ir.inc's char-pointer check reads PtrBaseTk as
+  the immediate pointee and must start guarding on PtrDepth in the SAME change.
+  decide-typeref-gains-a-pointer-depth-field is answered and PtrDepth now exists
+  and is populated; the fold is one coordinated edit away.
 
   Pass depth = 0 when the caller genuinely does not know (a pointee that is
   itself a pointer, from a source that records no depth); the fields then read
@@ -4141,6 +4255,43 @@ begin
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
   DbgReportSymPtr(SymCount, name);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
+end;
+
+{ Allocate a record variable of a KNOWN record type.
+
+  A record's SIZE and its RecName both come from the global `LastTypeRecId`
+  side-channel, because AllocVar has no argument that could carry a record id.
+  So every caller that materialises a hidden record TEMP has to set that global,
+  allocate, and restore it. Four of the five sites in `ir.inc` did exactly that
+  dance by hand. The fifth did not, and the consequence was not a wrong type --
+  it was a 232-byte OUT-OF-BOUNDS WRITE:
+
+    zeroSym := AllocVar('', tyRecord);          -- LastTypeRecId was REC_NONE
+    SymTR[zeroSym].RecId := recId;              -- a MIRROR field nothing reads
+    IRAppend(IR_DEFAULT_MEM, ..., RecSize(recId), ...);   -- zeroes 240 bytes
+
+  The temp got `RecSize(REC_NONE)` = 8 bytes of BSS and the lowering right below
+  it zeroed `RecSize(recId)` = 240. The `SymTR` write looks like the repair and
+  is not: SymTR is the additive mirror of `Syms[].RecName` (see SymSyncTypeRef),
+  nothing reads it yet, and the storage had already been sized.
+
+  It survived because BSS is MAPPED A PAGE AT A TIME. The overrun landed in the
+  page round-up slack and hit nothing, for months, until an unrelated change to
+  the ELF layout left the image ending 60 bytes below a page boundary and the
+  same write went off the end of the mapping. A latent memory bug whose
+  visibility was decided by where the linker happened to stop
+  (regression-test-asm-compiler-2, diagnosed by frankA).
+
+  Hence a helper rather than a fifth copy of the dance: the caller says which
+  record it means, the side channel is set and restored in one place, and
+  "forgot to set LastTypeRecId" stops being a thing a caller can do. }
+function AllocRecVar(const name: AnsiString; recId: Integer): Integer;
+var savedRecId: Integer;
+begin
+  savedRecId := LastTypeRecId;
+  LastTypeRecId := recId;
+  AllocRecVar := AllocVar(name, tyRecord);
+  LastTypeRecId := savedRecId;
 end;
 
 { The ABI oracle answers both parameter-slot questions now — the SIZE rule that
@@ -4441,7 +4592,31 @@ begin
   else
   begin
     elemSize := TypeSize(elemType);
+    { An ARRAY slot is pointer-aligned, whatever its element is. The four
+      branches above already say so outright (dyn-element, string, frozen
+      string, record all set TARGET_PTR_SIZE); this one asked TypeAlign about
+      the ELEMENT and got 1 for a byte, so an `array of Byte` local landed at
+      whatever offset the frame had reached.
+
+      That is not a theoretical looseness. `ir.inc` reserves the caller-side
+      storage for a fixed-array-returning call as AllocArray('', tyUInt8, 0,
+      bytes-1) — a byte array standing in for an aggregate — and every backend
+      then nil-inits that slot with a FOUR-BYTE store. On x86-64 and i386
+      unaligned word access is free and on qemu-riscv32/arm it is emulated
+      silently, so five backends never complained; xtensa traps, and
+      `WriteLn` of any real died with SIGBUS at an odd frame offset the moment
+      that target could run code at all. Measured by frankS as eight named
+      slots in the three float writers, at identical offsets on xtensa and
+      riscv32 — shared layout, not one backend's codegen.
+
+      Flooring here rather than at the two ir.inc call sites is deliberate:
+      it is one rule instead of two copies of one rule, and it covers every
+      other byte-array local at the same time. Over-aligning a frame slot
+      costs at most TARGET_PTR_SIZE-1 bytes of frame and is never wrong.
+      An alignment rule enforced only by hardware is not enforced.
+      bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot }
     align := TypeAlign(elemType);
+    if align < TARGET_PTR_SIZE then align := TARGET_PTR_SIZE;
   end;
 
   totalSize := (hi - lo + 1) * elemSize;
@@ -4487,6 +4662,13 @@ begin
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
+  { RecName is meaningless for an array -- its record id is ElemRecName above --
+    but slots are RECYCLED, so leaving it alone inherits the previous occupant's
+    id (an AllocParam'd `struct B` by value is the reproducer). The reset rule
+    these allocators follow says "every parallel array"; RecName is a field of
+    the record rather than a parallel array, which is exactly why it was missed.
+    bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot }
+  Syms[SymCount].RecName := REC_NONE;
   Syms[SymCount].IsRef    := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
@@ -4616,6 +4798,13 @@ begin
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
+  { RecName is meaningless for an array -- its record id is ElemRecName above --
+    but slots are RECYCLED, so leaving it alone inherits the previous occupant's
+    id (an AllocParam'd `struct B` by value is the reproducer). The reset rule
+    these allocators follow says "every parallel array"; RecName is a field of
+    the record rather than a parallel array, which is exactly why it was missed.
+    bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot }
+  Syms[SymCount].RecName := REC_NONE;
   Syms[SymCount].IsRef       := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
@@ -5088,6 +5277,118 @@ begin
   W1AluRightEligible := True;
 end;
 
+{ -O3 W1 slice 5: a RESIDENT LEFT operand feeding a COMPARE.
+
+  Slice 4 killed `mov rcx, rN` on the right. The left still funnels through rax
+  -- `mov rax, rN` before every use -- and for add/sub/and/or/xor it has to,
+  because those write their result to rax and a resident left cannot stay put.
+  A compare is the exception: it has NO destination, so the home register can be
+  read in place and the move is deletable outright rather than re-encoded.
+
+  Census before writing the arm (PXXDBG=a.w1left, static emit sites at -O3),
+  resident-left binops by what they feed:
+
+    program      CMP    ALU  MULIMM  SHIFT  OTHER   deletable
+    compiler    2891   2649     422    285    110   52%
+    jsondemo     794    806      91    105    113   46%
+    mandelbrot   234    462      31     59     55   32%
+    lispdemo     237    451      27     59     52   32%
+    sieve        226    451      27     59     58   31%
+
+  CMP is the largest bucket everywhere and is the half that needs no encoding
+  trick. MULIMM (`imul rax, rN, imm` is a three-operand form) is the other
+  deletable one and is NOT done here -- separate slice, separate proof.
+
+  Soundness rests on EmitLoadVar's own resident arm, which emits the move and
+  nothing else: "a correctly size/sign-extended value was loaded into it at body
+  entry, and every store re-extends it". So rN and rax hold the same 64-bit
+  value and `cmp rN, rcx` is equivalent instruction-for-instruction. }
+function W1CmpLeftEligible(node, left, right: Integer): Boolean;
+var op: TTokenKind; lt, rt: TTypeKind;
+begin
+  W1CmpLeftEligible := False;
+  if IRKind[left] <> IR_LOAD_SYM then Exit;
+  if ResidentRegOf(IRA[left]) = 0 then Exit;
+  op := IntToTokenKind(IRC[node]);
+  if not ((op = tkEq) or (op = tkNeq) or (op = tkLt) or
+          (op = tkLe) or (op = tkGt) or (op = tkGe)) then Exit;
+  lt := IntToTypeKind(IRTk[left]);
+  rt := IntToTypeKind(IRTk[right]);
+  { A WHITELIST, deliberately, not a copy of the conditions guarding the string
+    and char arms above the plain `cmp rax, rcx`. Every one of those arms is
+    reached through tyAnsiString, tyString or tyChar, so excluding exactly those
+    three would be sound TODAY and would stop being sound, silently, the day a
+    fourth is added -- the caller skips the left load on this predicate's word,
+    and a string arm reached with rax unloaded compares a stale register. Naming
+    what is ALLOWED fails closed instead: a new type is ineligible until someone
+    adds it here on purpose. }
+  if TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
+  if (lt = tyString) or (lt = tyAnsiString) or (lt = tyChar) then Exit;
+  if (rt = tyString) or (rt = tyAnsiString) or (rt = tyChar) then Exit;
+  if TypeIsFrozenString(lt) or TypeIsFrozenString(rt) then Exit;
+  if not (TypeIsOrdinal(lt) or (lt = tyPointer)) then Exit;
+  if not (TypeIsOrdinal(rt) or (rt = tyPointer)) then Exit;
+  W1CmpLeftEligible := True;
+end;
+
+{ `cmp <left>, rcx`. reg = 0 keeps the rax contract (`48 3B C1`); reg = 12..15
+  encodes the resident register as the REG operand instead, which needs REX.R
+  and shifts the reg field -- so the two forms differ only in REX and one ModRM
+  field, the same way EmitAluRaxRight's two forms do. One emitter rather than a
+  second hand-written encoding beside the first. }
+{ `cmp <left>, imm32`. reg = 0 keeps the rax contract (`48 3D id`, the short
+  accumulator form); reg = 12..15 needs the general form (`81 /7 id`) because
+  only rax has a short encoding. That costs 2 bytes on the cmp itself and saves
+  the whole 3-byte `mov rax, rN` in front of it -- net 1 byte and, the point of
+  the exercise, one instruction. Both forms sign-extend imm32 to 64 bits, so
+  signed and unsigned comparisons keep their meaning either way -- the same
+  property the cmp-immediate fold itself relies on. }
+{ `imul rax, <left>, imm32`. reg = 0 is the usual `imul rax, rax, imm32`;
+  reg = 12..15 names the SOURCE in the r/m field (REX.B) while rax stays the
+  destination in the reg field -- the three-operand form, so unlike the four
+  other imm-fold arms beside it (add/sub/and/or/xor, all short accumulator
+  encodings that both read and write rax) this one can take its input from
+  somewhere other than its output. Same 7 bytes either way; the saving is the
+  whole `mov rax, rN` in front.
+
+  No type screen, and that is not an oversight. The equivalence here is at the
+  REGISTER level, not the type level: EmitLoadVar's resident arm emits the move
+  and nothing else, so rN and rax hold the same 64 bits, and the consumer is the
+  very next instruction emitted -- there is no path below that could reach a
+  different arm expecting rax loaded. That last clause is exactly what the
+  register-form compare does NOT have, which is why that one needs a whitelist
+  and this one does not. }
+procedure EmitImulRaxLeftImm32(reg: Integer; imm: Integer);
+begin
+  EmitB($48 or Ord(reg <> 0)); EmitB($69);
+  if reg = 0 then EmitB($C0) else EmitB($C0 or (reg - 8));
+  EmitI32(imm);
+end;
+
+procedure EmitCmpLeftImm32(reg: Integer; imm: Integer);
+begin
+  if reg = 0 then
+  begin
+    EmitB($48); EmitB($3D); EmitI32(imm);
+  end
+  else
+  begin
+    EmitB($49); EmitB($81); EmitB($F8 or (reg - 8)); EmitI32(imm);
+  end;
+end;
+
+procedure EmitCmpLeftRcx(reg: Integer);
+begin
+  if reg = 0 then
+  begin
+    EmitB($48); EmitB($3B); EmitB($C1);
+  end
+  else
+  begin
+    EmitB($4C); EmitB($3B); EmitB($C1 or ((reg - 8) shl 3));
+  end;
+end;
+
 { `<op> rax, <right>` for the five ALU forms whose right operand is rcx by
   contract. reg = 0 keeps that contract (REX.W, ModRM /r with reg=rcx);
   reg = 12..15 encodes the resident register directly (REX.W+REX.R, reg=N-8).
@@ -5103,6 +5404,37 @@ begin
   else
   begin
     EmitB($4C); EmitB(opcode); EmitB($C0 or ((reg - 8) shl 3));
+  end;
+end;
+
+{ One shift emitter for rax, `modrm` naming the form ($E8 shr, $F8 sar,
+  $E0 shl) and `w64` selecting REX.W.
+
+  `immCnt >= 0` emits the IMMEDIATE form (`shr rax, k`) and the caller must NOT
+  have materialised the count into rcx; `immCnt < 0` keeps the cl contract
+  (`shr rax, cl`).
+
+  It exists so the two forms cannot drift apart. There are four shift sites in
+  the static integer path (logical shr, arithmetic sar, and shl in its 32- and
+  64-bit widths), each wrapped in its own width-fixup logic, and adding a second
+  hand-written encoding to each is how the arm nobody re-derives ends up wrong
+  -- devdocs/dev/normalise-dont-special-case.md. The width fixups stay exactly
+  where they are; only the final instruction changes.
+
+  A count of 0..63 only: hardware masks both cl and imm8 to 6 bits so larger and
+  negative constants would also agree, but a constant count above the width is
+  exactly where a silent mismatch would live, and the existing path handles it
+  unchanged. }
+procedure EmitShiftRax(modrm: Byte; w64: Boolean; immCnt: Integer);
+begin
+  if w64 then EmitB($48);
+  if immCnt >= 0 then
+  begin
+    EmitB($C1); EmitB(modrm); EmitB(Byte(immCnt));
+  end
+  else
+  begin
+    EmitB($D3); EmitB(modrm);
   end;
 end;
 
@@ -6046,7 +6378,7 @@ begin
 end;
 
 procedure EmitArgvToString(dstIdx: Integer);
-var inRangePatch, doneOutPatch: Integer;
+var inRangePatch, doneOutPatch, capPatch: Integer;
 begin
   { On entry: rax = argv index. Copy argv[rax] C-string to global string dstIdx. }
   { Bounds check: an out-of-range index (>= argc, or negative) yields '' rather
@@ -6071,6 +6403,21 @@ begin
   EmitB($74); EmitB($05);                           { je +5 }
   EmitB($48); EmitB($FF); EmitB($C1);               { inc rcx }
   EmitB($EB); EmitB($F5);                           { jmp -11 }
+  { CLAMP THE LENGTH. rcx is a full unbounded strlen(argv[i]); the destination is
+    a FROZEN slot of LOCAL_STR_CAP+8 bytes, so an argument longer than that used
+    to `rep movsb` straight past it into the neighbouring frame slot — in the
+    reported case the enclosing loop's own counter and bound, which made
+    `for i := 1 to ParamCount` run 1.29 MILLION iterations. It also stored a
+    length larger than the capacity, so Length() reported 300 for a 256-byte
+    buffer. Truncating is the established contract for a frozen string (abi.inc:
+    "capped at LOCAL_STR_CAP, the ShortString norm"), and it is what riscv32 and
+    xtensa already do via PXXCStrToFrozen. Clamped BEFORE `mov rax, rcx` so the
+    stored LENGTH and the copy COUNT are fixed by one clamp and cannot disagree.
+    bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp }
+  EmitB($48); EmitB($81); EmitB($F9); EmitI32(FROZEN_CSTR_CAP);  { cmp rcx, cap }
+  EmitB($76); capPatch := CodeLen; EmitB(0);                     { jbe fits }
+  EmitB($48); EmitB($C7); EmitB($C1); EmitI32(FROZEN_CSTR_CAP);  { mov rcx, cap }
+  Code[capPatch] := Byte(CodeLen - (capPatch + 1));
   EmitB($48); EmitB($89); EmitB($C8);               { mov rax, rcx }
   EmitStoreStrLen(dstIdx);
   EmitLeaStrDataRdi(dstIdx);
@@ -6783,6 +7130,34 @@ begin
   Result := Integer(h and LongWord(PROC_HASH_SIZE - 1));
 end;
 
+{ The declaration-scope sentinels EVERY frontend depends on and only one used
+  to set. Both mean "no class scope is open", both spell that -1, and both live
+  in BSS -- where the default is 0, which is a VALID UCls index (class 0, TGuid).
+  So a frontend that never ran this read as "we are inside TGuid's body" for the
+  whole compilation.
+
+  That is not hypothetical: it is measured, and it is why a NilPy program that
+  imported two unrelated units in the wrong order silently bound `Text` to a
+  class instead of the RTL file record (SizeOf 8 vs 4128) and still COMPILED.
+  AddClassLikeType registers a class-like type as a NESTED type of
+  ParsingClassBodyCi whenever it is >= 0, so every top-level class in every
+  imported unit became a nested type of TGuid; ParseTypeKind consults
+  FindNestedType BEFORE IsClassType, and class-scope lookup is deliberately not
+  visibility-gated -- correctly, which is why nothing in the visibility layer
+  looked broken while the wrong type came out.
+
+  Called before the frontend dispatch so it covers every driver, exactly as
+  EmitTlsMainInstall is called once rather than per driver for the same reason
+  (bug-a-threadsafe-segfaults-on-every-nilpy-program). ParseProgram also calls
+  it, so the Pascal per-parse reset keeps its old meaning without a second copy
+  of the literals -- the copy is what stays broken.
+  bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit }
+procedure ResetDeclScopeSentinels;
+begin
+  ParsingClassConstCi := -1;
+  ParsingClassBodyCi  := -1;
+end;
+
 procedure ProcHashReset;
 var i: Integer;
 begin
@@ -6794,7 +7169,10 @@ begin
 end;
 
 { Append idx to its bucket's FIFO chain. Called once per RegisterProc; proc
-  names are immutable after registration, so the index never goes stale. }
+  names are immutable after registration, so the index never goes stale.
+
+  "Never goes stale" was also read as "and so rollback can never be needed",
+  which is a different claim and is false — see ProcRollbackTo below. }
 procedure ProcHashInsert(idx: Integer);
 var b: Integer;
 begin
@@ -6805,6 +7183,63 @@ begin
   else
     ProcHashNext[ProcHashTail[b]] := idx;
   ProcHashTail[b] := idx;
+end;
+
+{ Truncate the proc table to newCount, unlinking the removed range from the
+  bucket chains. The counterpart of SymRollbackTo, and what lets a SPECULATIVE
+  parse back out: feature-a-error-does-not-halt-so-a-parse-can-be-speculative.
+
+  It is not a mirror image of SymRollbackTo, because the two hashes are built
+  the opposite way round and that is load-bearing in both:
+
+    SymHashInsert  is LIFO (newest-first) -- so the highest live index is
+                   always its bucket's HEAD, and each pop is O(1).
+    ProcHashInsert is FIFO (append at tail) -- because ProcChainHead's contract
+                   is REGISTRATION ORDER, which overload resolution walks. So
+                   the chain cannot be flipped to LIFO to make this cheaper.
+
+  Descending order gives the same invariant the other way up: indices are handed
+  out in increasing order and appended in that order, so within a bucket the
+  chain is sorted by index. Walking i downwards, every index above i is already
+  gone, so i is its bucket's current TAIL -- and unlinking a tail needs its
+  predecessor, which is the one walk this does.
+
+  NO analogue of SymRollbackTo's typed-const exception, and the asymmetry is
+  worth stating rather than rediscovering: that rule exists because a symbol's
+  INDEX outlives its scope (the -O2 inliner verifies copied bodies after
+  SymCount has come back down). RegisterProc reinitialises every field of a
+  slot it hands out, and a rolled-back proc by definition has no emitted call
+  referring to it, so a reclaimed proc index carries nothing forward. If that
+  ever stops being true, this is where the exception goes.
+
+  Callers must roll back what they queued as well as what they registered --
+  PyPendLam* for a lambda, which is a plain stack with its own mark. }
+procedure ProcRollbackTo(newCount: Integer);
+var i, b, p: Integer;
+begin
+  for i := ProcCount - 1 downto newCount do
+  begin
+    b := NameFoldHash(Procs[i].Name);
+    if ProcHashHead[b] = i then
+    begin
+      { i is the whole chain: it is the tail by the invariant above, and the
+        head by this test. }
+      ProcHashHead[b] := -1;
+      ProcHashTail[b] := -1;
+    end
+    else
+    begin
+      p := ProcHashHead[b];
+      while (p >= 0) and (ProcHashNext[p] <> i) do p := ProcHashNext[p];
+      if p >= 0 then
+      begin
+        ProcHashNext[p] := -1;
+        ProcHashTail[b] := p;
+      end;
+    end;
+    ProcHashNext[i] := -1;
+  end;
+  ProcCount := newCount;
 end;
 
 { First candidate (registration order) for a name; walk via ProcHashNext.
@@ -7308,7 +7743,27 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if (ProcUnitIdx[i] = CurrentUnitIdx) and (Procs[i].Name = name) then
+    { CaseEqual, not just `=`, for a case-INSENSITIVE routine. Pascal is
+      case-insensitive, so `function Bar; forward;` and its body written
+      `function bar;` are ONE routine — FPC binds them. This compare was exact
+      only, so the body registered a SECOND proc and the forward one stayed
+      bodiless. The failure is far from the cause and depends on how the name is
+      later reached: a direct call says `unresolved forward: Bar`, while
+      `@Bar` in a typed const captures the bodiless entry and dies at LINK with
+      "the address of a routine with no body was taken" — pointing at the
+      address-of, which is not the defect.
+      rtl-generics hits it as `TEquals.&Class` (declared) vs `TEquals.&class`
+      (implemented); the `&` escape is incidental, plain `Bar`/`bar` does it too.
+      The chain already folds case (NameFoldHash), so both spellings were always
+      in this bucket and only this compare rejected them — which is why the
+      guard belongs here and not in the hash.
+      ProcCaseSensitive is what keeps NilPy and C unaffected: their routines set
+      it True, so `foo` and `Foo` stay two routines there, as those languages
+      require. Same pair-shaped test as FindProcArity/FindProcSig — this was the
+      one lookup carrying only the exact half. }
+    if (ProcUnitIdx[i] = CurrentUnitIdx) and
+       ((Procs[i].Name = name) or
+        ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) then
     begin
       if Procs[i].ParamCount = nParams then
       begin
@@ -7576,7 +8031,7 @@ function MatchParamCompatible(i, j: Integer; aTk: TTypeKind): Boolean;
   `not (TypesCompatible(...) or ProcParamUntyped[...])` sites instead is how the
   previous additions went in, and two of them are already spelled slightly
   differently from the others. normalise-dont-special-case.md. }
-var si: Integer;
+var si, pe: Integer;
 begin
   Result := TypesCompatible(Procs[i].Params[j].TypeKind, aTk) or MatchArgNilOk(i, j);
   { ...then NARROW the blanket `tyPointer <- tyClass` rule TypesCompatible grants,
@@ -7606,9 +8061,25 @@ begin
      and (Procs[i].Params[j].TypeKind = tyPointer)
      and (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
   begin
-    si := Procs[i].Params[j].SymIdx;
-    if (si >= 0) and (Syms[si].PtrElemTk <> tyUnknown)
-       and (Syms[si].PtrElemTk <> tyClass) then
+    { Read the DURABLE column, not Syms[Params[j].SymIdx]. The symbol is gone by
+      now -- SymRollbackTo hands a routine's indices back at scope exit -- so the
+      symbol read returned whatever the caller's own scope had since allocated
+      there. Measured: GetPropInfo's `cls` (sym 363, elem tyRecord) read back as
+      the test program's variable `o`, elem tyUnknown, which is the
+      untyped-pointer sentinel, so this guard PERMITTED the class argument and
+      GetPropInfo(AnObject, 'Caption') bound the PClassRTTI arm and segfaulted.
+      bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching }
+    pe := ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j];
+    if PxxDbgEnabled('p.ptrparam') then
+    begin
+      si := Procs[i].Params[j].SymIdx;
+      writeln('PXXDBG p.ptrparam MATCH proc=', Procs[i].Name, ' j=', j,
+              ' durable=', pe, ' sym=', si,
+              ' symPtrElem=', Ord(Syms[si].PtrElemTk),
+              ' symName=', Syms[si].Name, ' symKind=', Ord(Syms[si].Kind),
+              ' symcount=', SymCount);
+    end;
+    if (pe <> Ord(tyUnknown)) and (pe <> Ord(tyClass)) then
       Result := False;
   end;
 end;
@@ -9228,6 +9699,7 @@ begin
   SetLength(InlineLocalTk, n*MAX_INLINE_LOCALS);
   SetLength(DceEdgeHead, n+1);
   SetLength(ProcParamPtrDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamRecId, n*MAX_PROC_PARAMS);  SetLength(ProcParamSetEnumId, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamPtrElemTk, n*MAX_PROC_PARAMS);  SetLength(ProcParamPtrElemRec, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDynDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamIsConst, n*MAX_PROC_PARAMS);  SetLength(ProcParamExplicitByRef, n*MAX_PROC_PARAMS);
   SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
   SetLength(ProcParamHasDefault, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLen, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLo, n*MAX_PROC_PARAMS);
@@ -9298,6 +9770,8 @@ begin
   for i := 0 to MAX_PROC_PARAMS - 1 do
   begin
     ProcParamPtrDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
+    ProcParamPtrElemTk[ProcCount * MAX_PROC_PARAMS + i] := Ord(tyUnknown);
+    ProcParamPtrElemRec[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
     ProcParamIsConst[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamCapRef[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamExplicitByRef[ProcCount * MAX_PROC_PARAMS + i] := False;
@@ -11379,6 +11853,43 @@ end;
 
 { ===== Call emission ===== }
 
+{ Manufacture the two libc imports the --rtl-libc lowering calls.
+
+  No Pascal source declares them, which is what made this look like it needed
+  new ELF machinery. It does not: an import in this compiler IS an ordinary
+  Procs[] entry carrying ProcExternal + ProcLibrary + ProcExtName, and
+  RegisterExternal below then hands out the GOT/PLT slot while the ELF writer
+  emits DT_NEEDED libc.so.6 off ExternalProc[]/ProcLibrary[] with no change of
+  its own. So synthesising an import is manufacturing a proc, not teaching
+  elfwriter a new trick.
+
+  ParamCount stays 0 deliberately: the IR_SYSCALL arm marshals the SysV
+  registers itself rather than routing through the general call path, so no
+  parameter metadata is consulted. Idempotent (-1 = not yet created).
+  feature-port-rtl-over-libc }
+procedure EnsureLibcSyscallProcs;
+var dummyNames: array[0..0] of AnsiString; dummyTypes: array[0..0] of TTypeKind;
+begin
+  if LibcSyscallProcIdx >= 0 then Exit;
+  { NOT a `__pxx_*` name: that prefix is reserved for pxx's own runtime bridge
+    and RegisterExternal below refuses to import it -- correctly, since no
+    library exports those. Only ProcExtName reaches the ELF (elfwriter.inc:128),
+    so the Pascal-level name is free to be anything that does not trip that
+    guard or collide with a user symbol. }
+  LibcSyscallProcIdx := RegisterProc('libc$syscall', True, tyNativeInt, 0,
+                                     dummyNames, dummyTypes);
+  ProcExternal[LibcSyscallProcIdx] := True;
+  ProcCdecl[LibcSyscallProcIdx]    := True;
+  ProcLibrary[LibcSyscallProcIdx]  := InternStr('libc.so.6');
+  ProcExtName[LibcSyscallProcIdx]  := InternStr('syscall');
+  LibcErrnoProcIdx := RegisterProc('libc$errno_location', True, tyPointer, 0,
+                                   dummyNames, dummyTypes);
+  ProcExternal[LibcErrnoProcIdx] := True;
+  ProcCdecl[LibcErrnoProcIdx]    := True;
+  ProcLibrary[LibcErrnoProcIdx]  := InternStr('libc.so.6');
+  ProcExtName[LibcErrnoProcIdx]  := InternStr('__errno_location');
+end;
+
 { Ensure the external procIdx has a GOT slot; return its ExternalProc[] index. }
 function RegisterExternal(procIdx: Integer): Integer;
 var i, extIdx: Integer; enm: AnsiString;
@@ -11482,6 +11993,97 @@ begin
   Inc(DynCallCount);
   EmitI32(0);
   FloatPoolRestore;
+end;
+
+{ --rtl-libc: the ONE out-of-line thunk every syscall site calls, appended after
+  all code is emitted (compiler.pas, just before the ELF writer) and reached by
+  the rel32 call sites EmitSyscall recorded.
+
+  ON ENTRY the RAW convention is already set up by the caller: rax = number,
+  rdi/rsi/rdx/r10/r8/r9 = args 0..5. libc'"'"'s `long syscall(long nr, ...)` takes the
+  number as its FIRST C argument, so the mapping is a SHIFT of every value one
+  slot right into rdi/rsi/rdx/rcx/r8/r9, with the 7th landing on the stack. All
+  61 RTL call sites pass the full 7 (the intrinsic zero-pads), so the stacked
+  argument is always present rather than a special case.
+
+  THE SIX ARE SAVED AND RESTORED, and that is what makes this safe without
+  auditing 43 callers. The real instruction clobbers only rax, rcx and r11 --
+  rdi/rsi/rdx/r10/r8/r9 survive it -- while a C call clobbers every caller-saved
+  register. A caller that sets an argument register once and issues two
+  syscalls, or reads one back afterwards, would break SILENTLY under a
+  non-preserving lowering. Rather than recording "I could not find a caller that
+  depends on it" -- a limit claim nobody re-tests -- the contract is preserved
+  and the dependency is made irrelevant. rax is deliberately NOT saved: it
+  carries the result.
+
+  Registers: r10 parks the old rsp, r11 carries the 7th argument. rax cannot
+  park anything -- SysV requires AL = the number of vector registers used for a
+  variadic callee, so it is zeroed at each call.
+
+  The internal branch is rel32, NOT rel8: with FloatPoolSave/Restore around the
+  two calls the span reaches ~143 bytes, which is precisely the overflow this
+  ticket already tripped once. Using rel32 here is the shape the fix for
+  bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows should take.
+
+  Error convention: raw returns -errno; libc returns -1 and sets errno. Mapping
+  it back here means no RTL error check changes anywhere and program output is
+  byte-identical to the raw build BY CONSTRUCTION. Verified as plain Pascal
+  externals before this was written: a bad-fd write returns -1 with errno 9,
+  and the raw build returns -9.
+  feature-port-rtl-over-libc }
+procedure EmitLibcSyscallThunk;
+var noErr, i: Integer;
+begin
+  if LibcSyscallCallCount = 0 then Exit;
+  LibcSyscallThunkAddr := CodeLen;
+  { save the raw-convention argument registers }
+  EmitB($41); EmitB($51);                                     { push r9  = a5 }
+  EmitB($41); EmitB($50);                                     { push r8  = a4 }
+  EmitB($41); EmitB($52);                                     { push r10 = a3 }
+  EmitB($52);                                                 { push rdx = a2 }
+  EmitB($56);                                                 { push rsi = a1 }
+  EmitB($57);                                                 { push rdi = a0 }
+  { build the C argument list: nr from rax, the rest from the saved copies }
+  EmitB($48); EmitB($89); EmitB($C7);                         { mov rdi, rax    = nr }
+  EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($00); { mov rsi, [rsp]    = a0 }
+  EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8]  = a1 }
+  EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($10); { mov rcx, [rsp+16] = a2 }
+  EmitB($4C); EmitB($8B); EmitB($44); EmitB($24); EmitB($18); { mov r8,  [rsp+24] = a3 }
+  EmitB($4C); EmitB($8B); EmitB($4C); EmitB($24); EmitB($20); { mov r9,  [rsp+32] = a4 }
+  EmitB($4C); EmitB($8B); EmitB($5C); EmitB($24); EmitB($28); { mov r11, [rsp+40] = a5 }
+  { aligned call: r10 parks rsp, r11 is the 7th argument at [rsp] }
+  EmitB($49); EmitB($89); EmitB($E2);                         { mov r10, rsp }
+  EmitB($48); EmitB($83); EmitB($E4); EmitB($F0);             { and rsp, -16 }
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($10);             { sub rsp, 16 }
+  EmitB($4C); EmitB($89); EmitB($54); EmitB($24); EmitB($08); { mov [rsp+8], r10 }
+  EmitB($4C); EmitB($89); EmitB($5C); EmitB($24); EmitB($00); { mov [rsp], r11 }
+  EmitB($31); EmitB($C0);                                     { xor eax, eax }
+  EmitExternalIndirectCall(RegisterExternal(LibcSyscallProcIdx));
+  EmitB($48); EmitB($8B); EmitB($64); EmitB($24); EmitB($08); { mov rsp, [rsp+8] }
+  { -1 means "consult errno"; every other value is already the raw answer }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($FF);             { cmp rax, -1 }
+  EmitB($0F); EmitB($85); noErr := CodeLen; EmitI32(0);       { jne .done (rel32) }
+  EmitB($49); EmitB($89); EmitB($E2);                         { mov r10, rsp }
+  EmitB($48); EmitB($83); EmitB($E4); EmitB($F0);             { and rsp, -16 }
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($10);             { sub rsp, 16 }
+  EmitB($4C); EmitB($89); EmitB($54); EmitB($24); EmitB($08); { mov [rsp+8], r10 }
+  EmitB($31); EmitB($C0);                                     { xor eax, eax }
+  EmitExternalIndirectCall(RegisterExternal(LibcErrnoProcIdx));
+  EmitB($48); EmitB($8B); EmitB($64); EmitB($24); EmitB($08); { mov rsp, [rsp+8] }
+  EmitB($8B); EmitB($00);                                     { mov eax, [rax] = errno }
+  EmitB($48); EmitB($F7); EmitB($D8);                         { neg rax        = -errno }
+  Patch32(noErr, CodeLen - (noErr + 4));                      { .done: }
+  { restore the raw-convention registers, preserving the caller'"'"'s contract }
+  EmitB($5F);                                                 { pop rdi }
+  EmitB($5E);                                                 { pop rsi }
+  EmitB($5A);                                                 { pop rdx }
+  EmitB($41); EmitB($5A);                                     { pop r10 }
+  EmitB($41); EmitB($58);                                     { pop r8 }
+  EmitB($41); EmitB($59);                                     { pop r9 }
+  EmitB($C3);                                                 { ret }
+  for i := 0 to LibcSyscallCallCount - 1 do
+    Patch32(LibcSyscallCallPos[i],
+            LibcSyscallThunkAddr - (LibcSyscallCallPos[i] + 4));
 end;
 
 { Load the resolved address of an external routine into rax. Reuses the dynamic
@@ -11621,6 +12223,109 @@ begin
   Result := FindProc('PXXDivZero');
 end;
 
+function XtensaCallReaches(pc, target: Integer): Boolean;
+var w: Integer;
+begin
+  { The arithmetic EncodeXtensaCall0/8 will apply, MIRRORED rather than
+    approximated, so this predicate and the encoder cannot disagree about a
+    boundary case and send a reachable call down the long path or the reverse. }
+  w := (target - (pc div 4) * 4 - 4) div 4;
+  Result := (w >= -131072) and (w <= 131071);
+end;
+
+{ --- an internal call that CALL0/CALL8 cannot reach --------------------------
+  CALL0/CALL8 encode an 18-bit WORD offset, so a direct call reaches +-512 KiB
+  and no further. That sounds generous and is not: test_overflow_qplus_narrow is
+  758 KiB of code on riscv32, and five test programs became hard COMPILE ERRORS
+  ("call0 displacement -133294 is outside the encodable range") the moment the
+  xtensa syscall table let them reach codegen at all. It is a ceiling on the
+  whole corpus, not a property of unusual programs.
+
+  riscv32 hit the same wall and widened its direct call unconditionally to
+  auipc+jalr (its arm below says so: cross lua, 1.75 MB of code). Xtensa has no
+  auipc, and the obvious substitute -- an absolute target address in a literal --
+  would need a new "address of a code offset" fixup threaded through the ELF
+  writer, which is precisely what
+  bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb declined to build.
+  That ticket's answer transfers here unchanged: CALL0 leaves the address of the
+  instruction AFTER itself in a0, so a call0 to the next 4-aligned offset is a
+  read-PC instruction, and (target - anchor) is a difference of two .text
+  OFFSETS -- a compile-time constant, identical in the linked and the
+  --emit-obj image, needing no relocation in either.
+
+  Only calls that would otherwise not have encoded at all pay for this: ~20
+  bytes and four extra instructions, at a site that was previously a refusal to
+  compile. Everything in reach still emits the same three bytes.
+
+  REGISTERS, and this is the part that is NOT obvious -- the first version of
+  this routine got it wrong and eight record/aggregate programs went red.
+
+  a0: dead at a Call0 call site (a non-leaf has already spilled it, and CALL0
+  clobbers it regardless), but LIVE under windowed, where it is the caller's own
+  return address -- saved and restored there exactly as the entry stub does it.
+
+  The scratch pair CANNOT be the same under both ABIs, because the two ABIs
+  disagree about which registers are dead at a call site:
+
+    Call0     arguments are a2..a7, and `a8` HOLDS THE HIDDEN DESTINATION
+              POINTER across the call for a function returning an aggregate
+              (IR_CALL loads it with `l32i a8, sp, nArgs*4` and expects it to
+              survive). a8 is therefore live, and the scratch is a9/a10.
+    windowed  the outgoing arguments ARE a10..a15, so those are live; a8/a9 are
+              what CALL8 overwrites with the callee's a0/a1 and cannot hold a
+              live caller value. Scratch is a8/a9.
+
+  Verified by forcing EVERY backward call down this path and re-running the
+  whole 129-program differential on both ABIs -- with a8/a9 under Call0 the
+  aggregate-return programs (test_cross_aggregate_return, the record-temp
+  family, test_call_result_member) returned garbage; with a9/a10 the corpus is
+  unchanged. A register that is free "almost everywhere" is exactly the bug this
+  form of call is most likely to have, so it is worth proving rather than
+  arguing. }
+procedure EmitXtensaLongCall(target: Integer);
+var anchorPc, anchorTgt, rTgt, rTmp: Integer;
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    rTgt := reg_xtensa_a8; rTmp := reg_xtensa_a9;
+    xtensa_mov(rTmp, reg_xtensa_a0);             { save the return address }
+  end
+  else
+  begin
+    rTgt := reg_xtensa_a9; rTmp := reg_xtensa_a10;   { a8 is the hidden dest }
+  end;
+  { CALL0 targets must be 4-aligned, so aim at the next 4-aligned offset and
+    pad the gap with bytes the call jumps over. a0 still receives PC+3, which
+    is the anchor the delta is measured from -- not the padded target. }
+  anchorPc := CodeLen + 3;
+  anchorTgt := ((anchorPc + 3) div 4) * 4;
+  xtensa_call0(anchorTgt - CodeLen);
+  while CodeLen < anchorTgt do EmitB(0);
+  xtensa_mov(rTgt, reg_xtensa_a0);               { rTgt := anchor PC }
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_mov(reg_xtensa_a0, rTmp);             { restore it }
+  XtensaEmitLitHeader;
+  EmitI32(target - anchorPc);                    { pure .text-offset delta }
+  xtensa_l32r(rTmp, $FFFF);
+  xtensa_add(rTgt, rTgt, rTmp);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_callx8(rTgt)
+  else
+    xtensa_callx0(rTgt);
+end;
+
+{ A call to an already-emitted RUNTIME HELPER (the exception setjmp/raise
+  entry points) rather than to a proc row. Same reach problem, same answer, but
+  no CallFix entry is involved at all -- the target is final at emit time -- so
+  the choice here is unconditional and needs no note about fixups. }
+procedure EmitXtensaCallToCode(target: Integer);
+begin
+  if XtensaCallReaches(CodeLen, target) then
+    xtensa_call0(target - CodeLen)
+  else
+    EmitXtensaLongCall(target);
+end;
+
 procedure EmitCallProc(procIdx: Integer);
 var extIdx, rvHi, rvLo: Integer;
 begin
@@ -11758,6 +12463,18 @@ begin
   end;
   if TargetArch = TARGET_XTENSA then
   begin
+    if (Procs[procIdx].BodyAddr >= 0) and
+       not XtensaCallReaches(CodeLen, Procs[procIdx].BodyAddr) then
+    begin
+      { Deliberately NOT RecordInternalCall: ApplyCallFixups would Patch24 a
+        3-byte CALLn over the head of this sequence and re-run the very range
+        check that sent us here. CallFix has exactly one other consumer, DceRun,
+        and it exits on `TargetArch <> TARGET_X86_64` (dce.inc) before reading
+        the array -- so no xtensa site is reachable from it. If DCE ever grows
+        an xtensa arm, these sites need their own fixup list before it does. }
+      EmitXtensaLongCall(Procs[procIdx].BodyAddr);
+      Exit;
+    end;
     RecordInternalCall(procIdx);
     if Procs[procIdx].BodyAddr >= 0 then
     begin
@@ -11767,6 +12484,14 @@ begin
         xtensa_call0(Procs[procIdx].BodyAddr - CodeLen);
     end
     else
+      { A FORWARD call still reserves three bytes, so a forward reference more
+        than 512 KiB ahead remains the honest compile error -- the long form
+        cannot be chosen here, because the target address that decides it does
+        not exist yet. Every failure this ticket reported was BACKWARD (all five
+        displacements negative), so this is a strictly narrower hole than the
+        one being closed, and it fails loudly rather than silently. Closing it
+        too means reserving ~20 bytes at every forward call site in every xtensa
+        program, a real cost paid by programs that do not need it. }
       xtensa_nop;           { 3 bytes, same as CALLn -- see the note above }
     Exit;
   end;
@@ -11819,6 +12544,19 @@ begin
       Patch32(CallFix[i].CodePos, $94000000 or (((tgt - CallFix[i].CodePos) div 4) and $03ffffff))
     else if TargetArch = TARGET_XTENSA then
     begin
+      { Name the call before the encoder refuses it. A FORWARD reference is the
+        one shape EmitCallProc cannot widen -- it reserved three bytes before
+        the target existed -- so this is where that hole is felt, and the bare
+        encoder message ("displacement N is outside the encodable range") says
+        nothing about WHICH call or that the direction is what makes it
+        unfixable. bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code }
+      if not XtensaCallReaches(CallFix[i].CodePos, tgt) then
+        Error('target xtensa: the forward call to ' + Procs[procIdx].Name +
+              ' at code offset ' + AIntToStr(CallFix[i].CodePos) +
+              ' cannot reach its body at ' + AIntToStr(tgt) +
+              ' (CALL0/CALL8 reach +-512 KiB). A BACKWARD call this far is '
+              + 'widened automatically; a forward one cannot be, because the '
+              + 'call site was sized before the body existed');
       if XtensaABI = XTENSA_ABI_WINDOWED then
         Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, tgt))
       else

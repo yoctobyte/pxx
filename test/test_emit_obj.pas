@@ -8,6 +8,14 @@ program TestEmitObj;
 
 procedure ext_notify(v: Integer); external;
 
+{ bug-a-emit-obj-ignores-external-name: `name 'sym'` sets the LINK symbol, not
+  the Pascal identifier. The object must ask the linker for
+  `ext_aliased_link` and must NEVER mention `ext_alias_decl`. The Makefile
+  rule asserts BOTH directions on purpose: the pre-fix object compiled
+  cleanly and merely carried the wrong name, so a presence-only check of the
+  alias is satisfied by an object that is still wrong. }
+procedure ext_alias_decl(v: Integer); cdecl; external name 'ext_aliased_link';
+
 var
   g: Integer;
   i: Integer;
@@ -26,5 +34,6 @@ begin
     g := g + 1;
   g := AddUp(9) + g;
   ext_notify(g);
+  ext_alias_decl(g);
   write('done');
 end.

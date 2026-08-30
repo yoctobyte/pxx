@@ -18,6 +18,16 @@ begin if got=want then writeln('ok   ',lbl,' = ',got) else begin writeln('FAIL '
 const UMSTAR = 'b = pop(); a = pop()'#10'n1 = a; n2 = b'#10'p = n1 * n2'#10'lo = p & 0xFFFFFFFFFFFFFFFF'#10'hi = (p >> 64) & 0xFFFFFFFFFFFFFFFF'#10'if lo >= 0x8000000000000000: lo -= 0x10000000000000000'#10'if hi >= 0x8000000000000000: hi -= 0x10000000000000000'#10'push(lo); push(hi)';
 begin
   fails:=0; vm:=TVM.Create; g:=TPyDict.Create; PVRec(@vmv)^.VType:=7; PVRec(@vmv)^.Payload:=Int64(Pointer(vm)); g.store('vm',vmv);
+  { exec()'s host call takes its receiver from the BOUND METHOD the callee
+    resolves to -- `env = {"push": b.push}` -- not from a global named `vm`.
+    That was uforth's own variable name leaking into the general contract and
+    ff439149e removed it; these tests were written against the old rule and
+    never updated, because nothing wired them into a build rule and so nothing
+    ran them. `vm` is still stored: the scripts below also reach it by
+    ATTRIBUTE (`vm.push(...)`), which is an ordinary global and always was.
+    bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed }
+  g.store('push', pybound_new(nil, Pointer(vm), False));
+  g.store('pop', pybound_new(nil, Pointer(vm), False));
   { UM* : unsigned 64x64->128. Test 2^63 * 2 = 2^64 -> lo=0, hi=1 }
   vm.Top:=0; InPush(-9223372036854775808); InPush(2);  { a=2^63(as signed MIN), b=2 }
   Run(UMSTAR); Chk('signedMIN*2 hi', OutPop, -1); Chk('signedMIN*2 lo', OutPop, 0);

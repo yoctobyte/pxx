@@ -77,3 +77,64 @@ already exposes before adding a TLS mechanism.
 - 2026-07-20 — Filed from Track E while building the PoW demo. Numbers above are
   from that demo on an 8-worker x86-64 host; the demo is kept as the standing
   reproducer (`--hash sha256` vs the default `--hash fast`).
+
+---
+
+## 2026-08-29 — a SECOND, independent claim about this allocator: it is 2-3x slower than FPC's with ONE thread
+
+Banked from [[feature-opt-bulk-copy-is-byte-at-a-time]], where it turned up as
+the residue after the copy loops were fixed. **This ticket is written entirely
+around threaded scaling; the measurement below has no threads in it at all.**
+
+3,000,000 iterations of `b := nil; SetLength(b, 64)` — allocate 256 bytes, zero
+it, free the previous block. No copy, no contention, one thread:
+
+| | time | |
+| --- | --- | --- |
+| FPC 3.2.2 | 0.28-0.29 s | |
+| pxx | 0.70-0.87 s | **2.4x - 3.1x slower** |
+
+Both sides alternated in one window, best of three, twice — **binary
+`272e95c5ec9c`** (and `061099b514c0` for the first window). The spread is box
+contention, not measurement disagreement; the ratio held across both windows.
+
+### Why it matters here rather than in its own ticket
+
+Two different claims about one component, and this ticket held only one of them:
+
+| | workload | claim |
+| --- | --- | --- |
+| the original filing | 8 workers, sha256 with AnsiString buffers | **3.3x SLOWER than serial** — lock contention |
+| this addition | 1 worker, SetLength churn | **2.4-3.1x slower than FPC** — no lock contention possible |
+
+A per-thread free-list cache (direction 1) addresses the first and does nothing
+for the second, because with one thread the global spinlock is uncontended and
+`__pxxatomic_xchg` on an uncontended line is cheap. So **the acceptance
+criterion "No regression on single-threaded allocation throughput" is treating
+the single-threaded path as a constraint when it is also a defect.** Whoever
+takes this should decide deliberately whether they are fixing one problem or
+two; fixing only the contention leaves a 2-3x sitting under every allocating
+program on every target, threaded or not.
+
+### Where it was found, and why the finding is bigger than the number
+
+`Copy(arr)` on a 64-element array is 3.6x slower than FPC's at HEAD. After
+removing every byte loop on that path, **77% of the remaining time is this
+allocator** — 0.70 s of pxx's 0.91 s is allocate/zero/free churn, and the copy
+itself is ~0.21 s against FPC's ~0. The copy was never the main term once the
+block primitives landed; it just looked like it because nobody re-measured.
+
+### Every figure above is stamped, deliberately
+
+This ticket already carries the rule and learned it the hard way — the `-O2`
+promotion recorded here is worth **1.04x, not the 1.29x** originally quoted,
+because the baseline stopped existing. The same thing happened to
+`feature-opt-bulk-copy-is-byte-at-a-time`: its **23x became 3.6x** while the
+ticket sat in the backlog at prio 65 advertising the old number, and the work
+that closed the gap had landed weeks earlier.
+
+**A benchmark number in a ticket is a measurement with an unstated `as-of`, and
+the unstated part is what rots.** So: the numbers in this section are as of
+binary `272e95c5ec9c` / `061099b514c0`, and the 3.5x / 3.3x figures at the top of
+this ticket are **as of 2026-07-20 and unverified since** — rebuild their
+baseline before quoting them, including in the acceptance criteria.

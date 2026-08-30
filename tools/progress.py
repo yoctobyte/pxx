@@ -30,6 +30,15 @@ from collections import Counter, defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path
 
+# Inline-markdown patterns for the BOARD.html render, hoisted out of inline().
+# See the note at their use site: same semantics, ~30% off a full render.
+_RX_WIKI = re.compile(r"\[\[([A-Za-z0-9_-]+)\]\]")
+_RX_CODE = re.compile(r"`([^`]+)`")
+_RX_STRONG = re.compile(r"\*\*([^*]+)\*\*")
+_RX_EM = re.compile(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])")
+_RX_DEL = re.compile(r"~~([^~]+)~~")
+_RX_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)]+)\)")
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PROG = ROOT / "devdocs" / "progress"
@@ -95,9 +104,45 @@ PENDING_COMMIT = "PENDING-COMMIT"
 # placeholder does so mid-line, inside backticks or a table cell — and this
 # bug's own ticket does exactly that, so an unanchored pattern reports the
 # ticket about the bug as an instance of the bug.
+#
+# THIRD SPELLING, 2026-08-29: `resolved: PENDING-COMMIT`. Seven tickets in
+# done/ carried it and BOTH tools were blind — check reported nothing and sync
+# filled nothing, so the tickets read as fully recorded while citing no commit
+# at all. The previous fix taught the two tools to agree with each other; it did
+# not stop a third key appearing, because it enumerated key names instead of
+# describing the shape.
+#
+# So match ANY frontmatter key rather than a list of them. The thing that makes
+# this a citation is `<key>: PENDING-COMMIT` at line start, not which key it is
+# — `normalise-dont-special-case.md`, and the reason a fourth spelling would
+# have been invisible too. Still anchored to LINE START, which is what keeps
+# prose that QUOTES the placeholder (mid-line, in backticks or a table cell)
+# from counting as owing one; this bug's own tickets do exactly that.
+# FOURTH SPELLING, same day: a Log line ENDING in the placeholder with no
+# `commit` keyword before it — `- 2026-08-29 — resolved with the root-cause
+# sibling. PENDING-COMMIT`. Two Track A tickets carried it, invisible to both
+# tools. So the Log arm matches a list item whose PENDING-COMMIT is unbackticked
+# and at end of line, which is what a citation looks like; a bullet QUOTING the
+# placeholder does so inside backticks, mid-sentence, and still does not count.
 PENDING_RE = re.compile(
-    r"^(?:commit:[ \t]+" + PENDING_COMMIT
-    + r"|-[ \t].*\bcommit[ \t]+" + PENDING_COMMIT + r")", re.M)
+    r"^(?:[A-Za-z_][A-Za-z0-9_-]*:[ \t]+" + PENDING_COMMIT
+    + r"|-[ \t][^`\n]*(?<!`)" + PENDING_COMMIT + r"[.\s]*$)", re.M)
+
+
+def fill_pending(text: str, sha: str) -> str:
+    """Replace every unfilled citation in `text` with `sha`.
+
+    THE counterpart of PENDING_RE, and deliberately in the same file. The
+    detection side has now grown four spellings; the FILL side lived in
+    sync.sh as a pair of sed literals covering two of them. Widening detection
+    alone is how `check` reported 17 forever while sync filled nothing
+    (bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two) —
+    the previous fix gave the two tools one DEFINITION and left them two
+    IMPLEMENTATIONS, so the same drift was still available. This is the
+    implementation, singular.
+    """
+    return PENDING_RE.sub(
+        lambda m: m.group(0).replace(PENDING_COMMIT, sha), text)
 # Buckets where a citation is OWED. A placeholder in backlog/ or working/ is
 # normal — the ticket has not landed yet, and there is no commit to cite.
 RESOLVED_BUCKETS = ("done", "decided", "done-followup")
@@ -179,6 +224,26 @@ def strip_quotes(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
         return value[1:-1]
     return value
+
+
+# An explicit "do not claim me" marker in a ticket body. Deliberately narrow:
+# two spellings, both of which an author writes on purpose.
+_NODISPATCH_RE = re.compile(r"NOT DISPATCHABLE|do not claim", re.I)
+
+# twatch auto-files a regression stub with a `track:` GUESSED from the test
+# source path, and says so -- in the BODY. The ranker, `next`, and the sole-A
+# guard all read FRONTMATTER, where a guess is indistinguishable from a
+# declaration. That is the exact shape meta-track-w-collision-windows-vs-website
+# describes, and it is not theoretical: on 2026-08-29 an ascii-cache regression
+# whose defect was in ir_codegen.inc/defs.inc (Track A) carried `track: N`,
+# guessed from its `.npy` test. Two agents were dispatched onto it at once and
+# the sole-A guard -- which keys off that field -- never fired.
+#
+# NOT a reason to drop the guess. twatch's own comment records why it exists:
+# four stubs needed the same hand edit on 2026-08-16 alone, and "a wrong lane a
+# triager can see beats no lane at all". The defect is that the guess is
+# invisible to tools, so this makes it visible without changing it.
+_GUESSED_TRACK_RE = re.compile(r"Track guessed as \*{0,2}([A-Z+]+)")
 
 
 def normalize_track(value: str) -> str:
@@ -300,6 +365,74 @@ class Ticket:
             m = re.search(r"^#\s+(.+)$", self.text, re.MULTILINE)
             s = m.group(1).strip() if m else ""
         return s.replace("|", r"\|")
+
+    @property
+    def not_dispatchable(self) -> bool:
+        """True when the ticket says IN ITS OWN TEXT that it must not be claimed.
+
+        Keyed on an explicit human marker, never on `owner:` -- measured
+        2026-08-29: 16 of 332 ranked tickets carry an owner and most are RETIRED
+        session names (`claude-A`, `agent-AN`, `fable-a-n`) on perfectly
+        dispatchable backlog items. Suppressing on `owner` would have hidden ~14
+        real tickets to catch one bad dispatch. The marker matches 4 tickets, all
+        of which mean it.
+
+        Why it is needed at all: `unfinished/` conflates two states -- "parked,
+        re-claim it" and "held right now by another agent's live checkout" --
+        and only the second must not be dispatched. `feature-target-wasm` opens
+        with "NOT DISPATCHABLE ... Do not claim" and `next` was printing a
+        paste-ready claim command for it (found by frankB, 2026-08-29).
+        """
+        return bool(_NODISPATCH_RE.search(self.text))
+
+    @property
+    def is_idea(self) -> bool:
+        """A brainstorm PARENT, not a unit of work.
+
+        `next` prints a paste-ready `claim` line, so offering one of these is an
+        invitation to scope inflation: `idea-c-realworld-test-targets` [p60] is
+        the ranked head of Track C, its own status line says "not scheduled --
+        user prefers moving elsewhere next", and its remaining candidates are
+        DOOM, micropython and p2c -- each a multi-session campaign. Its concrete
+        items already spun out into their own tickets. It presented as the head
+        to every agent dispatched onto C (found by frankC, 2026-08-29, which
+        skipped it rather than claiming it).
+
+        This is rule 7 in tool form: a ranked queue says a ticket is UNBLOCKED,
+        not that it has work left in it, and `ready`/`next` cannot tell those
+        apart. Lowering the prio would have been the wrong fix -- the priority
+        is honest, it is the TYPE that is wrong for dispatch. So they stay
+        ranked and visible in `ready`, annotated, and only `next` declines to
+        hand one over. Measured: 5 such tickets across the ranked buckets.
+        """
+        return (self.slug.startswith("idea-")
+                or self.fm.get("type", "").strip().strip('"').lower() == "idea")
+
+    @property
+    def guessed_track(self) -> str:
+        """The lane letter twatch GUESSED, when that guess is still standing.
+
+        Returns "" when the ticket was not auto-filed, or when a human has
+        since corrected it. The discriminator is that the guessed letter is
+        written into the note, so it can be compared against frontmatter: if
+        they differ, somebody re-laned it on purpose and the note is a stale
+        record of how the ticket started, not a live warning. Measured over the
+        six live stubs carrying the note -- five still match their guess, and
+        the sixth (crtl-reachability-3, retracked C->B by frankC an hour
+        earlier) is correctly excluded. Zero false positives.
+
+        Of the five that DO match, at least two are wrong right now:
+        regression-fpc-bootstrap-compiler-2 is guessed P and is a Track R
+        duplicate forward, and the reactor-exhaustion stub is guessed P from a
+        threads test whose subject is the scheduler. So this is not a
+        hypothetical annotation -- the guess is wrong roughly as often as it is
+        right, which is precisely why it must not read as a declaration.
+        """
+        m = _GUESSED_TRACK_RE.search(self.text)
+        if not m:
+            return ""
+        guessed = normalize_track(m.group(1))
+        return guessed if guessed == self.track else ""
 
     @property
     def owner(self) -> str:
@@ -585,14 +718,34 @@ class Board:
         self.tickets: list[Ticket] = []
         self.by_slug: dict[str, Ticket] = {}
         self.by_status: dict[str, list[Ticket]] = {st: [] for st in STATUSES}
+        self.mojibake: list[Path] = []
         self.load()
 
     def load(self) -> None:
+        # errors="replace", NOT strict. One ticket carrying a stray non-UTF-8
+        # byte used to raise UnicodeDecodeError out of here and take down
+        # `ready`, `next`, `check` and `board-md` for EVERY lane at once -- and
+        # the traceback named the codec and a byte offset, never the file, so
+        # the blast radius was the whole fleet and the diagnosis was a manual
+        # bisect. Measured 2026-08-30: a bug-a-hosted-xtensa ticket pasted the
+        # diverging program's RAW OUTPUT into a markdown table, which is exactly
+        # the evidence such a ticket should carry.
+        #
+        # A ticket is prose plus evidence, and evidence arrives as bytes from a
+        # failing program -- so this will happen again, and the board must
+        # degrade to one damaged cell rather than fail closed. The substitution
+        # is not silent: the paths are collected and `check` reports them, so
+        # the ticket still gets repaired, it just no longer blocks anyone first.
         for st in STATUSES:
             for path in sorted((PROG / st).glob("*.md")):
                 if path.name in {"README.md", "BOARD.md"}:
                     continue
-                text = path.read_text(encoding="utf-8")
+                raw = path.read_bytes()
+                try:
+                    text = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    text = raw.decode("utf-8", errors="replace")
+                    self.mojibake.append(path)
                 fm, fm_blockers = parse_frontmatter(text)
                 t = Ticket(path, st, slug_from_path(path), text, fm, fm_blockers)
                 self.tickets.append(t)
@@ -698,6 +851,14 @@ class Board:
             # unfinished/ ranks, but say so: it is re-claim work, not new work.
             if t.status == "unfinished":
                 extra += " [parked — re-claim, do not duplicate]"
+            if t.not_dispatchable:
+                extra += " [!! DO NOT CLAIM — the ticket says so; read it]"
+            if t.is_idea:
+                extra += (" [idea — a brainstorm parent, not a unit of work; "
+                          "spin out a concrete ticket instead of claiming it]")
+            if t.guessed_track:
+                extra += (" [track GUESSED from the test path — the defect may "
+                          "be in another lane; verify before claiming]")
             lines.append(f"  [{tag}p{eff[t.slug]:>3}] [{t.track}] {t.slug}{extra}")
         return "\n".join(lines) + "\n"
 
@@ -705,6 +866,11 @@ class Board:
         """The single top-of-queue ticket to grab — the 'do tickets at will'
         entry point. Prints the winner plus why it's on top."""
         rt = self.ready_tickets(track_filter)
+        # Drop tickets that declare themselves unclaimable. `next` prints a
+        # paste-ready `claim` line, so offering one of these is an invitation;
+        # `ready` still lists them (flagged) because seeing them is useful.
+        skipped = [t for t in rt if t.not_dispatchable or t.is_idea]
+        rt = [t for t in rt if not (t.not_dispatchable or t.is_idea)]
         if not rt:
             scope = f" for Track {track_filter}" if track_filter else ""
             return f"no ready ticket{scope} (all blocked or none in urgent/backlog/unfinished)\n"
@@ -728,6 +894,18 @@ class Board:
             f"  {t.path.relative_to(ROOT)}",
             f"  claim: tools/progress.sh claim {t.slug} <your-agent-id>",
         ]
+        if skipped:
+            lines.append(
+                f"  (skipped {len(skipped)} higher-ranked ticket(s) — "
+                f"do-not-claim or brainstorm-parent: "
+                f"{', '.join(t.slug for t in skipped)})")
+        if t.guessed_track:
+            lines.append(
+                f"  NOTE: this ticket's track was GUESSED from its test source "
+                f"path, not declared. The defect may be in another lane — a "
+                f"regression's test and its cause are routinely in different "
+                f"ones. Verify the lane before you claim it, and re-lane it if "
+                f"the guess is wrong.")
         return "\n".join(lines) + "\n"
 
     def cmd_autorate(self, write: bool = False, track_filter: str = "") -> str:
@@ -960,12 +1138,20 @@ class Board:
                 if sl in slugs:
                     return f'<a href="#t-{sl}">{sl}</a>'
                 return f"<em>{sl}</em>"
-            x = re.sub(r"\[\[([A-Za-z0-9_-]+)\]\]", wiki, x)
-            x = re.sub(r"`([^`]+)`", r"<code>\1</code>", x)
-            x = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", x)
-            x = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", x)
-            x = re.sub(r"~~([^~]+)~~", r"<del>\1</del>", x)
-            x = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2">\1</a>', x)
+            # Patterns are module-level constants (_RX_*), NOT literals passed to
+            # re.sub on every call. They are identical either way -- re.sub caches
+            # compiled patterns -- but the cache is a dict keyed on the pattern
+            # STRING, so a literal here pays a hash of the pattern text per call
+            # per line. Measured over a full BOARD.html render: ~1.9M lookups,
+            # 18.66s -> 12.99s, output byte-identical. The render is on the path
+            # of every ticket move in every lane, so this is the hottest cheap
+            # win in the tool. (pxx-a5, chore-t-board-html-render-is-13s-...)
+            x = _RX_WIKI.sub(wiki, x)
+            x = _RX_CODE.sub(r"<code>\1</code>", x)
+            x = _RX_STRONG.sub(r"<strong>\1</strong>", x)
+            x = _RX_EM.sub(r"<em>\1</em>", x)
+            x = _RX_DEL.sub(r"<del>\1</del>", x)
+            x = _RX_LINK.sub(r'<a href="\2">\1</a>', x)
             # bare ticket slugs in prose become links too (cheap nicety)
             return x
 
@@ -1190,6 +1376,18 @@ pre code{background:none;padding:0}
         exists = self.by_slug
         indeg = {s: 0 for s in exists}
         dependents: dict[str, list[str]] = defaultdict(list)
+
+        # Load() no longer dies on a non-UTF-8 ticket, so the damage has to be
+        # reported somewhere or the replacement really would be silent. WARNING,
+        # not a problem: the board is usable and the ticket is readable; what is
+        # lost is the exact bytes of some pasted evidence, which is worth
+        # repairing at leisure and never worth blocking a dispatch over.
+        for path in self.mojibake:
+            lines.append(
+                f"ENCODING: {path.name} is not valid UTF-8 — undecodable bytes "
+                f"shown as U+FFFD. Re-paste any raw program output as \\xNN "
+                f"escapes so the evidence survives.")
+            warning_count += 1
 
         for t in self.tickets:
             for b in t.blockers:
@@ -1436,6 +1634,515 @@ pre code{background:none;padding:0}
                         f"{', '.join(rest)}"
                     )
 
+        # THE PROSE HALF, for the PARKED population only.
+        #
+        # The aperture note below used to say the prose half "cannot be"
+        # checked, reasoning that a body-grep for slug mentions would be
+        # "mostly noise". That prediction is correct for the scan it imagined
+        # and wrong for this one, and the difference is the SCOPE, not the
+        # cleverness. Measured 2026-08-30, after frankwasm found a ticket
+        # parked twelve days on four blockers that had all resolved the day
+        # the park was written:
+        #
+        #   all 376 live tickets, slug-mention only ......... ~50, mostly noise
+        #   all 376 live, mention near a condition word ..... ~35, still noise
+        #   the 35 PARKED tickets, mention near a condition ... 10  <- signal
+        #
+        # A live ticket citing a done ticket is NORMAL -- that is how the
+        # record works, and it is what floods the wide scan. A PARKED ticket
+        # citing a done ticket is a candidate stale resume condition, because
+        # parking is the only state where "X must land first" is load-bearing.
+        # The signal was never "names a resolved slug"; it is "names a
+        # resolved slug AND is not moving".
+        #
+        # Frontmatter edges are excluded: the scan above owns those, and
+        # reporting both would double-count the tickets that do it correctly.
+        PROSE_EDGE_PHRASE = re.compile(
+            r"\b(?:blocked\s+(?:on|by)|gated\s+on|waiting\s+on|depends\s+on)\b", re.I)
+        PARK_COND = re.compile(
+            r"blocked on|blocked by|waiting on|wait for|resume|depends on|"
+            r"prerequisite|gated on|once .{0,40}land|after .{0,40}land|park",
+            re.I)
+        SLUGISH = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+){3,}")
+        for t in self.tickets:
+            # working/ IS SCANNED -- added 2026-08-30, and it is the gap that
+            # mattered. frankwasm: "My ticket was in working/, outside both
+            # apertures, which is precisely why nothing caught it for two
+            # days." An active lock is the LONGEST-lived place a stale prose
+            # dependency can sit, because the holder wrote the park and has
+            # stopped re-reading it. Reported as HELD, never dispatched.
+            # TWO CHECKS, TWO APERTURES -- separated 2026-08-30 after frankD
+            # measured the OUTER one. DANGLING-LINK was written inside the
+            # STALE-PARK family and inherited its folder filter, even though
+            # its own defect has nothing to do with parks: the scan INSIDE the
+            # loop was deliberately widened to read the whole body, and the
+            # loop's own aperture came along unexamined. The fixed check then
+            # reported 0 findings while FOUR live dangles sat in backlog/,
+            # including two of the specifying ticket's own worked examples.
+            #
+            # A dangle is a live obstacle wherever a ticket is still actionable
+            # -- ranked folders included. It is history in done/ and rejected/,
+            # where rewriting a finished record falsifies it, so those stay out.
+            # Negative control, frankD's and it is the right one: a link that
+            # dangles in backlog/ MUST produce a finding. Tonight it did not,
+            # four times.
+            if t.status in ("done", "rejected"):
+                continue
+            # A DELIBERATE DANGLE IS A REAL OUTCOME. Mirrors the DANGLING SHAS
+            # BY DESIGN escape: bug-pascal-subclass-inherited-members is cited
+            # four times by feature-demo-songformatter-pxx-target, the nearest
+            # candidate covers ONE of the four arms the prose names, and
+            # re-pointing it would silently mark the other three resolved. The
+            # right move there is to keep the dangle and write down what is and
+            # is not known -- so the check has to let a ticket say that, or it
+            # fires forever on the one case that was handled correctly.
+            park_scope = t.status in ("unfinished", "blocked", "working")
+            by_design = "DANGLING LINKS BY DESIGN" in t.text.upper()
+            # EXCLUDE TICKETS THAT ARE ACTUALLY BEING WORKED. Measured by
+            # frankwasm 2026-08-30, triaging the scan's first eleven: the two
+            # loudest hits -- naming SIX and FOUR resolved slugs -- were both
+            # `status: working` with an `owner:`, sitting in unfinished/ while
+            # a lane actively edited them. The slugs they cite are that lane's
+            # OWN landed fixes, cited by the notes recording them.
+            #
+            # So the scan's signal strength was inverted: citation density
+            # tracks how much work a lane has LANDED, which means the loudest
+            # findings systematically point at the busiest lane and at files
+            # nobody else may open. Two of eleven, and they were the two I told
+            # an agent to take first -- which nearly put two agents in one file.
+            # HELD tickets are REPORTED, not skipped -- corrected 2026-08-30.
+            #
+            # The exclusion below was added because the scan's two loudest hits
+            # were tickets a lane was actively editing, and dispatching a second
+            # agent at them nearly put two agents in one file. That reason is
+            # about DISPATCH. Applied to REPORTING it was wrong, and frankwasm
+            # produced the counter-example from inside its own lane: its ticket
+            # sat in working/ for two days accumulating exactly this defect --
+            # a dependency stated in prose, in a plan file, on a side branch --
+            # and nothing caught it, because working/ is outside both apertures.
+            #
+            # A long-lived lock is not evidence a ticket is healthy. It is the
+            # place a stale prose dependency hides LONGEST, because the holder
+            # has stopped re-reading the park they wrote.
+            #
+            # So: still surfaced, under a different verb. Tell the holder; do
+            # not send anyone else.
+            held = (t.status == "working"
+                    or t.fm.get("status", "").strip() == "working"
+                    or bool(t.fm.get("owner", "").strip()))
+            rows = t.text.splitlines()
+            hits: set[str] = set()
+            dangling: set[str] = set()
+            # THE PARK'S CONDITION CAN BE REWRITTEN WHILE IT IS PARKED, and
+            # then counting resolved blockers answers a question the ticket
+            # stopped asking. Found by frankD 2026-08-30 on
+            # feature-pascal-corpus-expansion [P p75]: seven resolved slugs in
+            # the prose, all real, all closed -- and a `Status:` line dated
+            # LATER naming a different, still-open blocker. The seven and the
+            # live block were DISJOINT SETS.
+            #
+            # frankD's rule, and it is what makes this mechanical: a park's
+            # condition needs a date as much as a park does, and the Status
+            # line is the only line that carries one -- which is exactly why it
+            # was the only line in that file still right. So when a dated
+            # Status line names a slug that is STILL OPEN, that is the live
+            # condition and every prose hit is history. Report it as such
+            # rather than as "the resume condition may already be met", which
+            # is what this check said for weeks about a ticket whose condition
+            # had been replaced.
+            #
+            # This also bounds the permanent-false-positive frankD flagged: on
+            # a file whose convention is append-never-edit, prose naming
+            # resolved tickets inside dated snapshots is the COMMON case, not
+            # the rare one, and a check that fires forever trains people to
+            # skim past the one time it is right.
+            # A WIKILINK MAY LEGITIMATELY POINT AT A DOC, NOT A TICKET.
+            # Calibration 2026-08-30 turned up 8 hits, of which one --
+            # [[ir-as-substrate]] in feature-port-freebsd-native -- resolves to
+            # devdocs/dev/ir-as-substrate.md, a real page and a correct
+            # reference. Flagging it would be the check crying wolf on the
+            # repo's own cross-referencing convention, and a check that fires
+            # on correct usage is the one people learn to scroll past. So a
+            # name is dangling only when it is NEITHER a ticket NOR a file
+            # anywhere under devdocs/. The remaining 7 resolve to nothing at
+            # all -- there are ZERO project_* files in the tree, measured.
+            if not hasattr(self, "_doc_basenames"):
+                names = set()
+                try:
+                    for dp, _dn, fns in os.walk(ROOT / "devdocs"):
+                        for fn in fns:
+                            if fn.endswith(".md"):
+                                names.add(fn[:-3])
+                            names.add(fn)
+                except Exception:
+                    pass
+                self._doc_basenames = names
+            live_block = ""
+            for line in rows:
+                if not re.match(r"\s*[-*]?\s*\**Status\**:?", line, re.I):
+                    continue
+                if not PARK_COND.search(line):
+                    continue
+                for m in SLUGISH.finditer(line):
+                    cand = m.group(0)
+                    if cand == t.slug:
+                        continue
+                    o = self.by_slug.get(cand)
+                    if o is not None and o.status not in closed_st:
+                        live_block = cand
+                        break
+                if live_block:
+                    break
+            # SCANNED OVER THE WHOLE BODY, not just near a blocking phrase.
+            # A resolved-slug mention is only signal next to a condition word
+            # -- that bound is what took the wide scan from ~50 noisy hits to
+            # 10 real ones. A DANGLING link needs no such bound: it is wrong
+            # wherever it sits, because it resolves to nothing anywhere, and
+            # the counters that misread it do not check for a condition word
+            # either. Different signal, different aperture.
+            # THE VOCABULARY IS DERIVED FROM THE BOARD, NOT HAND-LISTED.
+            # A hand-written prefix list misses whatever was added since it was
+            # written -- frankD, 2026-08-30: a list drafted that day would have
+            # omitted `refactor-` (37 tickets), which owns one of the eleven
+            # real findings. So the set of legitimate ticket prefixes is read
+            # off the live slugs each run and cannot go stale.
+            #
+            # WHY A PREFIX AT ALL, AND NOT JUST "not a known slug": because
+            # `[[...]]` is used for MORE than tickets. `project_*` and
+            # `feedback_*` are the AGENT-MEMORY namespaces -- 270 references,
+            # 129 distinct names, and no such file has ever existed in this
+            # repo, because they were never meant to. feature-dynamic-compiler-
+            # tables:149 says it in words: "see [[project_dynamic_compiler_
+            # arrays_pattern.md]] IN AGENT MEMORY". Snake_case, where every
+            # ticket slug on this board is kebab-case.
+            #
+            # This exclusion was SPECIFIED before the check was written, in the
+            # ticket the check implements -- chore-t-a-wikilink-to-a-ticket-
+            # that-does-not-exist-is-never-detected [T p30], whose fix sketch
+            # says "ignoring the project_* / feedback_* memory namespaces AND
+            # devdocs filenames", and which records that its own first count
+            # was 252 for exactly this reason. The first shipped version
+            # implemented the devdocs half and shipped past the other, having
+            # calibrated only against the namespace its author thought of.
+            # Grep for the incumbent applies to a SPEC as much as to a tool.
+            if not hasattr(self, "_ticket_prefixes"):
+                pfx = set()
+                for known in self.by_slug:
+                    head = known.split("-", 1)[0]
+                    if head and head.isalpha():
+                        pfx.add(head)
+                self._ticket_prefixes = pfx
+            for j in range(len(rows)):
+                for m in re.finditer(r"\[\[([a-z0-9][a-z0-9_-]{6,})\]\]", rows[j]):
+                    cand = m.group(1)
+                    if (cand != t.slug
+                            and self.by_slug.get(cand) is None
+                            and cand not in self._doc_basenames
+                            and cand.split("-", 1)[0] in self._ticket_prefixes):
+                        dangling.add(cand)
+            if by_design:
+                dangling.clear()
+            for i, line in enumerate(rows if park_scope else []):
+                if not PARK_COND.search(line):
+                    continue
+                for j in range(max(0, i - 2), min(len(rows), i + 3)):
+                    # A DANGLING WIKILINK READS AS AN OPEN DEPENDENCY TO
+                    # ANYTHING THAT COUNTS THEM AND AS A TYPO TO A HUMAN --
+                    # which is why nobody fixes it and every counter is wrong.
+                    # frankD, 2026-08-30: feature-pascal-corpus-fpc-testsuite
+                    # [P p65] showed four not-done links, of which TWO resolved
+                    # to no file at all and one was the umbrella itself. Its
+                    # "four resolved" understated -- it is behind ONE item.
+                    # Only explicit [[...]] links are flagged: the bare-slug
+                    # regex matches too much prose to carry this without noise,
+                    # and a wikilink is unambiguous intent to point at a ticket.
+                    for m in SLUGISH.finditer(rows[j]):
+                        s = m.group(0)
+                        if s == t.slug or s in t.blockers:
+                            continue
+                        o = self.by_slug.get(s)
+                        if o is not None and o.status in closed_st:
+                            hits.add(s)
+            if dangling:
+                warning_count += 1
+                dshown = sorted(dangling)[:3]
+                dmore = f" (+{len(dangling) - 3} more)" if len(dangling) > 3 else ""
+                lines.append(
+                    f"DANGLING-LINK: {t.slug} [{t.track} p{t.prio}] names "
+                    f"{len(dangling)} wiki-link(s) ANYWHERE IN ITS BODY whose "
+                    f"prefix is a live ticket prefix but which resolve to no "
+                    f"ticket ({', '.join(dshown)}{dmore}). A dangling link "
+                    f"reads as an OPEN dependency to anything counting them "
+                    f"and as a typo to a human, so a park can look blocked on "
+                    f"four things and be blocked on one. READ IT BEFORE "
+                    f"CHANGING IT: it may be a RENAME (point it at the new "
+                    f"slug), a ticket that was PLANNED AND NEVER FILED (file "
+                    f"it, or de-link and say so), work ALREADY DELIVERED under "
+                    f"another name (say so -- the link is advertising finished "
+                    f"work as pending), a ticket MERGED INTO THE ONE CITING IT "
+                    f"(the absorbed slug's citations came along, so the "
+                    f"document is citing itself as a separate dependency -- "
+                    f"the evidence is in this file, not on the board, and the "
+                    f"link is what stops you looking), or prose that was never "
+                    f"a ticket at all (de-link, keep the sentence). Deleting "
+                    f"is one of FIVE outcomes and is rarely the right one; if "
+                    f"the dangle is deliberate and documented, put DANGLING "
+                    f"LINKS BY DESIGN in the body"
+                )
+            if hits and live_block:
+                warning_count += 1
+                shown = sorted(hits)[:4]
+                more = f" (+{len(hits) - 4} more)" if len(hits) > 4 else ""
+                lines.append(
+                    f"PARK-CONDITION-REWRITTEN: {t.slug} [{t.track} p{t.prio}] "
+                    f"names {len(hits)} now-resolved ticket(s) in its prose "
+                    f"({', '.join(shown)}{more}) BUT its Status line names "
+                    f"`{live_block}`, which is still open. The park's condition "
+                    f"was REPLACED while it was parked, so the resolved set and "
+                    f"the live block are disjoint -- counting the resolved ones "
+                    f"answers a question this ticket stopped asking. The Status "
+                    f"line is the only line carrying a date, which is why it is "
+                    f"the one still right. Resume is gated on `{live_block}` alone"
+                )
+                continue
+            if hits:
+                warning_count += 1
+                shown = sorted(hits)[:4]
+                more = f" (+{len(hits) - 4} more)" if len(hits) > 4 else ""
+                if held:
+                    who = t.fm.get("owner", "").strip() or "a lane"
+                    lines.append(
+                        f"STALE-PARK-HELD: {t.slug} [{t.track} p{t.prio}] is "
+                        f"HELD by {who} and its PROSE names {len(hits)} "
+                        f"now-resolved ticket(s) near a blocking phrase "
+                        f"({', '.join(shown)}{more}). DO NOT CLAIM IT — tell "
+                        f"the holder. A long-lived lock is where a stale prose "
+                        f"dependency hides longest, because the holder has "
+                        f"stopped re-reading the park they wrote. THE SLUG "
+                        f"MATCHED, NOT THE QUESTION -- see the STALE-PARK note "
+                        f"below"
+                    )
+                else:
+                    lines.append(
+                        f"STALE-PARK: {t.slug} [{t.track} p{t.prio}] is parked in "
+                        f"{t.status}/ and its PROSE names {len(hits)} now-resolved "
+                        f"ticket(s) near a blocking phrase ({', '.join(shown)}"
+                        f"{more}) — the resume condition may already be met. "
+                        f"Read the park; a prose condition has no owner and "
+                        f"nothing else re-checks it. THE SLUG MATCHED, NOT THE "
+                        f"QUESTION — see the NOTE below"
+                    )
+
+        # PROSE EDGE THAT SHOULD HAVE BEEN FRONTMATTER.
+        #
+        # The ranker propagates priority down `blocked-by` edges and reads
+        # NOTHING ELSE. So a blocking relationship stated only in prose is
+        # invisible to it: the blocker does not inherit what it unblocks, and
+        # the blocked ticket keeps its own number as if nothing gated it.
+        #
+        # Measured 2026-08-30 (frank-user + coordinator):
+        # feature-pascal-corpus-expansion [P p75] carries
+        #   "Status: unfinished (parked -- rung 6 blocked on
+        #    decide-revisit-object-types-rtl-generics-fired-the-trigger)"
+        # ONE LINE ABOVE frontmatter reading only `prio: 75`. The decide item
+        # therefore sat at 40 while a 75 waited on it, and the coordinator
+        # found it BY HAND -- the third time that umbrella went stale on its
+        # own prose.
+        #
+        # This is the exact complement of STALE-PARK, which sees a prose edge
+        # whose named ticket has CLOSED. That one catches a condition that
+        # expired; this one catches a condition that was never wired up. The
+        # two apertures together are "prose and frontmatter disagree", and
+        # neither alone reports the family.
+        #
+        # POPULATION, dated: every ticket outside done/ and rejected/, as of
+        # 2026-08-30. Same-line only -- STALE-PARK's +/-2-line window is right
+        # for a park banner and too loose here, where a nearby slug in an
+        # unrelated sentence would read as an edge. Reported only when the
+        # named ticket is still OPEN; a closed one is STALE-PARK's.
+        prose_edges = []
+        for t in self.tickets:
+            if t.status in ("done", "rejected", "decided"):
+                continue
+            if "PROSE EDGES BY DESIGN" in t.text.upper():
+                continue
+            rows = t.text.splitlines()
+            missing = {}
+            for line in rows:
+                # A TIGHTER PHRASE SET THAN STALE-PARK'S, and measured that way.
+                # Reusing PARK_COND gave 18 hits of which several were noise
+                # from `until` and `resume` -- the face index tripped on
+                # "off `PATH` until ...", a sentence with no dependency in it
+                # at all. Same-line matching needs a phrase that means an edge
+                # and nothing else.
+                mp = PROSE_EDGE_PHRASE.search(line)
+                if not mp:
+                    continue
+                # DIRECTION. "X is blocked on Y" and "Y blocks X" are the same
+                # sentence to a slug scanner, and the second one is somebody
+                # ELSE's edge quoted here. A slug BEFORE the phrase is the
+                # subject, so the line is about that ticket, not this one --
+                # measured on decide-install-qemu-system... (quoting
+                # feature-port-freebsd-native's status) and on a table row in
+                # refactor-a-c-exclusive-lowering... Only slugs AFTER the
+                # phrase, and only when nothing slug-shaped precedes it.
+                if SLUGISH.search(line[:mp.start()]):
+                    continue
+                for m in SLUGISH.finditer(line[mp.end():]):
+                    nm = m.group(0)
+                    if nm == t.slug or nm in t.blockers:
+                        continue
+                    other = self.by_slug.get(nm)
+                    # `decided` IS A CLOSED STATE AND THIS CHECK DID NOT KNOW IT.
+                    # Track U resolves with `decided`, not `done` -- progress.py
+                    # treats the two together everywhere else (RESOLVED_BUCKETS,
+                    # the terminal sets at the archive and cycle checks). This
+                    # check, written later, used the two-element spelling, so a
+                    # prose edge onto a SETTLED decision was reported as blocked
+                    # by a "still-OPEN" ticket. Measured 2026-08-30 on
+                    # feature-pascal-corpus-expansion, whose named blocker
+                    # decide-revisit-object-types-rtl-generics-fired-the-trigger
+                    # had been in decided/ for hours. The blind spot lands
+                    # exactly on Track U, whose entire purpose is unblocking
+                    # chains -- so the check was worst precisely where an edge
+                    # matters most.
+                    if other is None or other.status in ("done", "rejected", "decided"):
+                        continue
+                    missing.setdefault(nm, other)
+            if missing:
+                prose_edges.append((t, missing))
+        # THE CONSEQUENCE DEPENDS ON THE FOLDER, AND THE MESSAGE USED NOT TO
+        # PRINT THE FOLDER. `ready`/`next` scan only RANKED_STATUSES, so
+        # "the ranker will offer this as though nothing gated it" is FALSE for a
+        # ticket in rainy-day/ float/ experimental/ blocked/ -- the ranker never
+        # offers it at all. Measured 2026-08-30: of six hits, TWO were in
+        # rainy-day/ and both carried that sentence, and a lane acted on one of
+        # them and reported it as a live mis-ranking. The finding was real (the
+        # prose does lie to readers); the CONSEQUENCE was invented by this
+        # message. Same shape as the checks corrected earlier that week: the
+        # predicate was right and the population was never stated.
+        RANKED = ("backlog", "backlog_new", "unfinished", "urgent")
+        for t, missing in prose_edges:
+            warning_count += 1
+            shown = sorted(missing)[:3]
+            more = f" (+{len(missing) - 3} more)" if len(missing) > 3 else ""
+            worst = max(missing.values(), key=lambda o: o.prio)
+            if t.status in RANKED:
+                consequence = (
+                    f"THE RANKER READS FRONTMATTER AND NOTHING ELSE, so no "
+                    f"priority propagates: `{worst.slug}` sits at p{worst.prio} "
+                    f"while this p{t.prio} waits on it, and `ready`/`next` will "
+                    f"offer this ticket as though nothing gated it. "
+                )
+            else:
+                consequence = (
+                    f"IT IS IN {t.status}/, WHICH `ready`/`next` NEVER SCAN, so "
+                    f"nothing is mis-ranked today and there is no urgency: the "
+                    f"cost is that the prose tells every READER it is gated while "
+                    f"the frontmatter does not, and the edge will not come with "
+                    f"it if it is ever promoted into a ranked folder. Fix it when "
+                    f"you promote it, not before. "
+                )
+            lines.append(
+                f"PROSE-EDGE-NOT-IN-FRONTMATTER: {t.slug} [{t.track} p{t.prio}, "
+                f"in {t.status}/] "
+                f"states in PROSE that it is blocked by {len(missing)} still-OPEN "
+                f"ticket(s) ({', '.join(shown)}{more}) that its `blocked-by` "
+                f"frontmatter does not name. " + consequence + "Two "
+                f"different repairs and they are NOT interchangeable -- if the "
+                f"edge is real, add it to `blocked-by` (the prose was right and "
+                f"the ticket was mis-ranked); if it is stale or was only ever a "
+                f"remark, rewrite the sentence (the frontmatter was right and the "
+                f"prose is lying to every reader). Deciding which requires reading "
+                f"it. This is the COMPLEMENT of STALE-PARK: that one finds a prose "
+                f"edge whose ticket has closed, this one finds one that was never "
+                f"wired up, and neither aperture reports the other's half. If a "
+                f"sentence names a ticket without gating on it, put PROSE EDGES BY "
+                f"DESIGN in the body"
+            )
+
+        # DUPLICATE FACE NUMBERS -- an append-only index that numbers its
+        # entries from its own tail CANNOT BE WRITTEN CONCURRENTLY. Found by
+        # frankB 2026-08-30 after colliding TWICE in under ten minutes on
+        # feature-a-a-refusal-is-a-claim-with-a-date-on-it: it filed as 226,
+        # rebased onto another lane's 226, renumbered to 227, rebased onto a
+        # third lane's 227, and landed as 228.
+        #
+        # WHY GIT CANNOT SEE IT. Both sides are pure appends of different
+        # content. frankB got a merge conflict only because the appends landed
+        # on ADJACENT LINES -- incidental, not detection. Two lanes appending at
+        # different offsets both land clean and the file quietly contains two
+        # 226s. The conflict was luck, and luck is not a mechanism.
+        #
+        # WHY IT MATTERS MORE THAN IT LOOKS. Entries are cited BY NUMBER from
+        # commit messages and from devdocs/dev/a-success-message-is-not-a-
+        # verdict.md. A duplicated number makes every one of those citations
+        # ambiguous permanently, and the ambiguity is invisible: `grep '### 226'`
+        # returns two hits only to someone who thinks to count them.
+        #
+        # DELIBERATELY NOT A CONVENTION CHANGE. Renumbering by lane
+        # (`226-frankB`) or dropping numbers for slugs would break every
+        # existing citation and force every lane to change behaviour. This
+        # leaves the convention alone and makes the collision DETECTABLE, which
+        # is the whole defect -- the lanes resolved all three collisions
+        # correctly once they could see them.
+        #
+        # SELF-SELECTING, no hardcoded slug: any ticket carrying 10+ numbered
+        # headings is using this convention. Calibrated 2026-08-30 over the live
+        # board: exactly one file qualifies, 312 numbered headings, zero
+        # duplicates -- so it lands silent and non-vacuity was proved separately
+        # against an injected duplicate.
+        #
+        # SAME LEVEL ONLY. `## 219 — A TICKET'S EVIDENCE EXPIRES` followed by
+        # `### 219 — a ticket whose body is a measurement` is the section header
+        # and its first sub-entry, which is the file's normal shape. Comparing
+        # across levels would flag that as a collision and the check would be
+        # wrong on its first real run.
+        # SEPARATOR SET WIDENED 2026-08-30. The first version required an
+        # em/en-dash and silently missed 90 headings in an OLDER numbering
+        # style -- `### 30. Two fields of one report disagree` -- which are
+        # numbered faces written with a period. Two lanes counted this file
+        # independently, got 317 both times, and BOTH missed the same 90,
+        # because both greps were written by reading the file's recent tail
+        # where every entry uses a dash. A pattern derived from the current
+        # convention cannot see the convention it replaced.
+        # The suffix may be a WORD, not just a letter: frankB filed
+        # `235d-control` as the control experiment for `235d`, and with a
+        # letter-only suffix the `-control` was eaten by the separator
+        # class, so the two parsed as ONE number and DUP-FACE-NUMBER cried
+        # wolf on a deliberate naming. A check that flags a correct
+        # convention earns the habit of being scrolled past, which is the
+        # failure this check exists to prevent. True duplicates are still
+        # caught: `235d` twice collides, and so does `235d-control` twice.
+        face_hdr = re.compile(
+            r"^(#{2,4})\s+(?:FACE\s+)?(\d{1,3}[a-z]?(?:-[a-z]+)?)\s*[\u2014\-\u2013.]")
+        for t in self.tickets:
+            seen_faces: dict = {}
+            for n, line in enumerate(t.text.splitlines(), 1):
+                m = face_hdr.match(line)
+                if m:
+                    seen_faces.setdefault((len(m.group(1)), m.group(2)), []).append(n)
+            if len(seen_faces) < 10:
+                continue
+            for (lvl, num), where in sorted(seen_faces.items()):
+                if len(where) > 1:
+                    warning_count += 1
+                    lines.append(
+                        f"DUP-FACE-NUMBER: {t.slug} defines entry {num} "
+                        f"{len(where)} times at the same heading level "
+                        f"(lines {', '.join(str(w) for w in where)}). An "
+                        f"append-only index that numbers from its own tail "
+                        f"cannot be written concurrently: every lane computes "
+                        f"the next number from a tail that is already stale, "
+                        f"and git sees two pure appends of different content, "
+                        f"not a collision. Entries are cited BY NUMBER from "
+                        f"commit messages and from other docs, so a duplicate "
+                        f"makes those citations ambiguous permanently. "
+                        f"RENUMBER THE LATER ONE to the next free number and "
+                        f"fix any citation of it; do not delete either, they "
+                        f"are different findings"
+                    )
+
         # The mirror: filed as a decision without writing DOWN the answer.
         # Dependents reach the decision by following their blocked-by slug into
         # decided/ (or legacy done/), so a decide- ticket parked there without
@@ -1541,6 +2248,77 @@ pre code{background:none;padding:0}
                 f"(check does not rewrite prose)"
             )
 
+        # The SAME contradiction one aperture over. The scan above reads a
+        # PROSE `- **Status:**` bullet; this one reads the FRONTMATTER
+        # `status:` field. They are different text in different places and the
+        # prose scan cannot see the field, so a ticket can pass it while
+        # announcing a lock in its own header.
+        #
+        # Measured 2026-08-30 over 3277 tickets: 1443 carry a frontmatter
+        # `status:`, 85 disagree with their folder, and 82 of those are the
+        # vocabulary rather than a defect — `open` in backlog/ and `new` in
+        # backlog_new/ are what people write and mean no harm. Flagging all 85
+        # would bury the 3 that matter, which is the exact mistake the prose
+        # scan above already learned. So LOCKISH only, and the equivalences are
+        # named rather than inferred.
+        #
+        # Why the 3 are worth failing over: the whole fleet is told to OPEN THE
+        # TICKET AT HEAD before dispatching, so a header reading
+        # `status: working` is read by a careful agent as "someone holds this"
+        # and skipped. `feature-a-typeref-migrate-consumers` sat that way for
+        # five days at p62 while ranking THIRD of 111 in `ready --track A` --
+        # not hidden by the ranker, which listed it correctly every time, but
+        # declined by every reader who obeyed the rule and opened it. A ticket
+        # that looks taken is more durable than one that is missing, because
+        # nothing ever re-checks a lock someone else appears to hold.
+        VOCAB = {"backlog": {"open"}, "backlog_new": {"new"}}
+        for t in self.tickets:
+            if t.status in archive:
+                continue
+            claimed = str(t.fm.get("status", "")).strip().strip('"').lower()
+            if not claimed or claimed == t.status:
+                continue
+            if claimed in VOCAB.get(t.status, set()):
+                continue
+            if claimed not in LOCKISH and t.status not in LOCKISH:
+                continue
+            problems = 1
+            lines.append(
+                f"FM-STATUS-DRIFT: {t.slug} [{t.track} p{t.prio}] is in "
+                f"{t.status}/ but its FRONTMATTER says 'status: {claimed}' — "
+                f"the folder is the lock, and a header claiming a lock makes "
+                f"the ticket look taken to everyone who opens it"
+            )
+
+        # DUPLICATE-SLUG: one slug present in two status folders. The folder IS
+        # the lock, so a stray copy in working/ is a phantom lock on a ticket that
+        # may already be finished -- and it is indistinguishable from a real lock,
+        # because every ownership scan reads the folder and there is nothing else
+        # to read. Found 2026-08-30 only because a `git mv` refused to overwrite;
+        # it had held a Track A lock for four hours after the fix landed, and the
+        # stray copy carried no frontmatter, so it answered no question about who
+        # held it either.
+        #
+        # The remedy is CONCATENATE, never delete: that pair was complementary,
+        # not identical -- done/ held the ticket, working/ held a 28-line
+        # resolution write-up that existed nowhere else. Deleting "the duplicate"
+        # would have destroyed the only record of how it was fixed.
+        by_slug: dict = {}
+        for t in self.tickets:
+            by_slug.setdefault(t.slug, []).append(t)
+        for slug, ts in sorted(by_slug.items()):
+            if len(ts) < 2:
+                continue
+            problems = 1
+            where = ", ".join(sorted(x.status + "/" for x in ts))
+            lines.append(
+                f"DUPLICATE-SLUG: {slug} exists in {len(ts)} status folders "
+                f"({where}) — the folder is the lock, so the copy in the "
+                f"earlier folder reads as a live claim on finished work. "
+                f"CONCATENATE the copies and keep one; they are usually "
+                f"complementary, not identical, so never delete before diffing."
+            )
+
         pending, dead, bookkeeping = self._audit_citations()
         for slug in pending:
             warning_count += 1
@@ -1606,6 +2384,169 @@ pre code{background:none;padding:0}
                 lines.append(f"STALE-BOARD: devdocs/progress/BOARD-{st}.md out of date — run: tools/progress.sh board-md")
                 problems = 1
 
+        # A PLACEHOLDER IN A TICKET THAT WAS NEVER RESOLVED.
+        #
+        # frankC, 2026-08-30: `sync.sh` fills PENDING-COMMIT only for tickets a
+        # push RESOLVES. Park a ticket to unfinished/ after writing a Log line
+        # and the literal placeholder stays, with no warning from anything --
+        # a different aperture from the wrapped-citation case, same outcome,
+        # every tool reporting clean.
+        #
+        # Deliberately a warning and not a failure: a placeholder in a LIVE
+        # ticket is often correct in-flight state (resolve written, push
+        # pending). What is wrong is nobody being able to tell those apart, so
+        # this names them rather than judging them.
+        for t in self.tickets:
+            if t.status in ("done", "rejected", "decided"):
+                continue
+            # MENTION VERSUS USE. A bare substring search returns 2 of 2 FALSE
+            # POSITIVES here: the family index DISCUSSES the placeholder, and
+            # `bug-t-concurrent-sync-runs-can-squash-two-commits-into-one` is
+            # ABOUT it. Fourth instance of that shape in one night -- and I hit
+            # it while building the guard, having banked the other three.
+            # Keyed on the Log-line form `commit PENDING-COMMIT` that
+            # `progress.sh resolve` actually writes, not on the token.
+            if not re.search(r"commit\s+\**PENDING-COMMIT", t.text):
+                continue
+            warning_count += 1
+            lines.append(
+                f"UNFILLED-PLACEHOLDER: {t.slug} [{t.track} p{t.prio}] is in "
+                f"{t.status}/ and still carries a literal PENDING-COMMIT. "
+                f"sync.sh fills these only for tickets a push RESOLVES, so a "
+                f"ticket parked mid-flight keeps it silently. Fill it by hand "
+                f"with the sha the work landed as, or delete the Log line if "
+                f"the work did not land"
+            )
+
+        # A CITED SHA THAT DOES NOT EXIST.
+        #
+        # `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` is why `resolve`
+        # takes no sha: it writes PENDING-COMMIT and sync.sh fills in what the
+        # commit LANDED as. That guard covers the Log: line, because that is
+        # where the TOOL writes. Prose in the body is where PEOPLE write, and
+        # it is unguarded -- two lanes did it within one hour on 2026-08-30
+        # (`ce3560ecd` for `9b01b1b9b`, `90b4d2b51` for `89ab3d9d4`), each
+        # having verified the push by artefact and then typed the pre-rebase
+        # sha from their own reflog. `git show` works locally and fails
+        # everywhere else, which is the worst possible signature.
+        #
+        # MEASURED before landing, over every ticket:
+        #   4294 hex tokens -> 1306 unresolvable -> 474 "look like shas".
+        # That check would have been useless: 12-hex tokens here are mostly
+        # BINARY sha256 prefixes from byte-identity comparisons, not commits.
+        # Narrowed to git's short-sha width (9-11) AND a commit-ish context
+        # word on the same line: 82 live candidates, 7 dangling. Four of those
+        # are one ticket that QUOTES squashed-away shas on purpose -- mention
+        # versus use again, fifth instance -- so that ticket opts out by
+        # marker and the check reports 3.
+        #
+        # done/ and rejected/ are NOT scanned, and that is the design: 130
+        # dangling citations sit there, and rewriting a finished record to
+        # tidy a sha falsifies history. The number is worth knowing; the sweep
+        # is not worth doing.
+        SHORT_SHA = re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{9,11}(?![0-9a-fA-F])")
+        SHA_CTX = re.compile(r"land|commit|push|\bsha\b|resolve|bisect|revert", re.I)
+        sha_hits: "dict[tuple, int]" = {}  # (ticket, tok) -> first line
+        for t in self.tickets:
+            if t.status in ("done", "rejected", "decided"):
+                continue
+            if "DANGLING SHAS BY DESIGN" in t.text:
+                continue
+            for lineno, line in enumerate(t.text.splitlines(), 1):
+                if not SHA_CTX.search(line):
+                    continue
+                for m in SHORT_SHA.finditer(line):
+                    tok = m.group(0)
+                    if not (any(c.isdigit() for c in tok) and any(c.isalpha() for c in tok)):
+                        continue
+                    sha_hits.setdefault((t.slug, tok), (t, lineno))
+        if sha_hits:
+            # `git cat-file -e` IS NOT THE TEST, and it is the test a careful
+            # person reaches for. b4, 2026-08-30: it answered LIVE for both of
+            # its dangling citations, because the pre-rebase objects were still
+            # in its own object store. The question is not "does this object
+            # exist" but "is it reachable from origin/master" -- so build the
+            # reachable set once and match short prefixes against it.
+            ref = None
+            for cand in ("origin/master", "origin/HEAD", "master", "HEAD"):
+                r = subprocess.run(["git", "rev-parse", "--verify", "--quiet", cand],
+                                   capture_output=True, text=True, cwd=str(ROOT))
+                if r.returncode == 0:
+                    ref = cand
+                    break
+            reach = None
+            if ref:
+                try:
+                    r = subprocess.run(["git", "rev-list", ref], capture_output=True,
+                                       text=True, cwd=str(ROOT), timeout=120)
+                    if r.returncode == 0:
+                        reach = {9: set(), 10: set(), 11: set()}
+                        for full in r.stdout.split():
+                            reach[9].add(full[:9])
+                            reach[10].add(full[:10])
+                            reach[11].add(full[:11])
+                except Exception:
+                    reach = None
+            if reach is not None:
+                for (_slug, tok), (t, lineno) in sha_hits.items():
+                    if tok in reach[len(tok)]:
+                        continue
+                    # NOT on master is not the same as NOWHERE. This repo has
+                    # long-lived side branches (origin/wasm), and a ticket that
+                    # says "measured at branch `wasm` sha 954b56b53" in the very
+                    # line being scanned was reported as a pre-rebase reflog
+                    # artefact -- a message that was confidently wrong about a
+                    # case the ticket itself explained. The deciding half
+                    # (reachable from master?) and the reporting half (what that
+                    # means) had drifted apart, which is the defect this file's
+                    # own check family exists to catch. So ask git which ref
+                    # carries it before saying it is dead. One subprocess per
+                    # MISS only -- misses are a handful, and the answer is the
+                    # branch name, which is the part a reader actually needs.
+                    on_branch = ""
+                    try:
+                        b = subprocess.run(
+                            ["git", "branch", "-r", "--contains", tok],
+                            capture_output=True, text=True, cwd=ROOT, timeout=20)
+                        if b.returncode == 0 and b.stdout.strip():
+                            names = [x.strip() for x in b.stdout.splitlines() if x.strip()]
+                            names = [x for x in names if "->" not in x]
+                            if names:
+                                on_branch = ", ".join(names[:3])
+                    except Exception:
+                        on_branch = ""
+                    if on_branch:
+                        warning_count += 1
+                        lines.append(
+                            f"SIDE-BRANCH-SHA: {t.slug} [{t.track} p{t.prio}] cites "
+                            f"`{tok}` at line {lineno}, which is NOT on {ref} but IS "
+                            f"on {on_branch}. Usually fine and often deliberate — a "
+                            f"measurement taken on a side branch. It is flagged, not "
+                            f"failed, because the reader of a ticket cannot tell a "
+                            f"side-branch sha from a dead one, and BRANCH PERMISSION "
+                            f"IS NOT MERGE PERMISSION: nothing on a side branch is "
+                            f"pre-approved for master. Say which branch in the ticket "
+                            f"line, or add 'DANGLING SHAS BY DESIGN' to its body"
+                        )
+                        continue
+                    warning_count += 1
+                    lines.append(
+                        f"DANGLING-SHA: {t.slug} [{t.track} p{t.prio}] cites "
+                        f"`{tok}` at line {lineno}, which is on NO remote ref at all, so not "
+                        f"reachable from {ref} either. Almost always a PRE-REBASE sha copied from a "
+                        f"local reflog after a verified push. Do NOT check it "
+                        f"with `git cat-file -e` — that answers LIVE in the "
+                        f"author's own tree, because the pre-rebase object is "
+                        f"still in the local store, so it is exactly the check "
+                        f"that cannot tell these apart. Use `git merge-base "
+                        f"--is-ancestor {tok} {ref}`. Re-read the sha from "
+                        f"{ref} and correct it in place; a binary sha256 "
+                        f"prefix is not a commit and should be written "
+                        f"'sha256 `…`' so it reads as one. If the ticket "
+                        f"quotes a dead sha ON PURPOSE, add the line "
+                        f"'DANGLING SHAS BY DESIGN' to its body"
+                    )
+
         # THE APERTURE, printed with every verdict including a clean one.
         #
         # The stale-edge scan above reads frontmatter. Three instances found on
@@ -1616,21 +2557,36 @@ pre code{background:none;padding:0}
         # the same file. Six instances in one day across four sessions is a
         # rate, not a run of bad luck.
         #
-        # Deliberately NOT a second query. There is no reliable scan for "a
-        # paragraph that is no longer true", and a body-grep for slug mentions
-        # would be mostly noise plus one more instrument whose reach nobody can
-        # see. So the reach of THIS one is stated instead — an instrument that
-        # does not report its own aperture is how "no findings" and "did not
-        # look" come to print the same thing.
+        # WAS "deliberately NOT a second query", on the reasoning that a
+        # body-grep for slug mentions "would be mostly noise". Half right, and
+        # the wrong half was load-bearing: it is noise over all 376 live
+        # tickets (~50 hits, nearly all ordinary citations) and signal over the
+        # 35 PARKED ones (10 hits). STALE-PARK above is that second query. The
+        # general case remains unscannable — there is still no reliable test
+        # for "a paragraph that is no longer true" — so the reach of both is
+        # stated in the note: an instrument that does not report its own
+        # aperture is how "no findings" and "did not look" come to print the
+        # same thing, and a note that says CANNOT is how nobody tries.
         #
         # The prose half is the expensive half: a stale edge is SILENT and
         # merely hides a ticket, while stale prose is BELIEVED — it reads as
         # prior investigation and pre-empts the check that would have caught
         # it.
         lines.append(
-            "NOTE stale-edge scan reads FRONTMATTER only. A blocking claim "
-            "made in a ticket's PROSE is not checked and cannot be; a clean "
-            "run means the frontmatter half is clean, not the family. "
+            "NOTE a STALE-PARK hit matches SLUGS, not questions: a blocker "
+            "that settled the OPPOSITE question reads exactly like one "
+            "that settled yours, so read what it resolved rather than "
+            "that it closed. Measured 2026-08-30 by frankC — "
+            "`refactor-a-one-resolved-file-identity-for-a-translation-unit` "
+            "settled that `./math.pas` and `math.pas` are ONE identity; "
+            "`feature-c-import-a-pascal-unit-under-a-mangled-name` needs two "
+            "DIFFERENT files of one unit name to be TWO identities, the "
+            "opposite question, and the collision still refuses at HEAD. "
+            "stale-edge reads FRONTMATTER; STALE-PARK reads PROSE in "
+            "unfinished/, blocked/ and working/ (the last as STALE-PARK-HELD: "
+            "tell the holder, never claim it), where a resume condition is "
+            "load-bearing. Prose in a RANKED folder is still unchecked — a "
+            "clean run means those two apertures are clean, not the family. "
             "Convention that keeps them in sync: prose stating a blocking "
             "relationship must also carry the frontmatter edge, and the commit "
             "that closes a blocker marks its dependents' prose."
@@ -1665,6 +2621,60 @@ def git_tracked(path: Path) -> bool:
     ).returncode == 0
 
 
+# Folder-name synonyms nobody should be nagged about. `open` in backlog/ and
+# `new` in backlog_new/ are what people write and mean exactly the destination,
+# so rewriting them would be churn in every move diff for no reader benefit.
+_STATUS_SYNONYMS = {"backlog": {"open"}, "backlog_new": {"new"}}
+
+
+def sync_status_to_folder(path: Path, status: str) -> None:
+    """Bring a ticket's SELF-DESCRIBED status into line with the folder it now
+    sits in. Updates only fields that already exist -- it never invents a claim
+    a ticket was not making.
+
+    Why this belongs in the move rather than in `check`: on 2026-08-30 a park
+    commit moved feature-a-typeref-migrate-consumers from working/ to backlog/
+    and cleared its owner, correctly and deliberately, while leaving
+    `status: working` in its own frontmatter. The act of RELEASING the ticket is
+    what made it look held. Every reader is told to open a ticket at HEAD before
+    claiming it, so the header saying `working` is read as "someone has this"
+    and the ticket is skipped -- by careful readers especially, since the
+    careless ones never opened it.
+
+    Both spellings are handled because they drift independently: a prose
+    `- **Status:**` bullet and a frontmatter `status:` field are different text
+    in different places, and a ticket can carry either, both, or neither.
+    """
+    text = path.read_text(encoding="utf-8")
+    orig = text
+
+    fm = re.match(r"---\n(.*?)\n---\n", text, re.S)
+    if fm:
+        cur = re.search(r"(?mi)^status:\s*(.*)$", fm.group(1))
+        if cur:
+            val = cur.group(1).strip().strip('"').lower()
+            if val != status and val not in _STATUS_SYNONYMS.get(status, set()):
+                block = re.sub(r"(?mi)^status:\s*.*$", f"status: {status}",
+                               fm.group(1), count=1)
+                text = text.replace(fm.group(0), f"---\n{block}\n---\n", 1)
+
+    def _prose(m: "re.Match[str]") -> str:
+        val = m.group(2).strip().lower().rstrip(".,:*")
+        if val == status or val in _STATUS_SYNONYMS.get(status, set()):
+            return m.group(0)
+        return f"{m.group(1)}{status}"
+
+    # Only the bare `- **Status:** word` form. A bullet that continues into a
+    # sentence ("unfinished -- agent half done, parked awaiting X") is prose
+    # carrying a reason, and silently truncating someone's explanation to one
+    # word is a worse outcome than a stale word.
+    text = re.sub(r"(?mi)^(\s*-\s*\*\*Status:\*\*\s*)(\w+)\s*$", _prose,
+                  text, count=1)
+
+    if text != orig:
+        path.write_text(text, encoding="utf-8")
+
+
 def move_ticket(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     if git_tracked(src):
@@ -1672,6 +2682,7 @@ def move_ticket(src: Path, dst: Path) -> None:
     else:
         shutil.move(str(src), str(dst))
         subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    sync_status_to_folder(dst, dst.parent.name)
 
 
 def set_prio_auto(path: Path, value: int) -> None:
@@ -1967,6 +2978,73 @@ def cmd_claim(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_park(args: argparse.Namespace) -> int:
+    """Release a lock: working/ (or anywhere) -> unfinished/, owner cleared.
+
+    THE ONE LIFECYCLE TRANSITION THE TOOL DID NOT SUPPORT, AND THE ONE THAT GETS
+    SKIPPED. `claim` and `resolve` were one command each; parking was a manual
+    `git mv` plus two frontmatter edits, so a session that stopped mid-ticket
+    left the lock standing and the board could not distinguish it from live
+    work. Observed twice on 2026-08-30 during a fleet pause: two locks whose
+    owners had stopped, each needing a message to chase. Raised by
+    frank-optimize-b4 after doing the move by hand.
+
+    THE REASON IS A REQUIRED POSITIONAL, ON PURPOSE. A park with no note is the
+    failure this command exists to prevent, not a convenience it should allow --
+    making parking one command while letting the note be optional would make it
+    cheaper to park BADLY. What is lost when a session stops is never the
+    measurements (those get written into the ticket as they are made); it is the
+    SHAPE OF THE RESUME, which lives only in the holder's head. So the reason is
+    the argument, and the printed guidance asks for the resume condition rather
+    than a status summary.
+    """
+    src = find_ticket(args.slug)
+    dst = PROG / "unfinished" / f"{args.slug}.md"
+    if src == dst:
+        print(f"{args.slug} already in unfinished/", file=sys.stderr)
+        return 1
+    was_held = src.parent.name == "working"
+    move_ticket(src, dst)
+    set_field(dst, "Status", "unfinished")
+    set_field(dst, "Owner", "")
+    reason = " ".join(args.reason).strip()
+    text = dst.read_text(encoding="utf-8")
+    if not text.endswith("\n"):
+        text += "\n"
+    text += (
+        f"\n## Parked {_dt.date.today().isoformat()}\n\n"
+        f"{reason}\n\n"
+        f"**Before resuming:** read the reason above, then the ticket body. If "
+        f"the reason does not tell you what would make this worth picking up "
+        f"again, establishing that is the first step -- a park is a handoff to a "
+        f"stranger who may be you.\n"
+    )
+    dst.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "add", str(dst)], cwd=ROOT,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"parked {args.slug} -> unfinished/ (owner cleared{', lock released' if was_held else ''}).",
+          file=sys.stderr)
+    # The Track A warning is not decoration: CLAUDE.md makes a Track A ticket in
+    # unfinished/ CRITICAL, because a HALF-APPLIED compiler change can break the
+    # self-host gate for every lane. The distinction that matters and that the
+    # folder cannot express: a park is a BOOKKEEPING state, and the rule is about
+    # a CODE state. A clean tree parks freely; a dirty one owes a decision.
+    head = dst.read_text(encoding="utf-8")[:600]
+    m = re.search(r"^track:\s*(\S+)", head, re.M)
+    if m and "A" in m.group(1).upper().replace("+", ""):
+        print("NOTE: this is a Track A ticket. `check` treats an A ticket in "
+              "unfinished/ as critical -- but that rule is about a HALF-APPLIED "
+              "compiler change, not about bookkeeping. If your tree is clean and "
+              "everything is pushed, there is nothing to revert and the park is "
+              "fine; if it is NOT, decide now whether to land or revert, because "
+              "the folder cannot tell the two apart.", file=sys.stderr)
+    print("staged, not committed. write what a resumer needs INTO the ticket "
+          "(what you measured, what the next step was, what is deliberately NOT "
+          "next), regenerate the board (%s board-md) and commit the move + edits "
+          "together." % Path(sys.argv[0]).name, file=sys.stderr)
+    return 0
+
+
 def cmd_pending(args: argparse.Namespace) -> int:
     """`<path>\t<sha>` per ticket owing a citation — sync.sh's input.
 
@@ -1987,6 +3065,26 @@ def cmd_pending(args: argparse.Namespace) -> int:
             if not PENDING_RE.search(text):
                 continue
             print("%s\t%s" % (path.relative_to(ROOT), resolve_commit(path)))
+    return 0
+
+
+def cmd_fill(args: argparse.Namespace) -> int:
+    """Fill one ticket's unfilled citations with a landed sha.
+
+    Called by tools/sync.sh in place of the sed pair it used to carry, so that
+    "what an unfilled citation looks like" has exactly one implementation as
+    well as one definition. Rewrites nothing when there is nothing to fill, so
+    it is safe to call on any path.
+    """
+    path = Path(args.path)
+    if not path.is_file():
+        print("fill: no such file: %s" % path, file=sys.stderr)
+        return 1
+    text = path.read_text(encoding="utf-8")
+    filled = fill_pending(text, args.sha)
+    if filled == text:
+        return 0
+    path.write_text(filled, encoding="utf-8")
     return 0
 
 
@@ -2050,10 +3148,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "F", "M", "N", "O", "P", "R", "S", "T", "U", "W", "Z"], default="")
         sp.add_argument("--strict", action="store_true")
         sp.add_argument("--write", action="store_true")
+        # board-md only (the loop gives it to every subcommand the way --strict
+        # and --write already are). BOARD.html is gitignored and costs ~87% of
+        # board-md's runtime, so a caller that only needs the committed
+        # BOARD*.md — tools/sync.sh, which runs this INSIDE its fetch->push
+        # race window and stages nothing else — can say so.
+        sp.add_argument("--no-html", action="store_true")
     sp = sub.add_parser("claim")
     sp.add_argument("slug")
     sp.add_argument("owner")
+    # park: the reason is a REQUIRED positional (nargs="+"), so the tool cannot
+    # be used to release a lock without saying what resumes it.
+    sp = sub.add_parser("park")
+    sp.add_argument("slug")
+    sp.add_argument("reason", nargs="+")
     sub.add_parser("pending")
+    sp = sub.add_parser("fill")
+    sp.add_argument("path")
+    sp.add_argument("sha")
     sp = sub.add_parser("near")
     sp.add_argument("text", nargs="+")
     sp.add_argument("--track", default="")
@@ -2078,8 +3190,12 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     if args.cmd == "claim":
         return cmd_claim(args)
+    if args.cmd == "park":
+        return cmd_park(args)
     if args.cmd == "pending":
         return cmd_pending(args)
+    if args.cmd == "fill":
+        return cmd_fill(args)
     if args.cmd == "resolve":
         return cmd_resolve(args)
     if args.cmd == "near":
@@ -2102,9 +3218,14 @@ def main(argv: list[str]) -> int:
         sys.stdout.write(board.cmd_board())
     elif cmd == "board-md":
         board.write_board_md()
-        board.write_board_html()
         print(f"wrote {PROG / 'BOARD.md'}")
-        print(f"wrote {PROG / 'BOARD.html'}")
+        # Measured 2026-08-30 on plexus: board-md is 18-21s, of which ~2.5s is
+        # the markdown and the rest is BOARD.html (md_html -> inline ->
+        # ~1.9M uncompiled re.sub calls). BOARD.html is gitignored, so a
+        # git-facing caller pays 87% for a file it will never stage.
+        if not getattr(args, "no_html", False):
+            board.write_board_html()
+            print(f"wrote {PROG / 'BOARD.html'}")
     elif cmd == "check":
         rc, out = board.check(getattr(args, "strict", False))
         sys.stdout.write(out)

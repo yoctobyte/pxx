@@ -1,7 +1,7 @@
 ---
 track: P
 prio: 65
-owner: unassigned
+owner: frankA
 blocked-by: []
 status: unfinished
 type: feature
@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished (parked — the 3341 blocker is cleared; next wall is a new failure class)
+- **Status:** unfinished (folder is the lock; line corrected by the coordinator 2026-08-30)
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -1089,3 +1089,187 @@ Still open from this sweep, and NOT blocking:
 [[bug-p-a-call-chained-onto-a-class-method-result-is-dropped]] — the class-NAME
 receiver (`TFactory.MakeC.Tag`) is still silently wrong, and its obvious cause is
 recorded as refuted.
+
+## 2026-08-29 (claude-N) — the recorded wall is GONE; the next two were one bug
+
+**Re-verified at HEAD before working, and the entry above is stale.** The wall it
+records — `@TEquals.Class: the address of a routine with no body was taken` — no
+longer occurs. `uses Generics.Defaults;` **compiles clean.** Whoever fixed it did
+not know it closed this rung's wall, which is the ordinary case and the reason to
+re-verify rather than resume from the note.
+
+The frontier is now two units further on. Current state, measured:
+
+| unit | compiles | runs |
+| --- | --- | --- |
+| `generics.strings` | yes | yes |
+| `generics.helpers` | yes | yes |
+| `generics.memoryexpanders` | yes | yes |
+| `generics.hashes` | yes | **SEGFAULT** before the first statement |
+| `generics.defaults` | yes | **SEGFAULT** (inherits it — `uses Generics.Hashes`) |
+| `generics.collections` | `unknown type: TKey` | — |
+
+### Both segfaults were one bug, and it is not generics machinery either
+
+[[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] — filed, not
+fixed here. **(It landed at `6cc4afc17`, 2026-08-29 22:32 — this paragraph is a
+record of that session, not a live blocker; see the 2026-08-30 note at the end.
+Marked here because a prose condition has no owner and nothing sweeps it the way
+frontmatter `blocked-by:` edges get swept.)** A cast written through a user-declared alias of an ordinal type does
+not narrow: with `A1 = byte` and `c = $12345678`, `byte(c)` gives 120 and
+`A1(c)` gives 305419896.
+
+`generics.hashes:976` declares **`type ToByte = byte;`** — on non-ARM it is an
+ALIAS, so `ToByte(x)` is a truncating cast rather than a call. (The
+`{$ifdef CPUARM}` arm five lines above is a real masking *function*; the unit
+uses the two forms interchangeably, which is what makes the alias load-bearing
+rather than incidental.) `InitializeCrc32ctab` then indexes
+`crc32ctab[0, ToByte(crc)]` with a full `cardinal`, so an unnarrowed index
+reaches ~4.3e9 into a `array[0..3, byte] of cardinal` and the unit's
+initialization writes off the end.
+
+Substituting **only** that alias for the unit's own ARM-path masking function
+makes `Generics.Hashes` run clean **and** `Generics.Defaults` compile and run.
+So this rung's next two walls are one frontend bug, and it is a general one —
+nothing about it is specific to generics, classes or interfaces.
+
+Third rung in a row where the frontier was not generics machinery. That is worth
+taking seriously as a signal rather than noting each time: this corpus is now
+finding ordinary Pascal defects, which is a fine result for a corpus but means
+the *rung's stated purpose* (generics × classes × interfaces) is not what it is
+currently testing.
+
+### Two traps in this unit, for whoever reduces here next
+
+- **`generics.hashes` has no `initialization` keyword.** Its init is FPC's
+  implicit form — a bare `begin ... end.` at the end of the unit. A `grep -n
+  '^initialization'` says the unit has none, which is how the crash first read
+  as "not in the unit's startup". It is.
+- **`{$define PUREPASCAL}` is set INSIDE the unit** (lines 59/72/75), so
+  `crc32ctab` really is `[0..3, byte]` and `high()` really is 3. A `SizeOf` of
+  4096 where 8192 was expected is correct here, not a defect — checked against
+  FPC before believing it.
+
+### Not re-walked
+
+`generics.collections`' `unknown type: TKey` is already re-diagnosed as
+cross-unit Delphi generics, not `TKey` (`81dffa9cb`). Left alone.
+
+### Still parked
+
+Blocked behind the alias-cast bug, which is Track P's file and was not fixed
+under this corpus dispatch (corpus work files defects into the owning lane, it
+does not fix them). Once it lands, resume at `generics.collections`.
+
+---
+
+## 2026-08-30 (frankA) — the wall MOVED TWICE. Both of this ticket's parking notes were stale
+
+### First: the two notes at the bottom of this file were both false when I read them
+
+| the note said | actual state 2026-08-30 |
+| --- | --- |
+| *"Still parked — blocked behind the alias-cast bug"* | [[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] landed at `6cc4afc17`, 2026-08-29 22:32. Unblocked for hours before I opened this. |
+| *"`generics.collections`' `unknown type: TKey` is already re-diagnosed as cross-unit Delphi generics (`81dffa9cb`). Left alone."* | That re-diagnosis was FIXED at `625991d20` — and **the wall survived it unchanged**. The note sends the next holder to a closed ticket. |
+
+Same shape the umbrella [[feature-pascal-corpus-oop]] already documents: *a
+stalled-because note ages into a false claim, and it ages invisibly*, because
+resolving a blocker is an event on the **blocker**, not on the dependent. Two
+instances in one file.
+
+### The real cause of the `TKey` wall — measured, after three refuted hypotheses
+
+`unknown type: TKey` was raised while parsing `generics.defaults.pas`, a unit
+that compiles perfectly alone. The chain:
+
+1. `CollectSpecializationBoundNamesFromTokens` harvests type-parameter names so
+   a specialization spelled with one takes the *deferred* path instead of
+   minting an alias.
+2. It collected **96** names for this corpus and **`TKey` was not among them** —
+   though 583 `TKey` tokens sat in the stream.
+3. Not the 512-name cap (96 of 512 — refuted). Not the scan abandoning the
+   stream (instrumented for the runaway case; never fired — refuted). Not
+   ordering (the tokens were present the whole time — refuted).
+4. It was `CollectNestedTypeNames` mis-tracking nesting depth. A **bodiless
+   class** opens no body, but only the spelling `= class;` was recognised — the
+   code tested the single token after `class` for `;`, while its own comment
+   claimed `= class(TBase);` worked too. So
+   `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);`
+   left depth at 1 and the scan ran to a *later* declaration's `end`:
+   **one jump swallowed 11,312 tokens**, and with them every parameter those
+   declarations bind.
+
+**Nothing reported any of this.** The names were simply absent; a specialization
+naming one then took the alias path and minted an alias into the TEMPLATE's
+unit, where the parameter does not exist. The error surfaced two units away
+from its cause.
+
+### The fix had a second arm, in the same shape one level down
+
+Handling only the outermost bodiless class was not enough — `TList` nests
+
+```pascal
+type
+  TEnumerator = class(TCustomListEnumerator<T>);
+```
+
+inside its own body, which inflated depth again and swallowed 10,864 tokens. A
+bodiless class opens no body at **any** nesting level, so the fix does not touch
+depth at all rather than special-casing the top. Exactly
+`normalise-dont-special-case`: the first patch was the second path, and the
+second path is the one that stays broken.
+
+### Result — bound names 96 → 293, and the frontier moved ~1200 lines
+
+| stage | bound names | where it stops |
+| --- | ---: | --- |
+| before | 96 (`TKey` absent) | `generics.defaults.pas:46` — `unknown type: TKey` |
+| + outermost bodiless fix | 112 | still `defaults:46` |
+| + nested arm (any depth) | **293** (`TKey` present) | `collections:1313` — `MAX_NESTED_SPECS` |
+| + `MAX_NESTED_SPECS` 24 → 96 | 293 | `collections:120` — `unknown type: PT` |
+
+`MAX_NESTED_SPECS` was a **genuine capacity limit, not a runaway** — confirmed
+by raising it and watching the frontier move rather than the compile explode
+(71s wall, 63 MB peak). Bumped with the measurement recorded at the constant.
+
+### Where rung 3 stands now, and what NOT to assume
+
+`generics.collections` still does not compile. The current wall is
+`unknown type: PT` at `collections:120`, which is the same *family* as the TKey
+one and **must not be assumed to be the same defect** — that assumption is what
+this ticket's stale note got wrong, and what I got wrong once already tonight.
+
+Filed on the way, both reachable only because the scan fix moved the frontier:
+
+- [[bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected]]
+  — the parser rejects `TD<T> = class abstract(TEnumBase<T>);` outright. All
+  three ingredients required; FPC compiles it. rtl-generics uses this shape.
+
+### PARKED 2026-08-30 (frankA) — released from `working/`
+
+The frontier moved twice and `generics.collections` still does not compile, so
+this rung is not done. Released rather than held: a lock over a ticket nobody is
+working reads as "someone is on it", which is the failure measured fleet-wide
+tonight (`decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop`).
+
+Everything is pushed; nothing is half-applied. **Re-measure before trusting the
+table above** — that is the rule this ticket has now taught twice in its own
+history, and this section is a snapshot like every other.
+
+## 2026-08-30 (frankA) — park cleared, frontmatter drift fixed, still unfinished
+
+`progress check` flagged this ticket as STALE-PARK-HELD: its prose names
+`bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate` next to a blocking
+phrase, and that ticket is in `done/`. Confirmed — it landed at `6cc4afc17` on
+2026-08-29, and the entry above has been marked in place rather than rewritten,
+because it is an accurate record of what that session did and knew.
+
+Also fixed FM-STATUS-DRIFT: the frontmatter said `status: working` while the
+file sits in `unfinished/`, so it read as actively held to anyone who opened it.
+The location is the truth; the field now matches.
+
+**Nothing here is blocked any more.** The next session on this rung should do
+what the 2026-08-25 recon already asked for — re-stage rtl-generics and drive it
+until the wall moves — rather than starting from any conclusion recorded above,
+since the walls have moved three times and each recorded line number was
+superseded within a session or two.

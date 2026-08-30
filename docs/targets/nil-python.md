@@ -7,7 +7,7 @@ order: 63
 
 Nil Python is a statically compiled Python-shaped frontend for the PXX compiler. It compiles `.npy` source files directly to native machine code through the shared AST and backend, achieving high performance without the overhead of a Python interpreter or runtime.
 
-It is a **mainline frontend**, a peer of Pascal and C rather than a research path: it has its own test gate (`test-nilpy`), which must be green — along with a byte-identical self-host and the cross-target builds — before any change lands. BASIC, Rust and Zig are the experimental frontends; Nil Python began there and no longer is.
+It is a **mainline frontend**, a peer of Pascal and C rather than a research path: it has its own gated test suite (`test-nilpy`), and it is held to the same bar as the Pascal and C frontends — the suite green, the self-host fixedpoint byte-identical (at the default optimisation level), and the cross-target builds clean. The fixedpoint is proved on every change; the suites and the cross-targets are swept continuously against each pushed commit. BASIC, Rust and Zig are the experimental frontends; Nil Python began there and no longer is.
 
 > [!NOTE]
 > Nil Python is not a full Python implementation. Source files can use either the `.npy` extension or plain `.py` — both compile through the same frontend; PXX does not require CPython-standard syntax, so a `.py` file that leans on dynamic-typing features CPython allows may not compile as-is.
@@ -22,18 +22,24 @@ bugs rather than accepted as dialect differences. Nil Python is a from-scratch
 compiler that targets CPython compatibility; it is not derived from CPython's
 implementation, and it is not an interpreter.
 
-That is a harder target than Pascal or C, and the board shows it: Nil Python's
-open queue peaked at 79 tickets against 30 for the C frontend and 20 for
-Pascal's, and 77% of its tickets are bugs or regressions. A deep queue here
+That is a harder target than Pascal or C, and the board shows it: Nil Python
+carries by far the deepest open queue of any frontend, and roughly four in five
+of its tickets are bugs or regressions rather than features. A deep queue here
 means the reference is exacting, not that the frontend is fragile — see
-[ticket flow](https://pxxc.org/status/flow/) for the curves.
+[ticket flow](https://pxxc.org/status/flow/) for the curves, which are generated
+from the board and cannot go stale the way a sentence can.
 
 **What it will not do**, and this is a design boundary rather than a gap to
-close: anything requiring a live interpreter. No `eval` of runtime-constructed
-code, no monkeypatching a class after compilation, no duck typing resolved at
-run time. Function parameters and return types need annotations; locals are
-inferred. If a program's design depends on Python's dynamism, it belongs on
-CPython.
+close: anything requiring a live interpreter. No monkeypatching a class after
+compilation, no duck typing resolved at run time. Function parameters and
+return types need annotations; locals are inferred. If a program's design
+depends on Python's dynamism, it belongs on CPython.
+
+`exec` and `eval` are a narrower case than that boundary suggests, and they
+have [their own section](#exec-and-eval): the **explicit-namespace** forms —
+`exec(src, d, d)` and `eval(src, g, l)` — do run source built at run time, over
+a subset of Python. That is a tree-walker over the text, not a live
+interpreter, and the distinction is load-bearing.
 
 ### It hardens the rest of the compiler
 
@@ -41,8 +47,8 @@ Compiling Python-shaped code exercises the shared AST, IR and runtime along
 paths that Pascal and C programs rarely reach — variants, dunder dispatch,
 container semantics — and the defects it turns up are usually **not** in the
 Nil Python frontend at all. They land in the shared layers, where fixing them
-benefits every frontend. Over 100 tickets in the compiler-core lane reference
-Nil Python work. It has been the cheapest bug-discovery route the project has:
+benefits every frontend. Well over a hundred compiler-core tickets reference Nil
+Python work. It has been the cheapest bug-discovery route the project has:
 no third-party test corpus had to be dragged into Pascal or C to find them.
 
 ---
@@ -252,7 +258,8 @@ supported. Triple-quoted f-strings are not.
 
 **A bare import name means Python.** `import mymod` looks for `mymod.py` or
 `mymod.npy` and nothing else — it will not quietly load a Pascal unit that
-happens to share the name. Where a name *does* collide with one of PXX's own
+happens to share the name (One thing that is *not* an ordinary Pascal
+unit does import bare: a [Python extension module](#python-extension-modules-import-bare).) Where a name *does* collide with one of PXX's own
 RTL units, the compiler says so and names the spelling that reaches it:
 
 ```
@@ -284,6 +291,53 @@ Two things that are **not** available, deliberately or not yet:
   defeat. Quote it instead.
 - `from 'sysutils.pas' import Trim` — not built; the error is *expected a
   module name after from*. Use the `as` form and qualify.
+
+### Python extension modules import bare
+
+An extension module is the one thing written in Pascal that a bare `import`
+reaches. That is not the rule bending — it is the rule not applying. The rule
+above governs how you reach a *Pascal unit*; a cpyext extension module is a
+**Python module whose body happens to be Pascal and C**, exactly what `_socket`
+or `_json` is to CPython, so bare import is its correct spelling:
+
+```python
+import fmt_ext                   # a Pascal unit, imported as the Python module it is
+print(fmt_ext.fmtUnicode())
+```
+
+The unit is found the same way any Python module is — on the search path, so a
+unit outside the current directory needs a `-Fu` root like any other (below).
+
+A unit becomes one by saying so, and the compiler checks the claim. Both must
+hold:
+
+```pascal
+unit fmt_ext;
+
+{$PYEXTENSION}                   { the DECLARATION — a line that is exactly this }
+
+interface
+
+uses pxxcio, '../../lib/cpyext/src/pyruntime.c',   { the CHECK — binds the cpyext runtime }
+     './fmt_ext_host.c';
+```
+
+The declaration is what makes it a Python module; binding the runtime only
+confirms the claim. A unit that binds the runtime without declaring itself is
+still refused by name, so the carve-out cannot widen into "any unit that
+touches CPython".
+
+**The module's name means nothing here.** `_ext` is not a convention — of 147
+real extension modules on a stock CPython 3.12 (stdlib `lib-dynload`,
+statically builtin, and third-party `.so` together), none end in `_ext`, while
+70 begin with a leading underscore. The `_ext` names in PXX's own test units are
+test-local naming. Nothing is keyed on the spelling of the name.
+
+Neither is `PyInit_<name>` a reliable tell, and PXX does not use it: a
+*vendored* extension's init symbol carries the **upstream** module's name, so a
+unit wrapping MarkupSafe's accelerator exports `PyInit__speedups`, not
+`PyInit_markupsafe_ext`. A unit that only *consumes* the C API exports no
+`PyInit_` at all and is still an extension module.
 
 ### Finding a third-party Python package: `-Fu`
 
@@ -428,6 +482,83 @@ Two things follow that are worth knowing before you meet them:
   `__file__` needs the data moved next to the binary, or the path supplied
   some other way (an argument, an environment variable, a config file).
 
+## `exec` and `eval`
+
+Source built at run time does execute, through a tree-walker over the text.
+Say it uncompressed, because the short version is wrong in both directions:
+**the explicit-namespace forms work, over a subset of Python.** There is no
+live interpreter behind them, and nothing about the surrounding compiled
+program becomes dynamic.
+
+```python
+d = {}
+exec("total = 0\nfor i in range(4):\n    total = total + i", d, d)
+print(d["total"])                  # 6
+
+g = {"a": 10, "b": 4}
+print(eval("a * b + 2", g, g))     # 42
+```
+
+`eval` also accepts the ambient form, `eval("1 + 2")` — an expression only
+reads, so a name it cannot see is a run-time error naming that name, never a
+silent wrong value.
+
+`exec` does **not**. The ambient form is a compile error that names the working
+spelling:
+
+```
+Nil Python: exec(src) with no namespace is not supported — it would bind into
+the caller's own locals, which are compiled stack slots with no run-time name
+table. Use the explicit form Python also has: d = {}; exec(src, d, d), then
+read the results out of d
+```
+
+It is refused rather than accepted-and-ignored because those locals are
+compiled stack slots with no run-time name table to bind into — there is
+nowhere for the result to go, and failing loudly at compile time is the only
+honest answer.
+
+### The subset
+
+Inside `exec`/`eval`: assignment and augmented assignment, `if`/`elif`/`else`,
+`while`, `for` with `break`, `def`, `return`, `raise`, `del`, and expression
+statements. Expressions cover arithmetic, bitwise, comparison and boolean
+operators, calls, attribute access, subscripts including slices, f-strings,
+`isinstance`, conditional expressions, tuple/list/dict literals, and the
+`len`/`int`/`print` builtins.
+
+Not in the subset: `import`, `class` definitions, and `exec` inside `exec`.
+Pass what the source needs in through the namespace dict instead of importing
+it there.
+
+### `__builtins__` is a documented incompatibility
+
+CPython injects a `__builtins__` key into the globals dict it hands to
+`exec`. Nil Python does not, having no module object to put there:
+
+| | CPython | Nil Python |
+| --- | --- | --- |
+| `d={}; exec("x=1", d, d); sorted(d.keys())` | `['__builtins__', 'x']` | `['x']` |
+| `d["x"]` | `1` | `1` |
+
+Only a program that **enumerates** the namespace can see the difference;
+reading a bound name agrees. This is decided and permanent for now, and the
+reason is worth stating rather than apologising for: CPython resolves every
+name miss through one run-time dict, so its `__builtins__` is live and mutating
+it changes the whole program. Nil Python resolves builtin names in compiled
+code at compile time. Any `__builtins__` it handed back would be honoured by
+exec'd source and silently ignored by every compiled call site — a key that
+half-works is worse than an absent one, so it is absent.
+
+A **separate, open** bug sits next to it: a caller-supplied mapping is
+discarded rather than honoured, so the restricted-exec idiom does not restrict.
+
+| | CPython | Nil Python |
+| --- | --- | --- |
+| `d={"__builtins__":{}}; exec("n=len([1,2,3])", d, d)` | `NameError` | `n = 3` |
+
+Do not rely on that as a sandbox. It is tracked, not decided.
+
 ## Known gotchas
 
 These are open, tracked issues — real-world `.py`/`.npy` programs can still
@@ -448,6 +579,11 @@ hit them:
 - Object reclamation (reference counting) is disabled inside an imported
   `.py` module specifically — a module compiled as the main program does not
   have this restriction.
+- An `import` inside `exec` is skipped without a diagnostic and the statements
+  after it still run, so the failure — if the imported name is used at all —
+  arrives later as `pyeval: name not defined: <module>`, pointing at the use
+  rather than at the discarded import. Pass what the source needs in through
+  the namespace dict.
 - ~~A `def`/`lambda` in a plain variable can silently do nothing or segfault
   when called.~~ ~~Missing methods segfault.~~ ~~`int("abc")` halts instead of
   raising a catchable `ValueError`.~~ ~~`"%d" % value` yields garbage.~~

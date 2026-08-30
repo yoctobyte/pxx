@@ -387,6 +387,17 @@ begin
   if CaseEqual(mnem, 'ret') then begin x64_ret; Exit; end;
   if CaseEqual(mnem, 'leave') then begin x64_leave; Exit; end;
   if CaseEqual(mnem, 'syscall') then begin x64_syscall; Exit; end;
+  { The opt-out from --rtl-libc's thunk, for the syscalls whose CONTRACT is the
+    machine state at the instruction itself. `syscall` above is free to become a
+    `call` into the libc thunk; `syscall_raw` never is, on any target or flag.
+    Today's only user is rt_sigreturn, and it is not a style preference: it takes
+    no arguments and restores the entire context from a signal frame at a FIXED
+    offset from rsp, so the thunk's return address and six register pushes make
+    the kernel read the frame from the wrong place -- measured as a SIGSEGV on
+    signal delivery where the default build exits 143. Anything else that is
+    rsp-relative or must not return belongs here too (clone's child-stack stub
+    is already raw for the same reason, in thread_emit.inc). }
+  if CaseEqual(mnem, 'syscall_raw') then begin EncB($0F); EncB($05); Exit; end;
   if CaseEqual(mnem, 'nop') then begin EncB($90); Exit; end;
   if CaseEqual(mnem, 'pause') then begin EncB($F3); EncB($90); Exit; end;   { F3 90 — the spin-wait hint: on a real core it throttles the loop and drains the store buffer, and on a hyperthread it yields the pipeline to the sibling. Decodes as NOP on anything that predates it, so it is always safe to emit. }
   if CaseEqual(mnem, 'cqo') then begin EncB($48); EncB($99); Exit; end;

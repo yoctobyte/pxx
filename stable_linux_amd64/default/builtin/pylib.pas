@@ -262,11 +262,13 @@ type
       NEW sequence. Returns Self so the statement lowering can use it as a
       value node, the same shape sort() and extend() use. }
     function reverse: Variant;
-    { list.sort(reverse=) -- in place, returns None. `key=` is still absent: it
-      needs PyCallKey1's callable dispatch, which lives in pyeval (which USES
-      this unit, so it cannot be called from here). `reverse=` needs no callable
-      at all — just the opposite pyvar_gt comparison. }
-    function sort(reverse: Boolean = False): Variant;
+    { list.sort(key=, reverse=) -- in place, returns None. `key=` was long
+      absent because calling it needs PyCallKey1's callable dispatch, which
+      lives in pyeval (which USES this unit, so it cannot be called from here);
+      it goes through PyIterCallHook, which is that very routine, installed
+      here by pyeval to invert exactly this dependency. `reverse=` needs no
+      callable at all — just the opposite pyvar_gt comparison. }
+    function sort(key: Pointer = nil; reverse: Boolean = False): Variant;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
       yield the file's LINES, and each keeps its newline, so joining them
       reproduces the file byte for byte — which is what CPython's read()
@@ -1293,6 +1295,14 @@ function pyos_path_expanduser(const p: AnsiString): AnsiString;
 function pyos_path_splitext(const p: AnsiString): TPyList;
 function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
+{ time.time() — seconds since the Unix epoch as a float, CPython's contract.
+  Raises rather than answering 0 on a target with no clock number: the epoch is
+  a legal value, so a soft failure here is a wrong ANSWER, not a missing one. }
+function pytime_time: Double;
+{ os.listdir(path) — the directory's entries, '.' and '..' excluded as CPython
+  excludes them. Order is the filesystem's, which CPython also does not promise;
+  a caller that needs an order sorts. }
+function pyos_listdir(const path: AnsiString): TPyList;
 function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
 { os.remove / os.rename: unlink / rename via syscall, returning 0 (Python returns
@@ -3349,8 +3359,17 @@ begin
     indexing loop O(n^2) — measured at 2476x CPython for n=160k, and the reason
     a compiled language was losing to a bytecode interpreter
     (bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython).
-    The block header carries the answer; PXXStrUnique forgets it whenever bytes
-    are about to change, which is the one place they can. }
+    The block header carries the answer, and every site that mutates bytes in
+    place must forget it — PXXStrUnique is one of them, NOT the only one. This
+    sentence used to say it was ("which is the one place they can"); the same
+    claim in PXXStrUnique's own header caused three bugs fixed on 2026-08-29,
+    and this copy is the one that decides whether the cache may be trusted at
+    all, so it is the worse place for it to be wrong. The list today is
+    `grep PXXStrForgetAscii` in builtinheap.pas plus two hand-emitted x86-64
+    paths in ir_codegen.inc (the AnsiStrUniqueAddr blob and the in-place
+    SetLength resize). Adding a mutation site means adding a forget, whether or
+    not it goes through PXXStrUnique.
+    bug-a-the-ascii-cache-consumer-still-says-byte-mutation-has-one-place }
   cached := PXXStrAsciiCached(Pointer(s));
   if cached >= 0 then
   begin
@@ -5631,14 +5650,30 @@ begin
   Result := pynone;   { Python returns None }
 end;
 
-{ Python's list.sort(reverse=) — IN PLACE, unlike sorted() (pyeval.pas), which
-  returns a new list. `key=` is still absent: it needs PyCallKey1's
-  generic-callable dispatch, which lives in pyeval.pas and cannot be called
-  from here (pyeval `uses pylib`, not the reverse) — refused rather than
-  guessed at. `reverse=` has no such constraint: it needs no callable, only the
-  opposite `pyvar_gt` content-order comparison this unit already has (see
-  max()/min() above). bug-nilpy-list-sort-method-missing,
-  bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error.
+{ Python's list.sort(key=, reverse=) — IN PLACE, unlike sorted() (pyeval.pas),
+  which returns a new list.
+
+  `key=` WAS absent, and the reason recorded here was that it needs PyCallKey1's
+  generic-callable dispatch, which lives in pyeval.pas and cannot be called from
+  a unit pyeval itself `uses`. That constraint is real and is also already
+  solved: pyeval installs PyCallKey1 into PyIterCallHook precisely to invert
+  this dependency, because map/filter cursors in THIS unit had the identical
+  problem. Going through the hook means sort() dispatches a key by the same one
+  entry point sorted()/map()/filter() do, so there is no shape it handles
+  differently — which was the objection that kept this refused (a pylib-side
+  re-implementation would have got the common lambda right and diverged on the
+  callable shapes that fall back). A nil hook raises rather than silently
+  sorting by the UNMAPPED element, the same call the cursors make.
+
+  `reverse=` never had that constraint: it needs no callable, only the opposite
+  `pyvar_gt` content-order comparison this unit already has (see max()/min()
+  above). bug-nilpy-list-sort-method-missing,
+  bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error,
+  feature-nilpy-list-sort-inplace-key-reverse.
+
+  `key` leads, as it does in sorted() and in CPython (`sort(*, key, reverse)`);
+  no caller can pass sort's arguments positionally, since CPython's are
+  keyword-only, so the added leading parameter cannot displace one.
 
   Declaring the parameter is the whole frontend fix. The method call path in
   pasparser_*.inc drives its argument loop off ParamCount (`while mai <=
@@ -5651,9 +5686,25 @@ end;
   way, so equal elements must retain input order in both directions. Flipping
   which operand `pyvar_gt` gets keeps the comparison STRICT, so equal elements
   still do not swap and stability is preserved. }
-function TPyList.sort(reverse: Boolean): Variant;
-var i, j: Integer; v: Variant; swapped: Boolean;
+function TPyList.sort(key: Pointer; reverse: Boolean): Variant;
+var i, j: Integer; v, kv: Variant; swapped: Boolean; keys: TPyList;
 begin
+  { The keys are computed ONCE, up front, and moved in lockstep with the
+    elements below — Python calls key() exactly once per element, and a key
+    with a side effect (or an expensive one) would otherwise be re-entered
+    O(n^2) times by the insertion sort. Same shape as sorted(). }
+  keys := TPyList.Create;
+  for i := 0 to Self.count - 1 do
+  begin
+    if key <> nil then
+    begin
+      if PyIterCallHook = nil then
+        raise TypeError.Create('list.sort(): callable dispatch is unavailable');
+      keys.append(PyIterCallHook(key, Self.at(i)));
+    end
+    else
+      keys.append(Self.at(i));
+  end;
   for i := 1 to Self.count - 1 do
   begin
     j := i;
@@ -5661,18 +5712,22 @@ begin
     while (j > 0) and swapped do
     begin
       if reverse then
-        swapped := pyvar_gt(Self.at(j), Self.at(j - 1))
+        swapped := pyvar_gt(keys.at(j), keys.at(j - 1))
       else
-        swapped := pyvar_lt(Self.at(j), Self.at(j - 1));
+        swapped := pyvar_lt(keys.at(j), keys.at(j - 1));
       if swapped then
       begin
         v := Self.at(j);
         Self.put(j, Self.at(j - 1));
         Self.put(j - 1, v);
+        kv := keys.at(j);
+        keys.put(j, keys.at(j - 1));
+        keys.put(j - 1, kv);
         Dec(j);
       end;
     end;
   end;
+  keys.Free;
   Result := pynone;   { Python returns None }
 end;
 
@@ -12491,6 +12546,84 @@ begin
   pyos_getenv_d := pyos_environ_get_d(name, dflt);
 end;
 
+{ The getdents64 buffer walk. The kernel packs VARIABLE-LENGTH records:
+
+    struct linux_dirent64 {
+      u64  d_ino;      offset 0
+      s64  d_off;      offset 8
+      u16  d_reclen;   offset 16   <- how far to the next record
+      u8   d_type;     offset 18
+      char d_name[];   offset 19, NUL-terminated, padded so reclen is aligned
+    };
+
+  That layout is the same on every target — it is a kernel ABI struct, not a
+  per-arch one, which is why only the syscall NUMBER varies and this walk does
+  not. d_reclen is assembled from two BYTES rather than read as a wider word:
+  every target here is little-endian so a masked 8-byte read would work, but it
+  would also read past the record for the shortest possible entry, and being
+  explicit costs one line. }
+function pyos_listdir(const path: AnsiString): TPyList;
+var cs, nm: AnsiString;
+    buf: array[0..8191] of Byte;
+    fd, n, pos, reclen, k: Int64;
+begin
+  Result := TPyList.Create;
+  if not PyPalHasGetdents then
+    raise Exception.Create('os.listdir: this build has no getdents64 number '
+      + 'for this target (see the table in pypal.pas)');
+  cs := path + #0;
+  { O_RDONLY, deliberately WITHOUT O_DIRECTORY: that flag's value differs per
+    architecture (0200000 on x86, 040000 on arm/arm64), so requiring it would
+    add a second per-arch constant table to get wrong. getdents64 on a
+    non-directory answers -ENOTDIR by itself, which is the same refusal one
+    syscall later. }
+  fd := PyPalOpen(@cs[1], PYPAL_O_RDONLY, 0);
+  if fd < 0 then
+    pyos_raise_ioerror(fd, path, '');
+  while True do
+  begin
+    n := PyPalGetdents(fd, @buf[0], SizeOf(buf));
+    if n = 0 then Break;                 { end of directory }
+    if n < 0 then
+    begin
+      PyPalClose(fd);                    { before raising, or the fd leaks }
+      pyos_raise_ioerror(n, path, '');
+    end;
+    pos := 0;
+    while pos < n do
+    begin
+      reclen := Int64(PByte(@buf[pos + 16])^)
+                or (Int64(PByte(@buf[pos + 17])^) shl 8);
+      { A zero reclen would spin this loop forever on a malformed buffer; stop
+        instead. Nothing should produce one, which is exactly why an unguarded
+        version would hang rather than fail. }
+      if reclen <= 0 then Break;
+      nm := '';
+      k := pos + 19;
+      while (k < n) and (buf[k] <> 0) do
+      begin
+        nm := nm + Chr(buf[k]);
+        k := k + 1;
+      end;
+      if (nm <> '.') and (nm <> '..') then Result.append(nm);
+      pos := pos + reclen;
+    end;
+  end;
+  PyPalClose(fd);
+end;
+
+function pytime_time: Double;
+var sec, nsec: Int64;
+begin
+  if not PyPalClockRealtime(sec, nsec) then
+    raise Exception.Create('time.time(): this build has no clock_gettime '
+      + 'number for this target (see the table in pypal.pas)');
+  { Double carries 53 mantissa bits; an epoch second needs 31, which leaves
+    sub-microsecond resolution — the same precision CPython's float gives, and
+    for the same reason. }
+  pytime_time := Double(sec) + Double(nsec) / 1000000000.0;
+end;
+
 function pyos_getcwd: AnsiString;
 var buf: array[0..4095] of Char; r: Int64; i: Integer;
 begin
@@ -12704,15 +12837,32 @@ end;
 
 { `s is None` for a str-typed value: a NilPy str that is None has a nil handle,
   a real string (including "") does not. Compares the managed handle, not the
-  content — content compare against None read the wrong bytes and crashed. }
+  content — content compare against None read the wrong bytes and crashed.
+
+  That first sentence was FALSE for as long as it stood, and this routine was
+  correct only for None: an empty AnsiString WAS nil, so every `is None` test
+  fired for "" too. It became true with PXX_NILPY_STR
+  (bug-nilpy-empty-str-and-none-are-the-same-value) — the fix is entirely in
+  the string PRODUCERS, and this consumer is unchanged. }
 function pystr_is_none(const s: AnsiString): Boolean;
 begin
   Result := Pointer(s) = nil;
 end;
 
+{ None in a plain-`str` slot. Result is deliberately LEFT UNASSIGNED: an
+  AnsiString result is zero-initialised, so this returns the nil handle, and
+  nil is now the one and only thing that means None.
+
+  It must NOT say `Result := ''`. Under PXX_NILPY_STR an empty NilPy string
+  literal is a real zero-length block (that is the whole fix for
+  bug-nilpy-empty-str-and-none-are-the-same-value), so `''` here would hand
+  back a non-nil handle and `retnone() is None` would answer False for
+  `def retnone() -> str: return None` -- which CPython answers True, and which
+  this compiler answered correctly BY ACCIDENT before, via the same collapse
+  that made "" wrong. Fixing the empty string without fixing this line trades
+  one wrong answer for another. }
 function pystr_none: AnsiString;
 begin
-  Result := '';
 end;
 
 { Identity that BOXES its argument into a variant: passing a scalar to a Variant

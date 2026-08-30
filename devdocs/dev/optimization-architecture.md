@@ -1,7 +1,7 @@
 # Optimization architecture (the `-O` arc)
 
 *Study guide to how frankonpiler optimizes. Read alongside the live ticket
-`devdocs/progress/working/feature-optimization-levels.md` (per-pass log +
+[[feature-optimization-levels]] (per-pass log +
 measurements) and the split-out tickets it links.*
 
 This document explains **what we optimize, where each optimization lives, why
@@ -162,8 +162,14 @@ A constant right operand loads straight into `rcx` instead of the stack dance:
 ```
 push rax ; <eval right> ; mov rcx,rax ; pop rax     ->     mov rcx, imm32/imm64
 ```
-Safe: the constant has no side effects; downstream register contract (rax=left,
-rcx=right) is byte-identical.
+Safe: the constant has no side effects, and the register contract downstream
+(rax=left, rcx=right) is exactly what the stack dance produced, so **every byte
+emitted after the operand load is unchanged**. Note that is a third sense of
+"identical" from the two in CLAUDE.md's claims table -- not binary
+reproducibility and not behavioural parity, but *this pass emits the same
+downstream code*. Verified 2026-08-30; the sentence previously read "is
+byte-identical" with no object, which is the shape the claims table exists to
+catch.
 
 **Pass 2 — leaf-sym BINOP operand direct load** (`ir_codegen.inc` + `EmitLoadVarRcx`
 in `symtab.inc`). Extends pass 1 to a side-effect-free scalar local/param/global
@@ -221,7 +227,17 @@ shared IR), with identical runtime output.
 ### The `-O2` tier (landed 2026-07-04)
 
 `-O2` is no longer an alias of `-O1`. Two features landed, both gated
-`OptLevel >= 2` so `-O0`/`-O1` stay byte-identical:
+`OptLevel >= 2` so `-O0`/`-O1` output is unaffected by them:
+
+> **Re-verified 2026-08-30.** Still true: `RegcallAssignResidency` and
+> `TryRetainInlineBody` each open with an `OptLevel < 2` exit. But the sentence
+> is now *incomplete* rather than wrong — it was written before the `-O3` tier
+> existed, and there are now 24 `OptLevel >= 3` gates whose passes must satisfy
+> the same property. Each `-O3` slice verifies it per landing (baseline = HEAD
+> with only that slice's hunk reverted; `-O0`/`-O1`/`-O2` byte-identical on six
+> programs), which is evidence per slice, not a standing gate. See
+> `feature-opt-o3-register-pressure`, standing rule 1: the self-host fixedpoint
+> is structurally blind to an `-O3`-only defect.
 
 **Register calling convention — r14/r15 param residency** (x86-64 only;
 `feature-callconv-register-args`). Up to 2 eligible scalar-by-value params per
@@ -252,9 +268,24 @@ normally. Pure args (literal / plain scalar ident) substitute directly; if any
 arg has a side effect, ALL args are captured left-to-right into temps first, so
 Pascal evaluation order holds. Auto-inline: keys on eligibility, not the `inline;`
 keyword (also captured). `--measure-inline` (phase 0) sized it: 664 leaf@12
-call sites (2.2%), on hot tiny helpers. Validated byte-identical `-O0` vs `-O2`
-across **505 programs** and on all four cross targets (i386/aarch64/arm32/
-riscv32).
+call sites (2.2%), on hot tiny helpers.
+
+**What "validated" means here, checked 2026-08-30 — the two halves have
+different lifetimes and the original sentence gave them one tense.** The
+**505-program** run was a ONE-TIME measurement at landing; nothing re-runs it,
+and it is written above in the present tense, which is the exact rot the claims
+discipline warns about. What stands today is `make test-opt`: **24 programs**,
+comparing program **output** at `-O0`/`-O1`/`-O2`/`-O3`. The **cross-target**
+half IS still live — i386, aarch64, riscv32 and arm32 each carry a `-O2 == -O0`
+inline gate in the Makefile.
+
+Two further precisions. "Byte-identical `-O0` vs `-O2`" here means the compiled
+programs produce **identical output** — behavioural parity, the second row of
+CLAUDE.md's claims table, not binary reproducibility; the binaries differ, which
+is the point of optimising. And `tools/selfcompile_odiff.sh` is **not** the
+standing answer to this claim, though it is adjacent enough to be mistaken for
+one: it asserts that a compiler *built* at `-O0` and one built at `-O3` **emit
+the same bytes**, which is a different proposition about a different artefact.
 
 **Slice 2b (straight-line multi-statement bodies, `-O2`).** A leaf function whose
 body is a straight-line statement sequence with scalar ordinal locals and a
@@ -342,6 +373,22 @@ honor it.
 
 ## 6. Methodology — how every pass is proven
 
+> **Corrected 2026-08-30 (frankD): this rhythm is the PASS-PROMOTION checklist,
+> not the per-edit loop.** Steps 2 and 4 name suite targets the repo now refuses
+> outright — `.claude/hooks/no-full-suite.sh` denies the whole `make test*`
+> family, `make test-opt` included. While you are still changing a pass, the loop
+> is `make compiler/pascal26` plus your repro; Track T sweeps breadth against
+> your pushed sha, and `tools/gate.sh quick` is required before a pin.
+>
+> Run the ladder below when you are about to **promote** a pass from `-O3` to
+> `-O2`, or to bless a binary — which is the moment it was written for, and where
+> its extra thoroughness earns its cost. Step 3 in particular is worth keeping
+> and is **not** covered by the ordinary gate: `make compiler/pascal26` builds
+> `compiler.pas` at the DEFAULT `-O` level, so the standard fixedpoint proves
+> self-compilation at *one* level only. A `-O0`-only self-compile failure passed
+> the entire gate on 2026-08-19 and was found by a benchmark. That is exactly the
+> hole step 3 closes, and nothing else does.
+
 Per-pass rhythm (never skip a step; slow steps run as separate visible
 commands):
 
@@ -398,7 +445,8 @@ tiers (the sacred gate); pins are -O2-built and transparent.
 | `compiler/inline_expand.inc` | **inline retention `TryRetainInlineBody`/`CloneToInlineRegion`/`BuildInlineTernary` (§4)**; `inline;` directive capture |
 | `compiler/emit.inc` | low-level x86-64 emit; `MovRaxImm` (pass 3) |
 | `compiler/symtab.inc` | `EmitLoadVar`/`EmitLoadVarRcx` + `LeafSymRcxLoadable` (pass 2); **`ResidentRegOf`/`RegcallRefreshResident` + resident hooks + epilogue restore (§4)** |
-| `compiler/ir_codegen386/arm32/aarch64/riscv32/xtensa.inc` | cross backends — read the shared (optimized) IR incl. inlined bodies; **no emitter peepholes, no regcall (x86-64 only)** |
+| `compiler/ir_codegen386.inc`, `ir_codegen_arm32/riscv32/xtensa.inc` | cross backends — read the shared (optimized) IR incl. inlined bodies; **no emitter peepholes, no register residency** |
+| `compiler/ir_codegen_aarch64.inc` | aarch64 — same shared-IR consumption, **plus its own register residency** (`UnifiedResidencyAssignA64`). Corrected 2026-08-30: this file was previously grouped with the four above under "no regcall (x86-64 only)", which stopped being true when aarch64 residency landed. CLAUDE.md's rule is per-backend effort = **x86-64 + aarch64**, so aarch64 gaining a pass is the expected direction, and the table row was a false limit rather than a surprise. No emitter peepholes here yet. |
 | `Makefile` | `test-opt` (-O1/-O2 differential corpus + fixedpoints); cross-target inline gates; `stabilize`/`pin` (now -O2); `benchmark-opt-levels` |
 
 **Tickets:** `feature-optimization-levels` (umbrella + log),

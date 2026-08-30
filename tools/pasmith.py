@@ -106,6 +106,24 @@ NO_SHORTSTRING_TRUNCATION = False    # FIXED: fec98091 + 7716bd2a (truncating st
 NO_ONE_CHAR_STRING_LITERAL = False   # FIXED: 913ad5fc (Copy() promotes a Char arg to string; compat-pascal-copy-of-char-literal done)
 NO_BARE_NOT_ORD = False              # FIXED: not-ord bitwise + operand-width (bug-pascal-not-of-ord-uses-boolean-negation)
 
+# PASMITH_NO_DODGES=1 forces every dodge OFF, whatever it is set to above.
+#
+# A dodge removes a shape from the generator, so a ledger entry parked as
+# `dodged` cannot be re-measured while its dodge is active: regenerating the
+# recorded seed produces a program that no longer contains the bug, and the
+# recheck would report FIXED from a program that never had the chance to fail.
+# That is a green verdict from no data — the same shape as the empty-loop FIXED
+# that recheck() used to print.
+#
+# So pasmith_run's recheck sets this when it re-measures a dodged entry, which
+# is what makes "dodged -> fixed" happen on its own. Note the three shas
+# hand-written above: every one of those transitions was a human noticing, which
+# is precisely the property recheck's docstring claims nobody should need.
+if os.environ.get("PASMITH_NO_DODGES") == "1":
+    NO_SHORTSTRING_TRUNCATION = False
+    NO_ONE_CHAR_STRING_LITERAL = False
+    NO_BARE_NOT_ORD = False
+
 
 def lit_for(ty, rnd):
     """A literal that always fits `ty` -- never relies on range checking."""

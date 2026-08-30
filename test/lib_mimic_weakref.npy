@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_weakref.py against CPython's real `weakref`.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where `import weakref`
+finds the stdlib module, and every line below produces identical output both
+ways. Run it as `python3 test/lib_mimic_weakref.npy` to see that.
+
+WHAT A DIFFERENTIAL CAN AND CANNOT COVER HERE, because the gap is the point.
+The shim's `proxy` returns the target itself, so it diverges from CPython in
+three ways: `proxy(x) is x`, `type(proxy(x))`, and lifetime (ours is a strong
+reference and leaks where CPython's does not). NONE of those are asserted below,
+and their absence is deliberate rather than an oversight -- a differential pins
+what the two agree on, and asserting a difference would make this file fail under
+one of the two interpreters, which is exactly the property that makes it worth
+having.
+
+So this test proves the thing the corpus caller actually depends on: that
+attribute reads, writes and method calls FORWARD to the target identically. The
+divergence is documented in lib/rtl/mimic_weakref.py's header, and the leak it
+causes is stated there in the loudest terms available. If someone later makes
+`proxy` a real weak reference, this file should still pass unchanged -- it is
+written to survive that fix, not to pin the workaround.
+"""
+
+import weakref
+
+ok = 0
+
+
+def check(label, got, want):
+    global ok
+    if got == want:
+        ok = ok + 1
+        print(label + "=ok")
+    else:
+        print(label + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+class Target:
+    def __init__(self):
+        self.v = 7
+        self.name = "target"
+
+    def doubled(self):
+        return self.v * 2
+
+    def add(self, n):
+        return self.v + n
+
+
+t = Target()
+p = weakref.proxy(t)
+
+# Reads forward.
+check("read-int", p.v, 7)
+check("read-str", p.name, "target")
+
+# Method calls forward, including ones that read state and ones that take args.
+check("call-noargs", p.doubled(), 14)
+check("call-args", p.add(5), 12)
+
+# Writes forward to the TARGET, not to a copy -- this is the one that would
+# catch a "proxy" implemented as a snapshot rather than a reference.
+p.v = 20
+check("write-through", t.v, 20)
+check("write-visible-via-proxy", p.v, 20)
+check("call-after-write", p.doubled(), 40)
+
+# A write made on the target is visible through the proxy: the other direction
+# of the same property, and the one that fails if a proxy ever copies on read.
+t.v = 3
+check("read-after-target-write", p.v, 3)
+
+# The callback parameter is accepted. CPython fires it on target death; the shim
+# can never observe a death and ignores it. Neither behaviour is reachable while
+# the target is alive, so both interpreters agree on this line: it constructs.
+q = weakref.proxy(t, None)
+check("callback-arg-accepted", q.v, 3)
+
+# Two proxies of one target both see it.
+r = weakref.proxy(t)
+t.v = 99
+check("two-proxies-agree", r.v, p.v)
+check("two-proxies-see-target", r.v, 99)
+
+print("checks=" + str(ok))
+if ok == 11:
+    print("MIMIC-WEAKREF OK")
+else:
+    print("MIMIC-WEAKREF FAIL")

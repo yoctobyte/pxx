@@ -75,8 +75,27 @@ Cardinal width (rows 4 and 5 agree today and must keep agreeing).
 `Assert(False)` raises `EAssertionFailed` in pxx and is a no-op in FPC unless
 `-Sa`. With `-Sa` the two agree line for line, so this is purely a default.
 
-**Status: NOT yet decided** — `decide-assertion-default-vs-fpc` is open. Listed
-here so a differential run recognises the shape, not because it is settled.
+**Status: DECIDED 2026-08-25, NOT implemented.**
+[[decide-assertion-default-vs-fpc]] resolved to **option 3 — implement
+`{$ASSERTIONS}` / `{$C±}` / `-Sa`, default ON** — derived from the dialect
+contract rather than chosen: an extension must be available by default *and*
+disabled under the strict family, and only option 3 keeps both clauses.
+
+The behaviour above is therefore still exactly what a differential run sees —
+nothing in `lexer.inc` implements the directive yet — but the open work is
+**implementation, not decision**, and it is claimable now:
+[[feature-p-assertions-directive-and-position]] and
+[[feature-p-assertions-switch-and-strict-default]], both in `backlog/`. The
+message format was settled separately in
+[[decide-assertions-directive-and-message-format]].
+
+> Corrected 2026-08-30 (frankD). This read *"NOT yet decided —
+> `decide-assertion-default-vs-fpc` is open"* five days after it was decided. The
+> observable had not changed, which is exactly why nobody noticed: the sentence
+> was right about what a differential run sees and wrong about what anyone needs
+> to do next. **A question recorded as open when it has been answered is a
+> decision that cannot be made** — the reader routes it to Track U instead of to
+> the two feature tickets that are sitting claimable in the backlog.
 
 ## `Abs` / `Sqr` of a 32-bit Integer: native width, same as shifts
 
@@ -112,10 +131,21 @@ So this is the shift decision's rule applied to two more operators, and here it
 is also the arithmetically correct answer rather than merely the convenient one.
 Not a bug — do not "fix" it toward FPC in the default dialect.
 
-**`--strict-fpc` does NOT yet cover these two.** That gap mirrors the one
-`bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` closed for shifts, and is
-filed as `compat-pascal-strict-fpc-abs-and-sqr-widths`. Until it lands, a port
-of FPC bit-twiddling can pin shift width with the flag but not `Abs`/`Sqr`.
+**`--strict-fpc` does NOT yet cover these two** — still true, verified
+2026-08-30. That gap mirrors the one
+[[bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths]] closed for shifts, and
+is filed as **[[compat-pascal-the-strict-fpc-flag-family-is-incomplete]]**
+(`backlog/`), which carries `Abs`/`Sqr` widths as its first row alongside
+pointer difference and `TypeInfo` name. Until it lands, a port of FPC
+bit-twiddling can pin shift width with the flag but not `Abs`/`Sqr`.
+
+> Corrected 2026-08-30 (frankD): this cited the slug
+> compat-pascal-strict-fpc-abs-and-sqr-widths (written plain, not in backticks,
+> because a dead slug quoted like a live one is indistinguishable from one), and
+> it exists nowhere in `devdocs/progress/`. The *claim* was right and
+> the work *is* filed — only the pointer was dead, which is the worse half:
+> following it finds nothing, and "no such ticket" reads as **unfiled**, so the
+> next reader either drops it or files a duplicate.
 
 ## `High`/`Low` of a SHORTSTRING expression
 
@@ -157,7 +187,13 @@ in its header which two do not.
 ## A generic's own type-parameter name, reused as a member/param/local name
 
 **pxx accepts; FPC rejects.** Recorded 2026-08-27 while fixing
-`bug-p-a-nested-type-may-name-a-field-after-an-enclosing-type-parameter`.
+[[bug-p-two-generic-templates-cannot-share-a-nested-type-name]] (`done/`).
+
+> Corrected 2026-08-30 (frankD): this cited
+> `bug-p-a-nested-type-may-name-a-field-after-an-enclosing-type-parameter`, a
+> descriptive slug that has never existed. Third dead ticket pointer in this
+> file; the other two were absorbed into surviving tickets, this one was simply
+> never the name.
 
 Inside `generic TG<T> = class ... end`, the type parameter `T` is in the class's
 scope, so FPC 3.2.2 treats a field, parameter, local or method also named `T` as
@@ -406,3 +442,83 @@ the default mode), and that rejection looks exactly like FPC refusing the
 override. It cost one wrong conclusion here on 2026-08-28: the failure was read
 as evidence about the construct when it was evidence about the scaffolding.
 Confirm the failure is the one you are hunting before recording a limit from it.
+
+## `p - q` counts ELEMENTS, always; FPC counts bytes when either side is untyped
+
+Per [[decide-pointer-difference-unit]], decided 2026-08-25. FPC scales by the
+element size only when **both** operands are typed pointers; when either side is
+an untyped `Pointer` there is no stride to divide by, so it answers **bytes**.
+Under FPC's default `{$TYPEDADDRESS OFF}` that includes `@x`. pxx scales by the
+**left** operand's stride whatever the right operand is.
+
+```pascal
+var a: array[0..7] of Integer; p, p0: ^Integer; u: Pointer;
+p0 := @a[0]; p := @a[2]; u := @a[0];
+{ p - p0    : fpc 2        pxx 2  }
+{ p - u     : fpc SizeOf   pxx 2  }
+{ p - @a[0] : fpc SizeOf   pxx 2  }
+```
+
+**The FPC column is a byte count, so it is not one number — and a `{$mode}` line
+decides which.** `Integer` is 16-bit in FPC's default mode and 32-bit under
+`-Mobjfpc` / `-Mdelphi`, so this exact program prints **4** under plain `fpc` and
+**8** under `fpc -Mobjfpc`, while pxx prints 2 in both. Measured on v393, both
+modes. Anyone writing "fpc 8" from memory has silently assumed objfpc; the
+divergence is bytes-vs-elements, never a particular integer.
+
+Direction: **we give a different answer to a program FPC also accepts**, so it is
+a real divergence and not the "we accept a form FPC rejects" row. It is chosen:
+the uniform rule is derivable from the language — *a pointer difference counts
+elements* — whereas FPC's is derivable only from `{$TYPEDADDRESS OFF}`, i.e. from
+a switch rather than from the type.
+
+**Porting advice** (this is what the rejected diagnostic would have printed, and
+both spellings were checked against FPC as well as pxx — they agree on both):
+
+- want elements → cast the untyped operand to the pointer type: `p - PInt(u)`
+  gives **2** on both;
+- want a byte count → go through `PtrUInt`: `PtrUInt(p) - PtrUInt(u)` gives
+  **8** on both (objfpc mode).
+
+**`--strict-fpc` does NOT restore the byte semantics today.** The decision routed
+it there, but it is unimplemented: measured on v393, `--strict-fpc` and
+`--mimic-fpc` both still print 2. The follow-up was folded into
+[[compat-pascal-the-strict-fpc-flag-family-is-incomplete]] at prio 15 — cite that,
+not `compat-pascal-strict-fpc-pointer-difference-bytes`, which was absorbed and
+no longer exists as a ticket.
+
+## `Null` and `Unassigned` share one tag, and neither raises
+
+Per [[decide-should-a-null-variant-raise-like-fpc]], decided 2026-08-25. pxx
+spells FPC's `Null`, FPC's `Unassigned` and NilPy's `None` with a single
+`VT_EMPTY` tag. FPC keeps them apart, prints an `Unassigned` as empty, and
+**raises** for a `Null`.
+
+Measured on v393 against `fpc -Mobjfpc`:
+
+| | pxx | FPC |
+| --- | --- | --- |
+| `VarType(Null)` | `0` (varEmpty) | `1` (varNull) |
+| `VarType(Unassigned)` | `0` | `0` (varEmpty) |
+| `VarIsNull` / `VarIsEmpty` of `Null` | True / **True** | True / False |
+| `VarIsNull` / `VarIsEmpty` of `Unassigned` | **True** / True | False / True |
+| `WriteLn(v)` and `string(v)` of `Unassigned` | `[]` | `[]` |
+| `WriteLn(v)` and `string(v)` of `Null` | `[]`, exit 0 | **`EVariantTypeCastError`**, exit 217 |
+
+FPC's message is *Could not convert variant of type (Null) into type (String)*,
+and it dies at the `WriteLn` before the cast is reached.
+
+So the consequence a reader actually hits is that **both predicates answer True
+for both spellings** — a program branching on `VarIsNull` to tell a SQL NULL from
+an uninitialised variant cannot do it here.
+
+Direction: a real divergence, chosen. The conflation buys one propagating empty
+tag across three frontends' spellings of the same idea.
+
+**Arithmetic is the case where one tag is not a compromise but the right answer**
+— checked rather than assumed. FPC propagates *both* through arithmetic as
+themselves and raises for neither: `Null + 1` is `Null`, `Unassigned + 1` is
+`Unassigned`. pxx propagates its single tag. The observable behaviour therefore
+agrees — the value keeps propagating, nothing raises — and only the tag `VarType`
+reports differs. That is what `builtin.pas`' `PXXVarBinOpPas` is relying on, and
+until now it was recorded only there and in `lib/rtl/variants.pas`' header.

@@ -37,6 +37,25 @@ INC = re.compile(r'\{\$i(?:nclude)?\s+([^}]+?)\s*\}', re.I)
 DIRECTIVE = re.compile(r'\{\$[^}]*\}')
 IDENT = re.compile(r'[A-Za-z_]\w*')
 
+# A repeated `forward;` — the OTHER way this repo can self-host clean and fail
+# the FPC seed. pxx accepts a routine forward-declared twice; FPC answers
+# "Function is already declared Public/Forward" and aborts the whole compile.
+# Cost a live incident on 2026-08-29: two agents bisecting, and every check a
+# worker normally runs stayed green, because `make compiler/pascal26` compiles
+# with pxx.
+#
+# Same MISS-not-false-alarm bias as the rest of this file, enforced twice:
+# anything under a {$ifdef} is skipped outright (this scanner does not evaluate
+# conditionals, so two forwards in mutually exclusive branches are not a
+# duplicate and reporting them would be a lie), and so is anything marked
+# `overload`, where a repeated NAME is the entire point.
+SIGN = re.compile(
+    r'^\s*(?:function|procedure)\s+[A-Za-z_]\w*(.*?);\s*forward', re.I | re.S)
+COND_OPEN = re.compile(r'\{\$(ifdef|ifndef|ifopt|if)\b', re.I)
+COND_CLOSE = re.compile(r'\{\$(endif|ifend)\b', re.I)
+COND_ANY = re.compile(r'\{\$(ifdef|ifndef|ifopt|if|else|elseif|endif|ifend)\b',
+                      re.I)
+
 # Names FPC's own system/sysutils units export. A use of one of these BEFORE
 # this codebase's own definition is not a build failure — FPC resolves it to
 # ITS routine and compiles — so it is reported as a NOTE rather than a FAIL.
@@ -111,8 +130,18 @@ def strip(line, depth):
     return ''.join(out), depth
 
 
-def expand(path, root, seen, out):
-    """Append (file, lineno, stripped-source) for path and everything it includes."""
+def expand(path, root, seen, out, cdepth=None):
+    """Append (file, lineno, stripped-source, under-conditional) per line.
+
+    `cdepth` is a one-element list so the {$ifdef} nesting survives recursion
+    into an include. A line is flagged conditional when it is inside an open
+    conditional OR carries one itself — the second half matters because this
+    repo writes one-line forms like
+    `{$ifndef PXX_NO_ARM32}procedure Foo; forward;{$endif}`, which open and
+    close on the same line and would otherwise read as unconditional.
+    """
+    if cdepth is None:
+        cdepth = [0]
     real = os.path.realpath(path)
     if real in seen:
         return
@@ -128,9 +157,13 @@ def expand(path, root, seen, out):
         if m:
             name = m.group(1).strip().strip("'\"")
             if not name.startswith('%'):        # {$i %DATE%} and friends
-                expand(os.path.join(root, name), root, seen, out)
+                expand(os.path.join(root, name), root, seen, out, cdepth)
                 continue
-        out.append((path, ln, DIRECTIVE.sub('', INC.sub('', code))))
+        cond = cdepth[0] > 0 or bool(COND_ANY.search(code))
+        cdepth[0] = max(0, cdepth[0]
+                        + len(COND_OPEN.findall(code))
+                        - len(COND_CLOSE.findall(code)))
+        out.append((path, ln, DIRECTIVE.sub('', INC.sub('', code)), cond))
 
 
 def analyse(stream):
@@ -141,14 +174,14 @@ def analyse(stream):
     either detail to show up in the wall clock.
     """
     declared, decl_lines = {}, set()
-    for pos, (_path, _ln, code) in enumerate(stream):
+    for pos, (_path, _ln, code, _cond) in enumerate(stream):
         m = DEF.match(code)
         if m:
             declared.setdefault(m.group(1).lower(), pos)
             decl_lines.add(pos)
 
     bad, notes, seen = [], [], set()
-    for pos, (path, ln, code) in enumerate(stream):
+    for pos, (path, ln, code, _cond) in enumerate(stream):
         if pos in decl_lines:
             continue
         low = code.lower()
@@ -169,12 +202,39 @@ def analyse(stream):
     return bad, notes
 
 
+def duplicate_forwards(stream):
+    """Report a routine given the same `forward;` twice in the FPC stream.
+
+    Keyed on name AND normalised signature, so a genuine overload pair is not
+    reported even if someone forgets the `overload` directive — the bias is to
+    miss, and the gate's real FPC build stays the backstop either way.
+    """
+    first, dups = {}, []
+    for path, ln, code, cond in stream:
+        if cond:
+            continue
+        m = DEF.match(code)
+        if not m or not FWD.search(code):
+            continue
+        if 'overload' in code.lower():
+            continue
+        sm = SIGN.match(code)
+        key = (m.group(1).lower(),
+               re.sub(r'\s+', '', sm.group(1)).lower() if sm else '')
+        if key in first:
+            dups.append((path, ln, m.group(1)) + first[key])
+        else:
+            first[key] = (path, ln)
+    return dups
+
+
 def main(argv):
     entry = argv[1] if len(argv) > 1 else 'compiler/compiler.pas'
     root = os.path.dirname(os.path.realpath(entry))
     stream = []
     expand(entry, root, set(), stream)
     bad, notes = analyse(stream)
+    dups = duplicate_forwards(stream)
     for path, ln, name, dpath, dln in notes:
         print(f'note {path}:{ln}: uses {name} before this codebase declares it '
               f'at {dpath}:{dln} — FPC resolves it to its OWN system-unit '
@@ -183,14 +243,25 @@ def main(argv):
     for path, ln, name, dpath, dln in bad:
         print(f'FAIL {path}:{ln}: calls {name}, declared at '
               f'{dpath}:{dln}, which FPC has not seen yet')
+    for path, ln, name, fpath, fln in dups:
+        print(f'FAIL {path}:{ln}: {name} is already forward-declared at '
+              f'{fpath}:{fln} — FPC rejects the second '
+              f'("already declared Public/Forward") and aborts the compile')
+    if dups:
+        print('     pxx tolerates a repeated forward and FPC does not, so this')
+        print('     self-hosts clean and breaks the bootstrap seed. Delete the')
+        print('     LATER one — the earlier declaration is the one a call')
+        print('     between them depends on.')
     if bad:
         print('     pxx resolves across the unit and FPC resolves in source')
         print('     order, so this self-hosts and breaks the bootstrap seed.')
         print('     Add a `forward;` — near the top of the same file, or in')
         print('     forwards.inc / the frontend`s own forwards file.')
         return 1
+    if dups:
+        return 1
     print(f'ok  no use-before-declaration in the FPC include stream '
-          f'({len(stream)} lines from {entry})')
+          f'and no duplicate forward ({len(stream)} lines from {entry})')
     return 0
 
 

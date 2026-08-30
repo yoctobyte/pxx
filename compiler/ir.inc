@@ -678,6 +678,19 @@ function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
 function IRMethodRefToTemp(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
+{ Track C: C-EXCLUSIVE lowering, moved to compiler/cir.inc (which is included
+  AFTER this file, so ir.inc needs the forwards). Each is reached ONLY from a
+  CProgramMode-guarded call site below; none of them contains that string, which
+  is why the grep that scoped the carve-out could not see any of them.
+  refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed }
+function IRLowerBitFieldRead(fieldNode: Integer; storageAddr: Integer; storageTk: TTypeKind): Integer; forward;
+function IRLowerBitFieldStore(fieldNode, rhsValue: Integer; storageTk: TTypeKind): Integer; forward;
+function IRAddrMayCall(n, depth: Integer): Boolean; forward;
+function IRAssignIsSharedCompound(node: Integer): Boolean; forward;
+function IRLowerCompoundAssign(node: Integer): Integer; forward;
+function CNodeIsDecayedRow(node: Integer): Boolean; forward;
+procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer;
+                                     var defaultLabel: Integer); forward;
 { defined near IRWrapChkBounds, used from IRLowerAddress's AN_DEREF arm far above it
   — the FPC seed needs the forward (bug-a-fpc-seed-drift-emitasmx64-forward). }
 function IRWrapNilChk(ptrVal, astNode: Integer; defaultOn: Boolean): Integer; forward;
@@ -765,8 +778,14 @@ begin
         the epilogue pass that still visits it releases nothing a second time —
         the same "nil it and the old path becomes a no-op" safety the interface
         arm below relies on. }
-      zeroSym := AllocVar('', tyRecord);
-      SymTR[zeroSym].RecId := recId;
+      { AllocRecVar, not AllocVar: this temp is zeroed with RecSize(recId)
+        immediately below, so it must be ALLOCATED at RecSize(recId). It was
+        not -- LastTypeRecId is whatever the last declaration left behind, here
+        REC_NONE, so the temp got 8 bytes and the IR_DEFAULT_MEM wrote 240. The
+        SymTR line that used to sit here looked like it fixed that and could
+        not: SymTR is the additive mirror of Syms[].RecName and nothing reads
+        it, and the storage was already sized. }
+      zeroSym := AllocRecVar('', recId);
       SymIsHiddenArgTemp[zeroSym] := True;
       zeroAddr := IRAppend(IR_LEA, zeroSym, -1, -1, 0, Ord(tyPointer));
       IRAppend(IR_DEFAULT_MEM, zeroAddr, -1, REC_NONE, RecSize(recId), Ord(tyRecord));
@@ -946,111 +965,6 @@ begin
   for i := 0 to width - 1 do
     m := (m shl 1) or 1;
   Result := m;
-end;
-
-function IRBitStorageTk(bytes: Integer): TTypeKind;
-begin
-  if bytes <= 1 then Result := tyUInt8
-  else if bytes = 2 then Result := tyUInt16
-  else if bytes <= 4 then Result := tyUInt32
-  else Result := tyUInt64;   { long-long bitfield: a >4-byte storage unit loads 8 bytes }
-end;
-
-function IRLowerBitFieldRead(fieldNode: Integer; storageAddr: Integer; storageTk: TTypeKind): Integer;
-var recId, width, shift: Integer; fieldName: AnsiString; value, maskNode: Integer;
-    fieldTk: TTypeKind; signBit: Int64; sbNode: Integer;
-begin
-  recId := ResolveNodeRec(ASTLeft[fieldNode]);
-  fieldName := GetASTIdentName(fieldNode);
-  width := RecFieldBitWidth(recId, fieldName);
-  shift := RecFieldBitShift(recId, fieldName);
-  fieldTk := RecFieldType(recId, fieldName);
-  storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
-  value := IRAppend(IR_LOAD_MEM, storageAddr, -1, -1, 0, Ord(storageTk));
-  if shift > 0 then
-    value := IRAppend(IR_BINOP, value,
-                      IRAppend(IR_CONST_INT, -1, -1, -1, shift, Ord(tyInteger)),
-                      Ord(tkIdent), 0, Ord(storageTk));
-  maskNode := IRAppend(IR_CONST_INT, -1, -1, -1, IRBitMask(width), Ord(storageTk));
-  Result := IRAppend(IR_BINOP, value, maskNode, Ord(tkAnd), 0, Ord(storageTk));
-
-  { A SIGNED bitfield stores a two's-complement value in `width` bits, so the mask
-    above hands it back ZERO-extended: `signed f : 7` holding -5 reads as 123. C says
-    -5. Sign-extend it branchlessly with (v xor signBit) - signBit -- no arithmetic
-    shift, no new IR op, correct for every width.
-
-    Applies to EVERY signed field, whatever its width: IRBitStorageTk always picks an
-    UNSIGNED storage type (tyUInt8/16/32), so the load is zero-extended even when the
-    field exactly fills its unit. Guarding on `width < storage bits` (as this first
-    did) left `signed f : 8` in a one-byte unit reading -7 back as 249. An unsigned
-    field must of course stay zero-extended.
-
-    csmith found this on its fourth program, and every signed bitfield in every
-    generated program was wrong. The C corpora (lua/sqlite/tcc) never caught it
-    because their bitfields are unsigned -- the bug was invisible to a decade of
-    real-world C. }
-  { C integer promotion: a bitfield NARROWER than int reads as a SIGNED int —
-    every value of a sub-int field fits, so both signed and unsigned sub-int fields
-    promote to `int`, and downstream signed-vs-unsigned arithmetic (subtraction,
-    modulo, division, comparison) is chosen from THIS node's type. The prior code
-    sign-extended in the (unsigned) storage type and left the result tagged
-    unsigned, so `bit.i % bit.u` did an UNSIGNED modulo (bf-sign-2.c, bitfld-1.c,
-    the gcc-torture bitfield cluster). Do the whole extension in the 32-bit
-    tyInteger domain: first re-mask to a clean zero-extended value (clears garbage
-    above `width` left by a sub-int storage-width op), then sign-extend if the field
-    is signed. Full-width (:32) and long-long bitfields can't fit in int, so they
-    keep the storage-type extension path below. }
-  if width < 32 then
-  begin
-    maskNode := IRAppend(IR_CONST_INT, -1, -1, -1, IRBitMask(width), Ord(tyInteger));
-    Result := IRAppend(IR_BINOP, Result, maskNode, Ord(tkAnd), 0, Ord(tyInteger));
-    if ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
-        (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
-    begin
-      signBit := IRBitMask(width) - (IRBitMask(width) div 2);   { = 1 shl (width-1) }
-      sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(tyInteger));
-      Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkXor), 0, Ord(tyInteger));
-      sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(tyInteger));
-      Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkMinus), 0, Ord(tyInteger));
-    end;
-  end
-  else if ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
-           (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
-  begin
-    { Full-width / long-long signed bitfield: sign-extend in the storage type. }
-    signBit := IRBitMask(width) - (IRBitMask(width) div 2);   { = 1 shl (width-1) }
-    sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(storageTk));
-    Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkXor), 0, Ord(storageTk));
-    sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(storageTk));
-    Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkMinus), 0, Ord(storageTk));
-  end;
-end;
-
-function IRLowerBitFieldStore(fieldNode, rhsValue: Integer; storageTk: TTypeKind): Integer;
-var recId, width, shift, addr, oldVal, clearMask, newBits, maskedNew, maskNode: Integer;
-    fieldName: AnsiString; mask, shiftedMask: Int64;
-begin
-  recId := ResolveNodeRec(ASTLeft[fieldNode]);
-  fieldName := GetASTIdentName(fieldNode);
-  width := RecFieldBitWidth(recId, fieldName);
-  shift := RecFieldBitShift(recId, fieldName);
-  storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
-  addr := IRLowerAddress(fieldNode);
-  mask := IRBitMask(width);
-  shiftedMask := mask shl shift;
-  oldVal := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, Ord(storageTk));
-  clearMask := IRAppend(IR_BINOP, oldVal,
-                        IRAppend(IR_CONST_INT, -1, -1, -1, not shiftedMask, Ord(storageTk)),
-                        Ord(tkAnd), 0, Ord(storageTk));
-  maskedNew := IRAppend(IR_BINOP, rhsValue,
-                        IRAppend(IR_CONST_INT, -1, -1, -1, mask, Ord(storageTk)),
-                        Ord(tkAnd), 0, Ord(storageTk));
-  if shift > 0 then
-    maskedNew := IRAppend(IR_BINOP, maskedNew,
-                          IRAppend(IR_CONST_INT, -1, -1, -1, shift, Ord(tyInteger)),
-                          Ord(tkShl), 0, Ord(storageTk));
-  newBits := IRAppend(IR_BINOP, clearMask, maskedNew, Ord(tkOr), 0, Ord(storageTk));
-  Result := IRAppend(IR_STORE_MEM, addr, newBits, -1, 0, Ord(storageTk));
 end;
 
 { ===== PROMOTABLE INT lowering (feature-a-promotable-int stage 3) =====
@@ -1755,8 +1669,13 @@ begin
         (s[1] -> data[0], lo=-7); C is 0-based ("lit"[0] -> data[0], lo=-8).
         Without the C offset, "1.3.1"[0] read base+7 (the length word's high
         byte, 0) instead of '1'. }
+      { C's base is now the DATA pointer (the producer decayed it), so index 0
+        is at base+0 and the lo adjustment is 0 — it was -8 while the base was
+        the handle. Pascal is unchanged: its base is still the handle and it is
+        1-based, so s[1] -> data[0] is lo=-7.
+        refactor-c-string-literal-decay-belongs-at-the-producer }
       if CProgramMode then
-        Result := IRAppend(IR_INDEX, baseAddr, indexNode, -8, 1, Ord(tyChar))
+        Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, 1, Ord(tyChar))
       else
         Result := IRAppend(IR_INDEX, baseAddr, indexNode, -7, 1, Ord(tyChar));
       Exit;
@@ -2072,55 +1991,6 @@ begin
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
 end;
 
-function IRAddrMayCall(n, depth: Integer): Boolean;
-{ Does evaluating this ADDRESS node RUN something? Only calls matter: every other
-  address shape here is a load or an arithmetic node over one, and re-walking
-  those is free and idempotent (`*p++` parks its increment in a separate
-  statement, which is why that shape was never affected).
-
-  The walk is kind-aware on purpose. IRA is a NODE index for some opcodes and a
-  SYMBOL/PROC index for others (IR_LEA, IR_LOAD_SYM, IR_CALL), so a blind
-  three-operand recursion would read a symbol number as a node number and answer
-  from an unrelated part of the arena. Unknown kinds answer False — that is
-  today's behaviour, so a shape this list misses stays exactly as it was rather
-  than growing a temp nobody asked for. }
-begin
-  Result := False;
-  if (n < 0) or (n >= IRCount) or (depth > 12) then Exit;
-  case IRKind[n] of
-    IR_CALL, IR_CALL_IND, IR_VIRTUAL_CALL:
-      Result := True;
-    IR_LOAD_MEM, IR_NEG, IR_NOT:
-      Result := IRAddrMayCall(IRA[n], depth + 1);
-    IR_INDEX, IR_FIELD, IR_BINOP:
-      begin
-        Result := IRAddrMayCall(IRA[n], depth + 1);
-        if not Result then Result := IRAddrMayCall(IRB[n], depth + 1);
-      end;
-  end;
-end;
-
-function CASTLValueHasSideEffect(n, depth: Integer): Boolean;
-{ Does EVALUATING this lvalue do anything observable — call, increment, assign?
-  Only then is it worth pinning the node down; an ordinary `a[i] += 1` must keep
-  the exact IR it has today, so the default answer is False and the recursion
-  covers only the shapes an lvalue is actually built from. }
-begin
-  Result := False;
-  if (n < 0) or (n >= ASTNodeCount) or (depth > 12) then Exit;
-  case ASTKind[n] of
-    AN_CALL, AN_VIRTUAL_CALL, AN_INCDEC, AN_ASSIGN, AN_COMPOUND_ASSIGN, AN_COMMA:
-      Result := True;
-    AN_DEREF, AN_FIELD, AN_PTR_CAST, AN_ADDR, AN_CLASS_CAST:
-      Result := CASTLValueHasSideEffect(ASTLeft[n], depth + 1);
-    AN_INDEX, AN_BINOP:
-      begin
-        Result := CASTLValueHasSideEffect(ASTLeft[n], depth + 1);
-        if not Result then Result := CASTLValueHasSideEffect(ASTRight[n], depth + 1);
-      end;
-  end;
-end;
-
 function IRLowerDestAddress(node: Integer): Integer;
 { The destination address of an assignment, evaluated EXACTLY ONCE.
 
@@ -2164,90 +2034,6 @@ begin
   IRTk[Result] := Ord(tyPointer);
   IRAppend(IR_STORE_SYM, addrTmp, Result, -1, 0, Ord(tyPointer));
   Result := IRAppend(IR_LOAD_SYM, addrTmp, -1, -1, 0, Ord(tyPointer));
-end;
-
-function IRLowerCompoundAssign(node: Integer): Integer;
-{ C `lv OP= rhs` where lv has a SIDE EFFECT.
-
-  cparser desugars it to `lv = lv OP rhs` and REUSES the one lvalue AST node in
-  both places -- the comment there says "since it is a pure lvalue read this is
-  safe", which is the assumption C breaks. Lowering walks that node twice, so
-  `*f() += 1` called f twice, `a[i++] += 1` stepped i twice, and `*p++ += 1`
-  advanced p by TWO. The increment operators never had it: AN_INCDEC lowers the
-  address once, and that is the model here.
-
-  Keeping the desugar is deliberate. The alternative -- switching cparser to the
-  AN_COMPOUND_ASSIGN node, whose docstring promises exactly "the lvalue address
-  is computed ONCE" -- looks like a one-line fix and is a trap: that node lowers
-  to a raw scalar read-modify-write with no pointer-arithmetic SCALING, so
-  `p += 1` on a `long long *` would step one byte. The desugar inherits all of
-  C's conversion and scaling rules from the ordinary binop path, because the AST
-  is untouched; only the VALUE the shared node lowers to is supplied here.
-
-  So: lower the destination address once, read through it once, and pin the node
-  to both for the duration of the RHS. Saved/restored around the recursion so a
-  nested compound assignment (`a[i++] += (b[j++] += 1)`) keeps its own pinning.
-  bug-c-a-compound-assignment-evaluates-its-lvalue-twice }
-var lvNode, lvTk, addr, cur, val: Integer;
-    savedAST, savedAddr, savedVal: Integer;
-begin
-  lvNode := ASTLeft[node];
-  lvTk := ASTTk[lvNode];
-  addr := IRLowerDestAddress(lvNode);
-  cur := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, lvTk);
-  savedAST := IRCompoundLvAST; savedAddr := IRCompoundLvAddr; savedVal := IRCompoundLvVal;
-  IRCompoundLvAST := lvNode;
-  IRCompoundLvAddr := addr;
-  IRCompoundLvVal := cur;
-  val := IRLowerAST(ASTRight[node]);
-  IRCompoundLvAST := savedAST; IRCompoundLvAddr := savedAddr; IRCompoundLvVal := savedVal;
-  Result := IRAppend(IR_STORE_MEM, addr, val, -1, 0, lvTk);
-  { an assignment is an expression yielding the stored value (C 6.5.16), same
-    load-back the ordinary scalar arms append }
-  Result := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, lvTk);
-end;
-
-function CASTNodeOccursIn(root, target, depth: Integer): Boolean;
-{ Does this exact AST NODE INDEX appear inside that subtree? Node identity, not
-  equality: two spellings of the same expression are two nodes, so a hit means
-  one node is genuinely reachable from two places — which in C only cparser's
-  `lv OP= rhs` -> `lv = lv OP rhs` desugar produces. Depth-capped; the shared
-  node sits on the RHS's left spine, a few levels down at most (a plain-char
-  lvalue promotes through three binops before it). }
-begin
-  Result := False;
-  if (root < 0) or (root >= ASTNodeCount) or (depth > 24) then Exit;
-  if root = target then begin Result := True; Exit; end;
-  Result := CASTNodeOccursIn(ASTLeft[root], target, depth + 1);
-  if not Result then Result := CASTNodeOccursIn(ASTRight[root], target, depth + 1);
-end;
-
-function IRAssignIsSharedCompound(node: Integer): Boolean;
-{ Is this AN_ASSIGN the `lv = lv OP rhs` cparser builds for `lv OP= rhs`, with a
-  side-effecting lvalue? The signature is exact: the binop's LEFT is the very
-  same AST node index as the destination, which nothing else produces.
-
-  Narrow on purpose -- a pure lvalue keeps the IR it has today (the shared node
-  lowers to the same loads twice, which is only duplicated work), an AN_IDENT
-  destination has no address to double, and a managed or aggregate destination
-  belongs to the arms that know how to copy it. C has no compound assignment on
-  those anyway. }
-var lv: Integer; tk: TTypeKind;
-begin
-  Result := False;
-  if not CProgramMode then Exit;
-  lv := ASTLeft[node];
-  if (lv < 0) or (ASTKind[lv] = AN_IDENT) then Exit;
-  if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_BINOP) then Exit;
-  { The lvalue is normally the binop's own left operand, but a promotion sits in
-    between when it needs one: a plain-char lvalue arrives as
-    `((lv & $FF) ^ $80) - $80`, three binops deep, and that spelling kept its
-    double evaluation after the direct check was already fixed. Search the RHS
-    instead of guessing the depth. }
-  if not CASTNodeOccursIn(ASTRight[node], lv, 0) then Exit;
-  tk := IntToTypeKind(ASTTk[lv]);
-  if not (TypeIsOrdinal(tk) or TypeIsFloat(tk) or (tk = tyPointer)) then Exit;
-  Result := CASTLValueHasSideEffect(lv, 0);
 end;
 
 function IRBuildHiddenDest(procIdx: Integer): Integer;
@@ -2347,41 +2133,27 @@ end;
 
 function IRNodePointerBase(node: Integer): Boolean;
 { Is this node something pointer ARITHMETIC scales against — a pointer, or an
-  array that decays to one?
+  array that decays to one? It asks the declaration and nothing else.
 
-  tyInt64 on a C node is AMBIGUOUS, and that is the whole difficulty here. The
-  partial-index builder in cparser.inc RETAGS its base `ASTTk[base] :=
-  Ord(tyInt64)` as a SENTINEL meaning "this add is raw bytes, already scaled —
-  do not scale me again" (`m[1]` on `int m[3][4]`). But tyInt64 is also the
-  honest element tag of `long long a[8]`, and the blanket `<> tyInt64` bail this
-  function used to carry could not tell the two apart: a signed 64-bit array was
-  never a pointer base, so `a + 1` stepped ONE BYTE instead of eight, while
-  `unsigned long long a[8]` (tyUInt64) stepped correctly. A sign bit decided a
-  stride. `a[1]` was always right — indexing scales itself — so the layout
-  looked fine and only the decayed form was wrong.
+  It USED TO carry a tyInt64 special case, because cparser's decayed-row
+  builders marked "already byte-scaled, do not scale me again" by retagging
+  their base tyInt64 — a flag in the type field, indistinguishable from the
+  honest tag of `long long a[8]`. This function had to guess which meaning it
+  was looking at, and every version of that guess was wrong for some real
+  program: first a blanket bail (`long long q - p` answered 0), then a
+  whitelist for the one shape that carries tyInt64 honestly, which still read
+  `(char*)(m+1)-(char*)m` on `long long m[3][4]` as 1 instead of 32 and
+  `*(s.v+3)` on a `long long v[8]` FIELD as 0 instead of 3.
 
-  Tell them apart by asking whether the node's own DECLARATION explains the tag:
-  a fixed-extent, single-dimension array whose element type really is tyInt64
-  carries it honestly and decays like any other array. Everything else keeps the
-  bail, which is what the multi-dimensional row cases need — a 2-D array's ident
-  is retagged in place, and there the sentinel reading is the right one.
-
-  The real fix is for the sentinel to stop borrowing a type tag; filed as
-  [[refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag]].
+  The flag now lives on the add node as an ASTSLen stamp, which means one thing;
+  `CNodeIsDecayedRow` reads it, and the pointer-arith arms consult that directly
+  rather than inferring it from a type. There is nothing left here to
+  disambiguate.
+  refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag,
   bug-c-pointer-difference-on-a-long-long-element-type }
-var symIdx: Integer;
 begin
   Result := IntToTypeKind(ASTTk[node]) = tyPointer;
   if Result or (not CProgramMode) then Exit;
-  if IntToTypeKind(ASTTk[node]) = tyInt64 then
-  begin
-    symIdx := -1;
-    if ASTKind[node] = AN_IDENT then symIdx := ASTIVal[node];
-    if (symIdx < 0) or (not Syms[symIdx].IsArray) or
-       (Syms[symIdx].ArrLen = -1) or (SymArrNDims[symIdx] > 1) or
-       (Syms[symIdx].ElemType <> tyInt64) then
-      Exit;
-  end;
   Result := CNodeDecaysToPointer(node);
 end;
 
@@ -2440,6 +2212,20 @@ begin
     if CProgramMode and RecFieldIsArray(recId, fieldName) and
        (RecFieldDynDepth(recId, fieldName) = 0) then
     begin
+      { A MULTI-dimensional array FIELD decays to a pointer to its ROW, exactly
+        as the AN_IDENT arm above says a multi-dim array does — `s.m + 1` on
+        `struct { int m[3][4]; }` steps 16 bytes. This arm answered the ELEMENT
+        type and stopped, so it stepped 4 (1 for a char row, 8 for a double
+        row), and `int (*r)[4] = s.m + 1; r[0][2]` silently read a different
+        element. The bare-array spelling was fixed in
+        bug-c-a-multidim-array-decays-with-the-element-stride and this arm, one
+        screen below it in the same routine, was not touched.
+        bug-c-a-multidim-array-field-decays-with-the-element-stride }
+      if RecFieldArrNDims(recId, fieldName) > 1 then
+      begin
+        Result := RecFieldRowStride(recId, fieldName);
+        Exit;
+      end;
       elemTk := RecFieldType(recId, fieldName);
       recId := ResolveNodeRec(node);
     end
@@ -2460,12 +2246,11 @@ begin
   end
   else if ASTKind[node] = AN_BINOP then
   begin
-    { A DECAYED ARRAY ROW (`m[1]` on `int m[3][4]`) is built as a raw byte add
-      over a base retagged tyInt64, so neither operand can answer what the
-      result steps by; the partial-index builder stamps it here.
-      bug-c-a-decayed-array-row-steps-one-byte }
-    if CProgramMode and (ASTSLen[node] > 0) and
-       (IntToTypeKind(ASTTk[node]) = tyPointer) then
+    { A DECAYED ARRAY ROW (`m[1]` on `int m[3][4]`) is built as a raw byte add,
+      so neither operand can answer what the result steps by; the builder stamps
+      it, and that stamp is also what marks the add pre-scaled.
+      bug-c-a-multidim-array-decays-with-the-element-stride }
+    if CNodeIsDecayedRow(node) then
     begin
       Result := ASTSLen[node];
       Exit;
@@ -2570,7 +2355,7 @@ end;
   it DECAYS (a row, for a multi-dim one), and a fully indexed base wants the
   element instead. bug-c-a-multidim-array-decays-with-the-element-stride }
 function IRArrayElemStride(node: Integer): Integer;
-var symIdx: Integer;
+var symIdx, fldRec: Integer; fldName: AnsiString; fldTk: TTypeKind;
 begin
   if (node >= 0) and (ASTKind[node] = AN_IDENT) then
   begin
@@ -2583,6 +2368,28 @@ begin
         Result := 1
       else
         Result := TypeSize(Syms[symIdx].ElemType);
+      Exit;
+    end;
+  end;
+  { ...and the same array reached as a FIELD. Without this arm an AN_FIELD base
+    took the fallback below, and the fallback is exactly what this function was
+    split out to avoid: IRPointerStride answers what a multi-dim field DECAYS
+    to, which is the ROW. `&a.m[1][0] - &a.m[0][0]` on `int m[3][4]` then
+    divided 16 bytes by a 16-byte row and said 1 where gcc says 4 — the precise
+    symptom the caller's own comment names, reached through the spelling its
+    AN_IDENT test does not cover.
+    bug-a-irarrayelemstride-has-no-field-arm-so-it-answers-the-row-stride }
+  if (node >= 0) and (ASTKind[node] = AN_FIELD) then
+  begin
+    fldRec := ResolveNodeRec(ASTLeft[node]);
+    fldName := GetASTIdentName(node);
+    if RecFieldIsArray(fldRec, fldName) and
+       (RecFieldDynDepth(fldRec, fldName) = 0) then
+    begin
+      fldTk := RecFieldType(fldRec, fldName);
+      if fldTk = tyRecord then Result := RecSize(RecFieldRecId(fldRec, fldName))
+      else if fldTk = tyUnknown then Result := 1
+      else Result := TypeSize(fldTk);
       Exit;
     end;
   end;
@@ -2911,7 +2718,6 @@ var argTk: TTypeKind;
     needTemp: Boolean;
     argIsWholeArray: Boolean;
     argRecId: Integer;
-    savedLastTypeRecId: Integer;
     tmpSym: Integer;
     tmpAddr: Integer;
     srcAddr: Integer;
@@ -3837,12 +3643,9 @@ begin
      (pathIdx < Procs[cpi].ParamCount) and (pathIdx < MAX_PROC_PARAMS) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) then
   begin
-    savedLastTypeRecId := LastTypeRecId;
-    LastTypeRecId := ProcParamRecId[cpi * MAX_PROC_PARAMS + pathIdx];
-    if LastTypeRecId = REC_NONE then LastTypeRecId := EnsureMethodPtrRec;
-    argRecId := LastTypeRecId;
-    tmpSym := AllocVar('', tyRecord);
-    LastTypeRecId := savedLastTypeRecId;
+    argRecId := ProcParamRecId[cpi * MAX_PROC_PARAMS + pathIdx];
+    if argRecId = REC_NONE then argRecId := EnsureMethodPtrRec;
+    tmpSym := AllocRecVar('', argRecId);
     IRAppend(IR_DEFAULT_MEM,
       IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer)),
       -1, REC_NONE, RecSize(argRecId), Ord(tyRecord));
@@ -3855,10 +3658,7 @@ begin
 
   if needTemp then
   begin
-    savedLastTypeRecId := LastTypeRecId;
-    LastTypeRecId := argRecId;
-    tmpSym := AllocVar('', tyRecord);
-    LastTypeRecId := savedLastTypeRecId;
+    tmpSym := AllocRecVar('', argRecId);
     isComIntfArg := (argRecId >= REC_UCLASS_BASE) and
                     UClsIsInterface[argRecId - REC_UCLASS_BASE] and
                     UClsIsComInterface[argRecId - REC_UCLASS_BASE];
@@ -4362,15 +4162,12 @@ function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer;
 
   Memoised in ASTLiftedVar: the interface-call path takes the value's address more
   than once, so this must build it once. }
-var intfCi, tmpSym, instSym, instVal, endLbl, c, skipLbl, savedRec: Integer;
+var intfCi, tmpSym, instSym, instVal, endLbl, c, skipLbl: Integer;
     li, vmtSym, lv, va, eq: Integer;
 begin
   if ASTLiftedVar[node] >= 0 then begin Result := ASTLiftedVar[node]; Exit; end;
   intfCi := Integer(ASTIVal[node]);
-  savedRec := LastTypeRecId;
-  LastTypeRecId := REC_UCLASS_BASE + intfCi;
-  tmpSym := AllocVar('', tyRecord);          { size = TARGET_PTR_SIZE }
-  LastTypeRecId := savedRec;
+  tmpSym := AllocRecVar('', REC_UCLASS_BASE + intfCi);   { size = TARGET_PTR_SIZE }
   ASTLiftedVar[node] := tmpSym;
 
   instSym := AllocVar('', tyPointer);
@@ -4748,48 +4545,6 @@ begin
   AppendDynWalkTail := argNode;
 end;
 
-{ Dispatch scan: walk the ENTIRE switch body (any depth — case/default labels are
-  labels on arbitrarily nested statements, C 6.8.1) assigning each C marker an
-  IR_LABEL and, for a case, emitting `if (sel == val) goto label`. Recurses into
-  every construct EXCEPT a nested AN_SWITCH (its own cases belong to it). This is
-  what lets Duff's device work: the case labels buried inside a do-while are found
-  here and the body lowering (normal IRLowerAST) drops the IR_LABELs in place, so
-  dispatch can jump straight into the loop. C markers carry ASTSLen=1 (distinct
-  from a Pascal AN_CASE statement / the Default(T) node). }
-procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer; var defaultLabel: Integer);
-var condNode, selSz: Integer; caseVal: Int64;
-begin
-  if node < 0 then Exit;
-  if ASTKind[node] = AN_SWITCH then Exit;   { nested switch owns its own case labels }
-  if (ASTKind[node] = AN_CASE) and (ASTSLen[node] = 1) then
-  begin
-    ASTSOffset[node] := IRNewLabel;
-    { C 6.8.4.2: each case constant is CONVERTED to the promoted controlling
-      type. quickjs switches a uint32_t tag over negative enum labels
-      (JS_TAG_OBJECT = -1): the label must compare as 0xFFFFFFFF, not as a
-      sign-extended 64-bit -1 that never matches a zero-extended selector. }
-    caseVal := ASTIVal[node];
-    selSz := TypeSize(IntToTypeKind(selTk));
-    if (selSz < 8) and TypeCompareUnsigned(IntToTypeKind(selTk), IntToTypeKind(selTk)) and
-       (caseVal < 0) then
-      caseVal := caseVal and ((Int64(1) shl (selSz * 8)) - 1);
-    condNode := IRAppend(IR_BINOP,
-      IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
-      IRAppend(IR_CONST_INT, -1, -1, -1, caseVal, selTk),
-      Ord(tkNeq), 0, Ord(tyBoolean));
-    IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[node], condNode, -1, 0, 0);
-    Exit;                                    { marker has no children of interest }
-  end;
-  if (ASTKind[node] = AN_DEFAULT) and (ASTSLen[node] = 1) then
-  begin
-    ASTSOffset[node] := IRNewLabel;
-    defaultLabel := ASTSOffset[node];
-    Exit;
-  end;
-  IRLowerCSwitchDispatchScan(ASTLeft[node], selTmp, selTk, defaultLabel);
-  IRLowerCSwitchDispatchScan(ASTRight[node], selTmp, selTk, defaultLabel);
-end;
-
 { Inline expansion (feature-inline-routines): clone a retained inline body from
   the reserved AST region into the LIVE pool, replacing each AN_INLINE_PARAM(i)
   placeholder with a fresh clone of the call's i-th argument AST (in InlineArgAST).
@@ -4845,6 +4600,80 @@ begin
     if (sidx < 0) or (sidx >= SymCount) then Exit;
     if Syms[sidx].IsArray then Exit;
     InlineArgIsPure := True;
+  end;
+end;
+
+{ -O3: is this for-loop BOUND safe to re-emit at its point of use instead of
+  being materialised into a hidden temp?
+
+  AN_FOR must evaluate both bounds before assigning the control variable, and
+  the initial bound is normally captured into a temp to achieve that — because
+  `initValNode` is a value node the backend re-emits at the STORE, so leaving it
+  uncaptured moves the initial expression's side effects after the limit's, and
+  Pascal's order is initial-then-final
+  (bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned).
+
+  That capture costs a store plus a load at every loop ENTRY — measured at
+  exactly 2 instructions per entry, and 8% of a program whose inner loop is
+  entered 20000 times and runs twice. It is only NECESSARY when re-emitting the
+  initial bound later could observe something different. For a literal or a plain
+  scalar variable it cannot: it has no side effects to reorder, and the only
+  thing that could change its value between the two points is the LIMIT's own
+  lowering — so BOTH bounds must pass this test, not just the initial one. When
+  they do, the store can simply be appended after the limit and the bound
+  re-emitted there, which is what the pre-fix code did for free and correctly,
+  for this subset only.
+
+  The allow-list is closed and the DEFAULT IS FALSE — an unknown node kind is
+  assumed impure. That is the opposite default from CASTLValueHasSideEffect
+  nearby, deliberately: that one is permissive because a wrong "no side effect"
+  there merely misses an optimisation, while a wrong answer HERE silently
+  restores a wrong iteration count, which is the bug this lowering was fixed for
+  two hours before this was written.
+
+  AN_CALL is out for the obvious reason. AN_INDEX and AN_FIELD are out for a
+  less obvious one and it is a judgement call, not an oversight: they are reads
+  and a pure limit cannot write what they read, but they can FAULT (range check,
+  nil base), and I would rather not reason about fault ORDERING inside a
+  lowering this recently broken. The census says they cost little — allowing
+  binop and unary already covers about 80% of the loops that pay for the temp
+  (`init=3 limit=5`, a variable up to an expression, is the single most common
+  shape at 87 of ~250 in compiler.pas), while AN_INDEX and AN_FIELD inits are 46
+  between them. Cheap to add later with its own proof.
+
+  Deliberately mirrors InlineArgIsPure, which answers the same question for a
+  substituted inline argument. Kept separate rather than shared: that one may
+  widen for inlining reasons that have nothing to do with evaluation order, and
+  this predicate guards a rule whose violation is a SILENT wrong iteration count.
+  A shared helper would let one caller's convenience change the other's
+  correctness. }
+function ForBoundReEmittable(boundAST, depth: Integer): Boolean;
+begin
+  ForBoundReEmittable := False;
+  if (boundAST < 0) or (boundAST >= ASTNodeCount) or (depth > 12) then Exit;
+  case ASTKind[boundAST] of
+    AN_INT_LIT, AN_BOOL_LIT:
+      ForBoundReEmittable := True;
+    AN_IDENT:
+      begin
+        if ASTIVal[boundAST] < 0 then Exit;
+        if ASTIVal[boundAST] >= SymCount then Exit;
+        if Syms[ASTIVal[boundAST]].IsArray then Exit;
+        { A bare AN_IDENT can name a parameterless FUNCTION in this dialect (the
+          `bare own name` form), and calling one is emphatically not re-emittable.
+          Requiring a data symbol kind excludes it by construction rather than by
+          hoping the parser produced AN_CALL. }
+        ForBoundReEmittable :=
+          (Syms[ASTIVal[boundAST]].Kind = skGlobal) or
+          (Syms[ASTIVal[boundAST]].Kind = skLocal) or
+          (Syms[ASTIVal[boundAST]].Kind = skParam);
+      end;
+    AN_NEG, AN_NOT:
+      ForBoundReEmittable := ForBoundReEmittable(ASTLeft[boundAST], depth + 1);
+    AN_BINOP:
+      ForBoundReEmittable :=
+        ForBoundReEmittable(ASTLeft[boundAST], depth + 1) and
+        ForBoundReEmittable(ASTRight[boundAST], depth + 1);
   end;
 end;
 
@@ -5215,12 +5044,9 @@ end;
   taken through a base-typed variable captures the override.
   bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
 function IRMethodRefToTemp(mref: Integer): Integer;
-var savedRecId, tmpSym, tmpAddr, value, dataAddr, ofsNode: Integer;
+var tmpSym, tmpAddr, value, dataAddr, ofsNode: Integer;
 begin
-  savedRecId := LastTypeRecId;
-  LastTypeRecId := EnsureMethodPtrRec;
-  tmpSym := AllocVar('', tyRecord);
-  LastTypeRecId := savedRecId;
+  tmpSym := AllocRecVar('', EnsureMethodPtrRec);
   tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
   value := IRMethodRefCode(mref);                                  { Code @ +0 }
   IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));
@@ -5954,6 +5780,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     down: Boolean;
     varIdx, varIdx2: Integer;
     forLimTmp: Integer;   { AN_FOR: hidden temp holding the once-evaluated limit }
+    forInitTmp: Integer;  { AN_FOR: hidden temp holding the once-evaluated initial value }
     initValNode, storeNode, limitValNode, cmpNode, condJmpNode, bodyIRNode: Integer;
     loadVarNode2, constOneNode, stepNode, storeStepNode, jmpNode: Integer;
     hiddenArgSym: Integer; argIsManagedTemp: Boolean;
@@ -6052,7 +5879,33 @@ begin
       Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], ASTTk[node]);
 
     AN_STR_LIT:
+    begin
       Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
+      { IN C, A STRING LITERAL *IS* A `char *`, so decay it HERE, once, rather
+        than at each consumer. IR_CONST_STR's value is the frozen string's
+        HANDLE — an 8-byte length prefix then the data — and C wants the data.
+
+        Three consumers used to add the 8 themselves (assign, return, binop),
+        each testing `ASTKind[<its own operand>] = AN_STR_LIT`. That test asks
+        what NODE produced the operand, so ANY node in between defeated all of
+        them at once. Measured before this change: `return (1, "s")` returned a
+        pointer at the length prefix and printed nothing, and so did
+        `return (const char *)(1, "s")`, `return (1, (const char *)"s")`,
+        `return (1, (2, "s"))` and `const char *v = (const char *)(1, "s")` —
+        five silent wrong values, every one of them a comma operator, which is
+        simply a wrapper nobody had thought to test.
+
+        Deciding at the producer cannot be defeated that way: there is no
+        "in between" to hide in. The call-argument path already worked for
+        exactly this reason — it keys on the LOWERED VALUE's tk
+        (`IRTk[aval] = tyString`), not on the node kind — and its whole column
+        was green while the node-kind columns were not.
+        refactor-c-string-literal-decay-belongs-at-the-producer }
+      if CProgramMode then
+        Result := IRAppend(IR_BINOP, Result,
+                           IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                           Ord(tkPlus), 0, Ord(tyPointer));
+    end;
 
     AN_DEFAULT:
       { C switch-default MARKER (ASTSLen=1): drop its dispatch IR_LABEL in place.
@@ -6097,12 +5950,29 @@ begin
       end;
       vrTmp := AllocDynArray('', vrElemTk, 1 + vrElemDepth);
       { Managed local synthesised after the prologue zero-init pass — flag it for
-        the codegen prologue nil-init and zero the handle slot here so SetLength
-        sees nil (mirrors AN_VARREC_ARRAY). }
+        the codegen prologue nil-init (mirrors AN_VARREC_ARRAY).
+
+        No per-reach IR_DEFAULT_MEM: nil-init happens ONCE at body head (BSS for
+        a main-body skGlobal, the SymIsHiddenArgTemp codegen-prologue pass for an
+        in-proc skLocal), so on every later reach the slot already holds the
+        PREVIOUS array — SetLength then resizes that array instead of publishing
+        a fresh one over the top of it, and each element store's release-of-old
+        frees the previous trip's element. Zeroing here dropped the handle
+        instead, orphaning the block AND every managed element it owned.
+
+        This is the same defect, mechanism and remedy as
+        bug-a-managed-string-arg-temp-leaks-on-loop-reuse, whose fix is a few
+        hundred lines below on the managed-string arg temps; the array-ctor
+        temps were simply never covered by it. It is NOT the frame-buffer remedy
+        of bug-open-array-copy-temp-leak, and that distinction is load-bearing:
+        that arm could call managed handles "borrowed bytes, no per-element ARC"
+        because it copied bytes out of a CALLER-owned fixed array, whereas this
+        arm CREATES the handles through the element-assign path with ARC. A
+        frame buffer reusing storage without releasing the previous contents
+        would have halved the number and kept leaking one element per trip,
+        proportional to string length.
+        bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array }
       SymIsHiddenArgTemp[vrTmp] := True;
-      IRAppend(IR_DEFAULT_MEM,
-        IRAppend(IR_SLOTADDR, vrTmp, -1, -1, 0, Ord(tyPointer)),
-        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
 
       { SetLength(tmp, vrCount) }
       vrIdent := AllocNode(AN_IDENT);
@@ -6160,16 +6030,18 @@ begin
 
       { This dyn-array temp is a managed local synthesised during lowering, after
         the parser's prologue zero-init pass, so flag it for the codegen prologue
-        nil-init. The inline DEFAULT_MEM below only zeroes the slot when this
-        literal is actually reached; if the `[...]` sits in a branch that is not
-        taken, the slot would otherwise hold stale stack bytes and the function's
-        managed-local cleanup would free a garbage handle. }
-      SymIsHiddenArgTemp[vrTmp] := True;
+        nil-init.
 
-      { Zero the handle slot (allocated after the prologue) so SetLength sees nil. }
-      IRAppend(IR_DEFAULT_MEM,
-        IRAppend(IR_SLOTADDR, vrTmp, -1, -1, 0, Ord(tyPointer)),
-        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+        That prologue pass — plus BSS for a main-body skGlobal — is what makes
+        the not-taken-branch case safe, and it is why there is no per-reach
+        IR_DEFAULT_MEM here. The old inline zero ran on every reach, so in a loop
+        it discarded the previous trip's array handle before SetLength could
+        resize it: the block was orphaned once per call (`Format('%d-%s',
+        [i,'x'])` leaked 64 bytes a call, 2M calls reaching 125 MB RSS). Same
+        defect and same remedy as
+        bug-a-managed-string-arg-temp-leaks-on-loop-reuse below.
+        bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array }
+      SymIsHiddenArgTemp[vrTmp] := True;
 
       { SetLength(tmp, vrCount): synthesise the dyn-array SetLength (-102) call. }
       vrIdent := AllocNode(AN_IDENT);
@@ -9114,7 +8986,14 @@ begin
       end
       else
       begin
+        { A DECAYED ROW is already in bytes -- cparser multiplied by the
+          stride when it built the add -- so none of the three pointer-arith
+          arms below may scale it again. It used to be kept out of them by
+          retagging its base tyInt64, which is the sentinel this refactor
+          removed; the marker is now read where it is written.
+          refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag }
         if (ASTIVal[node] = Ord(tkMinus)) and
+           (not CNodeIsDecayedRow(node)) and
            IRNodePointerBase(ASTLeft[node]) and
            IRNodePointerBase(ASTRight[node]) then
         begin
@@ -9145,6 +9024,7 @@ begin
           end;
         end
         else if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
+           (not CNodeIsDecayedRow(node)) and
            IRNodePointerBase(ASTLeft[node]) and
            TypeIsOrdinal(IntToTypeKind(ASTTk[ASTRight[node]])) then
         begin
@@ -9159,6 +9039,7 @@ begin
           Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, Ord(tyPointer));
         end
         else if (ASTIVal[node] = Ord(tkPlus)) and
+                (not CNodeIsDecayedRow(node)) and
                 TypeIsOrdinal(IntToTypeKind(ASTTk[ASTLeft[node]])) and
                 IRNodePointerBase(ASTRight[node]) then
         begin
@@ -9210,17 +9091,9 @@ begin
             the 8-byte Pascal length prefix — same +8 as the store/call paths).
             Without this, `"abc" == (void*)0` hit the Pascal content-compare,
             which dereferences the NULL operand -> SIGSEGV. }
-          if CProgramMode then
-          begin
-            if ASTKind[ASTLeft[node]] = AN_STR_LIT then
-              left := IRAppend(IR_BINOP, left,
-                               IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                               Ord(tkPlus), 0, Ord(tyPointer));
-            if ASTKind[ASTRight[node]] = AN_STR_LIT then
-              right := IRAppend(IR_BINOP, right,
-                                IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                                Ord(tkPlus), 0, Ord(tyPointer));
-          end;
+          { The two +8 adjustments this arm used to apply are gone: a C literal
+            is decayed at the producer, so `"abc" == (void*)0` already compares
+            char pointers. refactor-c-string-literal-decay-belongs-at-the-producer }
           { {$Q+} arithmetic: ival=1 marks the op overflow-checked; codegen
             traps a wrapped result into PXXOverflow (RE 215 / EIntOverflow).
             Only ordinal +,-,* carry the tag (parser sets ASTQChk). }
@@ -10347,8 +10220,14 @@ begin
           the DESTINATION instead, because Pascal does not permit a string
           literal in a `p: Pointer` at all and pxx should not invent a meaning
           for it. }
+        { PASCAL ONLY. C's literals arrive already decayed from the producer
+          arm of IRLowerAST, so adding 8 again would step past the first eight
+          characters. Pascal keeps the destination-keyed rule below because
+          Pascal does not permit a literal in a plain `p: Pointer` and pxx
+          should not invent a meaning for it.
+          refactor-c-string-literal-decay-belongs-at-the-producer }
         if (ASTKind[ASTRight[node]] = AN_STR_LIT) and (lhsTk = tyPointer) and
-           (CProgramMode or IsNodePChar(ASTLeft[node])) then
+           (not CProgramMode) and IsNodePChar(ASTLeft[node]) then
           value := IRAppend(IR_BINOP, value,
                             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                             Ord(tkPlus), 0, Ord(tyPointer));
@@ -10557,11 +10436,11 @@ begin
             apply. Without it `const char *ver(void){ return "1.3.1"; }` returns a
             pointer at the length byte, so ver()[0] is 5 not '1' (zlib's version
             check). C-mode only; Pascal self-build unaffected. }
-          if CProgramMode and (ASTKind[ASTLeft[node]] = AN_STR_LIT) and
-             (CurProc >= 0) and (Procs[CurProc].RetType = tyPointer) then
-            value := IRAppend(IR_BINOP, value,
-                              IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                              Ord(tkPlus), 0, Ord(tyPointer));
+          { The +8 this arm used to apply now happens once at the producer, so
+            it is gone from here. It was the site that failed most visibly:
+            keyed on ASTKind[ASTLeft[node]], it saw through nothing, and
+            `return (1, "s")` returned the length prefix.
+            refactor-c-string-literal-decay-belongs-at-the-producer }
           if (CurProc >= 0) and (Procs[CurProc].RetSymIdx >= 0) then
           begin
             varIdx := Procs[CurProc].RetSymIdx;
@@ -12126,8 +12005,62 @@ begin
       down := ASTIVal[isDownNode] = 1;
       varIdx := ASTIVal[lhsNode];
       
+      { EVALUATE BOTH BOUNDS BEFORE ASSIGNING THE CONTROL VARIABLE.
+
+        ISO Pascal, Delphi and FPC all evaluate the initial AND the final
+        expression first, and only then assign the control variable. This used
+        to store the control variable HERE and lower the limit below, so a limit
+        that MENTIONS the control variable read the value just stored:
+        `n := 5; for n := 1 to n do` ran ONE iteration where FPC runs five,
+        `to n - 1` ran ZERO where FPC runs four, and `downto` was wrong the same
+        way (9 against FPC's 3).
+
+        Silent: no diagnostic, no crash, just a wrong iteration count. It was
+        found only because the wrong count happened to index out of bounds and
+        segfault -- a version that merely looped the wrong number of times would
+        have produced a plausible wrong answer and been believed. And nobody
+        writes `for n := 1 to n` deliberately; it arrives from a computed bound
+        reusing a scratch variable, `n := min(i, j); for n := 1 to n do`, which
+        is ordinary code.
+
+        Note this is the SAME window as the once-only comment below, at its other
+        end. That fix materialised the limit so the loop could not re-read it
+        while running; this one materialises the bounds so the loop cannot
+        mis-read them while STARTING. Fixing the first did not close the second.
+
+        The initial value must be materialised too, and that is the part that is
+        not a two-line reorder: `initValNode` is a value NODE, and the backend
+        re-emits that subtree at its use -- the store. Moving the store after the
+        limit without a temp would therefore move the initial expression's SIDE
+        EFFECTS after the limit's, and Pascal's order is initial-then-final. With
+        both bounds as calls, `for i := Start to Lim do`, the call order would
+        silently swap.
+
+        Same IR_CONST_INT exemption as the limit: a constant is free to re-emit,
+        so the ordinary `for i := 1 to 10` allocates nothing and emits exactly
+        what it did before.
+        bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned }
+      { PXXDBG=a.forinit -- REPORT ONLY, prices how far the re-emittable test has
+        to widen. The narrow "literal or plain scalar ident on BOTH bounds" form
+        fired on the microbenchmark and on NOTHING in mandelbrot / lispdemo /
+        jsondemo, so print what the bounds of a costing loop actually ARE. }
+      if PxxDbgEnabled('a.forinit') and (ASTKind[initNode] <> AN_INT_LIT) then
+        WriteLn('PXXDBG a.forinit init=', ASTKind[initNode],
+                ' limit=', ASTKind[limitNode]);
       initValNode := IRLowerAST(initNode);
-      storeNode := IRAppend(IR_STORE_SYM, varIdx, initValNode, -1, 0, ASTTk[lhsNode]);
+      { -O3: skip the capture when BOTH bounds are a literal or a plain scalar
+        variable. Then re-emitting the initial bound at the store observes
+        exactly what capturing it would have — nothing it reads can be written
+        by the limit's lowering, and it has no side effects of its own to
+        reorder. Everything else still captures. See ForBoundReEmittable. }
+      if (IRKind[initValNode] <> IR_CONST_INT) and
+         not ((OptLevel >= 3) and ForBoundReEmittable(initNode, 0) and
+              ForBoundReEmittable(limitNode, 0)) then
+      begin
+        forInitTmp := AllocVar('', IntToTypeKind(IRTk[initValNode]));
+        IRAppend(IR_STORE_SYM, forInitTmp, initValNode, -1, 0, IRTk[initValNode]);
+        initValNode := IRAppend(IR_LOAD_SYM, forInitTmp, -1, -1, 0, IRTk[initValNode]);
+      end;
 
       limitValNode := IRLowerAST(limitNode);
 
@@ -12147,6 +12080,9 @@ begin
         IRAppend(IR_STORE_SYM, forLimTmp, limitValNode, -1, 0, IRTk[limitValNode]);
         limitValNode := IRAppend(IR_LOAD_SYM, forLimTmp, -1, -1, 0, IRTk[limitValNode]);
       end;
+
+      { ...and only NOW is the control variable assigned. }
+      storeNode := IRAppend(IR_STORE_SYM, varIdx, initValNode, -1, 0, ASTTk[lhsNode]);
 
       startLabel := IRNewLabel;
       endLabel := IRNewLabel;

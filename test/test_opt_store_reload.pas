@@ -23,6 +23,13 @@
      between the store and it. The WriteLn between the store and the use is
      that test — it is a call, so the run ends there.
 
+  4. THE MARK IS A PREDICTION AND THE EMITTER IS THE AUTHORITY. Points 2 and 3
+     are cases IRFirstEvaluated models correctly. Section 6 is a case it does
+     NOT model — the emitter's own -O3 arm evaluates the RIGHT operand first —
+     and there the mark is made and must then be REFUSED at emit time. Getting
+     that wrong is not a missed optimisation, it is a silently wrong number:
+     -O3 alone printed 222 where four oracles printed 635218.
+
   ParamCount keeps every value out of reach of constant folding (it is 0 at
   run time, so the printed numbers are stable); without it -O3 folds the whole
   program to literals and the test asserts nothing.
@@ -41,6 +48,8 @@ var
   arr: array[0..1] of Integer;
   rec: record f: Integer; end;
   pi: ^Integer;
+  la, lb, lc: LongInt;
+  qh: QWord;
 begin
   big := 4294967296 + 5 + ParamCount;
 
@@ -114,4 +123,40 @@ begin
   c := ShortInt(201 + ParamCount);
   pi^ := c * 2;
   WriteLn('mem   ', arr[0], ' ', rec.f, ' ', arr[1]);
+
+  { 6. THE EMITTER REORDERS AND THE MARK IS WRONG.
+    `qh := qh * 31 xor qword(lc)` is a binop whose two subtrees are BOTH
+    complex and both pure, which is precisely -O3's W1 slice 9: park the RIGHT
+    value in r8 and evaluate it FIRST, because then the left lands in rax where
+    it belongs and one move disappears. IRFirstEvaluated does not model that
+    arm — it answers "the left leaf", i.e. the load of qh — so the load is
+    marked redundant and rax, by the time it is reached, holds qword(lc).
+
+    Every one of the four axes below is load-bearing; drop any and the shape
+    stops reaching that arm:
+      - TWO statements: the mark needs the immediately preceding store to qh.
+      - `* 31`: the imm-fold arm is what makes IRFirstEvaluated walk down to
+        the leaf load instead of stopping at "cannot say".
+      - `qword(...)` on the RIGHT: it lowers to a binop, so the right subtree
+        is not a leaf and the leaf-right arms above slice 9 do not take it.
+        All-Int64 is clean for exactly that reason.
+      - both subtrees pure: slice 9 requires it.
+
+    The witness is the VALUE, not the absence of a divergence: 635218 is what
+    -O0, -O1, -O2, fpc -O0 and fpc -O2 all print, and 222 is what -O3 printed.
+    222 = (7 * 31) xor 7 — the third variable standing in for the first
+    statement's result, which is how the bug was read off a single number.
+    bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements }
+  la := 661 + ParamCount; lb := ParamCount; lc := 7 + ParamCount;
+  qh := QWord(la) * 31 xor QWord(lb);
+  qh := qh * 31 xor QWord(lc);
+  WriteLn('reord ', Int64(qh));
+
+  { ...and again with lb non-zero, which separates "statement one was DROPPED"
+    from "statement one was MISCOMPUTED": the wrong answer did not move when
+    lb did, so nothing of statement one reached statement two. }
+  la := 661 + ParamCount; lb := 5 + ParamCount; lc := 7 + ParamCount;
+  qh := QWord(la) * 31 xor QWord(lb);
+  qh := qh * 31 xor QWord(lc);
+  WriteLn('reord2 ', Int64(qh));
 end.

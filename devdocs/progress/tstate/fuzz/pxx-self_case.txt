@@ -1,0 +1,19 @@
+sig=pxx-self_case
+seed=91162
+sha=8e39c9ed5
+compiler=/home/neo/pxx/compiler/pascal26
+note=pxx CONTRADICTS ITSELF across -O levels -- it produces different output; an optimiser bug (Track A/O); FPC not involved
+
+fpc-O0       16452949249337348755
+fpc-O2       16452949249337348755
+pxx-O0       16452949249337348755
+pxx-O2       16452949249337348755
+pxx-O3       16571182087083257235
+
+first divergence at checkpoint 8 of 67 -- a `case` statement
+    fpc-O0     96154030711226118
+    pxx-O3     1043162413893359075
+    (checkpoint N = the Nth statement of the traced program;
+     everything before it agrees, so the bug is AT that statement)
+
+repro: tools/pasmith.py --seed 91162 --vars 12 --funcs 2 --stmts 60 --depth 4 --classes 3 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3 --checks 1 --consts 1

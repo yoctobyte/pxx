@@ -144,6 +144,7 @@ enables a whole lane.
 | `n.ctorargs` | N (NilPy) | every NilPy construction's argument AST kind + type kind |
 | `a.ir:<proc>` | A (core) | the IR of ONE routine (`a.ir:*` = `--dump-ir`) |
 | `a.ast:<proc>` | A (core) | that routine's AST tree before lowering |
+| `p.dgen` | P (Pascal) | one line per IN-PLACE `specialize` injection by the mode-Delphi generic-use rewrite: the template name, the token index, the source line. The rewrite's only observable is the token stream it edits, so a test that merely compiles cannot tell a correct rewrite from one that injects in the wrong place -- which is exactly how `bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use` spliced `specialize` in front of a type DECLARATION and went unnoticed. Note it fires only on the in-place (paramform) arm; a CONCRETE specialization takes the alias-minting path and prints nothing, so a zero here is not by itself evidence the rewrite ran |
 | `a.inline` | A (core) | one line per routine whose body is RETAINED for inline expansion: name, body shape (1 = `Result := E`, 2 = if/else ternary, 3 = straight-line), param count, and whether the body contains a call / reads a global |
 | `a.reload:*` | A (core) | one line per load the -O3 store->reload pass MARKED redundant: IR node, sym index, sym name. The firing count is what a test asserts — an -O0-vs-O3 differential that passes because the pass never ran asserts nothing |
 | `a.arc:<proc>` | A (core) | every symbol the scope-exit managed-cleanup pass CONSIDERS for that routine, with the three facts that decide whether it is released: `kind` (only `skLocal` is released), `comIntf`, `hiddenArgTemp` — plus `scopeBase`/`symCount`/`retSym`. The epilogue releases are emitted as MACHINE CODE, not IR, so a leaking managed temp is invisible in `a.ir`; without this the only way to tell a skipped temp from a released one was to disassemble. It is what showed that the by-value interface temp was NOT skipped by this pass, killing a plausible wrong root cause |
@@ -152,6 +153,9 @@ enables a whole lane.
 | `a.symptr:<name>` | A (core) | what a pointer DECLARATION actually recorded for that symbol (`:*` for every symbol): kind, isArray, element type, pointer DEPTH, immediate pointee, ultimate base, and a pointer-to-fixed-array's extent. The fields `IsNodePChar` and the deref walks consult, so "was the metadata never populated, or never read?" is one run |
 | `a.opovl` | A (core) | every operator-table registration and query, each candidate with its stored right-operand key, and the answer. "My operator did not fire" otherwise has four indistinguishable causes |
 | `a.srcmap:*` | A (core) | the token->file range table a diagnostic's `in: <path>` line is read from: every range's start with the source lines and token text on both sides of the boundary, the token index the diagnostic asked about, and a PLANT line per mark as it is recorded. Answers "did the ranges drift, or is the lookup reading a different token?" — the two guesses that both turned out wrong in `bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file` |
+| `a.w1left` | A (core) | one line per binop whose LEFT operand is a register-resident leaf symbol, bucketed by what it feeds: `CMP`, `MULIMM`, `ALU`, `SHIFT`, `OTHER`. The buckets are what is ACTIONABLE, not what is syntactic — a compare has no destination so its `mov rax, rN` is deletable outright, `imul` has a three-operand form so its is deletable by re-encoding, and add/sub/and/or/xor write rax so theirs is not deletable at all. Answers "which arms could drop the move", which "the operand funnel is 1.21% of the binary" does not. **Read it as a population, never as a firing count**: it said CMP was the largest bucket everywhere and the first implementation fired on 11 sites, because two folds upstream had already consumed most of what it counted |
+| `a.w1cmp32` | every decision of W1 slice 8's 4-byte compare fold, **including the declines** — `FIRE32` / `size` / `leftnotsym` / `typekind`, each with the symbol and its TypeKind. Written because the slice self-hosted clean and changed its target loop by zero bytes: a probe that prints only on firing cannot tell "never called" from "declined", and the answer was a guard rejecting on *unset* IR type metadata rather than on a real mismatch. Prints to **stdout** like the other `a.*` probes, so redirect stderr, not stdout. |
+| `a.forinit` | A (core) | one line per `for` loop whose INITIAL bound is not a literal — the loops that pay for the AN_FOR init temp (a store + a load at every loop ENTRY). Prints the raw `ASTKind` of both bounds, because there is no `AN_` name table and this file says why one should not be added: 1 = `AN_INT_LIT`, 3 = `AN_IDENT`, 5 = `AN_BINOP`, 8 = `AN_CALL`, 10 = `AN_INDEX`, 11 = `AN_FIELD`. **It classifies by ROOT kind, and the disqualifying node is usually a child** — `Length(s) - 1` counts as a binop and is rejected for containing a call. That gap is why widening the elision to pure arithmetic recovered far less than the table predicted |
 | `n.*` / `a.*` | — | everything in a lane |
 | `all` | — | everything |
 
@@ -223,8 +227,33 @@ shape (the C one is done and most of it is reusable).
 
 ## Related
 
-- `devdocs/progress/backlog/feature-heap-poison-and-object-trace.md` — this
+- [[feature-heap-poison-and-object-trace]] — this
   plus the retain/release trace still to come.
-- `devdocs/progress/backlog/feature-debuggability-umbrella.md` — where this sits
+- [[feature-debuggability-umbrella]] — where this sits
   relative to the compiler-side `PXXDBG` switch, real DWARF, and the CPython
   differential harness.
+
+### `p.ptrparam` — a parameter's pointer element type, at both ends
+
+Prints where a pointer parameter's pointee is **written** (parameter
+registration, `pasparser_proc.inc`) and where it is **read** (overload matching,
+`MatchParamCompatible` in `symtab.inc`), so the two can be compared directly.
+
+```
+$ PXXDBG=p.ptrparam ./compiler/pascal26 -Fulib/rtl prog.pas /tmp/p
+PXXDBG p.ptrparam REG   proc=GetPropInfo i=0 sym=363 elemtk=5 stored=5 durable=5 symcount=364
+PXXDBG p.ptrparam MATCH proc=GetPropInfo j=0 durable=5 sym=363 symPtrElem=0 symName=o symKind=1 symcount=365
+```
+
+The MATCH line deliberately prints **both** columns. `durable=` is
+`ProcParamPtrElemTk`, which lives as long as the `Proc`; `symPtrElem=`/`symName=`
+are what `Syms[Params[j].SymIdx]` says. When those disagree — above, the
+parameter `cls` has become the caller's own variable `o` — the symbol slot has
+been **recycled** by `SymRollbackTo`, not merely gone stale.
+
+That distinction is what this channel exists for: it separates "the index is
+wrong" from "the index is right and its referent no longer exists", which
+`bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching`
+could not settle by reasoning — the ticket offered those two hypotheses and the
+answer was the third thing. Reach for it whenever a `Proc*` value and a `Sym`
+value are supposed to agree and do not.

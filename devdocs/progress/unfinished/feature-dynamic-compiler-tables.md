@@ -327,3 +327,17 @@ on every body. Filed and fixed as
 either a real remaining cap (fine — `LabelFixup*` still is one) or a shadow that
 the conversion has just made wrong. That grep is now part of the pattern, not
 an afterthought.
+
+## 2026-08-30 — RE-MEASURE (triage only, nothing applied): still genuine
+
+Checked in the parked-ticket pass. No resume condition names another ticket:
+the five resolved slugs here are cited landed work, and the one open slug
+(`feature-opt-dynarray-grows-in-place`) is a pointer, not a blocker.
+
+This ticket is an incremental conversion with its method already written down —
+*before converting the next family, grep for its `MAX_` name across
+`compiler/**` and read every hit*, because deleting a cap does not delete the
+code that assumed it (the `IRVerify` out-of-bounds write is the worked
+example). That instruction is the ticket's real value and it is intact.
+
+**Re-priced: unchanged.** Parked for want of an agent, not for want of a bridge.

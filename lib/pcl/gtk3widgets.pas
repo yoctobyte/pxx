@@ -1322,10 +1322,23 @@ end;
   OK — it dismisses from a g_timeout via DismissMessageBox, which returns
   control from the run exactly as a real click would. }
 procedure TGtk3WidgetSet.MessageBox(const AText: string);
-var dlg: Pointer;
+var dlg, esc: Pointer;
 begin
+  { Two calls rather than one because gtk_message_dialog_new is VARIADIC in the
+    real headers and pxx's C import drops the variadic tail, so only the fixed
+    prefix is callable (bug-a-c-header-import-drops-the-variadic-tail). The
+    curated binding used to declare a fixed 6-arity form and pass ("%s", text).
+
+    NULL as the format gives a dialog with no message, and set_markup then
+    supplies it -- but set_markup INTERPRETS Pango markup where "%s" did not,
+    so the text is escaped first. Without the escape a message containing & or
+    < renders wrong or is dropped entirely, which is the silent half of this
+    change and the reason it is not just "call set_markup". }
   dlg := gtk_message_dialog_new(nil, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
-                                GTK_BUTTONS_OK, PC('%s'), PC(AText));
+                                GTK_BUTTONS_OK, nil);
+  esc := g_markup_escape_text(PC(AText), -1);
+  gtk_message_dialog_set_markup(dlg, esc);
+  g_free(esc);
   ActiveDialogHandle := dlg;
   gtk_dialog_run(dlg);
   { a timeout may already have destroyed it — do not free it twice }

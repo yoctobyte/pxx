@@ -79,6 +79,11 @@ function RExprRecId(node: Integer): Integer; forward;
   source-order rule as RExprRecId right above. }
 function RParseTryOp(valNode: Integer): Integer; forward;
 function RSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer; forward;
+{ Both are used by RParseFormat, which sits above them because format! is an
+  expression and the Debug expander is written next to println!. Same
+  source-order rule as RExprRecId above. }
+function RSpecIsDebug(fmtOff, start, len: Integer): Boolean; forward;
+procedure RDebugExpand(recvNode, recId: Integer; const prefix: AnsiString); forward;
 
 const
   RVAR_UNIT   = 0;
@@ -122,6 +127,23 @@ var
     with `__` followed by our digits by accident, and there is no block
     scoping to roll back into anyway. }
   RTempSerial: Integer;
+  { Set only while the body of a `fmt` method under `impl fmt::Display` is
+    being parsed. Inside it, two forms mean something they mean nowhere else:
+    `write!(f, ..)` appends to the returned String, and `Ok(())` is a no-op.
+    A narrow, clearly-delimited mode beats teaching those two spellings to the
+    whole statement parser. }
+  RInDisplayFmt: Boolean;
+  { `{:?}` over a record, flattened to an alternating list: item i is the
+    literal text RDbgText[i] followed by the field read RDbgNode[i] (-1 when
+    the item is text only). A LIST, and not a rendered result, because the two
+    consumers render differently and neither should learn the other's form:
+    println! turns each item into a write, format! concatenates them. Global
+    rather than a var parameter because both scanners parse every argument
+    BEFORE they walk the format string, so there is no reentrancy to worry
+    about -- a nested format! inside an argument is already finished. }
+  RDbgText: array[0..255] of AnsiString;
+  RDbgNode: array[0..255] of Integer;
+  RDbgCount: Integer;
   ROptionCi: array[0..MAX_UCLASS-1] of Boolean;
   ROptionElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
   ROptionElemRec: array[0..MAX_UCLASS-1] of Integer;
@@ -590,6 +612,19 @@ begin
   end;
 end;
 
+{ Traits that need no `trait` declaration in the source because the frontend
+  knows them. `Display` is the one with behaviour attached (its `fmt` is
+  rerouted, see RRegisterImpls); the rest are here so `impl Default for X` and
+  friends register their methods as ordinary mangled procs instead of failing
+  on an unknown trait. }
+function RIsBuiltinTrait(const name: AnsiString): Boolean;
+begin
+  Result := (name = 'Display') or (name = 'Debug') or (name = 'Default') or
+            (name = 'Clone') or (name = 'Copy') or (name = 'PartialEq') or
+            (name = 'Eq') or (name = 'PartialOrd') or (name = 'Ord') or
+            (name = 'From') or (name = 'Into');
+end;
+
 function RFindTrait(const name: AnsiString): Integer;
 var i: Integer;
 begin
@@ -1033,6 +1068,35 @@ end;
   must be used wherever "is this a string" is asked -- checking tyAnsiString
   alone silently drops every literal. }
 
+{ `impl fmt::Display for X` registered `X::fmt(&self) -> String` (see
+  RRegisterImpls). This is how every rendering path asks whether a record has
+  one, and builds the call if it does -- `{}` in println!/format!, and
+  `.to_string()`. Returns -1 when the type has no Display, which is what makes
+  `{}` on a plain struct an error instead of a silent first-field write. }
+function RDisplayCall(recvNode, recId: Integer): Integer;
+var procIdx, argNode: Integer;
+begin
+  Result := -1;
+  if recId < REC_UCLASS_BASE then Exit;
+  procIdx := FindProc(RTypeNameOf(recId - REC_UCLASS_BASE) + '::fmt');
+  if procIdx < 0 then Exit;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyAnsiString);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := recvNode; ASTRight[argNode] := -1;
+  ASTLeft[Result] := argNode;
+end;
+
+{ A literal string as an AST node. Three callers wanted their own copy of
+  these four lines before it was lifted. }
+function RStrLit(const t: AnsiString): Integer;
+begin
+  Result := AllocNode(AN_STR_LIT);
+  ASTSOffset[Result] := RStoredName(t); ASTSLen[Result] := Length(t);
+  ASTTk[Result] := Ord(tyString);
+end;
+
 function RIsStrMethodName(const m: AnsiString): Boolean;
 begin
   Result := (m = 'len') or (m = 'is_empty') or (m = 'push_str') or
@@ -1047,10 +1111,22 @@ end;
   too. Not on a record or a class, though -- `impl Piece { fn to_string(&self) }`
   is ordinary Rust and stealing it would replace a user's own rendering with a
   number, silently. }
-function RStrMethodApplies(recvTk: TTypeKind; const m: AnsiString): Boolean;
+function RStrMethodApplies(recvTk: TTypeKind; recId: Integer; const m: AnsiString): Boolean;
 begin
-  Result := (RIsStrTk(recvTk) and RIsStrMethodName(m)) or
-            ((m = 'to_string') and (recvTk <> tyRecord) and (recvTk <> tyClass));
+  if recvTk = tyClass then begin Result := False; Exit; end;
+  { A RECORD's `to_string()` is Rust's ToString blanket impl over Display, so
+    it is ours to lower -- but only when the type has no `to_string` of its
+    OWN, which wins. Without that check a hand-written `fn to_string(&self)`
+    would be silently replaced by the derived rendering, which is the same
+    mistake as stealing `clone`. RStrOf then errors if the type has no
+    Display either, so the failure is a message and not a wrong string. }
+  if recvTk = tyRecord then
+  begin
+    Result := (m = 'to_string') and (recId >= REC_UCLASS_BASE) and
+              (FindProc(RTypeNameOf(recId - REC_UCLASS_BASE) + '::to_string') < 0);
+    Exit;
+  end;
+  Result := (RIsStrTk(recvTk) and RIsStrMethodName(m)) or (m = 'to_string');
 end;
 
 { `s.method(...)` on a string. Two callers -- the identifier arm below (a
@@ -1128,19 +1204,21 @@ function RStrOf(node: Integer): Integer;
 var tk: TTypeKind; callNode, argNode, widthNode, pairNode, tNode, fNode: Integer;
     procIdx: Integer;
 
-  { named RStrOfLit, not `Lit`: tools/forwardlint.py flattens nested
-    functions into one namespace, so a short generic name here reads as a
-    use-before-declaration against an unrelated `lit` in pylexer.inc. }
-  function RStrOfLit(const t: AnsiString): Integer;
-  begin
-    RStrOfLit := AllocNode(AN_STR_LIT);
-    ASTSOffset[RStrOfLit] := RStoredName(t); ASTSLen[RStrOfLit] := Length(t);
-    ASTTk[RStrOfLit] := Ord(tyString);
-  end;
-
 begin
   tk := IntToTypeKind(ASTTk[node]);
   if RIsStrTk(tk) then begin Result := node; Exit; end;
+
+  { a record renders through its own `impl fmt::Display` if it has one --
+    which is what makes `x.to_string()` work on a Display type, since
+    Rust's ToString blanket impl is exactly that. }
+  if tk = tyRecord then
+  begin
+    procIdx := RDisplayCall(node, RExprRecId(node));
+    if procIdx < 0 then
+      Error('Rust: this type has no `impl fmt::Display`, so it cannot become a string');
+    Result := procIdx;
+    Exit;
+  end;
 
   { A bool is two literals and a branch. Unlike println!'s bool -- which must
     avoid the string runtime because println! does not otherwise need it --
@@ -1148,8 +1226,8 @@ begin
     and is the smaller lowering. }
   if tk = tyBoolean then
   begin
-    tNode := RStrOfLit('true');
-    fNode := RStrOfLit('false');
+    tNode := RStrLit('true');
+    fNode := RStrLit('false');
     pairNode := AllocNode(AN_PAIR);
     ASTLeft[pairNode] := tNode; ASTRight[pairNode] := fNode;
     Result := AllocNode(AN_TERNARY);
@@ -1165,7 +1243,7 @@ begin
     the AN_STR_FROM_CHAR temp-and-yield desugar a second time. }
   if tk = tyChar then
   begin
-    Result := RBinOp(tkPlus, RStrOfLit(''), node, tyAnsiString);
+    Result := RBinOp(tkPlus, RStrLit(''), node, tyAnsiString);
     Exit;
   end;
 
@@ -1195,10 +1273,15 @@ end;
   a shared scanner would have to hand back an ordered item list neither caller
   wants in that form. Duplicating ~20 lines of brace scanning is cheaper than
   the abstraction that couples an output path to an expression path. }
-function RParseFormat: Integer;
-var fmtOff, fmtLen, i, segStart, argCount, argUsed: Integer;
+{ The body of `format!`, starting AT the format literal and consuming through
+  the closing `)`. Split out so write!/writeln! -- which have a formatter
+  argument in front of the literal -- can reuse the whole thing instead of
+  rewinding the cursor into a shape RParseFormat would accept. }
+function RParseFormatTail: Integer;
+var fmtOff, fmtLen, i, segStart, specStart, argCount, argUsed: Integer;
     argExprs: array[0..7] of Integer;
-    acc, piece: Integer;
+    acc: Integer;
+    isDbg: Boolean;
 
   procedure Append(part: Integer);
   begin
@@ -1217,11 +1300,56 @@ var fmtOff, fmtLen, i, segStart, argCount, argUsed: Integer;
     Append(litNode);
   end;
 
+  procedure AddText(const t: AnsiString);
+  begin
+    if t = '' then Exit;
+    Append(RStrLit(t));
+  end;
+
+  { The value twin of println!'s AddFormatted, over the SAME item list from
+    RDebugExpand. The two consumers differ only in what they do with an item
+    -- a write there, a concatenation here -- which is exactly why the
+    expander hands back a list instead of rendered output. }
+  procedure AddFormatted(exprNode: Integer; dbg: Boolean);
+  var recId, k: Integer;
+  begin
+    recId := RExprRecId(exprNode);
+    if (IntToTypeKind(ASTTk[exprNode]) = tyRecord) and (recId >= REC_UCLASS_BASE) then
+    begin
+      if not dbg then
+      begin
+        k := RDisplayCall(exprNode, recId);
+        if k < 0 then
+          Error('Rust: `{}` needs Display and this type has none -- use `{:?}`, ' +
+                'implement `fmt::Display`, or format the fields');
+        Append(k);
+        Exit;
+      end;
+      RDbgCount := 0;
+      RDebugExpand(exprNode, recId, '');
+      for k := 0 to RDbgCount - 1 do
+      begin
+        AddText(RDbgText[k]);
+        if RDbgNode[k] >= 0 then Append(RStrOf(RDbgNode[k]));
+      end;
+      Exit;
+    end;
+    { see the twin in RParsePrintln }
+    if dbg and RIsStrTk(IntToTypeKind(ASTTk[exprNode])) then
+    begin
+      AddText('"'); Append(RStrOf(exprNode)); AddText('"');
+      Exit;
+    end;
+    if dbg and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+    begin
+      AddText(''''); Append(RStrOf(exprNode)); AddText('''');
+      Exit;
+    end;
+    Append(RStrOf(exprNode));
+  end;
+
 begin
-  Next; { format }
-  Next; { ! }
-  Expect(tkLParen, '(');
-  if CurTok.Kind <> tkString then Error('Rust: format! needs a string literal format');
+  if CurTok.Kind <> tkString then Error('Rust: format!/write! need a string literal format');
   fmtOff := Tokens[TokPos - 1].SOffset;
   fmtLen := Tokens[TokPos - 1].SLen;
   Next;
@@ -1244,13 +1372,14 @@ begin
     if TokChars[fmtOff + i] = '{' then
     begin
       AddSegment(fmtOff + segStart, i - segStart);
+      specStart := i + 1;
       while (i < fmtLen) and (TokChars[fmtOff + i] <> '}') do Inc(i);
       if i >= fmtLen then Error('Rust: unterminated {} placeholder in format string');
+      isDbg := RSpecIsDebug(fmtOff, specStart, i - specStart);
       Inc(i);
       segStart := i;
       if argUsed >= argCount then Error('Rust: more {} placeholders than arguments');
-      piece := RStrOf(argExprs[argUsed]);
-      Append(piece);
+      AddFormatted(argExprs[argUsed], isDbg);
       Inc(argUsed);
     end
     else
@@ -1271,8 +1400,246 @@ begin
   Result := acc;
 end;
 
+function RParseFormat: Integer;
+begin
+  Next; { format }
+  Next; { ! }
+  Expect(tkLParen, '(');
+  Result := RParseFormatTail;
+end;
+
+{ `write!(f, "fmt", args)` / `writeln!(...)` inside a Display `fmt` body.
+
+  APPENDS to the method's Result rather than returning it, so a body with
+  several writes accumulates and a body with one behaves identically. That is
+  what makes the reroute honest: `write!` really is "add this text", and the
+  trait's Formatter is the thing being replaced, not the semantics.
+
+  The formatter argument is parsed and DISCARDED -- it names the writer this
+  frontend does not have. Discarding it is safe precisely because the reroute
+  gives the method exactly one place to write to. }
+function RParseWriteMacro(isLn: Boolean): Integer;
+var fmtNode, asgn: Integer;
+begin
+  if not RInDisplayFmt then
+    Error('Rust: write!/writeln! are only supported inside a `impl fmt::Display` fmt body');
+  Next; { write / writeln }
+  Next; { ! }
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkIdent then Error('Rust: write! expects the formatter as its first argument');
+  Next;                                  { the formatter -- discarded }
+  Expect(tkComma, ',');
+
+  fmtNode := RParseFormatTail;           { the literal and its args, through `)` }
+
+  if isLn then
+    fmtNode := RBinOp(tkPlus, fmtNode, RStrLit(Chr(10)), tyAnsiString);
+
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := RMakeIdent(Procs[CurProc].RetSymIdx);
+  ASTRight[asgn] := RBinOp(tkPlus, RMakeIdent(Procs[CurProc].RetSymIdx),
+                           fmtNode, tyAnsiString);
+  Result := asgn;
+end;
+
+{ ===== derives: aggregates in expression position =====
+
+  `#[derive(Clone, Copy, PartialEq)]` needs almost nothing from the frontend,
+  which is the point of measuring before building: `Copy` is what a whole-record
+  assignment already does, and `PartialEq` is what the shared record comparison
+  already does, both proven by a test written before this rung. What was
+  actually missing is dumber and older -- an enum VARIANT could not appear in
+  an expression at all, so `c == Color::White` and `flip(Color::Black)` were
+  parse errors while `let c: Color = Color::White` worked.
+
+  The reason is structural, and it is stated on RParseAggregateIntoNode: no AST
+  node carries a whole aggregate VALUE, so a literal is always N stores into a
+  named slot. The expression form is therefore the same trick `?` uses --
+  allocate a hidden local, hoist the stores into RPendingPreSeq (flushed at the
+  single point in RParseStatement), and yield a read of the temp. }
+
+{ RPeekAggregateCi narrowed to the forms that are unambiguous with no expected
+  type. Two exclusions, both deliberate:
+
+  - the BRACE literal `Name { .. }`. rustc forbids a struct literal in the
+    condition of an `if`/`while`/`match` for exactly this reason: `if a == Sq
+    { .. }` cannot be told from a comparison followed by the block. rustc wants
+    parens there; so does this, and refusing agrees with the reference
+    implementation rather than inventing a rule.
+
+  - a BARE `Some` / `None` / `Ok` / `Err`. Every monomorphized instantiation
+    spells its variants the same way, so with no expectation the global table
+    answers with whichever class was registered FIRST -- a different layout,
+    silently. `let` and `return` positions have an expected type and resolve it
+    properly; an expression position does not, so this refuses rather than
+    guesses. A wrong class here would be a plausible wrong value, which is the
+    failure mode this frontend has already paid for three times. }
+function RPeekExprAggregateCi: Integer;
+var ci, vi: Integer;
+begin
+  Result := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  ci := FindUClass(CurTok.SVal);
+  if ci >= 0 then
+  begin
+    if REnumCi[ci] and (Tokens[TokPos].Kind = tkPathSep) and
+       (Tokens[TokPos + 1].Kind = tkIdent) and
+       (RFindVariantInEnum(ci, GetTokenStr(TokPos + 1)) >= 0) then
+      Result := ci;
+    Exit;
+  end;
+  vi := RFindVariantBare(CurTok.SVal);
+  if vi < 0 then Exit;
+  ci := REnumVariants[vi].EnumCi;
+  if RIsOptionRec(REC_UCLASS_BASE + ci) or RIsResultRec(REC_UCLASS_BASE + ci) then Exit;
+  Result := ci;
+end;
+
+{ Parses the aggregate literal at the cursor into an already-existing target
+  LVALUE (a node, so the target can be a local, a fn's Result slot, or a FIELD
+  of one) and returns the chain of field stores. A literal is the only way a
+  whole struct/enum value comes into existence here -- no AST node carries one
+  through an expression -- so it is always N stores into a named slot, and
+  every context that can name one uses this single implementation.
+
+  The target node is REUSED as the base of each store rather than rebuilt.
+  That is safe because a target lvalue is a pure address chain (ident, field,
+  index over them) with no side effects to repeat -- the same property the
+  compound-assign desugar relies on. }
+function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;
+
+function RMaterializeAggregate(ci: Integer): Integer;
+var tempSym, storeSeq: Integer; tempName: AnsiString;
+begin
+  LastTypeRecId := REC_UCLASS_BASE + ci;
+  tempName := '__agg' + RIntToStr(RTempSerial); Inc(RTempSerial);
+  tempSym := AllocVar(tempName, tyRecord);
+  storeSeq := RParseAggregateIntoNode(RMakeIdent(tempSym), ci);
+  RPendingPreSeq := RSeqAppend(RPendingPreSeq, storeSeq);
+  Result := RMakeIdent(tempSym);
+end;
+
+{ The `__ptr` / `__len` stores that make `sliceSym` a borrowed view of the
+  fixed array `arrSym`. `loNode` < 0 means 0 and `hiNode` < 0 means the array's
+  declared length, i.e. the whole-array borrow `&arr`.
+
+  ONE implementation, called from both places a slice can be created: the
+  `let s = &arr[lo..hi];` arm in RParseLet and the argument position in
+  RParseCallArg. Argument position had no arm at all until 2026-08-29, so
+  `f(&arr)` handed the ARRAY's address to a callee expecting a two-word header
+  and the callee read `arr[0]` and `arr[1]` as __ptr and __len -- a clean
+  compile and a segfault
+  (bug-rust-whole-array-borrow-as-a-slice-argument-segfaults). The textbook
+  double case of devdocs/dev/normalise-dont-special-case.md: the second path is
+  the one that stays broken, so there is no second path. }
+function RSliceHeaderStores(sliceSym, arrSym, loNode, hiNode: Integer): Integer;
+var elemNode, addrNode, identNode, fieldNode, assignNode, lenNode, seq: Integer;
+begin
+  if loNode < 0 then
+  begin
+    loNode := AllocNode(AN_INT_LIT); ASTIVal[loNode] := 0; ASTTk[loNode] := Ord(tyInt64);
+  end;
+  if hiNode < 0 then
+  begin
+    hiNode := AllocNode(AN_INT_LIT);
+    ASTIVal[hiNode] := Syms[arrSym].ArrLen;
+    ASTTk[hiNode] := Ord(tyInt64);
+  end;
+  elemNode := AllocNode(AN_INDEX);
+  ASTLeft[elemNode] := RMakeIdent(arrSym);
+  ASTRight[elemNode] := loNode;
+  ASTTk[elemNode] := Ord(Syms[arrSym].ElemType);
+  addrNode := AllocNode(AN_ADDR);
+  ASTLeft[addrNode] := elemNode;
+  ASTTk[addrNode] := Ord(tyPointer);
+  identNode := RMakeIdent(sliceSym);
+  fieldNode := AllocNode(AN_FIELD);
+  ASTLeft[fieldNode] := identNode;
+  ASTSOffset[fieldNode] := RStoredName('__ptr'); ASTSLen[fieldNode] := 5;
+  ASTTk[fieldNode] := Ord(tyInt64);
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := addrNode;
+  seq := RSeqAppend(-1, assignNode);
+  lenNode := RBinOp(tkMinus, hiNode, loNode, tyInt64);
+  fieldNode := AllocNode(AN_FIELD);
+  ASTLeft[fieldNode] := identNode;
+  ASTSOffset[fieldNode] := RStoredName('__len'); ASTSLen[fieldNode] := 5;
+  ASTTk[fieldNode] := Ord(tyInt64);
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := lenNode;
+  Result := RSeqAppend(seq, assignNode);
+end;
+
+{ A borrowed slice over `arrSym` as a VALUE: a hidden local carrying the
+  header, its two stores hoisted into RPendingPreSeq (flushed by
+  RParseStatement, exactly as the `?` desugar and the aggregate materializer
+  do), and the local's ident as the expression. }
+function RMaterializeSliceOf(arrSym, loNode, hiNode: Integer): Integer;
+var tempSym, ci: Integer; tempName: AnsiString;
+begin
+  ci := RSliceClassForRec(Syms[arrSym].ElemType, Syms[arrSym].ElemRecName);
+  LastTypeRecId := REC_UCLASS_BASE + ci;
+  tempName := '__slice' + RIntToStr(RTempSerial); Inc(RTempSerial);
+  tempSym := AllocVar(tempName, tyRecord);
+  RPendingPreSeq := RSeqAppend(RPendingPreSeq,
+    RSliceHeaderStores(tempSym, arrSym, loNode, hiNode));
+  Result := RMakeIdent(tempSym);
+end;
+
+{ One call argument, at parameter slot `slot` of `procIdx` (-1 when the callee
+  is not known yet -- the generic-fn path infers T from its first argument).
+
+  Every argument but one goes straight to RParseExpr. The exception is a borrow
+  of a fixed ARRAY, because Rust spells two different things the same way:
+  `&arr` for a `&[T]` SLICE param is a two-word __ptr/__len view, and `&arr` for
+  a `&[T; N]` ARRAY-REFERENCE param is a bare address. The operand alone cannot
+  tell them apart, which is why argument parsing is a function that knows the
+  callee at all rather than a bare RParseExpr at five call sites --
+  Params[slot].IsArray is the bit that separates them, and it is only reachable
+  here. A RANGE borrow `&arr[lo..hi]` is unambiguous and never an array ref. }
+function RParseCallArg(procIdx, slot: Integer): Integer;
+var save, arrSym, loNode, hiNode: Integer; wantsArrayRef: Boolean;
+begin
+  if (CurTok.Kind = tkAmp) and
+     ((Tokens[TokPos].Kind = tkIdent) or
+      ((Tokens[TokPos].Kind = tkMut) and (Tokens[TokPos + 1].Kind = tkIdent))) then
+  begin
+    save := TokPos - 1;   { the `&` itself, for the rewind below }
+    Next; { & }
+    if CurTok.Kind = tkMut then Next;
+    arrSym := FindSym(CurTok.SVal);
+    if (arrSym >= 0) and Syms[arrSym].IsArray then
+    begin
+      wantsArrayRef := False;
+      if (procIdx >= 0) and (slot >= 0) and (slot < Procs[procIdx].ParamCount) then
+        wantsArrayRef := Procs[procIdx].Params[slot].IsArray;
+      if not wantsArrayRef then
+      begin
+        Next; { the array name }
+        loNode := -1; hiNode := -1;
+        if (CurTok.Kind = tkLBrack) and RBrackHasDotDotAt(TokPos - 1) then
+        begin
+          Next;
+          loNode := RParseExpr;
+          Expect(tkDotDot, '..');
+          hiNode := RParseExpr;
+          Expect(tkRBrack, ']');
+        end;
+        Result := RMaterializeSliceOf(arrSym, loNode, hiNode);
+        Exit;
+      end;
+    end;
+    { not an array borrow after all -- rewind and let the ordinary expression
+      grammar have it (RParseUnary drops a `&` on a record, which is right:
+      records already travel by address). }
+    TokPos := save; Next;
+  end;
+  Result := RParseExpr;
+end;
+
 function RParsePrimary: Integer;
-var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci: Integer;
+var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci,
+    argSlot: Integer;
     name, methodName, fullName: AnsiString;
 begin
   case CurTok.Kind of
@@ -1333,6 +1700,17 @@ begin
         Result := RParseFormat;
         Exit;
       end;
+      { `Color::White` / `Piece::Pawn(x)` / a bare unit variant, anywhere an
+        expression is allowed -- see RPeekExprAggregateCi. Checked before the
+        associated-fn path below because `Enum::name` is spelled identically
+        either way; the peek only answers for a name that really is a VARIANT
+        of that enum, so `Enum::assoc_fn(..)` still falls through. }
+      ci := RPeekExprAggregateCi;
+      if ci >= 0 then
+      begin
+        Result := RMaterializeAggregate(ci);
+        Exit;
+      end;
       name := CurTok.SVal; Next;
       { `Type::fn(args)` / `Self::fn(args)` — associated-fn call on the
         mangled proc name (enum paths stay let-initializer-only) }
@@ -1373,11 +1751,11 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx;
         ASTTk[node] := Ord(Procs[procIdx].RetType);
-        lastArg := -1;
+        lastArg := -1; argSlot := 0;
         if CurTok.Kind <> tkRParen then
           repeat
             argNode := AllocNode(AN_ARG);
-            ASTLeft[argNode] := RParseExpr;
+            ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
             ASTRight[argNode] := -1;
             if lastArg < 0 then ASTLeft[node] := argNode else ASTRight[lastArg] := argNode;
             lastArg := argNode;
@@ -1404,10 +1782,12 @@ begin
           lastArg := AllocNode(AN_ARG);
           ASTLeft[lastArg] := argNode; ASTRight[lastArg] := -1;
           ASTLeft[node] := lastArg;
+          argSlot := 1;
           while Eat(tkComma) do
           begin
             argNode := AllocNode(AN_ARG);
-            ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+            ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
+            ASTRight[argNode] := -1;
             ASTRight[lastArg] := argNode; lastArg := argNode;
           end;
           Expect(tkRParen, ')');
@@ -1418,11 +1798,11 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx;
         ASTTk[node] := Ord(Procs[procIdx].RetType);
-        lastArg := -1;
+        lastArg := -1; argSlot := 0;
         if CurTok.Kind <> tkRParen then
           repeat
             argNode := AllocNode(AN_ARG);
-            ASTLeft[argNode] := RParseExpr;
+            ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
             ASTRight[argNode] := -1;
             if lastArg < 0 then ASTLeft[node] := argNode else ASTRight[lastArg] := argNode;
             lastArg := argNode;
@@ -1582,7 +1962,7 @@ begin
         record type nobody wrote has no method. }
       if (CurTok.Kind = tkDot) and
          (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) and
-         RStrMethodApplies(Syms[symIdx].TypeKind, GetTokenStr(TokPos)) then
+         RStrMethodApplies(Syms[symIdx].TypeKind, Syms[symIdx].RecName, GetTokenStr(TokPos)) then
       begin
         Next; { . }
         Result := RParseStrMethod(node, symIdx);
@@ -1602,6 +1982,20 @@ begin
           ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
           fullName := RTypeNameOf(ci) + '::' + methodName;
           procIdx := FindProc(fullName);
+          { `#[derive(Clone)]` on a record: a derived clone is a field-wise
+            copy, and a whole-record assignment is already exactly that, so
+            `a.clone()` yields `a` itself and the copy happens where the
+            result lands. Only when the type has no clone of its OWN -- a
+            hand-written `fn clone(&self)` resolves above and wins, because a
+            user's clone may do more than the derive would. }
+          if (procIdx < 0) and (methodName = 'clone') and
+             (Tokens[TokPos + 1].Kind = tkRParen) then
+          begin
+            Next; Next;                   { clone, ( }
+            Expect(tkRParen, ')');
+            Result := node;
+            Exit;
+          end;
           if procIdx < 0 then Error('Rust: ' + RTypeNameOf(ci) + ' has no method ' + methodName);
           Next; Next; { method name, ( }
           fieldNode := AllocNode(AN_CALL);
@@ -1610,10 +2004,12 @@ begin
           lastArg := AllocNode(AN_ARG);
           ASTLeft[lastArg] := node; ASTRight[lastArg] := -1;
           ASTLeft[fieldNode] := lastArg;
+          argSlot := 1;   { slot 0 is the receiver }
           if CurTok.Kind <> tkRParen then
             repeat
               argNode := AllocNode(AN_ARG);
-              ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+              ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
+              ASTRight[argNode] := -1;
               ASTRight[lastArg] := argNode; lastArg := argNode;
             until not Eat(tkComma);
           Expect(tkRParen, ')');
@@ -1660,10 +2056,12 @@ begin
           lastArg := AllocNode(AN_ARG);
           ASTLeft[lastArg] := node; ASTRight[lastArg] := -1;
           ASTLeft[fieldNode] := lastArg;
+          argSlot := 1;   { slot 0 is the receiver }
           if CurTok.Kind <> tkRParen then
             repeat
               argNode := AllocNode(AN_ARG);
-              ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+              ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
+              ASTRight[argNode] := -1;
               ASTRight[lastArg] := argNode; lastArg := argNode;
             until not Eat(tkComma);
           Expect(tkRParen, ')');
@@ -1769,7 +2167,7 @@ begin
     can read back. }
   while (CurTok.Kind = tkDot) and
         (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) and
-        RStrMethodApplies(IntToTypeKind(ASTTk[Result]), GetTokenStr(TokPos)) do
+        RStrMethodApplies(IntToTypeKind(ASTTk[Result]), RExprRecId(Result), GetTokenStr(TokPos)) do
   begin
     Next; { . }
     Result := RParseStrMethod(Result, -1);
@@ -2364,11 +2762,17 @@ begin
   Next; { while }
   node := AllocNode(AN_WHILE);
   ASTLeft[node] := RParseExpr;
-  { A `?` in the CONDITION would hoist its operand out of the loop and
-    evaluate it once -- silently, and wrongly. Refused rather than mis-lowered.
-    `if` is fine and is not guarded: its condition really is evaluated once. }
+  { Anything the condition HOISTED -- a `?` operand, an enum literal's
+    materialization -- would be evaluated once, outside the loop, silently and
+    wrongly. Refused rather than mis-lowered. `if` is fine and is deliberately
+    not guarded: its condition really is evaluated once.
+
+    The message names both constructs rather than just `?` because the second
+    one arrived later (rung 15) and a message naming only the first sends the
+    reader looking for a `?` that is not there. }
   if RPendingPreSeq >= 0 then
-    Error('Rust: `?` is not supported in a `while` condition (it would be hoisted out of the loop)');
+    Error('Rust: this `while` condition needs a hoisted temporary (a `?`, or an enum literal) ' +
+          'and would evaluate it once outside the loop -- bind it to a `let` above the loop instead');
   Expect(tkBegin, '{');
   ASTRight[node] := RParseBlock;
   Expect(tkEnd, '}');
@@ -2472,18 +2876,37 @@ begin
   if vi >= 0 then Result := REnumVariants[vi].EnumCi;
 end;
 
-{ Parses the aggregate literal at the cursor into an already-existing target
-  LVALUE (a node, so the target can be a local, a fn's Result slot, or a FIELD
-  of one) and returns the chain of field stores. A literal is the only way a
-  whole struct/enum value comes into existence here -- no AST node carries one
-  through an expression -- so it is always N stores into a named slot, and
-  every context that can name one uses this single implementation.
+{ A struct name followed by an open brace, where the name is a plain
+  (non-enum) struct: a struct literal, in a position where the grammar has
+  already ruled out a block. Deliberately NOT folded into
+  RPeekExprAggregateCi -- that one runs at every RParsePrimary, and in
+  statement position an open brace after an expression is a BLOCK (the `if`,
+  `while` and `match` heads all end that way), so reading the pair as a
+  literal is only safe inside a bracket run. }
+function RPeekStructLitCi: Integer;
+var ci: Integer;
+begin
+  Result := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  ci := FindUClass(CurTok.SVal);
+  if ci < 0 then Exit;
+  if REnumCi[ci] then Exit;
+  if Tokens[TokPos].Kind <> tkBegin then Exit;
+  Result := ci;
+end;
 
-  The target node is REUSED as the base of each store rather than rebuilt.
-  That is safe because a target lvalue is a pure address chain (ident, field,
-  index over them) with no side effects to repeat -- the same property the
-  compound-assign desugar relies on. }
-function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;
+{ `base[k]` with a literal index. `base` is deliberately SHARED by every element
+  node built from it rather than rebuilt per slot -- a target lvalue is a pure
+  address chain, so the AST is a DAG here and that is fine (the field-store and
+  array-literal arms have always done it). }
+function RArrIndexNode(baseNode, k, tk: Integer): Integer;
+var idxNode: Integer;
+begin
+  idxNode := AllocNode(AN_INT_LIT); ASTIVal[idxNode] := k; ASTTk[idxNode] := Ord(tyInt64);
+  Result := AllocNode(AN_INDEX);
+  ASTLeft[Result] := baseNode; ASTRight[Result] := idxNode;
+  ASTTk[Result] := tk;
+end;
 
 { One field's initializer, stored into an already-built field node. Three
   shapes, and the recursion is what makes a nested literal work:
@@ -2491,12 +2914,37 @@ function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;
     `squares: [0; 64]` / `[a, b, c]`   -> unrolled to one store per element
     anything else                      -> an ordinary expression assignment }
 function RStoreFieldValue(fieldNode, fieldRec, arrLen: Integer): Integer;
-var valNode, assignNode, idxNode, elemNode, k, n: Integer;
+var valNode, assignNode, idxNode, elemNode, k, n, aggCi: Integer;
 begin
   Result := -1;
   if (arrLen > 0) and (CurTok.Kind = tkLBrack) then
   begin
     Next;
+    aggCi := RPeekStructLitCi;
+    if aggCi >= 0 then
+    begin
+      { A struct-literal repeat as a field initializer. Rust's `[e; N]` on a
+        Copy type is "evaluate once, copy N-1 times", and that is literally
+        what this emits -- the literal fills slot 0 and every other slot is a
+        whole-record copy of it. The scalar arm below re-evaluates per slot
+        instead (a documented deviation); it cannot be done that way here,
+        because an aggregate literal has no expression form to re-evaluate. }
+      Result := RParseAggregateIntoNode(RArrIndexNode(fieldNode, 0, ASTTk[fieldNode]), aggCi);
+      Expect(tkSemicolon, ';');
+      if CurTok.Kind <> tkInteger then Error('Rust: repeat count must be an integer literal');
+      n := CurTok.IVal;
+      Next;
+      Expect(tkRBrack, ']');
+      if n <> arrLen then Error('Rust: repeat count does not match the array field length');
+      for k := 1 to n - 1 do
+      begin
+        assignNode := AllocNode(AN_ASSIGN);
+        ASTLeft[assignNode] := RArrIndexNode(fieldNode, k, ASTTk[fieldNode]);
+        ASTRight[assignNode] := RArrIndexNode(fieldNode, 0, ASTTk[fieldNode]);
+        Result := RSeqAppend(Result, assignNode);
+      end;
+      Exit;
+    end;
     valNode := RParseExpr;
     if CurTok.Kind = tkSemicolon then
     begin
@@ -2694,7 +3142,7 @@ end;
 function RParseArrayLiteral(const name: AnsiString; annotTk: TTypeKind;
                             annotLen: Integer): Integer;
 var symIdx, seq, k, ci, ci2, vi, valNode, tagNode, fieldNode, assignNode,
-    arrLen: Integer;
+    arrLen, aggCi: Integer;
     arrElemTk: TTypeKind;
     isArr: Boolean;
 begin
@@ -2702,6 +3150,46 @@ begin
   arrElemTk := annotTk;
   arrLen := annotLen;
     Next; { [ }
+    aggCi := RPeekStructLitCi;
+    if aggCi >= 0 then
+    begin
+      { A struct-literal repeat -- same evaluate-once/copy-the-rest lowering as
+        the struct-field arm in RStoreFieldValue, and for the same reason. The
+        count is scanned ahead of the parse because AllocArray needs the length
+        before the element can be stored, and in `[e; N]` the count comes
+        AFTER e. }
+      ci := TokPos - 1; vi := 1;
+      while (vi > 0) and (Tokens[ci].Kind <> tkEOF) do
+      begin
+        if Tokens[ci].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(vi)
+        else if Tokens[ci].Kind in [tkRBrack, tkRParen, tkEnd] then Dec(vi)
+        else if (Tokens[ci].Kind = tkSemicolon) and (vi = 1) then Break;
+        Inc(ci);
+      end;
+      if (Tokens[ci].Kind <> tkSemicolon) or (Tokens[ci + 1].Kind <> tkInteger) then
+        Error('Rust: an array of struct literals needs the repeat form: [Name { .. }; N]');
+      k := Tokens[ci + 1].IVal;
+      if isArr and (k <> arrLen) then Error('Rust: repeat count does not match the [T; N] annotation');
+      arrLen := k;
+      if arrLen <= 0 then Error('Rust: array length must be positive');
+      arrElemTk := tyRecord;
+      LastTypeRecId := REC_UCLASS_BASE + aggCi;
+      symIdx := AllocArray(name, tyRecord, 0, arrLen - 1);
+      seq := RParseAggregateIntoNode(
+        RArrIndexNode(RMakeIdent(symIdx), 0, Ord(tyRecord)), aggCi);
+      Expect(tkSemicolon, ';');
+      Next; { the count, already read by the scan }
+      Expect(tkRBrack, ']');
+      for k := 1 to arrLen - 1 do
+      begin
+        assignNode := AllocNode(AN_ASSIGN);
+        ASTLeft[assignNode] := RArrIndexNode(RMakeIdent(symIdx), k, Ord(tyRecord));
+        ASTRight[assignNode] := RArrIndexNode(RMakeIdent(symIdx), 0, Ord(tyRecord));
+        seq := RSeqAppend(seq, assignNode);
+      end;
+      Result := seq;
+      Exit;
+    end;
     valNode := RParseExpr;
     if not isArr then
     begin
@@ -2775,7 +3263,7 @@ var name, typeName, variantName, fname, mangled: AnsiString;
     symIdx, ci, structCi, fTokIdx, ci2, vi, k, tagOff, tagNode, tagAssign: Integer;
     annotTk, arrElemTk: TTypeKind; hasType, qualified, isArr: Boolean;
     identNode, fieldNode, valNode, assignNode, seq, arrLen, loNode, hiNode: Integer;
-    arrElemRecId, optCi: Integer;
+    arrElemRecId, optCi, arrSym: Integer;
     payTk: TTypeKind; isSome: Boolean;
 begin
   Next; { let }
@@ -2889,31 +3377,10 @@ begin
     hiNode := RParseExpr;
     Expect(tkRBrack, ']');
     ci := RSliceClassForRec(arrElemTk, Syms[symIdx].ElemRecName);
-    fieldNode := AllocNode(AN_INDEX);
-    ASTLeft[fieldNode] := RMakeIdent(symIdx);
-    ASTRight[fieldNode] := loNode;
-    ASTTk[fieldNode] := Ord(arrElemTk);
-    valNode := AllocNode(AN_ADDR);
-    ASTLeft[valNode] := fieldNode;
-    ASTTk[valNode] := Ord(tyPointer);
     LastTypeRecId := REC_UCLASS_BASE + ci;
+    arrSym := symIdx;
     symIdx := AllocVar(name, tyRecord);
-    identNode := RMakeIdent(symIdx);
-    fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := identNode;
-    ASTSOffset[fieldNode] := RStoredName('__ptr'); ASTSLen[fieldNode] := 5;
-    ASTTk[fieldNode] := Ord(tyInt64);
-    assignNode := AllocNode(AN_ASSIGN);
-    ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-    seq := RSeqAppend(-1, assignNode);
-    fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := identNode;
-    ASTSOffset[fieldNode] := RStoredName('__len'); ASTSLen[fieldNode] := 5;
-    ASTTk[fieldNode] := Ord(tyInt64);
-    assignNode := AllocNode(AN_ASSIGN);
-    ASTLeft[assignNode] := fieldNode;
-    ASTRight[assignNode] := RBinOp(tkMinus, hiNode, loNode, tyInt64);
-    Result := RSeqAppend(seq, assignNode);
+    Result := RSliceHeaderStores(symIdx, arrSym, loNode, hiNode);
     Exit;
   end;
   { Option<T> literal RHS: `Some(expr)` / `None`. Resolved against the
@@ -3299,6 +3766,121 @@ begin
   Result := RSeqAppend(RSeqAppend(-1, initNode), whileNode);
 end;
 
+{ Flatten `{:?}` over a record into RDbgText/RDbgNode. Rust's derived Debug
+  for a struct is `Name { field: value, field: value }`, and that is exactly
+  what this builds -- literal, field, literal, field.
+
+  WHY THIS EXISTS AT ALL: before it, `println!("{:?}", pos)` printed `1`. The
+  scanner treated `{:?}` as an ordinary placeholder and the write path,
+  handed a record, wrote its FIRST FIELD. A derived-Debug struct rendered as a
+  single integer, silently, in real output -- the fourth plausible wrong value
+  this frontend has produced and the same shape as the other three.
+
+  A nested record field recurses. A STRING field is quoted, because Debug
+  quotes where Display does not. An ENUM is refused: Rust's Debug for one
+  prints the VARIANT NAME, which is a runtime switch on __tag rather than a
+  static item list, and printing a wrong-but-plausible tag number instead is
+  precisely the failure this routine was written to end. An ARRAY field is
+  refused for the same reason -- rendering it needs a loop, and half-rendering
+  it would look like a value. }
+{ TokSliceStr does exactly this, but it lives in rtti_emit.inc, which FPC's
+  include stream reaches AFTER this file -- so calling it here compiles under
+  pxx and breaks the seed build. Six lines beats a forward into a later unit.
+  bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed }
+function RCharSlice(off, len: Integer): AnsiString;
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  i := 0;
+  while i < len do begin AppendChar(s, TokChars[off + i]); Inc(i); end;
+  RCharSlice := s;
+end;
+
+{ Is this placeholder's spec the Debug one? `{}` / `{:?}` are the two forms
+  this frontend understands; anything else (`{:x}`, `{:>8}`, `{:.3}`) is
+  REFUSED rather than silently rendered as `{}`, because a width or a radix
+  that is quietly ignored produces output that looks right and is not. }
+function RSpecIsDebug(fmtOff, start, len: Integer): Boolean;
+var spec: AnsiString;
+begin
+  spec := RCharSlice(fmtOff + start, len);
+  if spec = '' then begin Result := False; Exit; end;
+  if spec = ':?' then begin Result := True; Exit; end;
+  Error('Rust: format spec `{' + spec + '}` is not supported (only `{}` and `{:?}`)');
+  Result := False;
+end;
+
+procedure RDebugExpand(recvNode, recId: Integer; const prefix: AnsiString);
+var ci, base, cnt, k, fi, fieldNode: Integer;
+    fname: AnsiString; ftk: TTypeKind; frec: Integer;
+begin
+  ci := recId - REC_UCLASS_BASE;
+  if REnumCi[ci] then
+    Error('Rust: `{:?}` of an enum is not supported yet (Debug prints the variant name, ' +
+          'which needs a runtime switch on the tag) -- match on it and print the arm');
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  if RDbgCount + 2 * cnt + 2 >= 255 then Error('Rust: `{:?}` value is too deeply nested');
+
+  RDbgText[RDbgCount] := prefix + RTypeNameOf(ci) + ' { ';
+  RDbgNode[RDbgCount] := -1;
+  Inc(RDbgCount);
+
+  for k := 0 to cnt - 1 do
+  begin
+    fi := base + k;
+    fname := RCharSlice(UFldNOff[fi], UFldNLen[fi]);
+    ftk := IntToTypeKind(UFldTk[fi]);
+    frec := UFldRec_[fi];
+
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := recvNode;
+    ASTSOffset[fieldNode] := UFldNOff[fi];
+    ASTSLen[fieldNode] := UFldNLen[fi];
+    ASTTk[fieldNode] := Ord(ftk);
+
+    if (ftk = tyRecord) and (frec >= REC_UCLASS_BASE) then
+    begin
+      RDebugExpand(fieldNode, frec, fname + ': ');
+      { the separator belongs to the item AFTER a nested record, so append it
+        as text-only rather than folding it into a field item }
+      if k < cnt - 1 then
+      begin
+        RDbgText[RDbgCount] := ', ';
+        RDbgNode[RDbgCount] := -1;
+        Inc(RDbgCount);
+      end;
+      Continue;
+    end;
+
+    if RIsStrTk(ftk) then
+    begin
+      RDbgText[RDbgCount] := fname + ': "';
+      RDbgNode[RDbgCount] := fieldNode;
+      Inc(RDbgCount);
+      RDbgText[RDbgCount] := '"';
+      RDbgNode[RDbgCount] := -1;
+      if k < cnt - 1 then RDbgText[RDbgCount] := '", ';
+      Inc(RDbgCount);
+      Continue;
+    end;
+
+    RDbgText[RDbgCount] := fname + ': ';
+    RDbgNode[RDbgCount] := fieldNode;
+    Inc(RDbgCount);
+    if k < cnt - 1 then
+    begin
+      RDbgText[RDbgCount] := ', ';
+      RDbgNode[RDbgCount] := -1;
+      Inc(RDbgCount);
+    end;
+  end;
+
+  RDbgText[RDbgCount] := ' }';
+  RDbgNode[RDbgCount] := -1;
+  Inc(RDbgCount);
+end;
+
 { `println!("fmt {} ...", args);` / `print!(...)` — the Zig frontend's
   std.debug.print splitter ported back (feature-rust-misc-semantics #9 +
   feature-rust-rtl-macros-io #12, the format-output subset): literal fmt
@@ -3307,18 +3889,17 @@ end;
   consumes the next argument, everything chains as one AN_ARG list under
   a single AN_WRITE / AN_WRITELN. {{ }} escapes are not handled. }
 function RParsePrintln(isLn: Boolean): Integer;
-var fmtOff, fmtLen, i, segStart: Integer;
+var fmtOff, fmtLen, i, segStart, specStart: Integer;
     node, lastArg, argNode, litNode, seq, emitted: Integer;
     argExprs: array[0..7] of Integer;
     argCount, argUsed: Integer;
+    isDbg: Boolean;
 
   { A string literal as a one-argument write node. }
   function WriteLit(const t: AnsiString): Integer;
   var w, a2, l2: Integer;
   begin
-    l2 := AllocNode(AN_STR_LIT);
-    ASTSOffset[l2] := RStoredName(t); ASTSLen[l2] := Length(t);
-    ASTTk[l2] := Ord(tyString);
+    l2 := RStrLit(t);
     a2 := AllocNode(AN_ARG);
     ASTLeft[a2] := l2; ASTRight[a2] := -1;
     w := AllocNode(AN_WRITE);
@@ -3400,6 +3981,61 @@ var fmtOff, fmtLen, i, segStart: Integer;
     AddArg(litNode);
   end;
 
+  procedure AddText(const t: AnsiString);
+  begin
+    if t = '' then Exit;
+    AddArg(RStrLit(t));
+  end;
+
+  { One placeholder's worth of output. `{}` is Display and `{:?}` is Debug,
+    and the difference MATTERS in three places: a record has no Display at all
+    (rustc refuses it, and so does this -- writing its first field is what the
+    old code did), a string is quoted under Debug and bare under Display, and
+    everything else renders the same either way.
+
+    A record's Debug is expanded into literal/field items and each item
+    becomes an ordinary write, so this path needs no string runtime at all --
+    which is why a `{:?}` on a struct does not drag in 60KB the way building
+    the same text as a VALUE would. }
+  procedure AddFormatted(exprNode: Integer; dbg: Boolean);
+  var recId, k: Integer;
+  begin
+    recId := RExprRecId(exprNode);
+    if (IntToTypeKind(ASTTk[exprNode]) = tyRecord) and (recId >= REC_UCLASS_BASE) then
+    begin
+      if not dbg then
+      begin
+        k := RDisplayCall(exprNode, recId);
+        if k < 0 then
+          Error('Rust: `{}` needs Display and this type has none -- use `{:?}`, ' +
+                'implement `fmt::Display`, or print the fields');
+        AddArg(k);
+        Exit;
+      end;
+      RDbgCount := 0;
+      RDebugExpand(exprNode, recId, '');
+      for k := 0 to RDbgCount - 1 do
+      begin
+        AddText(RDbgText[k]);
+        if RDbgNode[k] >= 0 then AddArg(RDbgNode[k]);
+      end;
+      Exit;
+    end;
+    { Debug quotes what Display leaves bare: a string in double quotes, a
+      char in single ones. Every other scalar renders identically either way. }
+    if dbg and RIsStrTk(IntToTypeKind(ASTTk[exprNode])) then
+    begin
+      AddText('"'); AddArg(exprNode); AddText('"');
+      Exit;
+    end;
+    if dbg and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+    begin
+      AddText(''''); AddArg(exprNode); AddText('''');
+      Exit;
+    end;
+    AddArg(exprNode);
+  end;
+
 begin
   Next; { println / print }
   Next; { ! }
@@ -3431,12 +4067,14 @@ begin
     if TokChars[fmtOff + i] = '{' then
     begin
       AddSegment(fmtOff + segStart, i - segStart);
+      specStart := i + 1;
       while (i < fmtLen) and (TokChars[fmtOff + i] <> '}') do Inc(i);
       if i >= fmtLen then Error('Rust: unterminated {} placeholder in format string');
+      isDbg := RSpecIsDebug(fmtOff, specStart, i - specStart);
       Inc(i); { step past the closing brace }
       segStart := i;
       if argUsed >= argCount then Error('Rust: more {} placeholders than arguments');
-      AddArg(argExprs[argUsed]);
+      AddFormatted(argExprs[argUsed], isDbg);
       Inc(argUsed);
     end
     else
@@ -3586,6 +4224,38 @@ begin
   begin
     Result := RParsePrintln(CurTok.SVal = 'println');
     RExpectStmtEnd;
+    Exit;
+  end;
+
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLogNot) and
+     (Tokens[TokPos + 1].Kind = tkLParen) and
+     ((CurTok.SVal = 'write') or (CurTok.SVal = 'writeln')) then
+  begin
+    Result := RParseWriteMacro(CurTok.SVal = 'writeln');
+    { `write!(f, ..)?;` is the idiomatic spelling: the `?` propagates the
+      fmt::Result to the caller. Once the reroute has replaced the Result with
+      a String there is nothing left to propagate, so the `?` is consumed and
+      dropped rather than sent to RParseTryOp, which would look for an
+      enclosing fn returning Result and refuse. }
+    if CurTok.Kind = tkQuestion then Next;
+    { a `write!` is usually the TAIL expression of a fmt body and carries no
+      semicolon -- so the terminator is optional here, unlike println!'s }
+    if CurTok.Kind = tkSemicolon then Next;
+    Exit;
+  end;
+
+  { `Ok(())` as the tail of a Display fmt body: the trait's way of saying
+    "wrote it all", and there is nothing left to say once write! appends
+    directly. A no-op rather than an error, because every real Display impl
+    ends with one. }
+  if RInDisplayFmt and (CurTok.Kind = tkIdent) and (CurTok.SVal = 'Ok') and
+     (Tokens[TokPos].Kind = tkLParen) and (Tokens[TokPos + 1].Kind = tkLParen) and
+     (Tokens[TokPos + 2].Kind = tkRParen) and (Tokens[TokPos + 3].Kind = tkRParen) then
+  begin
+    Next; Next; Next; Next; Next;
+    if CurTok.Kind = tkSemicolon then Next;
+    Result := AllocNode(AN_BLOCK);
+    ASTLeft[Result] := -1;
     Exit;
   end;
 
@@ -4190,14 +4860,32 @@ begin
     begin
       hasTrait := False; traitName := '';
       j := i + 1;
-      if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkIdent) and
-         (GetTokenStr(j + 1) = 'for') then
+      { `impl fmt::Display for X` -- a trait name may be path-qualified, and
+        the qualifier is not a module this frontend knows, so it is simply the
+        last segment that names the trait.
+
+        NOTE THE `tkFor`. Both arms tested `GetTokenStr(..) = 'for'` against a
+        token that the lexer classifies as tkFor, whose SOffset/SLen are zero
+        -- so the comparison was against the empty string and could never
+        succeed. `impl Trait for Type` had therefore NEVER been recognised;
+        every one of them was read as `impl <Trait>` and died with "impl for
+        unknown type Area". Dead code that looked live, found by trying to
+        extend it. }
+      if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkPathSep) and
+         (Tokens[j + 2].Kind = tkIdent) and (Tokens[j + 3].Kind = tkFor) then
+      begin
+        traitName := GetTokenStr(j + 2);
+        hasTrait := True;
+        j := j + 4;
+      end
+      else if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkFor) then
       begin
         traitName := GetTokenStr(j);
-        if RFindTrait(traitName) < 0 then Error('Rust: unknown trait ' + traitName);
         hasTrait := True;
         j := j + 2;
       end;
+      if hasTrait and (RFindTrait(traitName) < 0) and (not RIsBuiltinTrait(traitName)) then
+        Error('Rust: unknown trait ' + traitName);
       if Tokens[j].Kind <> tkIdent then Error('Rust: expected type name after impl');
       typeName := GetTokenStr(j);
       ci := FindUClass(typeName);
@@ -4242,6 +4930,40 @@ begin
           selfBase := 1;
         end;
         nparams := 0;
+        { `fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result` is rerouted to
+          `fn fmt(&self) -> String`. The Formatter and the fmt::Result are the
+          trait's plumbing for a writer this frontend does not have; what a
+          Display impl actually says is "here is my text", and a String says
+          that with no trait dispatch, no writer object and no new machinery --
+          which is exactly the shortcut the corpus ticket predicted would be
+          cheaper than real trait dispatch. The param and the return
+          annotation are skipped WHOLE so `fmt::Formatter` and `fmt::Result`
+          never have to resolve as types. }
+        if hasTrait and (traitName = 'Display') and (methodName = 'fmt') then
+        begin
+          while (Tokens[j].Kind <> tkRParen) and (Tokens[j].Kind <> tkEOF) do Inc(j);
+          Inc(j); { ) }
+          if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
+          begin
+            j := j + 2;
+            Inc(j);                                  { fmt }
+            if Tokens[j].Kind = tkPathSep then j := j + 2;   { ::Result }
+          end;
+          fullName := typeName + '::fmt';
+          procIdx := RegisterProc(fullName, True, tyAnsiString, selfBase, pnamesFull, ptypesFull);
+          ProcRetRecId[procIdx] := REC_NONE;
+          Procs[procIdx].Params[0].IsRef := True;
+          ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS] := True;
+          { skip the body }
+          k := 0;
+          while Tokens[j].Kind <> tkBegin do Inc(j);
+          repeat
+            if Tokens[j].Kind = tkBegin then Inc(k)
+            else if Tokens[j].Kind = tkEnd then Dec(k);
+            Inc(j);
+          until (k = 0) or (Tokens[j].Kind = tkEOF);
+          Continue;
+        end;
         while Tokens[j].Kind <> tkRParen do
         begin
           if Tokens[j].Kind = tkMut then Inc(j);
@@ -4532,9 +5254,21 @@ var typeName, traitName, fname, pname, fullName: AnsiString;
     ci, procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode, selfBase: Integer;
     pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
     precids: array[0..7] of Integer;
+    isDisplayFmt: Boolean;
 begin
   Next; { impl }
-  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkIdent) and (GetTokenStr(TokPos) = 'for') then
+  traitName := '';
+  { path-qualified trait name (`fmt::Display for X`) -- the twin of the
+    prepass's; both must agree or the body parser will not know it is looking
+    at a Display impl. }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkPathSep) and
+     (Tokens[TokPos + 1].Kind = tkIdent) and (Tokens[TokPos + 2].Kind = tkFor) then
+  begin
+    Next; Next;                 { qualifier, :: }
+    traitName := CurTok.SVal;
+    Next; Next;                 { trait name, 'for' }
+  end
+  else if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkFor) then
   begin
     traitName := CurTok.SVal;
     Next; Next; { trait name, 'for' }
@@ -4572,7 +5306,22 @@ begin
       selfBase := 1;
     end;
     nparams := 0;
-    while CurTok.Kind <> tkRParen do
+    { the Display reroute's body-side twin: the Formatter param and the
+      `-> fmt::Result` are skipped whole, exactly as the prepass skipped them,
+      and the body is parsed with RInDisplayFmt on. }
+    isDisplayFmt := (traitName = 'Display') and (fname = 'fmt');
+    if isDisplayFmt then
+    begin
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+      Next;                                       { ) }
+      if CurTok.Kind = tkMinus then
+      begin
+        Next; Expect(tkGt, '>');
+        Next;                                     { fmt }
+        if CurTok.Kind = tkPathSep then begin Next; Next; end;   { ::Result }
+      end;
+    end;
+    while (not isDisplayFmt) and (CurTok.Kind <> tkRParen) do
     begin
       if CurTok.Kind = tkMut then Next;
       if nparams + selfBase >= 6 then Error('Rust: too many parameters (limit is 6 incl. self)');
@@ -4591,14 +5340,17 @@ begin
       Inc(nparams);
       if not Eat(tkComma) then Break;
     end;
-    Expect(tkRParen, ')');
-    if CurTok.Kind = tkMinus then
+    if not isDisplayFmt then
     begin
-      Next; Expect(tkGt, '>');
-      { consumed through RRetTypeCur so a multi-token `Option<T>` or `[T; N]`
-        is skipped WHOLE; the registered signature is what actually types the
-        method, so the value is discarded here on purpose. }
-      RRetTypeCur;
+      Expect(tkRParen, ')');
+      if CurTok.Kind = tkMinus then
+      begin
+        Next; Expect(tkGt, '>');
+        { consumed through RRetTypeCur so a multi-token `Option<T>` or `[T; N]`
+          is skipped WHOLE; the registered signature is what actually types the
+          method, so the value is discarded here on purpose. }
+        RRetTypeCur;
+      end;
     end;
 
     savedSC := SymCount; savedFS := FrameSize;
@@ -4629,7 +5381,9 @@ begin
     EmitParamSpillsForTarget(procIdx, nparams + selfBase);
 
     Expect(tkBegin, '{');
+    RInDisplayFmt := isDisplayFmt;
     bodyNode := RParseFnBody;
+    RInDisplayFmt := False;
     Expect(tkEnd, '}');
 
     { Zero every managed local before the body -- see the twin in

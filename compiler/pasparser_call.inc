@@ -1730,6 +1730,49 @@ begin
   end;
 end;
 
+function OverloadArgParamIdx(pi, base, j, kwTok: Integer): Integer;
+{ Which PARAMETER of `pi` does the probe's argument `j` bind to?
+
+  For a positional argument that is `base + j` and always was. For a NilPy
+  KEYWORD argument it is wherever the name says, and the difference is not
+  cosmetic: `meth(a=0, v=(8, 6))` against
+  `meth(a: Integer = -1; const s: AnsiString = ''; const v: Variant = 0)`
+  binds its second argument to `v`, while `base + j` says `s`. The probe then
+  judged a tuple against an AnsiString parameter, found a reference-shaped
+  argument on a string slot, and refused a legal call:
+  `no overload of meth matches these arguments`.
+
+  The probe used to DISCARD the keyword name -- it steps over `name=` so the
+  name is not parsed as an expression -- on the stated ground that it "only
+  needs the argument's TYPE; which parameter it binds to is settled later by
+  PyKwArgIndex". That is true of what the two loops below want to know, and
+  false of how they INDEX, which is positional. So the name is recorded as a
+  token index and resolved here instead of being thrown away.
+
+  -1 means "no parameter of that name", which is not an error: a callee with
+  `**kwargs` legitimately takes it. Both callers ABSTAIN on -1 rather than
+  reject, which is this file's standing rule -- an unsound refusal of a legal
+  program is worse than the looseness it replaces.
+  bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped }
+var i: Integer;
+    nm: AnsiString;
+begin
+  if kwTok < 0 then
+  begin
+    OverloadArgParamIdx := base + j;
+    Exit;
+  end;
+  OverloadArgParamIdx := -1;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  nm := GetTokenStr(kwTok);
+  for i := base to Procs[pi].ParamCount - 1 do
+    if ParamNameEq(pi, Procs[pi].Params[i].Name, nm) then
+    begin
+      OverloadArgParamIdx := i;
+      Exit;
+    end;
+end;
+
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { TYPE-aware method overload selection.
 
@@ -1751,6 +1794,9 @@ var
   argTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   argRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   argIsNil: array[0..MAX_PROC_PARAMS-1] of Boolean;   { the literal `nil` at argument j }
+  argKwTok: array[0..MAX_PROC_PARAMS-1] of Integer;   { token index of argument j's NilPy
+                                                        keyword name, -1 if positional }
+  pj: Integer;                                        { argument j's parameter slot }
   nCand, nArgs, i, j, c, pi, base, want, curr, mbase, cnt, lp, savedCurIdx, best: Integer;
   score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
   ok: Boolean;
@@ -1872,6 +1918,7 @@ begin
 
   nArgs := 0;
   for i := 0 to MAX_PROC_PARAMS - 1 do argIsNil[i] := False;
+  for i := 0 to MAX_PROC_PARAMS - 1 do argKwTok[i] := -1;
   if (lp >= 0) and (nExplicitArgs > 0) then
   begin
     TokPos := lp + 1;
@@ -1882,12 +1929,16 @@ begin
       { NilPy `name=expr`: step over the keyword before probing, or the name is
         parsed as an expression and reported as an undefined variable — an
         OVERLOADED façade method could not be called with keyword arguments at
-        all (`canvas.create_window((0,0), window=w)`). The probe only needs the
-        argument's TYPE; which parameter it binds to is settled later by
-        PyKwArgIndex. }
+        all (`canvas.create_window((0,0), window=w)`). The name is RECORDED
+        as well as stepped over. It used to be discarded here, on the ground
+        that the probe "only needs the argument's TYPE; which parameter it
+        binds to is settled later by PyKwArgIndex" -- true of what the loops
+        below want to know, and false of how they INDEX, which is positional.
+        See OverloadArgParamIdx. }
       if isNilPy and (CurTok.Kind = tkIdent) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign) then
       begin
+        argKwTok[nArgs] := TokPos - 1;   { CurTok IS the name; TokPos is its `=` }
         Next;   { the name }
         Next;   { the '=' }
       end;
@@ -1936,17 +1987,19 @@ begin
     score := 0;
     for j := 0 to nArgs - 1 do
     begin
-      rank := OverloadArgRank(Procs[pi].Params[base + j].TypeKind, argTk[j]);
+      pj := OverloadArgParamIdx(pi, base, j, argKwTok[j]);
+      if (pj < base) or (pj >= MAX_PROC_PARAMS) then continue;   { abstain: see the helper }
+      rank := OverloadArgRank(Procs[pi].Params[pj].TypeKind, argTk[j]);
       { CLASS-IDENTITY-aware refinement: two tyClass params tie at rank 0, so
         `Add(TJSONData)` vs `Add(TJSONObject)` picked whichever was declared
         first regardless of the argument's class. FPC picks the EXACT class,
         accepts an up-cast to an ancestor as merely compatible, and rejects an
         unrelated class. Both recs must be known — REC_NONE (nil, untagged)
         keeps the kind-level rank. (bug-pascal-overload-impl-decl-signature-match) }
-      if (rank < 3) and (Procs[pi].Params[base + j].TypeKind = tyClass) and
-         (argTk[j] = tyClass) and ((base + j) < MAX_PROC_PARAMS) then
+      if (rank < 3) and (Procs[pi].Params[pj].TypeKind = tyClass) and
+         (argTk[j] = tyClass) then
       begin
-        pRec := ProcParamRecId[pi * MAX_PROC_PARAMS + base + j];
+        pRec := ProcParamRecId[pi * MAX_PROC_PARAMS + pj];
         aRec := argRec[j];
         if (pRec >= REC_UCLASS_BASE) and (aRec >= REC_UCLASS_BASE) and (pRec <> aRec) then
         begin
@@ -2014,21 +2067,24 @@ begin
     pi := UMthProc_[cand[0]];
     ok := True;
     for j := 0 to nArgs - 1 do
-      if (1 + j) < MAX_PROC_PARAMS then
+    begin
+      pj := OverloadArgParamIdx(pi, 1, j, argKwTok[j]);
+      if (pj >= 1) and (pj < MAX_PROC_PARAMS) then
       begin
-        if Procs[pi].Params[1 + j].IsArray then continue;
-        if ProcParamUntyped[pi * MAX_PROC_PARAMS + 1 + j] then continue;
+        if Procs[pi].Params[pj].IsArray then continue;
+        if ProcParamUntyped[pi * MAX_PROC_PARAMS + pj] then continue;
         if argIsNil[j] then continue;
         if not ((argTk[j] = tyPointer) or (argTk[j] = tyClass)) then continue;
-        if not (TypeIsOrdinal(Procs[pi].Params[1 + j].TypeKind) or
-                TypeIsFloat(Procs[pi].Params[1 + j].TypeKind) or
-                (Procs[pi].Params[1 + j].TypeKind = tyString) or
-                (Procs[pi].Params[1 + j].TypeKind = tyAnsiString) or
-                (Procs[pi].Params[1 + j].TypeKind = tyShortString) or
-                (Procs[pi].Params[1 + j].TypeKind = tyFixedString)) then continue;
-        if not TypesCompatible(Procs[pi].Params[1 + j].TypeKind, argTk[j]) then
+        if not (TypeIsOrdinal(Procs[pi].Params[pj].TypeKind) or
+                TypeIsFloat(Procs[pi].Params[pj].TypeKind) or
+                (Procs[pi].Params[pj].TypeKind = tyString) or
+                (Procs[pi].Params[pj].TypeKind = tyAnsiString) or
+                (Procs[pi].Params[pj].TypeKind = tyShortString) or
+                (Procs[pi].Params[pj].TypeKind = tyFixedString)) then continue;
+        if not TypesCompatible(Procs[pi].Params[pj].TypeKind, argTk[j]) then
           ok := False;
       end;
+    end;
     if not ok then
       Error('no overload of ' + name + ' matches these arguments');
     Result := FindUMethArity(ci, name, nExplicitArgs);

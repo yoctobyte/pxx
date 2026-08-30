@@ -118,8 +118,25 @@ absence is treated as unknown-and-allowed, so older pins keep working.
 
 ## The gate, decoupled
 
+> **Read this section as a description of what the TARGETS contain, not as
+> instructions.** Its subject is the FPC decoupling — which checks need a
+> system FPC and which do not — and that is still exactly right. The label
+> "DAILY gate" below is not: nothing is a daily gate any more.
+>
+> **Corrected 2026-08-30 (frankD).** `make test` and its family are **denied by a
+> PreToolUse hook** (`.claude/hooks/no-full-suite.sh`); CLAUDE.md is the single
+> source of truth for gating and the per-fix loop is `make compiler/pascal26`
+> (~12s, and it *is* the byte-identical self-host fixedpoint) plus your repro,
+> with `tools/gate.sh quick` optional per fix and required only before a pin.
+> Breadth is Track T's sweep against your pushed sha.
+>
+> `make stabilize-fast && make pin` (~35s) is likewise the default pin, with
+> full `stabilize` reserved for a release. The decoupling this page documents
+> is what makes that pin FPC-free, so the achievement survives the correction
+> intact — only the recommended entry point moved.
+
 ```
-make test       # DAILY gate — FPC-free: test-core + test-debug-g + lib-fpc-clean
+make test       # the suite -- FPC-free (NOT a gate you run; see above): test-core + test-debug-g + lib-fpc-clean
                 #   self-hosts off the existing compiler/pascal26 (no FPC).
 make test-fpc   # POSTCHECK — the FPC-dependent checks, NOT in the daily gate:
                 #   fpc-check  (FPC compiles us, byte-identical to self-host)

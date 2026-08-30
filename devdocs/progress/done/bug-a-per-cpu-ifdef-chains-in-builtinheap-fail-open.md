@@ -279,7 +279,7 @@ already expects, instead of returning a plausible success.
   above identifies — both outside `compiler/builtin/**`.
 
 ## Log
-- 2026-08-29 — fixed as the shape, not a fifth arm; resolved. PENDING-COMMIT
+- 2026-08-29 — fixed as the shape, not a fifth arm; resolved in commit 4eeadadc4.
 
 ## CORRECTION 2026-08-29 — `{$error}` DOES exist. Correction 1 above is wrong.
 

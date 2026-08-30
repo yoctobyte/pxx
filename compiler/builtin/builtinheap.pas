@@ -203,7 +203,16 @@ const
   PXX_KIND_MASK    = $FF;
 
   { Flags, bits 8-15 }
-  PXX_FLAG_STATIC   = $0100;   { .rodata, never freed — reserved, unused }
+  { Built by the COMPILER, not by this allocator: the block lives in the data
+    section in front of a pooled string literal (InternStr, emit.inc), its
+    refcount is born saturated so no PXXStrDecRef can reach the free, and it
+    carries no PXX_FLAG_APPENDABLE and no allocator size word worth trusting.
+    Nothing here BRANCHES on it — every in-place path already refuses a shared
+    block on its own terms (rc <= 1, plus APPENDABLE for the append). The flag
+    is what makes such a block identifiable in a dump or a debugger, and the
+    reason a `p` that never came from PXXAlloc can be sitting in this heap's
+    protocol at all. bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+  PXX_FLAG_STATIC   = $0100;
   PXX_FLAG_INTERNED = $0200;   { reserved, unused }
   PXX_FLAG_ASCII    = $0400;   { verified: no byte >= $80 }
   { The ASCII bit ANSWERED. Without this, 0 means both "scanned, has high bytes"
@@ -630,6 +639,32 @@ var
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
+{$ifdef PXX_ALLOC_CENSUS}
+  { ---- allocation census (-dPXX_ALLOC_CENSUS) ------------------------------
+    How much does this program allocate, and of what size? This runtime could
+    answer "was it read after free" (-dPXX_HEAP_DEBUG), "who retained it"
+    (-dPXX_OBJTRACE) and "what did the compiler infer" (PXXDBG), and could not
+    answer that one — so three sessions of
+    bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython reached for
+    callgrind instead, which is not installed on the box the work happens on
+    (and perf is blocked there too: perf_event_paranoid = 4). A share quoted
+    from an instrument nobody present can re-run is how that ticket ended up
+    ranking its own follow-ups on numbers it could not reproduce.
+
+    BSS-zeroed, so no initialiser and no startup hook. Counters only — there is
+    deliberately NO call-site attribution: that needs either a caller tag
+    threaded through every entry point or a stack walk, and both change what
+    they measure. Sizes plus rates answer the question this was built for. }
+  CensusAllocs : Int64;   { PXXAlloc calls }
+  CensusFrees  : Int64;   { PXXFree calls }
+  CensusBytes  : Int64;   { payload bytes handed out, after 8-rounding }
+  CensusReuse  : Int64;   { served from a size bin — the O(1) path }
+  CensusList   : Int64;   { served from the large first-fit list }
+  CensusBump   : Int64;   { served by bumping the arena (never yet freed) }
+  CensusArenas : Int64;   { HeapMmap calls }
+  CensusNext   : Int64;   { allocs at which the next report fires; 0 = first }
+  CensusBins   : array[0..HEAP_BIN_COUNT-1] of Int64;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   { --threadsafe on targets without x86-64's hand-emitted lock blobs (i386):
     a userspace spinlock guarding the allocator state (FreeList/HeapPtr/
@@ -829,6 +864,27 @@ begin
   { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
     prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
   Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_XTENSA)}
+  { hosted linux (qemu-user). TWO numbers differ from every arm above and BOTH
+    were measured under qemu-xtensa 10.2.1, not read off a table:
+
+      mmap2 = 80.  Xtensa has its OWN syscall numbering, the same one that puts
+      read at 12 and write at 13 rather than the generic 63/64. Generic 222 --
+      the number the riscv32 arm three lines up uses -- is `Unknown syscall 222`
+      here; qemu names 80 as mmap2.
+
+      MAP_ANONYMOUS = $800, so flags = MAP_PRIVATE|MAP_ANONYMOUS = $802 = 2050,
+      NOT the 34 every other arm passes. Xtensa is one of the architectures with
+      non-standard MAP_* values. This is the half that fails QUIETLY-ish: with
+      34 the kernel sees MAP_PRIVATE|0x20 with no ANONYMOUS bit, tries to map
+      fd -1, and returns EBADF -- a negative errno that PXXAlloc deliberately
+      does not check, so it becomes the heap base and faults later.
+
+    Until this arm existed xtensa fell through to the terminal `Result := -1`
+    below, which is exactly what it looks like: SIGBUS at $FFFFFFFF on the first
+    allocation. No hosted xtensa program that allocated anything had ever run.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Result := __pxxrawsyscall(80, 0, len, 3, 2050, -1, 0);
 {$else}
   { No arm for this target. -1, not 0: every caller reaches this through
     PXXAlloc, which does NOT check the result (deliberately -- on a hosted
@@ -942,6 +998,11 @@ begin
   Result := np;
 end;
 {$else}
+{$ifdef PXX_ALLOC_CENSUS}
+{ Defined after PXXSysWrite, which is what it writes through. Forward here
+  because the trigger is inside PXXAlloc and the printer cannot be. }
+procedure PXXCensusReport; forward;
+{$endif}
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
@@ -957,6 +1018,12 @@ begin
 {$endif}
   if size <= 0 then size := 8;
   size := (size + 7) and (not NativeInt(7));   { round up to 8 -- see the note at PXXAlloc }
+{$ifdef PXX_ALLOC_CENSUS}
+  CensusAllocs := CensusAllocs + 1;
+  CensusBytes := CensusBytes + size;
+  if size <= HEAP_BIN_MAX then
+    CensusBins[Integer(size shr 3) - 1] := CensusBins[Integer(size shr 3) - 1] + 1;
+{$endif}
 
   { Free-list nodes are payload addresses; the size header is at [cur-8] and the
     next link is parked in the payload at [cur]. A reused block holds stale bytes,
@@ -973,6 +1040,9 @@ begin
     if cur <> 0 then
     begin
       FreeBins[bin] := PWord(cur)^;        { pop }
+{$ifdef PXX_ALLOC_CENSUS}
+      CensusReuse := CensusReuse + 1;
+{$endif}
       i := 0;
       while i < size do
       begin
@@ -984,6 +1054,9 @@ begin
       Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
       PXXHeapSpin := 0;
+{$endif}
+{$ifdef PXX_ALLOC_CENSUS}
+      if CensusAllocs >= CensusNext then PXXCensusReport;
 {$endif}
       Exit;
     end;
@@ -1000,6 +1073,9 @@ begin
       begin
         if prev = 0 then FreeList := PWord(cur)^
         else PWord(prev)^ := PWord(cur)^;
+{$ifdef PXX_ALLOC_CENSUS}
+        CensusList := CensusList + 1;
+{$endif}
         i := 0;
         while i < size do
         begin
@@ -1009,6 +1085,9 @@ begin
         Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
         PXXHeapSpin := 0;
+{$endif}
+{$ifdef PXX_ALLOC_CENSUS}
+        if CensusAllocs >= CensusNext then PXXCensusReport;
 {$endif}
         Exit;
       end;
@@ -1036,6 +1115,9 @@ begin
     if arena < HEAP_ARENA then arena := HEAP_ARENA;
     HeapPtr := HeapMmap(arena);
     HeapEnd := HeapPtr + arena;
+{$ifdef PXX_ALLOC_CENSUS}
+    CensusArenas := CensusArenas + 1;
+{$endif}
     if (HeapLow = 0) or (HeapPtr < HeapLow) then HeapLow := HeapPtr;
     if HeapEnd > HeapHigh then HeapHigh := HeapEnd;
   end;
@@ -1043,8 +1125,19 @@ begin
   HeapPtr := HeapPtr + need;
   PWord(base)^ := size;                     { size header }
   Result := Pointer(base + 8);              { payload }
+{$ifdef PXX_ALLOC_CENSUS}
+  CensusBump := CensusBump + 1;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   PXXHeapSpin := 0;
+{$endif}
+{$ifdef PXX_ALLOC_CENSUS}
+  { Reported here and not on the reuse paths purely because this one already
+    ends the routine; the trigger reads CensusAllocs, which every path bumped.
+    Deliberately AFTER the spinlock is released: the printer takes no lock and
+    must not run inside one — the same rule PXXDbgFlush's header states, and
+    for the same reason (bug-a-threadsafe-plus-heap-debug-hangs-at-runtime). }
+  if CensusAllocs >= CensusNext then PXXCensusReport;
 {$endif}
 end;
 
@@ -1245,6 +1338,11 @@ var
 begin
   addr := Int64(p);
   if addr = 0 then Exit;
+{$ifdef PXX_ALLOC_CENSUS}
+  { Counted after the nil guard, so `frees` is comparable with `allocs`: a nil
+    free is not a free, and counting it would make live look negative. }
+  CensusFrees := CensusFrees + 1;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := 0;
   while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
@@ -1350,23 +1448,17 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;      { refcount }
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;          { length }
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
-  i := 0;
-  while i < newLen * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := 0;
-    i := i + 1;
-  end;
+  { Same two calls as the hosted PXXDynSetLen below, for the same reason. Both
+    helpers are forward-declared at the top of this unit, so the ESP arm is not
+    obliged to hand-roll what the hosted one calls.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXMemZero(newArrData, newLen * elSize);
   if oldData <> nil then
   begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen * elSize do
-    begin
-      PByte(Int64(newArrData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
   end;
   PWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayReleaseEsp(oldData);
@@ -1651,12 +1743,15 @@ begin
 {$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(63, fd, buf, count);   { hosted linux (qemu-user) }
 {$elseif defined(CPU_XTENSA)}
-  { Was the PRE-CHAIN DEFAULT, inherited by every unnamed target rather than
-    chosen for this one; kept byte-for-byte so this restructure changes no
-    target's behaviour, but 0 means "read 0 bytes, no error" — EOF — and if
-    xtensa ever reaches here that is a silent lie, not a dead stub. Deciding
-    that is Track S's call, not this ticket's. }
-  Result := 0;   { xtensa (bare-only): no read syscall — dead stub there }
+  { Track S's call, made 2026-08-29: 12 is __NR_read in XTENSA'S OWN table,
+    measured under qemu-xtensa — not the generic numbering riscv32 uses two
+    arms up, where read is 63. The previous `Result := 0` was the pre-chain
+    default inherited by every unnamed target, and as that comment warned, 0
+    here reads as EOF: a hosted xtensa program saw every file as empty and no
+    error was raised. Bare/IDF xtensa never reaches this — the ESP PAL owns
+    file I/O there.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Result := __pxxrawsyscall(12, fd, buf, count);
 {$else}
   { No arm. -1 is the POSIX failure value; a fall-through 0 would report EOF. }
   Result := -1;
@@ -1699,14 +1794,151 @@ begin
 {$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(64, fd, buf, count);   { hosted linux (qemu-user) }
 {$elseif defined(CPU_XTENSA)}
-  { As in PXXSysRead: this was the pre-chain default, not a choice made for
-    xtensa. Preserved exactly. 0 means "wrote nothing, successfully". }
-  Result := 0;
+  { As in PXXSysRead, and the same call: 13 is __NR_write in xtensa's own
+    table (measured), NOT the 64 riscv32 uses two arms up. The previous
+    `Result := 0` meant "wrote nothing, successfully", which is why a hosted
+    WriteLn emitted its string through the inline syscall in codegen and then
+    silently dropped the newline PXXWriteNL sends through here. }
+  Result := __pxxrawsyscall(13, fd, buf, count);
 {$else}
   { No arm. See PXXSysOpenRO. }
   Result := -1;
 {$endif}
 end;
+
+{$ifdef PXX_ALLOC_CENSUS}
+{ ---- allocation census report (-dPXX_ALLOC_CENSUS) -------------------------
+  One block to stderr each time the allocation count reaches the next power of
+  two. Geometric and not a fixed stride on purpose, and the reason is that
+  there is no exit hook to report from: the program's last line is emitted by
+  CODEGEN (EmitExit), not by this runtime, so a census that only printed at the
+  end would need a change outside this file. Doubling thresholds mean the last
+  report is always within 2x of the true total, a short program still gets one,
+  a long one gets a growth CURVE rather than a single number — and a program
+  that segfaults leaves its census behind, which a report-at-exit would not.
+
+  Read it as: `live` is allocs minus frees, so a flat live with a climbing
+  allocs is churn and a climbing live is retention. `reuse` versus `bump` says
+  whether the free lists are doing their job. The size histogram is where the
+  churn actually is.
+
+  ALLOCATES NOTHING, and that is a hard requirement rather than tidiness: this
+  runs from inside PXXAlloc, so an allocation here would re-enter the allocator,
+  and a managed string temp would be finalized on the way out into the release
+  blob which takes the heap lock. That is the hang PXXDbgFlush's header
+  documents (bug-a-threadsafe-plus-heap-debug-hangs-at-runtime); the rules are
+  the same here. Digits go out one byte at a time out of a local, and the label
+  text is indexed in place out of constants.
+
+  Cost when the define is OFF is zero — every counter and every trigger is
+  inside the ifdef, so the shipped allocator is unchanged.
+  bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+const
+  CEN_HDR   = 'pxx-census: allocs=';
+  CEN_FREE  = ' frees=';
+  CEN_LIVE  = ' live=';
+  CEN_BYTES = ' bytes=';
+  CEN_REUSE = ' reuse=';
+  CEN_LIST  = ' list=';
+  CEN_BUMP  = ' bump=';
+  CEN_AREN  = ' arenas=';
+  CEN_SIZES = 'pxx-census: sizes';
+
+procedure PXXCensusPut(kind: Integer);
+{ One byte at a time out of a string CONSTANT — no managed temp anywhere. }
+var i: NativeInt; b: Byte; r: Int64;
+begin
+  if kind = 1 then
+    for i := 1 to Length(CEN_HDR) do begin b := Byte(CEN_HDR[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 2 then
+    for i := 1 to Length(CEN_FREE) do begin b := Byte(CEN_FREE[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 3 then
+    for i := 1 to Length(CEN_LIVE) do begin b := Byte(CEN_LIVE[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 4 then
+    for i := 1 to Length(CEN_BYTES) do begin b := Byte(CEN_BYTES[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 5 then
+    for i := 1 to Length(CEN_REUSE) do begin b := Byte(CEN_REUSE[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 6 then
+    for i := 1 to Length(CEN_LIST) do begin b := Byte(CEN_LIST[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 7 then
+    for i := 1 to Length(CEN_BUMP) do begin b := Byte(CEN_BUMP[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 8 then
+    for i := 1 to Length(CEN_AREN) do begin b := Byte(CEN_AREN[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else
+    for i := 1 to Length(CEN_SIZES) do begin b := Byte(CEN_SIZES[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
+end;
+
+procedure PXXCensusNum(v: Int64);
+{ Decimal, no padding. Built high digit first into a local byte array so the
+  common case is one write; negatives cannot occur here but are printed rather
+  than hidden, because a negative `live` is exactly the bug this would be used
+  to find. }
+var buf: array[0..23] of Byte; n, i: Integer; d: Int64; r: Int64; neg: Boolean;
+begin
+  neg := v < 0;
+  if neg then v := -v;
+  n := 0;
+  if v = 0 then begin buf[0] := 48; n := 1; end
+  else
+    while v > 0 do
+    begin
+      d := v mod 10;
+      buf[n] := Byte(48 + d);
+      n := n + 1;
+      v := v div 10;
+    end;
+  if neg then begin buf[n] := 45; n := n + 1; end;
+  { buf holds the digits reversed; emit backwards. }
+  i := n - 1;
+  while i >= 0 do
+  begin
+    r := PXXSysWrite(2, Int64(@buf[i]), 1);
+    i := i - 1;
+  end;
+end;
+
+procedure PXXCensusReport;
+var i: Integer; b: Byte; r: Int64;
+begin
+  { Advance the threshold FIRST. If anything below ever allocated, the trigger
+    would otherwise still be armed and the report would recurse forever.
+
+    Geometric at 1.125 rather than doubling, and the ratio is the whole
+    usability of the tool. There is no exit hook, so the LAST report is the
+    closest thing to a total and its error is the step size: doubling leaves it
+    anywhere within 2x, which was measured to be too loose to A/B on — two runs
+    of the same program differing by half their allocations produced last-report
+    ranges that OVERLAPPED, so the honest reading was "no conclusion". At
+    +1/8 the tail is within 12.5% and about 180 lines cover 1e9 allocations.
+    Integer arithmetic throughout, and the +1 is what makes it move at all
+    below 8. }
+  if CensusNext = 0 then CensusNext := 1;
+  while CensusAllocs >= CensusNext do
+    CensusNext := CensusNext + (CensusNext div 8) + 1;
+
+  PXXCensusPut(1); PXXCensusNum(CensusAllocs);
+  PXXCensusPut(2); PXXCensusNum(CensusFrees);
+  PXXCensusPut(3); PXXCensusNum(CensusAllocs - CensusFrees);
+  PXXCensusPut(4); PXXCensusNum(CensusBytes);
+  PXXCensusPut(5); PXXCensusNum(CensusReuse);
+  PXXCensusPut(6); PXXCensusNum(CensusList);
+  PXXCensusPut(7); PXXCensusNum(CensusBump);
+  PXXCensusPut(8); PXXCensusNum(CensusArenas);
+  b := 10; r := PXXSysWrite(2, Int64(@b), 1);
+
+  PXXCensusPut(9);
+  for i := 0 to HEAP_BIN_COUNT - 1 do
+    if CensusBins[i] <> 0 then
+    begin
+      b := 32; r := PXXSysWrite(2, Int64(@b), 1);
+      PXXCensusNum((i + 1) * 8);
+      b := 58; r := PXXSysWrite(2, Int64(@b), 1);   { ':' }
+      PXXCensusNum(CensusBins[i]);
+    end;
+  b := 10; r := PXXSysWrite(2, Int64(@b), 1);
+end;
+{$endif}
+
 
 
 {$ifndef PXX_ESP_BARE}
@@ -1956,12 +2188,7 @@ begin
     while (PByte(Int64(src) + len)^ <> 0) and (len < 255) do len := len + 1;
   PWord(dst)^ := len;
   PWord(Int64(dst) + 4)^ := 0;     { high half of the 8-byte length prefix }
-  i := 0;
-  while i < len do
-  begin
-    PByte(Int64(dst) + 8 + i)^ := PByte(Int64(src) + i)^;
-    i := i + 1;
-  end;
+  PXXBlockCopy(Int64(dst) + 8, Int64(src), len);
 end;
 
 { Publish a managed handle into a string slot, releasing the old one. }
@@ -2010,6 +2237,18 @@ begin
   Result := __pxxrawsyscall(5, Int64(path), 0, 0);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$elseif defined(CPU_RISCV32)}
+  { asm-generic, like aarch64 above: there is NO plain `open` in that table, so
+    this is openat(AT_FDCWD = -100, path, O_RDONLY, 0). }
+  Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$elseif defined(CPU_XTENSA)}
+  { xtensa's OWN table, measured under qemu-xtensa -strace: openat is 288, not
+    the 56 riscv32 and aarch64 use. xtensa DOES still carry a legacy open (8),
+    and this deliberately does not use it -- openat is what the other generic
+    targets here issue, and the matching SysOpen builtin in
+    ir_codegen_xtensa.inc lowers to openat for the same reason, so the two
+    routes to a file descriptor on this target cannot drift apart. }
+  Result := __pxxrawsyscall(288, -100, Int64(path), 0, 0);
 {$else}
   { NO ARM FOR THIS TARGET — see the group comment above. Returning the POSIX
     failure value is the whole point: before this was one chain it was four
@@ -2022,6 +2261,10 @@ begin
 end;
 
 function PXXSysLseek(fd, offset, whence: NativeInt): Int64;
+{$if defined(CPU_RISCV32)}
+var res, r: Int64;   { STACK locals -- this group runs under the heap lock and
+                       must allocate nothing (see the group comment). }
+{$endif}
 begin
 {$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(8, fd, offset, whence);
@@ -2031,6 +2274,32 @@ begin
   Result := __pxxrawsyscall(19, fd, offset, whence);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(62, fd, offset, whence);
+{$elseif defined(CPU_RISCV32)}
+  { rv32's 62 is _llseek(fd, off_hi, off_lo, loff_t *result, whence), NOT plain
+    lseek -- rv32 has no plain lseek at all. The 3-arg form leaves the result
+    pointer NULL and the kernel returns EINVAL, which is not a hypothesis:
+    qemu-riscv32 -strace on test_cross_loadfile printed
+
+      openat(AT_FDCWD,"test/hello.pas",O_RDONLY) = 3
+      llseek(3,0,2,NULL,UNKNOWN)                 = -1 errno=22
+      read(3,0x2b2ad050,-22)                     = -1 errno=14
+
+    -- a size of -1 flowing into read as a count, and LoadFile publishing an
+    EMPTY string with no error anywhere. This mirrors PalBackendSeek in
+    lib/rtl/platform/posix/platform_backend.pas, which already carries the
+    identical split and the identical reason; the two must not drift.
+
+    NOTE the sibling comment in that same file's rv32 block still says the plain
+    form is tolerated by qemu-user for small offsets. The strace above falsifies
+    that for the RETURN VALUE case, which is the one this helper needs.
+    bug-b-platform-backend-rv32-comment-claims-plain-lseek-is-tolerated }
+  res := 0;
+  r := __pxxrawsyscall(62, fd, (offset shr 32) and $FFFFFFFF,
+                       offset and $FFFFFFFF, Int64(@res), whence);
+  if r < 0 then Result := r else Result := res;
+{$elseif defined(CPU_XTENSA)}
+  { xtensa's own table again: lseek is 15. Same small-offset caveat as rv32. }
+  Result := __pxxrawsyscall(15, fd, offset, whence);
 {$else}
   { No arm — see PXXSysOpenRO. A garbage size here is the worse half of the
     defect: PXXStrLoadFile feeds it straight to PXXAlloc(size + hdr + 1). }
@@ -2048,6 +2317,10 @@ begin
   Result := __pxxrawsyscall(6, fd);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(57, fd);
+{$elseif defined(CPU_RISCV32)}
+  Result := __pxxrawsyscall(57, fd);                { asm-generic }
+{$elseif defined(CPU_XTENSA)}
+  Result := __pxxrawsyscall(9, fd);                 { xtensa's own table }
 {$else}
   { No arm — see PXXSysOpenRO. }
   Result := -1;
@@ -2085,9 +2358,16 @@ end;
 
 { Managed-string refcount retain/release for targets without the hand-emitted
   atomic blob (i386 and other cross targets). p = data pointer; refcount lives
-  at [p-16], length at [p-8]. NON-atomic — threadsafe mode is x86-64 only and
-  keeps its lock-prefixed inline version. PXXStrDecRef frees the block (base =
-  p-16) when the count reaches zero. nil is ignored. }
+  at [p-16], length at [p-8]. PXXStrDecRef frees the block (base = p-16) when
+  the count reaches zero. nil is ignored.
+
+  Non-atomic in the DEFAULT build; under --threadsafe (PXX_TS_SOFTLOCK) the
+  increments below use __pxxatomic_add. Corrected 2026-08-30: this said
+  "NON-atomic — threadsafe mode is x86-64 only", and both halves had stopped
+  being true — the ifdef'd body twelve lines down is atomic, and --threadsafe
+  covers more than x86-64. For WHICH targets, see the gate in compiler.pas
+  (the ThreadSafeMode target check); that condition is the authority and this
+  comment deliberately does not repeat the list. }
 procedure PXXStrIncRef(p: Pointer);
 var rcAddr: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
@@ -2647,10 +2927,30 @@ begin
   { Whichever path runs, the caller is about to WRITE bytes through the handle
     we return, so any cached ASCII answer stops being true. rc<=1 hands back the
     same block (mutated in place); the COW path copies through PXXStrFromLit,
-    which stamps the flag from the OLD bytes. Both must forget it — this is the
-    single choke point for byte mutation, which is what makes the cache sound.
-    PXXStrSetLen needs no such call: it always allocates a fresh block and
-    PXXHdrInit zeroes its meta. }
+    which stamps the flag from the OLD bytes. Both must forget it.
+
+    This is ONE of several sites that mutate bytes, not the only one — the
+    sentence that used to stand here said "the single choke point for byte
+    mutation, which is what makes the cache sound", and on 2026-08-29 three
+    separate bugs were fixed that had all been caused by believing it
+    (8be3c6d06, df19c72a7, b71690c40). The invariant is per-site, so state it
+    that way: EVERY site that mutates bytes in place must forget the answer.
+    The current list is `grep PXXStrForgetAscii` plus the two hand-emitted
+    x86-64 paths in ir_codegen.inc — the AnsiStrUniqueAddr blob, and the
+    in-place SetLength resize that clears both bits itself. Run the grep; do not
+    trust a count in a comment, this one's included.
+
+    A note on the clause that also used to stand here, because it is the subtler
+    trap: "PXXStrSetLen needs no such call: it always allocates a fresh block."
+    That is TRUE of this Pascal routine — every non-collapsing path really does
+    PXXAlloc + PXXHdrInit — and it was still the premise of a real bug, because
+    x86-64 does not CALL PXXStrSetLen: it inlines the symbol-target resize, and
+    that inline has an in-place arm (df19c72a7). A reader who checked the claim
+    against PXXStrSetLen confirmed it and stopped. **The thing that gets checked
+    was not the thing that was load-bearing** — so when a comment justifies an
+    invariant by naming a routine, check the OPERATION's other implementations,
+    not the routine.
+    bug-a-the-comment-that-caused-three-bugs-survived-all-three-fixes }
   rc := PWord(oldHandle - 16)^;
   if rc <= 1 then
   begin
@@ -2697,12 +2997,23 @@ end;
   (length, data) operand shape so managed handles and inline strings share it.
   Returns -1, 0 or +1.
 
-  It exists because the four cross backends had NO ordered-string arm at all:
-  only `=` / `<>` were special-cased, so `a < b` fell through to the ordinary
-  integer compare and compared the two heap HANDLES. That is a silent wrong
-  answer — `'zzz' < 'aaa'` reported by allocation order — on i386, arm32,
-  aarch64 and riscv32 alike.
+  It exists because the cross backends that do not call it have NO
+  ordered-string arm at all: only `=` / `<>` were special-cased, so `a < b`
+  fell through to the ordinary integer compare and compared the two heap
+  HANDLES — a silent wrong answer, `'zzz' < 'aaa'` reported by allocation
+  order.
   bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+
+  THE COUNT USED TO BE IN THIS SENTENCE AND THE COUNT WAS WRONG. It said "the
+  four cross backends", meaning i386, arm32, aarch64 and riscv32 — and there
+  were five. **Xtensa was never visited**, kept the bug for months, and was
+  found only once a hosted xtensa profile could run a program and print the
+  wrong answer. The count is deliberately gone rather than corrected to five:
+  a number in a comment is a claim that goes stale silently, and the next
+  target to land would have made "five" wrong the same way. Say which backends
+  by the property that matters — whether they call this helper — so the
+  sentence stays true as the set changes.
+  bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle
 
   Bytes are compared UNSIGNED (x86-64's inline sequence uses repe cmpsb + the
   unsigned setcc family), and the shorter string sorts first when one is a
@@ -3282,12 +3593,9 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := len;
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
-  i := 0;
-  while i < len * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := PByte(Int64(arrData) + i)^;
-    i := i + 1;
-  end;
+  { The copy-on-write duplicate — every write to a shared dyn array lands here.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXBlockCopy(Int64(newArrData), Int64(arrData), len * elSize);
 
   depth := PInt32(Int64(desc) + 8)^;
   baseKind := PInt32(Int64(desc) + 12)^;
@@ -3391,24 +3699,24 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
-  i := 0;
-  while i < newLen * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := 0;
-    i := i + 1;
-  end;
+  { PXXMemZero / PXXBlockCopy, not a byte loop. Both are defined above and both
+    already move a machine word at a time (PXXMemZero is `rep stosb` on x86-64),
+    so this is one call replacing a loop, not a new primitive.
+
+    The old loops were worse than "one byte per iteration": each recomputed
+    `newLen * elSize` in its own condition, so every byte cost a multiply as well
+    as a load, a store and a compare. This is on the `Copy(arr)` path -- Copy
+    lowers to SetLength-then-PXXMemCopy, so the zero-fill here ran byte-by-byte
+    immediately before a `rep movsb` overwrote every byte of it.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXMemZero(newArrData, newLen * elSize);
 
   if oldData <> nil then
   begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen * elSize do
-    begin
-      PByte(Int64(newArrData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
     PXXDynArrayRetainImmediate(newArrData, copyLen, depth, baseKind, baseRecDesc);
   end;
 
@@ -3456,20 +3764,14 @@ begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen do
-    begin
-      PByte(Int64(newData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    { SetLength(s, n) on a string, on every target — the site this ticket's
+      original list missed entirely, and plausibly the hottest of them.
+      feature-opt-bulk-copy-is-byte-at-a-time }
+    PXXBlockCopy(Int64(newData), Int64(oldData), copyLen);
   end;
 
-  i := copyLen;
-  while i < newLen do
-  begin
-    PByte(Int64(newData) + i)^ := 0;
-    i := i + 1;
-  end;
+  if newLen > copyLen then
+    PXXMemZero(Pointer(Int64(newData) + copyLen), newLen - copyLen);
   PByte(Int64(newData) + newLen)^ := 0;       { nul terminator }
 
   PWord(strSlot)^ := Int64(newData);

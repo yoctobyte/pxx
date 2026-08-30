@@ -42,18 +42,29 @@ assembler, linker, or C compiler invoked during the build.
 
 ## Design points
 
-- **Self-hosting.** The compiler is written in its own dialect. The
-  development gate requires it to compile itself to a byte-identical fixed
-  point — build 2 must equal build 3, exactly, on every self-hosting target.
+- **Self-hosting.** The compiler is written in its own dialect, and every
+  change is gated on it compiling itself to a byte-identical fixed point:
+  the compiler builds the compiler, that result builds the compiler again, and
+  the two must be equal to the byte. This runs natively, at the default
+  optimisation level; the other self-hosting targets are covered by the
+  cross-target suites in the test matrix rather than by the per-change gate.
 - **Two string ABIs.** The default build uses managed, reference-counted
   strings; a `hello world` executable is approximately 31 KB. Compiling with
   `-uPXX_MANAGED_STRING` selects an older frozen-string ABI with no dynamic
   allocation for strings; the same program is a 287-byte static ELF. Both
   figures were verified on this checkout. See
   [Types](../language/types.md#strings).
-- **Six targets, one compiler.** x86-64, i386, aarch64, and arm32 self-host
-  byte-identical; xtensa and riscv32 target bare-metal ESP32 as emit-only
-  backends. `--target=` selects the backend.
+- **Six code-generating targets, one compiler.** x86-64, i386, aarch64, and
+  arm32 self-host byte-identical. riscv32 covers both bare-metal ESP32-C3 and
+  hosted 32-bit RISC-V Linux, whose binaries run under `qemu-riscv32`; xtensa
+  targets the ESP32-S2/S3. The three cross self-hosts are proved by a
+  triple-stage check — cross-compile the compiler, run *that* binary under QEMU
+  to compile the compiler again, `cmp` the two — and are run in the
+  managed-string build, which the `cross-bootstrap` rule states is required for
+  them; the native fixedpoint passes no build flags at all. Same property, two
+  configurations, worth naming because "all four self-host" reads as one gate
+  and is two. `--target=` selects the backend, and
+  [Targets](../targets/index.md) is the table that stays current.
 - **Multiple frontends.** The same backend also compiles a C frontend
   (tested against real-world C, including SQLite and Lua sources), a
   statically-typed Python-like dialect (Nil Python, `.npy`), and an
@@ -77,8 +88,10 @@ Compilation proceeds through five stages, with no external tools invoked:
    is imported.
 
 Optimization runs at `-O2` by default (peephole passes, procedure inlining,
-and dead-code elimination, tiered by `-O` level); `-O0` disables it and is the
-byte-identity reference used by the self-host gate. There is no whole-program or
+and dead-code elimination, tiered by `-O` level); `-O0` disables it. The
+self-host fixedpoint is proved at the **default** level, not at `-O0` — the
+compiler rebuilds itself with no `-O` flag at all, so "it reproduces itself" is a
+statement about one optimisation level. There is no whole-program or
 SSA-based optimizer — the passes are local and the emitted code stays close to
 the source. See the [command-line reference](../reference/cli.md#runtime-and-codegen)
 for the `-O` levels.
@@ -96,8 +109,9 @@ cleanly on x86-64, i386, aarch64, and arm32 while writing this page. The C
 and Nil Python frontends compile against real-world C headers and libraries.
 DWARF debug information (`-g`) is available on all four Linux targets.
 
-Known gaps: the two ESP32 targets (xtensa, riscv32) are emit-only, not
-self-host, targets (though classes with virtual dispatch now work on both).
+Known gaps: xtensa and riscv32 are not self-host targets — the compiler emits
+for them but does not compile itself with them (though classes with virtual
+dispatch now work on both).
 Optimization is local only — there is no whole-program or SSA-based pass.
 Integer overflow, range, and IO checking exist but are opt-in per region
 (`{$Q+}`, `{$R+}`, `{$I+}`); the lax default wraps and does not range-check.

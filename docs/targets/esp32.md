@@ -89,12 +89,19 @@ procedure vTaskDelay(ticks: Integer); external;
 
 ## Code size and memory footprint
 
-Measured with the pinned compiler (empty program, bare profile):
+Measured on **2026-08-30 with pinned `v393`** (empty program, `--esp-profile=bare`).
+Re-measure rather than trust the table — these have roughly doubled since they
+were first published, and a figure without a pin behind it is a promise nobody
+renewed:
+
+```sh
+pxx --target=esp32c3 --esp-profile=bare empty.pas out    # prints code/data/bss
+```
 
 | | code | data | bss |
 | --- | --- | --- | --- |
-| esp32c3 (riscv32) | ~26 KB | 48 B | ~70 KB |
-| esp32s3 (xtensa) | ~21 KB | 48 B | ~70 KB |
+| esp32c3 (riscv32) | ~50 KB | 344 B | ~104 KB |
+| esp32s3 (xtensa) | ~43 KB | 344 B | ~104 KB |
 
 What that buys you — the floor is not "hello world plus bloat", it is the
 full managed runtime:
@@ -103,11 +110,16 @@ full managed runtime:
   `New`/`Dispose`/`GetMem`/dynamic arrays work on bare metal.
 - **Managed strings**: `AnsiString` with reference counting works on bare
   metal, including on the C3's boot path.
-- The remaining ~6 KB of bss is runtime globals (exception state and
-  similar).
+- The remainder of that bss figure is runtime globals — exception state and
+  similar. It has grown faster than the arena and is tracked as
+  a compiler-size problem, not an ESP one; see the emission-size work on the
+  board rather than treating the number here as a target.
 
-An ESP32-C3 has roughly 400 KB of usable SRAM; a minimal PXX image plus
-stack uses well under a quarter of it.
+An ESP32-C3 has roughly 400 KB of usable SRAM, so a minimal PXX image plus
+stack currently sits around a quarter of it. That is comfortable but no longer
+negligible, and it is the honest way to say it — an earlier version of this page
+claimed "well under a quarter" against a bss figure that has since grown by
+about half.
 
 ## Floating point
 
@@ -116,7 +128,7 @@ integer soft-float kernels. On bare images this support is **opt-in** so
 programs that never touch floats do not pay for it:
 
 ```pascal
-uses softfloat;   { Double/Single arithmetic, ~50 KB of code }
+uses softfloat;   { Double/Single arithmetic; ~54 KB of code on xtensa, ~64 KB on riscv32 }
 ```
 
 Without the unit, float operations fail at compile time with a clear error

@@ -52,6 +52,10 @@ ALLOWED = {
     "twatch_close_stubs_devtest.py":
         "builds its own throwaway clone as a fixture; the path it joins is the "
         "fixture's, not a live watcher's",
+    "twatch_failing_step_devtest.py":
+        "same fixture case: it git-inits a bare repo plus a clone under "
+        "tempfile and joins TSTATE_REL onto THAT, so file_stub_tickets has a "
+        "real tree to publish into. It never opens the repo's own tstate",
     # Same case as the line above, verified one at a time rather than waved
     # through as a group: each of these joins tstate onto a root/clone/path IT
     # JUST CREATED under tempfile, so there is no live watcher tree to be stale

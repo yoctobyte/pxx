@@ -71,8 +71,9 @@ Two pointers in `stable_linux_amd64/default/`:
   freely; B's ground only shifts on a deliberate `make pin`. `pxx-stable-check`
   tells A when `latest` is ahead of `pinned` (a checkpoint waiting to be blessed).
 - Current platform (x86-64) only. Cross-compile is a later concern; the cross
-  suites (`make test-i386 / test-aarch64 / test-arm32 / cross-bootstrap`)
-  discover any per-target gaps after the fact.
+  suites discover any per-target gaps after the fact — **as Track T's sweep
+  against your pushed sha, not as something you run.** Those targets are denied
+  by the same hook as the rest of the suite family.
 
 ## Track A — compiler
 
@@ -82,12 +83,17 @@ stabilize parts of the `Makefile` and `test/`.
 Publishing a new baseline, when a feature B needs lands:
 
 ```sh
-make stabilize        # runs `make test` + 4-iteration fixedpoint, then records:
+make stabilize-fast   # ~35s. THE DEFAULT (see the correction below). self -> next
+                      #   -> fixedpoint, then records:
                       #   stable_linux_amd64/default/v{N+1}, latest -> vN+1,
                       #   last.sha256, history.log (ts, vN, sha, commit, subject)
 make pin              # bless it for B: pinned -> latest (or VERSION=N), -> pin.log
 git add stable_linux_amd64 && git commit -m "chore(stable): record vN, pin for B"
 ```
+
+Plain `make stabilize` runs the same recording, preceded by the full suite and a
+4-iteration fixedpoint — ~25 minutes with the repo lock held. It is for a
+RELEASE, or when Track T is *proven* down, not for a pin.
 
 `make stabilize` only records a checkpoint (moves `latest`); it does **not**
 touch `pinned`, so B is unaffected until you `make pin`. Bless deliberately when
@@ -98,14 +104,40 @@ tracked file under the stable dir from the commit that pinned that version, so
 `pinned`, `VERSION` and `pin.log` come back byte-for-byte, and it leaves the
 result staged for you to commit. `make pin` takes no `VERSION=`.
 
-The **authoritative gate is unchanged**: `make test` + self-host fixedpoint.
-A feature is not "done" until it passes that. `make stabilize` will not record a
-baseline that fails the gate.
+> ## Corrected 2026-08-30 (frankD) — the gate this section names is refused
+>
+> This said *"the **authoritative gate is unchanged**: `make test` + self-host
+> fixedpoint. A feature is not 'done' until it passes that."* **CLAUDE.md is the
+> single source of truth for gating, and it now says otherwise.** The per-fix
+> loop is `make compiler/pascal26` (~12s, and it *is* the byte-identical
+> self-host fixedpoint) plus your repro; `tools/gate.sh quick` is optional per
+> fix and required only before a pin. Breadth — full suites, cross targets, the
+> corpus — is **Track T's job**, run against your pushed sha and returned
+> asynchronously.
+>
+> This is not advice you may weigh against the text above: `make test` is **denied
+> by a PreToolUse hook** (`.claude/hooks/no-full-suite.sh`), as are the heavy
+> `gate.sh` and `testmgr` tiers and the cross suites named earlier in this file.
+> An agent following this page's ladder meets a refusal, not a gate.
+>
+> The same correction applies to the pin recipe above: **`make stabilize-fast &&
+> make pin` (~35s) is the default**, and full `stabilize` is for a release. A pin
+> holds the repo lock, so every other lane and the human wait for it — and the
+> one property a bad pin could poison for everyone, a compiler that cannot
+> reproduce itself, is exactly what `stabilize-fast`'s self→next→fixedpoint chain
+> proves.
+>
+> **This page is where CLAUDE.md sends every agent** — *"Full protocol … is in
+> `devdocs/dev/parallel-tracks.md`. Read it before starting your track."* — which
+> makes it the highest-consequence copy of a stale gate in the tree, and the
+> reason it survived is the ordinary one: the rule it states is **tighter** than
+> the rule that replaced it, so obeying it wasted ten minutes and produced
+> nothing wrong. Nobody reports that.
 
-`make test` (and therefore `stabilize`/`pin`) is **FPC-free** — it self-hosts off
-the existing `compiler/pascal26`. FPC-dependent checks (compliance + the host
-asm-emit oracle) live in `make test-fpc`, a release/CI postcheck, not the daily
-gate. A fresh checkout seeds the working binary with `make seed-from-stable` (no
+The gate `make stabilize` enforces is **FPC-free** — it self-hosts off the
+existing `compiler/pascal26`. FPC-dependent checks (compliance + the host
+asm-emit oracle) live in a separate release/CI postcheck target, not in any
+daily gate. A fresh checkout seeds the working binary with `make seed-from-stable` (no
 FPC); only a pure-source build with no committed binary needs `make bootstrap`.
 See **`devdocs/dev/fpc-optional-workflow.md`**.
 
@@ -139,7 +171,7 @@ file a Track A bug ticket with the exact compiler error or misbehavior.
 Owns: the **C-language frontend** — `compiler/clexer.inc`, `cparser.inc`,
 `cpreproc.inc`, the C-exclusive C→IR lowering, `lib/crtl` (the C runtime), and C
 tests. Goal: compile real portable C (tiny-regex → lua → sqlite); roadmap in
-`devdocs/progress/backlog/feature-c-desktop-lua-sqlite-path.md`.
+[[feature-c-desktop-lua-sqlite-path]].
 
 **Works on `master`** — like every other track. The C frontend merged to
 `master` at **v80** (2026-06-26); the old `feat/cfront` worktree at

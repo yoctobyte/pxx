@@ -13,7 +13,7 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - Direct ELF executable output: no assembler or linker subprocess for normal
   Pascal programs.
 - Alternate output modes for interop with other toolchains: `--emit-obj`
-  writes a relocatable `.o` on any target; `--shared` writes an x86-64 `.so`
+  writes a relocatable `.o` on x86-64, riscv32 and xtensa; `--shared` writes an x86-64 `.so`
   (currently validated via the `.asm` assembly-source frontend).
 - Zero-dependency binaries by default: no libc, no `DT_NEEDED`, only Linux
   kernel syscalls at runtime — for every frontend, not just C. Linking a system
@@ -24,7 +24,11 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
   symbol table, and import resolver, so `import`/`uses` resolves a C header, a
   Pascal unit, or a Nil Python module through the same chain — no FFI blocks,
   IDL, or generated bindings. See [Cross languages](../targets/cross-languages.md).
-- Byte-identical fixedpoint builds are part of the development gate.
+- Byte-identical fixedpoint builds are part of the development gate: the
+  compiler rebuilds itself and the two binaries must match to the byte, at the
+  default optimisation level. This is the compiler reproducing **its own**
+  output — a different claim from the output parity against gcc- and FPC-built
+  references described in [Compatibility status](../reference/status.md).
 - DWARF debug info with `-g` on Linux targets.
 
 ## Language

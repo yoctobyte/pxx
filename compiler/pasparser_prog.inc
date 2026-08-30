@@ -548,7 +548,7 @@ end;
 
 procedure ParseProgram;
 var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
-    doneUses, doneDecls, hasExceptions, needsBuiltin,
+    doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
     needsSoftFloat, needsWasiFile: Boolean;
@@ -565,8 +565,7 @@ begin
   StrConstCount := 0;
   SetConstCount := 0;
   ClassConstCount := 0;
-  ParsingClassConstCi  := -1;
-  ParsingClassBodyCi   := -1;
+  ResetDeclScopeSentinels;
   NestedTypeCount      := 0;
   ParsingClassConstVis := 0;
   { Decl-order gating defaults: no body active (a high sentinel means "see all"
@@ -1365,17 +1364,7 @@ begin
   doneDecls := False;
   while not doneDecls do
     case CurTok.Kind of
-      tkUses:
-      begin
-        Next;
-        doneUses := False;
-        while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
-        begin
-          ParseUsesEntry;
-          if not Eat(tkComma) then doneUses := True;
-        end;
-        Eat(tkSemicolon);
-      end;
+      tkUses:     ParseUsesClause;
       tkVar:      ParseVarSection;
       tkConst:    ParseConstSection(-1, 0, False);
       tkType:     ParseTypeSection;

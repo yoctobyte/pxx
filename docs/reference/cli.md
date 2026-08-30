@@ -36,6 +36,83 @@ An output path ending in `.o` also selects object-output mode, the same as
 passing `--emit-obj`. An output path ending in `.so` selects shared-library
 mode, the same as passing `--shared`.
 
+## Information flags
+
+These answer a question about the toolchain itself and need **no source file**.
+Each exits 0.
+
+| Flag | Answers |
+| --- | --- |
+| `--help`, `-h` | usage, plus the options worth remembering |
+| `--version` | generation, the frontends built in, the host |
+| `--where`, `--config` | every path the compiler resolves, and which tier it came from |
+| `--list-targets` | the `--target=` values, and which of them run on this host |
+| `--list-libraries` | the units this binary can actually find, grouped by directory |
+| `--doctor` | what this box can do — cross-run, ESP, gdb, FPC seed, gcc |
+
+`--version` names the compiler generation — the same number a
+`{$IF PXX_VERSION >= n}` directive tests:
+
+```
+pxx (pascal26) — self-hosting Pascal-dialect compiler
+  generation:  26   (the value {$IF PXX_VERSION >= n} tests)
+  frontends:   pascal c nilpy rust zig ada basic fortran algol erlang lolcode whitespace
+  host arch:   x86-64 linux
+```
+
+That frontend list is every frontend compiled into the binary, and they sit at
+very different stages. The ones these docs cover in depth are Pascal,
+[C](../targets/c-frontend.md) and [Nil Python](../targets/nil-python.md); the
+rest are a real BASIC frontend, two experimental ones, and six skeleton probes,
+and their presence in the list is not a support claim. See
+[Other frontends](../targets/other-frontends.md) for which is which.
+
+### `--where` — the one to reach for first
+
+When a build cannot find a unit or a header, `--where` is the answer, because it
+prints the paths **from the code that resolves them** rather than from a rule
+written down separately. It marks each root that does not exist `[MISSING]`, and
+ends with the tier order in force:
+
+```
+Library roots (as ParseUsesUnit resolves them):
+  /opt/pxx/lib/rtl/   [RTL]
+  /opt/pxx/lib/pcl/   [PCL]
+  ...
+
+Pascal unit search roots, in order (-Fu goes in FRONT of these):
+  /opt/pxx/../lib/rtl/platform/posix/   [MISSING]
+  /opt/pxx/lib/rtl/platform/posix/
+
+Tier order: -Fu/-I  >  PXX_HOME/PXX_LIBPATH  >  pxx.cfg  >  exe-dir defaults.
+```
+
+`--config` is an exact alias — same output, same exit — for when the question is
+phrased as "which `pxx.cfg` is in effect?" rather than "where is the RTL?".
+(Deliberately not called "byte-identical": in these docs that phrase is reserved
+for two specific technical claims, and reusing it for two flags that print the
+same thing would blur a distinction worth keeping. The two claims are **not the
+same claim** — in the self-host fixedpoint it is the *binary* that is identical,
+to our own previous output; in the gcc-oracle corpora it is a compiled program's
+*output* that is identical, to the output of the same program built with gcc.
+PXX does not emit gcc's machine code. See
+[Status](status.md#what-works-means-here).)
+
+One subtlety worth knowing: `-Fu` and `-I` given **before** `--where` on the
+command line appear in its output, and ones given after it do not — `--where`
+answers where it is read.
+
+### `--doctor` — capability, not correctness
+
+`--doctor` reports what this box can do with this binary: native compilation,
+whether the RTL, builtin units and C headers were found, which cross targets can
+actually be *run* here through qemu, whether an ESP-IDF and Espressif toolchain
+are present, and whether an FPC seed, gdb and gcc are around for compiler
+development. Every `no` row names what to install.
+
+**Nothing in it is fatal.** Compiling and running a native program needs none of
+the optional rows; each `no` costs exactly the one capability its row names.
+
 ## Options
 
 | Option | Effect |
@@ -45,7 +122,7 @@ mode, the same as passing `--shared`.
 | `--xtensa-cpu=lx6` | Use the older ESP32 LX6 software divide/mod profile. |
 | `--xtensa-fpu` | Use Xtensa hardware single-precision float operations where supported. |
 | `--esp-profile=bare` | Select the bare-metal ESP platform profile for `riscv32` or `xtensa`. |
-| `--emit-obj` | Emit a relocatable object (`.o`) instead of a linked executable, on any target. Same as an output path ending in `.o`. |
+| `--emit-obj` | Emit a relocatable object (`.o`) instead of a linked executable. Support has **two axes, target and source kind**: `riscv32` and `xtensa` emit a general object (code, data, bss, relocations, exported symbols) for a compiled source — Pascal, C or NilPy; **x86-64 emits objects for `.asm` sources only** — text, `global` labels and calls to externals — and refuses a Pascal, C or NilPy program rather than writing an object that defines nothing; i386, aarch64 and arm32 have no object writer at all, and `.asm` sources produce objects on x86-64 only. Same as an output path ending in `.o`, which carries the same restrictions. |
 | `--shared` | Emit an ET_DYN shared library (`.so`) instead of an executable. x86-64 only; introduced for and validated with the `.asm` assembly-source frontend. Same as an output path ending in `.so`. |
 | `-S` | Also write `<output>.s`, a best-effort x86-64 disassembly text dump of the emitted code. Additive — the normal output (executable, `--emit-obj`, or `--shared`) still happens. x86-64 only. |
 | `-g` | Emit DWARF debug information. |
@@ -79,6 +156,7 @@ effect where one exists.
 | `--require-forward` | A routine must be defined above its call, `forward;`-declared, in an interface section, or be a class method — no whole-source pre-scan. First check under `--strict`. | `{$STRICT ON}` |
 | `--strict-overload` | Require explicit `overload;` on overloaded routines. | `{$STRICT_OVERLOAD ON}` |
 | `--permissive-overload` | Relax the overload marker requirement (the default). | `{$STRICT_OVERLOAD OFF}` |
+| `--strict-overload-width` | Among integer overloads, pick the **narrowest that fits**, as FPC does, instead of the default dialect's widening. Changes which body a call binds to, so it is deliberately **not** in `--strict-fpc`; see [modes](./modes.md), which carries the value table. | — command line only |
 | `--strict-operator` | FPC-parity rejection of `=` / `<>` on class operands (lax default allows them). | `{$STRICT_OPERATOR ON}` |
 | `--strict-case` | FPC-parity `case`-label diagnostics: inverted ranges, duplicate/overlapping labels. | `{$STRICT_CASE ON}` |
 | `--strict-visibility` | Enforce `private` / `protected` / `strict` member access (lax default parses the markers but grants access anywhere). | `{$STRICT_VISIBILITY ON}` |
@@ -93,6 +171,7 @@ effect where one exists.
 | `-O0` … `-O3` | Optimization level. `-O2` is the proven default; `-O3` carries newer, still-promoting passes. `-g` implies `-O0` unless an `-O` level is given explicitly. |
 | `--no-default-rtl` | Do not pull the default standard-unit surface (textfile + builtin). Used by the compiler self-build. |
 | `--no-div-check` | Opt out of the integer div/mod pre-divide zero check (default on: divide by zero raises a clean runtime error rather than a raw `SIGFPE`). |
+| `--no-nil-check` | Opt out of **all** emitted nil checks, including those a source turned on with `{$NILCHECKS ON}`. Call sites are checked by default (a method on a nil instance, or a call through a nil procvar, method pointer or interface); bare `p^` derefs are not. A checked site raises a catchable `EAccessViolation` with `SysUtils`, else `Runtime error 216`. See [directives](./directives.md#nilchecks-is-tri-state). |
 | `--no-signals` | Opt out of the default signal runtime (graceful `SIGINT`/`SIGTERM` dispatch + `SetSignalHandler`). PC targets only. |
 | `--fpc-float-errors` | Emulate FPC's float error behaviour: unmask invalid / zero-divide / overflow at entry (the set FPC itself unmasks) and report a trap as FPC's runtime error — 208 float division by zero, 205 overflow, 207 invalid. Off by default; see below. x86-64 only, and it needs the signal runtime (so not with `--no-signals`). |
 | `--no-unhandled-handler` | Do not install the default unhandled-exception handler. |
@@ -137,18 +216,20 @@ unit, which take and return an FPC-compatible `TFPUExceptionMask`.
 
 ## Diagnostics and internal flags
 
-These serve compiler development and self-inspection, not normal builds. Use
-them only when directed.
+The `--warn-*` flags are opt-in diagnostics you can run against ordinary
+source; each is off by default and none changes what is compiled. The dump and
+measure flags below them serve compiler development and self-inspection — use
+those only when directed.
 
 | Option | Effect |
 | --- | --- |
 | `--dump-cpp` | Dump the intermediate C++-ish form. |
 | `--proc-map` | Dump the procedure map. |
-| `--selftest` | Run the built-in self-test. |
 | `--measure-inline` / `--measure-regcall` | Emit inline / register-call instrumentation. |
 | `--warn-missed-fold` | Warn on constant-fold opportunities the optimizer missed. |
 | `--warn-self-result` | Warn when a parameterless function's bare own name is read as its `Result`. |
 | `--warn-uses-leak` | Warn whenever a name resolves through a unit not reachable by the non-transitive `uses` rule. Read-only measurement — resolution itself is unchanged. |
+| `--warn-ignored-directives` | Report a routine directive that is accepted but cannot be honored *here*, naming the reason (`cdecl`, `register`, `iram` off the ESP targets, `stackful`, `reintroduce`, and `inline` when the routine cannot be inlined). Diagnostic only — codegen is unchanged. See [routine directives](../language/dialect.md). |
 
 ## Search paths
 
@@ -162,6 +243,11 @@ Use `-Fu` for project-local units:
 Search roots are checked in flag order before the default library roots. That
 lets a project override or add units deliberately without changing the checkout.
 
+The full order — flags, then environment, then `pxx.cfg`, then the defaults
+guessed from the binary's location — is printed by `pxx --where` (see
+[Information flags](#information-flags) above), which reads it from the resolver
+itself. Prefer running it over trusting a copy of the rule.
+
 Use `-I` for C headers. It also feeds the Pascal unit search path, which is
 useful for generated bindings that sit next to the imported header:
 
@@ -169,9 +255,50 @@ useful for generated bindings that sit next to the imported header:
 ./pxx -Iinclude main.pas main
 ```
 
+## Environment and `pxx.cfg`
+
+Three environment variables and one optional config file sit between the
+command-line flags and the defaults the compiler guesses from its own location.
+Run `pxx --where` to see which of them are actually in effect — it prints all
+of them, set or unset.
+
+| Variable | Effect |
+| --- | --- |
+| `PXX_HOME=<root>` | Install root. Its `lib/` and `compiler/builtin/` **replace** the roots guessed from the binary's own directory. |
+| `PXX_LIBPATH=a:b` | Extra Pascal unit roots, inserted after `-Fu` and before the defaults. |
+| `PXX_CONFIG=<file>` | Use this config file instead of searching for one. |
+
+`PXX_HOME` is what makes an unpacked tarball work from any directory, and it is
+honoured **all-or-nothing**: the exe-dir guesses are not kept underneath it as a
+fallback. Point it at the wrong root and the RTL is simply not found —
+
+```
+error: uses: unit source not found: platform_backend
+```
+
+— which is `--where` territory, and every root will be marked `[MISSING]`.
+
+### The config file
+
+If `PXX_CONFIG` is unset, the compiler takes the first of these that exists:
+`./pxx.cfg`, `~/.config/pxx/pxx.cfg`, `<exe dir>/pxx.cfg`. Three directives are
+understood today:
+
+```
+home      /opt/pxx
+unitpath  /opt/units
+incpath   /opt/inc
+```
+
+`--where` echoes the file it chose and the directives it read from it, so a
+config that is not taking effect is one command away from explaining itself.
+Per-library define and mode manifests are not implemented.
+
 ## Examples
 
 ```sh
+./pxx --where
+./pxx --doctor
 ./pxx hello.pas hello
 ./pxx -g hello.pas hello
 ./pxx --target=aarch64 hello.pas hello.a64

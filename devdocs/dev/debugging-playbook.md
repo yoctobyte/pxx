@@ -48,6 +48,9 @@ order to read them in. Route by what you are holding:
 
 **You have a failing thing and want the tool**
 - `## Order` -- the tool per question, and the reason to reach for one at all
+- `## Order` item **6** -- *it faulted on a cross target and I have only an
+  address*: `-strace` for the `si_code`, `-d in_asm` for the block, `--debug` to
+  name the routine, and where the cross binutils actually live
 - ``## `perf` being blocked is not "no profiler"`` -- FPC `-pg` + gprof, read call
   counts not percentages
 - ``## Profile the SHIPPING binary`` -- and `tools/pxxprof`, for when `perf` and
@@ -147,6 +150,49 @@ grep 0x7fffd7e00018 trace.log       # one object's whole life, in order
 Use *after* step 2 has told you there IS a use-after-free. Poison says which
 read hits it; the trace says which release caused it.
 
+**3b. How much does it allocate, and of what size?**
+
+```sh
+compiler/pascal26 -dPXX_ALLOC_CENSUS prog.py out
+./out 2>census.log
+grep 'allocs=' census.log | tail -1        # the closest thing to a total
+grep 'sizes'  census.log | tail -1         # where the churn actually is
+```
+
+The three defines above answer *correctness* questions. This one answers a
+*cost* question, and it exists because the answer used to require callgrind —
+which is **not installed on plexus**, where `perf_event_paranoid` is 4 and
+blocks even user-space sampling. Three sessions of
+`bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` ranked their
+own follow-ups on shares nobody present could re-run.
+
+```
+pxx-census: allocs=14482408 frees=14040465 live=441943 bytes=595241560 reuse=13999247 list=41000 bump=442161 arenas=1
+pxx-census: sizes 8:37176 16:558 24:509 32:11710484 40:899237 48:571422 ...
+```
+
+Read it as: **`live` flat with `allocs` climbing is churn; `live` climbing is
+retention.** `reuse` vs `bump` says whether the free lists are working. The
+histogram is bin size in bytes → count, and it is what makes a change legible
+as a mechanism rather than as a percentage: turning string literals into static
+blocks took uforth's `core.fr` from 14.48M allocations to 8.04M, and the
+histogram said *why* — the 32-byte class alone fell by 6.14M, which is 95% of
+the whole reduction and exactly the size of a short literal's block.
+
+*Two things to know before you use it.* There is **no exit hook** — the
+program's exit is emitted by codegen, not by the runtime — so the report fires
+on a schedule instead: at each 12.5% growth in the allocation count. The last
+line is therefore a floor within 12.5% of the true total, never the total. In
+exchange it gives a growth *curve*, and **a program that segfaults still leaves
+its census**, which a report-at-exit would not. And there is deliberately **no
+call-site attribution**: that needs a caller tag threaded through every entry
+point or a stack walk, and both change what they measure.
+
+*Tell:* you are about to argue that some routine is "most of the allocation
+cost". Count it first. This is a counting instrument, so it is immune to the
+box being busy — unlike every timing number, which on plexus drifts enough that
+the same binary measured 2.514s and 2.817s twenty minutes apart.
+
 **4. Step through it.**
 
 ```sh
@@ -176,7 +222,23 @@ PXXDBG=a.poisonslot compiler/pascal26 -O3 prog.pas out # does ANYTHING still rea
 make pxx-debug && gdb --args compiler/pascal26-debug prog.py /tmp/out
 ```
 
-The last two answer a question this repo keeps asking in different words: *was
+**`a.ir` at TWO `-O` levels is the cheapest disconfirming measurement here, and
+it is worth running before any bisect of an optimizer bug.** Dump the diverging
+routine's IR at the level that is right and the level that is wrong and diff
+them. If they are identical, every IR-level pass is exonerated in one command
+and the search is now inside the backend — that is half the candidate sites gone
+before the first rebuild. It settled
+`bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements` (33
+nodes, same numbering at `-O2` and `-O3`), where a site-by-site probe of nine
+`OptLevel >= 3` gates was the alternative at ~20s per rebuild each.
+
+*The wrinkle that makes it look like the tool does not apply:* `a.ir:<proc>`
+takes a ROUTINE NAME, and a program's MAIN BODY has none, so a top-level repro
+prints every routine but the one you care about. **Wrap the repro in a
+`procedure` first** — if the bug survives that (check, do not assume), you can
+ask for it by name.
+
+The next two answer a question this repo keeps asking in different words: *was
 the metadata never populated, or never read?* `a.symptr:<name>` (or `:*`) prints
 a pointer variable's recorded depth, pointee and ultimate base — the exact
 fields `IsNodePChar` and friends consult, so a shape that lowers wrong tells you
@@ -251,6 +313,67 @@ self-compiling (~90s) is how a wrong premise got recorded in a ticket** — the
 cheap move was to reason instead of measure. Do not reason about what type the
 compiler inferred; print it.
 
+**6. It faulted on a CROSS target and all you have is an address.**
+
+```sh
+tools/run_target.sh <arch> ./prog                  # the plain run
+qemu-<arch> -strace ./prog                         # WHY it died, and where
+qemu-<arch> -d in_asm -D /tmp/asm.log ./prog       # the block it died in
+qemu-<arch> -d cpu    -D /tmp/cpu.log ./prog       # register state
+compiler/pascal26 --debug ... 2>&1 | grep '^proc'  # "proc N: NAME at OFFSET"
+```
+
+New in 2026-08-30, because until then no xtensa binary could be executed at all
+and "it faulted" was not a shape this repo had. Take them in that order — the
+first line usually ends it:
+
+- **`-strace` first, always.** It prints the syscalls, then the signal *with its
+  `si_code` and address*. `SIGBUS si_code=1` is `BUS_ADRALN` and the address
+  will be odd — which converts *"a wild pointer somewhere"* into *"a misaligned
+  one, go look at the frame"*, and those are different searches. A wild pointer
+  sends you hunting ownership; a misaligned one sends you to the frame layout,
+  where the bug actually was
+  ([[bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot]]).
+- **`-d in_asm` names the block**, and its last instruction is the faulting one.
+  `-d cpu` gives the registers, but read it knowing the dump is at the last
+  *exception*, which for a normal syscall is the syscall itself — a register
+  there is not necessarily the register at the fault.
+- **`--debug` maps an address to a routine.** It prints `proc N: NAME at
+  OFFSET`, and the base is the ELF **entry point**, not the load address (our
+  images have no section headers, so nothing else will tell you). Without this
+  you are staring at a hex address with no name.
+- **Then, and only then, a probe** in the backend's own emitter to print the
+  offending symbol. That is what turned "an odd offset" into eight named slots.
+
+**The cross toolchains are installed and are not on `PATH`.** ESP-IDF puts
+`xtensa-esp-elf-objdump`, `xtensa-esp-elf-gdb` and the riscv32 pair under
+`~/.espressif/tools/**`, reachable only after `. $IDF_PATH/export.sh`. A bare
+`command -v xtensa-esp-elf-objdump` in a fresh shell answers about the SHELL and
+reads exactly like the tool being absent — this cost the fleet five weeks on the
+QEMU emulators and cost one session a weaker verification the same night, in the
+same directory tree. **A stated absence about this box is a claim about a
+search, not about the box**; before concluding a capability is missing, grep the
+repo for something that already uses it (`tools/esp_run.sh` had been globbing
+that directory for four weeks).
+
+Our ELFs carry program headers only, so disassemble the raw image:
+
+```sh
+OD=$(ls ~/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp-elf-objdump|head -1)
+$OD -D -b binary -m xtensa --adjust-vma=0x08048000 \
+    --start-address=0x... --stop-address=0x... ./prog
+```
+
+Two cautions worth the lines. **Objdump desyncs on the inline literal pools**
+xtensa emits mid-code (a `j` hops over each one), so anchor `--start-address` on
+a known instruction boundary — a proc start from `--debug` — and treat
+`excw` / stray `.byte` runs as the tell that you have drifted. And **the
+strongest evidence is two backends, not one**: the same source compiled for
+xtensa and riscv32, disassembled with each toolchain, showed *identical* frame
+offsets, which is what proved a suspected xtensa codegen bug was shared layout
+that five backends simply never trap. One backend's disassembly could not have
+said that.
+
 ## Two traps that produced confident wrong readings
 
 - **Stale binary.** A still-running instance makes the compiler's write a silent
@@ -264,7 +387,15 @@ compiler inferred; print it.
   two do — and several agents share this box. `tools/gui_shot.sh:52` carries the
   same rule, learned when one agent's pattern-kill took down another's live Xvfb
   mid-capture; a `pgrep` waiter has the mirror-image bug, because it matches
-  *itself* and never returns.
+  *itself* and never returns. **And `pkill` has that same self-match**: the shell
+  running `pkill -f "reduce.py"` has `reduce.py` in its own command line, so it
+  kills itself and the call returns 143/144 — measured 2026-08-30, and read as a
+  crashed tool rather than as the documented trap, because the entry above named
+  `pgrep`'s presentation and not the mechanism. The general form: **a `-f`
+  pattern match runs inside a process whose command line contains the pattern**,
+  and the three victims (a sibling's process, the waiter, the asker) look like
+  three unrelated faults. Bracket one character — `pkill -f "[r]educe\.py"` — or
+  kill the pid you started.
 - **Lost stdout.** SIGTERM discards buffered stdout, so "the marker never fired"
   and "it fired and the output died" look identical. Give tests a clean exit.
 
@@ -1104,6 +1235,109 @@ one was silently wrong (`map` answered `[1,2,3]` where CPython says `[2,3,4]`).
 Boundaries are where these live — check the smallest and the largest case, not a
 comfortable middle.
 
+## Reaching for the instrument is necessary and not sufficient — the FORMATTER is part of its aperture
+
+The section above is about choosing a sentinel the *program* cannot mistake for
+a value. This is its mirror: an illegal sentinel, chosen correctly, destroyed on
+the way to your eyes by the thing that printed it.
+
+Measured 2026-08-30, hunting `bug-c-a-header-reached-by-uses-discards-function-
+bodies-and-imports-them-instead`. The question was what `CModuleOfTok` returns
+for a token in a `uses`d header, where **-1 means "no C module"** — a properly
+illegal sentinel, exactly as the section above prescribes. The probe printed it
+with `IncSmallIntStr`, whose own doc comment says *"decimal text of a small
+**non-negative** int"* and whose first line is `if n <= 0 then Result := '0'`.
+
+So the probe printed `module=0`. Which is a module id. The one value that meant
+*"no module"* was rendered as a real answer, the output looked entirely
+reasonable, and the conclusion drawn from it was wrong. `differential-probes.md`
+already carries this warning — *a probe that FORMATS its output can answer a
+different question than you asked* — and it had been read the same night, in
+this repo, by the person who then walked into it.
+
+**The sequence is the lesson, because each step was closer to measurement than
+the last and each still produced a plausible wrong answer:**
+
+1. **Reasoned about the function instead of printing it.** This file's headline
+   failure, committed by someone who had read this file.
+2. **Printed it — through a formatter that could not represent the answer.**
+   The instrument was right, the aperture was not.
+3. **Measured a harness artefact and read it as the bug.** The test program and
+   the test header shared a stem, so `uses foo` resolved to `foo.pas`, the
+   program itself. The compiler reported a real and correct error about *that*,
+   and it was read as the defect under investigation — which is the most
+   expensive of the three, because everything about it looks like signal.
+
+Only the fourth attempt — distinct names, and a formatter with a branch for the
+negative case — produced the boundary table the ticket now carries.
+
+**What to actually do**, in rough order of cost:
+
+- **Print the sentinel's own spelling, not its number.** `module=NEG` /
+  `module=none` cannot be confused with an id. Branch on the sentinel in the
+  probe rather than trusting the renderer.
+- **Read the helper you reached for.** `IncSmallIntStr` says non-negative in its
+  first comment line and clamps in its first statement; thirty seconds of
+  reading beats a rebuild and a wrong conclusion. Its siblings
+  (`CPSmallIntStr`, `AsmIntToStr`, `RIntToStr`) do not all agree on this, so
+  which one is in scope changes the answer.
+- **Sanity-check the probe against a case whose answer you already know.** Here
+  a header with no includes at all was known to work; had its probe line said
+  `module=0` while the failing one also said `module=<some id>`, the collision
+  would have been visible immediately.
+- **Give the harness distinct names.** A test program and its test header
+  sharing a stem is not an exotic mistake — it is what you get from naming both
+  after what they test.
+
+The general form, which is what makes this more than one bad night:
+
+> **An instrument narrows what you can be wrong about; it does not eliminate it.
+> Everything between the value and your eyes — the accessor, the formatter, the
+> harness, the file names — is part of the instrument, and any of it can quietly
+> answer a different question.**
+
+## A background job's reported exit code is the LAST command's, not the job's
+
+Measured 2026-08-30, six times into a night of the same class.
+
+I launch gates as:
+
+```sh
+tools/gate.sh quick > gateq8.log 2>&1; tail -12 gateq8.log
+```
+
+so that the log is visible when the job returns. The `;` makes **`tail`** the
+last command in the list, so the shell's exit status is `tail`'s — always 0 —
+and the completion notification read:
+
+> `Background command "Gate slice 2a" completed (exit code 0)`
+
+for a gate whose own last line was `gate: RED (exit 1)`.
+
+**A green light reporting on a red run, produced entirely by the shape of my own
+invocation.** Nothing was wrong with the gate, the log, or the notification —
+each reported correctly on what it was actually given. Had I trusted the
+notification instead of reading the log, I would have committed on a red gate
+and had a green summary line to point at.
+
+**The fix**, and prefer the first:
+
+```sh
+tools/gate.sh quick > gateq.log 2>&1              # exit code is the gate's
+tools/gate.sh quick > gateq.log 2>&1; rc=$?; tail -12 gateq.log; exit $rc
+```
+
+**The rule.** In a `;`-list the status belongs to the last command, and a
+convenience appended for readability is a command. Pipelines have the same shape
+(`cmd | tee log` reports `tee`); so does `cmd && echo done` in the other
+direction. **Anything appended after the thing you are measuring becomes the
+thing that reports.**
+
+This is the same family as the formatter section above and the stdout-capture
+one: the instrument was fine and the *plumbing around it* answered a different
+question. It belongs with them because the tell is identical — a result that
+looks clean, arrived at through a layer nobody was examining.
+
 ## `perf` being blocked is not "no profiler" — build the compiler with FPC and `-pg`
 
 `perf` is refused on plexus (`kernel.perf_event_paranoid = 4`) and cannot be
@@ -1378,6 +1612,57 @@ enough to resolve it, and **is the effect larger than one tick of the timer?**
 The last question is the cheapest of the three to ask and the easiest to skip,
 because the number already looks like a measurement.
 
+## When the box is busy, stop timing and start COUNTING
+
+All three corrections above make a wall-clock delta trustworthy. None of them
+help when the box itself is the problem — this fleet routinely runs nine agents
+and seven concurrent self-host builds, at load 9-19 on 12 cores. At that point a
+wall-clock A/B is not measuring your change, and no amount of interleaving fixes
+it.
+
+**Count retired instructions instead. The count is load-invariant by
+construction, not by assumption.**
+
+`perf stat` is the obvious tool and is **unavailable here**: this workstation runs
+`kernel.perf_event_paranoid = 4`, which denies unprivileged access to every event,
+hardware and software alike. Raising it is a root sysctl on the owner's machine.
+
+So use qemu's execution trace, which is better anyway (frank-optimize-b4,
+2026-08-29):
+
+```
+qemu-x86_64 -one-insn-per-tb -d exec ./bench 2>&1 | wc -l
+```
+
+One log line per instruction **executed** — exact and deterministic rather than
+sampled, with no multiplexing and no skid. It costs ~100x slowdown, and you pay
+for that by **shrinking `n` instead of enduring it**: a straight-line loop with one
+back-edge has a constant per-iteration cost, so the count scales exactly and small
+`n` proves the same thing. Measured on the W1 shift slice:
+
+| n | BASE | HEAD | delta | delta/n |
+| --- | --- | --- | --- | --- |
+| 2 000 | 44 211 | 42 211 | 2 000 | 1.000 |
+| 20 000 | 440 227 | 420 227 | 20 000 | 1.000 |
+| 50 000 | 1 100 235 | 1 050 235 | 50 000 | 1.000 |
+
+**Delta exactly `n` at all three sizes, no residue** — one instruction per
+iteration, proven rather than argued. Load was 9.51 during the run and 16.44
+shortly before; recorded, and *irrelevant*, which is the whole point.
+
+**It also corrects the denominator, which eyeballing the emitted code will not.**
+b4 had counted the hot loop as 18 instructions from the straight-line body. The
+execution trace showed 18 addresses hit exactly `n` times **and 3 hit `n−1` times**
+— the increment tail, skipped on the last iteration. The real body is 22, so the
+win was 4.55%, not 5.6%. **Reading the emitted code tells you what was emitted;
+only running it tells you what retires**, and loop control is the part a human
+reading a listing reliably forgets.
+
+Wall clock is still owed for anything claiming a *time* improvement — instruction
+count cannot see cache behaviour, port pressure or branch prediction. Take it when
+the box is quiet, and stamp both numbers with the binary sha **and** the load
+average.
+
 ## A capability that exists and cannot be asked for costs you at the worst moment
 
 `compiler/asmtext_wasm.inc` could write a `.wat` — the text form of a wasm
@@ -1553,3 +1838,60 @@ bytes**, and the fix was correct the whole time.
 - **A regression test nobody has watched fail is not yet a regression test.**
   Run it against the pre-fix binary. If it passes there, it does not test what
   you think, and you will never learn that from a green suite.
+
+## A Pascal comment cannot contain its own delimiters, and the error lands nowhere near the edit
+
+**Cost: five wasted builds in one session (frankC, 2026-08-30), all self-inflicted, all the same mistake wearing different clothes.**
+
+This dialect's comments **nest in both styles**, and the consequence is that the
+most natural thing to write in an explanatory comment — the syntax you are
+explaining — silently terminates or extends it.
+
+```pascal
+{ a struct member cannot have a body: a missing } closes here, not below }
+```
+
+The comment ends at the **first** closing brace, so `closes here, not below }`
+becomes code. Same trap in the other style, from the other direction:
+
+```pascal
+(* the arm at (*name) is the one that... *)
+```
+
+`(*` **nests**, so this comment is now one level deep and swallows everything
+until a second `*)` — often hundreds of lines away, sometimes the rest of the file.
+
+A string literal inside a comment is not a refuge either: `{ pass '}' to close }`
+fails identically, because the lexer is not reading a string, it is counting
+delimiters.
+
+### The tell, and why it wastes a whole build each time
+
+The compiler reports where the *damage surfaces*, not where the comment is:
+
+```
+pascal26:2998: error: unexpected character
+pascal26:3187: error: unterminated comment
+```
+
+Both of those were **a hundred-plus lines below a comment I had just edited**, in
+code I had not touched. The instinct at that point — read the reported line,
+find nothing wrong with it, start widening — is the expensive path, and it is the
+wrong one every time.
+
+> **`unexpected character` or `unterminated comment` at a line you did not edit,
+> in a build you started right after editing a comment, is the comment. Look
+> UP, at your own last edit, before you look at anything the error names.**
+
+### The rule
+
+**A Pascal comment must not contain `{`, `}`, or `(*` in either style.** When the
+comment's subject *is* brace syntax — and in a C frontend it constantly is —
+**spell the delimiters out in words**: "a closing brace is missing above this
+line", not the character. That is why `CEndCMember`'s diagnostics read the way
+they do; it was not a stylistic choice.
+
+This belongs with the tool-aperture entries above rather than the measurement
+ones: nothing was mismeasured, the instrument reported correctly on what it was
+given, and the input had been corrupted by an edit that looked inert. A comment
+is the one construct you edit while believing it cannot change behaviour.

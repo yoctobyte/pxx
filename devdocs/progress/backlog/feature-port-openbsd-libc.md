@@ -49,3 +49,37 @@ dynamic-imports — so this is mostly *configuration* on top of [[feature-port-r
 
 qemu OpenBSD via `autoinstall` (no pre-built qcow2). Runner may live in the Track T
 clone.
+
+## Update 2026-08-30 — the lowering this depends on now exists
+
+`feature-port-rtl-over-libc` landed (`3a0ed43fb`). On x86-64 Linux, `--rtl-libc`
+routes compiler-generated kernel entries through an out-of-line thunk that calls
+libc's `syscall()`, taking a Pascal binary from **73 raw kernel-entry
+instructions to 1**. That is the mechanism this ticket's acceptance criterion
+("disassembly contains no raw `syscall`") was waiting on; what remains here is
+the OpenBSD *target*, not the lowering.
+
+Four things carry over, and the last two are the ones that will bite:
+
+1. `tools/syscall_scan.py <binary> --list` prints every kernel-entry site with
+   its address, and works on our section-less ELFs — `objdump -d` does **not**
+   (it disassembles *sections*, so it reports a clean zero on any pxx binary).
+   The acceptance check here should use the scanner, not a grep.
+2. Every compiler-generated kernel entry funnels through `x64_syscall`
+   (`x64enc.inc`), so a target-specific policy has one seam rather than ~22.
+3. **The residual will not be zero, and the criterion above should say so.**
+   `rt_sigreturn` must stay a bare instruction — it restores the whole context
+   from a signal frame at a fixed offset from rsp, so routing it through a thunk
+   is a SIGSEGV on the first delivered signal. It is emitted via the
+   `syscall_raw` mnemonic, which never becomes a call. `clone`'s child stub in
+   `thread_emit.inc` is raw for the same class of reason. If OpenBSD's
+   pinsyscalls genuinely requires *zero*, that is a real design question for
+   this port — raise it as a Track U `decide-*` rather than assuming the Linux
+   shape transfers.
+4. A pxx-created thread inherits the parent's FS base, so the thunk's
+   FS-relative errno fixup resolves to the **main thread's** errno slot. Reasoned
+   and unobserved on Linux; see
+   `feature-rtl-libc-frontend-sites-and-thread-errno` for the trigger to test.
+
+**Not closed by that work** — this ticket is the OpenBSD target, and none of it
+has been exercised on OpenBSD.

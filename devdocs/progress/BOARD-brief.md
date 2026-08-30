@@ -5,77 +5,86 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:21 blocked:5 backlog:304 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:117 done:2598 rejected:51`
+`unfinished:30 blocked:7 backlog:376 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:125 done:2787 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-cross-bootstrap-aarch64-overflows-max-code` [A] — owner: frankA
-- `feature-opt-emitloadvara64-needs-a-destination-register-parameter` [A+O] — owner: frank-optimize
-- `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
+_none — no lane is locked._
 
-## unfinished (21) — parked mid-flight; re-claim, do not duplicate
+## unfinished (30) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
+- `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead` [C] — blocked-by: bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
+- `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
+- `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
+- `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — blocked-by: bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
+- `feature-c-diagnostics-name-the-module-they-are-in` [C] — blocked-by: bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
+- `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-dynamic-compiler-tables` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
+- `feature-nilpy-enum-class` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
+- `feature-nilpy-user-defined-decorators` [N]
+- `feature-pal-esp-posix-fd-semantics` [S] — blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
 - `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P]
 - `feature-pascal-type-helpers` [A]
-- `feature-port-rtl-over-libc` [A]
-- `feature-real-dynlib-loader` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
+- `feature-rust-option-type` [R]
 - `feature-signal-siginfo-ucontext` [A]
-- `feature-target-wasm` [A+B]
+- `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `feature-threadsafe-heap-optimize` [A]
+- `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (5) — has an unmet blocker; do not claim
+## blocked (7) — has an unmet blocker; do not claim
 
+- `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
+- `feature-esp-gpio-and-adc-callback-slices` [B+S]
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 318, ranked
+## Ready — top 30 of 403, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
-- `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
+- `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [A]` bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64
-- `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
-- `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
+- `[p 70] [P]` bug-p-generic-type-constraints-are-parsed-and-discarded
+- `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
-- `[p 70] [P]` feature-pascal-typed-and-untyped-files
-- `[p 70] [T]` regression-cascade-154d1aa3fba6
-- `[p 70] [P]` regression-cascade-4e27dc2be114
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
-- `[p 70] [N]` regression-tools-devtest-00-2
-- `[p 68] [E]` feature-demo-songformatter-pxx-target
+- `[p 70] [T]` regression-cascade-fc01c8094434
+- `[p 70] [P]` regression-test-asm-compiler-3
+- `[p 70] [A]` regression-test-asm-test-asm-emit-rv32
+- `[p 70] [A]` regression-test-core-test-opt-store-reload
+- `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
+- `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
+- `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
+- `[p 70] [T]` regression-test-pascal-conformance-shard4-6-4
+- `[p 70] [T]` regression-test-pascal-conformance-shard5-6-4
+- `[p 70] [T]` regression-tools-devtest-00-3
+- `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
+- `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+- `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
-- `[p 65] [P]` bug-p-two-different-nested-specializations-of-one-template-collide
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
-- `[p 65] [N]` feature-nilpy-iter-and-next-over-a-container
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
+- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
-- `[p 62] [A]` feature-unicodestring-model
 
-_288 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_373 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

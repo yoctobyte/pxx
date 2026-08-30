@@ -78,6 +78,18 @@ procedure ParseExpr; forward;   { body in pasparser_expr.inc — called from pas
                                   which compiler.pas includes first. pxx pre-scans and does not
                                   need this; FPC does, so dropping it breaks ONLY the seed build
                                   (bug-a-fpc-seed-drift-emitasmx64-forward). }
+{ Same seed-only hazard, same file, recurrence of 2026-08-30: 3ee9a672f uses
+  QualArgAliasName and EmitQualAliasDecl at pasparser_generic.inc:844/:1022 and
+  defines them at :1476/:1525. pxx pre-scans, so `make compiler/pascal26` stayed
+  green and the break was invisible to the per-fix loop — it surfaces ONLY in
+  `make bootstrap`, the cold-start path a fresh box takes.
+  Their forwards are NOT here: they live in pasparser_generic.inc beside the
+  bodies they describe. Declaring them here as well is what broke the seed a
+  SECOND time the same day — FPC rejects a repeated forward ("already declared
+  Public/Forward") as hard as it rejects a missing one, and pxx tolerates it, so
+  the duplicate is just as invisible to the self-host loop as the absence was.
+  Two lanes fixed the absence independently and both fixes landed. Do not
+  re-add them here. }
 
 { ===== Where the Pascal parser went =========================================
 

@@ -1,8 +1,9 @@
 ---
 track: A
-owner: claude-A
+owner: ""
 prio: 62
 type: feature
+status: backlog
 ---
 
 # TypeRef: migrate consumers lane by lane
@@ -17,6 +18,16 @@ field per entity, one lane at a time.
 See `devdocs/dev/type-identity-as-substrate.md` for the full design and why
 this matters (the "one of six parallel arrays not written" bug class — four
 such bugs landed in one session per that note's evidence table).
+
+> **The candidate lane order below is OVERTAKEN by this ticket's own later
+> sections — do not plan off it.** Measured 2026-08-30: lane 1 (`TSymbol`) is
+> substantially landed, and lane 4 (proc returns) *and* record/class fields are
+> **DONE**. Lanes 2 and 3 are not the live work. The live item is step 3 (the
+> `TTypeRef` fold), whose Track U blocker
+> [[decide-typeref-gains-a-pointer-depth-field]] was **answered on 2026-08-25**
+> (`28c19f214`) and sat unnoticed for five days — `PtrDepth` has since landed,
+> readers-free. What remains is one coordinated commit that needs `ir.inc`. See
+> the 2026-08-30 section at the bottom.
 
 ## Landing rule (unchanged from the parent ticket)
 
@@ -372,3 +383,84 @@ divergences out of 88.
    which can be deleted without the other three agreeing on the node tags. That
    is a bigger, better-value refactor than the table fold and it is not filed
    yet -- file it before starting, with the four sites named.
+
+## 2026-08-30 (frankA) — `PtrDepth` landed, and the recorded blocker was stale
+
+Took this under a coordinator constraint: **no `compiler/ir.inc`** (held for the
+`cir.inc` carve-out). That turned out to select exactly the right slice.
+
+### The lane assessment, since the dispatch asked for one
+
+The ticket's lane list is largely overtaken by its own later sections. Lane 1
+(`TSymbol`) is substantially landed; lane 4 (proc returns) and record/class
+FIELDS are **DONE**. The live item is step 3 — the `TTypeRef` fold — and
+`decide-typeref-gains-a-pointer-depth-field` **is answered** (`28c19f214`), so
+it is no longer blocked. The decision's own step 1 is *"add `PtrDepth` to
+`TTypeRef` first, readers-free"*, which touches `defs.inc` + `symtab.inc` and
+**not** `ir.inc`. That is what landed here. Step 2 — re-pointing
+`PtrBaseTk`/`Rec` at the ultimate base — *does* need `ir.inc`, in the same
+change, and is deliberately **not** started.
+
+### The correction, and it is the reason this was worth doing now
+
+`symtab.inc`'s `SetSymPointerType` comment stated, in the present tense, that
+*"twelve symbols carried an immediate pointee over depth 0 and base tyUnknown …
+and it is why feature-a-typeref-migrate-consumers cannot re-point
+TTypeRef.PtrBaseTk at the real base yet."* **That was the stated reason the
+migration could not proceed, and it is out of date** — it was written
+2026-08-24 when 12 of 21 sites were unconverted, and step 1 finished afterwards.
+
+Re-measured 2026-08-30:
+
+```
+Syms[..].PtrElemTk :=   outside symtab.inc :  0
+SymPtrDepth[..]    :=   outside symtab.inc :  0
+SetSymPointerType/To call sites outside it : 21
+   ast_syminfer 6 · cparser 9 · pasparser_decl 2 · pyparser 2
+   · pasparser_proc 1 · pasparser_stmt 1
+```
+
+The 21 is the denominator that makes the two zeros mean *converted* rather than
+*no such sites exist*. The write side is in lockstep. **The remaining blocker is
+purely the reader**: `ir.inc`'s char-pointer check reads `PtrBaseTk` as the
+immediate pointee and must begin guarding on `PtrDepth` in the same commit. The
+comment is corrected in place, with the old text kept as history.
+
+### Landed
+
+`TTypeRef.PtrDepth` (`defs.inc`), populated from `SymPtrDepth[idx]` in
+`SymSyncTypeRef` as a literal copy like every other line there. **Readers-free**
+— nothing consults it yet, which is what makes it safe mid-migration. The two
+`Base`-named fields now carry a note saying they hold the *immediate pointee*
+despite their names, so the next reader is not misled by the same gap that made
+`^PChar` indistinguishable from `PChar`.
+
+**A/B binary comparison — the standard this ticket sets, eight sources, four
+frontends, all `BINARY IDENTICAL`:** `compiler.pas`,
+`test_pchar_pointer_to_pchar.pas`, `test_inferred_pointer_keeps_its_depth.pas`,
+`test_not_operand_type_matrix.pas`, `test_basic_comprehensive.bas`,
+`c_builtin_bits.c`, `test_nilpy_configparser.npy`,
+`test_nilpy_float_methods.npy`. Compiler built before and after, same sources,
+diffed. Self-host fixedpoint 1 round `3b00f387f0df`; `gate.sh quick` GREEN.
+
+### Item 4's count is wrong, measured — filed as its own ticket
+
+The "still open" list says *"four copies of the pointer walk"*. Listed rather
+than counted: **nine**, of which six are the Pascal frontend
+(`pasparser_lval.inc:4770`, `pasparser_expr.inc:930/6391/6740`,
+`pasparser_stmt.inc:6444/6559`) and three are NilPy's
+(`pyparser.inc:42567/47378/47524`), which are legitimately duplicated across
+languages per `the-substrate-is-ast-and-ir-not-the-parser.md`. So the refactor
+is 6 Pascal-side copies, not 4. Filed as
+[[refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend]] as
+this ticket asked ("file it before starting, with the four sites named").
+
+### Next, for whoever holds `ir.inc`
+
+One coordinated commit: re-point `PtrBaseTk`/`PtrBaseRec` at
+`SymPtrBaseTk`/`SymPtrBaseRec`, and change `ir.inc`'s char-pointer check to
+require `PtrDepth = 1`. `PtrDepth` is already there and already populated. Note
+the outstanding caveat recorded 2026-08-24: Pascal's *parameter* table still has
+no depth sibling, so a Pascal `^PChar` parameter arrives at depth 1 rather than
+2 — check whether that makes the `PtrDepth = 1` guard wrong for parameters
+before relying on it.

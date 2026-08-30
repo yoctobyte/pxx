@@ -32,7 +32,7 @@ from. Two sources:
 preprocessor *also* pulls its sibling `src/<name>.c` — `CPAutoPullCrtlImpl`,
 right after the header is processed in `CPInclude`. That is the missing link
 step: `#include <math.h>` alone (no `-I`, no unity include) makes `fabs` resolve
-to the bridged body, and the binary has **no `DT_NEEDED`** at all.
+to the crtl body, and the binary has **no `DT_NEEDED`** at all.
 
 Each impl is pulled **at most once** per compile (`CrtlSrcPulled` dedup). The
 dedup also covers an explicit `#include "math.c"` (a unity build like
@@ -69,14 +69,30 @@ a declaration (the general external-symbol path), independent of the crtl set.
 ## Adding a crtl function
 
 1. Declare it in `lib/crtl/include/<name>.h`.
-2. Implement it libc-free in `lib/crtl/src/<name>.c` (a real body, or bridge to a
-   `lib/rtl/*.pas` routine — watch the case-insensitive C↔Pascal `FindProc`
-   binding: a same-name wrapper `double sqrt(double x){return Sqrt(x);}` recurses,
-   so let matching names bind directly and only wrap the name-mismatch cases).
+2. Implement it libc-free in `lib/crtl/src/<name>.c` — **a real C body. Never a
+   bridge to a `lib/rtl/*.pas` routine.** `lib/crtl/src/math.c`'s header comment
+   states the rule flatly: *"never write a wrapper that calls the Pascal twin
+   from its C namesake (`double sqrt(double x){ return Sqrt(x); }`): `Sqrt` binds
+   case-insensitively back to the C `sqrt` and recurses forever."* No file under
+   `lib/crtl/src/` bridges today; the only mention left in the tree is that
+   warning.
 3. Any C program that `#include <name.h>` now gets it, libc-free, automatically.
 
 These files are **Track B** (`lib/crtl/**`). The auto-pull mechanism itself lives
 in the compiler (`cpreproc.inc`, Track C).
+
+> **Corrected 2026-08-30 (frankD): step 2 offered as an option the thing this
+> file's own 2026-08-14 correction says was removed for silently breaking C
+> programs.** That correction rewrote the *descriptive* paragraph above — "the
+> impls are a REAL C body", bridging "was REMOVED" — and left the
+> *prescriptive* one here untouched, still saying "a real body, **or** bridge to
+> a `lib/rtl/*.pas` routine", with the infinite recursion demoted to something to
+> "watch" and route around by wrapping only the name-mismatch cases.
+>
+> **The prescriptive half is the one a reader acts on**, and it is the half that
+> survived. A correction that fixes what a doc *reports* and not what it
+> *instructs* leaves the doc more dangerous than before, because the description
+> above now certifies that someone checked this page.
 
 ## Status / limits
 

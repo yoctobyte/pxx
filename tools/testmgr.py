@@ -199,6 +199,30 @@ TIERS = {
         "test-c-conformance",
         "test-float-determinism", "test-emit-obj",
         "test-i386", "test-aarch64", "test-arm32", "test-riscv32",
+        # XTENSA — full only, and it could not have gone anywhere else. It
+        # drives tools/run_target.sh, so it classes `qemu`, and `limited`'s one
+        # promise is that a box without qemu can run it; `native` says so in its
+        # own comment. Enrolled 2026-08-30, the day after the target existed at
+        # all (feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle) — before
+        # that an xtensa binary spun in EmitExit's self-loop or faulted on its
+        # first allocation, which is why three wrong-answer bugs lived in that
+        # backend: nothing could run it, so every ticket ended "do not land this
+        # on inspection".
+        #
+        # WHAT IS ENROLLED IS 55 OF 142 SOURCES, and the other 87 are a STATED
+        # POPULATION, not a filter: 21 measured divergences
+        # (bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs)
+        # and 66 that do not compile yet. The target's own header names them and
+        # cites the ticket; enrolling it here must not be read as "xtensa is
+        # covered". A differential that hides its own failures is exactly how
+        # xtensa got into this state, and the count is the honest headline:
+        # 55/142, not GREEN.
+        #
+        # And a green here is green UNDER --xtensa-soft-mulhigh, which LABELS a
+        # divergence from hardware rather than removing it (no qemu-xtensa core
+        # implements MUL32HIGH). Arithmetic questions — the two tickets that
+        # motivated the oracle — are what this target still cannot answer.
+        "test-xtensa",
         # the 220-program c-testsuite battery per cross target, + lua on all
         # four: this matrix found 3 real backend gaps on the day it landed,
         # so the watcher should be the one running it (Track C asked for it in
@@ -378,6 +402,18 @@ INNER_TIMEOUT_FLOOR = 20.0
 # whole build, not an inner-loop cost.
 FPC_CANARY_TIERS = ("native", "limited", "full")
 # Tiers carrying the self-host fixedpoint GATE (~20s: two compiler builds).
+# The SIZE CANARY: the code/data/bss floor of an empty image, per bare profile.
+#
+# native+limited+full, and NOT quick only because quick is the inner loop. It
+# costs ~1.06s measured — five empty-program compiles, no emulation, no corpus —
+# and its whole value is naming the COMMIT that grew the image. A full-tier-only
+# cadence would blur that across a day of them, which is how the thing it
+# watches drifted 2x over four MONTHS with no test failing: an empty ESP32 bare
+# image went from ~26 KB code / ~70 KB bss to 50,528 / 103,692, and it surfaced
+# only because a docs page quoted the old figure and someone re-measured.
+# bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss.
+SIZE_CANARY_TIERS = ("native", "limited", "full")
+
 # Not "quick": that is the inner loop, and this is a bootstrap chain. It is NOT
 # advisory — byte-identical self-host is the gate the stable binary rests on.
 SELFHOST_GATE_TIERS = ("native", "limited", "full")
@@ -446,6 +482,56 @@ METRICS_ALPHA = 0.4             # EWMA weight of the newest observation
 # outgrown-class note in Manager.__init__ for why the class figure alone is
 # not safe to keep as a ceiling.
 OUTGROWN_MARGIN = 2.0
+
+# How many times a job that has NEVER earned trusted metrics on this box may
+# have its budget raised from its own observed duration before the harness
+# stops offering. Exactly one, and the number is what makes the offer safe.
+#
+# The gate above (n >= METRICS_MIN_RUNS) is what stops a HANG from ratcheting
+# its own budget: learn_timeout() records "it ran at least this long" on every
+# timeout, and if that fed the budget unconditionally a hung job would be
+# killed at the budget, raised from the kill, killed at the bigger budget,
+# forever -- test_c_gtk_call.pas climbed 90s -> 2902s -> 3522s exactly that way.
+#
+# But the same gate is a BOOTSTRAPPING TRAP for a job that is merely slow on
+# this host: it can only reach n >= 2 by passing, it can only pass with a
+# bigger budget, and the raise that would give it one is written on every
+# timeout and read on none. Three jobs on `seven` sit there permanently,
+# entering new_red on every full tier and filing cascades naming commits they
+# cannot have been caused by (rejected/regression-cascade-154d1aa3fba6).
+#
+# Nothing in the stored data tells a slow box from a hung job on a first
+# encounter, and that fork is why the ticket asked rather than patched. The
+# resolution is not to distinguish them -- it is to make the distinction not
+# matter. ONE raise cannot ratchet: the slow job passes and starts earning real
+# metrics, the hung job is killed at the second budget, the counter is spent,
+# and the budget reverts to the class figure permanently. The cost of being
+# wrong is one class-length run, once, and it is named in the report both
+# times.
+UNPROVEN_ESCALATIONS = 1
+
+
+def unproven_budget(m, cls_budget):
+    """The one-off budget a job with no trusted metrics may have, or None.
+
+    `m` is its stored metric (possibly None), `cls_budget` the already-scaled
+    class figure. Returns a number only when all three hold: the job has an
+    observed duration, it has not spent its grant, and the raise would actually
+    give it more room than the class figure already does. Otherwise None, which
+    means "class budget", i.e. today's behaviour.
+
+    A function rather than three lines inline because it is the RULE, and the
+    rule is the thing worth testing: everything around it in Manager.__init__
+    needs a whole run to reach.
+    """
+    if not m or not m.get("dur"):
+        return None
+    if int(m.get("n") or 0) >= METRICS_MIN_RUNS:
+        return None                      # trusted: the main path owns it
+    if int(m.get("esc") or 0) >= UNPROVEN_ESCALATIONS:
+        return None                      # grant spent; class figure, forever
+    want = m["dur"] * OUTGROWN_MARGIN
+    return want if want > cls_budget else None
 
 # No per-job budget may exceed this fraction of the run's GLOBAL deadline.
 #
@@ -883,6 +969,23 @@ def kill_run(pid, why):
 #            silent either way.
 TESTTMP = (os.environ.get("TESTTMP") or "/tmp").rstrip("/") or "/tmp"
 TESTTMP_RE = re.escape(TESTTMP)
+# ...and write it BACK, so every `make` this process starts expands $(TESTTMP)
+# to the value the matchers above were built from. Reading it is not enough:
+# make_dry_run() runs `make -n` with no env= and so inherits THIS environment,
+# and if the variable is absent make applies its own default instead. Once that
+# default stopped being /tmp (bug-a-testtmp-defaults-to-a-path-every-checkout-
+# shares) the dry-run text named a root TMP_RE still matched -- so the
+# privatizing rewrite prefixed RUN_TMP onto an ALREADY-per-checkout path and
+# produced /tmp/testmgr-scratch-<pid>/pxx-testtmp-<...>/qc_nilpy26: compiled
+# there, then `not found` at exec. Measured by tools/gate.sh quick, 2026-08-30.
+#
+# Set here rather than at each call site because there are four `make`
+# invocations in this file and the next one must not have to know: an
+# environment the whole process shares cannot go out of step with itself, where
+# a per-call env= can. job_env()'s allowlist still drops it, so the job half is
+# pinned separately in BASE_ENV_KEEP -- two mechanisms because there are two
+# environments, not two policies.
+os.environ["TESTTMP"] = TESTTMP
 
 
 def reap_stale(info):
@@ -1250,6 +1353,46 @@ HOST_CAPS = [
 ]
 
 
+# ---- host TOOL requirements -------------------------------------------------
+# The CPU guard above, moved from the silicon to $PATH. A cross job runs its
+# binary through tools/run_target.sh, which `need`s the matching qemu-user
+# emulator and exits 2 when it is absent -- so on a box that never installed
+# one, every job of that target goes RED and reads as a defect in the tree.
+#
+# Not hypothetical, and the bill has already been paid: in
+# rejected/regression-cascade-154d1aa3fba6, TEN of eighteen "newly red" jobs on
+# a fresh watcher box were a missing i386 loader and an absent cross sysroot,
+# auto-filed at prio 70 against twelve innocent commits and costing three agents
+# a triage cycle. The corpus guard below already solved this exact shape for the
+# filesystem -- skip, and name the one command that fixes it -- and its argument
+# transfers whole: a red is strictly worse than a skip because it masks a future
+# real regression in that job permanently, while every later run reads it as
+# STILL-RED rather than as coverage loss.
+#
+# PRESENCE ONLY, deliberately. Whether the emulator WORKS is what the job
+# answers; whether it EXISTS is what the harness can answer without running it.
+# And only the arches run_target.sh `need`s unconditionally: `x86_64` execs
+# natively and `i386` tries the native path FIRST and falls back to qemu, so an
+# absent qemu-i386 is not proof that job cannot run. Skipping it would remove
+# coverage on a box that has ia32 emulation in the kernel -- the same
+# asymmetry host_cpu_flags() argues for, and in the same direction: when in
+# doubt, RUN the job.
+HOST_TOOLS = [
+    ("aarch64", "qemu-aarch64"),
+    ("arm32",   "qemu-arm"),
+    ("riscv32", "qemu-riscv32"),
+    ("riscv64", "qemu-riscv64"),
+    ("xtensa",  "qemu-xtensa"),
+]
+RUN_TARGET_RE = re.compile(r"run_target\.sh\s+([A-Za-z0-9_]+)")
+
+
+def missing_emulators():
+    """{arch: binary} for the emulators this box does not have on PATH."""
+    return {arch: exe for arch, exe in HOST_TOOLS
+            if shutil.which(exe) is None}
+
+
 def host_cpu_flags():
     """The host CPU's feature flags, lowercased. Empty set when unknown.
 
@@ -1269,6 +1412,40 @@ def host_cpu_flags():
     except OSError:
         pass
     return set()
+
+
+def apply_host_tool_skips(jobs, absent):
+    """Skip every job that would run a binary through an absent emulator.
+
+    -> the number skipped. A job ALREADY skipped keeps its existing reason: the
+    first one is the actionable one, and re-labelling it with a second true
+    sentence buries the command that would fix it.
+    """
+    if not absent:
+        return 0
+    n = 0
+    for j in jobs:
+        if j.status == "skip":
+            continue
+        arches = set()
+        for ln in j.lines:
+            arches.update(RUN_TARGET_RE.findall(ln))
+        hit = sorted(arches & set(absent))
+        if not hit:
+            continue
+        names = ", ".join(absent[a] for a in hit)
+        j.status = "skip"
+        j.skip_reason = ("host tool absent: %s — this box has no %s on PATH, so "
+                         "the job cannot run here and a red would say nothing "
+                         "about the tree; install it with tools/install_qemu.sh"
+                         % (names, names))
+        n += 1
+    if n:
+        print("testmgr: %d job(s) SKIPPED — no %s on PATH. That is coverage this "
+              "box is not providing, not a verdict on the tree; run "
+              "tools/install_qemu.sh to close it."
+              % (n, ", ".join(sorted(absent.values()))), flush=True)
+    return n
 
 
 CORPUS_ROOTS = [
@@ -1424,6 +1601,11 @@ class Job:
         self.proc = None
         self.t0 = self.t1 = None
         self.timeout = None       # set after calibration
+        # True when this run granted the one-off budget raise a job with no
+        # trusted metrics may have (see UNPROVEN_ESCALATIONS). Read by
+        # learn_timeout() to spend the grant rather than record our own budget
+        # as the job's duration.
+        self.escalated = False
         self.status = "queued"    # queued|running|pass|fail|timeout|skipped|skip
         # WHY this job skipped, in the job's own terms. "" while it has not.
         #
@@ -1437,6 +1619,10 @@ class Job:
         # because a skipped job is not merely undecided -- it is scored as fine.
         self.skip_reason = ""
         self.logpath = None
+        # Index into self.lines of the recipe line the job was executing when
+        # it stopped -- see script(). None until read back from the marker
+        # file, and None forever for a job that never launched.
+        self.step_i = None
         self.requeued = False
         self.attempts = 0         # launch count; retriable classes may re-run
         self.flaky = False        # failed at least once, then passed on retry
@@ -1489,9 +1675,25 @@ class Job:
         # '/tmp/lib*.so'` variant this was originally written for.)
         pinned = pinned_tmp_paths(self.lines)
         parts = ["cd %s || exit 1" % shlex.quote(REPO)]
-        for ln in self.lines:
+        # WHICH LINE the job was on when it died. A job is one shell script of
+        # up to ~200 recipe lines spanning several lanes' files (lib-test#00 is
+        # 198 lines and 39 sources), and everything downstream -- the stub slug,
+        # the `track:` guess, the human reading it -- was derived from the
+        # job's FIRST source, which is related to the failure only by ordering.
+        # bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step.
+        #
+        # A marker file rather than a marker printed into the log: the log is
+        # what job_reason() and diagnostic_lines() read, and salting it with
+        # harness output would put our own lines in front of the error we
+        # spent two tickets learning to surface. The write happens BEFORE each
+        # line, not on failure, so it also names the line a TIMEOUT was
+        # sitting in -- the case where the log says least.
+        stepf = (self.logpath + ".step") if self.logpath else None
+        for i, ln in enumerate(self.lines):
             if ln.strip().startswith("#"):
                 continue                      # recipe comment: shell no-op
+            if stepf:
+                parts.append("echo %d > %s" % (i, shlex.quote(stepf)))
             body = TMP_RE.sub(
                 lambda m: m.group(0) if m.group(0) in pinned
                 else RUN_TMP + m.group(0)[len(TESTTMP):], ln)
@@ -1525,6 +1727,7 @@ SRC_RE = re.compile(r"\b(?:test|lib|examples|tools|compiler)/[A-Za-z0-9_./+-]*"
 # the job, and if the cause was environmental or has since been fixed, the
 # re-run answers a different question than the one that was asked.
 REASON_MAX = 400          # chars kept per red job. tstate is committed to git.
+STEP_LINE_MAX = 300       # ...and the failing recipe line, same reason
 REASON_TAIL_BYTES = 8192  # of the log read to find them
 REASON_LINES = 6          # substantive lines, at most
 
@@ -1538,6 +1741,49 @@ _REASON_TMP_RE = re.compile(TESTTMP_RE + r"/[A-Za-z0-9_./+-]+")
 _REASON_NOISE_RE = re.compile(
     r"^(?:make(?:\[\d+\])?: (?:\*\*\*|Leaving directory|Entering directory)"
     r"|Makefile:\d+: recipe for target\b)")
+
+# --- the error the tail cannot reach -------------------------------------
+#
+# job_reason() takes the log's tail, for the reason its docstring gives: a
+# signature list goes stale silently, a tail is true for every shape. That
+# argument survives here untouched -- what follows only ADDS a line, and only
+# when the tail carries no error text of its own.
+#
+# The case that forced it (2026-08-30, fpc-bootstrap on plexus AND seven):
+# `fpc compiler/compiler.pas` emits 960 warnings and 238 notes. The six lines
+# the tail kept were three warnings that PASSING builds emit too, FPC's
+# "There were 1 errors compiling module" summary, "Compilation aborted", and
+# the driver's exit code. The reason named an error and did not contain it,
+# and the log lives on the watcher's clone where no reader of tstate can go.
+#
+# For any compile job that warns in volume, the tail IS warnings and the error
+# is out of frame by construction. That is not a shape the tail covers badly;
+# it is one it cannot cover at all.
+REASON_ERROR_SCAN_BYTES = 1 << 20   # read this much of the end looking for it
+REASON_ERROR_MAX = 200              # ...and never let one line eat the budget
+
+_REASON_ERROR_RE = re.compile(
+    r"(?:^|[\s:])(?:Error|error|ERROR|Fatal|FAILED|Assertion|"
+    r"Segmentation fault|undefined reference|panic:)\b")
+
+# Lines that MATCH the signature above and say nothing. Without this the
+# fpc-bootstrap case still fails: its tail contains
+# `Error: /usr/bin/ppcx64 returned an error exitcode`, so "the tail already
+# shows an error" would be true and the scan would never run. A driver
+# reporting that its child failed is not a diagnosis -- it is the exit code
+# with a prefix.
+_REASON_ERRORLESS_RE = re.compile(
+    r"(?:returned an error exitcode"
+    r"|There were \d+ errors? compiling"
+    r"|^Fatal: Compilation aborted"
+    r"|^make(?:\[\d+\])?: \*\*\*.*Error \d+"
+    r"|^Error \d+$)")
+
+
+def substantive_error(line):
+    """Does this line say WHAT went wrong, rather than THAT something did?"""
+    return bool(_REASON_ERROR_RE.search(line)
+                and not _REASON_ERRORLESS_RE.search(line))
 
 
 # A run's jobs, minus the ones that produced no verdict. Extracted for the
@@ -1567,6 +1813,8 @@ def report_job(j):
     thing about a run that OUTLIVES the run, so its shape deserves a test that
     does not need a full tier to reach it.
     """
+    step_i, step_line = (failed_step(j) if j.status in ("fail", "timeout")
+                         else (None, ""))
     return {"name": j.name, "cls": j.cls, "src": j.src,
             "sel": j.sel or j.name,
             # Does this job build EXCLUSIVELY with the pinned binary? testmgr is
@@ -1581,6 +1829,20 @@ def report_job(j):
             # Only for reds -- see job_subject(). "" for everything else, which
             # reads as "undeclared", never as "not float".
             "subject": job_subject(j) if j.status in ("fail", "timeout") else "",
+            # WHICH recipe line went red, and what IT names -- not what the job
+            # names. Present on every job so a consumer tests a field rather
+            # than inferring from absence, but only FILLED for a red: a passing
+            # job has no failing step, and `step_i: null` says exactly that.
+            #
+            # `step_src` is the routing evidence. It is the failing line's own
+            # sources and nothing else -- deliberately "" rather than the job's
+            # `src` when the line names no file, because falling back to the
+            # job's sources is the bug this exists to fix, not a safety net.
+            "step_i": step_i,
+            "step_line": " ".join(step_line.split())[:STEP_LINE_MAX],
+            "step_src": step_sources(step_line),
+            "step_n": sum(1 for l in (getattr(j, "lines", None) or [])
+                          if not l.strip().startswith("#")),
             "flaky": j.flaky,
             "attempts": j.attempts,
             # `is not None`, not truthiness: the unset sentinel is None
@@ -1630,26 +1892,57 @@ def job_reason(job):
 
     An empty return means the log is gone or unreadable, and reads that way --
     it is never a claim that the job failed for no reason.
+
+    That argument still holds, and the tail is still what this returns. What it
+    did not cover: a log whose tail is WARNINGS. `fpc compiler/compiler.pas`
+    emits 960 of them, so when it failed on two hosts on 2026-08-30 the six
+    lines kept were three warnings a passing build emits too plus three lines
+    saying an error had happened, without saying which. Not a shape the tail
+    covers badly -- one it cannot cover at all, since the error is out of frame
+    whenever more than REASON_LINES lines follow it.
+
+    So: keep the tail exactly, and when it contains no substantive error line,
+    prepend the last one found above it. A signature list that goes stale can
+    then only fail to ADD something -- never to report nothing, which is what
+    the paragraph above actually objects to.
     """
     if not job.logpath:
         return ""
     try:
         with open(job.logpath, "rb") as f:
             try:
-                f.seek(-REASON_TAIL_BYTES, os.SEEK_END)
-            except OSError:               # log shorter than the tail window
+                f.seek(-REASON_ERROR_SCAN_BYTES, os.SEEK_END)
+            except OSError:               # log shorter than the scan window
                 f.seek(0)
-            tail = f.read().decode(errors="replace")
+            window = f.read().decode(errors="replace")
     except OSError:
         return ""
-    lines = [ln.rstrip() for ln in tail.splitlines()]
+    scanned = [ln.rstrip() for ln in window.splitlines()]
+    # The kept lines still come from the last REASON_TAIL_BYTES and nowhere
+    # else -- `floor` is that window expressed as a line index, so everything
+    # below is the same selection this function has always made. The wider read
+    # buys only the SEARCH SPACE below it.
+    floor = len(scanned) - len(window[-REASON_TAIL_BYTES:].splitlines())
     # Drop noise from the END only. The same text mid-log can be a sub-make that
     # failed and recovered, and dropping it there would rewrite the story.
-    while lines and (not lines[-1].strip() or _REASON_NOISE_RE.match(lines[-1])):
-        lines.pop()
-    lines = [ln for ln in lines[-REASON_LINES:] if ln.strip()]
+    end = len(scanned)
+    while end > floor and (not scanned[end - 1].strip()
+                           or _REASON_NOISE_RE.match(scanned[end - 1])):
+        end -= 1
+    start = max(floor, end - REASON_LINES)
+    lines = [ln for ln in scanned[start:end] if ln.strip()]
     if not lines:
         return ""
+    # If the tail already diagnoses the failure, it is the whole answer and is
+    # left exactly as it was -- this branch is why the change can only ever ADD.
+    # Only when it does NOT do we go looking, and then for one line: the last
+    # thing above the tail that says what went wrong. Prepended, because it
+    # happened BEFORE everything in the tail, so the result stays in log order.
+    if not any(substantive_error(ln) for ln in lines):
+        for ln in reversed(scanned[:start]):
+            if substantive_error(ln):
+                lines.insert(0, ln.strip()[:REASON_ERROR_MAX])
+                break
     out = _REASON_TMP_RE.sub("$TMP", " | ".join(ln.strip() for ln in lines))
     return out[:REASON_MAX - 1] + "\u2026" if len(out) > REASON_MAX else out
 
@@ -1751,6 +2044,57 @@ def job_subject(job):
         if m:
             return m.group(1).lower()
     return ""
+
+
+# --- which STEP of the job went red ---------------------------------------
+#
+# A job is a script, not a test. `lib-test#00` is 198 recipe lines touching 39
+# source files across Tracks A, B, C and T; `test-threads#src:...@2` compiles
+# the same Pascal file for four targets and compares four outputs. The job's
+# NAME is its first source, and its `src` is every file it mentions -- so both
+# describe the job's SUBJECT and neither describes the failure. Three tickets
+# were routed to the C lane off `test/crtl_reachability.c` while the red was a
+# GTK3 guard in lib/pcl, twenty lines further down the same script.
+#
+# script() writes the line index to a marker file before running each line, so
+# this is a read, not an inference. The index is into `job.lines` verbatim
+# (comments included), which is what a reader needs to find it in `make -n`.
+def failed_step(job):
+    """(index into job.lines, that line's text) — (None, "") if unknown.
+
+    Never raises, for job_subject()'s reason: this runs on the path that
+    REPORTS a failure, so an exception here turns one red job into no report
+    at all. Unknown is the honest answer for a job that never launched, a
+    marker the OS reaped, and a report from a watcher predating this field.
+    """
+    path = getattr(job, "logpath", None)
+    if not path:
+        return None, ""
+    try:
+        with open(path + ".step", errors="replace") as f:
+            i = int(f.read(32).strip())
+    except (OSError, ValueError):
+        return None, ""
+    lines = getattr(job, "lines", None) or []
+    if not 0 <= i < len(lines):
+        return None, ""
+    return i, lines[i]
+
+
+def step_sources(line):
+    """Repo-relative sources a single recipe line names, space-joined.
+
+    "" when the line names none -- a `readelf` assertion, a bare binary run.
+    That is a real answer and must not fall back to the job's other sources:
+    the fallback IS the defect, because the job's other sources are what sent
+    three tickets to the wrong lane.
+    """
+    seen, out = set(), []
+    for m in SRC_RE.findall(line or ""):
+        if m not in seen:
+            seen.add(m)
+            out.append(m)
+    return " ".join(out[:4])
 
 
 # A skip whose cause is "this box lacks the corpus" is a COVERAGE HOLE: the job
@@ -2126,6 +2470,34 @@ def split_jobs(target, lines):
     for i, g in enumerate(groups):
         text = "\n".join(g)
         toks = set(tmp_re.findall(text))
+        # A PRODUCER MAY NAME THE DIRECTORY AND THE CONSUMER A FILE INSIDE IT,
+        # and exact-path equality cannot see that. The C include-nesting test
+        # is the whole shape in three lines: one recipe line generates 16
+        # headers plus a gmain.c into `$(TESTTMP)/cnest16`, the NEXT line
+        # compiles `$(TESTTMP)/cnest16/gmain.c` -- and because that next line
+        # is a compile following a non-compile, the split above puts them in
+        # different jobs. Their token sets are {/tmp/cnest16} and
+        # {/tmp/cnest16/gmain.c, /tmp/cnest16_26}: no string in common, no
+        # merge, no ordering. It passed for as long as it did only because the
+        # producer's job usually got dispatched first -- a race, not a
+        # dependency -- and it finally lost that race on a busy box as
+        # `test-core#src:tools/expect_same.sh@276`, reporting
+        # `cannot read input file: .../cnest16/gmain.c` against a job named
+        # after expect_same.sh.
+        #
+        # So every ancestor directory strictly below TESTTMP becomes a token
+        # too. STRICTLY below: TESTTMP itself would merge every job in the
+        # target into one, since they all name something under it. Measured
+        # before adding it -- across test-core, test-threads, lib-test,
+        # test-nilpy and test-asm there are exactly THREE paths with a
+        # subdirectory component, so this cannot merge anything by accident;
+        # it is a named blind spot, not a widened net. Same reasoning as the
+        # LOADER_DIR token below, which models a different invisible edge.
+        for t in list(toks):
+            d = os.path.dirname(t)
+            while len(d) > len(TESTTMP):
+                toks.add(d)
+                d = os.path.dirname(d)
         if so_prod_re.search(text) or loader_dir_re.search(text):
             toks.add(LOADER_DIR)
         for f in toks:
@@ -2330,6 +2702,8 @@ def generate(tier):
         jobs.append(fpc_canary_job())
     if tier in SELFHOST_GATE_TIERS:
         jobs.append(selfhost_fixedpoint_job())
+    if tier in SIZE_CANARY_TIERS:
+        jobs.append(size_canary_job())
     assign_selectors(jobs)
     return jobs
 
@@ -2454,6 +2828,29 @@ def fpc_canary_job():
     j.cls = "selfhost"
     j.advisory = True
     j.est_mem = CLASSES["selfhost"]["est_mem"]
+    return j
+
+
+def size_canary_job():
+    """Has the empty-image floor moved? -> Job
+
+    A DELTA gate against tools/size_baseline.json, not a ceiling: a ceiling
+    needs a number a human must maintain and defend, a delta needs only the last
+    measurement. It blesses none of the current sizes — 103,692 B of bss on a
+    ~400 KB part is the subject of an open Track A ticket — it only makes the
+    next move visible on the commit that made it.
+
+    ADVISORY, for the same reason `demos` is: a size that grew is a decision for
+    the owning lane, not grounds to fail everyone's verdict. twatch still
+    reports and tickets it, so the signal arrives; it just does not hold the
+    tier hostage. A ratchet that reds the fleet until someone re-baselines is a
+    ratchet somebody eventually switches off, and this repo has written that
+    down twice already.
+    """
+    j = Job("size-canary", 0, ["python3 tools/size_canary.py"])
+    j.name = "size-canary#00"
+    j.cls = "unit"
+    j.advisory = True
     return j
 
 
@@ -2590,6 +2987,25 @@ ENV_ALLOW_PREFIXES = ("PXX_", "TESTMGR_", "LC_", "QEMU_")
 BASE_ENV_KEEP = {
     "NO_AT_BRIDGE": "1",       # GTK2/3: do not start the a11y bridge
     "GTK_A11Y": "none",        # GTK3+: same, newer spelling
+    # PIN the scratch root into the make we spawn, rather than passing it
+    # through. Reading TESTTMP (line ~920) taught the MATCHERS the value; it did
+    # not teach the PRODUCER, and this environment is an allowlist that TESTTMP
+    # was not on -- so `TESTTMP=/foo tools/testmgr.py ...` rebuilt TMP_RE, the
+    # three make_dry_run expressions, _REASON_TMP_RE and RUN_TMP around /foo
+    # while make, stripped of the variable, kept emitting /tmp. Every matcher
+    # then hunted a prefix no recipe produced: all four blind at once, silently,
+    # which is the exact failure the comment on them describes. Measured
+    # 2026-08-30: job_env() returned no TESTTMP and `make -s print-TESTTMP`
+    # under that environment printed /tmp.
+    #
+    # Setting it (not allowlisting it) is what makes the agreement structural:
+    # `?=` in the Makefile means our value always wins, so the producer cannot
+    # disagree with the matchers even when the Makefile's own DEFAULT moves --
+    # which is what bug-a-testtmp-defaults-to-a-path-every-checkout-shares does.
+    # Our default stays /tmp deliberately: reap_stale() and sweep_stale() find
+    # abandoned scratch by globbing this root, and a per-checkout root would
+    # scatter them where no run looks.
+    "TESTTMP": TESTTMP,
 }
 # The session/desktop family. A job gets these ONLY if its own recipe names one
 # of them -- see job_env_for(). Kept as an explicit set so the report can say
@@ -2686,6 +3102,7 @@ class Manager:
         self.metrics = self.heal_latched_metrics(load_metrics(), args.deadline)
         outgrown = []
         unschedulable = []
+        unproven = []
         for j in jobs:
             cls_to = CLASSES[j.cls]["timeout"]
             m = self.metrics.get(metrics_key(j))
@@ -2723,6 +3140,26 @@ class Manager:
                     if j.exp_dur >= j.timeout:
                         j.timeout = j.exp_dur * OUTGROWN_MARGIN
                         outgrown.append((j, cls_to * scale))
+            elif j.timeout is None:
+                # NEVER earned trusted metrics here, but it may still have
+                # DEMONSTRATED a duration -- learn_timeout() records one on
+                # every timeout, and until now nothing read it back for this
+                # job. See UNPROVEN_ESCALATIONS and unproven_budget().
+                #
+                # Only the BUDGET comes from the unproven metric.
+                # exp_dur/exp_cores/est_mem drive scheduling order and
+                # admission and must still come from a passing sample, so such
+                # a job is scheduled exactly as it is today and only gets more
+                # room to finish.
+                want = unproven_budget(m, cls_to * scale)
+                if want is not None:
+                    j.timeout = want
+                    # The GRANT is what gets counted, not the timeout that
+                    # prompted it -- see learn_timeout(). Counting timeouts
+                    # would spend the escalation on the run that discovered the
+                    # job was slow, before anything had been offered.
+                    j.escalated = True
+                    unproven.append((j, cls_to * scale, m["dur"] * scale))
             if j.timeout is None:
                 j.timeout = cls_to * scale
             # THE clamp. Applies to every path above -- class ceiling, hang
@@ -2741,6 +3178,14 @@ class Manager:
                   "reclassify it, or fix what made it hang."
                   % (j.sel or j.name, wanted, args.deadline,
                      args.deadline * MAX_JOB_DEADLINE_FRAC), flush=True)
+        for j, budget, observed in unproven:
+            print("testmgr: %s has no trusted metrics on this box and was "
+                  "observed to need %.0fs against a %.0fs `%s` budget — raised "
+                  "to %.0fs for this run, ONCE. If it times out again the "
+                  "budget reverts to the class figure permanently, and that "
+                  "timeout is the job's own signal rather than a harness kill."
+                  % (j.sel or j.name, observed, budget, j.cls, j.timeout),
+                  flush=True)
         for j, budget in outgrown:
             print("testmgr: %s outgrew its `%s` budget — measured %.0fs against "
                   "%.0fs, so it could never pass. Budget raised to %.0fs for "
@@ -3157,6 +3602,27 @@ class Manager:
             return
         key = metrics_key(job)
         m = dict(self.metrics.get(key) or {})
+        # The job we ALREADY gave extra room to, which used it and still did not
+        # finish. `observed` here is the budget WE chose, not a duration the job
+        # revealed -- exactly the argument the ceiling refusal above makes -- so
+        # recording it would be recording our own guess and doubling it next
+        # time. Spend the escalation instead: the budget reverts to the class
+        # figure and stays there, which is what makes one grant unable to
+        # ratchet. See UNPROVEN_ESCALATIONS.
+        if getattr(job, "escalated", False):
+            m["esc"] = int(m.get("esc") or 0) + 1
+            m.setdefault("dur", observed)
+            m.setdefault("cpu", 1.0)
+            m.setdefault("mem", CLASSES[job.cls]["est_mem"])
+            m["n"] = int(m.get("n") or 0)
+            self.metrics[key] = m
+            print("testmgr: %s timed out at %.0fs — the budget it had was "
+                  "already raised once and it did not finish, so no further "
+                  "raise. Its budget reverts to the `%s` class figure and this "
+                  "is a real timeout, not a harness kill: the job hangs, is "
+                  "misclassified, or is too big for this box."
+                  % (job.sel or job.name, observed, job.cls), flush=True)
+            return
         if m.get("dur", 0) >= observed:
             return
         m["dur"] = observed
@@ -3250,6 +3716,12 @@ class Manager:
         m["mem"] = max(int(mem), int((1 - a) * m["mem"] + a * mem))
         m["cpu"] = round((1 - a) * m.get("cpu", 1.0) + a * cores, 2)
         m["n"] = m.get("n", 0) + 1
+        # A PASS proves the budget was adequate, so the escalation counter goes
+        # back to full. It counts CONSECUTIVE unproven timeouts, not lifetime
+        # ones: a job that passes, is broken by a later commit and times out
+        # deserves the same one grant a new job gets, and a counter that never
+        # resets would silently deny it.
+        m.pop("esc", None)
 
     def admit_ok(self, job, now):
         if len(self.running) >= self.hard_cap:
@@ -3578,9 +4050,100 @@ class Manager:
 
 
 # ------------------------------------------------------------ calibration --
+# THE SECOND PROBE, and why one was not enough.
+#
+# The hello.pas compile above cannot tell this fleet's boxes apart. Measured
+# 2026-08-30 on plexus (Xeon E5-2620 v2, 2013): 0.25 / 0.27 / 0.26s against a
+# 0.35 reference, so max(1.0, 0.74) = 1.0 — the FLOOR, not a measurement. And
+# `seven` (dual Xeon E5645, Westmere, 2010, no AVX) publishes `scale: 1.0` in
+# its own reports too. The two boxes therefore received byte-identical budgets,
+# and the mechanism that exists so weak hardware never gets false timeouts was
+# inert on every host it ran on.
+#
+# It is a resolution problem, not a floor problem. The floor is right (never
+# shrink a budget below the reference box). A 0.26s single-threaded compile is
+# dominated by process startup and page cache and has perhaps 1.3x of range
+# across a decade of hardware — while the budgets it scales govern qemu-user
+# EMULATION, where a Westmere and an Ivy Bridge are much further apart, and
+# where the false timeouts actually landed (`test-aarch64#test_parallel_reduction`,
+# 240.4s against a 240s budget, on a job that had never once passed there).
+#
+# So: a fixed compute loop, cross-compiled and run under qemu, timed. It is
+# generated rather than kept in test/ because a probe is not a test — nothing
+# should sweep it, enrol it, or wire it into a tier.
+#
+# bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget
+# Filled by calibrate(); published in the report so a remote box's scale can be
+# read as a measurement rather than a default.
+PROBE_RATIOS = {"native": None, "emulated": None}
+
+PROBE_EMU_ARCH = "aarch64"      # the emulator every cross-capable box has
+PROBE_EMU_ITERS = 8000000       # ~0.36s emulated on the reference box
+PROBE_EMU_REF = 0.36            # seconds: that loop under qemu-aarch64, plexus
+
+PROBE_EMU_SRC = """program probe_loop;
+var i, s: LongInt;
+begin
+  s := 0;
+  for i := 1 to %d do
+    s := (s + i * 3) and $FFFFFF;
+  writeln(s);
+end.
+""" % PROBE_EMU_ITERS
+
+
+def calibrate_emulated():
+    """Time a fixed compute loop under qemu-user. -> ratio, or None.
+
+    None means "NO OPINION", never "fast". Every failure path returns it — no
+    emulator, a cross-compile that does not build, a run that exits nonzero —
+    because the alternative is a probe that reports a small number when it
+    measured nothing, and a small number here SHRINKS nobody's budget but does
+    silently withhold the only evidence that would have raised one. A box with
+    no qemu at all skips every job this would have covered anyway.
+    """
+    exe = dict(HOST_TOOLS).get(PROBE_EMU_ARCH)
+    if not exe or shutil.which(exe) is None:
+        return None
+    src = os.path.join(RUN_TMP, "testmgr_probe_emu.pas")
+    binp = os.path.join(RUN_TMP, "testmgr_probe_emu")
+    try:
+        with open(src, "w") as fh:
+            fh.write(PROBE_EMU_SRC)
+        r = subprocess.run([os.path.join(REPO, COMPILER),
+                            "--target=" + PROBE_EMU_ARCH, src, binp],
+                           cwd=REPO, capture_output=True)
+        if r.returncode != 0:
+            return None
+        t0 = time.monotonic()
+        r = subprocess.run([os.path.join(REPO, "tools/run_target.sh"),
+                            PROBE_EMU_ARCH, binp], cwd=REPO,
+                           capture_output=True)
+        dt = time.monotonic() - t0
+        if r.returncode != 0:
+            return None
+    except OSError:
+        return None
+    return dt / PROBE_EMU_REF
+
+
 def calibrate():
-    """Time one known-cost compile; scale all timeouts from it so weak
-    hardware never gets false timeouts."""
+    """Time known-cost work; scale all timeouts from it so weak hardware never
+    gets false timeouts. -> float >= 1.0
+
+    Two probes, combined with max(): a box slow on EITHER axis gets the bigger
+    budget. The asymmetry is deliberate and it is the same one host_cpu_flags()
+    argues for. A budget is a CEILING, so being generous costs hang-detection
+    latency — one class-length run before the kill — while being stingy costs a
+    false RED, which is indistinguishable from a regression and is the failure
+    this function exists to prevent.
+
+    WHAT THIS STILL DOES NOT FIX, stated because the scale is a single global
+    number: a box slow only under emulation now gets generous NATIVE budgets
+    too. That is the ceiling above, so it is cheap. The converse — a box slow
+    only natively — is still served by a probe with ~1.3x of range, and no
+    second probe here helps it. Per-class scales would, and are not this change.
+    """
     t0 = time.monotonic()
     r = subprocess.run([os.path.join(REPO, COMPILER), "test/hello.pas",
                         os.path.join(RUN_TMP, "testmgr_probe26")], cwd=REPO,
@@ -3588,7 +4151,26 @@ def calibrate():
     dt = time.monotonic() - t0
     if r.returncode != 0:
         sys.exit("testmgr: probe compile failed — is %s healthy?" % COMPILER)
-    return max(1.0, dt / PROBE_REF)
+    native = dt / PROBE_REF
+    emulated = calibrate_emulated()
+    scale = max(1.0, native, emulated or 0.0)
+    # Kept for the REPORT, not only for stdout. A scale of 1.00 has two very
+    # different causes -- "this box is at the reference speed" and "the probe
+    # measured nothing" -- and only the components tell them apart. The box
+    # where that distinction is load-bearing is a remote watcher whose stdout
+    # nobody reads (bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-
+    # bigger-budget), so the numbers have to travel with the verdict.
+    PROBE_RATIOS["native"] = round(native, 2)
+    PROBE_RATIOS["emulated"] = None if emulated is None else round(emulated, 2)
+    # ALWAYS printed, including the x1.00 case. "The floor is the answer" is
+    # what went unnoticed for the life of this function, and a line that appears
+    # only when the probe found something cannot say that it found nothing.
+    print("testmgr: budgets x%.2f (native probe %.2f, emulated probe %s)%s"
+          % (scale, native,
+             "%.2f" % emulated if emulated is not None else "no opinion",
+             "" if scale > 1.0 else " — at the floor, so neither probe raised it"),
+          flush=True)
+    return scale
 
 
 PINNED_REL = "stable_linux_amd64/default/pinned"
@@ -5017,6 +5599,11 @@ def main():
                                  "this box and a red would be permanent"
                                  % (cap, human))
                 break
+    # ...and the same for an emulator that is not installed at all. Ordered
+    # after the CPU guard for the same reason that one is ordered after the
+    # corpus guard: a job already skipped has a reason, and the FIRST reason is
+    # the actionable one.
+    apply_host_tool_skips(jobs, missing_emulators())
     for j in jobs:
         j.deps = [d for d in j.deps if d.status != "skip"]
     if args.inject_hang:
@@ -5317,6 +5904,9 @@ def main():
     print("\ntestmgr: %s" % verdict)
     if args.report_json:
         rep = {"tier": args.tier, "wall": round(wall, 1), "scale": round(scale, 2),
+               # The two ratios BEHIND that scale. Without them a published
+               # `scale: 1.0` cannot be told from a probe that never ran.
+               "probe": dict(PROBE_RATIOS),
                "verdict": verdict,
                # the binary these results came from, so a report's provenance is
                # identifiable after the fact instead of inferred from timestamps

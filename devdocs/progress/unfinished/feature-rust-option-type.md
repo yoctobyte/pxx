@@ -1,0 +1,577 @@
+---
+prio: 0
+track: R
+---
+# Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder
+
+- **Type:** feature — Track R (X-tagged: experimental, unranked; picked up on
+  the user's 2026-08-29 request to run Track R for a ~48h window)
+- **Status:** unfinished (parked 2026-08-30 — see the banner at the bottom)
+- **Owner:** Claude (~/frank-rust)
+- **Opened:** 2026-08-29
+- **Umbrella:** [[feature-rust-frontend]] · ladder: [[feature-rust-corpus-chess]]
+
+## Why this rung
+
+[[feature-rust-corpus-chess]] names the gap list in the order the real engine
+modules hit it, and `Option<T>` is first: *"chess.rs wall, stage 2"*. The
+adapted branch sidesteps it (packed i64 / sentinel squares); the UNMODIFIED
+`~/nextlevel/engine/src` cannot — `piece_at() -> Option<Piece>` and
+`ep_square: Option<Square>` are the shape the source is written in.
+
+Not spec-completeness: `Option` is picked because the engine uses it, per the
+umbrella's *"pick work from its ladder"* instruction.
+
+## Approach — monomorphize onto the enum machinery that already exists
+
+No new AST node, no new IR op, no shared-internals change: one auto-registered
+tagged-union UClass per concrete `T`, exactly the layout `RRegisterEnums`
+gives a hand-written enum (`__tag` i64 at 0, payload as the mangled field
+`Some.0` past it), with `None`/`Some` pushed into `REnumVariants` so `match`
+resolves arm names against the scrutinee's own class with no special case.
+Same shape as the borrowed-slice `&[T]` classes (`RSliceClassForRec`).
+
+The one thing monomorphization forces: **`Some`/`None` cannot go through the
+bare-variant table.** Every instantiation declares variants spelled `Some` and
+`None`, so that lookup is ambiguous the moment a second `T` appears. The
+literal is therefore resolved against the EXPECTED type (the annotation), or,
+when there is none, against the payload expression's own type.
+
+## Units (pushed separately)
+
+1. **DONE** — the type, the literal, the accessors, bare match arms.
+   `let x: Option<T>` annotations (via a new `RTypeNameAt`/`RTypeNameCur`
+   that reads a generic type at any type site), `Some(e)`/`None` literals
+   with expected-type or inferred resolution, `is_some`/`is_none`/`unwrap`
+   as pure field reads, and unbraced match arms (`Some(v) => f(v),` — the
+   spelling real source uses; the block form was the only one accepted).
+   Test `test/test_rust_option.rs`, in `make test`.
+2. **DONE** — `Option<T>` in fn signatures: params and, the load-bearing
+   half, RETURN values, on a free fn and an impl method alike. Struct/enum
+   returns were rejected outright; allowing them turned out to be pure
+   frontend wiring — the shared machinery has always compiled a
+   record-returning routine (Pascal's `function F: TRec`), the Rust
+   frontend simply never registered `ProcRetRecId`, never allocated the
+   hidden aggregate-destination slot, and never emitted
+   `EmitAggregateDestStash`. Without the last two, Result is written
+   through a garbage pointer — the identical segfault the C frontend hit
+   on lua's by-value union return, reproduced here and fixed the same way.
+   Generalised rather than special-cased: any record return works now, not
+   just `Option<T>`. Impl-method params also gained struct/enum types
+   (they were `allowStruct=False` while free fns were already `True`) and
+   the `IsRef` flag a record param needs.
+3. **DONE** — the pattern half. `match` now accepts an ARBITRARY
+   expression as its scrutinee (`match self.piece_at(sq)`, the spelling
+   real source uses), evaluated once into a generated local; `if let
+   PAT = e { .. } else { .. }` lands as a one-arm match; `unwrap_or(d)`
+   is a value select over the tag via the shared AN_TERNARY the C and Zig
+   frontends already use. None of it is Option-specific — the scrutinee
+   resolution, the tag test and the pattern binds were extracted out of
+   `match` into `RParseScrutinee` / `RTagTest` / `RParsePatternBinds` and
+   are shared, so `if let Rect { w, h } = s` over a user-declared enum
+   works for free.
+
+## Known narrowings (documented, not silent)
+
+- `unwrap()` does not panic on `None` — it reads the payload slot as-is.
+  This frontend has no panic path yet; a checked unwrap follows one.
+- `Option<Option<T>>` is refused with a clear error: the `>>` lexes as a
+  shift token, and splitting it is not worth doing before something needs it.
+- `let x = None;` with no annotation is an error — nothing to infer from.
+- A non-variable scrutinee must be a call or a plain variable: `RExprRecId`
+  answers for `AN_CALL` and `AN_IDENT`, so `match self.some_field` (a
+  record-typed FIELD) is not resolvable yet and says so.
+- Option accessors work on any LVALUE receiver (variable, field, element)
+  but not on a call result: `maybe(4).unwrap_or(-1)` is still refused, `let m
+  = maybe(4); m.unwrap_or(-1)` works. Materializing a temp would lift it, the
+  same fix the match scrutinee got.
+- `println!` evaluates each argument as it reaches that placeholder, so a
+  side-effecting argument interleaves with the format text — Rust evaluates
+  all arguments first. Noticed while writing the tail-return test.
+- Compound assignment on a field/index target names the target subtree on
+  both sides, so a side-effecting subscript (`a[f()] += 1`) evaluates that
+  subscript twice. A narrowing, not a wrong answer.
+- **pxx brace comments NEST.** A `{` written inside a `{ ... }` comment
+  opens a second one, and the comment then runs to the *next* `}` —
+  which in this file was a `'}'` string 150 lines later, reported as
+  `unexpected character` on an innocent blank line. Cost a build cycle;
+  worth knowing before writing a comment that quotes Rust syntax.
+
+## Rungs found by testing, past the Option stage
+
+Both were discovered by writing engine-shaped code against the new
+signatures, not from the ladder's list — and both are ahead of it now:
+
+4. **DONE** — fixed-array STRUCT FIELDS (`squares: [i64; 64]`). chess.rs's
+   Board is a mailbox array and the frontend refused the syntax outright.
+   Frontend wiring: `UFldIsArray`/`UFldArrLen` already model an array field
+   (Pascal's `array[0..N-1] of T` and C's `int a[N];` land on it), access is
+   AN_INDEX over AN_FIELD, and `field[i].member` for a record element comes
+   free from `ResolveNodeRec`'s existing arm. `test/test_rust_struct_array_field.rs`.
+5. **DONE** — `&`/`&mut` parameters actually ALIAS. This was the serious one:
+   the frontend DROPPED the `&` on a parameter, so the one bit that decides
+   aliasing never reached `ProcParamExplicitByRef`, `ir.inc` read the by-ref
+   flag as the silent >8-byte ABI promotion, and every record argument was a
+   private temp copy. `self.side = v` in a method wrote into that copy and the
+   caller saw nothing — **silently, no diagnostic**. `&mut self` was not even
+   accepted by the parser. Measured, not reasoned: `PXXDBG=a.ir:main` showed
+   the `IR_COPY_REC` into a temp at the call site.
+   Fixed by recording `&` and setting `ProcParamExplicitByRef`, keeping the
+   by-value copy for a plain `p: T` / `self` — the half a blanket
+   "always alias" fix would have broken, and the half the test pins.
+   Compound assignment on a field/index target (`self.n += 1`) rode along; it
+   is how real code spells this mutation. `test/test_rust_refs.rs`.
+6. **DONE** — value positions: a whole struct/enum RETURNED, and Rust's
+   implicit TAIL return. `let` carried three near-copies of "parse an
+   aggregate literal and store it into a slot" (enum variant, tuple struct,
+   named-field); they are now ONE implementation
+   (`RPeekAggregateCi` + `RParseAggregateInto`) that the `return` path uses
+   too, so `return Square(i)` / `Point { .. }` / `Circle(r)` / `Some(x)` all
+   work and the Option-specific return branch is gone. The tail return applies
+   to a fn BODY and deliberately not to any inner block — an inner block's
+   trailing expression is a block VALUE, and treating one as a return would
+   turn `if c { f() }` into an early exit; `test_rust_value_positions.rs`
+   pins that anti-case. `test/test_rust_value_positions.rs`.
+7. **DONE** — the rest of the engine's own idioms, driven by writing
+   `chess.rs`-shaped source and fixing what it hit, one wall at a time:
+   nested aggregate literals and array initializers inside a struct literal
+   (`Board { squares: [0; 64], ep: None, .. }`), an aggregate literal as an
+   ASSIGNMENT rhs (`self.ep = Some(sq);`), a method on a record-typed FIELD
+   (`self.side.flip()`), a tail `match` whose arms are the fn's return values
+   (`fn flip(self) -> Color { match self { .. } }`), and the Option accessors
+   on any lvalue receiver rather than only a plain variable (`b.ep.is_none()`).
+   The literal parser now takes a target NODE instead of a symbol, which is
+   what let `let` / `return` / field-assign / nested-field all share it.
+   `test/test_rust_engine_shapes.rs` is the acceptance shape: every construct
+   in it was refused at the start of this window.
+
+8. **DONE** — fixed-array RETURN VALUES (`fn f() -> [T; N]`), the ladder's
+   attacks.rs rung, plus the integer-literal suffix bug it surfaced.
+
+   The ABI needed nothing: `ProcRetFixedArrBytes` + `ABIRetViaHiddenDestProc`
+   have carried Pascal's `function F: TArr` since
+   `bug-a-set-and-array-function-results-come-back-empty`, and the caller side
+   (whole-array `IR_COPY_REC` from a call) was already in `ir.inc`. **Fourth
+   rung running where the shared machinery had the mechanism and the Rust
+   frontend had simply never reached for it.** What the frontend needed: parse
+   `-> [T; N]` (one `RRetTypeAt`/`RRetTypeCur` pair replacing four hand-written
+   return-type reads), record the shape at SIGNATURE time rather than body time
+   (a call site is lowered while the CALLER's body is parsed, which can precede
+   the callee's), allocate `Result` AS an array, and lower a value in return
+   position through `RReturnValue`.
+
+   That last one is where the measurement mattered. `return a;` lowered as
+   AN_EXIT-with-a-value, which is a SCALAR store into Result: `PXXDBG=a.ir`
+   showed `store_sym Result := lea(a)` where a 32-byte copy belongs. The caller
+   then copied its 32 bytes perfectly faithfully, so `[0,1,4,9]` printed as a
+   stack address and three zeros with no fault anywhere. Reasoning about it
+   would have blamed the caller.
+
+   Also landed here because the same test needed it: `&[T; N]` params (an array
+   REFERENCE, which Rust distinguishes from the `&[T]` slice that shares the
+   parse site) and unannotated `let t = f();` resolved from the callee's
+   registered return shape, for a plain call and for a method through the
+   receiver's class.
+
+   **The integer-literal suffix was a silent wrong-value bug, not a gap.** The
+   lexer consumed `u64`/`i64`/... and discarded it, so every literal was i32:
+   `1u64 << 44` evaluated to **0** and `1u64 << 31` to `0xFFFFFFFF80000000`,
+   neither with a diagnostic. Found because a knight-attack table came back
+   with 48 of 64 squares empty — a plausible number, which is exactly the shape
+   of bug this repo's debugging playbook is written about. Fixed by carrying
+   the suffix on the raw token's `SOffset`/`SLen` (shared `Next` already
+   surfaces that as `CurTok.SVal`, so no shared-struct change) and typing the
+   literal through the existing name→kind mapper, a suffix being spelled
+   exactly like the type name. An unsuffixed literal too big for i32 now widens
+   to i64 rather than truncating.
+
+   **Narrowings, deliberate and recorded rather than worked around:**
+   - `let x = if c { a } else { b };` — `if` as an EXPRESSION is not parsed.
+     Real Rust uses it constantly; it is the strongest candidate for the next
+     rung.
+   - `[Sq { .. }; N]` — an array literal whose element is a struct literal.
+     Uninitialised `let mut c: [Sq; 2];` is the workaround in the test.
+   - impl-method params take neither `&[T]` slices nor `&[T; N]` arrays; only
+     free fns do. The impl registration path never had slices either, so this
+     is a pre-existing symmetry gap, not one introduced here.
+   - indexing a call result directly (`f()[0]`) is not parsed; Pascal has
+     `ProcRetArrAi` for exactly that and the Rust side does not populate it.
+
+9. **DONE** — `if` as an EXPRESSION, in both spellings: `let x = if c { a }
+   else { b };` and the tail form `fn pick(n: i64) -> i64 { if n > 0 { 1 } else
+   { -1 } }`. Named as the next wall by rung 8's own probe, which had to be
+   rewritten around its absence.
+
+   Lowers to the shared **AN_TERNARY** — Left = condition, Right =
+   AN_PAIR(then, else) — the same node the C frontend builds for `c ? a : b`
+   and Pascal for its own if-expression. So only the selected arm is evaluated
+   and nothing new reaches the IR. Fifth rung with no Track A change.
+
+   The tail form is the interesting half. It cannot be decided by trying the
+   expression parse and rewinding, because `Error()` aborts — there is nothing
+   to rewind to, and a speculative parse leaves allocated nodes behind whether
+   it succeeds or not. `RIfIsTailValue` decides it by a token scan using
+   **Rust's own discriminator**: a block has a value when it is non-empty and
+   its last token before the closing brace is not a semicolon. Require that of
+   every arm, require the `else` (an if with no else has no value — Rust says
+   the same, in its own words), and require a closing brace or a comma after
+   it, which is what makes it a tail. Anything failing any of those goes to
+   `RParseIf` unchanged, so the check cannot capture an `if` that worked
+   before; `side_effect` in the test is the pin for that direction.
+
+   One narrowing kept: an arm is a single expression, not a block with
+   statements and a trailing value. A block-with-value needs a hidden temp and
+   a statement sequence in expression position, which is a different feature
+   and not one the engine's tables use.
+
+   Matching arm types keep their exact kind rather than going through
+   `RWiden`, which would collapse a `u64`/`u64` pair to i32 — the rung-8
+   literal-suffix bug wearing a different hat, and worth stating because the
+   generic-looking helper is the obvious thing to reach for.
+
+10. **DONE** — module-level items: type aliases that actually alias, and
+    top-level `const NAME: [T; N]`. Stage 0/3 of the ladder — what a real `.rs`
+    file has *above* its first fn, and what a unity-build concatenation of
+    several modules therefore has a lot of.
+
+    Both were being *swallowed*: `RStripTopItems` dropped `type X = Y;` whole
+    (so every use of X died on `unknown type X`) and `RParseTopLevelConst`
+    skipped array consts whole (so every use died on `undefined variable`).
+    That is why the corpus's modules died in their first four lines.
+
+    - **Aliases** are recorded as the item is stripped and resolved in
+      `RTypeNameAt`, the one canonical type-name reader — so `FindUClass`, the
+      record-id lookups and the array-element paths all see the TARGET name
+      and need no alias knowledge of their own. Chained aliases resolve, with
+      a bounded loop so `type A = B; type B = A;` cannot spin. Narrowing:
+      single-token targets only, so `type Row = [u8; 8];` still vanishes as
+      before and this strictly widens what compiles.
+    - **Const arrays** become globals filled at startup, registered by a
+      PRESCAN (Rust lets a const be used above its declaration, and a global
+      needs `CurProc < 0`), with the stores prepended to `main`'s body — this
+      driver calls `main` and exits, so there is no other startup hook.
+      Deviation, stated rather than hidden: Rust's `const` is a `.rodata`
+      compile-time value and this is a mutable global. No compiling program
+      can observe the difference — values, stable addresses, reads from any
+      function are all identical — and real `.rodata` initializers are
+      shared-codegen work (Track A) that would buy the engine nothing.
+
+    The refactor is the part worth keeping: the array-literal parser was
+    lifted out of `RParseLet` into `RParseArrayLiteral` and shared with the
+    const prescan, rather than copied. An array-literal parser that exists
+    twice is one that gets fixed on one arm — this file has already paid that
+    tax three times this window.
+
+11. **FIXED (urgent, p80, not a rung)** — `RExprRecId` was called ~340 lines
+    above its own declaration with no `forward`. pxx resolves names across the
+    whole unit; **FPC resolves in source order**, so `compiler.pas` did not
+    compile under FPC at all and a fresh tree with no trusted binary could not
+    be seeded.
+
+    The reason it reached master with every gate green is structural and worth
+    internalising: `make compiler/pascal26` compiles the compiler **with pxx**,
+    so the only compiler the per-fix loop ever consults is the one under test.
+    The byte-identical self-host fixedpoint — our strongest signal — cannot see
+    FPC-only breakage by construction, and no testmgr tier covers it either.
+    `python3 tools/forwardlint.py` is what catches it, and nothing in
+    `gate.sh` or the Makefile invoked it. **Run it before pushing.**
+    Verified two ways here: forwardlint clean, and a direct
+    `fpc -Mobjfpc compiler.pas` bootstrap that now links.
+    Resolves `bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed` and
+    `bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile`.
+
+11. **DONE** — the stage-3 **unity build**: several `.rs` modules concatenated
+    into one translation unit, the same trick `test/zlib/runner.c` uses. `cat`
+    IS the build step; no module system, and none wanted.
+
+    What concatenation does *not* fix is the module QUALIFIERS: the source
+    still says `crate::attacks::popcount(...)` and `board::Board::new()`, and
+    those names have to become flat. Stripping them needs to tell a MODULE path
+    from a TYPE path, because `Board::new` and `Color::White` must survive — so
+    `RStripTopItems` now collects the `mod x;` declarations in a first pass and
+    strips `<mod>::`, `crate::`, `self::`, `super::` anywhere in a second.
+    Exact rather than heuristic: no rule about capitalisation, and an unknown
+    `foo::bar` still errors the way it should. Chains fall out for free, since
+    after dropping `crate ::` the loop re-examines `board ::` in place.
+
+    The two-pass split is load-bearing: a `mod` item may sit BELOW a use of its
+    own qualifier, and one forward pass would then strip nothing.
+
+    `test/rust_unity/` is four modules with real cross-module references — a
+    data module of const tables, a type module with an impl, a module reading
+    both and returning an array, and a crate root that declares them. Every
+    oracle is a hand-computed knight mobility (a1 = 2, b2 = 4, c3..f6 = 8,
+    h8 = 2), not a recorded run.
+
+    **Stated limit:** the corpus is written in real-crate shape but is NOT
+    verified against rustc — there is no rustc on this box. It is a shape
+    fixture, not a conformance one, and the Makefile comment says so. Claiming
+    otherwise would be the same overreach the claims-discipline section warns
+    about.
+
+12. **DOC** — `devdocs/dev/rust-semantics-divergences.md` created, the Rust peer
+    of the NilPy and Pascal divergence docs. Holds the const-array deviation
+    (routed there by CLAUDE.md's "an observable that no compiling program can
+    reach" row rather than by a `decide-*`, since the written rule already
+    answers it), the `println!` argument-order note from rung 6, and the
+    single-token type-alias narrowing — all three had been living only in this
+    ticket, which is the wrong place for them once the ticket closes.
+
+13. **DONE** — `Result<T, E>` and the `?` try operator, and the payload-sizing
+    bug the rung exposed in **Option**.
+
+    Result monomorphizes onto the same enum machinery as Option: one
+    auto-registered UClass per concrete `(T, E)`, `__tag` at 0 and `Ok.0` /
+    `Err.0` overlapping past it. That is what a tagged union is, so `match`,
+    `return Ok(..)` / `return Err(..)` and field access all worked the moment
+    the class existed and the type reader learned two parameters — **seventh
+    rung where the machinery was already there.**
+
+    `?` desugars to what the reference says it means: `match e { Ok(v) => v,
+    Err(e) => return Err(e) }`. Two of those three pieces cannot live in an
+    expression node — the operand is evaluated once and read twice (so it must
+    be materialized), and the Err arm RETURNS. So the statement half is hoisted
+    into `RPendingPreSeq` and only `temp.Ok.0` is the expression's value.
+    `RParseStatement` is the **single** flush point, as a wrapper around the
+    old body rather than a line at each exit: the inner function has a dozen
+    exits, and the one that gets forgotten is the one that silently drops the
+    early return.
+
+    Guard rather than a silent mis-lowering: a `?` in a **`while` condition**
+    would hoist out of the loop and evaluate once, so it is refused. `if` is
+    not guarded — its condition genuinely is evaluated once, so the hoist is
+    correct there.
+
+    Narrowing: the two error types must be **identical**. Rust inserts
+    `From::from` on the Err arm, which needs trait dispatch this frontend does
+    not have; requiring a match errors loudly instead of converting wrongly.
+
+    **THE FIND: a monomorphized payload was sized with `TypeSize`, which
+    answers 8 for a record.** `symtab.inc` says so in its own comment on that
+    line — *caller must use RecSize() for full record size*. Option has had
+    this wrong since it was written and got away with it because
+    `Option<Square>` is exactly 8 bytes. Measured, not argued: at master's
+    rparser, `Option<Big>` (32 bytes) **SEGFAULTED**, and `Result<Pos, i64>`
+    read `Pos { file: 4, rank: 2 }` back as `4 0`. Neither failed at the point
+    of the mistake. Fixed for both through one `RPayloadSize`/`RPayloadAlign`
+    pair, and both cases are pinned in the test.
+
+    That is the second time this window that adding a feature has surfaced a
+    latent bug in the feature next to it, and both times the tell was the same:
+    a value that was plausible rather than absent.
+
+    `forwardlint` also earned its place immediately — it caught `RParseTryOp`
+    being called above its declaration **before** the push, which is the
+    failure that reached master this morning. FPC bootstrap re-verified
+    directly: 210839 lines, 0 errors.
+
+## Log
+- 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
+- 2026-08-29 — unit 2 landed: Option (and records generally) through fn
+  signatures and returns.
+- 2026-08-29 — unit 3 landed: expression scrutinees, `if let`, `unwrap_or`.
+- 2026-08-29 — rung 4 landed: fixed-array struct fields.
+- 2026-08-29 — rung 5 landed: `&`/`&mut` params alias; `&mut self` parses;
+  compound assignment on a field/index target.
+- 2026-08-29 — rung 6 landed: aggregate literals in return position (one
+  shared implementation with `let`), and implicit tail returns.
+- 2026-08-29 — rung 7 landed: nested/array struct-literal fields, aggregate
+  assignment rhs, methods on record fields, tail matches, Option accessors on
+  any lvalue. `test_rust_engine_shapes.rs` compiles and runs.
+- 2026-08-29 — merged `origin/master` into the topic branch at this rung
+  boundary (the cadence the coordinator asked for), and converted this
+  ticket's five Makefile assertions to `tools/expect_same.sh` so they are not
+  new instances of the defect Track B spent the day removing.
+- 2026-08-29 — merged `rust` into `master` at `b3fd1c760` (window opened by the
+  coordinator; merged, not rebased, so the eight commits keep their shas).
+- 2026-08-29 — rung 8 landed: fixed-array returns, `&[T; N]` params, and the
+  integer-literal suffix fix. `test_rust_array_return.rs` is the acceptance
+  shape; its knight-table oracle is hand-checked rather than recorded from a
+  run, because the bug it pins produced *plausible* numbers.
+- 2026-08-29 — rung 9 landed: `if` as an expression, statement and tail forms,
+  on the shared AN_TERNARY. `test_rust_if_expr.rs`.
+- 2026-08-29 — rung 10 landed: type aliases resolve, top-level const arrays
+  become startup-filled globals, and the array-literal parser is now shared
+  between `let` and the const prescan. `test_rust_module_items.rs`.
+- 2026-08-29 — urgent FPC-seed fix: `RExprRecId` forward-declared. Both
+  duplicate p80 tickets resolved.
+- 2026-08-29 - rung 11 landed: the stage-3 unity build. Module qualifiers are
+  stripped using the crate root's own `mod x;` declarations, so a `cat` of four
+  modules compiles and runs. `test/rust_unity/`.
+- 2026-08-29 - `devdocs/dev/rust-semantics-divergences.md` created.
+- 2026-08-29 - rung 12 landed: Result<T, E>, the `?` operator, and a fix for
+  the record-payload sizing bug it exposed in Option (segfault on master).
+  `test_rust_result.rs`.
+- 2026-08-29 - rung 13 landed: `println!` spells a bool `true`/`false`.
+  Found by an EDGE SWEEP over rung 12, not by a test — every value in
+  `Option`/`Result` was right and `is_none()` printed `TRUE`. Same shape as
+  the two bugs before it: a wrong value that looked like a result. Fixed in
+  the frontend (the spelling belongs to the language, not the writer) and as
+  a branch between two literal writes, because the obvious ternary over two
+  strings needs a managed-string runtime this frontend deliberately does not
+  emit. `test_rust_bool_print.rs`.
+- 2026-08-29 - rung 14 landed: `String`, `&str`, `format!`. Both Rust string
+  types map to ONE managed AnsiString, which is unobservable because the only
+  experiment that could tell them apart is the one rustc's borrow checker
+  refuses to compile. The load-bearing half was the DRIVER: `wantAnsiRuntime`
+  needs builtinheap AND builtin pulled with it, which is why last rung's
+  ternary failed, and it is gated on a token scan so the 18 earlier rust tests
+  keep their exact code size. Surfaced a third latent
+  plausible-wrong-value bug: Rust procs never called EmitManagedLocalsZeroInit,
+  so a managed local's first assignment released stale stack bytes -- the same
+  defect NilPy had, fixed by calling the same shared helper. Char literals now
+  carry `char` in the integer-suffix channel, so `println!("{}", 'x')` stops
+  printing 120. `test_rust_string.rs`.
+- 2026-08-29 - rung 15 landed in three pushed units: (1) enum values in
+  EXPRESSION position (`c == Color::White` was a parse error while the `let`
+  form worked) plus derived clone -- derive(Copy)/derive(PartialEq) turned out
+  to need NOTHING, which measuring found and reading the ticket would not;
+  (2) `{:?}` renders a struct field-wise and `{}` on one is refused -- it used
+  to print the FIRST FIELD, the fourth plausible wrong value this window;
+  (3) `impl Trait for Type`, which **had never run at all** (both parsers
+  compared a tkFor token against the string 'for' through GetTokenStr, which is
+  empty for a keyword), plus `impl fmt::Display` rerouted to a String method
+  with `write!` appending to it. `test_rust_derive.rs`, `test_rust_traits.rs`.
+
+### Rung 16 — `[Name { .. }; N]`: repeat arrays of struct literals (ArrayVec shape)
+
+The last frontend gap between the corpus chess engine and *valid* Rust. The
+engine writes
+
+```rust
+let mut mv: [Move; 256];        // uninitialised -- rustc rejects this
+```
+
+and hand-threads a count through `fn add(ms: &[Move], n: i64, ..) -> i64`. The
+ArrayVec shape that replaces it —
+
+```rust
+struct MoveList { data: [Move; 256], len: i64 }
+impl MoveList { fn new() -> MoveList { MoveList { data: [Move { .. }; 256], len: 0 } } }
+```
+
+— needed exactly **one** thing that did not exist: a repeat-array literal whose
+element is a struct literal. Everything else the shape wants was already there
+and the ladder's earlier note that "`list[i] = some_move` (record-value copy) is
+not yet wired" turned out to be **stale** — measured before touching anything:
+array-of-struct fields, `self.data[self.len].from = f` through `&mut self`,
+`fn get(&self, i) -> Move`, `fn fill(ml: &mut MoveList)` with `fill(&mut ml)`,
+and whole-record copies through array elements (`a[i] = a[j]`, `let m: Move =
+a[0]`) all worked already. `[0; 64]` worked; `[Move { .. }; 8]` said
+`undefined variable Move`.
+
+**The lowering is Rust's own definition.** `[e; N]` for a `Copy` type is
+"evaluate `e` once, copy it into the other N-1 slots", so that is what is
+emitted: `RParseAggregateIntoNode` fills slot 0, then N-1 `AN_ASSIGN` whole-record
+copies from slot 0. Note this is *stricter* than the scalar arm right next to it,
+which re-evaluates the element expression per slot (a deviation documented since
+it was written). The aggregate arm cannot do that even if it wanted to — an
+aggregate literal has no expression form to re-evaluate, which is the same
+"no AST node carries a whole struct value" constraint that shapes every other
+aggregate path in this frontend.
+
+Both positions, one shape each:
+
+- `RParseArrayLiteral` — the `let` form, annotated (`let a: [Move; 4] = ..`) and
+  inferred (`let b = [Move { .. }; 3]`). The count must be **scanned ahead**
+  before the element is parsed, because `AllocArray` needs the length up front
+  and in `[e; N]` the count comes *after* `e`.
+- `RStoreFieldValue` — the struct-field form, `data: [Move { .. }; 256]`, which
+  is the one `MoveList::new()` actually needs.
+
+Two new helpers, both deliberately narrow:
+
+- `RPeekStructLitCi` — a plain (non-enum) struct name followed by `{`. It is
+  **not** folded into `RPeekExprAggregateCi`, which runs at every
+  `RParsePrimary`: in statement position an open brace after an expression is a
+  *block* (`if x {`, `while x {`, `match x {`), so reading the pair as a literal
+  is only sound inside a bracket run, where the grammar has already ruled a
+  block out.
+- `RArrIndexNode(base, k, tk)` — `base[k]` with a literal index, sharing `base`
+  across every element node rather than rebuilding it. Safe for the same reason
+  `RParseAggregateIntoNode` already reuses its target: a target lvalue is a pure
+  address chain, so the AST is a DAG here.
+
+**Trap hit while writing it:** pxx nests `{ }` comments. Three comment blocks
+written with `[Name { .. }; N]` inside them closed early and produced
+`unterminated comment` pointing at the *first* of the three, ~200 lines above
+the real one. Prose in this file must not contain braces.
+
+Test `test/test_rust_movelist.rs` → `test_rust_movelist26`, oracle hand-computed.
+`tail -1 0` is the load-bearing line: it pins that the slots past `len` still
+hold the constructor's fill value, i.e. that the N-1 copies actually happened
+rather than the array being left as zeroed bss.
+
+**Gap found and NOT taken:** `ml.get(0).from` — a field access on a *call*
+result — is a parse error (`unexpected token near: ml get >>> from`). The test
+binds `let m: Move = ml.get(0);` first. That is a real Rust shape and worth a
+rung of its own; it is not on the path to the corpus rewrite.
+
+### Stage 4 — the corpus rewrite (the ladder's last item), DONE
+
+`test/test_rust_chess_engine.rs` now carries the ArrayVec shape end to end:
+`MoveList { data: [Move; 256], len: i64 }` with `new`/`push`/`get`/`len`,
+`gen_moves(.., ml: &mut MoveList)` returning nothing, and the three search loops
+reading slots back through `ml.get(i)`. `fn add(ms, n, ..) -> i64` and the
+hand-threaded count are gone. Output unchanged: `perft4 197281` /
+`bestmove a1a8`.
+
+Rung 16 was the only frontend work it needed. Everything else was measured
+working *first* — which is the point worth carrying forward: the ticket's
+standing note that record-value array copies were "not yet wired" was stale, and
+the fastest way to find that out was to write the six-line probe rather than
+believe the note.
+
+Cost: 0.252s vs 0.192s, the 255 constructor copies plus the ~6 KB by-value
+return, once per search node. Recorded in the corpus ticket so it is not
+re-measured later as a regression.
+
+Two pre-existing Track R bugs found while probing, filed under
+`devdocs/progress/experimental/` and deliberately NOT fixed here — both are
+worth a rung each and neither is on this ladder:
+
+- `bug-rust-slice-param-fn-erases-mains-record-array-element-type` — a fn with a
+  slice param and arity >= 2, declared before `main`, makes a `[Struct; N]`
+  local in `main` lose its element record type. Loud (parse error on `.field`)
+  for a struct element; **silent — a segfault —** when the slice's element type
+  is that same struct. Ticket carries the full 12-row probe matrix. The
+  mechanism is NOT diagnosed: two measured facts (it is specific to `main`, and
+  the fn must precede `main` in token order even though the prescan registers
+  every signature first) kill the obvious "the slice UClass shifts an index"
+  story, so the ticket says so instead of recording a plausible guess.
+- `bug-rust-whole-array-borrow-as-a-slice-argument-segfaults` — `f(&arr)`
+  compiles clean and crashes; only `let s = &arr[lo..hi]; f(s)` is wired. The
+  `let`-level lowering exists and the argument-position one does not, which is
+  the textbook double case `normalise-dont-special-case.md` describes.
+
+Also parked, found in the same session and noted in rung 16: `ml.get(0).from` —
+a field access on a *call* result — is a parse error.
+
+---
+
+## 2026-08-30 — PARKED in `unfinished/` (frank-rust)
+
+**Status: not blocked, not dead — the session moved to Track P and this lock was
+stale.** `working/` means an agent is actively in it, and for the last several
+hours that was untrue: the work in this checkout has been the Pascal generics
+parser (`pasparser_generic.inc`), filed and landed as Track P tickets. The
+coordinator was reading this lock as a Track R activity report and routing Rust
+questions here on the strength of it, which is exactly the cost a stale lock has.
+A lock records a claim, not an activity.
+
+**Where it got to:** the ladder is walked through **rung 16** and **stage 4 (the
+corpus rewrite) is DONE** — see the Log. Nothing here is half-applied: every rung
+landed as its own pushed unit, so there is no partial state in the tree and
+nothing to revert. What remains is further rungs of
+[[feature-rust-corpus-chess]], not the completion of a change already started.
+
+**What unparks it:** a user or coordinator request to resume Track R. Track R is
+X-tagged, so it is never ranked by `next`/`ready` and nothing will dispatch it on
+its own — that is by design, not neglect.
+
+**Three findings from this ticket are already filed separately and are NOT parked
+with it** (all under `devdocs/progress/experimental/`):
+`bug-rust-slice-param-fn-erases-mains-record-array-element-type`,
+`bug-rust-whole-array-borrow-as-a-slice-argument-segfaults`, and the parked
+`ml.get(0).from` parse error noted in rung 16. Each is worth a rung and none is
+on this ladder.

@@ -68,6 +68,105 @@ begin
       Result := i;
 end;
 
+{ ---- HOISTING a template's own nested types --------------------------------
+
+  `TDict<TKey,TVal>` declaring `type TPair = record K: TKey; V: TVal; end;` and
+  then using `specialize TEnum<TPair>` inside its own body. `TPair` names
+  something that exists only inside a specialization of TDict, so the group
+  cannot be minted concretely -- that half is fixed, and the group is correctly
+  deferred to the nested-prerequisite path. The prerequisite is then emitted at
+  the TOP LEVEL as `TEnum$TPair = specialize TEnum<TPair>`, where `TPair` does
+  not exist.
+
+  ROUTE, chosen after hand-compiling both desugarings rather than reasoning about
+  them. The obvious repair -- name it in qualified form,
+  `specialize TEnum<TDict$Integer$LongInt.TPair>` -- is IMPOSSIBLE, and not
+  because pxx cannot parse it (it can, since
+  bug-p-a-qualified-type-name-cannot-be-a-generic-argument). It needs three
+  declarations in a cycle: the alias needs the specialized class declared, that
+  class body names the TEnum prerequisite, and the prerequisite needs the alias.
+  FPC rejects the hand-written desugaring too, so there is no order to find.
+
+  So HOIST instead. The nested type is lifted to its own top-level declaration
+  with the substitution applied, and the declaration left behind in the class body
+  becomes an ALIAS to it:
+
+    TDict$I$L$TPair = record K: Integer; V: LongInt; end;
+    TEnum$TDict$I$L$TPair = specialize TEnum<TDict$I$L$TPair>;
+    TDict$I$L = class
+    type TPair = TDict$I$L$TPair;              <- alias, NOT a second copy
+      ...
+    end;
+
+  Each line names only what precedes it.
+
+  AN ALIAS AND NOT A COPY, which is the load-bearing half. Emitting a top-level
+  duplicate of the record and leaving the in-class declaration alone is easier and
+  is wrong: the two would be structurally identical but DISTINCT types, so `d.P`
+  would have one and the specialization's result the other, and assigning between
+  them fails. That is a silent-shaped defect, so the rewrite of the in-body
+  declaration is the part to get right.
+
+  ONLY WHAT IS ACTUALLY USED AS A GENERIC ARGUMENT IS HOISTED. Hoisting every
+  nested type of every specialization would rewrite programs that work today --
+  test_generic_nested_type_identity and test_generic_nested_type_field_name are
+  both nested-type programs with no generic-argument use in sight -- so the
+  trigger is the argument, not the declaration. A template with nested types and
+  no such use produces byte-identical output to before. }
+
+const MAX_HOISTED_NESTED = 32;
+var
+  { in-body name, e.g. TPair }
+  HoistName  : array[0..MAX_HOISTED_NESTED-1] of AnsiString;
+  { the top-level name it is lifted to, e.g. TDict$Integer$LongInt$TPair }
+  HoistFull  : array[0..MAX_HOISTED_NESTED-1] of AnsiString;
+  { ABSOLUTE TemplateTokens indices of the declaration RHS, both inclusive }
+  HoistStart : array[0..MAX_HOISTED_NESTED-1] of Integer;
+  HoistEnd   : array[0..MAX_HOISTED_NESTED-1] of Integer;
+  { set when some generic argument in the body actually named it }
+  HoistUsed  : array[0..MAX_HOISTED_NESTED-1] of Boolean;
+  HoistCount : Integer;
+  { False while the hoisted RHS is itself being substituted, so the replacement
+    hook below does not eat its own body }
+  HoistActive: Boolean;
+  { Every hoisted declaration ALREADY emitted, for the whole compilation.
+
+    Without this the fix does not terminate. Emitting the hoists takes the
+    DEFERRAL path, which re-emits `TE = specialize TDict<...>` behind them; the
+    re-parse runs CollectHoistCandidates again, NestedSpecArg marks the same
+    candidate used again, and it defers again -- redeclaring the hoisted type
+    every round until the deferral counter calls it a cycle. The re-parse must
+    still SEE the candidate as used, because the class body streaming needs it to
+    collapse the in-body RHS to an alias; what it must not do is emit it twice.
+    So "used" and "still to emit" are separate questions, and this answers the
+    second. }
+  HoistEmitted     : array[0..MAX_HOISTED_NESTED*8-1] of AnsiString;
+  HoistEmittedCount: Integer;
+
+{ Has this hoisted declaration already been written into the stream? }
+function HoistAlreadyEmitted(const nm: AnsiString): Boolean;
+var k: Integer;
+begin
+  HoistAlreadyEmitted := False;
+  for k := 0 to HoistEmittedCount - 1 do
+    if CaseEqual(HoistEmitted[k], nm) then HoistAlreadyEmitted := True;
+end;
+
+{ The hoisted name for an in-body nested type, or '' when the name is not one.
+  Marks it used, which is what makes it hoisted at all. }
+function HoistedNameFor(const nm: AnsiString): AnsiString;
+var k: Integer;
+begin
+  HoistedNameFor := '';
+  for k := 0 to HoistCount - 1 do
+    if CaseEqual(HoistName[k], nm) then
+    begin
+      HoistUsed[k] := True;
+      HoistedNameFor := HoistFull[k];
+      Exit;
+    end;
+end;
+
 { Does TemplateTokens[ts + i] open a `specialize NAME<...>` group naming a
   template we know? Returns the offset of the closing `>`, or -1. A binder
   (`X = specialize ...`, a nested type declaration) is ParseSpecialization's
@@ -106,7 +205,7 @@ end;
   force (SpecSub*): a reference to the enclosing template's parameter becomes
   the concrete type it is being specialized with. }
 procedure NestedSpecArg(ts, at: Integer; var t: TRawToken);
-var k: Integer; nm: AnsiString;
+var k: Integer; nm, hn: AnsiString;
 begin
   t.Kind := TemplateTokens[ts + at].Kind;
   t.IVal := TemplateTokens[ts + at].IVal;
@@ -121,8 +220,19 @@ begin
       t.Kind := SpecSubKinds[k];
       t.SOffset := TokCharsAppend(SpecSubValues[k]);
       t.SLen := Length(SpecSubValues[k]);
-      Break;
+      Exit;
     end;
+  { ...and a name the template declares in its OWN body becomes the top-level
+    name that body's declaration is hoisted to. Second mapping, same reason as
+    the first: the argument means something only inside a specialization, and a
+    prerequisite is emitted OUTSIDE one. See the hoisting note. }
+  hn := HoistedNameFor(nm);
+  if hn <> '' then
+  begin
+    t.Kind := tkIdent;
+    t.SOffset := TokCharsAppend(hn);
+    t.SLen := Length(hn);
+  end;
 end;
 
 { The alias name the group resolves to — the SAME minting DelphiRewriteGenericUses
@@ -246,14 +356,22 @@ begin
   SpecSubNamePosition := False;
 end;
 
-procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
+{ The SUBSTITUTION half of SpecializeStream, ending at a filled
+  SpecializeTokens[0..Result-1] and touching Tokens[] not at all.
+
+  Split out because a hoisted nested type needs the same substituted token run
+  put somewhere ELSE -- into a prerequisite declaration emitted ahead of the
+  specialization, rather than spliced at the cursor. The buffer was always
+  there; only the splice was welded to it.
+  bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument }
+function SpecializeToBuffer(tokStart, count: Integer; const specName: AnsiString): Integer;
 { Substitutions come from the SpecSub* globals (param name -> concrete
   name/kind), set by the caller — multi-param generics replace every type
   parameter in one pass. }
 var
   i, j, k: Integer;
   subCount: Integer;
-  gEnd: Integer;
+  gEnd, hoistHit: Integer;
   s, aliasNm: AnsiString;
 begin
   { PASS 1 — which type parameters does this template also declare as a name?
@@ -279,6 +397,31 @@ begin
       exists (it defers the whole declaration otherwise), so an unresolved group
       here means a name that is not a type at all: leave it alone and let the
       ordinary error reporting name it. }
+    { A hoisted nested type's RHS collapses to the single identifier of the
+      top-level declaration it was lifted to, turning `TPair = record ... end`
+      into `TPair = TDict$Integer$LongInt$TPair`. An ALIAS, so the in-class name
+      and the hoisted name are ONE type -- a second copy would be structurally
+      identical and distinct, and assigning between them would fail. Guarded by
+      HoistActive so that substituting the hoisted RHS itself does not collapse
+      it into a reference to the declaration being written. }
+    if HoistActive then
+    begin
+      hoistHit := -1;
+      for k := 0 to HoistCount - 1 do
+        if HoistUsed[k] and (tokStart + i = HoistStart[k]) then hoistHit := k;
+      if hoistHit >= 0 then
+      begin
+        SpecializeTokens[subCount].Kind := tkIdent;
+        SpecializeTokens[subCount].IVal := 0;
+        SpecializeTokens[subCount].Line := TemplateTokens[tokStart + i].Line;
+        SpecializeTokens[subCount].SOffset := TokCharsAppend(HoistFull[hoistHit]);
+        SpecializeTokens[subCount].SLen := Length(HoistFull[hoistHit]);
+        Inc(subCount);
+        i := HoistEnd[hoistHit] - tokStart + 1;
+        Continue;
+      end;
+    end;
+
     gEnd := NestedSpecGroup(tokStart, i, count);
     if gEnd >= 0 then
     begin
@@ -356,7 +499,14 @@ begin
     Inc(subCount);
     Inc(i);
   end;
+  SpecializeToBuffer := subCount;
+end;
 
+{ Substitute one template range and SPLICE it at the parse cursor. }
+procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
+var i, subCount: Integer;
+begin
+  subCount := SpecializeToBuffer(tokStart, count, specName);
   EnsureTokCapacity(TokCount + subCount + 1);
   i := TokCount - 1;
   while i >= TokPos do
@@ -428,6 +578,318 @@ end;
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body in pasparser_lval.inc, which also CALLS it above the body (the type-helper type-name receiver). pxx pre-scans and does not need this; FPC does. }
+function QualArgAliasName(const path: AnsiString): AnsiString; forward;
+procedure EmitQualAliasDecl(const aliasNm, path: AnsiString); forward;   { both bodies live below their first CALL (the qualified-type-name-as-generic-argument arms). pxx resolves across the unit; FPC resolves in source order and the seed build fails without these. }
+
+{ Every name whose meaning DEPENDS ON A SPECIALIZATION, read straight out of
+  Tokens[] rather than out of Templates[]. Two kinds, one concept:
+
+    - a template's PARAMETER names          -- `TDict<TKey, TValue>`
+    - the type names its BODY declares      -- `TDict<..> = class type TPair = ..`
+
+  Both are meaningless until the template that owns them is specialized, and a
+  generic argument spelled with either must go down the deferred / nested-
+  prerequisite path instead of being minted into a concrete alias. They are
+  collected by ONE procedure on purpose: the parameter case was fixed first and
+  the nested-type case walked straight through it, which is the two-mechanisms-
+  for-one-concept smell from root-cause-over-microfix.md.
+  bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument
+
+  Why it cannot come from Templates[]: the sweep for template ti runs the moment
+  ti is DECLARED, and a use of ti inside a LATER template's body carries that
+  later template's parameters and nested types. `TCmp<TKey>` written in `TDict<TKey, TValue>`'s
+  body is swept while TDict does not exist yet, so TKey is nobody's registered
+  parameter, the group reads as concrete, and `TCmp$TKey` is minted -- a class
+  whose streamed body says `Val: TKey` and reports `unknown type: TKey` from
+  TCmp's own line, which the user did not ask to be specialized.
+  bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type
+
+  The enabling fact is the one wall 6 used: LexAll fills Tokens[] COMPLETELY
+  before the parser starts, so the later template's header is already there as
+  tokens. It is unparsed, not unavailable.
+
+  A header is `Name < ... > =` -- the `=` is what separates it from a USE, which
+  is followed by `;`, `)`, `.` or a type opener, never by `=`. (`a < b >= c`
+  lexes `>=` as tkGe, so a comparison cannot spell this shape.) Constraints are
+  skipped: in `<T: TObject; U>` only T and U are parameter names.
+
+  A REJECTED alternative, recorded because it looks like the tidier answer: flip
+  the test to a whitelist -- mint only what is CONCRETE at sweep time (a builtin,
+  or a type already declared). It is wrong for the reason this whole ticket is
+  about. "Concrete" and "already parsed" are not the same property, and a
+  whitelist conflates them: a perfectly concrete top-level type declared AFTER
+  the template would fail the test and be deferred, with nothing to re-trigger
+  the sweep. That is the parse-order dependence this collector exists to remove,
+  reintroduced from the other side.
+
+  Deliberately UNSCOPED -- it is every such name in the file, not just the ones
+  in scope at the use. That over-approximates toward "defer to the nested
+  path", which yields an honest error rather than a wrong class, and is the
+  opposite of the direction wall 6's ticket warns about
+  (`do not weaken the prerequisite scan`). The cost is a real type that happens
+  to share a name with somebody's type parameter; the benefit is that the check
+  does not depend on parse order, which is the whole defect. }
+const MAX_SPEC_BOUND_NAMES = 512;
+var
+  SpecBoundNameOff : array[0..MAX_SPEC_BOUND_NAMES-1] of Integer;
+  SpecBoundNameLen : array[0..MAX_SPEC_BOUND_NAMES-1] of Integer;
+  SpecBoundNameCount : Integer;
+
+{ Harvest the type names declared INSIDE one template's body, and report where
+  that body ends so the caller can resume past it. `afterEq` is the token just
+  after the header's `=`.
+
+  Body extent by depth, not by a second parser: `class` / `record` / `object` /
+  `interface` / `case` open, `end` closes. `class` opens only when it is not
+  `class function|procedure|var|operator|of` -- the modifier spelling, which is
+  everywhere in a real class body. A header with no body at all (`= class;` or
+  an alias `= TBar<T>;`) simply runs to its `;`.
+
+  Inside the extent, a name is declared when a `type` section is open and an
+  identifier is followed by `=`. The section state is what keeps
+  `procedure P(a: Integer = 0)` from registering `Integer` as a nested type --
+  the `procedure` closes the section before the default value is reached, and
+  registering `Integer` would have deferred every `TBox<Integer>` in the file.
+  `public type PT = ^T;` works because the visibility keyword precedes `type`.
+
+  Not shared with GenericMethodBodyEnd: that one matches begin/case/end over a
+  STATEMENT body, which is a different grammar with a different opener set. }
+procedure CollectNestedTypeNames(afterEq: Integer; var resumeAt: Integer);
+var j, depth, k, pdepth: Integer;
+    inTypeSec, isModifier: Boolean;
+begin
+  j := afterEq;
+  { `packed record`, `bitpacked record` }
+  while (j < TokCount) and (Tokens[j].Kind = tkIdent) and
+        (CaseEqual(GetTokenStr(j), 'packed') or CaseEqual(GetTokenStr(j), 'bitpacked')) do
+    Inc(j);
+  if j >= TokCount then begin resumeAt := TokCount; Exit; end;
+
+  if (Tokens[j].Kind = tkClass) or (Tokens[j].Kind = tkRecord) or
+     ((Tokens[j].Kind = tkIdent) and
+      (CaseEqual(GetTokenStr(j), 'interface') or CaseEqual(GetTokenStr(j), 'object'))) then
+  begin
+    depth := 0;
+    inTypeSec := False;
+    while j < TokCount do
+    begin
+      if Tokens[j].Kind = tkEnd then
+      begin
+        Dec(depth);
+        if depth <= 0 then begin resumeAt := j; Exit; end;
+      end
+      else if (Tokens[j].Kind = tkRecord) or (Tokens[j].Kind = tkCase) then
+        Inc(depth)
+      else if (Tokens[j].Kind = tkIdent) and
+              (CaseEqual(GetTokenStr(j), 'interface') or CaseEqual(GetTokenStr(j), 'object')) then
+        Inc(depth)
+      else if Tokens[j].Kind = tkClass then
+      begin
+        isModifier := (j + 1 < TokCount) and
+                      ((Tokens[j + 1].Kind = tkFunction) or (Tokens[j + 1].Kind = tkProcedure) or
+                       (Tokens[j + 1].Kind = tkVar) or (Tokens[j + 1].Kind = tkConst) or
+                       (Tokens[j + 1].Kind = tkOf) or
+                       ((Tokens[j + 1].Kind = tkIdent) and
+                        (CaseEqual(GetTokenStr(j + 1), 'operator') or
+                         CaseEqual(GetTokenStr(j + 1), 'constructor') or
+                         CaseEqual(GetTokenStr(j + 1), 'destructor'))));
+        if not isModifier then
+        begin
+          { A BODILESS class closes immediately. All four spellings count:
+            `= class;`, `= class(TBase);`, `= class abstract(TBase);`,
+            `= class sealed(TBase);`. Only the FIRST was detected -- the test
+            read the single token after `class` and asked if it was `;`, while
+            the comment above it claimed the parent form worked too. So
+            rtl-generics' `TCustomPointersEnumerator<T, PT> = class
+            abstract(TEnumerator<PT>);` left depth at 1, and the scan ran on
+            until some LATER declaration's `end`: one jump swallowed 11,312
+            tokens of generics.collections, and with them every type parameter
+            those declarations bind. Nothing reported it -- the names simply
+            were not there, and a specialization naming one then took the alias
+            path and minted an alias into the TEMPLATE's unit, where the
+            parameter does not exist.
+            bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section }
+          k := j + 1;
+          while (k < TokCount) and (Tokens[k].Kind = tkIdent) and
+                (CaseEqual(GetTokenStr(k), 'abstract') or
+                 CaseEqual(GetTokenStr(k), 'sealed')) do Inc(k);
+          if (k < TokCount) and (Tokens[k].Kind = tkLParen) then
+          begin
+            pdepth := 0;
+            while k < TokCount do
+            begin
+              if Tokens[k].Kind = tkLParen then Inc(pdepth)
+              else if Tokens[k].Kind = tkRParen then
+              begin
+                Dec(pdepth);
+                if pdepth <= 0 then begin Inc(k); Break; end;
+              end;
+              Inc(k);
+            end;
+          end;
+          if (k < TokCount) and (Tokens[k].Kind = tkSemicolon) then
+          begin
+            { Bodiless: it opens NO body, so it must not touch depth -- at ANY
+              nesting level. Handling only the outermost one was the second arm
+              of this same bug: rtl-generics nests
+              `TEnumerator = class(TCustomListEnumerator<T>);` inside TList's
+              `type` section, which inflated depth by one and made TList's own
+              `end` close the wrong level. }
+            if depth = 0 then begin resumeAt := k; Exit; end;
+            j := k;
+          end
+          else
+            Inc(depth);
+        end;
+      end
+      else if Tokens[j].Kind = tkType then inTypeSec := True
+      else if (Tokens[j].Kind = tkVar) or (Tokens[j].Kind = tkConst) or
+              (Tokens[j].Kind = tkProcedure) or (Tokens[j].Kind = tkFunction) or
+              (Tokens[j].Kind = tkProperty) then inTypeSec := False
+      else if (Tokens[j].Kind = tkIdent) and
+              (CaseEqual(GetTokenStr(j), 'constructor') or
+               CaseEqual(GetTokenStr(j), 'destructor')) then inTypeSec := False
+      else if inTypeSec and (Tokens[j].Kind = tkIdent) and
+              (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkEq) then
+      begin
+        if SpecBoundNameCount < MAX_SPEC_BOUND_NAMES then
+        begin
+          SpecBoundNameOff[SpecBoundNameCount] := Tokens[j].SOffset;
+          SpecBoundNameLen[SpecBoundNameCount] := Tokens[j].SLen;
+          Inc(SpecBoundNameCount);
+        end;
+      end;
+      Inc(j);
+    end;
+    { Ran off the end without depth returning to 0. resumeAt := TokCount makes
+      the CALLER's scan jump to the end of the stream, silently abandoning every
+      declaration after this one. }
+    if PxxDbgEnabled('p.specbound') then
+      writeln('PXXDBG p.specbound RUNAWAY from tok=', afterEq,
+              ' depth=', depth, ' -- rest of stream (', TokCount - afterEq,
+              ' tokens) NOT scanned');
+    resumeAt := TokCount;
+  end
+  else
+  begin
+    { an alias header -- no body, nothing nested to declare }
+    while (j < TokCount) and (Tokens[j].Kind <> tkSemicolon) do Inc(j);
+    resumeAt := j;
+  end;
+end;
+
+procedure CollectSpecializationBoundNamesFromTokens;
+var i, j, savedCount: Integer;
+    ok, wantName: Boolean;
+begin
+  SpecBoundNameCount := 0;
+  i := 0;
+  while i + 2 < TokCount do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (Tokens[i + 1].Kind = tkLt) then
+    begin
+      { walk the group, collecting the names that start each entry. Collected
+        speculatively and rolled back below if the group turns out to be a USE
+        -- which is why savedCount exists rather than a two-pass scan. }
+      savedCount := SpecBoundNameCount;
+      j := i + 2;
+      ok := True;
+      wantName := True;
+      while ok and (j < TokCount) and (Tokens[j].Kind <> tkGt) do
+      begin
+        if Tokens[j].Kind = tkIdent then
+        begin
+          if wantName then
+          begin
+            if SpecBoundNameCount < MAX_SPEC_BOUND_NAMES then
+            begin
+              SpecBoundNameOff[SpecBoundNameCount] := Tokens[j].SOffset;
+              SpecBoundNameLen[SpecBoundNameCount] := Tokens[j].SLen;
+              Inc(SpecBoundNameCount);
+            end;
+            wantName := False;
+          end;
+          Inc(j);
+        end
+        else if Tokens[j].Kind = tkComma then begin wantName := True; Inc(j); end
+        else if Tokens[j].Kind = tkSemicolon then begin wantName := True; Inc(j); end
+        else if Tokens[j].Kind = tkColon then
+        begin
+          { a constraint list runs to the next `;` or `>` and names no parameter }
+          Inc(j);
+          while (j < TokCount) and (Tokens[j].Kind <> tkSemicolon) and
+                (Tokens[j].Kind <> tkGt) do Inc(j);
+        end
+        else ok := False;
+      end;
+      { A HEADER is followed by `=` -- but so are several USES, so the `=` alone
+        is not enough and treating it as enough is
+        regression-test-pascal-conformance-shard0-6-2:
+
+            const P: ^specialize TTest<LongInt> = Nil;
+
+        is `Ident < Ident > =`, so `LongInt` was harvested as though it were a
+        template PARAMETER name. Every later specialization spelled with that
+        name then looked like a param form and was left un-rewritten. It bit
+        only the type names that lex as tkIdent -- longint, cardinal, int64,
+        qword, smallint, word, shortint and every user alias -- because the walk
+        below only records tkIdent. Exactly ten spellings get a dedicated kind
+        in lexer.inc (boolean byte char double extended integer longword real
+        single string -- ten spellings over nine kinds, `byte` shares
+        tkInteger_T), and those can never be harvested. That is why the failure
+        looked like it cared which type it was: the failing set and the passing
+        set are two disjoint lists of NAMES.
+
+        A declaration's left-hand side can only follow the `type` keyword, the
+        `;` that ended the previous declaration, or -- in objfpc mode -- the
+        `generic` keyword that introduces it. Test for those, rather than trying
+        to enumerate the ways a use can be spelled.
+
+        THE `generic` ARM IS NOT OPTIONAL AND ITS ABSENCE WAS A REGRESSION.
+        The first version of this whitelist listed only `type` and `;`, in a
+        comment that asserted those were the only two. That is true of the
+        Delphi surface (`TDict<TKey, TValue> = class`) and false of objfpc
+        (`generic TDict<TKey, TValue> = class`), where the name is preceded by
+        `generic` and nothing else. Every objfpc header therefore failed the
+        test, its parameters were never harvested, and a use of one of them as
+        an argument -- `C: specialize TCmp<TKey>` -- was minted as a CONCRETE
+        specialization instead of being deferred, so the template's own `Val: T`
+        came back as `unknown type: TKey`.
+        regression-test-core-test-generic-arg-is-enclosing-template-param-objfpc.
+        `generic` carries no dedicated token kind; it lexes as tkIdent. }
+      if ok and (j + 1 < TokCount) and (Tokens[j].Kind = tkGt) and
+         (Tokens[j + 1].Kind = tkEq) and
+         ((i = 0) or (Tokens[i-1].Kind = tkType) or
+          (Tokens[i-1].Kind = tkSemicolon) or
+          ((Tokens[i-1].Kind = tkIdent) and
+           CaseEqual(GetTokenStr(i-1), 'generic'))) then
+      begin
+        { a header -- keep the parameter names, then harvest the names its BODY
+          declares, and resume past the whole declaration }
+        savedCount := i;
+        CollectNestedTypeNames(j + 2, i);
+        if PxxDbgEnabled('p.specbound') and (i > savedCount + 1) then
+          writeln('PXXDBG p.specbound JUMP ', savedCount, ' -> ', i,
+                  ' (skipped ', i - savedCount, ' tokens) header=', GetTokenStr(savedCount));
+      end
+      else
+        SpecBoundNameCount := savedCount;   { a use, or malformed -- forget them }
+    end;
+    Inc(i);
+  end;
+  { The cap is silent: past MAX_SPEC_BOUND_NAMES a real type-parameter name is
+    simply not recorded, and the only symptom is a specialization later taking
+    the alias path instead of the deferred one -- i.e. an alias minted into the
+    TEMPLATE's unit naming a parameter that does not exist there. Report the
+    occupancy so a near-miss is visible before it becomes a wall. }
+  if PxxDbgEnabled('p.specbound') then
+  begin
+    writeln('PXXDBG p.specbound names=', SpecBoundNameCount,
+            ' cap=', MAX_SPEC_BOUND_NAMES,
+            ' overflow=', Ord(SpecBoundNameCount >= MAX_SPEC_BOUND_NAMES),
+            ' tokcount=', TokCount);
+  end;
+end;
 
 { mode-Delphi generics desugar. After template ti (`TFoo<T> = class...`) is
   captured, rewrite every later use of the Delphi surface into the objfpc
@@ -460,7 +922,16 @@ var
   ins: array[0..MAX_TEMPLATE_PARAMS*2+8] of TRawToken;
   ok, isParamForm, specB: Boolean;
   si: Integer;
+  { qualified arguments minted by THIS rewrite, emitted at insertAt below.
+    Local, not the QNeed* set ParseSpecialization uses: this runs at rewrite
+    time and that runs later, and sharing one pending list would let whichever
+    ran second clear the other's. }
+  dgQName: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
+  dgQPath: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
+  dgQCount: Integer;
+  qPath, qMint: AnsiString;
 begin
+  dgQCount := 0;
   tname := Templates[ti].Name;
   np := TemplateNParams[ti];
   seenCnt := 0;
@@ -505,7 +976,39 @@ begin
         if (j < TokCount) and (na < MAX_TEMPLATE_PARAMS) and
            IsConcreteTypeArgKind(Tokens[j].Kind) then
         begin
-          argTok[na] := Tokens[j]; Inc(na); Inc(j);
+          { A QUALIFIED argument -- `TBox<TOuter.TPair>` -- is normalised to the
+            same minted single identifier the objfpc arm uses, and its alias
+            declaration is emitted at insertAt below, ahead of the tuple
+            declarations that name it. Without this the group simply failed to
+            match, the rewrite left it alone, and the parser reported `unknown
+            type: TBox`.
+            bug-p-a-qualified-type-name-cannot-be-a-generic-argument }
+          if (Tokens[j].Kind = tkIdent) and (j + 1 < TokCount) and
+             (Tokens[j + 1].Kind = tkDot) then
+          begin
+            qPath := GetTokenStr(j);
+            while (j + 2 < TokCount) and (Tokens[j + 1].Kind = tkDot) and
+                  (Tokens[j + 2].Kind = tkIdent) do
+            begin
+              qPath := qPath + '.' + GetTokenStr(j + 2);
+              j := j + 2;
+            end;
+            qMint := QualArgAliasName(qPath);
+            argTok[na].Kind := tkIdent;
+            argTok[na].IVal := 0;
+            argTok[na].Line := Tokens[j].Line;
+            argTok[na].SOffset := TokCharsAppend(qMint);
+            argTok[na].SLen := Length(qMint);
+            if dgQCount < MAX_DGEN_TUPLES then
+            begin
+              dgQName[dgQCount] := qMint;
+              dgQPath[dgQCount] := qPath;
+              Inc(dgQCount);
+            end;
+          end
+          else
+            argTok[na] := Tokens[j];
+          Inc(na); Inc(j);
           if (j < TokCount) and (Tokens[j].Kind = tkComma) then Inc(j)
           else Break;
         end
@@ -513,6 +1016,29 @@ begin
       end;
       if ok and ((j >= TokCount) or (Tokens[j].Kind <> tkGt)) then ok := False;
       if ok and (na <> np) then ok := False;
+      { A DECLARATION, not a use: `TFoo<T> = record ...`. `j` is the closing
+        `>`, so a following `=` means this group is the LEFT-HAND SIDE of a type
+        declaration that happens to reuse a name already registered as a
+        template -- a unit shadowing a generic it imported (legal, and FPC
+        compiles it), or a redeclaration in one unit. Rewriting it injects
+        `specialize` in FRONT of a declaration and the parse dies with
+        `Expected: =, but got: <name>`.
+        The preceding token is a WHITELIST, not a blacklist, and that is the
+        whole point: several genuine USES are also followed by `=`. A typed
+        constant `x: TFoo<Integer> = (V: 1)` is one; `const P: ^specialize
+        TTest<LongInt> = Nil` is another, and it is preceded by `specialize`,
+        not by `:`. An earlier version of this guard excluded only `:` and so
+        suppressed the rewrite for the `^specialize` spelling, widening
+        regression-test-pascal-conformance-shard0-6-2 from the handful of type
+        names that lex as tkIdent to EVERY type name. A declaration's left-hand
+        side can only follow the `type` keyword or the `;` that ended the
+        previous declaration, so test for those instead of trying to enumerate
+        the ways a use can be spelled.
+        bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use }
+      if ok and ((j + 1) < TokCount) and (Tokens[j+1].Kind = tkEq) and
+         (i > 0) and
+         ((Tokens[i-1].Kind = tkType) or (Tokens[i-1].Kind = tkSemicolon)) then
+        ok := False;
       if ok then
       begin
         { A `<...>` group can be resolved EAGERLY into an alias only when every
@@ -532,6 +1058,16 @@ begin
             if (argTok[k].Kind = tkIdent) and
                CaseEqual(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen),
                          TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + kk]) then
+              isParamForm := True;
+        { ...and any OTHER template's parameter name, read from the token stream
+          rather than from Templates[] -- the enclosing template that gives the
+          name its meaning is usually not parsed yet when this runs. See
+          CollectSpecializationBoundNamesFromTokens. }
+        for k := 0 to na - 1 do
+          for kk := 0 to SpecBoundNameCount - 1 do
+            if (argTok[k].Kind = tkIdent) and
+               CaseEqual(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen),
+                         GetTokenStrFromRaw(SpecBoundNameOff[kk], SpecBoundNameLen[kk])) then
               isParamForm := True;
         if DebugTrace then writeln('DGEN match at ', i, ' na=', na, ' paramform=', isParamForm);
         if isParamForm then
@@ -583,6 +1119,13 @@ begin
             begin
               ins[0].Kind := tkIdent; ins[0].IVal := 0; ins[0].Line := Tokens[i].Line;
               ins[0].SOffset := TokCharsAppend('specialize'); ins[0].SLen := 10;
+              { The rewrite's only observable is the token stream it edits, so a
+                test that merely compiles cannot tell a correct rewrite from one
+                that injects in the wrong place. Print every in-place injection.
+                bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use }
+              if PxxDbgEnabled('p.dgen') then
+                writeln('PXXDBG p.dgen inject specialize before ', tname,
+                        ' tok=', i, ' line=', Tokens[i].Line);
               InsertTokens(i, ins, 1);
               i := j + 1;   { the loop's Inc(i) lands past the inserted group }
             end;
@@ -623,6 +1166,19 @@ begin
     Inc(i);
   end;
 
+  { qualified-argument aliases FIRST -- a tuple declaration below names one }
+  if dgQCount > 0 then
+  begin
+    NSpecInsCnt := 0;
+    for k := 0 to dgQCount - 1 do
+      EmitQualAliasDecl(dgQName[k], dgQPath[k]);
+    if NSpecInsCnt > 0 then
+    begin
+      InsertTokens(insertAt, NSpecIns, NSpecInsCnt);
+      insertAt := insertAt + NSpecInsCnt;
+    end;
+  end;
+
   { one alias declaration per distinct tuple, inserted in first-seen order }
   for si := 0 to seenCnt - 1 do
   begin
@@ -657,6 +1213,73 @@ begin
   end;
 end;
 
+{ Desugar Delphi-surface uses of templates that came in through a USES clause.
+  Called once per uses clause, immediately after it is consumed.
+
+  Tokens[] is ONE array shared by every unit, and the main program is lexed
+  FIRST -- units are appended after it. So a template declared in a used unit
+  sits at a token index ABOVE every use of it in the program, and the sweep
+  ParseGenericTemplateNamed runs (anchored at the template's own declaration,
+  rewriting only what follows) can never reach those uses. The name then falls
+  through to ParseTypeKind's recovery arm as `unknown type: TOne`.
+  bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
+
+  The obvious repair -- start that sweep at 0 -- is wrong, and measurably so:
+  every enclosing ParseUsesUnitBody frame has a savedTokPos into a region lexed
+  EARLIER, and neither InsertTokens nor RemoveTokens adjusts it. A unit that
+  itself uses another unit then resumes several tokens off (measured: `program
+  nest / uses ua / ua uses ub` reported "unexpected token in a unit interface
+  section" from ua, three tokens past where it stopped).
+
+  So sweep from HERE instead. Every edit then lands strictly above the live
+  cursor and above every saved one, because a use of an imported template cannot
+  precede the `uses` that imports it. The same procedure does the work with the
+  same minting -- this is a second CALL SITE, not a second implementation.
+
+  The aliases land in the file that uses them, which is also where they belong:
+  DelphiRewriteGenericUses splices bare `X = specialize T<Args>;` and relies on
+  an open type section, and after a uses clause there is none -- hence the `type`
+  token in front, added only when a round actually emitted something. }
+procedure DesugarImportedDelphiGenericUses;
+var
+  at, rounds, before, atBefore, t, resume: Integer;
+  ins: array[0..0] of TRawToken;
+begin
+  if (TemplateCount = 0) or (CurTok.Kind = tkEOF) or (TokPos < 1) then Exit;
+  { CurTok holds Tokens[TokPos-1] -- step back so the splice lands in FRONT of
+    the token already read, and the Next at the end reads the first spliced one.
+    Same idiom as SpecializeInlineGenericFuncUses. }
+  Dec(TokPos);
+  at := TokPos;
+  resume := TokPos;
+  rounds := 0;
+  repeat
+    before := TokCount;
+    atBefore := at;
+    CollectSpecializationBoundNamesFromTokens;
+    for t := 0 to TemplateCount - 1 do
+      DelphiRewriteGenericUses(t, at, TemplateIsDelphi[t]);
+    Inc(rounds);
+    if rounds > 16 then
+      Error('generic specialization nested deeper than 16 levels (or a rewrite loop)');
+  { An unchanged TokCount is NOT "nothing happened": a round both inserts alias
+    declarations and removes the `<Args>` groups it rewrote, and the two cancel
+    exactly when one tuple is used twice. `at` advances only on an alias, so the
+    pair of them is what "this round was idle" actually means. }
+  until (TokCount = before) and (at = atBefore);
+  { `at` advances by exactly the alias tokens each round emits, so `at > resume`
+    is "something was declared" -- TokCount is NOT, because the same round also
+    REMOVES each rewritten `<Args>` group and the two cancel: one tuple used
+    twice removes 8 tokens and inserts 8, and the type section went missing. }
+  if at > resume then
+  begin
+    ins[0].Kind := tkType; ins[0].IVal := 0; ins[0].Line := Tokens[TokPos].Line;
+    ins[0].SOffset := 0; ins[0].SLen := 0;
+    InsertTokens(TokPos, ins, 1);
+  end;
+  Next;
+end;
+
 procedure ParseGenericTemplate;
 begin
   Next; { consume 'generic' }
@@ -668,7 +1291,7 @@ procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm
 var
   templateName, nextStr: AnsiString;
   depth, startTok, cur, finalCur, np, gi, scan: Integer;
-  dgenAt, dgenRounds, dgenBefore, dgenT: Integer;   { the nested-specialize fixed point }
+  dgenAt, dgenRounds, dgenBefore, dgenAtBefore, dgenT: Integer;   { the nested-specialize fixed point }
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   isOpener, doneParams, bodyless: Boolean;
 begin
@@ -709,8 +1332,9 @@ begin
     (class/record/array/procvar branches) parses it. }
   if not ((CurTok.Kind in [tkClass, tkRecord, tkPacked, tkArray,
                             tkProcedure, tkFunction]) or
-          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'interface'))) then
-    Error('generic templates must be class, record, interface, array or procedure declarations');
+          ((CurTok.Kind = tkIdent) and
+           (CaseEqual(CurTok.SVal, 'interface') or CaseEqual(CurTok.SVal, 'object')))) then
+    Error('generic templates must be class, record, object, interface, array or procedure declarations');
 
   startTok := TokPos - 1;
   if CurTok.Kind = tkPacked then
@@ -774,6 +1398,22 @@ begin
     else
     begin
       scan := cur;
+      { `class abstract;` / `class sealed(TBase);` -- the Delphi modifiers sit
+        between `class` and the heritage list or the `;`. Unskipped, the
+        bodyless test below looks at `abstract` rather than at the `;`, decides
+        the declaration HAS a body, and hands it to the depth loop -- which has
+        no `end` to count down to and swallows every following declaration
+        until it finds one. That is what walled rtl-generics at
+        `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);`
+        and reported the damage 24 lines EARLIER, on a line that was fine.
+        Needs all three of generic + modifier + bodyless: the non-generic path
+        consumes the modifiers itself (pasparser_decl.inc ~4449) and a real
+        body ends at its own `end`.
+        This is the sibling of the same omission in CollectNestedTypeNames
+        above -- one decision, two hand-rolled copies. }
+      while (scan < TokCount) and (Tokens[scan].Kind = tkIdent) and
+            (CaseEqual(GetTokenStr(scan), 'abstract') or
+             CaseEqual(GetTokenStr(scan), 'sealed')) do Inc(scan);
       if (scan < TokCount) and (Tokens[scan].Kind = tkLParen) then
       begin
         depth := 0;
@@ -887,8 +1527,10 @@ begin
     `unknown type: specialize` -- var, local, field, parameter and function
     result alike, all five of which FPC accepts.
 
-    A round that rewrites nothing inserts no alias declaration, so an unchanged
-    TokCount is exactly "nothing left to collapse". The cap is a runaway guard,
+    A round is idle when it neither changed TokCount nor advanced dgenAt -- both,
+    because an alias insertion and the removal of the group it replaced cancel
+    exactly when one tuple is used twice, and TokCount alone then reads "idle" on
+    a round that did work. The cap is a runaway guard,
     not a real limit: depth is the nesting depth of the source expression.
     bug-a-a-nested-inline-specialize-is-refused-outside-a-type-section }
   dgenAt := finalCur;
@@ -901,12 +1543,17 @@ begin
       own sweep ran before TPair existed, so it could not have collapsed the
       inner group then. Re-sweeping the earlier templates once TPair's round has
       turned the inner group into a plain ident is what finishes the outer one. }
+    dgenAtBefore := dgenAt;
+    CollectSpecializationBoundNamesFromTokens;
     for dgenT := 0 to TemplateCount - 1 do
       DelphiRewriteGenericUses(dgenT, dgenAt, TemplateIsDelphi[dgenT]);
     Inc(dgenRounds);
     if dgenRounds > 16 then
       Error('generic specialization nested deeper than 16 levels (or a rewrite loop)');
-  until TokCount = dgenBefore;
+  { …and dgenAt, for the reason spelled out in DesugarImportedDelphiGenericUses:
+    inserted aliases and removed `<Args>` groups cancel in TokCount, so TokCount
+    alone can read "idle" on a round that did work. }
+  until (TokCount = dgenBefore) and (dgenAt = dgenAtBefore);
 
   TokPos := finalCur;
   Next;
@@ -933,6 +1580,161 @@ begin
     SpecSubNames[k]  := TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k];
     SpecSubValues[k] := SpecConcreteNames[si * MAX_TEMPLATE_PARAMS + k];
     SpecSubKinds[k]  := SpecConcreteKinds[si * MAX_TEMPLATE_PARAMS + k];
+  end;
+end;
+
+{ ---- QUALIFIED generic arguments, normalised to one token ------------------
+
+  `specialize TEnum<TOuter.TPair>` is legal Pascal and FPC compiles it. Every
+  mechanism here reads an argument as exactly ONE TOKEN -- five
+  IsConcreteTypeArgKind tests, NestedSpecAlias, NestedSpecArg, the SpecSub*
+  substitution set, and the storage type NSpecArg: array of TRawToken. A
+  qualified name is three tokens and fits none of them.
+
+  So it is NORMALISED, not special-cased: the dotted form is rewritten at the
+  one place it is read into a single minted identifier naming an ordinary type
+  alias, and the alias declaration is emitted through the prerequisite path that
+  already exists for nested specializations. Nothing downstream ever sees a dot.
+  The alternative -- teach all five tests and the storage type about token
+  RANGES -- adds a second argument shape to six places, and per
+  devdocs/dev/normalise-dont-special-case.md the second path is the one that
+  stays broken.
+
+  The target form is measured, not assumed: `TAlias = TOuter.TPair;` followed by
+  `specialize TEnum<TAlias>` compiles and runs identically on pxx and FPC.
+
+  NAME SPELLING, and why it carries a leading `$`. The specialization minter
+  produces `Name$Arg1$Arg2`, so a plain `TOuter$TPair` here would be exactly what
+  `TOuter<TPair>` mints -- a real collision between two different types under
+  arity overloading, which is the failure that is silent. A leading `$` cannot be
+  produced by that minter and cannot be written in source, so `$qual$TOuter$TPair`
+  collides with nothing by construction. It is a synthetic tkIdent and is only
+  ever compared as a string, so the character never has to be lexable.
+
+  DECLARED ONCE PER COMPILATION. Two specializations naming the same qualified
+  type would otherwise emit the alias twice and get a duplicate-type error, so a
+  mint is recorded in QualAliasName the moment its declaration is emitted and is
+  never emitted again. }
+
+const MAX_QUAL_ARG_ALIASES = 128;
+var
+  QualAliasName : array[0..MAX_QUAL_ARG_ALIASES-1] of AnsiString;
+  QualAliasCount: Integer;
+  { pending for the specialization currently being parsed }
+  QNeedName : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  QNeedPath : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  QNeedCount: Integer;
+
+{ The mint for one dotted path: `TOuter.TPair` -> `$qual$TOuter$TPair`. }
+function QualArgAliasName(const path: AnsiString): AnsiString;
+var i: Integer; r: AnsiString;
+begin
+  r := '$qual$';
+  for i := 1 to Length(path) do
+    if path[i] = '.' then r := r + '$' else r := r + path[i];
+  QualArgAliasName := r;
+end;
+
+{ Record that this specialization needs `aliasNm = path;` declared ahead of it.
+  Silent no-op when the alias already exists -- that is the common case once a
+  program names the same qualified type twice. }
+procedure NoteQualArgNeed(const aliasNm, path: AnsiString);
+var k: Integer;
+begin
+  for k := 0 to QualAliasCount - 1 do
+    if CaseEqual(QualAliasName[k], aliasNm) then Exit;
+  for k := 0 to QNeedCount - 1 do
+    if CaseEqual(QNeedName[k], aliasNm) then Exit;
+  if QNeedCount >= MAX_TEMPLATE_PARAMS then Exit;
+  QNeedName[QNeedCount] := aliasNm;
+  QNeedPath[QNeedCount] := path;
+  Inc(QNeedCount);
+end;
+
+{ One token into NSpecIns. Flat, not nested inside EmitQualAliasDecl: nested
+  routines appear nowhere else in this file. }
+procedure QualPush(k: TTokenKind; const txt: AnsiString; ln: Integer);
+begin
+  if NSpecInsCnt >= MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS) then
+    Error('nested specialization token buffer overflow');
+  NSpecIns[NSpecInsCnt].Kind := k;
+  NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln;
+  if txt = '' then
+  begin
+    NSpecIns[NSpecInsCnt].SOffset := 0;
+    NSpecIns[NSpecInsCnt].SLen := 0;
+  end
+  else
+  begin
+    NSpecIns[NSpecInsCnt].SOffset := TokCharsAppend(txt);
+    NSpecIns[NSpecInsCnt].SLen := Length(txt);
+  end;
+  Inc(NSpecInsCnt);
+end;
+
+{ Emit `HoistFull = <the RHS, substituted>;` into NSpecIns for every candidate a
+  generic argument actually named. Runs with HoistActive False so the RHS is not
+  collapsed into a reference to the declaration being written. }
+procedure EmitHoistedDecls(const specName: AnsiString);
+var k, n, q, ln: Integer;
+begin
+  ln := 0;
+  if TokPos > 0 then ln := Tokens[TokPos - 1].Line;
+  for k := 0 to HoistCount - 1 do
+    if HoistUsed[k] and not HoistAlreadyEmitted(HoistFull[k]) then
+    begin
+      HoistActive := False;
+      n := SpecializeToBuffer(HoistStart[k], HoistEnd[k] - HoistStart[k] + 1, specName);
+      HoistActive := False;
+      if HoistEmittedCount < MAX_HOISTED_NESTED * 8 then
+      begin
+        HoistEmitted[HoistEmittedCount] := HoistFull[k];
+        Inc(HoistEmittedCount);
+      end;
+      if NSpecInsCnt + n + 4 > MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS) then
+        Error('hoisted nested type is too large for the prerequisite buffer ' +
+              '(raise MAX_NESTED_SPECS): ' + HoistFull[k]);
+      QualPush(tkIdent, HoistFull[k], ln);
+      QualPush(tkEq, '', ln);
+      for q := 0 to n - 1 do
+      begin
+        NSpecIns[NSpecInsCnt] := SpecializeTokens[q];
+        Inc(NSpecInsCnt);
+      end;
+      QualPush(tkSemicolon, '', ln);
+    end;
+end;
+
+{ Emit `alias = A.B.C;` into NSpecIns, and mark the alias as declared so no
+  later specialization emits it a second time. }
+procedure EmitQualAliasDecl(const aliasNm, path: AnsiString);
+var ln, i, start: Integer;
+begin
+  { Declared once per compilation, and the check lives HERE rather than in each
+    caller: the Delphi rewrite reaches this with duplicates by construction (one
+    entry per OCCURRENCE of the group, and it runs to a fixed point), while the
+    objfpc path filters in NoteQualArgNeed. Two filters for one rule is how the
+    second one goes stale, so there is one, and it is the one nothing can skip. }
+  for i := 0 to QualAliasCount - 1 do
+    if CaseEqual(QualAliasName[i], aliasNm) then Exit;
+  ln := 0;
+  if TokPos > 0 then ln := Tokens[TokPos - 1].Line;
+  QualPush(tkIdent, aliasNm, ln);
+  QualPush(tkEq, '', ln);
+  start := 1;
+  for i := 1 to Length(path) + 1 do
+    if (i > Length(path)) or (path[i] = '.') then
+    begin
+      if start > 1 then QualPush(tkDot, '', ln);
+      QualPush(tkIdent, Copy(path, start, i - start), ln);
+      start := i + 1;
+    end;
+  QualPush(tkSemicolon, '', ln);
+  if QualAliasCount < MAX_QUAL_ARG_ALIASES then
+  begin
+    QualAliasName[QualAliasCount] := aliasNm;
+    Inc(QualAliasCount);
   end;
 end;
 
@@ -1110,6 +1912,132 @@ begin
     end;
 end;
 
+{ The arena index of the `;` that ends the declaration whose RHS starts at d,
+  stepping over any nested record/class/case body. -1 when it never closes.
+  Flat, not nested inside CollectHoistCandidates: nested routines appear nowhere
+  else in this file. }
+function HoistDeclEndAt(d, limit: Integer): Integer;
+var q, dep: Integer;
+begin
+  q := d; dep := 0;
+  while q < limit do
+  begin
+    if (TemplateTokens[q].Kind = tkRecord) or (TemplateTokens[q].Kind = tkCase) or
+       (TemplateTokens[q].Kind = tkClass) then
+      Inc(dep)
+    else if TemplateTokens[q].Kind = tkEnd then
+    begin
+      Dec(dep);
+      if dep < 0 then Break;
+    end
+    else if (TemplateTokens[q].Kind = tkSemicolon) and (dep <= 0) then
+    begin
+      HoistDeclEndAt := q;
+      Exit;
+    end;
+    Inc(q);
+  end;
+  HoistDeclEndAt := -1;
+end;
+
+{ Find the nested TYPE declarations of one template's class body and record each
+  one's name and RHS extent. Nothing is hoisted here -- this only builds the
+  candidate set; HoistUsed decides. }
+procedure CollectHoistCandidates(ti: Integer; const specName: AnsiString);
+var ts, tc, j, depth, k, pdepth: Integer;
+    inTypeSec, isModifier: Boolean;
+    nm: AnsiString;
+
+begin
+  HoistCount := 0;
+  ts := Templates[ti].TokStart;
+  tc := Templates[ti].TokCount;
+  depth := 0;
+  inTypeSec := False;
+  j := ts;
+  while j < ts + tc do
+  begin
+    if TemplateTokens[j].Kind = tkEnd then
+    begin
+      Dec(depth);
+      if depth <= 0 then Break;
+      inTypeSec := False;
+    end
+    else if (TemplateTokens[j].Kind = tkRecord) or (TemplateTokens[j].Kind = tkCase) then
+      Inc(depth)
+    else if TemplateTokens[j].Kind = tkClass then
+    begin
+      { `class function` / `class var` / `class of` etc. is a MODIFIER and opens
+        no body -- the same distinction CollectNestedTypeNames documents. }
+      isModifier := (j + 1 < ts + tc) and
+                    ((TemplateTokens[j + 1].Kind = tkFunction) or
+                     (TemplateTokens[j + 1].Kind = tkProcedure) or
+                     (TemplateTokens[j + 1].Kind = tkVar) or
+                     (TemplateTokens[j + 1].Kind = tkConst) or
+                     (TemplateTokens[j + 1].Kind = tkOf) or
+                     ((TemplateTokens[j + 1].Kind = tkIdent) and
+                      (CaseEqual(GetTokenStrFromRaw(TemplateTokens[j + 1].SOffset,
+                                                    TemplateTokens[j + 1].SLen), 'operator') or
+                       CaseEqual(GetTokenStrFromRaw(TemplateTokens[j + 1].SOffset,
+                                                    TemplateTokens[j + 1].SLen), 'constructor') or
+                       CaseEqual(GetTokenStrFromRaw(TemplateTokens[j + 1].SOffset,
+                                                    TemplateTokens[j + 1].SLen), 'destructor'))));
+      if not isModifier then
+      begin
+        { a BODILESS class opens nothing -- see the same case in
+          CollectNestedTypeNames, and the bug it cost:
+          bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section }
+        k := j + 1;
+        while (k < ts + tc) and (TemplateTokens[k].Kind = tkIdent) and
+              (CaseEqual(GetTokenStrFromRaw(TemplateTokens[k].SOffset,
+                                            TemplateTokens[k].SLen), 'abstract') or
+               CaseEqual(GetTokenStrFromRaw(TemplateTokens[k].SOffset,
+                                            TemplateTokens[k].SLen), 'sealed')) do Inc(k);
+        if (k < ts + tc) and (TemplateTokens[k].Kind = tkLParen) then
+        begin
+          pdepth := 0;
+          while k < ts + tc do
+          begin
+            if TemplateTokens[k].Kind = tkLParen then Inc(pdepth)
+            else if TemplateTokens[k].Kind = tkRParen then
+            begin
+              Dec(pdepth);
+              if pdepth <= 0 then begin Inc(k); Break; end;
+            end;
+            Inc(k);
+          end;
+        end;
+        if (k >= ts + tc) or (TemplateTokens[k].Kind <> tkSemicolon) then
+          Inc(depth);
+      end;
+    end
+    else if TemplateTokens[j].Kind = tkType then
+      inTypeSec := (depth = 1)
+    else if (TemplateTokens[j].Kind = tkVar) or (TemplateTokens[j].Kind = tkConst) or
+            (TemplateTokens[j].Kind = tkProcedure) or (TemplateTokens[j].Kind = tkFunction) or
+            (TemplateTokens[j].Kind = tkProperty) then
+      inTypeSec := False
+    else if inTypeSec and (depth = 1) and (TemplateTokens[j].Kind = tkIdent) and
+            (j + 2 < ts + tc) and (TemplateTokens[j + 1].Kind = tkEq) then
+    begin
+      k := HoistDeclEndAt(j + 2, ts + tc);
+      if (k > j + 2) and (HoistCount < MAX_HOISTED_NESTED) then
+      begin
+        nm := GetTokenStrFromRaw(TemplateTokens[j].SOffset, TemplateTokens[j].SLen);
+        HoistName[HoistCount]  := nm;
+        HoistFull[HoistCount]  := specName + '$' + nm;
+        HoistStart[HoistCount] := j + 2;
+        HoistEnd[HoistCount]   := k - 1;
+        HoistUsed[HoistCount]  := False;
+        Inc(HoistCount);
+        j := k;
+      end;
+    end;
+    Inc(j);
+  end;
+end;
+
+
 { Record every `specialize NAME<args>` in one template-arena range as a nested
   prerequisite, skipping this declaration itself and anything already known or
   already queued. One body, three callers (the class body, each buffered method,
@@ -1168,6 +2096,8 @@ var
   gmScan: Integer;   { -1 = the class body, >= 0 = a buffered method body }
   nDeclEdges: Integer;   { NSpec entries below this came from the CLASS BODY }
   dup: Boolean;
+  qPath: AnsiString;     { non-empty while the current argument is a dotted name }
+  hoistPending: Boolean; { some nested type of this template must be lifted out }
 begin
   Result := False;
   Next; { consume 'specialize' }
@@ -1177,20 +2107,54 @@ begin
   Expect(tkLt, '<');
   nc := 0;
   NSpecCount := 0;
+  QNeedCount := 0;
   repeat
     if not IsConcreteTypeArgKind(CurTok.Kind) then
       Error('expected concrete type name');
     if nc >= MAX_TEMPLATE_PARAMS then Error('too many specialization arguments (MAX_TEMPLATE_PARAMS)');
-    { GetTokenStr, not SVal: a builtin type spelled as a KEYWORD token carries an
-      EMPTY SVal (see IsMethodNameTok's note), so every keyword-spelled argument
-      recorded the same empty name — which is what the duplicate-specialization
-      check below compares, so `TA = specialize TBox<Integer>` and a later
-      `TA = specialize TBox<Double>` read as the same declaration. }
-    if CurTok.SVal <> '' then cNames[nc] := CurTok.SVal
-    else cNames[nc] := GetTokenStr(TokPos - 1);
-    cKinds[nc] := CurTok.Kind;
-    { keep the raw token too — a deferral re-emits this declaration verbatim }
-    NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc] := Tokens[TokPos - 1];
+    { A QUALIFIED argument -- `specialize TEnum<TOuter.TPair>` -- is consumed
+      whole here and replaced by the single minted identifier of an ordinary
+      alias, so every mechanism below this loop keeps seeing one token per
+      argument. See the QualArgAliasName block above for why it is normalised
+      here rather than taught to the six places that read an argument. }
+    qPath := '';
+    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkDot) then
+    begin
+      qPath := GetTokenStr(TokPos - 1);
+      while (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) do
+      begin
+        Next;   { the '.' }
+        Next;   { the name after it }
+        if CurTok.Kind <> tkIdent then
+          Error('expected a type name after "." in a generic argument');
+        qPath := qPath + '.' + GetTokenStr(TokPos - 1);
+      end;
+    end;
+    if qPath <> '' then
+    begin
+      cNames[nc] := QualArgAliasName(qPath);
+      cKinds[nc] := tkIdent;
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].Kind := tkIdent;
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].IVal := 0;
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].Line := Tokens[TokPos - 1].Line;
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].SOffset := TokCharsAppend(cNames[nc]);
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc].SLen := Length(cNames[nc]);
+      NoteQualArgNeed(cNames[nc], qPath);
+    end
+    else
+    begin
+      { GetTokenStr, not SVal: a builtin type spelled as a KEYWORD token carries an
+        EMPTY SVal (see IsMethodNameTok's note), so every keyword-spelled argument
+        recorded the same empty name — which is what the duplicate-specialization
+        check below compares, so `TA = specialize TBox<Integer>` and a later
+        `TA = specialize TBox<Double>` read as the same declaration. }
+      if CurTok.SVal <> '' then cNames[nc] := CurTok.SVal
+      else cNames[nc] := GetTokenStr(TokPos - 1);
+      cKinds[nc] := CurTok.Kind;
+      { keep the raw token too — a deferral re-emits this declaration verbatim }
+      NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc] := Tokens[TokPos - 1];
+    end;
     Inc(nc);
     Next;
   until not Eat(tkComma);
@@ -1224,6 +2188,12 @@ begin
     SpecSubValues[i] := cNames[i];
     SpecSubKinds[i]  := cKinds[i];
   end;
+
+  { The template's OWN nested type declarations, as hoist CANDIDATES only --
+    nothing is hoisted unless a generic argument in the body names one, which
+    NestedSpecArg decides while the prerequisite scan runs below. A template with
+    nested types and no such use is untouched. See the hoisting note. }
+  CollectHoistCandidates(ti, specName);
 
   { Nested generic prerequisites: every `specialize NAME<args>` in the body,
     with args mapped through the substitution, that is not a type yet.
@@ -1310,6 +2280,7 @@ begin
     begin
       if DebugTrace then writeln('SPEC ', specName, ' = ', templateName, ' (already declared)');
       NSpecCount := 0;
+      QNeedCount := 0;
       Next;
       Result := True;
       Exit;
@@ -1338,7 +2309,13 @@ begin
     A genuine cycle is unaffected: both its edges are declaration-time, so
     nDeclEdges > 0 on at least one side and the deferral path below still runs.
     test/test_generic_cycle_fail.pas is the control and must keep failing. }
-  if (NSpecCount > 0) and (nDeclEdges = 0) then
+  { "still to emit", NOT "used" -- see HoistEmitted. On the re-parse behind its
+    own hoists this is False, which is what ends the deferral. }
+  hoistPending := False;
+  for k := 0 to HoistCount - 1 do
+    if HoistUsed[k] and not HoistAlreadyEmitted(HoistFull[k]) then hoistPending := True;
+
+  if (NSpecCount > 0) and (nDeclEdges = 0) and (QNeedCount = 0) and (not hoistPending) then
   begin
     NSpecInsCnt := 0;
     for k := 0 to NSpecCount - 1 do
@@ -1347,7 +2324,15 @@ begin
     NSpecCount := 0;
   end;
 
-  if NSpecCount > 0 then
+  { A pending qualified-argument alias forces the DEFERRAL path and cannot use
+    the fast one above. The fast path leaves this declaration registered and puts
+    the prerequisites AFTER it, which is right for a materialisation-time nested
+    spec and wrong here: the alias is a DECLARATION-time dependency -- the
+    argument is substituted into the class body that gets streamed immediately,
+    so the alias has to be a type before this declaration is parsed at all, not
+    after. Deferring re-emits the declaration behind the alias, and the re-parse
+    sees the minted identifier and takes the ordinary single-token path. }
+  if (NSpecCount > 0) or (QNeedCount > 0) or hoistPending then
   begin
     { Defer. CurTok is this declaration's trailing ';', so TokPos is exactly
       where the type-section loop reads next: put the prerequisites there,
@@ -1372,9 +2357,21 @@ begin
       of both declarations into the token stream every round with no diagnostic
       and no end. Name both sides: the cycle is what the author has to break. }
     if SpecDeferRound[dfIdx] > MAX_SPECIALIZATIONS then
-      Error('circular generic specialization: ' + specName + ' requires ' +
-            NSpecName[0] + ', which requires ' + specName + ' back');
+      if NSpecCount > 0 then
+        Error('circular generic specialization: ' + specName + ' requires ' +
+              NSpecName[0] + ', which requires ' + specName + ' back')
+      else
+        Error('circular generic specialization: ' + specName);
     NSpecInsCnt := 0;
+    { HOISTED nested types first of all -- the nested prerequisite emitted below
+      names one as its argument, and the re-emitted declaration's own class body
+      aliases to it. }
+    if hoistPending then EmitHoistedDecls(specName);
+    { qualified-argument aliases next: a nested prerequisite emitted below may
+      name one of them as its own argument. }
+    for k := 0 to QNeedCount - 1 do
+      EmitQualAliasDecl(QNeedName[k], QNeedPath[k]);
+    QNeedCount := 0;
     for k := 0 to NSpecCount - 1 do
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
     EmitSpecDecl(specName, templateName, (MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS, nc);
@@ -1414,7 +2411,17 @@ begin
 
   SpecializeTemplateName := Templates[ti].Name;
   SetSpecSubs(ti, SpecializationCount - 1);
+  { The collapse of a hoisted declaration's RHS applies to the CLASS BODY and
+    nowhere else, so the gate is opened around this one call rather than left on.
+    HoistStart/HoistEnd are absolute arena indices belonging to ONE template, and
+    SpecializeToBuffer has other callers (generic functions, the pending-method
+    flush) whose ranges are in the same arena — a stale candidate set could
+    otherwise collide with an unrelated range at the same index. Method bodies
+    need no collapse: they refer to the nested type by NAME, and the name is
+    still declared in the class, now as an alias. }
+  HoistActive := True;
   SpecializeStream(Templates[ti].TokStart, Templates[ti].TokCount, specName);
+  HoistActive := False;
   Next;
 end;
 

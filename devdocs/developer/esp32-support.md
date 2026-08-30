@@ -83,8 +83,13 @@ Run + validate (no IDF needed, just the Espressif qemu forks):
 ```bash
 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare.pas   # riscv32, raw UART bytes
 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare.pas   # xtensa Call0
-make test-esp-bare                                            # both, diff vs x86-64 oracle
 ```
+
+Those two are the per-change check. The `make test-esp-bare` target runs both and
+diffs against the x86-64 oracle, but **a hand-run is refused by
+`.claude/hooks/no-full-suite.sh` (changed 2026-08-30)** -- Track T sweeps it
+against the pushed sha. **CLAUDE.md's "THE PER-FIX LOOP" is the authority on
+gating**; this page is not.
 
 `test/test_esp_bare.pas` prints a string + signed integers; the bytes match the
 x86-64 oracle exactly on both chips. A frame-pointer (`s0`) stack walk was

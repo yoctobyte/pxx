@@ -1,0 +1,93 @@
+# `for n in range(3, n - 8, -1)` HUNG FOREVER where CPython yields 2 items.
+#
+# range() evaluates its arguments once, before the loop. The counted-loop
+# lowering copies a hidden counter into the user's variable at the top of each
+# body, so a stop expression that reads that variable and is re-evaluated per
+# iteration falls in lockstep with it and the guard is never false. With a
+# negative step that is a non-terminating program; with a positive one the same
+# re-read is silently wrong rather than fatal.
+#
+# THREE arms build a range loop and only one was broken. The runtime-step arm
+# already bound the stop to a temp -- its own comment says why, "the previous
+# lowering re-ran the stop expression on every iteration" -- and the literal-step
+# arm, which is the common one, never got that fix. The 2-arg arm lowers to a
+# Pascal for and was never affected. Testing all three is the point: shape said
+# all three were suspect, measurement said one.
+#
+# A hang is the worst shape this family takes: no wrong answer to notice and
+# nothing to diff against the oracle, because the program never reaches the
+# compare. Every expectation here is CPython's own output.
+# bug-n-a-range-loop-whose-bound-reads-the-loop-variable-never-terminates
+
+
+def two_arg(n):                      # 2-arg range -> the Pascal for-loop arm
+    c = 0
+    for n in range(1, n + 1):
+        c += 1
+    return c
+
+
+def literal_step_down(n):            # the arm that hung
+    c = 0
+    for n in range(3, n - 8, -1):
+        c += 1
+    return c
+
+
+def literal_step_up(n):              # same arm, positive step
+    c = 0
+    for n in range(1, n + 1, 1):
+        c += 1
+    return c
+
+
+def runtime_step(n, s):              # the arm that already bound a temp
+    c = 0
+    for n in range(3, n - 8, s):
+        c += 1
+    return c
+
+
+def other_var(n):                    # bound reads a name the loop does NOT rebind
+    c = 0
+    for k in range(3, n - 8, -1):
+        c += 1
+    return c
+
+
+def common_descending(n):            # the shape the lowering calls the common one
+    r = []
+    for k in range(n - 1, -1, -1):
+        r.append(k)
+    return r
+
+
+def literal_bounds():                # constant stop -- must keep paying nothing
+    c = 0
+    for i in range(0, 10, 2):
+        c += i
+    return c
+
+
+def stop_has_a_side_effect():
+    # the stop must be evaluated EXACTLY once, not once per iteration
+    calls = []
+
+    def bound():
+        calls.append(1)
+        return 3
+
+    c = 0
+    for i in range(0, bound()):
+        c += 1
+    return c, len(calls)
+
+
+print(two_arg(5))
+print(literal_step_down(9))
+print(literal_step_up(5))
+print(runtime_step(9, -1))
+print(other_var(9))
+print(common_descending(4))
+print(literal_bounds())
+print(stop_has_a_side_effect())

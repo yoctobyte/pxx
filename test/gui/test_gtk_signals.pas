@@ -9,7 +9,14 @@ program test_gtk_signals;
 uses gtk3, gtk3_c;
 
 var
-  win, btn: PGtkWidget;
+  { Pointer, not PGtkWidget: that typedef existed only in the curated
+    lib/pcl/gtk3_c.h and has no counterpart in the stock GTK3 headers
+    the binding now includes -- there it is GtkWidget*, which pxx's C
+    import surfaces as a plain Pointer. The sibling test_c_gtk_window.pas
+    made this same switch earlier for a sharper reason: PGtkWidget was
+    never DECLARED there at all, so it was silently a 4-byte integer and
+    truncated the pointer (bug-pascal-unknown-type-silently-integer). }
+  win, btn: Pointer;
 
 procedure OnDestroy(widget: Pointer; data: Pointer); cdecl;
 begin
@@ -20,6 +27,17 @@ end;
 procedure OnClick(widget: Pointer; data: Pointer); cdecl;
 begin
   writeln('button clicked');
+end;
+
+{ Synthesise the click. Without this nothing ever presses the button, so
+  OnClick never runs and `clicked` -- the whole point of the file -- is
+  asserted by nothing. The test predates being wired and was written to be
+  WATCHED: a human clicked the button. An automated row has to press it
+  itself or it is green on a dead callback. }
+function ClickCB(data: Pointer): Integer; cdecl;
+begin
+  gtk_button_clicked(btn);
+  ClickCB := 0;
 end;
 
 function AutoQuit(data: Pointer): Integer; cdecl;
@@ -41,7 +59,8 @@ begin
 
   SignalConnect(win, 'destroy', @OnDestroy);
   SignalConnect(btn, 'clicked', @OnClick);
-  g_timeout_add(2000, @AutoQuit, nil);
+  g_timeout_add(300, @ClickCB, nil);
+  g_timeout_add(1000, @AutoQuit, nil);
 
   gtk_widget_show_all(win);
   gtk_main;

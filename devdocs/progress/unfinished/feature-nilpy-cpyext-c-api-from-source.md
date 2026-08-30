@@ -148,7 +148,7 @@ doesn't collide (`hello_ext.c` → `hello_ext_module.c`).
 Next: M2 (arguments/errors — more `PyArg_ParseTuple` formats,
 `Py_BuildValue`, `PyErr_SetString` → NilPy `except`).
 
-## 2026-08-01 — M2 "arguments and errors" landed (commit `22515d725`)
+## 2026-08-01 — M2 "arguments and errors" landed (commit `d9decab9d`)
 
 `PyArg_ParseTuple`/`Py_BuildValue` widened to `i l d s s# O`;
 `PyErr_SetString`/`PyErr_Occurred`/`PyErr_Clear` propagate into a NilPy
@@ -833,3 +833,33 @@ than hard stops; `PyType_GetQualName` is real now that heap types exist.
   buffer protocol) are still open and no agent is actively on them. `working/`
   is a LIVE lock, not a bookmark. Nothing here is half-applied: the tree is
   green and pushed, so this is a clean pick-up point rather than a park.
+
+## 2026-08-30 — RE-MEASURE: the blocker is genuine. This one does NOT dissolve.
+
+Checked as the sibling of [[feature-nilpy-thirdparty-libraries-as-targets]],
+under the hypothesis that a ticket whose blocker is an architectural
+*cannot-reach* ages badly because the repo keeps adding bridges. **It does not
+apply here**, and recording the negative is the point of the check.
+
+- `blocked-by: []`, and has been since the one real blocker was cleared on
+  2026-08-02 (the path-form `uses` collision). Nothing is waiting on another
+  lane.
+- The prominent "why not a prebuilt `.so`" analysis reads like a wall but is a
+  deliberate **scope exclusion**, not a blocker — and its reasoning is about
+  *CPython's* binary object model (inlined `Py_INCREF` at offset 0, fixed
+  `tp_*` offsets, `PyGC_Head`, per-minor-version layouts). That is a fact about
+  someone else's artifact. No bridge this repo adds can dissolve it, which is
+  exactly what makes it age *well*: it will read the same in a year.
+- M5a and M5b both **landed** (2026-08-03, 2026-08-08), verified against the
+  gcc/CPython-3.12 oracle. What remains — M5c (a `cdef class`; a real
+  Cython-built package from PyPI) and M6 (the buffer protocol) — is
+  *feature-missing* work, which also ages well: it stays missing until built.
+- It sits in `unfinished/` because no agent is on it, which the 2026-08-08 log
+  says in those words. That is a staffing state, not a blocked state.
+
+**Re-priced: unchanged.** p65 is right and the cost is a genuine milestone pass,
+not an afternoon. The distinction worth carrying: a blocker that describes
+**our** code shape ages badly; one that describes an **external** artifact's
+shape, or names work simply not yet done, ages well.
+
+Nothing applied. Measured at `7b73a385d`.

@@ -74,7 +74,14 @@ end;
 
 procedure EmitHeapAllocLockedA64;
 { x0 = requested payload bytes. Returns payload pointer in x0. Delegates to the
-  Pascal PXXAlloc(size, align=8). Threadsafe locking is x86-64-only. }
+  Pascal PXXAlloc(size, align=8).
+
+  The HEAP allocator lock is not hand-emitted here — this path delegates to the
+  Pascal allocator, which takes PXXHeapSpin under PXX_TS_SOFTLOCK. Corrected
+  2026-08-30: this read "Threadsafe locking is x86-64-only", 212 lines above
+  this file's OWN port of EmitIoLockStubs and its IR_ATOMIC lowering. aarch64
+  supports --threadsafe; see the gate in compiler.pas (the ThreadSafeMode target
+  check), which is the authority on the target list. }
 var procIdx: Integer;
 begin
   EmitLoadImmA64(1, 8);              { mov x1, #8 (align) }
@@ -101,6 +108,45 @@ begin
   if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
   EmitCallProc(procIdx);
   EmitI32($F84107E0);             { ldr x0, [sp], #16 (restore handle) }
+end;
+
+{ ---- static string literals, the aarch64 half ------------------------------
+  Every pooled literal is preceded by a ready-made managed-string header
+  (InternStr, emit.inc), so a literal that has to become an AnsiString already
+  IS one and the address is the whole conversion — no PXXStrFromLit, no
+  PXXAlloc, no copy of bytes that are already in the image, and no PXXFree when
+  the reference dies. The x86-64 half carries the full note; this is the same
+  pass through the same shared representation, which is the point of putting
+  the header in the POOL rather than in a per-backend shim.
+
+  One difference worth stating: x86-64 takes its reference with a four-byte
+  `inc qword [rax-16]`, and this calls PXXStrIncRef instead. A hand-emitted
+  aarch64 retain would have to reproduce the threadsafe arm too (LSE or an
+  ldxr/stxr pair), and EmitStrIncRefA64 is the primitive that already gets that
+  right. A call is still a fraction of what it replaces, and if it ever shows
+  up in a profile the inline form is a separate, testable change.
+
+  Decides AND emits, for the reason spelled out on the x86-64 twin: a caller
+  that checks its own predicate can disagree with the emitter, and the way that
+  fails here is a destination register never loaded — a wrong value, not a
+  crash.
+  bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+function EmitStaticLitHandleA64(node: Integer): Boolean;
+var si: Integer;
+begin
+  EmitStaticLitHandleA64 := False;
+  if OptLevel < 3 then Exit;
+  if node < 0 then Exit;
+  if IRKind[node] <> IR_CONST_STR then Exit;
+  si := InternStr(GetTokenStrFromRaw(IRA[node], IRB[node]));
+  if (Strs[si].Len = 0) and (not isNilPy) then
+    EmitI32($AA1F03E0)                          { mov x0, xzr — Pascal '' is nil }
+  else
+  begin
+    EmitLoadDataRefA64(0, Strs[si].Offset + 8); { x0 = the handle }
+    EmitStrIncRefA64;                           { and take the reference }
+  end;
+  EmitStaticLitHandleA64 := True;
 end;
 
 procedure EmitObjRetainA64;
@@ -333,6 +379,7 @@ var sVal: AnsiString; si, procIdx: Integer; tk: TTypeKind;
 begin
   if IRKind[valNode] = IR_CONST_STR then
   begin
+    if EmitStaticLitHandleA64(valNode) then Exit;
     sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
     si := InternStr(sVal);
     EmitLoadImmA64(0, Strs[si].Len);
@@ -867,16 +914,30 @@ begin
   FxSaveOn := True;
 end;
 
-procedure EmitLoadVarA64(idx: Integer);
+{ Load a symbol into ANY general register. `EmitLoadVarA64(idx)` is this with
+  rd = 0 and is what almost everything wants; the destination parameter exists
+  for the binop path, which needs the right operand in x1 while the left sits in
+  x0 and must not get a duplicated loader to do it
+  (devdocs/dev/normalise-dont-special-case.md — the duplicate is the arm that
+  stays broken).
+
+  rd may be anything except x9, which is this routine's one scratch register.
+  That restriction is the whole reason the scratch was collapsed onto a single
+  register first: while skGlobal used x1 and locals used x9, there was no value
+  of rd that was safe for every symbol Kind, and the unsafe one was rd = 1 —
+  exactly what the caller below wants, failing only on globals. }
+procedure EmitLoadVarA64Dest(idx: Integer; rd: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
 begin
+  if rd = 9 then
+    Error('compiler error: EmitLoadVarA64Dest cannot target x9, its own scratch register');
   { -O3 unified residency: resident reads come from the register cache. The
     frame slot stays authoritative (stores dual-write); the cache holds the
     canonically extended value, exactly like a fresh frame load. }
   rreg := ResidentRegOf(idx);
   if rreg <> 0 then
   begin
-    EmitI32($AA0003E0 or (rreg shl 16));   { mov x0, x19..x24 }
+    EmitI32($AA0003E0 or (rreg shl 16) or rd);   { mov x(rd), x19..x24 }
     Exit;
   end;
   if Syms[idx].TypeKind = tyDouble then
@@ -884,7 +945,7 @@ begin
     rreg := FloatResidentXmmOf(idx);
     if rreg <> 0 then
     begin
-      EmitI32($9E660000 or (rreg shl 5));  { fmov x0, d8..d13 (value model: bits in x0) }
+      EmitI32($9E660000 or (rreg shl 5) or rd);  { fmov x(rd), d8..d13 (value model: bits in a gpr) }
       Exit;
     end;
   end;
@@ -906,93 +967,77 @@ begin
     sgn := False;
   end;
 
-  if tk = tySingle then
-  begin
-    if Syms[idx].Kind = skGlobal then
-    begin
-      EmitI32($18000041);  { ldr w1, [pc+8] }
-      EmitI32($14000002);  { b [pc+8] }
-      EmitGlobRef(Syms[idx].Offset);
-      EmitI32($B9400020);  { ldr w0, [x1] }
-    end
-    else
-    begin
-      EmitLoadImmA64(9, Syms[idx].Offset);
-      EmitI32($8B0903A9);  { add x9, x29, x9 }
-      if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
-      begin
-        EmitI32($F9400121);  { ldr x1, [x9] }
-        EmitI32($B9400020);  { ldr w0, [x1] }
-      end
-      else
-        EmitI32($B9400120);  { ldr w0, [x9] }
-    end;
-    EmitI32($1E270000);    { fmov s0, w0 }
-    EmitI32($1E22C000);    { fcvt d0, s0 }
-    EmitI32($9E660000);    { fmov x0, d0 }
-    Exit;
-  end;
+  { ONE scratch register for the whole helper: x9.
 
+    It used to be two, chosen by an invisible property of the symbol. The
+    skGlobal arms materialised the address in x1, the by-ref-param arms
+    dereferenced through x1, and the local/param arms used x9 — so WHICH
+    register this helper destroyed depended on the symbol's Kind, which is the
+    caller's least visible property. That is the blocker
+    feature-opt-emitloadvara64-needs-a-destination-register-parameter was parked
+    on: a destination-register parameter would self-clobber at rd=1 — the one
+    value the aarch64 leaf-operand collapse wants — and only for globals, the
+    arm least likely to appear in a quick test.
+
+    x9 is safe as the single scratch because this helper ALREADY destroyed it
+    unconditionally on its commonest path (every local, every parameter), so no
+    caller can have been relying on it surviving. The change makes x9 dead in
+    strictly more cases and x1 dead in strictly fewer. Checked at all 13 call
+    sites: the only one holding a live x9 is the residency spill, which does its
+    A64FrameAddr9 + str and is finished with x9 before it calls here.
+
+    Collapsing the scratch collapsed the code with it. The address computation
+    now happens once per Kind, and the sz/sgn load ladder — which existed in
+    THREE copies differing only in their base register — exists once.
+    devdocs/dev/normalise-dont-special-case.md: the duplicate is the arm that
+    stays broken, and this one had already drifted (see the dyn-array guard
+    above, added to the store side and forgotten on the load side). }
+
+  { x9 := the address to load from. }
   if Syms[idx].Kind = skGlobal then
   begin
-    EmitI32($18000041);  { ldr w1, [pc+8] }
+    EmitI32($18000049);  { ldr w9, [pc+8] }
     EmitI32($14000002);  { b [pc+8] }
     EmitGlobRef(Syms[idx].Offset);
-    if sz = 1 then
-    begin
-      if sgn then EmitI32($39800020) else EmitI32($39400020);
-    end
-    else if sz = 2 then
-    begin
-      if sgn then EmitI32($79800020) else EmitI32($79400020);
-    end
-    else if sz = 4 then
-    begin
-      if sgn then EmitI32($B9800020) else EmitI32($B9400020);
-    end
-    else
-      EmitI32($F9400020);
   end
   else
   begin
-    EmitLoadImmA64(9, Syms[idx].Offset);
-    EmitI32($8B0903A9);  { add x9, x29, x9 }
+    A64FrameAddr9(Syms[idx].Offset);
     if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
-    begin
-      EmitI32($F9400121);  { ldr x1, [x9] }
-      if sz = 1 then
-      begin
-        if sgn then EmitI32($39800020) else EmitI32($39400020);
-      end
-      else if sz = 2 then
-      begin
-        if sgn then EmitI32($79800020) else EmitI32($79400020);
-      end
-      else if sz = 4 then
-      begin
-        if sgn then EmitI32($B9800020) else EmitI32($B9400020);
-      end
-      else
-        EmitI32($F9400020);
-    end
-    else
-    begin
-      if sz = 1 then
-      begin
-        if sgn then EmitI32($39800120) else EmitI32($39400120);
-      end
-      else if sz = 2 then
-      begin
-        if sgn then EmitI32($79800120) else EmitI32($79400120);
-      end
-      else if sz = 4 then
-      begin
-        if sgn then EmitI32($B9800120) else EmitI32($B9400120);
-      end
-      else
-        EmitI32($F9400120);
-    end;
+      EmitI32($F9400129);  { ldr x9, [x9] — follow the reference }
   end;
+
+  { A Single is loaded as 4 bytes and widened to the double the value model
+    carries in a general register; sz/sgn do not apply to it. s0/d0 are used as
+    the conversion scratch and are clobbered — as they always were. }
+  if tk = tySingle then
+  begin
+    EmitI32($B9400120 or rd);          { ldr w(rd), [x9] }
+    EmitI32($1E270000 or (rd shl 5));  { fmov s0, w(rd) }
+    EmitI32($1E22C000);                { fcvt d0, s0 }
+    EmitI32($9E660000 or rd);          { fmov x(rd), d0 }
+    Exit;
+  end;
+
+  if sz = 1 then
+  begin
+    if sgn then EmitI32($39800120 or rd) else EmitI32($39400120 or rd);
+  end
+  else if sz = 2 then
+  begin
+    if sgn then EmitI32($79800120 or rd) else EmitI32($79400120 or rd);
+  end
+  else if sz = 4 then
+  begin
+    if sgn then EmitI32($B9800120 or rd) else EmitI32($B9400120 or rd);
+  end
+  else
+    EmitI32($F9400120 or rd);
+end;
+
+procedure EmitLoadVarA64(idx: Integer);
+begin
+  EmitLoadVarA64Dest(idx, 0);
 end;
 
 procedure RegcallRefreshResidentA64(idx: Integer);
@@ -1380,6 +1425,114 @@ begin
   else Error('target aarch64: unsupported float compare operator');
 end;
 
+{ How many IR_ARG nodes hang off this chain. Needed BEFORE the push loop runs,
+  because the last-argument collapse below has to know which push to skip while
+  it is still emitting them. }
+function ArgChainLenA64(argNode: Integer): Integer;
+var n: Integer;
+begin
+  n := 0;
+  while argNode <> -1 do begin Inc(n); argNode := IRB[argNode]; end;
+  ArgChainLenA64 := n;
+end;
+
+{ -O3 W1 last-argument collapse (aarch64), ported from x86-64's same pass.
+
+  Arguments are evaluated left to right into x0 and each is pushed to a 16-byte
+  temp; the pops then run in reverse into x0..x7. So the LAST argument is pushed
+  LAST and popped FIRST, with NOTHING emitted in between -- the round trip is
+  pure ceremony over a value already sitting in x0 where it was produced.
+
+  `mov x(n-1), x0` replaces the str/ldr pair: two instructions and 32 bytes of
+  stack traffic become one register move. And for a ONE-argument call not even
+  that, because the destination register IS x0 -- both instructions vanish.
+
+  Correct because the pair is adjacent: nothing can disturb x0 between them, and
+  removing a MATCHED push/pop at the TOP of the temp stack leaves every deeper
+  slot (earlier args, the hidden destination, an indirect callee) at exactly the
+  offset it had. Deliberately NOT applied when the args spill past x0..x7: that
+  path rebuilds an outgoing block from the temp slots by offset and needs every
+  one of them to exist. }
+function LastArgCollapseA64(nTotal: Integer): Boolean;
+begin
+  LastArgCollapseA64 := (OptLevel >= 3) and (nTotal >= 1) and (nTotal <= 8);
+end;
+
+procedure EmitLastArgMoveA64(nTotal: Integer);
+begin
+  if nTotal > 1 then
+    EmitI32($AA0003E0 or (nTotal - 1));   { mov x(n-1), x0 }
+end;
+
+{ -O3 W1 slice 10's aarch64 twin. Does the shift arm OPEN with a widen of the
+  left operand? Both the pre-decision that SKIPS the left load and the emit site
+  that must honour it call THIS function, so they cannot drift: a skip the widen
+  site failed to honour would leave x0 never loaded at all -- a wrong value, not
+  a crash. One condition, two readers.
+  Returns 0 = no leading widen, 1 = sxtw (signed, native-width result),
+  2 = `mov w0, w0` (zero-extend). Both flavours fuse; the x86-64 twin fused only
+  the sign-extending one, which is a gap on that side, not a difference here.
+  Deliberately NOT the `lsl` arm: its extend is TRAILING (it narrows the
+  RESULT), so there is no load to fuse it with. }
+function W1LeadingExtA64(node, left, op: Integer): Integer;
+begin
+  W1LeadingExtA64 := 0;
+  if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
+  if op = Ord(tkIdent) then                                  { Pascal `shr` }
+  begin
+    if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+       TypeSigned(IntToTypeKind(IRTk[left])) then
+      W1LeadingExtA64 := 1
+    else
+      W1LeadingExtA64 := 2;
+  end
+  else if op = Ord(tkShr) then                               { C `>>` }
+    W1LeadingExtA64 := 1;
+end;
+
+{ -O3 W1 slice 10's aarch64 twin: can the left operand's load be skipped and
+  carried by the widen? Returns its home register, or 0.
+  `sxtw x0, wN` and `mov w0, wN` each read the low 32 bits of xN and write x0 --
+  the read AND the extension in one instruction, where `mov x0, xN` plus the
+  extension is two. Correct by construction: neither depends on what the upper
+  half of xN holds, so unlike DELETING the extension this rests on no residency
+  normalisation invariant.
+  Exactly-4 is required: a 1- or 2-byte symbol's own load is a sxtb/sxth from
+  the low 8/16 bits, which neither of these is. }
+function W1ExtLeftEligibleA64(node, left, op: Integer): Integer;
+begin
+  W1ExtLeftEligibleA64 := 0;
+  if OptLevel < 3 then Exit;
+  if W1LeadingExtA64(node, left, op) = 0 then Exit;
+  if not LeafSymRcxLoadable(left) then Exit;
+  if TypeSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
+  W1ExtLeftEligibleA64 := ResidentRegOf(IRA[left]);
+end;
+
+{ Emit the leading widen of the left operand into x0, fusing the resident read
+  into it when the load above was skipped. reg = 0 means the value is already
+  staged in x0 and only the extension is emitted -- byte-identical to what these
+  two sites emitted before the fold existed. }
+procedure EmitWidenLeftA64(kind, reg: Integer);
+begin
+  if kind = 1 then
+    EmitI32($93407C00 or (reg shl 5))      { sxtw x0, w0|wN }
+  else
+    EmitI32($2A0003E0 or (reg shl 16));    { mov  w0, w0|wN }
+end;
+
+{ cmp Xn, Xm -- which on aarch64 IS `subs xzr, Xn, Xm`, so BOTH sources are
+  free register fields. That is the whole reason -O3 W1 slices 5 and 7 collapse
+  into one arm here where x86-64 needed two: neither operand has to be staged.
+  0 means "the standing contract" -- x0 for the left, x1 for the right -- so the
+  unfolded call emits exactly the $EB01001F this replaced. }
+procedure EmitCmpRegsA64(lreg, rreg: Integer);
+var rm: Integer;
+begin
+  if rreg = 0 then rm := 1 else rm := rreg;
+  EmitI32($EB00001F or (rm shl 16) or (lreg shl 5));
+end;
+
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
@@ -1388,6 +1541,9 @@ var
   pNilPos, pDonePos: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
+  nArgTotal: Integer;   { -O3 W1 last-argument collapse (aarch64): args counted BEFORE the push loop }
+  w1ExtLA64: Integer;   { -O3 W1 slice 10 (aarch64): 0 = left load emitted, else the resident reg the widen must read }
+  w1CmpLA64, w1CmpRA64: Integer;   { -O3 W1 slices 5+7 (aarch64): 0 = the normal x0/x1 contract, else x19..x24 read in place }
   sgn, isComp, savedLValueWrite: Boolean;
 begin
   if node = -1 then Exit;
@@ -2055,7 +2211,12 @@ begin
               WriteLn('PXXDBG a.a64binop LEAFSYM_NONCOMM');
           end
           else
-            WriteLn('PXXDBG a.a64binop OTHER');
+            { Name the kind. "6% are OTHER" is not a finding — it is a number
+              with no next step. What those operands ARE decides whether the
+              remainder is worth a pass or is structurally uncollapsible
+              (anything with a side effect, or that can observe the left
+              operand, must stay behind the stack round trip). }
+            WriteLn('PXXDBG a.a64binop OTHER ', IROpName(IRKind[right]));
         end;
         { -O3 leaf-operand direct load, aarch64 half of x86-64's -O1 arm.
 
@@ -2079,21 +2240,119 @@ begin
           and a further 12.6-16.3% a leaf-sym one, across compiler.pas,
           mandelbrot, chess and jsondemo — 93.4-93.9% collapsible in total.
 
-          The leaf-sym half is NOT done here, deliberately. It needs the right
-          operand loaded into x1 while the left sits in x0, and EmitLoadVarA64
-          hardcodes x0 — with residency, dyn-array-handle and sign-extension
-          special cases that must not be duplicated into a second path, since
-          the second path is the one that stays broken
-          (devdocs/dev/normalise-dont-special-case.md). The honest fix is to
-          give EmitLoadVarA64 a destination-register parameter, which is a
-          separate change with its own blast radius. }
+          The leaf-sym half is now done too, and it is the same trade for the
+          same reason: a leaf symbol load has no side effects and cannot observe
+          the left operand, so it can be issued AFTER the left is in x0 —
+          straight into x1. It took two steps rather than one, because the
+          obvious version was wrong:
+
+            step 1  EmitLoadVarA64 used x1 as its scratch for globals and for
+                    by-ref params, and x9 for locals. WHICH register it
+                    destroyed depended on the symbol's Kind. A destination
+                    parameter would therefore have self-clobbered at exactly
+                    rd = 1 — the value wanted here — and only for globals, the
+                    arm least likely to show up in a quick test. The scratch was
+                    collapsed onto x9 alone first.
+            step 2  the destination parameter, EmitLoadVarA64Dest.
+
+          IR_LOAD_SYM lowers to precisely EmitLoadVarA64(IRA[node]) and nothing
+          else, so this is a substitution rather than a reimplementation — there
+          is no second loader to keep in step, which is the whole point of
+          having done step 1. }
+        { -O3 W1 slices 5 and 7, ported from x86-64 -- and aarch64 is where the
+          concept was always cleaner, because `cmp` here IS `subs xzr, Xn, Xm`:
+          BOTH source registers are free fields, so neither operand has to be
+          staged anywhere. x86-64 needed two separate slices (5 for the left,
+          7 for the right, the second with a memory form) to say what one
+          encoding says here.
+
+          A comparison has no destination, so a register-resident operand can be
+          read where it lives and the `mov` that stages it into x0 or x1 simply
+          disappears -- one instruction for a resident left, another for a
+          resident right, both gone. This is the move DELETED, not a value
+          recomputed: the resident register and the frame slot hold the same
+          value by the residency contract, which is the same fact
+          EmitLoadVarA64Dest's own resident arm already relies on.
+
+          CmpFusible is the SHARED predicate, forward-declared in compiler.pas
+          rather than re-stated here. That is deliberate and the precedent is
+          two lines above it in that file: IRNodeOwnsManagedStr is forwarded for
+          exactly this reason, after four cross backends each hand-rolled a
+          narrower copy and every one of them was wrong. A second definition of
+          "which comparisons reach the bare cmp" is the same bug waiting.
+
+          Scope: only the const-right and leaf-sym-right arms fold. The
+          push/pop arm below is EXCLUDED, and the reason is not the one it looks
+          like -- this was measured, and the obvious answer was wrong.
+
+          The obvious answer is "a left value that was never materialised cannot
+          be pushed across an arbitrary right subtree". That is false: the cmp
+          reads the home register, so the pushed x0 is dead and popping garbage
+          into it harms nothing. Removing the guard on purpose left every test
+          GREEN, which is what sent me to measure instead.
+
+          Nor is it mutation. `a < f()` where f writes `a` would be a real
+          reordering hazard -- reading the register at cmp time would see the
+          NEW value -- except that a local reachable by a nested procedure or by
+          a `var` parameter is marked ESCAPES by the residency assigner and is
+          never given a register at all (measured both ways with
+          PXXDBG=a.resid). So a resident left cannot be mutated by any right
+          subtree, and the fold is correct in that arm too.
+
+          The exclusion is about SIZE, and it is temporary. Folding there while
+          still emitting the str/ldr pair saves one instruction and leaves two
+          dead ones; done properly the whole staging goes -- the left is never
+          materialised, so there is nothing to preserve across the right -- and
+          that is three instructions, not one. Different shape, its own control
+          pair, its own commit:
+          feature-opt-o3-a64-fold-a-resident-compare-left-across-a-complex-right }
+        w1CmpLA64 := 0;
+        w1CmpRA64 := 0;
+        w1ExtLA64 := 0;
+        if (OptLevel >= 3) and CmpFusible(node) then
+        begin
+          if LeafSymRcxLoadable(left) and
+             ((IRKind[right] = IR_CONST_INT) or (IRKind[right] = IR_LOAD_SYM)) then
+            w1CmpLA64 := ResidentRegOf(IRA[left]);
+          if LeafSymRcxLoadable(right) then
+            w1CmpRA64 := ResidentRegOf(IRA[right]);
+        end
+        else if (OptLevel >= 3) and
+                ((IRKind[right] = IR_CONST_INT) or (IRKind[right] = IR_LOAD_SYM)) then
+          { -O3 W1 slice 10's aarch64 twin: a 4-byte resident feeding a shift's
+            LEADING widen needs no load of its own -- `sxtw x0, wN` (or
+            `mov w0, wN`) is the read and the widen in one instruction. Safe to
+            defer across the right operand's setup for the same reason the
+            compare fold is: in these two arms the right is a constant or a leaf
+            symbol, so nothing between here and the widen writes x0, and nothing
+            can mutate the symbol out from under the deferred read. Restricted
+            to those two arms because the general one below stages x0 through
+            the stack, and there the deferred read has to move with it. }
+          w1ExtLA64 := W1ExtLeftEligibleA64(node, left, op);
+
         if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) then
         begin
-          IREmitNodeAarch64(left);              { x0 = left }
+          if (w1CmpLA64 = 0) and (w1ExtLA64 = 0) then
+            IREmitNodeAarch64(left);            { x0 = left }
           EmitLoadImmA64(1, IRIVal[right]);     { x1 = right, no stack round trip }
+        end
+        else if (OptLevel >= 3) and (IRKind[right] = IR_LOAD_SYM) then
+        begin
+          if (w1CmpLA64 = 0) and (w1ExtLA64 = 0) then
+            IREmitNodeAarch64(left);               { x0 = left }
+          if w1CmpRA64 = 0 then
+            EmitLoadVarA64Dest(IRA[right], 1);    { x1 = right, no stack round trip }
         end
         else
         begin
+          { Unreachable with a flag set, and structurally so rather than by
+            luck: w1CmpLA64 is only assigned when the right operand is a
+            CONST_INT or a LOAD_SYM, and w1CmpRA64 only when LeafSymRcxLoadable
+            says LOAD_SYM -- both of which take an arm above. No reset here,
+            because a guard that cannot fire is not a guard; it is a claim
+            nobody can check. If a future edit widens the pre-decision, THIS is
+            the arm that breaks, and the test's complex-right row is what says
+            so. }
           IREmitNodeAarch64(left);
           EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
           IREmitNodeAarch64(right);
@@ -2208,11 +2467,7 @@ begin
           begin
             { a NATIVE-width result sign-extends a signed operand first — see
               the x86-64 twin }
-            if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
-               TypeSigned(IntToTypeKind(IRTk[IRA[node]])) then
-              EmitI32($93407C00)                           { sxtw x0, w0 }
-            else
-              EmitI32($2A0003E0);                          { mov w0, w0 }
+            EmitWidenLeftA64(W1LeadingExtA64(node, left, op), w1ExtLA64);
           end;
           EmitI32($9AC12400);                              { lsr x0, x0, x1 }
         end
@@ -2223,13 +2478,13 @@ begin
             instead of zero-extending for a <8-byte operand, and uses asrv
             instead of lsrv. }
           if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
-            EmitI32($93407C00);                            { sxtw x0, w0 }
+            EmitWidenLeftA64(W1LeadingExtA64(node, left, op), w1ExtLA64);
           EmitI32($9AC12800);                              { asr x0, x0, x1 }
         end
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin
-          EmitI32($EB01001F); { cmp x0, x1 }
+          EmitCmpRegsA64(w1CmpLA64, w1CmpRA64);   { cmp x0|xN, x1|xM }
           { TypeCompareUnsigned, the SAME rule x86-64 and the fused-jump path
             use — not `unsigned(l) or unsigned(r)`, which this backend used to
             do. That version ignored integer promotion: an operand narrower than
@@ -2808,6 +3063,7 @@ begin
 
         argNode := IRB[node];
         nArgs := 0;
+        nArgTotal := ArgChainLenA64(argNode);
         while argNode <> -1 do
         begin
           { A frozen inline string (or a char) handed to a MANAGED string parameter has
@@ -2826,7 +3082,8 @@ begin
             EmitAnsiStringFromNodeA64(IRA[argNode])
           else
             IREmitNodeAarch64(IRA[argNode]);
-          EmitI32($F81F0FE0); { str x0, [sp, #-16]! (16-byte temp slot, arg0 deepest) }
+          if not (LastArgCollapseA64(nArgTotal) and (nArgs = nArgTotal - 1)) then
+            EmitI32($F81F0FE0); { str x0, [sp, #-16]! (16-byte temp slot, arg0 deepest) }
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
@@ -2841,9 +3098,13 @@ begin
 
         if nArgs <= 8 then
         begin
-          { All args fit in x0..x7: pop each temp into its register (unchanged). }
+          { All args fit in x0..x7: pop each temp into its register. The last
+            one was never pushed at -O3 -- it is still in x0. }
           for i := nArgs - 1 downto 0 do
-            EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
+            if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
+              EmitLastArgMoveA64(nArgTotal)
+            else
+              EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
           if ABIRetViaHiddenDestProc(procIdx) then
             EmitI32($F84107E8);   { ldr x8, [sp], #16 (hidden destination) }
           EmitCallProc(procIdx);
@@ -2958,15 +3219,20 @@ begin
         EmitI32($F81F0FE0);                          { str x0, [sp, #-16]! (callee) }
         argNode := IRB[node];
         nArgs := 0;
+        nArgTotal := ArgChainLenA64(argNode);
         while argNode <> -1 do
         begin
           IREmitNodeAarch64(IRA[argNode]);
-          EmitI32($F81F0FE0);                        { str x0, [sp, #-16]! }
+          if not (LastArgCollapseA64(nArgTotal) and (nArgs = nArgTotal - 1)) then
+            EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! }
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         for i := nArgs - 1 downto 0 do
-          EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
+          if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
+            EmitLastArgMoveA64(nArgTotal)            { last arg is still in x0 }
+          else
+            EmitI32($F84107E0 + i);                  { ldr x[i], [sp], #16 }
         EmitI32($F84107F0);                          { ldr x16, [sp], #16 (callee) }
         if IRCallDest[node] >= 0 then
           EmitI32($F84107E8);                        { ldr x8, [sp], #16 (hidden destination) }
@@ -2991,17 +3257,25 @@ begin
         end;
         argNode := IRA[node];
         nArgs := 0;
+        nArgTotal := ArgChainLenA64(argNode);
         while argNode <> -1 do
         begin
           IREmitNodeAarch64(IRA[argNode]);
-          EmitI32($F81F0FE0);                        { str x0, [sp,#-16]! }
+          if not (LastArgCollapseA64(nArgTotal) and (nArgs = nArgTotal - 1)) then
+            EmitI32($F81F0FE0);                      { str x0, [sp,#-16]! }
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         if nArgs > 8 then
           Error('target aarch64: virtual call with more than 8 parameters not supported');
+        { The pops run high-index first, so x0 (Self) is restored LAST and the
+          VMT load below still sees it -- the collapse only changes where the
+          highest-index argument comes from. }
         for i := nArgs - 1 downto 0 do
-          EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
+          if LastArgCollapseA64(nArgTotal) and (i = nArgTotal - 1) then
+            EmitLastArgMoveA64(nArgTotal)
+          else
+            EmitI32($F84107E0 + i);                  { ldr x[i], [sp], #16 }
         if IRCallDest[node] >= 0 then
           EmitI32($F84107E8);                        { ldr x8, [sp], #16 (hidden destination) }
         EmitI32($F9400009);                          { ldr x9, [x0] (VMT ptr) }
@@ -3824,9 +4098,8 @@ begin
         begin
           if IRA[node] <> -1 then
           begin
-            IREmitNodeAarch64(IRA[node]);
-            EmitI32($D2800BC8); { movz x8, #94 }
-            EmitI32($D4000001); { svc #0 }
+            IREmitNodeAarch64(IRA[node]);   { x0 = the exit code }
+            EmitExitReg;
           end
           else
             EmitExit(0);
@@ -3882,13 +4155,16 @@ begin
 
           if tk = tyString then
           begin
-            IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
-            EmitI32($AA0003E2);             { mov x2, x0 }
-            EmitI32($F9400040);             { ldr x0, [x2] (len) }
-            EmitI32($91002041);             { add x1, x2, #8 (src) }
-            procIdx := FindProc('PXXStrFromLit');
-            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-            EmitCallProc(procIdx);               { x0 = new AnsiString }
+            if not EmitStaticLitHandleA64(IRB[node]) then
+            begin
+              IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
+              EmitI32($AA0003E2);             { mov x2, x0 }
+              EmitI32($F9400040);             { ldr x0, [x2] (len) }
+              EmitI32($91002041);             { add x1, x2, #8 (src) }
+              procIdx := FindProc('PXXStrFromLit');
+              if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+              EmitCallProc(procIdx);               { x0 = new AnsiString }
+            end;
           end
           else if tk = tyAnsiString then
           begin
@@ -3944,13 +4220,16 @@ begin
 
         if tk = tyString then
         begin
-          IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
-          EmitI32($AA0003E2);             { mov x2, x0 }
-          EmitI32($F9400040);             { ldr x0, [x2] (len) }
-          EmitI32($91002041);             { add x1, x2, #8 (src) }
-          procIdx := FindProc('PXXStrFromLit');
-          if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-          EmitCallProc(procIdx);               { x0 = new AnsiString }
+          if not EmitStaticLitHandleA64(IRB[node]) then
+          begin
+            IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
+            EmitI32($AA0003E2);             { mov x2, x0 }
+            EmitI32($F9400040);             { ldr x0, [x2] (len) }
+            EmitI32($91002041);             { add x1, x2, #8 (src) }
+            procIdx := FindProc('PXXStrFromLit');
+            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(procIdx);               { x0 = new AnsiString }
+          end;
         end
         else if tk = tyAnsiString then
         begin

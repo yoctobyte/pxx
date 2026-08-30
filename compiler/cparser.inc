@@ -48,6 +48,12 @@ end;
 
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
+{ The braced-list loop condition, called from the first such loop ~3200 lines
+  above its body. pxx resolves across the whole unit; FPC resolves in source
+  order, and this file's own body sits after the first caller
+  (bug-a-fpc-seed-drift-emitasmx64-forward, and lexer.inc's CModuleOfTok the
+  same night). }
+function CBlockContinues: Boolean; forward;
 function ParseCStmtExprAST: Integer; forward;
 procedure SkipBraceBlock; forward;
 procedure ParseCSubroutine; forward;
@@ -67,6 +73,12 @@ procedure ParseCStructDecl; forward;
 function IsBareStructDecl: Boolean; forward;
 function IsBareEnumDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
+{ Called from CNodePointeeTk, ~1000 lines above its body. pxx prescans the
+  whole unit; FPC resolves in source order, so without this the bootstrap
+  seed fails to compile while the self-host fixedpoint stays green — the
+  hole CLAUDE.md names, caught by gate.sh quick's forward lint. }
+function CNodeArrayShape(node: Integer; var elemSz, elemRec: Integer;
+                         var elemTk: TTypeKind): Boolean; forward;
 { FindCTypedef's forward lives in forwards.inc (it is called from an include
   earlier in compiler.pas than this one). }
 function CTypedefNameAt(idx: Integer): AnsiString; forward;
@@ -2049,7 +2061,8 @@ end;
 { Pointed-at / element TTypeKind ordinal of a pointer or array node, used to tag
   AN_DEREF / AN_INDEX results. Defaults to Integer for shapes not yet modelled. }
 function CNodePointeeTk(node: Integer): Integer;
-var recId, inner, depth, baseTk: Integer; fieldName: AnsiString;
+var recId, inner, depth, baseTk, elemSz, elemRec: Integer;
+    fieldName: AnsiString; elemTk: TTypeKind;
 begin
   Result := Ord(tyInteger);
   if node < 0 then Exit;
@@ -2078,11 +2091,16 @@ begin
   begin
     inner := node;
     while (inner >= 0) and (ASTKind[inner] = AN_BINOP) do inner := ASTLeft[inner];
-    if (inner >= 0) and (ASTKind[inner] = AN_IDENT) and
-       Syms[ASTIVal[inner]].IsArray and (Syms[ASTIVal[inner]].ArrLen <> -1) and
-       (SymArrNDims[ASTIVal[inner]] > 1) then
+    { every spelling of the array, not just a bare ident: `a.s` decays the
+      same way `s` does, and the AN_IDENT-only test here is why `*a.s[1]` on
+      a `char s[3][8]` field came back 25699 — a four-byte load of a row whose
+      elements are bytes. The rank > 1 test is kept explicit rather than left
+      to CNodeArrayShape's incumbent: only a MULTI-dim array has a row to
+      decay to, and a 1-D array's `*a` is an ordinary load.
+      refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs }
+    if CNodeArrayShape(inner, elemSz, elemRec, elemTk) and (NDInfoNDims > 1) then
     begin
-      Result := Ord(Syms[ASTIVal[inner]].ElemType);
+      Result := Ord(elemTk);
       Exit;
     end;
   end;
@@ -2417,9 +2435,165 @@ begin
           + ' — a BUILD_BUG_ON/static-assert of this shape is FAILING');
 end;
 
+{ The sizeof TYPE-DESCRIPTOR WALK: from an already-consumed base identifier,
+  follow a postfix chain of `[i]` / `.f` / `->f` and answer the size of what it
+  lands on. Returns False when a link cannot be resolved, leaving `sz` untouched
+  so the caller keeps its conservative pointer-size default rather than a
+  confidently wrong answer.
+
+  `cArrLen >= 0` means "array of cTk"; cRec is the record id when cTk is
+  tyRecord, cPtrTk/cPtrRec the pointee when cTk is tyPointer. Walked as a type
+  descriptor rather than as per-shape special cases, so the chain composes to
+  any depth.
+
+  WHY IT IS A PROCEDURE. There were two sizeof implementations. This one served
+  the UNPARENTHESISED spelling (`sizeof a[0]`), and a second, per-shape one
+  served the parenthesised spelling — with no multi-dimension rule at all, so
+  `sizeof(m[0])` on `int m[3][4]` answered 4 where `sizeof m[0]` answered 16.
+  One parenthesis decided whether
+
+      memcpy(dst[1], src[1], sizeof(src[1]))
+
+  copied a row or a single element, silently, on a plain global array. The
+  comment on this walk had named that exact failure -- "without the spans
+  `sizeof m[0]` would answer the element size and ARRAY_SIZE(m) would count 15
+  rather than 3" -- while the other path had it, because a fix to one arm of a
+  double case does not reach its sibling (devdocs/dev/normalise-dont-special-case.md).
+  Both spellings now walk here.
+  bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
+function CSizeofDescriptorWalk(si: Integer; var sz: Integer): Boolean;
+var cArrLen, cRec, cPtrRec, cNDims, cDim, cSpanSym, recId, depth: Integer;
+    cTk, cPtrTk: TTypeKind; cOK: Boolean;
+    cFldRec: Integer; fieldName, cFldName: AnsiString;
+begin
+  cOK := True;
+  cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+  cNDims := 0; cDim := 0; cSpanSym := si;
+  cFldRec := REC_NONE; cFldName := '';
+  if Syms[si].IsArray then
+  begin
+    { ArrLen is the FLATTENED element count; a multidimensional array keeps
+      its per-dim spans in SymArrDimSpan, and one subscript peels ONE dim
+      (int[3][5] -> int[5], not int). Without the spans `sizeof m[0]` would
+      answer the element size and ARRAY_SIZE(m) would count 15 rather than 3. }
+    cArrLen := Syms[si].ArrLen;
+    cTk := Syms[si].ElemType;
+    cRec := Syms[si].ElemRecName;
+    cNDims := SymArrNDims[si];
+  end
+  else
+  begin
+    cArrLen := -1;
+    cTk := Syms[si].TypeKind;
+    cRec := Syms[si].RecName;
+    cPtrTk := Syms[si].PtrElemTk;
+    cPtrRec := Syms[si].PtrElemRec;
+  end;
+  while cOK do
+  begin
+    if CurTok.Kind = tkLBrack then
+    begin
+      { one subscript peels one level: an element of the array, or the
+        pointee of a pointer. The index expression is skipped balanced so
+        `a[f(i)][j]` and `a[b[0]]` do not stop at an inner `]`. }
+      if cArrLen >= 0 then
+      begin
+        if (cNDims > 1) and (cDim < cNDims - 1) then
+        begin
+          { One subscript peels ONE dimension, so divide out that dim's span.
+            A multidim RECORD FIELD keeps its spans somewhere else than a
+            symbol does -- UFldArrDimSpan, reached by RecFieldArrDimSpanAt --
+            and this used to bail to the pointer-size default rather than
+            look, on the stated grounds that they were "not reachable by
+            symbol index". True of symbol indices, and the record helper
+            already existed: `sizeof s.m[0]` on `int m[3][4]` answered 8 for
+            int, char and double alike, a row measured as a pointer.
+            bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
+          if cSpanSym >= 0 then
+          begin
+            cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cDim];
+            Inc(cDim);
+          end
+          else if (cFldRec <> REC_NONE) and
+                  (RecFieldArrDimSpanAt(cFldRec, cFldName, cDim) > 0) then
+          begin
+            cArrLen := cArrLen div RecFieldArrDimSpanAt(cFldRec, cFldName, cDim);
+            Inc(cDim);
+          end
+          else cOK := False;
+        end
+        else cArrLen := -1;
+      end
+      else if cTk = tyPointer then
+      begin
+        cTk := cPtrTk; cRec := cPtrRec;
+        cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+      end
+      else cOK := False;
+      depth := 0;
+      while CurTok.Kind <> tkEOF do
+      begin
+        if CurTok.Kind = tkLBrack then Inc(depth)
+        else if CurTok.Kind = tkRBrack then
+        begin
+          Dec(depth);
+          if depth = 0 then begin Next; Break; end;
+        end;
+        Next;
+      end;
+    end
+    else if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+    begin
+      { `.` and `->` both lex as tkDot. An ARRAY base reaches its element's
+        record through cRec, which is how `arr->field` sizes. }
+      recId := REC_NONE;
+      if cTk = tyRecord then recId := cRec
+      else if cTk = tyPointer then recId := cPtrRec;
+      if recId = REC_NONE then begin cOK := False; Break; end;
+      Next;   { consume '.' / '->' }
+      fieldName := CurTok.SVal;
+      Next;   { consume the field name }
+      cTk := RecFieldType(recId, fieldName);
+      cRec := REC_NONE; cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+      cNDims := 0; cDim := 0; cSpanSym := -1;
+      cFldRec := REC_NONE; cFldName := '';
+      if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
+      begin
+        cArrLen := RecFieldArrLen(recId, fieldName);
+        cNDims := RecFieldArrNDims(recId, fieldName);
+        cFldRec := recId; cFldName := fieldName;   { for RecFieldArrDimSpanAt in the subscript arm }
+        if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName);
+      end
+      else
+      begin
+        cArrLen := -1;
+        if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName)
+        else if cTk = tyPointer then
+        begin
+          cPtrTk := RecFieldPtrElemTk(recId, fieldName);
+          cPtrRec := RecFieldPtrElemRec(recId, fieldName);
+        end;
+      end;
+    end
+    else Break;
+  end;
+  if cOK then
+  begin
+    if cArrLen >= 0 then
+    begin
+      if cTk = tyRecord then sz := cArrLen * RecSize(cRec)
+      else sz := cArrLen * TypeSize(cTk);
+    end
+    else if cTk = tyRecord then sz := RecSize(cRec)
+    else sz := TypeSize(cTk);
+  end;
+  Result := cOK;
+end;
+
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen: Integer;
     cNDims, cDim, cSpanSym: Integer;
+    cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
     vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
     tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
@@ -2584,122 +2758,15 @@ begin
       if si >= 0 then
       begin
         Next;
-        if CurTok.Kind = tkDot then
-        begin
-          recId := REC_NONE;
-          if Syms[si].TypeKind = tyPointer then
-            recId := Syms[si].PtrElemRec
-          else if Syms[si].TypeKind = tyRecord then
-          begin
-            { an ARRAY of records keeps the element record in ElemRecName
-              (RecName is unset) — `arr->field` sizing, c-testsuite 00205's
-              `sizeof(cases->c)/sizeof(cases->c[0])` }
-            if Syms[si].IsArray then recId := Syms[si].ElemRecName
-            else recId := Syms[si].RecName;
-          end;
-          { Walk the WHOLE member chain, not just its first link. `->` and `.`
-            both lex as tkDot, so `sizeof(d.info->date)` used to size `info`
-            (a POINTER, 8) and let the balanced-paren scan swallow `->date`,
-            where the answer is 64. Direct `.` access was right, which is why
-            this survived: the obvious test passes.
-
-            Where the real array is SMALLER than a pointer the bogus 8 is a
-            BOUND that overflows — `memset(h.s->buf, 'X', sizeof(h.s->buf))`
-            wrote 8 bytes into 4 and clobbered the next field, silently. See
-            bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size. }
-          while (CurTok.Kind = tkDot) and (recId <> REC_NONE) do
-          begin
-            Next;
-            if CurTok.Kind <> tkIdent then Break;
-            fieldName := CurTok.SVal;
-            { Another `.`/`->` after this field? Then this link is intermediate:
-              step into the field's own record and keep walking. Anything that
-              is neither a record nor a pointer-to-record ends the walk with
-              recId = REC_NONE, leaving the default pointer-size answer rather
-              than a confidently wrong one. }
-            if Tokens[TokPos].Kind = tkDot then
-            begin
-              if RecFieldType(recId, fieldName) = tyPointer then
-                recId := RecFieldPtrElemRec(recId, fieldName)
-              else if RecFieldType(recId, fieldName) = tyRecord then
-                recId := RecFieldRecId(recId, fieldName)
-              else
-                recId := REC_NONE;
-              Next;   { onto the next tkDot }
-              Continue;
-            end;
-            if recId <> REC_NONE then
-            begin
-              if Tokens[TokPos].Kind = tkLBrack then
-              begin
-                if RecFieldIsArray(recId, fieldName) then
-                begin
-                  elemTk := RecFieldType(recId, fieldName);
-                  if elemTk = tyRecord then
-                    sz := RecSize(RecFieldRecId(recId, fieldName))
-                  else
-                    sz := TypeSize(elemTk);
-                end
-                else if RecFieldType(recId, fieldName) = tyPointer then
-                begin
-                  elemTk := RecFieldPtrElemTk(recId, fieldName);
-                  if elemTk = tyRecord then
-                    sz := RecSize(RecFieldPtrElemRec(recId, fieldName))
-                  else
-                    sz := TypeSize(elemTk);
-                end
-                else if RecFieldType(recId, fieldName) = tyRecord then
-                  sz := RecSize(RecFieldRecId(recId, fieldName))
-                else
-                  sz := TypeSize(RecFieldType(recId, fieldName));
-              end
-              else if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
-              begin
-                arrLen := RecFieldArrLen(recId, fieldName);
-                elemTk := RecFieldType(recId, fieldName);
-                if elemTk = tyRecord then
-                  sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
-                else
-                  sz := arrLen * TypeSize(elemTk);
-              end
-              else if RecFieldType(recId, fieldName) = tyRecord then
-                sz := RecSize(RecFieldRecId(recId, fieldName))
-              else
-                sz := TypeSize(RecFieldType(recId, fieldName));
-            end;
-            Break;   { terminal link: the chain is measured }
-          end;
-        end
-        else
-        begin
-        if CurTok.Kind = tkLBrack then
-        begin
-          { `sizeof(arr[i])` / `sizeof(p[i])` — the size of ONE element, not the
-            whole array. Without this, the ubiquitous `ArraySize(x)` idiom
-            `sizeof(x)/sizeof(x[0])` folded to 1 (whole/whole), so e.g. sqlite's
-            built-in-extension loop ran a single iteration. }
-          if Syms[si].IsArray then
-          begin
-            if Syms[si].ElemType = tyRecord then sz := RecSize(Syms[si].ElemRecName)
-            else sz := TypeSize(Syms[si].ElemType);
-          end
-          else if Syms[si].TypeKind = tyPointer then
-          begin
-            if Syms[si].PtrElemTk = tyRecord then sz := RecSize(Syms[si].PtrElemRec)
-            else sz := TypeSize(Syms[si].PtrElemTk);
-          end
-          else sz := TypeSize(Syms[si].TypeKind);
-        end
-        else if Syms[si].IsArray then
-        begin
-          if Syms[si].ElemType = tyRecord then
-            sz := Syms[si].ArrLen * RecSize(Syms[si].ElemRecName)
-          else
-            sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType);
-        end
-        else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
-        else sz := TypeSize(Syms[si].TypeKind);
-        end;
+        { The parenthesised spelling used to have its OWN per-shape sizing here
+          -- a `.`-chain walk and a `[` arm -- and that copy had no multi-dimension
+          rule, so `sizeof(m[0])` on `int m[3][4]` answered the ELEMENT size where
+          the unparenthesised `sizeof m[0]` answered the row. One parenthesis decided
+          whether `memcpy(dst[1], src[1], sizeof(src[1]))` copied a row or one int,
+          silently, on a plain global array. Both spellings now walk the same type
+          descriptor; the ~115 lines deleted here were that second copy.
+          bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
+        if not CSizeofDescriptorWalk(si, sz) then ;   { False leaves sz at the default }
       end;
     end;
     { General-expression operand none of the special cases consumed (e.g.
@@ -2780,112 +2847,7 @@ begin
       answer — the same conservative choice the parenthesized walk makes. }
     if si >= 0 then
     begin
-      cOK := True;
-      cPtrTk := tyUnknown; cPtrRec := REC_NONE;
-      cNDims := 0; cDim := 0; cSpanSym := si;
-      if Syms[si].IsArray then
-      begin
-        { ArrLen is the FLATTENED element count; a multidimensional array keeps
-          its per-dim spans in SymArrDimSpan, and one subscript peels ONE dim
-          (int[3][5] -> int[5], not int). Without the spans `sizeof m[0]` would
-          answer the element size and ARRAY_SIZE(m) would count 15 rather than 3. }
-        cArrLen := Syms[si].ArrLen;
-        cTk := Syms[si].ElemType;
-        cRec := Syms[si].ElemRecName;
-        cNDims := SymArrNDims[si];
-      end
-      else
-      begin
-        cArrLen := -1;
-        cTk := Syms[si].TypeKind;
-        cRec := Syms[si].RecName;
-        cPtrTk := Syms[si].PtrElemTk;
-        cPtrRec := Syms[si].PtrElemRec;
-      end;
-      while cOK do
-      begin
-        if CurTok.Kind = tkLBrack then
-        begin
-          { one subscript peels one level: an element of the array, or the
-            pointee of a pointer. The index expression is skipped balanced so
-            `a[f(i)][j]` and `a[b[0]]` do not stop at an inner `]`. }
-          if cArrLen >= 0 then
-          begin
-            if (cNDims > 1) and (cDim < cNDims - 1) then
-            begin
-              { the spans of a multidim RECORD FIELD are not reachable by symbol
-                index, so a subscript into one cannot be sized -- bail to the
-                default rather than answer the element size. }
-              if cSpanSym < 0 then cOK := False
-              else
-              begin
-                cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cDim];
-                Inc(cDim);
-              end;
-            end
-            else cArrLen := -1;
-          end
-          else if cTk = tyPointer then
-          begin
-            cTk := cPtrTk; cRec := cPtrRec;
-            cPtrTk := tyUnknown; cPtrRec := REC_NONE;
-          end
-          else cOK := False;
-          depth := 0;
-          while CurTok.Kind <> tkEOF do
-          begin
-            if CurTok.Kind = tkLBrack then Inc(depth)
-            else if CurTok.Kind = tkRBrack then
-            begin
-              Dec(depth);
-              if depth = 0 then begin Next; Break; end;
-            end;
-            Next;
-          end;
-        end
-        else if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
-        begin
-          { `.` and `->` both lex as tkDot. An ARRAY base reaches its element's
-            record through cRec, which is how `arr->field` sizes. }
-          recId := REC_NONE;
-          if cTk = tyRecord then recId := cRec
-          else if cTk = tyPointer then recId := cPtrRec;
-          if recId = REC_NONE then begin cOK := False; Break; end;
-          Next;   { consume '.' / '->' }
-          fieldName := CurTok.SVal;
-          Next;   { consume the field name }
-          cTk := RecFieldType(recId, fieldName);
-          cRec := REC_NONE; cPtrTk := tyUnknown; cPtrRec := REC_NONE;
-          cNDims := 0; cDim := 0; cSpanSym := -1;
-          if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
-          begin
-            cArrLen := RecFieldArrLen(recId, fieldName);
-            cNDims := RecFieldArrNDims(recId, fieldName);
-            if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName);
-          end
-          else
-          begin
-            cArrLen := -1;
-            if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName)
-            else if cTk = tyPointer then
-            begin
-              cPtrTk := RecFieldPtrElemTk(recId, fieldName);
-              cPtrRec := RecFieldPtrElemRec(recId, fieldName);
-            end;
-          end;
-        end
-        else Break;
-      end;
-      if cOK then
-      begin
-        if cArrLen >= 0 then
-        begin
-          if cTk = tyRecord then sz := cArrLen * RecSize(cRec)
-          else sz := cArrLen * TypeSize(cTk);
-        end
-        else if cTk = tyRecord then sz := RecSize(cRec)
-        else sz := TypeSize(cTk);
-      end;
+      if not CSizeofDescriptorWalk(si, sz) then ;   { False leaves sz at the default }
     end
     else if (procIdx >= 0) and (CurTok.Kind = tkLParen) then
     begin
@@ -3039,7 +3001,7 @@ var tmpSym, n, i, len, idn, idxLit, inode, asn, seq, tail, node: Integer;
 begin
   n := 0;
   Next;   { consume the opening brace }
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     if n > 255 then Error('too many array compound-literal elements');
     elems[n] := ParseCExpr; Inc(n);
@@ -3089,6 +3051,64 @@ begin
   ASTLeft[Result] := node; ASTTk[Result] := Ord(tk);
 end;
 
+{ THE array-shape reader. Answers one question — "is `node` a fixed-extent
+  array object, and what is one element?" — for every spelling of one, so a
+  caller never has to grow its own AN_IDENT/AN_FIELD pair.
+
+  That pair is the defect this closes. Four readers ask this question:
+  CSizeofDescriptorWalk, CDerefDecayStride, CNodePointeeTk and the decay path
+  in CNodeDecaysToPointer. Each grew an AN_IDENT arm first, because a bare
+  `a` is what every test writes; the AN_FIELD arm was then added by whoever
+  next hit a struct field, or never. A grep for the duplicated logic finds the
+  arms that diverged and is structurally blind to the ones that are MISSING —
+  so the missing ones stayed missing, one bug at a time:
+    bug-c-a-struct-field-partial-index-uses-the-outer-row-stride
+    bug-c-a-multidim-array-field-decays-with-the-element-stride
+    bug-c-sizeof-a-partial-index-answers-the-element-not-the-row
+
+  It is a thin wrapper over NodeArrNDInfo (pasparser_call.inc), which already
+  walks IDENT, FIELD and deref-of-pointer-to-array and fills NDInfoNDims /
+  NDInfoLo[] / NDInfoSpan[]. What it does NOT yield is the element triple —
+  size, record id, type kind — which is exactly what every caller here needs
+  and what each was hand-rolling. Two gaps in the incumbent are filed as
+  Track P tickets rather than patched here: it fires only for rank >= 2, and
+  it yields spans but no element. Both are P's file.
+
+  Returns False for a dynamic array (ArrLen = -1 / DynDepth <> 0), for a
+  non-array, and for a zero-size element — every caller treats that as "not
+  an array object" and keeps its existing fallback.
+  refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs }
+function CNodeArrayShape(node: Integer; var elemSz, elemRec: Integer;
+                         var elemTk: TTypeKind): Boolean;
+var recId: Integer; fname: AnsiString;
+begin
+  Result := False;
+  elemSz := 0; elemRec := REC_NONE; elemTk := tyUnknown;
+  if node < 0 then Exit;
+  if not NodeArrNDInfo(node) then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if not Syms[ASTIVal[node]].IsArray then Exit;
+    if Syms[ASTIVal[node]].ArrLen = -1 then Exit;
+    elemTk := Syms[ASTIVal[node]].ElemType;
+    elemRec := Syms[ASTIVal[node]].ElemRecName;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    fname := GetASTIdentName(node);
+    if not RecFieldIsArray(recId, fname) then Exit;
+    if RecFieldDynDepth(recId, fname) <> 0 then Exit;
+    elemTk := RecFieldType(recId, fname);
+    elemRec := RecFieldRecId(recId, fname);
+  end
+  else
+    Exit;      { a deref of a pointer-to-array keeps its own path below }
+  if elemTk = tyRecord then elemSz := RecSize(elemRec)
+  else elemSz := TypeSize(elemTk);
+  Result := elemSz > 0;
+end;
+
 { `*x` where x is a POINTER-TO-ARRAY: what the result steps by, or 0 when this
   is an ordinary dereference. C says dereferencing a pointer-to-array yields
   the array, which decays straight back to the same address — a no-op, not a
@@ -3103,7 +3123,8 @@ end;
   scan bails. That is what keeps `*(m[1]+1)` reading an int.
   bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying }
 function CDerefDecayStride(node: Integer): Integer;
-var base, si, k, lvl, stamp, elemSz, suffK, suffNext, d: Integer;
+var base, si, k, lvl, stamp, elemSz, elemRec, suffK, suffNext, d, nd: Integer;
+    elemTk: TTypeKind;
 begin
   Result := 0;
   base := node;
@@ -3115,13 +3136,18 @@ begin
     if (ASTSLen[base] > 0) and (stamp = 0) then stamp := ASTSLen[base];
     base := ASTLeft[base];
   end;
-  if (base < 0) or (ASTKind[base] <> AN_IDENT) then Exit;
-  si := ASTIVal[base];
-  if Syms[si].IsArray and (Syms[si].ArrLen <> -1) then
+  if base < 0 then Exit;
+  { The array arm reads its shape through CNodeArrayShape, so `a.m` is the
+    same object as `m` here. The AN_IDENT-only guard this replaces did not
+    give a wrong stride for a field — it gave none, so the decay never
+    happened and the deref stayed a load OF AN ELEMENT AS AN ADDRESS: `**a.s`,
+    `*(*(a.m+1)+2)` and `strcmp(*(a.s+1),"cd")` all SIGSEGV'd where the ident
+    spellings were right.
+    refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs }
+  if CNodeArrayShape(base, elemSz, elemRec, elemTk) then
   begin
-    if SymArrNDims[si] < 2 then Exit;    { a 1-D array's `*a` IS a load }
-    if Syms[si].ElemType = tyRecord then elemSz := RecSize(Syms[si].ElemRecName)
-    else elemSz := TypeSize(Syms[si].ElemType);
+    nd := NDInfoNDims;
+    if nd < 2 then Exit;    { a 1-D array's `*a` IS a load }
     { The stride AT LEVEL k is elemSz * the product of the dims below k. Level
       0 is the whole array; level nDims-1 points at elements, and dereferencing
       THAT is a real load. Find the level from the stamp, then answer the next
@@ -3130,22 +3156,23 @@ begin
     if stamp > 0 then
     begin
       suffK := elemSz;
-      for k := SymArrNDims[si] - 1 downto 0 do
+      for k := nd - 1 downto 0 do
       begin
         if suffK = stamp then begin lvl := k; Break; end;
-        d := SymArrDimSpan[si * MAX_ARR_DIMS + k];
+        d := NDInfoSpan[k];
         if d > 0 then suffK := suffK * d;
       end;
       if lvl = 0 then Exit;      { the stamp matched nothing — leave the load }
     end;
-    if lvl >= SymArrNDims[si] - 1 then Exit;   { pointing at elements: a load }
+    if lvl >= nd - 1 then Exit;   { pointing at elements: a load }
     suffNext := elemSz;
-    for k := lvl + 2 to SymArrNDims[si] - 1 do
-      if SymArrDimSpan[si * MAX_ARR_DIMS + k] > 0 then
-        suffNext := suffNext * SymArrDimSpan[si * MAX_ARR_DIMS + k];
+    for k := lvl + 2 to nd - 1 do
+      if NDInfoSpan[k] > 0 then suffNext := suffNext * NDInfoSpan[k];
     Result := suffNext;
     Exit;
   end;
+  if ASTKind[base] <> AN_IDENT then Exit;
+  si := ASTIVal[base];
   { `int (*r)[4]` — the pointee is an array, so *r is a pointer to its first
     element (and one dimension further in for a multi-dim pointee). Arithmetic
     over the pointer stays at that level, exactly as it does for an array, so
@@ -3412,8 +3439,10 @@ begin
         begin
           { the no-op deref: same address, one dimension further in. Built as
             the raw byte add the partial index uses, so one shape carries a
-            decayed row everywhere. }
-          if ASTKind[operand] = AN_IDENT then ASTTk[operand] := Ord(tyInt64);
+            decayed row everywhere. The add is marked pre-scaled by the ASTSLen
+            stamp below, NOT by retagging the base tyInt64 — see the note at the
+            partial-index arm.
+            refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag }
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := 0; ASTTk[node] := Ord(tyInt64);
           Result := AllocNode(AN_BINOP);
@@ -3697,7 +3726,7 @@ function ParseCPostfixTail(node: Integer): Integer;
 var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
-    ndimsF, flatNode, spanD, ndi, nIdx, si: Integer;
+    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si: Integer;
     sIdx: array[0..MAX_ARR_DIMS-1] of Integer;  { subscript nodes captured locally — the shared NDIdxNode[] is clobbered when a subscript is itself a multi-dim read }
     done: Boolean; fieldName: AnsiString;
 begin
@@ -3754,14 +3783,24 @@ begin
             decays to a POINTER to the remaining sub-array — g[1][3] on
             int[2][9][7] is int(*)[7]. Address = &base + Horner(first nIdx dims)
             * product(remaining dim spans) * elemsize. Built as a raw byte add
-            (the array ident decays to its base address, tagged tyInt64),
-            mirroring the struct-field partial-index path above; the pointer value
-            is then assignable to an int(*)[..] variable and re-indexed through it.
-            (bug-c-partial-multidim-array-index.) }
+            (the array ident decays to its base address), mirroring the
+            struct-field partial-index path above; the pointer value is then
+            assignable to an int(*)[..] variable and re-indexed through it.
+            (bug-c-partial-multidim-array-index.)
+
+            HOW "raw bytes, do not scale me again" IS RECORDED. This arm used to
+            retag the base `ASTTk[node] := Ord(tyInt64)`, which stopped the
+            pointer-arithmetic lowering from multiplying the already-multiplied
+            offset a second time. That was a FLAG written into the type field,
+            and tyInt64 is also the honest tag of a `long long` array — so the
+            readers had to guess which meaning they were looking at, and both
+            guesses were wrong for some real program. The fact now lives only in
+            the ASTSLen stamp on the resulting add, which means one thing and is
+            what IRPointerStride already read.
+            refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag }
           flatNode := BuildFlatNDIndex(nIdx);
           rowStride := TypeSize(Syms[ASTIVal[node]].ElemType);
           for ndi := nIdx to NDInfoNDims - 1 do rowStride := rowStride * NDInfoSpan[ndi];
-          ASTTk[node] := Ord(tyInt64);
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
@@ -3882,15 +3921,54 @@ begin
         else
         begin
           { partial index -> row pointer. rowStride = product(remaining spans)*elem.
-            Tag operands tyInt64 so the add is raw 64-bit (no pointer-stride scale);
-            the AN_FIELD value decays to its address as the base. }
+            The offset operands are tyInt64 so the add is raw 64-bit; the
+            AN_FIELD value decays to its address as the base. What says "already
+            byte-scaled, do not scale me again" is the ASTSLen stamp on the
+            resulting add, not the base's type tag — see the array arm above.
+            refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
+
+            RecFieldRowStride answers for ONE subscript — it is
+            elem*product(span[1..n-1]), the OUTER row. This arm is reached with
+            `ndi` subscripts consumed, and for ndi > 1 the multiplier is the
+            product of the REMAINING spans, which is what the array arm above
+            computes for itself. Using the outer row stride at every depth sent
+            `int *q = s.m[1][2]` on `int m[2][3][4]` 48 bytes per flat unit
+            instead of 16 — the address left the object and q[0] read garbage,
+            silently. Recover the element size by dividing the inner spans back
+            out of RecFieldRowStride (rather than re-deriving it from the field
+            type, which would have to special-case tyRecord the way that helper
+            already does), then multiply the spans this partial index actually
+            leaves behind.
+            bug-c-a-struct-field-partial-index-uses-the-outer-row-stride }
           rowStride := RecFieldRowStride(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld));
-          ASTTk[baseFld] := Ord(tyInt64);
+          for ndi2 := 1 to ndimsF - 1 do
+          begin
+            spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi2);
+            if spanD > 0 then rowStride := rowStride div spanD;
+          end;
+          for ndi2 := ndi to ndimsF - 1 do
+          begin
+            spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi2);
+            if spanD > 0 then rowStride := rowStride * spanD;
+          end;
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
           inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
           ASTLeft[inode] := baseFld; ASTRight[inode] := mulNode; ASTTk[inode] := Ord(tyPointer);
+          { What the decayed row pointer STEPS BY — the same stamp the ARRAY
+            partial-index arm sets, and the reason this arm needed it is the same
+            one: the base is retagged tyInt64 here, so IRPointerStride recurses
+            into the byte-offset multiply and falls to its size-1 default.
+            `*(s.m[1] + 1)` on `int m[3][4]` therefore stepped ONE BYTE and
+            answered 184549376 (11 shl 24) instead of 11 — the exact signature of
+            bug-c-a-multidim-array-decays-with-the-element-stride, whose second
+            half introduced this stamp for the ARRAY arm and never reached this
+            one. Same defect, same fix, the sibling arm nobody grepped for.
+            bug-c-a-struct-field-partial-index-uses-the-outer-row-stride }
+          spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi);
+          if spanD > 0 then ASTSLen[inode] := rowStride div spanD
+          else ASTSLen[inode] := rowStride;
           node := inode;
         end;
       end
@@ -5045,7 +5123,7 @@ begin
       begin
         Next; Expect(tkBegin, '{');
         ei := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        while CBlockContinues do
         begin
           if CurTok.Kind = tkAmp then Next;   { `&func` == `func` }
           initExpr := ParseCExpr;             { function name -> its address }
@@ -5469,7 +5547,7 @@ begin
       begin
         Next; Next;   { consume the assign then the open brace }
         curElemIdx := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        while CBlockContinues do
         begin
           if nArrElems > 255 then begin nArrElems := -1; Break; end;
           { `[k] =` element designator, and `[lo ... hi] =` GNU range, reposition
@@ -6131,12 +6209,71 @@ begin
   Result := blk;
 end;
 
+function CLastCSourceLine: Integer;
+{ The line of the last token that carried source -- the end of the user's file,
+  for a diagnostic raised at EOF. Not CurTok.Line: the cursor is ON the tkEOF
+  token, whose Line is one PAST the last line of the file, so the error would
+  name a line the user cannot open. That number is a parsed interface -- the IDE
+  keys jump-to-error off it (see WriteDiagSourceFile's note) -- so being one out
+  is not cosmetic. }
+var t: Integer;
+begin
+  Result := 0;
+  t := TokPos - 1;
+  while (t > 0) and (Tokens[t].Kind = tkEOF) do Dec(t);
+  if t >= 0 then Result := Tokens[t].Line;
+end;
+
+procedure CRefuseUnterminated;
+{ THE one wording for "the C text ran out mid-construct". Two call shapes reach
+  it -- the loop condition below, for every braced member/statement list, and
+  ParseCStatementAST's entry, for a statement that is not inside such a loop
+  (`if (x) <stmt>` running off the end). One predicate, one message, one place
+  to change either.
+
+  ErrorAt, not Error: the line must be the user's last C line, and the `in:` /
+  `near:` context must be SUPPRESSED, because from here both would describe
+  Pascal. That is the whole bug -- every part of the old diagnostic was correct
+  about a place the user has never seen. }
+begin
+  ErrorIdent := '';   { the message says it all; a stale ident would read as the culprit }
+  ErrorAt(CLastCSourceLine,
+          'unterminated C construct: end of file before its closing `}`');
+end;
+
+function CBlockContinues: Boolean;
+{ The loop condition for every braced list in the C parser: struct and enum
+  members, initializers, statement blocks, asm sections. Was written out
+  fourteen times as `(CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF)`, and all
+  fourteen were wrong in the same two ways.
+
+  The second term did nothing: the C stream's tkEOF used to be DELETED when
+  units were appended, so `tkEOF` could not fire until the whole Pascal RTL had
+  been parsed as C. That is fixed at the source now -- CLexAll sets
+  MainProgramTokCount, so the EOF survives -- and the term finally means
+  something.
+
+  And what it should mean is not "stop". A braced list that reaches END OF FILE
+  is UNTERMINATED, always: no C construct is well-formed with an open brace and
+  no closing one. Returning False there just hands the raw Expect(tkEnd) a token
+  it cannot name -- `Expected: <close-brace>, but got:  (Kind: 0)`, which is what
+  this printed for one build. So EOF refuses, and only a close brace ends the
+  loop.
+
+  (Braces are spelled out in this comment on purpose: pxx and FPC both NEST
+  comments, so a literal one inside the text terminates it early. Three builds
+  paid for that tonight.) }
+begin
+  if CurTok.Kind = tkEOF then CRefuseUnterminated;
+  Result := CurTok.Kind <> tkEnd;
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk: Integer;
     asmSections, asmDepth: Integer; asmEmpty: Boolean;   { GCC inline asm }
 begin
   Result := -1;
-  if CurTok.Kind = tkEOF then Exit;
+  if CurTok.Kind = tkEOF then Exit;   { the enclosing CBlockContinues refuses it }
 
   { empty statement }
   if CurTok.Kind = tkSemicolon then
@@ -6408,7 +6545,7 @@ begin
   scopeMark := SymCount;
   blockNode := AllocNode(AN_BLOCK);
   lastSeq := -1;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     stmtNode := ParseCStatementAST;
     if stmtNode <> -1 then
@@ -6472,7 +6609,7 @@ begin
   blockNode := AllocNode(AN_BLOCK);
   lastSeq := -1;
   prevStmt := -1;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     stmtNode := ParseCStatementAST;
     if stmtNode <> -1 then
@@ -6548,7 +6685,7 @@ begin
   if CurTok.Kind = tkBegin then
   begin
     Next;                        { consume the opening brace }
-    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+    while CBlockContinues do
     begin
       stmtNode := ParseCStatementAST;
       if stmtNode <> -1 then
@@ -7116,7 +7253,7 @@ begin
     { braced scalar `{ expr }` (C99 6.7.8p11) }
     Next;
     CInitLeaf(tkOrd, emit);
-    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+    while CBlockContinues do
     begin
       CSkipCInitElement;
       if not Eat(tkComma) then Break;
@@ -7230,7 +7367,7 @@ begin
     begin
       Next;
       CInitFillCharArray(UFldTk[fi], UFldArrLen[fi], emit);
-      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      while CBlockContinues do
       begin
         CSkipCInitElement;
         if not Eat(tkComma) then Break;
@@ -7760,7 +7897,7 @@ begin
     begin
       Next; Next;                        { consume assign and opening brace }
       fnCurTgt := 0; fnHadDesig := False;
-      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      while CBlockContinues do
       begin
         if nArrElems > 255 then begin nArrElems := -1; Break; end;
         { `[k] =` / `[lo ... hi] =` element designators (C 6.7.8 / GNU range) —
@@ -8028,7 +8165,7 @@ begin
     begin
       ptrArrDeferTok := TokPos;  { the opening brace's token index (not yet a defer) }
       Next; Next;  { consume assignment and opening initializer token }
-      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      while CBlockContinues do
       begin
         if nArrElems > 255 then begin nArrElems := -1; Break; end;
         if CurTok.Kind = tkString then
@@ -8305,7 +8442,7 @@ begin
       begin
         Next;   { consume the opening brace }
         ei := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        while CBlockContinues do
         begin
           { `[k] =` repositions the index; `[lo ... hi] =` (GNU range) fills every
             index lo..hi with the one value. Skipped slots stay 0 (BSS-zeroed). }
@@ -8369,7 +8506,7 @@ begin
           tySingle slot. }
         Next;   { consume the opening brace }
         ei := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        while CBlockContinues do
         begin
           if CurTok.Kind = tkLBrack then
           begin
@@ -9961,7 +10098,17 @@ begin
   CWarnImplicitSystemImports;
 
   mainIdx := FindProc('main');
-  if mainIdx < 0 then Error('main function not found');
+  if mainIdx < 0 then
+  begin
+    { ErrorAt: this runs AFTER both passes, with the cursor sitting past every
+      appended unit, so plain Error would print a `near:` window of Pascal RTL
+      source and an `in:` naming a builtin -- for a C program that simply has no
+      main. Same reasoning as CRefuseUnterminated: a diagnostic raised once the
+      parser is out of the C region must not read its context from where the
+      parser happens to be. }
+    ErrorIdent := '';
+    ErrorAt(CLastCSourceLine, 'main function not found');
+  end;
   { Patch the entry stub's call-to-main with main's body address. }
   CPatchStubCall(callPatch, Procs[mainIdx].BodyAddr);
 
@@ -9982,12 +10129,45 @@ begin
   end;
 end;
 
+{ Did the declaration whose type token sits at `typeIdx` carry a `static`
+  specifier? Scans BACKWARD over the storage-class / function specifiers that
+  the top-level walks skip without recording (CIsTopLevelSkipIdent), stopping
+  at the first token that is not one of them.
+
+  Backward rather than a flag threaded through the callers because those
+  specifiers are skipped in three separate top-level loops (program pass 1,
+  the crtl pull, and the header walk) and a flag would have to be set and
+  cleared correctly in all three; the token stream already holds the answer.
+
+  Deliberately conservative: an intervening `__attribute__((...))` or any
+  shape this does not model makes it answer False, which keeps the caller on
+  the pre-existing behaviour. A missed `static` is a bug that stays; a
+  hallucinated one would compile a body that should have been imported. }
+function CDeclSawStatic(typeIdx: Integer): Boolean;
+var k: Integer; s: AnsiString;
+begin
+  Result := False;
+  k := typeIdx - 1;
+  while (k >= 0) and (Tokens[k].Kind = tkIdent) do
+  begin
+    s := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+    if s = 'static' then
+    begin
+      Result := True;
+      Exit;
+    end;
+    if not CIsTopLevelSkipIdent(s) then Exit;
+    Dec(k);
+  end;
+end;
+
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
   name, extLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
+  hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
@@ -10014,6 +10194,32 @@ var
   apDims: array[0..MAX_ARR_DIMS-1] of Integer;   { `T name[][A][B]` param: the bracket dims }
   apN, apK, apProd: Integer;
 begin
+  { A `static`/`static inline` function DEFINED in a header reached by `uses`.
+    The header path assumed a header "declares and defines nothing", so it
+    dropped such a body, marked the proc external, and synthesised a soname
+    from the header's own stem -- producing a binary with a DT_NEEDED on a
+    lib<header>.so that cannot exist, dead at load. That invariant is right for
+    an FFI surface (sqlite3.h declares, libsqlite3.so defines) and simply false
+    for `static`, which has INTERNAL linkage: there is no library to import
+    from, because the definition IS the header.
+
+    THE PROVENANCE TERM IS THE WHOLE FIX, and its absence is why the first
+    attempt was reverted. This walk is not reached only by the user's own
+    `uses <header>`: crtl's own modules flow through it too — `uses gtk` pulls
+    gtk.h, which pulls stdlib.h, which brings lib/crtl/src/stdlib.c into the
+    same token buffer and the same walk. Compiling THOSE bodies uncovered two
+    dependencies the header path cannot satisfy (file-scope statics are never
+    reserved here, and the body then wants the crtl two-pass Pascal bridge for
+    __pxx_open), and it broke five gtk tests. So the question is not
+    header-vs-.c mode, it is *whose tokens are these*: CModuleOfTok is < 0 for
+    the header the user named and >= 0 once we are inside a crtl `.c` pull,
+    which already has a path that works and must keep it.
+
+    Computed here, before any Next moves TokPos past the type token.
+    bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead }
+  hdrStaticBody := CHeaderMode and (not CProgramMode) and
+                   (CModuleOfTok(TokPos - 1) < 0) and
+                   CDeclSawStatic(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
   extLib := 'libc.so.6';
@@ -10504,7 +10710,14 @@ begin
   if paramsOverflow then
     Error('C function definition: more than 16 parameters not supported (MAX_PROC_PARAMS)');
 
-  if CHeaderMode then
+  { ...EXCEPT a bodied `static` from the header the user actually named, which
+    falls through to ordinary compilation below: it has internal linkage, so
+    there is no library it could be imported from, and dropping its body is what
+    made the binary unloadable. A non-static bodied function in a header keeps
+    the old treatment -- that one at least matches the FFI intent, and changing
+    it is not what this ticket measured.
+    bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead }
+  if CHeaderMode and not hdrStaticBody then
   begin
     { A bodied function in a C program is a local definition compiled in pass 2;
       mark it internal now so a caller compiled earlier emits a fixup (internal)
@@ -11190,6 +11403,11 @@ end;
 { Consume a balanced brace-delimited block. CurTok must be at the opening
   tkBegin; on return CurTok is just past the matching closing brace. }
 procedure SkipBraceBlock;
+{ Skip a braced body without parsing it (an opaque struct, a duplicate tag, a
+  function body in pass 1). Reaching EOF with depth still open means the body
+  never closed -- the same refusal every braced list makes, and the reason an
+  unterminated `struct S` used to consume the appended RTL and then fail with
+  `main function not found` pointing at a Pascal line. }
 var depth: Integer;
 begin
   depth := 0;
@@ -11197,6 +11415,7 @@ begin
     if CurTok.Kind = tkBegin then Inc(depth)
     else if CurTok.Kind = tkEnd then Dec(depth);
     Next;
+    if (CurTok.Kind = tkEOF) and (depth > 0) then CRefuseUnterminated;
   until (depth = 0) or (CurTok.Kind = tkEOF);
 end;
 
@@ -11566,7 +11785,7 @@ var nextVal, val: Int64; nm: AnsiString;
 begin
   Next; { consume the opening brace }
   nextVal := 0;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     if CurTok.Kind = tkIdent then
     begin
@@ -11851,6 +12070,74 @@ end;
   pointers (any depth -> Pointer, element type/record recorded for deref),
   fixed arrays `T x[N]`, and nested struct-by-value. Bitfields (`x : n`) and
   inline anonymous struct definitions are skipped, not laid out. }
+procedure CEndCMember;
+(* A struct or union MEMBER declaration ends at a semicolon. If it does not, and
+   what follows is an opening brace, the declaration is a FUNCTION DEFINITION and
+   a closing brace is missing above it.
+
+   This was silent, and the silence was the expensive part. Open a struct,
+   declare a member, never close the brace, then define a function -- and it
+   compiled CLEAN. The function was consumed as a member and VANISHED; the only
+   diagnostic came later and elsewhere, "call to undeclared function" at the CALL
+   site, pointing away from the missing brace by however many lines the header
+   is. A program that never called the swallowed function built and ran with it
+   simply absent. gcc refuses such source outright, naming the brace that opens
+   the body.
+
+   Deliberately narrow. Everywhere else the member parser stays exactly as
+   lenient as it was -- a missing semicolon before anything OTHER than an opening
+   brace still just continues, because that leniency is what carries the odd
+   system header. Only the brace is refused, because only the brace means a body,
+   and a body is never a member.
+
+   Written with (* *) and no brace characters on purpose: pxx and FPC both NEST
+   comments, so a literal brace in the prose terminates the comment early and
+   surfaces as `unexpected character` a hundred lines below. Four builds paid for
+   that tonight before the habit stuck. *)
+var j, depth: Integer;
+begin
+  if Eat(tkSemicolon) then Exit;
+  if CurTok.Kind = tkBegin then
+  begin
+    ErrorIdent := '';
+    ErrorAt(CurTok.Line,
+            'a struct member cannot have a body: a closing brace is missing above this line');
+  end;
+  (* The far commoner spelling reaches here with the cursor on the parameter
+     list, not the body: `void f(void) BODY` leaves an opening paren where the
+     semicolon belongs. A paren alone is NOT enough to refuse -- the member
+     parser's leniency past a missing semicolon is what carries the odd system
+     header -- so skip the balanced parens and look at what follows. Only a
+     brace after them is refused, because only that is a function DEFINITION;
+     `void f(void);` after a missing semicolon still just continues, as before.
+     Note the real function-pointer member spelling -- return type, then a
+     parenthesised star-name, then the parameter list -- never reaches here:
+     ParseCDeclType consumes it whole and its own arm calls this with the cursor
+     already past the declarator. Spelled out in words because a literal
+     star-paren pair NESTS inside this comment style, exactly as a brace does in
+     the other one. *)
+  if CurTok.Kind = tkLParen then
+  begin
+    j := TokPos - 1; depth := 0;
+    while j < TokCount do
+    begin
+      if Tokens[j].Kind = tkLParen then Inc(depth)
+      else if Tokens[j].Kind = tkRParen then
+      begin
+        Dec(depth);
+        if depth = 0 then begin Inc(j); Break; end;
+      end;
+      Inc(j);
+    end;
+    if (j < TokCount) and (Tokens[j].Kind = tkBegin) then
+    begin
+      ErrorIdent := '';
+      ErrorAt(Tokens[j].Line,
+              'a struct member cannot have a body: a closing brace is missing above this line');
+    end;
+  end;
+end;
+
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
 var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
@@ -11925,7 +12212,7 @@ begin
   SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
   for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  while CBlockContinues do
   begin
     { Nested inline aggregate member: struct or union with an inline body followed
       by member name(s). Lay the body out as a sub-record (recursively) and buffer
@@ -12073,7 +12360,7 @@ begin
         else curOff := thisOff + totalSz;
         if al > maxAlign then maxAlign := al;
       until not Eat(tkComma);
-      Eat(tkSemicolon);
+      CEndCMember;
     end
     else if IsCTypeTok then
     begin
@@ -12108,7 +12395,7 @@ begin
         if isUnion then begin if TARGET_PTR_SIZE > curOff then curOff := TARGET_PTR_SIZE; end
         else curOff := thisOff + TARGET_PTR_SIZE;
         if TARGET_PTR_SIZE > maxAlign then maxAlign := TARGET_PTR_SIZE;
-        Eat(tkSemicolon);
+        CEndCMember;
       end
       else
       begin
@@ -12434,7 +12721,7 @@ begin
 
         firstDecl := False;
       until not Eat(tkComma);
-      Eat(tkSemicolon);
+      CEndCMember;
       end;  { close the non-fn-pointer-member else }
     end
     else
