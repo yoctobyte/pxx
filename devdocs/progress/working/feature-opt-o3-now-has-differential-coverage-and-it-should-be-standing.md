@@ -87,3 +87,72 @@ claim than correctness.
 
 Track T owns the harness; this ticket asks nothing of that file. It asks Track O
 to adopt a check that already exists.
+
+## 2026-08-30 (frank-optimize) — the cross batch was never run at `-O3`, and the new one is NOT vacuous
+
+### The gap this ticket's item 3 names is wider than it says
+
+`--opts` defaults to `0,2` (`tools/csmith_fuzz.py:595`). The aarch64 batch cited
+in the csmith ticket's section D1 — `--target aarch64 --iters 150 --seed-start
+300100` — **passes no `--opts`**, so *"136 ran clean across pxx `-O` levels"*
+means `-O0` against `-O2`. **aarch64 has never had `-O3` differential coverage
+at all**, while carrying 10 `-O3` gate sites by
+`tools/check_o3_backend_parity.py`'s count. Filed as
+[[bug-t-csmith-batch-records-do-not-state-which-o-levels-they-compared]],
+because the wording will mislead the next reader whatever this run returns.
+
+Running now: `--target aarch64 --opts 0,2,3 --iters 150 --seed-start 330000`,
+compiler **`ba3d1a18edf6`** (rebuilt first — the binary on disk was three
+compiler commits stale).
+
+### First: is a green here worth anything? Rule 2 of the campaign, applied
+
+A batch that never fires the passes is a vacuous green. Measured before
+reporting the batch, so the answer does not depend on how it ends.
+
+**Tier level:** aarch64 `-O2` and `-O3` binaries differ on all three probe
+seeds, so `-O3` code paths are reached.
+
+**Pass level**, counting the exact word the operand-staging fold skips
+(`ldr x0,[sp],#16` = `$F84107E0`) in `.text`, decoded directly — aarch64 is
+fixed-width, and local `objdump` has no aarch64 support even though the ELF has
+9 section headers and an `AX` `.text`:
+
+| seed | `-O` | instrs | staging pops | density | `ret` |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 330500 | 2 | 196550 | 7850 | 3.99% | 1677 |
+| 330500 | 3 | 196550 | 1663 | **0.85%** | 1677 |
+| 330501 | 2 | 196550 | 7856 | 4.00% | 1677 |
+| 330501 | 3 | 196550 | 1664 | **0.85%** | 1677 |
+| 330502 | 2 | 442310 | 20970 | 4.74% | 1701 |
+| 330502 | 3 | 393158 | 5512 | **1.40%** | 1701 |
+
+**Identical instruction and `ret` counts at both levels on the small seeds** —
+so nothing is inlined away, function count is unchanged, and the 79% drop in
+staging is the operand folds alone with the confound held fixed by the data
+rather than by an argument.
+
+**But those two rows do not say what they appear to.** Both small programs give
+*exactly* 196550 instructions, because `.text` is dominated by the statically
+linked RTL — so they measure the fold firing on **the RTL**, not on csmith's
+generated code. Subtracting that common baseline from seed 330502 (1096 lines,
+the only probe with a large program-specific part):
+
+| | instrs | staging pops | density |
+| --- | ---: | ---: | ---: |
+| csmith code, `-O2` | 245760 | 13120 | 5.34% |
+| csmith code, `-O3` | 196608 | 3849 | **1.96%** |
+
+**71% of the staging in csmith's own code is eliminated at `-O3`.** So the batch
+is non-vacuous at pass level too, and a clean result will be worth reporting.
+
+**Two labels I got wrong and am recording rather than quietly fixing.** I first
+called `mov x1, x0` (`$AA0003E1`) a control because both arms of the compare
+fold emit it — it fell 74%, as fast as the thing it was controlling for, because
+other `-O3` arms avoid the staging entirely. And neither stack word is exclusive
+to operand staging; prologues use the same encodings. The numbers are a density
+argument, not a firing count.
+
+**Residual, and I own it:** this shows the *operand-staging family* fires. It
+does not attribute firings to individual slices, and does not show that all 10
+aarch64 gate sites are reached. A clean batch clears the family, not each site.
