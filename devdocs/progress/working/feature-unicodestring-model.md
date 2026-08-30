@@ -275,3 +275,89 @@ miniature.
 `TypeInfo(WideString)^.Kind` and `TypeInfo(UnicodeString)^.Kind` are **both 24**
 (`tkUString`) on Linux — FPC's own RTTI collapses the two spellings exactly as
 this ticket does, which is independent support for the one-kind call.
+
+## 2026-08-30 (frankwasm) — the deciding measurement: **outcome 2, B stands**
+
+The falsifier was: *does an expression node carry an element slot, and if not
+what does adding one cost?* Measured.
+
+### No AST node carries one, and the existing answer to that problem is a walk
+
+There are 18 `AST*` parallel arrays. **None** carries an element type, record id
+or width — `ASTTk` ("TTypeKind of expression") is the only type information a
+node has. The analogous problem, a node's RECORD identity, is solved by
+`symtab.inc:12778 ResolveNodeRec`, a structural resolver that dispatches on node
+kind and walks to wherever the answer really lives. Its own comments call that
+path *"a recurring landmine throughout this codebase"* and it visibly grew arms
+one bug at a time. So the precedent exists and is a warning, not a template.
+
+### How `s1 + s2` answers it today: it doesn't — 1 is assumed
+
+Exactly as predicted. `PXXStrConcat(lenA, srcA, srcB, lenB)` takes BYTE lengths
+and element size never appears (which is why `PXXWideConcat` came out nearly
+identical). Indexing is where width lives, and for a managed string it is set in
+**one** place:
+
+    ir.inc:1794    if (tk = tyAnsiString) and not isArr then
+                   begin lo := 1; elemSize := 1; tk := tyChar; ... end
+
+That is THE site. `IR_INDEX` already carries `elemSize` as an operand and every
+backend already multiplies by it, so the IR layer needs nothing new — the
+constant is simply hardcoded one level up.
+
+### Cost of adding a node-level width: 4 mechanical sites
+
+Adding an `AST*` array is a worn path with three recent precedents
+(`ASTQChk`, `ASTNilChk`, `ASTRChk`). Measured on `ASTRChk`, the whole
+infrastructure cost is:
+
+    defs.inc            the declaration
+    ast_arena.inc:32    SetLength, growing in lockstep
+    ast_arena.inc:74    initialise in AllocNode
+    ast_arena.inc:123   copy in CloneAST
+
+Four sites, all mechanical. **Bounded and additive — outcome 2. B stands.**
+
+### The honest total for B, including what I did NOT expect
+
+| | sites |
+| --- | --- |
+| add the node width array | 4, mechanical |
+| width-sensitive lowering (index, Length, literal, Write, transcode) | ~5 |
+| **per-backend COW guards** | **6** |
+| of the 636 `tyAnsiString` tests | **0** |
+
+The COW guards are the part I would have missed. Six backends carry
+
+    (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)
+
+and under B a wide index has `elemSize = 2`, so the guard fails, copy-on-write
+does not fire, and mutating a SHARED wide string corrupts its aliases — a silent
+wrong value. All six must change.
+
+**And `ir_codegen_xtensa.inc:1677` is one of them — the exact line the
+coordinator's original stride objection cited.** So that objection was pointing
+at something real. It was wrong about the SCALE (six grep-identical guards, not
+a rewrite of indexing in six backends) and the retraction was correct, but the
+line was not imaginary and the reflex that found it was sound.
+
+The decisive asymmetry is findability, not just count: those 6 are one exact
+grep in one shape. The 636 are NOT mechanically separable into "means any
+string" and "means specifically AnsiString" — that is what makes A's misses
+undetectable except by the bug they cause.
+
+### Length needs no backend change at all
+
+`Length` on a managed string is emitted per backend as `mov rax, [rax-8]` (and
+its six equivalents) after testing `IRTk = tyAnsiString`. Under B that test still
+passes and returns the BYTE count, so the halving can be a FRONTEND-emitted
+shift over the existing result rather than seven new backend arms. Under A the
+test would FAIL for a wide string and Length would fall through to the
+dyn-array/catch-all path and return garbage — the silent-failure mode again.
+
+### Proceeding with B, per the stated ordering
+
+Not a fork, so not escalating. Starting on the node width array and
+`ir.inc:1794`, then the six COW guards, then Length. `tyWideString` (ordinal 32,
+readers-free) becomes the wide ELEMENT marker rather than a second string kind,
+so nothing landed so far is wasted.
