@@ -42,3 +42,6 @@ Unhandled exception: TypeError: '<' not supported between instances of 'int' and
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-30 — auto-closed by the seven watcher: `test-nilpy#src:test/test_nilpy_min_max_key_none.npy` passes at 90501813d990 (tier full); it was red at 0200df7eabcd. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
