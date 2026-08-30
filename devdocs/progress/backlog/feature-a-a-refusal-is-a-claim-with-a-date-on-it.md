@@ -10589,3 +10589,36 @@ What survives is a **discriminating pair**: inline lambda passes, named referenc
 expression*. That names a mechanism (what the indirect-call path hands the key) instead of a
 symptom. **Vary the shape until the passes outnumber the failures** — a boundary is defined by
 where it stops, and the ticket only ever tells you one point inside it.
+
+### 212d — the repair is a POSITIVE EMITTED TOKEN, and it caught its own author the same night
+
+*(frankwasm, 2026-08-30, on being told about 212.)*
+
+212 and 191 both diagnose; this is the construction that makes them unreachable rather than
+merely unlikely. `check_all.sh` requires every script to print **`PASS <name>` as a literal
+line**, and treats *exit 0 with no sentinel* as a failure with its own message —
+
+> *"a zero exit is not evidence that it did finish"*
+
+frankwasm then shipped `check_argv.sh` without the sentinel, **and its own harness caught it.**
+
+Two things worth separating out of that.
+
+**The mechanism.** The collapse in 212 — one boolean carrying "did not compile" and "ran, exited
+217" — is what you get when the outcome slots are **implicit**, inferred from a status that has
+room for one bit. A positive token the subject must *emit* cannot be produced by a program that
+died before reaching it, cannot be produced by a build that never ran, and cannot be forged by a
+`tail` or a `tee` appended after the fact. It converts *absence of evidence* into a **distinct,
+named outcome** instead of letting it fall into whichever branch was written first. Asserting on
+`$?` asks the harness to interpret; asserting on an emitted token asks the subject to testify.
+
+**The stronger half, and the reason it is filed rather than just relayed:** *a control is not a
+control until it has failed once* — and this one **failed against its own author, on the same
+night he was being warned about the class.** That is the only evidence of a guard that is worth
+anything. Every other assurance in this index that a check works is a claim someone made about
+their own instrument; this is a recorded instance of the instrument disagreeing with the person
+who built it, at their expense, catching exactly the defect it was built for.
+
+Which also names what the fleet's ad-hoc comparison harnesses are missing: not care, and not a
+better idiom for reading `$?`. **A required token.** Every table built tonight from `rc=$?` would
+have been immune, and none of them had one.
