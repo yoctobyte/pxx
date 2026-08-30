@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (328)
+## backlog (327)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -165,7 +165,6 @@ _none_
 | bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does | A+S | 35 | bug | `ir_codegen_xtensa.inc` has no IR_SET_SIGNAL case, so any program installing a signal handler dies with `unsupported node in IR codegen: unknown`. riscv32 has the arm; xtensa is the only hosted backend without it. The op is also one of the seven IROpName does not name, which is why the message says `unknown` instead of naming it. | — |
 | bug-t-89-nilpy-expectations-are-duplicated-across-two-targets-with-nothing-keeping-them-in-sync | T | 50 | bug | 89 .npy tests are run by BOTH test-nilpy and test-core, with their expect_same expectation inlined verbatim in each -- the two copies sit ~9900 lines apart in the Makefile and nothing keeps them in sync. Measured drift today is ZERO, so this is a ratchet on a clean invariant, not a backlog: update one copy and the other target goes red with no indication that a second copy exists. | — |
 | bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in | T | 45 | bug | A container ticket for an active campaign has nowhere correct to live. working/ is a per-agent live LOCK, and an umbrella held there for the length of a campaign is a lock that never clears; every other status ready/next scans is claimable, so parking it invites a second agent onto files the campaign owns. The status vocabulary has no term for 'this is a container, not a unit of work'. | — |
-| bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget | T | 55 | bug | learn_timeout() raises a timed-out job's expected duration so 'the next run gets room', but deliberately leaves n=0, and the only consumer of that duration is gated on n >= METRICS_MIN_RUNS. So the raise is written and never read for a job that has NEVER PASSED on this host -- which is precisely the job it cannot rescue. calibrate() cannot cover for it either: it returns max(1.0, dt/0.35) and plexus measures 0.26s, so the floor is the answer on every box measured so far, and a 2010 Westmere gets the same budgets as a 2013 Ivy Bridge. | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | A+T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
 | bug-t-auto-close-on-one-green-is-sound-for-a-deterministic-test-and-unsound-for-a-racy-one | T | 50 | bug | The watcher auto-closes a regression ticket on a single green. For a ~12%-failure race that is the EXPECTED outcome with the defect fully present -- and it happened: the reactor-exhaustion ticket was auto-closed while the bug was live. Nothing in the ticket stub tells the closer whether it is holding a deterministic test or a racy one. | — |
@@ -641,9 +640,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2709)
+## done (2710)
 
-2709 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2710 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -777,7 +776,6 @@ _none_
 - [p 55] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
-- [p 55] [T] bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
 - [p 55] [U] decide-settextbuf-needs-buffered-text-io-or-stays-missing

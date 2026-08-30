@@ -483,6 +483,56 @@ METRICS_ALPHA = 0.4             # EWMA weight of the newest observation
 # not safe to keep as a ceiling.
 OUTGROWN_MARGIN = 2.0
 
+# How many times a job that has NEVER earned trusted metrics on this box may
+# have its budget raised from its own observed duration before the harness
+# stops offering. Exactly one, and the number is what makes the offer safe.
+#
+# The gate above (n >= METRICS_MIN_RUNS) is what stops a HANG from ratcheting
+# its own budget: learn_timeout() records "it ran at least this long" on every
+# timeout, and if that fed the budget unconditionally a hung job would be
+# killed at the budget, raised from the kill, killed at the bigger budget,
+# forever -- test_c_gtk_call.pas climbed 90s -> 2902s -> 3522s exactly that way.
+#
+# But the same gate is a BOOTSTRAPPING TRAP for a job that is merely slow on
+# this host: it can only reach n >= 2 by passing, it can only pass with a
+# bigger budget, and the raise that would give it one is written on every
+# timeout and read on none. Three jobs on `seven` sit there permanently,
+# entering new_red on every full tier and filing cascades naming commits they
+# cannot have been caused by (rejected/regression-cascade-154d1aa3fba6).
+#
+# Nothing in the stored data tells a slow box from a hung job on a first
+# encounter, and that fork is why the ticket asked rather than patched. The
+# resolution is not to distinguish them -- it is to make the distinction not
+# matter. ONE raise cannot ratchet: the slow job passes and starts earning real
+# metrics, the hung job is killed at the second budget, the counter is spent,
+# and the budget reverts to the class figure permanently. The cost of being
+# wrong is one class-length run, once, and it is named in the report both
+# times.
+UNPROVEN_ESCALATIONS = 1
+
+
+def unproven_budget(m, cls_budget):
+    """The one-off budget a job with no trusted metrics may have, or None.
+
+    `m` is its stored metric (possibly None), `cls_budget` the already-scaled
+    class figure. Returns a number only when all three hold: the job has an
+    observed duration, it has not spent its grant, and the raise would actually
+    give it more room than the class figure already does. Otherwise None, which
+    means "class budget", i.e. today's behaviour.
+
+    A function rather than three lines inline because it is the RULE, and the
+    rule is the thing worth testing: everything around it in Manager.__init__
+    needs a whole run to reach.
+    """
+    if not m or not m.get("dur"):
+        return None
+    if int(m.get("n") or 0) >= METRICS_MIN_RUNS:
+        return None                      # trusted: the main path owns it
+    if int(m.get("esc") or 0) >= UNPROVEN_ESCALATIONS:
+        return None                      # grant spent; class figure, forever
+    want = m["dur"] * OUTGROWN_MARGIN
+    return want if want > cls_budget else None
+
 # No per-job budget may exceed this fraction of the run's GLOBAL deadline.
 #
 # The outgrown-class path above raises a budget to fit a job that got slower.
@@ -1551,6 +1601,11 @@ class Job:
         self.proc = None
         self.t0 = self.t1 = None
         self.timeout = None       # set after calibration
+        # True when this run granted the one-off budget raise a job with no
+        # trusted metrics may have (see UNPROVEN_ESCALATIONS). Read by
+        # learn_timeout() to spend the grant rather than record our own budget
+        # as the job's duration.
+        self.escalated = False
         self.status = "queued"    # queued|running|pass|fail|timeout|skipped|skip
         # WHY this job skipped, in the job's own terms. "" while it has not.
         #
@@ -2931,6 +2986,7 @@ class Manager:
         self.metrics = self.heal_latched_metrics(load_metrics(), args.deadline)
         outgrown = []
         unschedulable = []
+        unproven = []
         for j in jobs:
             cls_to = CLASSES[j.cls]["timeout"]
             m = self.metrics.get(metrics_key(j))
@@ -2968,6 +3024,26 @@ class Manager:
                     if j.exp_dur >= j.timeout:
                         j.timeout = j.exp_dur * OUTGROWN_MARGIN
                         outgrown.append((j, cls_to * scale))
+            elif j.timeout is None:
+                # NEVER earned trusted metrics here, but it may still have
+                # DEMONSTRATED a duration -- learn_timeout() records one on
+                # every timeout, and until now nothing read it back for this
+                # job. See UNPROVEN_ESCALATIONS and unproven_budget().
+                #
+                # Only the BUDGET comes from the unproven metric.
+                # exp_dur/exp_cores/est_mem drive scheduling order and
+                # admission and must still come from a passing sample, so such
+                # a job is scheduled exactly as it is today and only gets more
+                # room to finish.
+                want = unproven_budget(m, cls_to * scale)
+                if want is not None:
+                    j.timeout = want
+                    # The GRANT is what gets counted, not the timeout that
+                    # prompted it -- see learn_timeout(). Counting timeouts
+                    # would spend the escalation on the run that discovered the
+                    # job was slow, before anything had been offered.
+                    j.escalated = True
+                    unproven.append((j, cls_to * scale, m["dur"] * scale))
             if j.timeout is None:
                 j.timeout = cls_to * scale
             # THE clamp. Applies to every path above -- class ceiling, hang
@@ -2986,6 +3062,14 @@ class Manager:
                   "reclassify it, or fix what made it hang."
                   % (j.sel or j.name, wanted, args.deadline,
                      args.deadline * MAX_JOB_DEADLINE_FRAC), flush=True)
+        for j, budget, observed in unproven:
+            print("testmgr: %s has no trusted metrics on this box and was "
+                  "observed to need %.0fs against a %.0fs `%s` budget — raised "
+                  "to %.0fs for this run, ONCE. If it times out again the "
+                  "budget reverts to the class figure permanently, and that "
+                  "timeout is the job's own signal rather than a harness kill."
+                  % (j.sel or j.name, observed, budget, j.cls, j.timeout),
+                  flush=True)
         for j, budget in outgrown:
             print("testmgr: %s outgrew its `%s` budget — measured %.0fs against "
                   "%.0fs, so it could never pass. Budget raised to %.0fs for "
@@ -3402,6 +3486,27 @@ class Manager:
             return
         key = metrics_key(job)
         m = dict(self.metrics.get(key) or {})
+        # The job we ALREADY gave extra room to, which used it and still did not
+        # finish. `observed` here is the budget WE chose, not a duration the job
+        # revealed -- exactly the argument the ceiling refusal above makes -- so
+        # recording it would be recording our own guess and doubling it next
+        # time. Spend the escalation instead: the budget reverts to the class
+        # figure and stays there, which is what makes one grant unable to
+        # ratchet. See UNPROVEN_ESCALATIONS.
+        if getattr(job, "escalated", False):
+            m["esc"] = int(m.get("esc") or 0) + 1
+            m.setdefault("dur", observed)
+            m.setdefault("cpu", 1.0)
+            m.setdefault("mem", CLASSES[job.cls]["est_mem"])
+            m["n"] = int(m.get("n") or 0)
+            self.metrics[key] = m
+            print("testmgr: %s timed out at %.0fs — the budget it had was "
+                  "already raised once and it did not finish, so no further "
+                  "raise. Its budget reverts to the `%s` class figure and this "
+                  "is a real timeout, not a harness kill: the job hangs, is "
+                  "misclassified, or is too big for this box."
+                  % (job.sel or job.name, observed, job.cls), flush=True)
+            return
         if m.get("dur", 0) >= observed:
             return
         m["dur"] = observed
@@ -3495,6 +3600,12 @@ class Manager:
         m["mem"] = max(int(mem), int((1 - a) * m["mem"] + a * mem))
         m["cpu"] = round((1 - a) * m.get("cpu", 1.0) + a * cores, 2)
         m["n"] = m.get("n", 0) + 1
+        # A PASS proves the budget was adequate, so the escalation counter goes
+        # back to full. It counts CONSECUTIVE unproven timeouts, not lifetime
+        # ones: a job that passes, is broken by a later commit and times out
+        # deserves the same one grant a new job gets, and a counter that never
+        # resets would silently deny it.
+        m.pop("esc", None)
 
     def admit_ok(self, job, now):
         if len(self.running) >= self.hard_cap:

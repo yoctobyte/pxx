@@ -2,7 +2,7 @@
 track: T
 prio: 55
 type: bug
-status: backlog
+status: done
 blocked-by: []
 found: 2026-08-30
 found-by: claude@plexus (Track T face 2), while closing regression-cascade-154d1aa3fba6
@@ -222,3 +222,136 @@ one and is not attempted here.
 family as this ticket (a host fact reported as a defect in the tree), and it is
 what makes enrolling `test-xtensa` into the full tier safe on a box that never
 installed qemu-xtensa.
+
+---
+
+## 2026-08-30 — the n-gate half is now closed too. FIXED.
+
+The fork this ticket was filed to escalate is dissolved rather than answered,
+and that is the whole design:
+
+> a fix must let a never-passed job earn room **without** letting a hang do the
+> same, and today nothing in the stored data distinguishes "slow box" from
+> "hung job" on a first encounter
+
+Nothing distinguishes them, so **do not try to**. Bound the offer instead and the
+distinction stops mattering: **one** grant, then the class figure forever. The
+slow job passes at the raised budget and starts earning real metrics; the hung
+job is killed at the second budget, the grant is spent, and nothing grows. The
+cost of guessing wrong is one class-length run, once, and it is named in the
+report both times. That is why this landed as work rather than as a Track U
+`decide-*`.
+
+### The mechanism
+
+`UNPROVEN_ESCALATIONS = 1`, and a named rule beside it:
+
+```python
+def unproven_budget(m, cls_budget):
+    """The one-off budget a job with no trusted metrics may have, or None."""
+    if not m or not m.get("dur"):                    return None
+    if int(m.get("n") or 0) >= METRICS_MIN_RUNS:     return None   # trusted path owns it
+    if int(m.get("esc") or 0) >= UNPROVEN_ESCALATIONS: return None # grant spent, forever
+    want = m["dur"] * OUTGROWN_MARGIN
+    return want if want > cls_budget else None
+```
+
+A function and not three inline lines because it **is** the rule, and everything
+around it in `Manager.__init__` needs a whole run to reach.
+
+Four things make the bound actually bound, and each is a place it could have
+leaked:
+
+1. **Only the BUDGET comes from an unproven metric.** `exp_dur` / `exp_cores` /
+   `est_mem` drive launch order and admission and still require a passing
+   sample, so such a job is scheduled exactly as it is today and only gets more
+   room to finish. An unproven metric must not be allowed to reserve memory.
+2. **The GRANT is counted, not the timeout that prompted it.** Counting
+   timeouts spends the offer on the run that merely *discovered* the job was
+   slow — before anything had been offered — so a job would go straight from
+   "no data" to "grant exhausted" without ever receiving one. `Job.escalated`
+   carries the grant into `learn_timeout()`.
+3. **A timeout at a granted budget records no duration.** That number is the
+   budget *we* chose, not something the job revealed — the same argument the
+   existing ceiling refusal makes one branch above. Recording it is what turns
+   one grant into a doubling per run; it is precisely how 90s became 2902s
+   became 3522s.
+4. **A pass clears the counter.** It counts CONSECUTIVE unproven timeouts, not
+   lifetime ones — a job that passes, is broken by a later commit and times out
+   deserves the same one grant a new job gets, and a counter that never reset
+   would silently deny it.
+
+Reported by name on both events: the grant says what was observed, against what
+budget, that it is once, and that a second timeout is the job's own signal;
+the refusal says the budget reverts and that the job hangs, is misclassified, or
+is too big for this box.
+
+### Sized before it was written
+
+Locally, 2818 metric entries: **1 at n=0, 79 at n=1, 2738 trusted**. Under the
+most permissive assumption (every unproven job in the smallest class) at most
+**17** would see a raised budget; in the `qemu` class where the ticket's jobs
+live, 12. And the raise is a **ceiling only** — it cannot turn a passing job
+into a failing one, it can only delay a hang's kill by one class-length run,
+once.
+
+"Unproven" is `n < METRICS_MIN_RUNS`, not `n == 0`, and that is deliberate. `n
+== 0` is the ticket's title but it is the wrong set: a job rescued by the grant
+passes once, reaches n=1 — still below the gate — and falls into the identical
+trap one step later. Scoping to the set the main gate actually excludes is what
+makes the escape complete rather than one-run-deep.
+
+### Verified end to end with a second instrument, not only with its own guards
+
+`tools/testmgr_unproven_budget_devtest.py`, 9 guards, each checked against its
+own broken condition — bound removed → 3 red (sequence `[240, 480, 480, 480]`);
+granted-timeout recording restored → 2 red (`[240, 480, 960, 960]`, the ratchet
+itself); pass no longer clearing the counter → 1 red.
+
+But the guards exercise `unproven_budget()` and the two `learn` methods, and
+**not** the wiring in `Manager.__init__` — the exact sampling gap that made a
+seven-guard suite agree with itself and still be wrong earlier tonight
+([[bug-a-testtmp-defaults-to-a-path-every-checkout-shares]]). So the wiring was
+observed directly: a metric was injected for a real quick-tier job
+(`test-quick#19`, n=0, dur=120) and `testmgr --tier quick` was run.
+
+```
+testmgr: test-quick#19 has no trusted metrics on this box and was observed to
+         need 145s against a 109s `unit` budget — raised to 240s for this run,
+         ONCE. If it times out again the budget reverts to the class figure
+         permanently, and that timeout is the job's own signal rather than a
+         harness kill.
+  PASS   test-quick#19    unit    0.8s
+```
+
+and the metric afterwards was `{'dur': 72.28, 'n': 1}` — **no `esc` key**: the
+grant was offered, the job passed, and the counter went back to full. That is
+the success path, observed rather than modelled. The injected key was restored
+afterwards and only that key; the run's other learning is real and discarding it
+would have been worse than the injection.
+
+One instrument error, recorded for the same reason as the last: a chained shell
+ran the third negative control against a file the previous control's restore had
+not yet replaced, so it reported the *previous* control's two failures and the
+guard actually under test stayed green. Re-run with the file state asserted
+before and after the edit, it produced exactly one red, the right one. **The
+apparatus's state is a measurement too.**
+
+### Both recommendations landed, in the order the ticket gave them
+
+The probe fix (preferred) landed earlier today and gave `calibrate()` real
+range; this is the secondary, and it covers what the probe cannot — a single
+job slow for its own reasons on one host, rather than a uniformly slow box.
+
+### Gate
+
+`make compiler/pascal26`: self-host fixedpoint verified, `9120da105197`.
+`testmgr --tier quick` GREEN (the run above). Eight testmgr-adjacent devtests
+green plus the new 9.
+
+Note the box carried two other testmgr runs (`/home/neo/frankA` quick,
+`/home/neo/trackt-watch` full) and load ~18 throughout, so no timing in any of
+this is a signal.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
