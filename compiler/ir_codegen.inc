@@ -5291,8 +5291,16 @@ begin
               so classify it by its own IR type — reading Params[] there would be
               out of bounds. C default-argument-promotion carries variadic floats
               as double, so no single-precision narrowing applies to them. }
+            { A by-REF param is a POINTER whatever its declared type -> int
+              class. Without this, `var d: Double` went through xmm while the
+              callee read a pointer from a GP register and the program
+              SEGFAULTED. This is the INDIRECT path, which is the one a
+              function-pointer call actually takes; the direct IR_CALL path
+              carries the same correction.
+              bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse }
             if (i >= IRC[node]) and ((i - IRC[node]) < Procs[cpi].ParamCount) then
-              argIsSse[i] := TypeIsFloat(Procs[cpi].Params[i - IRC[node]].TypeKind)
+              argIsSse[i] := TypeIsFloat(Procs[cpi].Params[i - IRC[node]].TypeKind) and
+                             (not Procs[cpi].Params[i - IRC[node]].IsRef)
             else
               argIsSse[i] := (i >= IRC[node]) and TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]]));
             argNode := IRB[argNode]; Inc(i);
@@ -7671,7 +7679,25 @@ begin
                 tk := Procs[procIdx].Params[i].TypeKind
               else
                 tk := IntToTypeKind(IRTk[argNodeArr[i]]);
-              if TypeIsFloat(tk) then
+              { A by-REF param is a POINTER whatever its declared type, so SysV
+                puts it in the INTEGER class. Classifying it by its declared
+                TypeKind sent `var d: Double` through xmm while the callee read
+                a pointer from a GP register, and the program SEGFAULTED --
+                measured on both the pre- and post-SysV-prologue binaries, so
+                this is older than either. The non-cdecl fnptr path with the
+                same signature prints the right answer, which is what makes it
+                this classification and not by-ref params generally.
+                Only the REGISTER-CLASS decision is corrected here; `tk` itself
+                is left alone, because the two sites below that recompute it use
+                it for variant/narrowing decisions a by-ref param does not reach.
+                IsArray deliberately NOT included: an array param measured
+                correct on both binaries, so its TypeKind is not reaching this
+                as a float, and widening the condition on a guess would break a
+                working path.
+                bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse }
+              if TypeIsFloat(tk) and
+                 ((i >= Procs[procIdx].ParamCount) or
+                  (not Procs[procIdx].Params[i].IsRef)) then
               begin
                 argIsSse[i] := True;
                 if sseIdx < 8 then

@@ -2,9 +2,10 @@
 track: A
 prio: 50
 type: bug
-status: open
+status: working
 found: 2026-08-30
 found-by: claude-A
+owner: claude-A
 ---
 
 # The cdecl soundness reject still has its argument-shaped door on i386/arm32/aarch64/riscv32

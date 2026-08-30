@@ -30,9 +30,11 @@ type
                     i3: Integer; d3: Double): Integer; cdecl;
   TFnSng = function(s: Single; n: Integer): Integer; cdecl;
   TFnOvf = function(a, b, c, d, e, f, g: Integer; x, y: Double): Integer; cdecl;
+  TFnRef = function(var a: Double; b: Integer): Integer; cdecl;
 
 var failures: Integer = 0;
     checks: Integer = 0;
+    dref: Double;
 
 procedure Expect(got, want: Integer; const nm: AnsiString);
 begin
@@ -73,6 +75,32 @@ end;
 function CbOverflow(a, b, c, d, e, f, g: Integer; x, y: Double): Integer; cdecl;
 begin
   Result := a + b + c + d + e + f + g + Trunc(x)*1000 + Trunc(y)*10000;
+end;
+
+{ A by-REF float param is a POINTER, so SysV puts it in the INTEGER class. Both
+  the caller's classification and the prologue must agree on that, and for a
+  while they did not: `var d: Double` was classified by its declared TypeKind,
+  went through xmm, and the callee read a pointer out of a GP register --
+  SEGFAULT, not a wrong number.
+
+  The two halves have DIFFERENT histories and both are asserted here:
+    - through a function pointer: broken before the SysV prologue and after it.
+      Pre-existing.
+    - called DIRECTLY: correct before the SysV prologue, broken by it. Setting
+      ProcCdecl moved direct calls onto the SysV path, which carried the same
+      misclassification. A REGRESSION introduced by feature-cdecl-bodied-sysv-
+      prologue and caught by widening this file rather than by a suite.
+  bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse }
+function CbByRef(var a: Double; b: Integer): Integer; cdecl;
+begin
+  Result := Trunc(a) + b;
+end;
+
+procedure TakeRef(fn: TFnRef);
+var d: Double;
+begin
+  d := 2.5;
+  Expect(fn(d, 7), 9, 'by-ref float param via fnptr');
 end;
 
 { Taking the parameter as a value forces the ARGUMENT shape, which is the one
@@ -127,6 +155,9 @@ begin
   Expect(CbOverflow(1,2,3,4,5,6,7, 8.0, 9.0), 98028, 'overflow direct');
 
   ViaVariable;
+  TakeRef(@CbByRef);
+  dref := 2.5;
+  Expect(CbByRef(dref, 7), 9, 'by-ref float param direct');
 
   if failures = 0 then
     writeln('CDECL-SYSV OK checks=', checks)
