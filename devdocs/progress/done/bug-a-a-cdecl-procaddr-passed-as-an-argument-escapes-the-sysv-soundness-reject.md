@@ -79,4 +79,4 @@ the symptom, and because if that feature slips this must not slip with it.
 Gate: the repro above prints `9` and `36`.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3af4f6380.
