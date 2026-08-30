@@ -150,4 +150,4 @@ both 50, and the unsafe build passed. Standing rule 4 is about adjacency, and it
 applies to an ORDERING exactly as it does to a register: the reordered read must
 differ from the correct one, and round numbers are where it does not.
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit bcecdfab3.
