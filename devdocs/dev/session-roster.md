@@ -18569,3 +18569,47 @@ correction this system produces.
   for state; do not assert it.**
 - **Dispatched frankD onto finished work** (above).
 - Two malformed heredocs cost a retry each. `-F <file>` for commit messages remains absolute.
+
+## Tick — 2026-08-30 ~08:4x (coordinator)
+
+**PIN v394 `53800fbeb0b66e11`.** Master builds clean at HEAD: `make compiler/pascal26` exit 0,
+`converged after 2 round(s)`, fixedpoint `a3f0f9e3325f`. Track T **UP** through `97c5fba007f9`.
+
+**Live slots.**
+
+| session | holds | state |
+| --- | --- | --- |
+| frankA | zero compiler files (measured, not recalled) | `regression-test-nilpy-test-nilpy-max-min-iterables` [N p70]; then ParamStr; then the 5 test-asm reds |
+| frankB | none — minidom parked to `unfinished/` | `c[i]` PChar-alias audit next |
+| frankS | `ir_codegen_xtensa.inc` | veneer landed `3f203a20b`; offered the rv32 encoder truncation [A+S p60] |
+| frankD | — | **dispatched out of lane** to the urgent NilPy hang (D is dry: 1 ready item, itself parked) |
+| frankwasm | `feature-target-wasm` (**live lock, verified — do not release**) | Phase 9j argv + 9k Frac/Int landed; blocked only on the U decision |
+| frank-rust | `pasparser_generic.inc`, uncommitted | Track P generics under an R identity; asked to push + release the stale R lock |
+| frankC | `cir.inc` carve-out, `ir.inc` | last commit 05:29 — longest quiet gap on the fleet, unchased |
+| b4 | uForth blocktest [O p65] | released `feature-opt-o3-register-pressure` |
+| pxx-a5 | Track T tooling | fuzz held under load 16.9; fixed `pasmith_run.py` sentinel handling |
+
+**What I changed this tick.**
+
+- **Re-laned five p70 regressions P → A** (`regression-test-asm-*`). twatch guessed from the test
+  SOURCE (`.pas` → P) because the failing step was unrecorded; the failing **job** is `test-asm`,
+  the x86-64 emitter, which is A whatever it is fed. They were invisible to `ready --track A`
+  while idling at p70 in a lane that does not own `x64enc.inc`. One reports `undefined variable
+  (EmitSyscall)` in `compiler/x64enc.inc`; the only code commit touching that file in range is
+  frankA's `3a0ed43fb`.
+- **Re-priced `decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal` 40 → 70.**
+  Filed at 24 of 52 refusals; frankwasm re-measured it at **32 of 32**. It now gates the entire
+  *pascal26 under wasmtime* anchor. Not raised higher because frankwasm is not idle on it.
+- Faces **211–214** filed to the method index.
+
+**Open, for whoever holds this seat next.**
+
+- **U queue at 31, three at p70.** Only the owner drains it. The WASI one is now the sole gate on
+  a whole lane's milestone and is the one to surface first.
+- **frankC unchased**, quiet since 05:29.
+- **twatch's job-name hole**, relayed to pxx-a5, not fixed by me (T's file): a job NAME is
+  sometimes a *subject* (`lib-test#00`, 39 sources, four lanes) and sometimes a *mechanism*
+  (`test-asm`, always the x64 emitter). Only the second kind carries a lane, and twatch consults
+  the name in neither case — right for the first, wrong for the second.
+- **Five test-asm tickets may be one defect.** twatch files per source, so one cause splits into
+  five slugs — the same overcount pxx-a5 found in the fuzz ledger tonight.
