@@ -5,11 +5,75 @@ track: A+B
 prio: 60
 type: feature
 blocked-by: [decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal]
-status: working
+status: unfinished
 owner: frankwasm
 created: 2026-08-27
 summary: "NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim."
 ---
+
+# PARKED 2026-08-30 — owner asked for less parallel work; wasm named explicitly
+
+**Not blocked, not failing, not abandoned.** The owner asked for fewer lanes
+running at once and named wasm as one to pause. Everything is committed and
+pushed; the lane stopped mid-queue with work available, not stuck.
+
+## State you can verify without asking anyone
+
+| | |
+| --- | --- |
+| branch | **`wasm`** (`origin/wasm`), at **`f97477cf9`** |
+| checkout | **standalone** (`~/frankwasm`), **self-gated, NOT swept by Track T** |
+| divergence | **94 commits on `wasm` that are not on `origin/master`** |
+| binary | self-host fixedpoint **`12bd7e665b5e`** — a **binary sha256** prefix of `compiler/pascal26`, NOT a commit |
+| tests | **all 31 `test/wasm` checks pass** at that sha |
+| tree | clean, nothing unpushed |
+
+**Branch permission is not merge permission.** Nothing on `origin/wasm` is
+pre-approved for `master`; 94 commits is a conversation with the owner, not a
+merge anyone here can authorise.
+
+## Resume here — four of the five need no decision
+
+Measured, not guessed: compiling `test/lib_classes.pas` and
+`test/lib_variants_surface.pas` for wasm32 and reading the refusal report.
+
+| # | item | size | needs the U decision? |
+| --- | --- | --- | --- |
+| 1 | ~~`IR_CLASSREF` (op 39) — `is`/`as`, class refs, `ClassType`~~ | ~~8 bodies~~ | **DONE, Phase 9m** |
+| 2 | `IR_VAR_STORE` (op 43) — store into a variant | 2 bodies | no |
+| 3 | `IR_SET_LIT` (op 33) — set literal materialised to memory | 1 body | no |
+| 4 | set-typed PARAMETER — `TReplaceFlags` on `StringReplace` / `TStringHelper.Replace`; `WasmParamValType` has no answer for a 32-byte set passed by value | 2 sites | no |
+| 5 | `IR_SYSCALL` (op 54) | 1 body | **YES — this one only** |
+
+Row 1 landed after this park was requested and before the lane stopped, so
+**start at row 2.** `IR_VAR_STORE` pairs with the *write of a variant* refusal
+already sitting in the same `WasmEmitWrite` arm (*"needs the slot ADDRESS, not
+its value"*) — same shape, and a variant already lives in a slot, so it wants
+`WasmLValueAddr` rather than the shadow-stack spill Phase 9l used for floats.
+
+## The one sentence a future reader most needs
+
+**All 32 of 32 remaining `compiler.pas` refusals are a single shape.** The
+histogram is 17× `-50`, 8× `-100` (`LoadFile`), 6× `-52`, 1× `IR op 54`
+(`getdents64`) — every one file / directory / environment I/O, every one gated
+by
+[`decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`](../backlog/decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal.md)
+[U p70]. There is **no route to the anchor milestone** (`pascal26` running under
+wasmtime) that avoids that answer, and answering it clears all thirty-two at
+once.
+
+**So read the `blocked-by:` edge as *the milestone waits*, never *the agent
+waits*.** The edge is kept deliberately — removing it would misreport the anchor
+as reachable, which is the worse error — but nothing was ever stalled behind it.
+Rows 2-4 above are startable the moment someone resumes, with no decision
+needed.
+
+## Where the detail lives
+
+`devdocs/dev/wasm/PLAN.md` **on branch `wasm`**, not on master. Phases 9j
+(argv), 9k (`Frac`/`Int`), 9l (`Write` of a real) and 9m (`IR_CLASSREF`) all
+landed on 2026-08-30 and each carries its own costing, its rejected
+alternatives and what its test is shaped to catch.
 
 > **DANGLING SHAS BY DESIGN.** Every commit sha in this ticket is on branch
 > **`wasm`**, never on `origin/master`. This lane works in a standalone

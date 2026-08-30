@@ -11,6 +11,16 @@ created: 2026-08-28
 summary: "ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class."
 ---
 
+> **DANGLING SHAS BY DESIGN.** The commit shas in this ticket live on branch
+> **`wasm`**, not on `origin/master` — it was filed from the wasm lane's
+> standalone checkout, which pushes to its own branch. `progress.sh check`
+> flags them `SIDE-BRANCH-SHA` and that is correct rather than a defect: the
+> measurement was taken where the work is. **Branch permission is not merge
+> permission** — nothing on `origin/wasm` is pre-approved for master.
+> Twelve-hex values like `2e68d018ccac` are **binary sha256** prefixes of
+> `compiler/pascal26`, not commits at all, and will not resolve as objects.
+> — frankwasm, 2026-08-30
+
 # The trap
 
 ```pascal
@@ -44,7 +54,8 @@ ones.
 # Found
 
 By the wasm32 backend, 2026-08-28, in an audit done *before* the code had ever
-run (`36f8753c7` → fixed in the commit that followed). Reading the riscv32 arms
+run (`36f8753c7`, **on branch `wasm`** → fixed in the commit that followed).
+Reading the riscv32 arms
 to check three unverified assumptions turned this up as a fourth thing nobody
 was looking for. It would otherwise have shipped as arbitrary IR ops being
 skipped or spuriously refused, with no diagnostic pointing anywhere near the

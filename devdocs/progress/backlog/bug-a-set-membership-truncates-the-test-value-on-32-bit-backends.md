@@ -9,6 +9,16 @@ found: 2026-08-28
 found-by: frankwasm (measured on five targets while implementing the wasm32 `in` arm)
 ---
 
+> **DANGLING SHAS BY DESIGN.** The commit shas in this ticket live on branch
+> **`wasm`**, not on `origin/master` — it was filed from the wasm lane's
+> standalone checkout, which pushes to its own branch. `progress.sh check`
+> flags them `SIDE-BRANCH-SHA` and that is correct rather than a defect: the
+> measurement was taken where the work is. **Branch permission is not merge
+> permission** — nothing on `origin/wasm` is pre-approved for master.
+> Twelve-hex values like `2e68d018ccac` are **binary sha256** prefixes of
+> `compiler/pascal26`, not commits at all, and will not resolve as objects.
+> — frankwasm, 2026-08-30
+
 ## The fact
 
 ```pascal
