@@ -217,7 +217,7 @@ Track C's, plus the `.h`/`.c` pair, plus **at least one gtk binding test**
 - 2026-08-30 — **partially fixed** by frankC: the provenance scope term landed
   with the `.h`/`.c` pair test, gtk green. Parked to `unfinished/` blocked on
   `bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull`, which is the
-  rest of it. Commit PENDING-COMMIT.
+  rest of it. Commit f5708eb77.
 - 2026-08-29 — filed by pxx-a5, split out of the unit-resolution ticket.
 - 2026-08-30 — fixed by frankC (`eefa85d70`), then **reverted** the same night
   after it broke five gtk tests. Reopened with the diagnosis above.
