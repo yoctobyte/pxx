@@ -3,7 +3,7 @@ slug: bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings
 track: P
 prio: 45
 type: bug
-status: backlog
+status: done
 blocked-by: []
 summary: "`TryParseParenlessMethodRef` (pasparser_call.inc:723) reads `obj.M` with no `@` and no argument list as a method REFERENCE, and is the single place that decision lives. It handles two receiver spellings — a class NAME and an instance VARIABLE — and there are four. A BARE name inside the class's own method (`TSel(Pick)`) and a METACLASS VARIABLE receiver (`mc: class of TSvc; TSel(mc.Pick)`) both fall through to the call path and are rejected with `wrong number of parameters in call to TSvc.Pick`. FPC accepts both. Same on pinned faf762981c3c and HEAD a9a4818ab6c8, so neither is a regression. The corpus does not need them — all 24 rtl-generics sites use the working class-name spelling — which is why this is filed rather than folded into the ticket that found it."
 owner: unassigned
@@ -209,3 +209,6 @@ and the last dispatches through a DERIVED metaclass so the override is proved
 captured rather than the pointer merely proved non-nil. Three-stage measurement is
 in the file header: compile error on `pinned`, SIGSEGV with the receiver arm alone,
 matches FPC with both.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
