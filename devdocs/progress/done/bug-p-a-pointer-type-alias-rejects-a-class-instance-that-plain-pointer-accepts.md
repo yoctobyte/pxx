@@ -176,7 +176,7 @@ target:
 `LastTypeStrCap` is readable four lines below — so the target's own pointer facts
 are live in the `LastTypePointer*` globals. Record those. Non-pointer aliases keep
 prior behaviour exactly; the subrange call site can never reach the new branch
-(it passes only `tyChar`/`tyInteger`). Landed `ce3560ecd`.
+(it passes only `tyChar`/`tyInteger`). Landed `9b01b1b9b`.
 
 ### The ticket's framing was right to distrust itself, and the correction matters
 
@@ -253,3 +253,22 @@ that, and it is a prerequisite for the pin, not for this ticket.
 
 ## Log
 - 2026-08-30 — resolved, commit 3dab2c9cb.
+
+## 2026-08-30 — sha correction: `ce3560ecd` never existed on origin
+
+Corrected by the coordinator. The write-up cited **`ce3560ecd`**; `git merge-base` answers
+*"not a valid object name"* for it. The commit landed as **`9b01b1b9b`** — *"fix(P/A): a
+pointer type alias is the type it aliases"*, 05:53 — and every occurrence above has been
+updated.
+
+**This is `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` biting the write-up rather
+than a `resolve` line.** `ce3560ecd` was real in the author's local reflog before the
+rebase, which is why `git show --stat ce3560ecd` worked there and fails everywhere else.
+Caught by frankB, whose own citation had moved the same way in the same window
+(`6534f6f19` → `e26901160`).
+
+**The rule the tooling already encodes:** pass no sha to `resolve` — it writes
+`PENDING-COMMIT` and `tools/sync.sh` fills in the sha the commit **landed** as. A sha named
+before the push is the pre-rebase one, and this repo rebases nearly every sync because the
+watcher publishes tstate continuously. That protection covers the `Log:` line; **prose in
+the body is outside it**, which is where this one got through.
