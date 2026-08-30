@@ -618,6 +618,17 @@ fix the doc, not the loop.
   rebuilding a fixedpoint at HEAD showed the truth. The one-line discipline:
   **hunt async, verify against a known sha.**
 - `git pull --rebase` before pushing; push promptly. Stay in your lane's files.
+- **Parking held work: park an EDIT you can re-apply (patch, stash, anchored
+  scripted edits) — NEVER a whole-file copy of a shared file.** A copy is a
+  snapshot of everyone else's work too, and restoring it over a moved tree
+  reverts all of it as a *clean, well-formed commit*: no conflict, no diagnostic,
+  and no track letter sees it. Measured 2026-08-30 — copies of `defs.inc` and
+  `cpreproc.inc` would have silently reverted another lane's block and 124 lines.
+  **Do not rely on the build to catch it**; that case surfaced only because the
+  reverted code had a live caller. When something does surface, separate "my copy
+  is stale" from "master is broken" in one command: build with the **pinned**
+  compiler against a **clean** tree. Full note:
+  `devdocs/dev/parallel-tracks.md`, "Parking a held change".
 - **Push only your own lane.** Each track pushes the commits it made. During a
   sync, do **not** push, commit, or rebase another track's branch or in-flight
   work — not even a clean fast-forward of a sibling's commit. That track pushes
