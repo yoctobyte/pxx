@@ -10,10 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-pin-that-adds-a-builtin-unit-cannot-commit-it-with-git-add-u | A | 65 | bug | `make pin` correctly freezes `compiler/builtin/*.pas` into `stable_linux_amd64/default/builtin/`, but the hand-off line it prints is `git add -u stable_linux_amd64/` -- and `-u` stages only TRACKED files. A builtin unit added since the last pin is UNTRACKED in the stable tree, so it is frozen on disk, passes pin verify, and is then silently left out of the commit. Two such units exist right now: builtinentropy.pas and builtinwide.pas, both landed 2026-08-30. | — |
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
 ## unfinished (31)
@@ -64,7 +65,7 @@ lives in git, not in a timestamp._
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (388)
+## backlog (387)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -375,7 +376,6 @@ lives in git, not in a timestamp._
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 15 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
-| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-libc-frontend-sites-and-thread-errno | A | 40 | feature | Finish --rtl-libc: convert the C/Rust/Zig frontend syscall sites, and test the thread errno hazard the raw clone stub creates | — |
 | feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets | T | 40 | feature | The csmith oracle is a checksum of the globals, so it is complete for VALUES and structurally blind to LAYOUT: a struct whose members sit at the wrong offsets stores and loads consistently and produces an identical checksum. Predicted 2026-07-13, unacted on, and a real offset bug then survived every batch since -- 443 on 2026-08-30 alone. Proposes a layout dimension: emit offsetof for every member of every generated struct and diff against gcc. | — |
@@ -987,7 +987,6 @@ lives in git, not in a timestamp._
 - [p 45] [A+O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [A+O] feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
-- [p 45] [B] feature-random-library [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [A] refactor-a-the-managed-string-index-cow-rule-is-spelled-seven-times

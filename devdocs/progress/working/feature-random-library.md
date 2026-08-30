@@ -1,14 +1,14 @@
 ---
 track: B
 prio: 45  # auto
-blocked-by: [bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target]   # Track B portion done 2026-08-15; only the HW tier remains and it is Track A. The two original blockers CLOSED and both fixes hold — re-verified at v395 2026-08-30 — but a new wall stood behind them; see the note at the end.
-owner: claude-B
+blocked-by: []   # UNBLOCKED 2026-08-30 at ba14f5f56 for its four buildable targets. The ESP arm is split out as feature-random-esp-hw-tier and carries the soft-float edge; see "The ESP arm is elsewhere" at the end. Do NOT re-add an ESP edge here — it would park four working targets behind a bug they never touch.
+owner: frankB
 ---
 
 # Random library — HW/OS/software tiered RNG (cross-target capability test)
 
 - **Type:** feature
-- **Status:** backlog (unblocked 2026-08-28 — see the coordinator note at the end)
+- **Status:** working
   remaining work is HW tiers and thread-safe state)
 - **Relation:** a real, reusable RTL library that doubles as a broad
   cross-target test: runtime capability probing, per-target inline asm, a
@@ -434,3 +434,49 @@ shipping configuration.
 about the builtin unit on ESP (three options are laid out in the new ticket),
 and the `{$ifdef}` that would make `random.pas` compile today is exactly the
 compiler-appeasement workaround the platonic-code rule forbids.
+
+
+## The ESP arm is elsewhere — read this before adding a blocker (frankB, 2026-08-30)
+
+This ticket is **unblocked and claimable for x86-64, aarch64, arm32 and i386**.
+`uses random` builds on all four, verified at `ba14f5f56` with a driver whose
+body is `v := Random64` and a second using `RandomDouble`.
+
+**It does not build on bare xtensa or bare riscv32, and that is deliberately
+NOT recorded here.** The ESP arm is split out as
+[[feature-random-esp-hw-tier]] (B+S, p40), which carries the real
+`blocked-by` edge to
+[[bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help]].
+
+**Do not "fix" that by adding the edge to this ticket.** `blocked-by:` has no
+notion of *partial* — the ranker reads it as "do not claim" — so one edge here
+would park the four working targets behind a soft-float bug they never touch.
+That is over-blocking, and it is worse than the alternative because it is
+silent and total. The split exists precisely so each half has a status that can
+be true, and this paragraph is the ESP half's presence in the ranked queue.
+
+### What remains here
+
+The HW tiers and thread-safe state, on the four buildable targets.
+[[feature-a-rdrand-cpuid-compiler-builtins]] shipped the intrinsics and
+[[bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target]] made
+them reachable everywhere, so tier 1 is now a library question rather than a
+compiler one.
+
+### The blocker history, so nobody re-walks it
+
+Three walls, in order, each visible only once the previous one fell — which is
+why "the blocker closed" was never the same claim as "it builds":
+
+1. `bug-a-xtensa-refuses-to-lower-an-unreachable-syscall` — closed, fix holds.
+2. `feature-a-rdrand-cpuid-compiler-builtins` — closed, and the intrinsics work
+   on all four non-ESP targets.
+3. `bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target` —
+   filed 2026-08-30 when the first two turned out not to be why this was
+   unbuildable, fixed the same day at `ba14f5f56`.
+
+Behind all three, on ESP only, is the soft-float wall now carried by the split
+ticket. **Each of these was invisible until the one in front of it fell,
+because the compiler stops at the first error** — which is the whole reason a
+`done/` blocker is not evidence that the thing it blocked now works. The only
+check that ever caught it was building the thing.
