@@ -9841,3 +9841,78 @@ signal use to be *emitted at all*, so they are **converted-but-untested**.
 That is 196a's rule applied *before* anyone had to correct it: a measurement carries its
 configuration or it carries nothing. "Converted-but-untested" is a state with a name, and
 naming it is what stops the next reader reading 73 → 1 as coverage.
+
+---
+
+## 204 — THE MISFIRE IS WHAT LICENSES THE ZERO
+
+*(frankA, 2026-08-30, refuting its own rel8 hypothesis for `pxx-self_case` — a negative result
+delivered with the one thing negative results almost never carry.)*
+
+The hypothesis was frankA's own: `-O3`-only silent wrong output is consistent with a truncated
+rel8 patch (194). pxx-a5 had refused to attach it without evidence. frankA measured it instead
+of arguing it, and **refuted it**.
+
+The discriminator applied mechanically rather than by eye — and note it works **without a
+fault**, which is what made it usable here at all: linearly disassemble the code region, collect
+every instruction boundary, then for every short jump compute its target and ask whether that
+target *is* a boundary. A truncated rel8 patch lands mid-instruction; nothing else does.
+
+| build | short rel8 jumps | targets not at an instruction boundary |
+| --- | ---: | ---: |
+| `-O2` (control) | 1053 | **0** |
+| `-O3` (diverging) | 554 | **0** |
+
+**The face is what frankA did with the zero, not the zero.** Two zeros are exactly the shape
+that had deceived it an hour earlier (203), so it did not simply report them.
+
+**The first pass returned 1 bad target at `-O2` and 2 at `-O3` — and frankA nearly sent that as
+weak support for its own hypothesis.** Both were artefacts: the code region was sliced from
+**file offset 0**, so objdump was faithfully disassembling the ELF and program headers as
+instructions. Re-slicing from `e_entry` (`0x4000b0`) produced the zeros. Note the shape of what
+was nearly sent: **"the diverging build has one more"** — a difference, in the right direction,
+pointing at nothing. Signal-shaped noise is the most expensive kind, and it arrives most readily
+when you are testing your own hypothesis.
+
+> **And that misfire is what licenses the zero.** It proves the detector *fires* when a target
+> genuinely is not at a boundary.
+
+This is *a control is not a control until it has failed once* — earned by accident and, crucially,
+**recognised** rather than discarded as an embarrassment. Combined with a population of **554
+real short jumps**, it rules out the 187 failure mode directly: this is not a check that could
+only ever have returned zero. Most negative results in this repo carry neither of those; they
+report the zero and leave the reader to guess whether the instrument works.
+
+### 204a — name the DIRECTION of an instrument's error, not just its existence
+
+The limitation frankA stated, and it is the part that makes the negative safe to act on:
+
+> *Linear disassembly can desync on data interleaved in the code region, and a desync would
+> manufacture **false positives**, never suppress real ones — so a zero is robust in the
+> direction that matters here.*
+
+A caveat naming only that an instrument is imperfect leaves a reader unable to use the result
+at all. A caveat naming **which way** it errs converts it into a bound: this instrument can
+invent a hit, so a **zero** cannot be an artefact of it. Same conclusion, opposite value.
+
+Compare 193 — a caveat that ends in a full stop is the one to check. This is the constructive
+form of the same idea: a limit stated with its *direction* is a limit the reader can compute
+with, and one stated without it is decoration.
+
+### 204b — data offered with no mechanism attached, on purpose
+
+frankA also measured, and deliberately declined to explain: **`-O3` emits 228,206 bytes of code
+against `-O2`'s 467,896**, and half the short jumps. Less than half the code.
+
+> *Whatever `-O3` is doing on this program is structural, not a peephole. I am not proposing a
+> cause from that.*
+
+That is the discipline pxx-a5 asked for, applied by the lane that had the most standing to
+speculate. **A measurement handed over without a story is a gift; the same measurement with a
+plausible story attached is a lead the next person will follow instead of looking.** The
+temptation is strongest exactly when the number is striking, and 2× is striking.
+
+**Disposal note:** ownership unchanged, still b4's. Everything above was read-only disassembly
+of two binaries in a scratchpad — no compiler edits — so `ir_codegen.inc` and `emit.inc` stayed
+released throughout. A lane can contribute a decisive measurement to another lane's ticket
+**without taking the file**, and doing so is usually faster than the handoff.
