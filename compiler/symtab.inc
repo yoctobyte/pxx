@@ -1133,6 +1133,49 @@ begin
   Inc(UClsAliasCount);
 end;
 
+{ Would linking ci -> parentCi close a cycle in the class-parent chain?
+
+  THE GUARD GOES ON THE WRITE, NOT ON THE WALK. Seventy-two sites across five
+  files step `UClsParent`, in symtab, ir, rtti_emit and the Pascal parser, and
+  none of them is bounded — but only NINE assign the chain and only FOUR of those
+  assign a real parent. Bounding the reads would mean 72 edits across two lanes
+  and would turn a hang into an internal error; refusing the link here costs four
+  and means the cycle never exists, so every one of those walks terminates
+  because the data cannot be cyclic. That is the difference between a rule every
+  future walk must remember and an invariant it inherits.
+
+  Reachable, not theoretical — six lines of Pascal hung the compiler forever at
+  100% CPU with no output, and a three-class cycle did the same:
+
+      type TB = class; TA = class(TB) end; TB = class(TA) end;
+
+  FPC rejects that spelling, but a compiler that SPINS on input it should reject
+  is still a compiler that spins: the failure has no message, no exit status and
+  no end. NilPy already refuses the one-step case at its declaration site
+  ("class X cannot inherit from itself"); this is the same refusal for a chain of
+  any length, and for Pascal, which had none.
+
+  The walk here is itself bounded by UClsCount, so it stays finite even if a
+  cycle somehow predates it.
+  bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard }
+function UClsParentWouldCycle(ci, parentCi: Integer): Boolean;
+var curr, hops: Integer;
+begin
+  Result := False;
+  if (ci < 0) or (parentCi < 0) then Exit;
+  curr := parentCi;
+  hops := 0;
+  while curr >= 0 do
+  begin
+    if curr = ci then begin Result := True; Exit; end;
+    Inc(hops);
+    { already cyclic, or longer than every class in the program: either way,
+      refusing is right and walking further would not terminate }
+    if hops > UClsCount then begin Result := True; Exit; end;
+    curr := UClsParent[curr];
+  end;
+end;
+
 function FindIMT(classCi, intfCi: Integer): Integer;
 { Index into the IMT table for (classCi, intfCi), walking the parent chain so a
   subclass inherits a parent's interface implementation. -1 if none. }

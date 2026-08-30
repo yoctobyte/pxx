@@ -2,11 +2,12 @@
 track: A
 prio: 45
 type: bug
-status: backlog
+status: done
 found: 2026-08-30
 found-by: frankD
 blocked-by: []
 summary: "EIGHT unguarded chain walks in symtab.inc across TWO chain structures -- and one is live, not latent: FindSym is where the urgent two-definitions hang spins. Four walk curr := UClsParent[curr] with no cycle guard -- FindUField:1225, FindUMeth:1275, IsSubclassOf:1308, FindUProp:1366. A parent cycle spins in any of them forever, silently, with flat RSS: no OOM, no crash, no output, no exit status. The 2026-08-15 fix for bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler put its guard on the DECLARATION path in pyparser.inc, closing one route to a cycle and leaving every walk that a second route would hang in. Latent -- no current repro reaches it."
+owner: frankA
 ---
 
 # Four ancestor-chain walks in `symtab.inc` have no cycle guard
@@ -150,3 +151,105 @@ asserted in a comment and never checked — and that is a **producer** fix. This
 ticket is the **consumer** half, and the argument above stands: a guard on the
 producer protects the cases you thought of; a guard on the consumer protects the
 ones you did not. **Both, not either.**
+
+---
+
+## Resolved — frankA, 2026-08-30. And it was NOT latent.
+
+### The ticket's two headline numbers were both wrong, in opposite directions
+
+**"Four walks", then "eight".** Enumerated from the file rather than by eye:
+`UClsParent` is stepped at **13 sites in 13 different routines** in `symtab.inc`
+alone (FindIMT, FindUField, FindUMeth, IsSubclassOf, FindParentVirtualSlot,
+ResolveVMTSlotProc, FindUProp, FindDefaultProp, ClassHelperRecFor,
+FindUMethArity, FindUMethForSig, FindUMethByProc, MatchArgRecMismatch), plus 4
+`SymHashPrev` steps in FindSym/FindSymInUnit. And it does not stop at this file —
+`pasparser_class.inc`, `ir.inc` and `rtti_emit.inc` walk the same chain, for
+**72 `UClsParent` read sites across five files and two lanes**.
+
+**"Latent", "probably not this bug".** It is **reachable in six lines of Pascal**,
+and it hangs exactly as described — 100% CPU, no output, no exit:
+
+```pascal
+type TB = class; TA = class(TB) end; TB = class(TA) end;
+```
+
+Confirmed on `pinned` and at HEAD, before this fix, for a 2-cycle, a 3-cycle and
+the self-cycle `TA = class; TA = class(TA) end;`. A forward declaration that does
+NOT close a cycle compiled fine throughout, so the ingredient really is the cycle.
+I went looking for a constructive case precisely because "I could not construct
+one" is a statement about the search rather than about the language, and the case
+took three minutes to find.
+
+FPC rejects this spelling, so it is not a dialect-parity question — **a compiler
+that spins on input it should reject is still a compiler that spins**, and this
+failure has no message, no exit status and no end.
+
+### Fix: guard the WRITE, not the 72 walks
+
+Only **9** sites assign `UClsParent` and only **4** assign a real parent; the rest
+write -1. So the walks were the expensive place to fix it and the wrong one:
+bounding 72 reads across two lanes converts a hang into an internal error, while
+refusing the link at the write means **the cycle never exists and every one of
+those walks terminates because the data cannot be cyclic**. That is the
+difference between a rule each future walk must remember and an invariant it
+inherits — `normalise-dont-special-case` applied to a data structure rather than
+to a code path.
+
+`UClsParentWouldCycle(ci, parentCi)` lives in `symtab.inc`, next to the data it
+protects, and is itself bounded by `UClsCount` so it stays finite even if a cycle
+somehow predates it.
+
+### Only PASCAL was missing it — NilPy already had this, and I removed my own duplicate
+
+I first guarded all four sites. Then `pyparser.inc:35822` turned out to already
+refuse the whole chain via `PyClsHasAncestor`, with a comment making this
+ticket's own argument ("a resolver that says otherwise must SAY SO rather than
+spin"). My NilPy edits were redundant **and harmful**: they fired first and
+replaced the established diagnostic, which `Makefile:901` and `:11079` assert by
+`grep -q 'cannot inherit from itself'`. Reverted; NilPy is untouched and its
+wording and assertions are intact. The change is `symtab.inc` + **two** sites in
+`pasparser_decl.inc`.
+
+*Follow-up worth doing but not done here:* `PyClsHasAncestor` and
+`UClsParentWouldCycle` are now two answers to one question. The right end state is
+NilPy calling the shared one — a no-behaviour-change refactor in Track N's file,
+so it is theirs to make, not mine to slip in.
+
+### Verification, both directions
+
+| case | pre-fix (`pinned`) | after |
+| --- | --- | --- |
+| 3-class cycle | **hang, 0 bytes output** | `error: circular inheritance: TC would be its own ancestor` |
+| 2-class cycle | hang | error, names the class and line |
+| self-cycle | hang | error |
+| forward decl, no cycle | compiles | compiles |
+| ordinary 3-level hierarchy | ok | ok, prints 6 |
+| NilPy `class A(B)`/`class B(A)` | its own error | **unchanged wording** |
+
+Two tests, wired into `test-core`:
+`test_class_circular_inheritance_fail.pas` (three classes deliberately — a guard
+comparing only against the class being declared passes a self-check and still
+hangs on this) with a **`timeout` as the assertion**, because the failure emitted
+**zero bytes** and there is nothing to grep; and
+`test_class_forward_decl_no_cycle.pas`, the under-guard direction, which reaches
+the same write site and must still compile and run. Both were run against
+`pinned` before being committed: the negative **hangs** there and the control
+compiles identically, which is what makes the pair load-bearing rather than
+decorative (face 228).
+
+`tools/gate.sh quick` GREEN.
+
+### Residual, stated plainly
+
+The 72 read sites are **still unbounded**. Nothing structurally prevents a fifth
+write site from being added without the check — the invariant is now true but not
+enforced by the type system, which is why the predicate sits in `symtab.inc` beside
+the data rather than in a parser. If a future cycle appears anyway, the symptom is
+this same silent hang. A bounded step helper for the reads remains a defensible
+follow-up; it is not worth 72 cross-lane edits today, and this ticket's own history
+— four, then eight, then thirteen, then seventy-two — is the argument for counting
+the population before pricing that work.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

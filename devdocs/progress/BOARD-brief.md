@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:29 blocked:8 backlog:366 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2761 rejected:56`
+`working:3 unfinished:29 blocked:8 backlog:365 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2762 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 388, ranked
+## Ready — top 30 of 387, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -89,4 +89,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [A+S]` bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 - `[p 60] [A+S]` bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never
 
-_358 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_357 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

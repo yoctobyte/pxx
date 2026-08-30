@@ -4199,7 +4199,12 @@ begin
           interface id — see __pxxIntfIMT. }
         UClsSize_[ci] := TARGET_PTR_SIZE;
         UClsAlign[ci] := TARGET_PTR_SIZE;
-        UClsParent[ci] := parentIntfCi;
+        if UClsParentWouldCycle(ci, parentIntfCi) then
+          Error('circular inheritance: ' +
+                GetTokenStrFromRaw(UClsNOff[ci], UClsNLen[ci]) +
+                ' would be its own ancestor')
+        else
+          UClsParent[ci] := parentIntfCi;
         { Inherit the parent interface's methods first (contiguously, before this
           interface's own), so IMT slot order is [parent methods..., own...]. }
         if parentIntfCi >= 0 then
@@ -4591,7 +4596,15 @@ begin
         if (parentCi >= 0) and UClsSealed[parentCi] then
           Error('cannot derive from the sealed class ' +
                 GetTokenStrFromRaw(UClsNOff[parentCi], UClsNLen[parentCi]));
-        UClsParent[ci] := parentCi;
+        { A cycle here spins the compiler forever in any of the ~72 unbounded
+          UClsParent walks, with no message and no exit. Refuse the link instead:
+          bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard }
+        if UClsParentWouldCycle(ci, parentCi) then
+          Error('circular inheritance: ' +
+                GetTokenStrFromRaw(UClsNOff[ci], UClsNLen[ci]) +
+                ' would be its own ancestor')
+        else
+          UClsParent[ci] := parentCi;
         { bare `class;` with no heritage = a forward declaration (FPC).
           `class(TBase);` stays the empty-body shorthand. }
         UClsForward[ci] := (not hadParens) and (CurTok.Kind = tkSemicolon);

@@ -5995,6 +5995,23 @@ test-core: $(COMPILER)
 	# RUNS, because "accepted" and "correct" are different claims.
 	./$(COMPILER) test/test_assign_compatible_types.pas $(TESTTMP)/test_asgok26
 	tools/expect_same.sh test_asgok26 "$$($(TESTTMP)/test_asgok26)" "compat 7 abc 7 0 2"
+	# A class that is its own ancestor through a CHAIN is refused, and the
+	# refusal REPORTS rather than spinning. This hung the compiler forever with
+	# no output, no exit and no error: ~72 sites step UClsParent across five
+	# files and none is bounded, so the guard goes on the four WRITE sites and
+	# the cycle simply never exists. THE TIMEOUT IS THE ASSERTION -- the failure
+	# emitted zero bytes, so there is nothing to grep; without the bound a
+	# regression hangs this suite instead of reporting it. Three classes, not
+	# one: a guard comparing only against the class being declared passes a
+	# self-check and still hangs here.
+	# bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard
+	! timeout 60 ./$(COMPILER) test/test_class_circular_inheritance_fail.pas $(TESTTMP)/test_clscyc26 > $(TESTTMP)/test_clscyc.log 2>&1
+	grep -q "circular inheritance" $(TESTTMP)/test_clscyc.log
+	# ...and the under-guard direction, which the negative above cannot see: an
+	# ordinary forward declaration reaches the SAME write site and must still
+	# compile and run. A whitelist fails in two directions.
+	./$(COMPILER) test/test_class_forward_decl_no_cycle.pas $(TESTTMP)/test_clsfwd26
+	tools/expect_same.sh test_clsfwd26 "$$($(TESTTMP)/test_clsfwd26)" "3 TRUE"
 	# `not` over every operand shape the deleted node-kind whitelist ever named,
 	# plus the ones it deliberately distrusted. The list grew one entry per bug
 	# report -- array element, field, deref, Ord(x), value-cast, nested not,
