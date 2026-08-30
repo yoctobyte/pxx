@@ -197,4 +197,4 @@ HEAD and would fail against `pinned`, which compiles the same source clean.
 ## Log
 - 2026-08-30 — undefined read and dishonest guard fixed by frankC, both tests
   in `test-core`; the limit itself handed to Track A. Commit PENDING-COMMIT.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d5350d64a.
