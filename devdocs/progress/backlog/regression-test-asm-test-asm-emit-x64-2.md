@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: P
+track: A
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -41,3 +41,31 @@ pascal26:1075: error: undefined variable (PxxDbgWants)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Re-laned P -> A: the defect is an include-visibility problem in a core file (2026-08-30)
+
+`track: P` was **guessed from the test path** (`test/test_asm_emit_x64.pas`), which
+the auto-filer marks as a guess. It is wrong. The failure is:
+
+```
+pascal26:1052: error: undefined variable (PxxDbgWants)
+  in: compiler/asmtext.inc
+pascal26:1075: error: undefined variable (PxxDbgWants)
+```
+
+`PxxDbgWants` is declared at **`compiler/defs.inc:5339`** and called at
+**`compiler/asmtext.inc:1052` and `:1075`** (`'a.asmmemo'`). `asmtext.inc` is
+pulled at `compiler.pas:113`. Nothing about this is the Pascal frontend — it is
+core include structure, Track **A**.
+
+Note the shape before assuming it is a missing forward: the same symbol is called
+from `lexer.inc` (:143, :162, :299, :2977) and `dbg_filetable.inc` (:130, :228)
+**without** complaint, so whatever makes it invisible is specific to how
+`asmtext.inc` is reached in *this test's* configuration rather than to the
+declaration being absent. **Find out which before adding a forward** — a forward
+added to silence a visibility difference hides the reason the configuration
+differs, and this file family has already produced three wrong mechanisms today
+from reading rather than measuring.
+
+Surfaced by frankwasm while confirming an unrelated tstate RED was not its own.
+Still red; unclaimed.

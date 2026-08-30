@@ -21370,3 +21370,25 @@ via `IsArray`; that split has to be made deliberately at each new site rather th
 inherited. The syntax-side rule says a construct reachable through two shapes
 grows a second path that stays broken; this is the same hazard arriving through
 the type system, where the two shapes are spelled identically.
+
+## Write commit messages with `-F` and a quoted heredoc, never `-m "..."`
+
+frankwasm, 2026-08-30, after losing two phrases from a commit message to shell
+command substitution: **backticks inside a double-quoted `git commit -m` are
+executed**, silently, leaving `"so  is spelled there exactly as ."` where the
+identifiers were. It caught it reading the message back and amended before
+pushing, so origin stayed clean — but nothing warns you, and the damage is
+invisible unless you re-read.
+
+This codebase's commit style names identifiers in backticks constantly, so the
+hazard is not occasional. Use:
+
+```
+git commit -F - <<'MSG'
+...backticks and $vars are literal inside a QUOTED heredoc...
+MSG
+```
+
+The quoted delimiter (`<<'MSG'`, not `<<MSG`) is the part that matters — an
+unquoted heredoc still substitutes. Same applies to ticket bodies written with
+`cat >> file <<'EOF'`.

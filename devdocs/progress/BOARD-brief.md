@@ -64,7 +64,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
-- `[p 70] [P]` regression-test-asm-test-asm-emit-x64-2
+- `[p 70] [A]` regression-test-asm-test-asm-emit-x64-2
 - `[p 70] [P]` regression-test-core-test-warn-ignored-directives
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
