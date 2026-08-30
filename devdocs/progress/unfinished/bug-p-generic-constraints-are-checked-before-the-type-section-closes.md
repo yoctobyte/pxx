@@ -13,7 +13,7 @@ owner: ""
 # P: generic constraints are checked before the type section closes
 
 Follow-up to [[bug-p-generic-type-constraints-are-parsed-and-discarded]], which
-implemented constraint checking and took 33 of the 35 FAIL-marked
+implemented constraint checking and took 33 of the 40 FAIL-marked
 `tgenconstraint` tests from wrongly-accepted to correctly-rejected. This is the
 residual, and it is a **placement** problem, not a rule problem.
 
@@ -97,7 +97,7 @@ new unconditional call, not a widened guard.
 ## Raised 40 -> 70: this is now a live regression, not a latent one-liner (coordinator, 2026-08-30)
 
 `f4fb9d31b` (*"generic type constraints are recorded and checked"*) made
-constraints load-bearing for the first time — correctly; 35 FAIL-marked
+constraints load-bearing for the first time — correctly; 40 FAIL-marked
 `tgenconstraint` tests were being wrongly accepted. The moment it landed, this
 ticket stopped being a timing curiosity nothing could observe and became the
 mechanism behind a **NEW-RED on `test-fgl`**, on real FPC-corpus code:
@@ -107,7 +107,7 @@ specialization.
 
 Tracked as [[regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section]],
 which carries the repro and a 30-second discriminating test. **Do not fix by
-loosening the check** — the 35 tests are the arm that would silently undo.
+loosening the check** — the 40 tests are the arm that would silently undo.
 
 This is the second time today that a carrier nothing read turned out to be wrong
 the instant a reader existed (the other: `UFldStrElemTk` hardwired to

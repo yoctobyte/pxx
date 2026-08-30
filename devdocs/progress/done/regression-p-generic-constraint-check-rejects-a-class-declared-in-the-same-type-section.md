@@ -69,7 +69,7 @@ Do not skip this; the two produce the identical message.
 
 `f4fb9d31b` is a correct and valuable fix and **must not be reverted**:
 `TFoo<T: class>` and every other constraint form was parsed and discarded, so no
-specialization was ever checked and **all 35 FAIL-marked `tgenconstraint`
+specialization was ever checked and **all 40 FAIL-marked `tgenconstraint`
 fpc-testsuite tests were wrongly ACCEPTED**. The check is right; its *timing* is
 wrong. Fix the timing, keep the check.
 

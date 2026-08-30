@@ -18,7 +18,7 @@ Raised by frankwasm, 2026-08-30, from a live instance.
 
 `f4fb9d31b` recorded and checked generic constraints for the first time — a
 correct and valuable fix; before it, every constraint in the language meant
-nothing and all 35 FAIL-marked `tgenconstraint` tests were wrongly *accepted*.
+nothing and all 40 FAIL-marked `tgenconstraint` tests were wrongly *accepted*.
 
 It also broke `test-fgl` on real FPC-corpus code, because
 [[bug-p-generic-constraints-are-checked-before-the-type-section-closes]] was
@@ -72,3 +72,42 @@ a rate, but it is enough to record the shape so the fourth is recognised faster.
 
 The thing worth keeping regardless: **a comment or ticket explaining why something
 is safe *today* is a dated claim, and nothing re-checks it when the date passes.**
+
+## The harder half, from the case that motivated this (frankS, 2026-08-30)
+
+**The prediction was right about *a* regression and wrong about *the* mechanism,
+and that is the expensive failure mode this rule invites.**
+
+`bug-p-generic-constraints-are-checked-before-the-type-section-closes` [P p40]
+predicted that `f4fb9d31b` would break something. It did. **But not for the
+reason the p40 ticket describes.** The measured cause is two unreconciled
+representations of "descends from `TObject`" — `pasparser_decl.inc:4594`
+deliberately refuses to link `TObject` as a parent (a real-parent link would
+relocate every `class(TObject)` VMT), so `UClsParent` is `-1` at the root, while
+`CheckTemplateConstraint` resolves the constraint through `FindUClass('TObject')`,
+which **does** find the registered builtin row and then walks a chain terminating
+at `-1` that can never reach it. Nothing to do with type-section timing.
+
+Proof it is not timing: splitting the type section so the class closes **before**
+the specialization still fails, and a *user* base class as the constraint works in
+the same section. Two independent falsifications.
+
+**What it nearly cost.** The three-part deferral plan — pending list in
+`defs.inc`, record-not-check in `pasparser_generic.inc`, drain in
+`pasparser_decl.inc` — would have left the regression **live**, touched two other
+agents' files, and moved the check later in a coordinate system that still cannot
+answer the question. **And its validation would have looked fine**, because
+"does `objectlist.pas` compile now?" passes the moment the real fix lands, for an
+unrelated reason.
+
+**So the rule this ticket proposes needs a second clause.** Blocking the
+activating work on a latent-defect ticket is sound. **Treating the symptom that
+arrives as confirmation of the predicted mechanism is not** — a latent ticket
+raises the prior that *something* will break, and contributes nothing to
+diagnosing *what*. The discriminating test still has to run first, and the p40
+ticket stands unchanged and unmerged: it describes a real third state, with
+`tgenconstraint4`/`5` as its evidence.
+
+This strengthens the recommendation of option (4)/(3) over (1): an edge type that
+*names a mechanism* would have propagated the wrong diagnosis with the ranker's
+authority behind it.
