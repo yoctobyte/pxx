@@ -1928,6 +1928,71 @@ pre code{background:none;padding:0}
                         f"nothing else re-checks it"
                     )
 
+        # DUPLICATE FACE NUMBERS -- an append-only index that numbers its
+        # entries from its own tail CANNOT BE WRITTEN CONCURRENTLY. Found by
+        # frankB 2026-08-30 after colliding TWICE in under ten minutes on
+        # feature-a-a-refusal-is-a-claim-with-a-date-on-it: it filed as 226,
+        # rebased onto another lane's 226, renumbered to 227, rebased onto a
+        # third lane's 227, and landed as 228.
+        #
+        # WHY GIT CANNOT SEE IT. Both sides are pure appends of different
+        # content. frankB got a merge conflict only because the appends landed
+        # on ADJACENT LINES -- incidental, not detection. Two lanes appending at
+        # different offsets both land clean and the file quietly contains two
+        # 226s. The conflict was luck, and luck is not a mechanism.
+        #
+        # WHY IT MATTERS MORE THAN IT LOOKS. Entries are cited BY NUMBER from
+        # commit messages and from devdocs/dev/a-success-message-is-not-a-
+        # verdict.md. A duplicated number makes every one of those citations
+        # ambiguous permanently, and the ambiguity is invisible: `grep '### 226'`
+        # returns two hits only to someone who thinks to count them.
+        #
+        # DELIBERATELY NOT A CONVENTION CHANGE. Renumbering by lane
+        # (`226-frankB`) or dropping numbers for slugs would break every
+        # existing citation and force every lane to change behaviour. This
+        # leaves the convention alone and makes the collision DETECTABLE, which
+        # is the whole defect -- the lanes resolved all three collisions
+        # correctly once they could see them.
+        #
+        # SELF-SELECTING, no hardcoded slug: any ticket carrying 10+ numbered
+        # headings is using this convention. Calibrated 2026-08-30 over the live
+        # board: exactly one file qualifies, 312 numbered headings, zero
+        # duplicates -- so it lands silent and non-vacuity was proved separately
+        # against an injected duplicate.
+        #
+        # SAME LEVEL ONLY. `## 219 — A TICKET'S EVIDENCE EXPIRES` followed by
+        # `### 219 — a ticket whose body is a measurement` is the section header
+        # and its first sub-entry, which is the file's normal shape. Comparing
+        # across levels would flag that as a collision and the check would be
+        # wrong on its first real run.
+        face_hdr = re.compile(r"^(#{2,4})\s+(?:FACE\s+)?(\d{1,3}[a-z]?)\s*[\u2014\-\u2013]")
+        for t in self.tickets:
+            seen_faces: dict = {}
+            for n, line in enumerate(t.text.splitlines(), 1):
+                m = face_hdr.match(line)
+                if m:
+                    seen_faces.setdefault((len(m.group(1)), m.group(2)), []).append(n)
+            if len(seen_faces) < 10:
+                continue
+            for (lvl, num), where in sorted(seen_faces.items()):
+                if len(where) > 1:
+                    warning_count += 1
+                    lines.append(
+                        f"DUP-FACE-NUMBER: {t.slug} defines entry {num} "
+                        f"{len(where)} times at the same heading level "
+                        f"(lines {', '.join(str(w) for w in where)}). An "
+                        f"append-only index that numbers from its own tail "
+                        f"cannot be written concurrently: every lane computes "
+                        f"the next number from a tail that is already stale, "
+                        f"and git sees two pure appends of different content, "
+                        f"not a collision. Entries are cited BY NUMBER from "
+                        f"commit messages and from other docs, so a duplicate "
+                        f"makes those citations ambiguous permanently. "
+                        f"RENUMBER THE LATER ONE to the next free number and "
+                        f"fix any citation of it; do not delete either, they "
+                        f"are different findings"
+                    )
+
         # The mirror: filed as a decision without writing DOWN the answer.
         # Dependents reach the decision by following their blocked-by slug into
         # decided/ (or legacy done/), so a decide- ticket parked there without
