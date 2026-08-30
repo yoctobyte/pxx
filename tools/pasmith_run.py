@@ -392,10 +392,23 @@ def diff_traces(ta, tb, a_name, b_name, kinds):
     `<class>_<kind>`, so one crashing bug split into as many signatures as its
     seeds had distinct first statements -- `fpc-self_assign`, `fpc-self_case`,
     `fpc-self_forvarlimit` are three ledger entries, three sets of example seeds,
-    and three recheck costs for what the evidence says is one FPC -O2 defect
-    (rc=217, identical generator args, differing only in seed). That is exactly
-    the "one bug wearing many names" failure the ledger was built to remove,
-    re-entering through the crash path.
+    and three recheck costs for what is very likely one FPC -O2 defect. Measured
+    2026-08-30 with FPC alone, which needs no pxx build: all three die
+    `EAccessViolation` at rc=217 under -O2 and run clean under -O0, with
+    byte-identical generator args, differing only in the seed.
+
+    That is CONSISTENT WITH one defect and does not establish it — three
+    distinct -O2 optimizer bugs could each fault. The wording here said "what
+    the evidence says is one defect" until the measurement was actually taken,
+    which was an overclaim of exactly the kind this file keeps catching
+    elsewhere. What the evidence does establish is that the three signatures
+    carry no information distinguishing them, which is the only claim the dedup
+    key needs.
+
+    And the coarse key is right either way, by this file's own stated rationale:
+    a second bug hiding inside the first surfaces the moment the first is fixed
+    and the entry reopens. Splitting on the program's first statement is not a
+    hedge against that — it splits one bug three ways while merging nothing.
 
     The tell was in the reports all along: `of 1` is `min(len(la), len(lb))`, not
     the checkpoint count, so a truncated side prints "of 1" for a 27-checkpoint
