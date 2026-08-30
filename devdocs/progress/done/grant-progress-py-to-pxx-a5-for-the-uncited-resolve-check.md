@@ -128,4 +128,4 @@ that list was empty. Harmless live — `manifest_resolved` is a subset — but
 separately, so it failed on the first run.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit c1a8e092c.
