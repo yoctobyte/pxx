@@ -1,7 +1,7 @@
 ---
 track: B+S
 prio: 40
-blocked-by: []   # NOT the soft-float ticket — see "Status of the presumed blocker". The edge was proposed and is UNCONFIRMED; adding it unmeasured would park this for nothing.
+blocked-by: [bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help]   # CONFIRMED 2026-08-30 at c781fc84f, after the entropy fix landed — see "Status of the presumed blocker". Filed with no edge because it did not reproduce; the edge is here now because a run showed it.
 type: feature
 summary: "The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it."
 status: backlog
@@ -46,7 +46,7 @@ true. That division already existed in the work; the ticket was carrying both.
    than a failure. Confirm before designing: read what `Randomize` actually
    calls on `--esp-profile=bare` rather than trusting this paragraph.
 
-## Status of the presumed blocker — MEASURED, and it does not reproduce
+## Status of the presumed blocker — CONFIRMED 2026-08-30, and the earlier negative is explained
 
 The split was proposed so that
 [[bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help]]
@@ -54,8 +54,39 @@ would have a ticket it could genuinely block: bare xtensa and bare riscv32 were
 reported to fail `uses random` with *"no FPU ... `__pxx_ul2d` / `__pxx_l2d` is
 not linked"*.
 
-**That edge is NOT in the frontmatter, because it does not reproduce from
-here.** `random.pas:448` and `:568` do `Double(UInt64 shr 11) * 1.1102e-16`,
+**UPDATE, same day, after `ba14f5f56` landed: the edge is CONFIRMED and is now
+in the frontmatter.** The section below is left standing rather than rewritten,
+because the reason the first attempt saw nothing is the useful part.
+
+`uses random` on bare xtensa and bare riscv32 fails at
+`lib/rtl/random.pas:460` — inside `RandomDouble` — with *"this target has no FPU
+and the soft-float kernel `__pxx_ul2d` is not linked; add `uses softfloat` to
+the program"*. Three things make it worse than the report suggested:
+
+1. **It fires for programs that never touch a float.** The unit is compiled
+   whole, so a driver whose body is only `v := Random64` hits `RandomDouble`'s
+   float code anyway. The blocker is the **unit**, not `RandomDouble`.
+2. **`uses softfloat` — the fix the diagnostic itself advises — does not
+   work.** Measured in both orders on both targets. That is exactly
+   [[bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help]],
+   now with a concrete consumer.
+3. **What DOES work is putting any float in the PROGRAM.** A driver that adds
+   `d := 1.5; d := d * 2.0` alongside `v := Random64` builds on both targets.
+
+Point 3 is the root cause and it is a shape this repo has just fixed once: the
+soft-float kernel is pulled by a **token scan of the program**, so a need that
+arises inside a *unit* is invisible to it. That is the identical defect
+[[bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target]]
+had, in a second place — and the fix has a template, since `ba14f5f56` solved
+it for the intrinsics by making an on-demand unit a library file can `uses`.
+
+### Why the first pass saw nothing — the confound, recorded so it is not repeated
+
+**Every one of the seven shapes below is a PROGRAM with float code in it, so
+each one pulled the kernel by the very mechanism that is broken.** They were
+testing the working path while trying to test the broken one. The table stays
+because it is still true and still bounds the failure — generic float on bare
+ESP is fine — but it never could have found this: `random.pas:448` and `:568` do `Double(UInt64 shr 11) * 1.1102e-16`,
 which is exactly a `__pxx_ul2d`, so the report is structurally plausible — and
 seven separate float programs still build on **both** bare ESP targets at pin
 v395:
@@ -96,10 +127,11 @@ with a driver whose body is `v := Random64` and, separately, one using
 `RandomDouble` — because only the second reaches the float path, and if only
 that one fails the blocker is `RandomDouble`, not the unit.
 
-**Add the `blocked-by` edge when a run shows the failure, and not before.**
-An unmeasured edge parks work for nothing, which is the same defect as an
-unrecorded one pointed the other way — and this ticket exists because of that
-class of error.
+**The edge was added when a run showed the failure, and not before.** That
+sequence is the point: filing it unmeasured would have been right by accident,
+and the measurement changed *what* the blocker is (the unit, not
+`RandomDouble`) and *why* (an ambient pull that cannot see into a unit), which
+an assumed edge would have recorded wrongly while looking correct.
 
 ## Gate
 

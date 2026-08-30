@@ -116,7 +116,7 @@ _none_
 | bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 | A | 25 | bug | `--emit-obj` on i386/aarch64/arm32 refuses with `only xtensa/riscv32 targets` -- but x86-64 supports it and is the target most users are on. The message names a set that excludes a working target, so a reader who trusts the diagnostic over the docs concludes the feature is ESP-only. | — |
 | bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss | A+S | 25 | bug | An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate — nothing watches this number. | — |
 | bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use | A | 25 | bug | defs.inc:816 documents IR_FRAME with 'the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address' — stated as universal. It is false on riscv32, where s0 points at the BOTTOM of the frame and the links sit at +8/+12. ir.inc:4977 knows this and says assuming the common layout 'would have silently walked into the locals'. The lowering is correct (it asks FramePrevFpOffset/FrameRetAddrOffset); the DOC a backend implementer reads is not. | — |
-| bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help | A | 35 | bug | The "no FPU" diagnostic tells you to `uses softfloat`, and doing so changes nothing | — |
+| bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help | A | 35→40 | bug | The "no FPU" diagnostic tells you to `uses softfloat`, and doing so changes nothing | — |
 | bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
 | bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 25 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
@@ -478,7 +478,7 @@ _none_
 | chore-t-make-every-cross-target-row-assert-the-exit-code | T | 45 | chore | 536 cross-target differential rows compare stdout only; 5 capture the exit code. Both operands are runs of the same program, so the exit code is free to add — but run_target.sh returns the EMULATOR's status and signal deaths do not encode identically under qemu-user and a native shell, so a blanket rollout can manufacture diffs on exactly the rows most worth checking. Wants a piloted rollout, one arch at a time, verified against Track T's matrix. | — |
 | compat-n-repr-does-not-escape-non-printables-above-u007f | N | 15 | compat | `repr()` escapes only below U+0080, so C1 controls, NBSP and non-printable astral characters print raw where CPython escapes them: repr(chr(0x80)) is the raw byte here and '\\x80' in CPython. Everything below 0x80 is already correct. Output FORMATTING of a non-float value, so compat at low prio by CLAUDE.md's table. | — |
 | feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython | O | 55 | feature | Container subscript is NilPy's worst primitive against CPython by a wide margin: b[2] costs 234 ns against CPython's 12 (19x) and d['k'] 495 against 30 (16x), while pxx BEATS CPython at isinstance (0.39x), len (0.14x), exec (0.92x) and a zero-argument call (0.10x). Subscript is the largest single gap and the one with an obvious mechanism; it is also on the per-token path of every interpreter-shaped NilPy program. | — |
-| feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | — |
+| feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 | feature-t-check-flags-a-lane-blocker-that-has-no-in-edges | T | 40 | feature | prio propagates down dependency edges, so a ticket with in-degree zero inherits nothing — and a ticket that blocks a LANE rather than a ticket never gets an edge, because blocked-by: would be a false claim. Such a ticket under-ranks itself permanently and no checker sees it: from the ranker's side an in-degree of zero is indistinguishable from a leaf. Proposal: `progress.sh check` flags a ticket whose body names a track as its beneficiary and has no in-edges. Threshold MUST be calibrated against the live board before landing. | — |
 | refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering | A | 40 | refactor | ir.inc:10426 reads `(CProgramMode or IsNodePChar(dest))` -- one rule expressed two ways at two different strictnesses, with the dialect flag standing in for the property it implies. Normalising it DELETES an entry from the C carve-out inventory rather than moving one, so it makes that refactor smaller. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
@@ -992,6 +992,7 @@ _none_
 - [p 45] [T] task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it (unblocks 1)
+- [p 40] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help (unblocks 1)
 - [p 40] [A+S] bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing
 - [p 40] [A] bug-a-function-result-assignment-does-not-narrow-to-the-result-type
 - [p 40] [A+S] bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
@@ -1028,7 +1029,6 @@ _none_
 - [p 40] [A+O] feature-opt-dynarray-grows-in-place
 - [p 40] [A+O] feature-opt-o3-now-has-differential-coverage-and-it-should-be-standing
 - [p 40] [A+O] feature-opt-static-literal-blocks-should-never-be-written-to
-- [p 40] [B+S] feature-random-esp-hw-tier [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 40] [A] feature-rtl-libc-frontend-sites-and-thread-errno
 - [p 40] [T] feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets
 - [p 40] [T] feature-t-audit-tests-that-pass-with-the-implementation-removed
@@ -1049,7 +1049,6 @@ _none_
 - [p 35] [A] bug-a-help-does-not-advertise-flags-the-compiler-accepts
 - [p 35] [A] bug-a-pxx-home-is-advertised-but-not-honoured
 - [p 35] [A] bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one
-- [p 35] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - [p 35] [D] bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep
 - [p 35] [N] bug-n-pypal-ppoll-passes-a-64-bit-timespec-on-32-bit-targets
 - [p 35] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
@@ -1230,6 +1229,7 @@ _none_
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
 - **1** — bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
+- **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees

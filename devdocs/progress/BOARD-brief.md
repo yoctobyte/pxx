@@ -55,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 427, ranked
+## Ready — top 30 of 426, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -88,4 +88,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
-_397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_396 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
