@@ -371,6 +371,35 @@ So, periodically, of your own reports:
 Related: the same shape one level down is a true fact about the wrong subject
 (below); this is a true *measurement* answering the wrong question.
 
+### Measured 2026-08-30: the population is small, and mostly not what you fear
+
+Enumerated by `git blame` over every `.py`/`.sh` in `tools/` and `test/`, looking
+for hardcoded expected values and thresholds whose **line** no commit had touched
+in a month. **255 files, 63,863 lines blamed, 129 matches at any date, 21 older
+than a month across 7 files.** (Reporting the searched population, not only the
+hits, is the point of `the-empty-tree-audit.md` — 21 is unreadable without the
+63,863.) 47 files carry such values and were touched recently, so the absence of
+any devtest from the stale list is a real result rather than a broken glob.
+
+Then the part that matters: **of those 21, only 2 are in the class that can rot.**
+
+| kind | n | can it rot? |
+| --- | --- | --- |
+| policy tunables — `MEM_FLOOR`, `PSI_ADMIT`, `HEARTBEAT_STALE`, `CASCADE_THRESHOLD`, `HISTORY_CAP` … | 15 | **no** — a chosen operating point. Stability is the intent; "unchanged for a month" is health, not staleness. |
+| exit codes and protocol constants — `rc == 130`, `rc == 124`, `VT_PROMO_INT64 = 8193` | 4 | **only against their source.** Checked: 8193 still matches `compiler/defs.inc:1151`. |
+| **asserted observations** — `ADDLINE=10` (`dwarf_smoke.sh`), `BLANK_MAX=4000` (`gui_shot.sh`) | **2** | **yes** — a number someone measured once and wrote down. |
+
+**So sort by what a number IS, not by how long it has sat still.** A tunable and a
+recorded measurement look identical in a diff and age identically in `git blame`,
+and only the second one decays. Scanning for "old numbers" and treating the count
+as a backlog manufactures 19 items of work out of 2 — the polarity that sends
+effort somewhere useless rather than stopping you looking.
+
+The two real ones are unverified as of this writing; re-deriving them needs a
+build and was deferred off a loaded box. **The enumeration is cheap and the
+re-derivation is not, so they are separate jobs** — do the counting whenever, and
+spend cores only on the residue.
+
 ## Rule: "filed", "done", "already handled" are CLAIMS — and `ls` settles them
 
 Work that exists in prose but not as a rankable ticket is invisible to
