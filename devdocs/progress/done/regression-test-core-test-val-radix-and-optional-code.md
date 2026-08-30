@@ -64,4 +64,4 @@ collateral.** A `sed` spans the whole 16k-line file; a gate spans one recipe.
 Fixed by reverting the three `test-core` lines to `23 / 23` and leaving
 `qc_nilpy26` at `27 / 27`, plus a comment at the canary line naming the hazard
 for the next person who adds checks there. No compiler change.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 8983444a8.
