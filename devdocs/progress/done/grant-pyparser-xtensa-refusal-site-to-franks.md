@@ -115,4 +115,4 @@ the edit. A comment-only change that moved the binary would itself have been the
 finding; it did not.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 2c9abddc9.
