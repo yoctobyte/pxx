@@ -2533,6 +2533,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-fortran-skeleton | T | 70 | regression | regression: test-core#src:test/test_fortran_skeleton.f90 red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-fpc-compat-batch | P | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch.pas red at 1021bbdece65 (auto-filed by twatch) | — |
 | regression-test-core-test-fpc-compat-batch2 | T | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch2.pas red at f6bcbe6c1237 (auto-filed by twatch) | — |
+| regression-test-core-test-generic-arg-is-enclosing-template-param-objfpc | P | 70 | regression | regression: test-core#src:test/test_generic_arg_is_enclosing_template_param_objfpc.pas red at 1d8b44e59042 (auto-filed by twatch) | — |
 | regression-test-core-test-generic-inherit-delphi | P | 70 | regression | regression: test-core#src:test/test_generic_inherit_delphi.pas red at 98ed38202254 (auto-filed by twatch) | — |
 | regression-test-core-test-indexing-length-for-new-inc-positive | P | 70 | regression | regression: test-core#src:test/test_indexing_length_for_new_inc_positive.pas red at c59796cd1e1d (auto-filed by twatch) | — |
 | regression-test-core-test-integer-longint-overload | P | 70 | regression | regression: test-core#src:test/test_integer_longint_overload.pas red at 943c706936b3 (auto-filed by twatch) | — |

@@ -688,13 +688,29 @@ begin
         looked like it cared which type it was: the failing set and the passing
         set are two disjoint lists of NAMES.
 
-        A declaration's left-hand side can only follow the `type` keyword or the
-        `;` that ended the previous declaration. Test for those: a whitelist of
-        two, rather than trying to enumerate the ways a use can be spelled. }
+        A declaration's left-hand side can only follow the `type` keyword, the
+        `;` that ended the previous declaration, or -- in objfpc mode -- the
+        `generic` keyword that introduces it. Test for those, rather than trying
+        to enumerate the ways a use can be spelled.
+
+        THE `generic` ARM IS NOT OPTIONAL AND ITS ABSENCE WAS A REGRESSION.
+        The first version of this whitelist listed only `type` and `;`, in a
+        comment that asserted those were the only two. That is true of the
+        Delphi surface (`TDict<TKey, TValue> = class`) and false of objfpc
+        (`generic TDict<TKey, TValue> = class`), where the name is preceded by
+        `generic` and nothing else. Every objfpc header therefore failed the
+        test, its parameters were never harvested, and a use of one of them as
+        an argument -- `C: specialize TCmp<TKey>` -- was minted as a CONCRETE
+        specialization instead of being deferred, so the template's own `Val: T`
+        came back as `unknown type: TKey`.
+        regression-test-core-test-generic-arg-is-enclosing-template-param-objfpc.
+        `generic` carries no dedicated token kind; it lexes as tkIdent. }
       if ok and (j + 1 < TokCount) and (Tokens[j].Kind = tkGt) and
          (Tokens[j + 1].Kind = tkEq) and
          ((i = 0) or (Tokens[i-1].Kind = tkType) or
-          (Tokens[i-1].Kind = tkSemicolon)) then
+          (Tokens[i-1].Kind = tkSemicolon) or
+          ((Tokens[i-1].Kind = tkIdent) and
+           CaseEqual(GetTokenStr(i-1), 'generic'))) then
       begin
         { a header -- keep the parameter names, then harvest the names its BODY
           declares, and resume past the whole declaration }

@@ -5610,7 +5610,7 @@ test-core: $(COMPILER)
 	@# the width-specific integers and a user alias here. Per-name split (8 fail
 	@# / 7 pass before the fix) is recorded in the file header. Oracle: FPC.
 	./$(COMPILER) test/test_generic_bound_name_harvest.pas $(TESTTMP)/test_genboundharvest26
-	test "$$($(TESTTMP)/test_genboundharvest26)" = "boundharvest 45 A 1111111111"
+	test "$$($(TESTTMP)/test_genboundharvest26)" = "boundharvest 45 A 10 1111111111"
 	@# A GENERIC class declared bodyless WITH a Delphi modifier (`class abstract;`,
 	@# `class sealed(TBase);`) was mis-parsed: the bodyless test in
 	@# ParseGenericTemplateNamed looked at the token after `class` without

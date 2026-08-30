@@ -35,6 +35,21 @@
   Forward protection is still per-name: any one of the eight regressing on its
   own makes this file fail.
 
+  THE WHITELIST CAN FAIL IN TWO DIRECTIONS AND THIS FILE ORIGINALLY TESTED ONE.
+  Everything above is the OVER-collect direction: a use must not donate its
+  arguments to the bound-name set. The UNDER-collect direction -- a genuine
+  header's parameters must still BE collected -- was not covered here, and the
+  first whitelist broke it: it accepted only `type` and `;` before the name,
+  which is the Delphi surface, while objfpc writes `generic TDict<TKey, TValue>`
+  and is preceded by `generic`. Every objfpc header stopped being recognised,
+  so `specialize TCmpH<TKey>` below was minted CONCRETE instead of deferred and
+  the template's own `Val: T` came back as `unknown type: TKey`.
+
+  The Delphi spelling of that same shape never broke, because its header does
+  follow `type`/`;` -- which is why controls drawn from the Delphi surface all
+  passed against a compiler that was broken for objfpc. Both directions are
+  asserted below now.
+
   Oracle: FPC prints the same line. }
 program test_generic_bound_name_harvest;
 
@@ -45,6 +60,18 @@ type
 
   generic TCell<T> = record
     V: T;
+  end;
+
+  { UNDER-collect direction: TKey is TDictH's parameter, so `TCmpH<TKey>` is a
+    param form and must be DEFERRED, not minted concrete. That requires the
+    harvest to recognise `generic TDictH<...>` as a header in the first place. }
+  generic TCmpH<T> = class
+    Val: T;
+  end;
+
+  generic TDictH<TKey, TValue> = class
+    C: specialize TCmpH<TKey>;
+    K: TKey;
   end;
 
 const
@@ -64,6 +91,8 @@ const
   CChar:     ^specialize TCell<Char>     = Nil;
 
 var
+  dh: specialize TDictH<Integer, LongInt>;
+  ch: specialize TCmpH<Integer>;
   { The same names again as ordinary variables, which is where a suppressed
     rewrite surfaces as `unknown type` rather than as a silent wrong value. }
   vLongInt:  specialize TCell<LongInt>;
@@ -90,10 +119,13 @@ begin
   vInteger.V  := 9;
   vChar.V     := 'A';
 
+  dh := specialize TDictH<Integer, LongInt>.Create; dh.K := 4;
+  ch := specialize TCmpH<Integer>.Create;           ch.Val := 6;
+
   n := vLongInt.V + vCardinal.V + vInt64.V + LongInt(vQWord.V)
      + vSmallInt.V + vWord.V + vShortInt.V + vAlias.V + vInteger.V;
 
-  writeln('boundharvest ', n, ' ', vChar.V, ' ',
+  writeln('boundharvest ', n, ' ', vChar.V, ' ', dh.K + ch.Val, ' ',
           Ord(CLongInt = Nil), Ord(CCardinal = Nil), Ord(CInt64 = Nil),
           Ord(CQWord = Nil), Ord(CSmallInt = Nil), Ord(CWord = Nil),
           Ord(CShortInt = Nil), Ord(CAlias = Nil), Ord(CInteger = Nil),
