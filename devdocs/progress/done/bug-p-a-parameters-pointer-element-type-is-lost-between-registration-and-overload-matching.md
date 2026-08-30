@@ -2,7 +2,7 @@
 prio: 65
 track: P
 owner: frankA
-status: working
+status: done
 ---
 
 # A parameter's pointer element type is lost between registration and overload matching
@@ -156,3 +156,66 @@ the one on the overload-matching path.
 `defs.inc` is shared core. This ticket already says to route it as Track A if a
 new `Proc*` array is needed, and it is. Requested from the coordinator; probes
 are local and uncommitted until then.
+
+---
+
+## RESOLVED, 2026-08-30 (frankA, Track P with the A slot confirmed by the coordinator)
+
+`ProcParamPtrElemTk` / `ProcParamPtrElemRec` added to `defs.inc` beside
+`ProcParamPtrDepth`, sized and initialised in `symtab.inc`'s `RegisterProc`
+(default `Ord(tyUnknown)` / `REC_NONE`), written in `pasparser_proc.inc` at the
+same place `SetSymPointerType` is called for a pointer parameter, and read by
+`MatchParamCompatible` in place of `Syms[Procs[i].Params[j].SymIdx]`.
+
+The probe, after the fix, shows both columns and is the whole story in one line:
+
+```
+REG   proc=GetPropInfo i=0 sym=363 elemtk=5 stored=5 durable=5 symcount=364
+MATCH proc=GetPropInfo j=0 durable=5 sym=363 symPtrElem=0 symName=o symKind=1 symcount=365
+```
+
+`durable=5` survives; the symbol column still reads the caller's own `o`, because
+that is genuinely what lives in slot 363 now. The fix does not repair the symbol
+read — it stops depending on it.
+
+### Verified
+
+- **Baseline `46abdaa0285e`** (this fix reverted, rebuilt, sha confirmed
+  different): the regression test compiles and **segfaults, exit 139, no
+  output**. Fixed `e6954e884056`: `typinfo-overload hi`, exit 0.
+- `tools/gate.sh quick` **GREEN**; self-host fixedpoint `e6954e884056`.
+- Test `test/test_typinfo_instance_overload.pas`, wired into `test-core`.
+
+The test reads the property value back through the returned `PPropInfo`
+(`GetStrProp` → `hi`) rather than only asserting non-nil, so it distinguishes
+*bound the right arm* from *happened not to crash*. Its header carries this
+ticket's own warning — **do not simplify it into a local overload pair**, because
+every synthetic pair selects correctly even on the broken compiler; the defect
+needs a pointee whose symbol is genuinely gone, which is what a unit interface
+gives.
+
+### Not fixed, deliberately, and filed
+
+- **The sentinel collision** →
+  [[bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage]] [A p40].
+  `tyUnknown` is simultaneously "this pointer is untyped" and "nothing wrote
+  here", and the shared value is the **permissive** one, which is why this bug
+  segfaulted a user program instead of raising an internal error. Separating them
+  is a type-model change with a real audit attached and does not belong inside a
+  P-lane fix.
+- **Method parameters.** `pasparser_decl.inc` registers method params from
+  `mPTypesRec` and carries **no** pointer-element data at all, so there is
+  nothing to persist there yet; a pointer-typed method parameter still reads
+  `tyUnknown` and still fails open. Not a regression — it is today's behaviour
+  unchanged — but it is the remaining half, and plumbing the pointee through the
+  method path is its own piece of work.
+
+### Kept
+
+The `p.ptrparam` PXXDBG channel, documented in `devdocs/dev/debug-switches.md`.
+It is what separated "the index is wrong" from "the index is right and its
+referent no longer exists" — the distinction this ticket could not make by
+reasoning, having offered those first two as the only options.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

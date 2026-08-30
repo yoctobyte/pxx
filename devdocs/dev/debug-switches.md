@@ -232,3 +232,28 @@ shape (the C one is done and most of it is reusable).
 - [[feature-debuggability-umbrella]] — where this sits
   relative to the compiler-side `PXXDBG` switch, real DWARF, and the CPython
   differential harness.
+
+### `p.ptrparam` — a parameter's pointer element type, at both ends
+
+Prints where a pointer parameter's pointee is **written** (parameter
+registration, `pasparser_proc.inc`) and where it is **read** (overload matching,
+`MatchParamCompatible` in `symtab.inc`), so the two can be compared directly.
+
+```
+$ PXXDBG=p.ptrparam ./compiler/pascal26 -Fulib/rtl prog.pas /tmp/p
+PXXDBG p.ptrparam REG   proc=GetPropInfo i=0 sym=363 elemtk=5 stored=5 durable=5 symcount=364
+PXXDBG p.ptrparam MATCH proc=GetPropInfo j=0 durable=5 sym=363 symPtrElem=0 symName=o symKind=1 symcount=365
+```
+
+The MATCH line deliberately prints **both** columns. `durable=` is
+`ProcParamPtrElemTk`, which lives as long as the `Proc`; `symPtrElem=`/`symName=`
+are what `Syms[Params[j].SymIdx]` says. When those disagree — above, the
+parameter `cls` has become the caller's own variable `o` — the symbol slot has
+been **recycled** by `SymRollbackTo`, not merely gone stale.
+
+That distinction is what this channel exists for: it separates "the index is
+wrong" from "the index is right and its referent no longer exists", which
+`bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching`
+could not settle by reasoning — the ticket offered those two hypotheses and the
+answer was the third thing. Reach for it whenever a `Proc*` value and a `Sym`
+value are supposed to agree and do not.

@@ -5595,6 +5595,16 @@ test-core: $(COMPILER)
 	@# FPC divergence on the fourth form are in the file header. Oracle: FPC.
 	./$(COMPILER) test/test_generic_bodiless_class_modifier.pas $(TESTTMP)/test_genbodiless26
 	test "$$($(TESTTMP)/test_genbodiless26)" = "bodiless 7 3 1"
+	@# GetPropInfo(AnObject, 'Caption') -- the spelling every FPC consumer uses --
+	@# bound typinfo's PClassRTTI arm and segfaulted, because the narrowing guard
+	@# read the parameter's pointee from Syms[Params[j].SymIdx] and that symbol is
+	@# gone by match time: SymRollbackTo hands a routine's indices back, so the
+	@# slot held the CALLER's own variable. tyUnknown is the untyped-pointer
+	@# sentinel, so the guard failed OPEN. Reads the durable ProcParamPtrElemTk
+	@# column now. Baseline 46abdaa0285e segfaults (exit 139, no output); do NOT
+	@# simplify this into a local overload pair -- those pass on the bug.
+	./$(COMPILER) -Fulib/rtl test/test_typinfo_instance_overload.pas $(TESTTMP)/test_typinfoovl26
+	test "$$($(TESTTMP)/test_typinfoovl26)" = "typinfo-overload hi"
 	@out=$$(PXXDBG=p.dgen ./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26 2>&1); \
 	 decl=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TBox'); \
 	 real=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TPairU'); \

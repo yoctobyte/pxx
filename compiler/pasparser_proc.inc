@@ -2030,13 +2030,23 @@ begin
       SetSymPointerType(idx, ptypesPtrElemTk[i], ptypesPtrElemRec[i],
                         ptypesPtrDepth[i], ptypesPtrBaseTk[i],
                         ptypesPtrBaseRec[i]);
+      { Persist the param's POINTEE, for the same reason the rec id below is
+        persisted and stated in the same words: param sym slots are reused
+        across procs, so a caller's overload matching cannot read it back from
+        the sym. It does not read a stale value -- it reads whatever the next
+        scope allocated there, which for this field is tyUnknown, the
+        untyped-pointer sentinel, so the narrowing guard fails OPEN. }
+      if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then
+      begin
+        ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i] := Ord(ptypesPtrElemTk[i]);
+        ProcParamPtrElemRec[procIdx * MAX_PROC_PARAMS + i] := ptypesPtrElemRec[i];
+      end;
       if PxxDbgEnabled('p.ptrparam') then
         writeln('PXXDBG p.ptrparam REG proc=', Procs[procIdx].Name,
                 ' i=', i, ' sym=', idx,
                 ' elemtk=', Ord(ptypesPtrElemTk[i]),
                 ' stored=', Ord(Syms[idx].PtrElemTk),
-                ' procParamSym=', Procs[procIdx].Params[i].SymIdx,
-                ' name=', Syms[idx].Name, ' kind=', Ord(Syms[idx].Kind),
+                ' durable=', ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i],
                 ' symcount=', SymCount);
       SymProcSig[idx] := ptypesProcSig[i];
     end

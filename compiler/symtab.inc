@@ -7881,7 +7881,7 @@ function MatchParamCompatible(i, j: Integer; aTk: TTypeKind): Boolean;
   `not (TypesCompatible(...) or ProcParamUntyped[...])` sites instead is how the
   previous additions went in, and two of them are already spelled slightly
   differently from the others. normalise-dont-special-case.md. }
-var si: Integer;
+var si, pe: Integer;
 begin
   Result := TypesCompatible(Procs[i].Params[j].TypeKind, aTk) or MatchArgNilOk(i, j);
   { ...then NARROW the blanket `tyPointer <- tyClass` rule TypesCompatible grants,
@@ -7911,15 +7911,25 @@ begin
      and (Procs[i].Params[j].TypeKind = tyPointer)
      and (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
   begin
-    si := Procs[i].Params[j].SymIdx;
+    { Read the DURABLE column, not Syms[Params[j].SymIdx]. The symbol is gone by
+      now -- SymRollbackTo hands a routine's indices back at scope exit -- so the
+      symbol read returned whatever the caller's own scope had since allocated
+      there. Measured: GetPropInfo's `cls` (sym 363, elem tyRecord) read back as
+      the test program's variable `o`, elem tyUnknown, which is the
+      untyped-pointer sentinel, so this guard PERMITTED the class argument and
+      GetPropInfo(AnObject, 'Caption') bound the PClassRTTI arm and segfaulted.
+      bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching }
+    pe := ProcParamPtrElemTk[i * MAX_PROC_PARAMS + j];
     if PxxDbgEnabled('p.ptrparam') then
+    begin
+      si := Procs[i].Params[j].SymIdx;
       writeln('PXXDBG p.ptrparam MATCH proc=', Procs[i].Name, ' j=', j,
-              ' sym=', si, ' ptrelem=',
-              Ord(Syms[si].PtrElemTk),
-              ' name=', Syms[si].Name, ' kind=', Ord(Syms[si].Kind),
+              ' durable=', pe, ' sym=', si,
+              ' symPtrElem=', Ord(Syms[si].PtrElemTk),
+              ' symName=', Syms[si].Name, ' symKind=', Ord(Syms[si].Kind),
               ' symcount=', SymCount);
-    if (si >= 0) and (Syms[si].PtrElemTk <> tyUnknown)
-       and (Syms[si].PtrElemTk <> tyClass) then
+    end;
+    if (pe <> Ord(tyUnknown)) and (pe <> Ord(tyClass)) then
       Result := False;
   end;
 end;
@@ -9539,6 +9549,7 @@ begin
   SetLength(InlineLocalTk, n*MAX_INLINE_LOCALS);
   SetLength(DceEdgeHead, n+1);
   SetLength(ProcParamPtrDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamRecId, n*MAX_PROC_PARAMS);  SetLength(ProcParamSetEnumId, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamPtrElemTk, n*MAX_PROC_PARAMS);  SetLength(ProcParamPtrElemRec, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDynDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamIsConst, n*MAX_PROC_PARAMS);  SetLength(ProcParamExplicitByRef, n*MAX_PROC_PARAMS);
   SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
   SetLength(ProcParamHasDefault, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLen, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLo, n*MAX_PROC_PARAMS);
@@ -9609,6 +9620,8 @@ begin
   for i := 0 to MAX_PROC_PARAMS - 1 do
   begin
     ProcParamPtrDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
+    ProcParamPtrElemTk[ProcCount * MAX_PROC_PARAMS + i] := Ord(tyUnknown);
+    ProcParamPtrElemRec[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
     ProcParamIsConst[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamCapRef[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamExplicitByRef[ProcCount * MAX_PROC_PARAMS + i] := False;

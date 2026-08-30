@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:7 backlog:337 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2721 rejected:56`
+`working:4 unfinished:28 blocked:7 backlog:338 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2722 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching` [P] — owner: frankA
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
@@ -56,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 358, ranked
+## Ready — top 30 of 360, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -89,4 +88,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 
-_328 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_330 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
