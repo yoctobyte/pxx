@@ -342,4 +342,4 @@ if they converge, the `*Slow` routines are unnecessary rather than mandatory.
 That is a separate change and a separate measurement.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d27b4a28a.
