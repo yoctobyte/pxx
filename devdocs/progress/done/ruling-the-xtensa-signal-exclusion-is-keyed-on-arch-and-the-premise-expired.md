@@ -677,4 +677,4 @@ green throughout. That hole is invisible to the per-fix loop and is exactly what
 the optional step is for.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 5e1074561.
