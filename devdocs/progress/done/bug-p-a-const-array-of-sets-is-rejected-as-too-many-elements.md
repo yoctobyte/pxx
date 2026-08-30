@@ -144,4 +144,4 @@ unit are `undefined variable (PWideChar)` at line 285 and `undefined variable
 not filed here. See [[feature-pascal-corpus-oop]].
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 380364283.
