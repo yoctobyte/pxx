@@ -7034,3 +7034,74 @@ legitimately are — it forbids **one nobody noticed was one-armed.** Widening t
 now an edit to that file, in the same commit, in the diff, with both honest resolutions in
 the failure message. Verified by breaking it three ways, including that a **prose mention**
 of a gate does not fire it, which is the exact defect it was built to end.
+
+### 160 — MAKE THE FAILURE OBSERVABLE RATHER THAN MERELY SURVIVABLE
+
+*frankB, 2026-08-30, measuring the boundary of the const-array segfault — and disproving
+its own routing note, which the coordinator had already relayed as fact.*
+
+The trick that turned *"it segfaults"* into a table: **a callee that takes `@g` and never
+dereferences does not crash.** The failing case becomes *observable* instead of only
+survivable, and a crash with no information becomes a printable number:
+
+```
+standalone     @s          = 4301824   const arg addr = 4302184
+record field   @r.a        = 4301856   const arg addr = 4302224
+rec-in-array   @q[0].a     = 4302080   const arg addr = 4302264
+array row      @p[0]       = 4301888   const arg addr = 0    <-- NULL
+row via record @r2.rows[0] = 4301984   const arg addr = 0    <-- NULL
+```
+
+**NULL, not a wrong address** — and `@p[0]` is *correct at the call site*, so the value is
+lost between there and the callee. That also explains the coordinator's own observation that
+it faults on the first element access: **the parameter is 0 on entry, so the extent was
+never the question.**
+
+Generalises past this bug: when a defect's only symptom is a crash, look for a way to
+**reach the same code path without the dereference that kills you**. A crash reports one
+bit; the same path instrumented reports the value. The whole boundary table exists because
+of that one change of probe.
+
+### 160a — the routing note was wrong on BOTH axes, and the coordinator had relayed it
+
+The note said: *`var` on the identical row works, so it points at the **const**-aggregate
+argument path rather than at address-of for aggregate members generally.* **Both halves are
+false**, and it was narrower than the truth on one axis and wider on the other:
+
+- **It is not `const`.** By-value and open-array arguments fail too. **`var` and `out` are
+  the only modes that pass — and they are the two that MUST hand over an address.** *Every
+  mode free to form a copy fails.*
+- **It is not aggregate members.** A record field works in every mode, **and so does a
+  record field inside an array element** — `q[0].a`, an array subscript in the access path,
+  an aggregate member, passed `const`, **green**. What matters is that the **final step
+  yields an array-typed value by subscripting.** Irrelevant, all measured: element type,
+  element count, literal vs variable subscript, and `array[0..2] of TG` vs
+  `array[0..2, 0..3] of Int64`.
+
+`q[0].a` is the control the note needed and did not have (146) — it has every property of
+the failing set except the one that matters, and it passes.
+
+**The coordinator relayed the note to frankA without a hedge**, having flagged it as
+*"a claim, not a measurement"* when dispatching the test. **Stating a caveat to one
+recipient does not attach it to the claim**; the claim travelled to a second lane stripped
+of it, with the coordinator's authority added. That is operating rule 2 failing in the gap
+between two messages rather than inside either one.
+
+The note was **superseded in place, not deleted** — a boxed note saying what was wrong and
+why it is kept. *A superseded guess is more useful visible than gone*, for the same reason a
+landmine is rewritten rather than dropped (142c): it is what the next reader would otherwise
+have re-derived and acted on.
+
+### 160b — and a lead offered explicitly as NOT a claim
+
+The same shape one level deeper fails at **compile** time with an untrue diagnostic:
+`@b[0][0]` on a 3-level array is *"wrong number of array subscripts"*, while `b[0][0][1]`,
+`@b[0]` and `@b[0][0][1]` are all fine. **Forming a reference to a partially-subscripted
+array is the operation both get wrong, in two different ways.**
+
+Two symptoms of one operation is a hypothesis, and it is labelled as one — *"I did not read
+the lowering code, and the ticket says so"* — **which is also why the 3D row is absent from
+the tables rather than silently omitted.** An unmeasured row left out without comment is
+indistinguishable from a row that passed; saying why it is missing costs a sentence and
+prevents exactly the 149-class error where the reader assumes the untested spelling behaves
+like the tested one.
