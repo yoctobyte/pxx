@@ -24,4 +24,14 @@
 # contains, not only that it exists.
 # Replaced by 1d8db8667, verified here to contain 440c822e6 AND 72b4c47a7.
 1d8db86672676310675225590908054741a9c1cd	full	frankT	-O2 default changed for every lane: EmitStaticLitHandle(+A64) promoted -O3->-O2. Post-revert target — contains the promotion 440c822e6 AND the revert 72b4c47a7, so a red here is attributable. EXACT native at this sha is RED with new_red=[] (one pre-existing job, test_warn_ignored_directives), so native is already answered: what is unserved is CROSS, and the aarch64 arm moved in the same commit and has only been run under qemu by its author. Watch in-place literal mutation and two evaluations assumed distinct.
-f370bb08506ab2573b8ab5f1b33a618313cde44c	full	frank-coordinator	Shared-IR control-flow rewrite blocking a pin held on an ABSENCE, not a red: IRMarkReachableLabels replaces IRMarkReferencedLabels and IROptDeadCode's own fixpoint is deleted, touching every backend. Verified here: c9a1f6f2a IS an ancestor of f370bb085, so ONE verdict covers both -- they are one risk, not two. TIER IS full DELIBERATELY, and the requester offered a downgrade I am declining: the question is 'does a control-flow rewrite break any CROSS target', and `limited` is BY CONSTRUCTION the no-qemu tier (see TIERS in tools/testmgr.py -- 'the cross variants stay in full', and test-float-determinism is excluded precisely to keep limited runnable on a box without qemu). So limited answers 0% of the question. It would also be near-pure duplication: the sampler already has THREE native runs at descendants (0b930abf9 GREEN, 4e883063f GREEN, ff0799098 RED with new_red=[test_pointer_to_a_named_fixed_array] -- unrelated to control flow), so the native half is largely answered and full's entire marginal value here is the cross matrix. NOT overtaken: 0 runs at this exact sha and no descendant tested above native. If the sampler reaches it at full before you drain this, strike the line rather than serving it.
+# STRUCK 2026-08-30 by frankT, unserved: the f370bb085 full request. OVERTAKEN,
+# not stale -- a full at ff07990984a0 (seven, 20:57:28Z) covers it: --is-ancestor
+# says YES for both f370bb085 and c9a1f6f2a. Serving it would re-answer an
+# answered question at 3202 jobs on the binding-constraint box.
+# READ THE VERDICT CAREFULLY, THOUGH: that run's `new_red: []` is VACUOUS. Its
+# parent_tested IS its own sha, so nothing could be classified new -- full runs
+# self-parent often (both of tonight's did), and a number that cannot move is
+# not evidence. What actually clears the rewrite is the SET COMPARISON against
+# the last PRE-rewrite full (b4904151c, 20:30): two C tests fixed, one new red
+# (test_pointer_to_a_named_fixed_array, bisected to 5d840acdd, not the rewrite),
+# every other standing red identical. Plus two GREEN natives at descendants.
