@@ -270,5 +270,5 @@ anything when embedding fails — `bug-b-drawimage-discards-pdfgens-error-and-
 writes-a-pdf-with-no-image` is still open, and is Track B's.
 
 ## Log
-- 2026-08-30 — fixed by frankC, commit PENDING-COMMIT.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — fixed by frankC, commit 9100e057b.
+- 2026-08-30 — resolved, commit 9100e057b.
