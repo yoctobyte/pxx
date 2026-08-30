@@ -93,4 +93,4 @@ found later as a surprise.
 xtensa is **not measured** and is not assumed to share this shape.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 50ee2f8a7.
