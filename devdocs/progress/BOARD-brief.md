@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:2 unfinished:32 blocked:7 backlog:388 backlog_new:27 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2832 rejected:58`
+`urgent:1 working:3 unfinished:32 blocked:7 backlog:389 backlog_new:26 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2832 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-p-a-nested-class-naming-its-enclosing-template-is-substituted-twice` [P] — owner: frankR
+- `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-unicodestring-model` [A] — owner: frankwasm
 
 ## urgent (1) — jump the queue
@@ -73,6 +74,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [A]` regression-test-asm-test-asm-emit-x64-2
 - `[p 70] [P]` regression-test-core-test-warn-ignored-directives
+- `[p 70] [P]` regression-test-fgl-pascal26
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
@@ -92,6 +94,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-adopt-a-second-string-model-or-refuse-utf16-honestly
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 60] [A]` bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array (unblocks 1)
 
 _400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
