@@ -60,7 +60,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (369)
+## backlog (376)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -182,6 +182,7 @@ _none_
 | bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does | A+S | 35 | bug | `ir_codegen_xtensa.inc` has no IR_SET_SIGNAL case, so any program installing a signal handler dies with `unsupported node in IR codegen: unknown`. riscv32 has the arm; xtensa is the only hosted backend without it. The op is also one of the seven IROpName does not name, which is why the message says `unknown` instead of naming it. | — |
 | bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in | T | 45 | bug | A container ticket for an active campaign has nowhere correct to live. working/ is a per-agent live LOCK, and an umbrella held there for the length of a campaign is a lock that never clears; every other status ready/next scans is claimable, so parking it invites a second agent onto files the campaign owns. The status vocabulary has no term for 'this is a container, not a unit of work'. | — |
 | bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference | T | 25 | bug | test-core's language-skeleton loop runs the plain compile with a bare ';' while the very next compile has '\|\| exit 1'. A failing plain compile does not stop the loop -- it falls through to comparing an empty 'plain' against 'ts' and still fails, but reports '--threadsafe changes the output' for a defect that has nothing to do with --threadsafe. Not a status hole; a diagnosis-quality one. | — |
+| bug-t-a-present-corpus-is-never-checked-against-its-pinned-commit | T | 45 | bug | T: `present()` compares existence, not the commit the corpus was pinned to | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | A+T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
 | bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets | T | 50 | bug | 117 $(TESTTMP) binary names are written from more than one TARGET, and testmgr runs different targets' jobs concurrently in one scratch root — so two compiles race on one path, which is the ETXTBSY/half-written-binary window the self-host chain already solved with compile-to-unique-name + rename. 15 names are written by two different SOURCES, 6 of those from two targets, where the loser's assertion runs the winner's program. Not a backlog to clean by sweep: the fix is per-recipe and the population is frozen by a devtest so it cannot grow. | — |
@@ -427,6 +428,12 @@ _none_
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-rv32 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_rv32.pas red at 108ac182bed6 (auto-filed by twatch) | — |
 | regression-test-core-test-opt-store-reload | A | 70 | regression | regression: test-core#src:test/test_opt_store_reload.pas red at c951ec710b33 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard0-6-3 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard1-6 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard2-6 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard3-6 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard4-6-3 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at f6303d410d78 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard5-6-3 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 red at f6303d410d78 (auto-filed by twatch) | — |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
 | task-a-a-fix-on-one-backend-should-name-what-it-checked-on-the-others | A | 40 | task | Three fixed-on-one-target-left-on-the-others defects surfaced in one night, all by the same mechanism: a fix is written where the bug was observed, and the sibling backends have no observer. normalise-dont-special-case.md already says to grep for the sibling before closing; it is not being followed, and one of the three shows why -- the unfixed sibling's own comment ADMITTED the gap and nothing routed a reader to it. | — |
@@ -762,6 +769,12 @@ _none_
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [A] regression-test-asm-test-asm-emit-rv32
 - [p 70] [A] regression-test-core-test-opt-store-reload
+- [p 70] [T] regression-test-pascal-conformance-shard0-6-3
+- [p 70] [T] regression-test-pascal-conformance-shard1-6
+- [p 70] [T] regression-test-pascal-conformance-shard2-6
+- [p 70] [T] regression-test-pascal-conformance-shard3-6
+- [p 70] [T] regression-test-pascal-conformance-shard4-6-3
+- [p 70] [T] regression-test-pascal-conformance-shard5-6-3
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
@@ -893,6 +906,7 @@ _none_
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [P] bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name
 - [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 45] [T] bug-t-a-present-corpus-is-never-checked-against-its-pinned-commit
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
 - [p 45] [T] bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident
 - [p 45] [T] bug-t-concurrent-sync-runs-can-squash-two-commits-into-one

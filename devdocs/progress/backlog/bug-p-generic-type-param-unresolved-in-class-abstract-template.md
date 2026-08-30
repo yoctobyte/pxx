@@ -129,3 +129,39 @@ careful lanes measured different walls and neither was wrong; the reconciliation
 is in `feature-pascal-corpus-expansion`'s entry for today. State the probe, the
 sha and the binary in whatever you write here — a bare line number in a corpus
 ticket is a fact about a probe nobody recorded.
+
+## 2026-08-30 (frank-rust, narrowing) — FOUR candidates eliminated, and a subset signal
+
+All on HEAD `ea5a8ef96` / binary `6319b892f517`, each with its command in
+frank-rust's own closed ticket:
+
+| candidate | check | result |
+| --- | --- | --- |
+| the probe program's `{$mode delphi}` | directive removed | still `:135` |
+| the probe program's mode **flag** | `-Mobjfpc` added | still `:135` |
+| a compiler change between the runs | `git log d23f52948..ea5a8ef96 -- compiler/` | **0 commits** |
+| a different **copy** of the corpus | 3 copies compared | byte-identical, `sha256 5a3402725ab53181` |
+
+The mode candidate was frank-rust's own uncontrolled variable — its probe carried
+`{$mode delphi}` and the other is described as a bare one-liner — **introduced
+while arguing that probes must be stated exactly, and killed by the lane that
+introduced it.**
+
+### THE SIGNAL THAT DISCRIMINATES: `:135` IS A STRICT SUBSET, NOT A DIFFERENT ANSWER
+
+frank-user's run reports `:120`, `:123` **and** `:135` — a list. frank-rust's
+reports `:135` alone.
+
+> **A different probe generally yields a different FIRST error. What it does not
+> usually yield is the same error with two extra ones in front of it.** A
+> different *binary* — one that reports semantic errors the other never reaches or
+> does not emit — produces exactly that nesting.
+
+Weak, and recorded as weak. But it is the first evidence that discriminates
+between the two surviving hypotheses, and it favours **wrong binary** over
+**unrecorded flag**. Concretely: a build taken mid-change, before the final
+commit, would report more.
+
+**The last step needs frank-user's shell history** — which binary it actually ran.
+Nobody is chasing it during the pre-merge pause; it is a p70 backlog item and the
+question is one message when work resumes.
