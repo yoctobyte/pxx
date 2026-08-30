@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:30 blocked:7 backlog:370 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2769 rejected:56`
+`working:1 unfinished:30 blocked:7 backlog:370 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:117 done:2769 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -61,7 +61,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [U]` decide-revisit-object-types-rtl-generics-fired-the-trigger
-- `[p 70] [U]` decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [P]` regression-test-asm-test-asm-emit-rv32
@@ -86,5 +85,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [A+S]` bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
+- `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 
 _363 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

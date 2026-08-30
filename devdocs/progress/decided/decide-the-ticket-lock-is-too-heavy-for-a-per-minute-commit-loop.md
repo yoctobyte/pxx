@@ -2,7 +2,8 @@
 slug: decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 track: U
 prio: 70
-status: open
+status: decided
+owner: user
 ---
 
 # The ticket lock is too heavy for the loop it sits in — 607 commits, 3 locks
@@ -80,3 +81,76 @@ and a resume rule is one sentence. If collisions persist after both, 2 is the
 honest answer and should be built rather than exhorted.
 
 Not 3 while `lexer.inc` is still shared between A and P.
+
+
+# DECIDED 2026-08-30 — owner, from measurement
+
+**Judgement call, made against measured outcome rather than measured exposure.**
+
+## The answer
+
+**Option 4, implemented as a hook — plus option 1's resume sentence. Options 2
+and 3 are REJECTED outright, and option 1's automated nag is rejected with
+them.** Not deferred: rejected, so a future session does not re-open them from
+the exposure numbers.
+
+## Why — the harm did not materialise
+
+The ticket measures *exposure* (how many agents were in the hot file) and reads
+it as risk. Measured over the same window, the realised cost:
+
+| | |
+| --- | --- |
+| real (non-watcher) commits | **1262** |
+| reverts | **1** |
+| commits naming a clobber/collision/lost work | **1** |
+| build or self-host breakage fixes | **2** |
+
+Contention was real and concentrated — `symtab.inc`, `ir_codegen.inc`, `ir.inc`,
+`pyparser.inc`, `compiler.pas` and `builtin/pylib.pas` each saw **4 distinct
+sessions** in one night, across 236 source files touched. Git's own merge
+absorbed nearly all of it, because the sessions were editing different regions.
+
+Context the ticket could not have: **that night was a deliberate stress test** —
+heavy parallel work to consume the weekly token budget. Owner, 2026-08-30:
+*"last night was an excessive stress test"*, and from here the fleet runs slower
+with the coordinator choosing which tickets can go in parallel. Exposure scales
+down with concurrency; options 2 (file locks + TTL) and 3 (drop the lock on hot
+files) therefore solve a problem that is being removed by other means, and 2
+would add a TTL-expires-mid-work hazard that is worse than what it replaces.
+
+## What does NOT scale down with concurrency
+
+Attribution. Re-measured over the full night, excluding watcher tooling
+(`tstate*` commits are a daemon with no session and are correctly untrailed):
+
+```
+agent commits   1262
+with trailer     422  (33%)
+missing          840
+```
+
+**Two thirds of agent commits are unattributable** — worse than the 219/607 the
+ticket cited. This is what turned frankA's near-miss into an unresolvable one:
+it could not identify the two sessions it would most have collided with, at any
+concurrency level.
+
+## Why the hook, and not more discipline
+
+`CLAUDE_CODE_SESSION_ID` is present in every agent's environment. A
+`prepare-commit-msg` hook can append the trailer unconditionally — the same
+mechanism the repo already uses for `.claude/hooks/no-full-suite.sh`. That
+fixes the gap at its cause instead of asking harder for the voluntary act that
+is already failing two times in three, and it covers exactly the hurried
+commits that skip it now. Filed as a Track T ticket (tooling); T owns it.
+
+Option 1's resume rule is one sentence in CLAUDE.md and addresses the precise
+failure that produced this ticket — parked work resuming without re-claiming,
+which no reduction in concurrency prevents. Its companion nag is a new scheduled
+tool for a problem never observed, and is rejected.
+
+## Revisit when
+
+Concurrency returns to stress-test levels AND a collision causes real damage —
+a lost change, a broken self-host, or a revert that costs more than the commit.
+Reopen with outcome numbers, not exposure numbers. Prior art: this decision.

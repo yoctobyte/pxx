@@ -866,3 +866,13 @@ fix the doc, not the loop.
   A** one is CRITICAL (a half-applied compiler change can break the stable-binary
   / self-host gate) and `tools/progress.sh check` fails until it is resolved or
   reverted.
+- **RESUMING parked work re-takes the lock.** `claim` again before the first
+  commit when you pick up something from `backlog/` or `unfinished/` that you (or
+  a past session) had already been working in — resuming is the one transition
+  with no prompt to re-claim, because you are continuing rather than starting. A
+  lock is a claim about the present made by an action in the past, and nothing
+  re-asserts it: `feature-opt-o3-register-pressure` was legitimately released
+  when its campaign parked, then resumed without re-claiming and put 8 commits
+  into `ir_codegen.inc` while the ranker went on offering that file to every idle
+  Track A agent — correctly, by its own rules
+  (`decided/decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop`).

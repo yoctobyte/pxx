@@ -248,7 +248,6 @@ _none_
 | decide-t-refuse-unscoped-pattern-kills-in-a-hook | U | 45 | decide | Layer 2 of the pattern-pkill ticket is a PreToolUse hook refusing `pkill -f <toolname>` / `killall` with a bare pattern. It is a .claude/ config change binding every agent on this box, so it is the owner's call, not a track agent's or a peer's. Layers 1 and 3 landed without it; this is the only part left. | — |
 | decide-t-should-a-skip-close-an-open-regression | U | 25 | decide | reg_open counts red -> skip as FIXED, so a regression closes when a box merely STOPS RUNNING the job — the mirror of the skip-as-last-good bug, pointing the other way. It is a deliberate existing trade (the alternative pins a regression open forever on a box that cannot run the job), so it is a policy call, not a defect. Split out of 0dec0194a rather than bundled, because a policy change smuggled in behind a bug fix is how the trade would have been lost without anyone deciding it. | — |
 | decide-the-licensing-page-says-no-license-yet-and-the-repo-has-one | U | 60 | decide | DECIDE: `licensing-concerns.md` says "No License Yet"; the repo root carries LICENSE | — |
-| decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop | U | 70 | decide | The ticket lock is too heavy for the loop it sits in — 607 commits, 3 locks | — |
 | decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation | U | 30 | decide | devdocs/dev/ (50 files) and devdocs/developer/ (58 files) both hold internal developer docs. A grep in the wrong one returns silence, which reads like a refuted citation rather than a mislocated file. Decide whether to consolidate, and if so which name wins, given 631 citations point at dev/ and 40 at developer/. | — |
 | decide-two-threading-docs-disagreed-for-seven-weeks | U | 40 | decide | Two threading docs, one subject: consolidate, or make the split explicit? | — |
 | decide-what-a-reduced-compiler-must-still-self-host | U | 55 | decide | A reduced build (frontends/targets omitted at compile time) may not be able to compile compiler.pas at all — a NilPy-only compiler has no Pascal frontend. So what does a shipped configuration owe the self-host gate: must it self-host, must it merely be REPRODUCIBLE under the umbrella compiler, or neither? And which of 2^13 configurations does a pin gate? Filed as the second half of an escalation that feature-a-build-a-reduced-compiler asserted had happened and had not. | — |
@@ -365,6 +364,7 @@ _none_
 | feature-rtl-libc-frontend-sites-and-thread-errno | A | 40 | feature | Finish --rtl-libc: convert the C/Rust/Zig frontend syscall sites, and test the thread errno hazard the raw clone stub creates | — |
 | feature-t-a-second-oracle-dimension-section-alignment | T | 25 | feature | An external alignment oracle: what is left after `df98fea47`, measured | — |
 | feature-t-audit-tests-that-pass-with-the-implementation-removed | T | 40 | feature | frankB wrote a regression test for bug-b-resolver-sends-localhost-to-the-wire, got eight green rows, then reverted the fix to control it — and the test still passed, every row. This box's systemd-resolved is itself RFC 6761 compliant and synthesises the localhost subtree, so the broken code returned the right ANSWER and merely emitted 20 DNS queries to get it. A value assertion was testing systemd-resolved. Three instances of this shape landed in one night. This ticket is the sweep for others. | — |
+| feature-t-commit-trailer-hook | T | 60 | feature | Two thirds of agent commits (840 of 1262 in one night) carry no Claude-Session trailer, so a collision cannot be attributed to the sessions involved. CLAUDE_CODE_SESSION_ID is in every agent's environment; a prepare-commit-msg hook can append the trailer unconditionally instead of relying on the voluntary act that is already failing 2 times in 3. | — |
 | feature-t-dead-commit-is-a-closed-stock-and-a-counter-nobody-will-read | T | 30 | feature | The 350 dead citations are unrecoverable and finished; the risk is now the counter | — |
 | feature-t-lint-token-text-compared-against-a-keyword | T | 35 | feature | Make the never-true guard a lint instead of an audit | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -562,7 +562,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (116)
+## decided (117)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -664,6 +664,7 @@ _none_
 | decide-stralloc-one-implementation-or-fpcs-two | U | 35 | decide | FPC ships two incompatible StrAllocs — `strings` allocates prefix-free, `sysutils` allocates with a 4-byte size prefix — and `uses SysUtils, Strings` silently pairs the first with the second's StrBufSize/StrDispose, which is a measured heap error. We shipped ONE implementation (the prefixed one, shared by both units). Confirm, or ask for FPC's two-implementation split reproduced warts and all. | — |
 | decide-t-notification-transport-poll-not-webhooks | U | 60 | decide | How Track T's findings reach an agent or a human: polling, never webhooks. 60s is the baseline; adaptive backoff is allowed but the daemon must not grow a time-based one. | — |
 | decide-t-queue-scope-2026-08-03 | T | 60 | decide | User calls on four standing assumptions in the Track T queue: borg's watcher, the arm oracles, who may pin, and when the NilPy fuzzer earns its keep | — |
+| decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop | U | 70 | decide | The ticket lock is too heavy for the loop it sits in — 607 commits, 3 locks | — |
 | decide-threadsafe-gate-is-reach-based-not-use-based | U | 45 | decide | Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one | — |
 | decide-tobject-classinfo-blob-or-refusal | U | 42 | decide | TObject.ClassInfo is the last member of feature-pascal-builtin-tobject-class still PXX-REJECT, and it is a judgment call, not an implementation choice: our RTTI blob is honest for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Answer or refuse — the third option is to answer and be silently wrong for the second caller. | — |
 | decide-tobject-root-methods-dispatch-model | U | 65 | decide | Decide: how `TObject.Equals` / `GetHashCode` dispatch — intercept, real parent, or reserved slots | — |
@@ -755,7 +756,6 @@ _none_
 - [p 70] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [U] decide-revisit-object-types-rtl-generics-fired-the-trigger
-- [p 70] [U] decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - [p 70] [A+O] feature-opt-o3-register-pressure [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [P] regression-test-asm-compiler-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-asm-test-asm-emit-rv32 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -791,6 +791,7 @@ _none_
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [A+O] feature-opt-emitasmx64-reparses-fixed-strings
+- [p 60] [T] feature-t-commit-trailer-hook
 - [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image [parked — re-claim, do not duplicate]
 - [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor
