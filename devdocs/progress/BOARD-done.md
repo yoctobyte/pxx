@@ -1958,6 +1958,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-demo-vm | E | 50 | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-directive-if-numeric | A | 50 | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | — |
+| feature-dns-esp-backend | B+S | 20 | feature | DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend | — |
 | feature-dns-libc-backend | B | 35 | feature | `dns_libc` — a getaddrinfo backend, for the policy `dns_resolved` cannot see | — |
 | feature-dns-resolver-library | B | 60 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dotted-unit-names | A | 50 | feature | Dotted / namespace unit names in `uses` | — |

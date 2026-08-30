@@ -2,6 +2,7 @@
 track: B
 prio: 20
 type: feature
+status: done
 ---
 
 # DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend
@@ -359,3 +360,6 @@ saying so plainly was required. What was actually run: `make lib-test` for the
 host side (the shared `dns.pas` / `dns_libc.pas` edits), plus the QEMU boot above
 for the ESP side. The compiler was not rebuilt; everything used
 `$(PXX_STABLE)`.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

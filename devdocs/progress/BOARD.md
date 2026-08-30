@@ -265,7 +265,7 @@ _none_
 | feature-demo-nilpy-ide | E | 30 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
 | feature-demo-portable-userland | E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 68 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | bug-nilpy-render-backend-py-compile-does-not-terminate |
-| feature-dns-esp-backend | B+S | 20 | feature | DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend | — |
+| feature-dns-esp-wire-nameservers-from-lwip | B+S | 15 | feature | Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets. | — |
 | feature-dynamic-include-paths-config | A | 55 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-embed-dwscript-rtti | P | 40 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
@@ -652,9 +652,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2720)
+## done (2721)
 
-2720 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2721 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (56)
 
@@ -1041,7 +1041,6 @@ _none_
 - [p 20] [B] feature-b-a-real-minidom-is-an-implementation-not-a-shim
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [A] feature-cross-frontend-interop-contract
-- [p 20] [B+S] feature-dns-esp-backend
 - [p 20] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 20] [A] feature-nilpy-idf-import
 - [p 20] [T] feature-t-record-host-cpu-features-in-tstate
@@ -1054,6 +1053,7 @@ _none_
 - [p 15] [T] bug-t-twatch-web-lists-a-target-that-cannot-be-built
 - [p 15] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 15] [P] compat-pascal-the-strict-fpc-flag-family-is-incomplete
+- [p 15] [B+S] feature-dns-esp-wire-nameservers-from-lwip
 - [p 15] [A] feature-n-a-quoted-from-import-reaches-another-language
 - [p 15] [P] feature-p-legacy-value-object-types
 - [p 15] [P] feature-p-tobject-api-classparent-instancesize-tostring
