@@ -12,11 +12,10 @@ _none_
 
 _none_
 
-## unfinished (30)
+## unfinished (29)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows | A | 55 | bug | The rel8 patch idiom `Code[p] := Byte(CodeLen - (p + 1))` truncates without any diagnostic when the span exceeds 127 bytes. A forward jump silently becomes a BACKWARD jump into the middle of an instruction. Measured: a jns meant to skip 181 bytes was written as -75 and the program segfaulted at a mid-instruction address. Latent today; armed the moment any emitter between a patch site and its target grows. | — |
 | bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead | C | 55 | bug | A `static`/`static inline` DEFINED in a .h reached through `uses` had its body discarded and became an external, so the program linked a DT_NEEDED on a lib<header>.so that does not exist and died at load. PARTIALLY FIXED 2026-08-30 with the provenance scope term the reverted first attempt was missing (gtk green, .h/.c pair test in the gate). STILL BROKEN for the common shape -- a header that includes <stdio.h>/<string.h> or anything else with a crtl src/*.c sibling above the static -- because CModuleOfTok never resets when an include returns to its parent. Blocked on bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull; do not attempt the rest before that lands. | bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull |
@@ -701,9 +700,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2798)
+## done (2799)
 
-2798 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2799 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -826,7 +825,6 @@ _none_
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
-- [p 55] [A] bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows [parked — re-claim, do not duplicate]
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused

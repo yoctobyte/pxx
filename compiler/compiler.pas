@@ -73,6 +73,7 @@ function IsNilLiteralNode(node: Integer): Boolean; forward;   { real body in ast
 {$ifndef PXX_NO_ALGOL}{$include glexer.inc}{$endif}
 {$ifndef PXX_NO_ERLANG}{$include elexer.inc}{$endif}
 {$include emit.inc}
+{$include rel8.inc}   { range-checked rel8 displacements — after emit.inc: EmitRel8 calls EmitB }
 procedure AsmB(b: Integer); forward;
 procedure AsmI16(v: Int64); forward;
 procedure AsmI32(v: Int64); forward;

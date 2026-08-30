@@ -184,8 +184,8 @@ begin
     the same address before that word existed. }
   EmitAsmX64(['sub rax, %', 24]);
   EmitHeapFreeLocked;
-  Code[pNil] := Byte(CodeLen - (pNil + 1));
-  Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
+  PatchRel8(pNil);
+  PatchRel8(pNonZero);
 end;
 
 procedure EmitAnsiStrReleaseLocked;
@@ -204,8 +204,8 @@ begin
     the same address before that word existed. }
   EmitAsmX64(['sub rax, %', 24]);
   EmitHeapFreeLocked;
-  Code[pNil] := Byte(CodeLen - (pNil + 1));
-  Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
+  PatchRel8(pNil);
+  PatchRel8(pNonZero);
 end;
 
 procedure EmitManagedRecordRetain(recId: Integer);
@@ -2629,8 +2629,8 @@ begin
   EmitAsmX64(['sub rax, %', 24]);
   EmitHeapFreeLocked;
   EmitAsmX64(['pop rax']);
-  Code[pRelNil] := Byte(CodeLen - (pRelNil + 1));
-  Code[pRelLive] := Byte(CodeLen - (pRelLive + 1));
+  PatchRel8(pRelNil);
+  PatchRel8(pRelLive);
   EmitReleaseHeapLock;
   EmitB($C3);                                     { ret }
 
@@ -2679,17 +2679,17 @@ begin
   EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp done }
 
   { done_nil path }
-  Patch8(pNilUnique, CodeLen - (pNilUnique + 1));
+  PatchRel8(pNilUnique);
   EmitAsmX64(['xor eax, eax']);
   EmitB($EB); pDone2 := CodeLen; EmitB(0);         { jmp done }
 
   { done_keep path }
-  Patch8(pNilUnique2, CodeLen - (pNilUnique2 + 1));
+  PatchRel8(pNilUnique2);
   EmitAsmX64(['mov rax, rdi']);
 
   { done }
-  Patch8(pDone, CodeLen - (pDone + 1));
-  Patch8(pDone2, CodeLen - (pDone2 + 1));
+  PatchRel8(pDone);
+  PatchRel8(pDone2);
   { FORGET the cached ASCII answer, exactly as the Pascal PXXStrUnique does at
     both of its exits. The caller is about to WRITE bytes through the handle we
     are returning, so a stamped answer stops being true — and the clone path is
@@ -2712,7 +2712,7 @@ begin
   EmitB($74); pAsciiSkip := CodeLen; EmitB(0);    { jz skip }
   EmitB($48); EmitB($81); EmitB($60); EmitB($E8); { and qword [rax-24], imm32 }
   EmitI32(not PXX_ASCII_CACHE_BITS);
-  Patch8(pAsciiSkip, CodeLen - (pAsciiSkip + 1));
+  PatchRel8(pAsciiSkip);
   EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx', 'ret']);
 
   { rsi/lhs data, rdi/lhs length, rdx/rhs data, rcx/rhs length -> rax/string }
@@ -2881,7 +2881,7 @@ begin
   EmitAsmX64(['xor rax, rax']);                     { nil handle }
   EmitPublishManagedString(dstIdx);                  { dst := '' }
   EmitB($EB); doneOutPatch := CodeLen; EmitB(0);    { jmp done }
-  Code[inRangePatch] := Byte(CodeLen - (inRangePatch + 1));
+  PatchRel8(inRangePatch);
   EmitAsmX64([
     'shl rax, %', 3,
     'mov rcx, [@glob]', BSS_INITIAL_RSP,
@@ -2903,7 +2903,7 @@ begin
   EmitAsmX64(['mov rdi, rcx']);                     { length }
   IREmitCodeCall(AnsiStrFromLiteralAddr);           { rax = new managed string }
   EmitPublishManagedString(dstIdx);
-  Code[doneOutPatch] := Byte(CodeLen - (doneOutPatch + 1));
+  PatchRel8(doneOutPatch);
 end;
 
 procedure EmitVariantClearBody(zeroSlot: Boolean);
@@ -3287,7 +3287,7 @@ begin
   if procIdx < 0 then
     Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
   EmitCallProc(procIdx);
-  Code[pSkip] := Byte(CodeLen - (pSkip + 1));
+  PatchRel8(pSkip);
 end;
 
 procedure EmitOvfCheckNarrowX64(tk: TTypeKind);
@@ -3318,7 +3318,7 @@ begin
   if procIdx < 0 then
     Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
   EmitCallProc(procIdx);
-  Code[pSkip] := Byte(CodeLen - (pSkip + 1));
+  PatchRel8(pSkip);
 end;
 
 procedure EmitCvtSi2SdOrU64(xmm, reg: Integer; srcTk: TTypeKind);
@@ -3342,9 +3342,9 @@ begin
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd }
     EmitB($F2); EmitB($0F); EmitB($58); EmitB($C0 or (xmm shl 3) or xmm);             { addsd xmm, xmm }
     EmitB($EB); pDone := CodeLen; EmitB(0);                    { jmp done }
-    Code[pBig] := Byte(CodeLen - (pBig + 1));                  { small: }
+    PatchRel8(pBig);                  { small: }
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd }
-    Code[pDone] := Byte(CodeLen - (pDone + 1));                { done: }
+    PatchRel8(pDone);                { done: }
   end
   else
   begin
@@ -3412,9 +3412,9 @@ begin
     'mov rax, %', 1   { count }
   ]);
   EmitB($EB); jHave := CodeLen; EmitB(0);                                       { jmp havebyte }
-  Code[jPeek] := Byte(CodeLen - (jPeek + 1));                                   { doread: }
+  PatchRel8(jPeek);                                   { doread: }
   MovRdiImm(0); MovRdxImm(1); MovRaxImm(SYS_READ); EmitSyscall;
-  Code[jHave] := Byte(CodeLen - (jHave + 1));                                   { havebyte: }
+  PatchRel8(jHave);                                   { havebyte: }
   EmitAsmX64(['test rax, rax']);
   EmitB($0F); EmitB($8E); j1 := CodeLen; EmitI32(0);                           { jle done }
   EmitAsmX64(['movzx rcx, byte [rsi]', 'cmp rcx, %', 13]);
@@ -3470,8 +3470,8 @@ begin
   Patch32(jNotEof1, CodeLen - (jNotEof1 + 4));                                  { noteof: }
   Patch32(jNotEof2, CodeLen - (jNotEof2 + 4));
   EmitAsmX64(['xor rax, rax']);
-  Code[jDone1] := Byte(CodeLen - (jDone1 + 1));                                 { done: }
-  Code[jDone2] := Byte(CodeLen - (jDone2 + 1));
+  PatchRel8(jDone1);                                 { done: }
+  PatchRel8(jDone2);
 end;
 
 procedure EmitReadVarParse(tk: TTypeKind);
@@ -3667,9 +3667,9 @@ begin
   EmitB($48); EmitB($B8); EmitI64(Int64($7FFFFFFFFFFFFFFF));  { mov rax, INT64_MAX }
   EmitB($77); pDoneHi := CodeLen; EmitB(0);                   { ja .done  (source > 0) }
   EmitB($48); EmitB($B8); EmitI64(Int64($8000000000000000));  { mov rax, INT64_MIN }
-  Code[pDoneNE]  := Byte(CodeLen - (pDoneNE + 1));
-  Code[pDoneNaN] := Byte(CodeLen - (pDoneNaN + 1));
-  Code[pDoneHi]  := Byte(CodeLen - (pDoneHi + 1));
+  PatchRel8(pDoneNE);
+  PatchRel8(pDoneNaN);
+  PatchRel8(pDoneHi);
 end;
 
 procedure EmitTruncToIntegralX64;
@@ -3703,12 +3703,12 @@ begin
   EmitB($48); EmitB($D3); EmitB($E8);            { shr rax, cl }
   EmitB($48); EmitB($D3); EmitB($E0);            { shl rax, cl }
   EmitB($EB); pDone3 := CodeLen; EmitB(0);       { jmp .done }
-  Code[pLt1] := Byte(CodeLen - (pLt1 + 1));      { .lt1: keep the sign bit only }
+  PatchRel8(pLt1);      { .lt1: keep the sign bit only }
   EmitB($48); EmitB($C1); EmitB($E8); EmitB($3F); { shr rax, 63 }
   EmitB($48); EmitB($C1); EmitB($E0); EmitB($3F); { shl rax, 63 }
-  Code[pDone]  := Byte(CodeLen - (pDone + 1));
-  Code[pDone2] := Byte(CodeLen - (pDone2 + 1));
-  Code[pDone3] := Byte(CodeLen - (pDone3 + 1));
+  PatchRel8(pDone);
+  PatchRel8(pDone2);
+  PatchRel8(pDone3);
 end;
 
 procedure EmitWriteVariant;
@@ -4146,14 +4146,14 @@ begin
       EmitB($0F); EmitB($85); pDiffTags1 := CodeLen; EmitI32(0);   { jne L_diff_tags }
       
       { L_lhs_ok }
-      Code[pLhsOk] := Byte(CodeLen - (pLhsOk + 1));
+      PatchRel8(pLhsOk);
       EmitB($48); EmitB($83); EmitB($F9); EmitB(VT_CHAR);
       EmitB($74); pRhsOk := CodeLen; EmitB(0);
       EmitB($48); EmitB($83); EmitB($F9); EmitB(VT_STRING);
       EmitB($0F); EmitB($85); pDiffTags2 := CodeLen; EmitI32(0);   { jne L_diff_tags }
       
       { L_rhs_ok }
-      Code[pRhsOk] := Byte(CodeLen - (pRhsOk + 1));
+      PatchRel8(pRhsOk);
 
       { Extract LHS details from rdi }
       EmitB($56);                                               { push rsi }
@@ -4167,24 +4167,24 @@ begin
       EmitB($31); EmitB($D2);                                   { xor edx, edx }
       EmitB($EB); pLhsDoneCmp := CodeLen; EmitB(0);
       
-      Patch8(pLhsCharCmp, CodeLen - (pLhsCharCmp + 1));
+      PatchRel8(pLhsCharCmp);
       EmitB($48); EmitB($8D); EmitB($77); EmitB($08);           { lea rsi, [rdi+8] }
       EmitB($48); EmitB($C7); EmitB($C2); EmitI32(1);           { mov rdx, 1 }
       EmitB($EB); pLhsDone2Cmp := CodeLen; EmitB(0);
       
-      Patch8(pLhsStrCmp, CodeLen - (pLhsStrCmp + 1));
+      PatchRel8(pLhsStrCmp);
       EmitB($48); EmitB($8B); EmitB($77); EmitB($08);           { mov rsi, [rdi+8] }
       EmitB($48); EmitB($85); EmitB($F6);                       { test rsi, rsi }
       EmitB($74); pLhsNilCmp := CodeLen; EmitB(0);
       EmitB($48); EmitB($8B); EmitB($56); EmitB($F8);           { mov rdx, [rsi-8] }
       EmitB($EB); pLhsDone3Cmp := CodeLen; EmitB(0);
-      Patch8(pLhsNilCmp, CodeLen - (pLhsNilCmp + 1));
+      PatchRel8(pLhsNilCmp);
       EmitB($31); EmitB($F6);                                   { xor esi, esi }
       EmitB($31); EmitB($D2);                                   { xor edx, edx }
       
-      Patch8(pLhsDoneCmp, CodeLen - (pLhsDoneCmp + 1));
-      Code[pLhsDone2Cmp] := Byte(CodeLen - (pLhsDone2Cmp + 1));
-      Code[pLhsDone3Cmp] := Byte(CodeLen - (pLhsDone3Cmp + 1));
+      PatchRel8(pLhsDoneCmp);
+      PatchRel8(pLhsDone2Cmp);
+      PatchRel8(pLhsDone3Cmp);
 
       { Pop RHS Variant address to r8 }
       EmitB($41); EmitB($58);                                   { pop r8 }
@@ -4200,24 +4200,24 @@ begin
       EmitB($45); EmitB($31); EmitB($C9);                       { xor r9d, r9d }
       EmitB($EB); pRhsDoneCmp := CodeLen; EmitB(0);
       
-      Patch8(pRhsCharCmp, CodeLen - (pRhsCharCmp + 1));
+      PatchRel8(pRhsCharCmp);
       EmitB($49); EmitB($8D); EmitB($78); EmitB($08);           { lea rdi, [r8+8] }
       EmitB($41); EmitB($C7); EmitB($C1); EmitI32(1);           { mov r9d, 1 }
       EmitB($EB); pRhsDone2Cmp := CodeLen; EmitB(0);
       
-      Patch8(pRhsStrCmp, CodeLen - (pRhsStrCmp + 1));
+      PatchRel8(pRhsStrCmp);
       EmitB($49); EmitB($8B); EmitB($78); EmitB($08);           { mov rdi, [r8+8] }
       EmitB($48); EmitB($85); EmitB($FF);                       { test rdi, rdi }
       EmitB($74); pRhsNilCmp := CodeLen; EmitB(0);
       EmitB($4C); EmitB($8B); EmitB($4F); EmitB($F8);           { mov r9, [rdi-8] }
       EmitB($EB); pRhsDone3Cmp := CodeLen; EmitB(0);
-      Patch8(pRhsNilCmp, CodeLen - (pRhsNilCmp + 1));
+      PatchRel8(pRhsNilCmp);
       EmitB($31); EmitB($FF);                                   { xor edi, edi }
       EmitB($45); EmitB($31); EmitB($C9);                       { xor r9d, r9d }
       
-      Patch8(pRhsDoneCmp, CodeLen - (pRhsDoneCmp + 1));
-      Code[pRhsDone2Cmp] := Byte(CodeLen - (pRhsDone2Cmp + 1));
-      Code[pRhsDone3Cmp] := Byte(CodeLen - (pRhsDone3Cmp + 1));
+      PatchRel8(pRhsDoneCmp);
+      PatchRel8(pRhsDone2Cmp);
+      PatchRel8(pRhsDone3Cmp);
 
       { Compare }
       EmitB($48); EmitB($89); EmitB($D1);                       { mov rcx, rdx }
@@ -4255,12 +4255,12 @@ begin
       EmitB($4D); EmitB($31); EmitB($C9);                       { xor r9, r9 }
       EmitB($EB); pLhsDoneConcat := CodeLen; EmitB(0);
       
-      Patch8(pLhsCharConcat, CodeLen - (pLhsCharConcat + 1));
+      PatchRel8(pLhsCharConcat);
       EmitB($4C); EmitB($8D); EmitB($47); EmitB($08);           { lea r8, [rdi+8] }
       EmitB($49); EmitB($C7); EmitB($C1); EmitI32(1);           { mov r9, 1 }
       EmitB($EB); pLhsDone2Concat := CodeLen; EmitB(0);
       
-      Patch8(pLhsStrConcat, CodeLen - (pLhsStrConcat + 1));
+      PatchRel8(pLhsStrConcat);
       EmitB($48); EmitB($8B); EmitB($47); EmitB($08);           { mov rax, [rdi+8] }
       EmitB($48); EmitB($85); EmitB($C0);                       { test rax, rax }
       EmitB($74); pLhsNilConcat := CodeLen; EmitB(0);
@@ -4269,13 +4269,13 @@ begin
       EmitB($49); EmitB($89); EmitB($C9);                       { mov r9, rcx }
       EmitB($EB); pLhsDone3Concat := CodeLen; EmitB(0);
       
-      Patch8(pLhsNilConcat, CodeLen - (pLhsNilConcat + 1));
+      PatchRel8(pLhsNilConcat);
       EmitB($4D); EmitB($31); EmitB($C0);                       { xor r8, r8 }
       EmitB($4D); EmitB($31); EmitB($C9);                       { xor r9, r9 }
       
-      Patch8(pLhsDoneConcat, CodeLen - (pLhsDoneConcat + 1));
-      Code[pLhsDone2Concat] := Byte(CodeLen - (pLhsDone2Concat + 1));
-      Code[pLhsDone3Concat] := Byte(CodeLen - (pLhsDone3Concat + 1));
+      PatchRel8(pLhsDoneConcat);
+      PatchRel8(pLhsDone2Concat);
+      PatchRel8(pLhsDone3Concat);
 
       { RHS string/char details from rsi -> r10 (data), r11 (len) }
       EmitB($48); EmitB($8B); EmitB($06);                       { mov rax, [rsi] }
@@ -4288,12 +4288,12 @@ begin
       EmitB($4D); EmitB($31); EmitB($DB);                       { xor r11, r11 }
       EmitB($EB); pRhsDoneConcat := CodeLen; EmitB(0);
       
-      Patch8(pRhsCharConcat, CodeLen - (pRhsCharConcat + 1));
+      PatchRel8(pRhsCharConcat);
       EmitB($4C); EmitB($8D); EmitB($56); EmitB($08);           { lea r10, [rsi+8] }
       EmitB($49); EmitB($C7); EmitB($C3); EmitI32(1);           { mov r11, 1 }
       EmitB($EB); pRhsDone2Concat := CodeLen; EmitB(0);
       
-      Patch8(pRhsStrConcat, CodeLen - (pRhsStrConcat + 1));
+      PatchRel8(pRhsStrConcat);
       EmitB($48); EmitB($8B); EmitB($46); EmitB($08);           { mov rax, [rsi+8] }
       EmitB($48); EmitB($85); EmitB($C0);                       { test rax, rax }
       EmitB($74); pRhsNilConcat := CodeLen; EmitB(0);
@@ -4302,13 +4302,13 @@ begin
       EmitB($49); EmitB($89); EmitB($CB);                       { mov r11, rcx }
       EmitB($EB); pRhsDone3Concat := CodeLen; EmitB(0);
       
-      Patch8(pRhsNilConcat, CodeLen - (pRhsNilConcat + 1));
+      PatchRel8(pRhsNilConcat);
       EmitB($4D); EmitB($31); EmitB($D2);                       { xor r10, r10 }
       EmitB($4D); EmitB($31); EmitB($DB);                       { xor r11, r11 }
 
-      Patch8(pRhsDoneConcat, CodeLen - (pRhsDoneConcat + 1));
-      Code[pRhsDone2Concat] := Byte(CodeLen - (pRhsDone2Concat + 1));
-      Code[pRhsDone3Concat] := Byte(CodeLen - (pRhsDone3Concat + 1));
+      PatchRel8(pRhsDoneConcat);
+      PatchRel8(pRhsDone2Concat);
+      PatchRel8(pRhsDone3Concat);
 
       EmitB($4C); EmitB($89); EmitB($C6);                       { mov rsi, r8 }
       EmitB($4C); EmitB($89); EmitB($CF);                       { mov rdi, r9 }
@@ -4426,17 +4426,17 @@ begin
   EmitB($75); pLi := CodeLen; EmitB(0);                     { jne  Lli }
   EmitB($F2); EmitB($0F); EmitB($10); EmitB($47); EmitB($08);            { movsd xmm0,[rdi+8] }
   EmitB($EB); pLd := CodeLen; EmitB(0);                     { jmp  Lldone }
-  Code[pLi] := Byte(CodeLen - (pLi + 1));
+  PatchRel8(pLi);
   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($47); EmitB($08);{ cvtsi2sd xmm0,[rdi+8] }
-  Code[pLd] := Byte(CodeLen - (pLd + 1));
+  PatchRel8(pLd);
   EmitB($48); EmitB($8B); EmitB($06);                       { mov rax,[rsi] }
   EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
   EmitB($75); pRi := CodeLen; EmitB(0);                     { jne  Lri }
   EmitB($F2); EmitB($0F); EmitB($10); EmitB($4E); EmitB($08);            { movsd xmm1,[rsi+8] }
   EmitB($EB); pRd := CodeLen; EmitB(0);
-  Code[pRi] := Byte(CodeLen - (pRi + 1));
+  PatchRel8(pRi);
   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($4E); EmitB($08);{ cvtsi2sd xmm1,[rsi+8] }
-  Code[pRd] := Byte(CodeLen - (pRd + 1));
+  PatchRel8(pRd);
   if isCompare then
   begin
     EmitB($66); EmitB($0F); EmitB($2F); EmitB($C1);          { comisd xmm0,xmm1 }
@@ -5582,9 +5582,9 @@ begin
               EmitB($48); EmitB($83); EmitB($C7); EmitB($08);  { add rdi, 8 (dest chars) }
               EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
               EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
-              Code[pNil] := Byte(CodeLen - (pNil + 1));         { empty: }
+              PatchRel8(pNil);         { empty: }
               EmitB($48); EmitB($C7); EmitB($07); EmitI32(0);  { mov qword [rdi], 0 }
-              Code[pDone] := Byte(CodeLen - (pDone + 1));       { done: }
+              PatchRel8(pDone);       { done: }
             end
             else
             begin
@@ -6088,9 +6088,9 @@ begin
             EmitB($48); EmitB($83); EmitB($C7); EmitB($08);  { add rdi, 8 (dest chars) }
             EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
             EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
-            Code[pNil] := Byte(CodeLen - (pNil + 1));         { empty: }
+            PatchRel8(pNil);         { empty: }
             EmitB($48); EmitB($C7); EmitB($07); EmitI32(0);  { mov qword [rdi], 0 }
-            Code[pDone] := Byte(CodeLen - (pDone + 1));       { done: }
+            PatchRel8(pDone);       { done: }
           end
           else
           begin
@@ -7437,7 +7437,7 @@ begin
             EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
             EmitB($48); EmitB($89); EmitB($C2);            { mov rdx, rax (pad count) }
             MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-            Code[pDone] := Byte(CodeLen - (pDone + 1));
+            PatchRel8(pDone);
           end;
           EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] = handle (reload; syscall clobbered rax) }
           EmitB($48); EmitB($89); EmitB($C6);             { mov rsi, rax }
@@ -7446,7 +7446,7 @@ begin
           EmitB($58);                                     { restore managed expression }
           if (IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
             IREmitCodeCall(AnsiStrReleaseAddr);
-          Code[pNil] := Byte(CodeLen - (pNil + 1));
+          PatchRel8(pNil);
         end
         else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
         begin
@@ -7479,7 +7479,7 @@ begin
             EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
             EmitB($48); EmitB($89); EmitB($C2);              { mov rdx, rax (pad count) }
             MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-            Code[pDone] := Byte(CodeLen - (pDone + 1));
+            PatchRel8(pDone);
             EmitB($58);                                      { pop rax }
           end;
           EmitB($48); EmitB($89); EmitB($C6);              { mov rsi, rax }
@@ -8087,7 +8087,7 @@ begin
                EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
                EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done }
                EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
-               Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+               PatchRel8(jbePatch);
              end
              else if (IRKind[val1Node] = IR_LEA) and Syms[IRA[val1Node]].IsArray
                 and ((Syms[IRA[val1Node]].ArrLen = -1) or
@@ -8100,7 +8100,7 @@ begin
                EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
                EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done (rax already 0) }
                EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
-               Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+               PatchRel8(jbePatch);
              end
              else if ((IRKind[val1Node] = IR_INDEX) or (IRKind[val1Node] = IR_FIELD)) and
                      (IntToTypeKind(IRTk[val1Node]) = tyPointer) then
@@ -8114,7 +8114,7 @@ begin
                EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
                EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done }
                EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
-               Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+               PatchRel8(jbePatch);
              end
             else
             begin
@@ -8158,10 +8158,10 @@ begin
               EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);   { cvttsd2si rax, xmm0 }
               EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp .done }
               { .not_double: }
-              Code[pNotDouble] := Byte(CodeLen - (pNotDouble + 1));
+              PatchRel8(pNotDouble);
               EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] ; payload }
               { .done: }
-              Code[pDone] := Byte(CodeLen - (pDone + 1));
+              PatchRel8(pDone);
               EmitB($5B);                                      { pop rbx }
             end;
           end
@@ -8189,12 +8189,12 @@ begin
               EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] ; payload }
               EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp .done }
               { .not_double: an integer payload -> its double bits }
-              Code[pNotDouble] := Byte(CodeLen - (pNotDouble + 1));
+              PatchRel8(pNotDouble);
               EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] }
               EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);  { cvtsi2sd xmm0, rax }
               EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);  { movq rax, xmm0 }
               { .done: }
-              Code[pDone] := Byte(CodeLen - (pDone + 1));
+              PatchRel8(pDone);
               EmitB($5B);                                      { pop rbx }
             end;
             if TypeIsFloat(IntToTypeKind(IRTk[val1Node])) or
@@ -8244,14 +8244,14 @@ begin
                   EmitB($78); pUnsNeg := CodeLen; EmitB(0);               { js .neg }
                   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);   { cvtsi2sd xmm0, rax }
                   EmitB($EB); pUnsDone := CodeLen; EmitB(0);              { jmp .done }
-                  Code[pUnsNeg] := Byte(CodeLen - (pUnsNeg + 1));         { .neg: }
+                  PatchRel8(pUnsNeg);         { .neg: }
                   EmitB($48); EmitB($89); EmitB($C1);                     { mov rcx, rax }
                   EmitB($48); EmitB($D1); EmitB($E8);                     { shr rax, 1 }
                   EmitB($83); EmitB($E1); EmitB($01);                     { and ecx, 1 (keep the odd bit) }
                   EmitB($48); EmitB($09); EmitB($C8);                     { or rax, rcx }
                   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);   { cvtsi2sd xmm0, rax }
                   EmitB($F2); EmitB($0F); EmitB($58); EmitB($C0);         { addsd xmm0, xmm0 }
-                  Code[pUnsDone] := Byte(CodeLen - (pUnsDone + 1));       { .done: }
+                  PatchRel8(pUnsDone);       { .done: }
                 end
                 else
                   begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, rax }

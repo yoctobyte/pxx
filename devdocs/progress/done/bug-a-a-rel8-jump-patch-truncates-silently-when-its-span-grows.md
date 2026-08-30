@@ -4,7 +4,7 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-status: unfinished
+status: done
 found: 2026-08-30
 summary: "The rel8 patch idiom `Code[p] := Byte(CodeLen - (p + 1))` truncates without any diagnostic when the span exceeds 127 bytes. A forward jump silently becomes a BACKWARD jump into the middle of an instruction. Measured: a jns meant to skip 181 bytes was written as -75 and the program segfaulted at a mid-instruction address. Latent today; armed the moment any emitter between a patch site and its target grows."
 owner: frankA
@@ -211,3 +211,123 @@ remaining when the true figure is 74.
 **Gate for slice 2:** identical to this one — fixedpoint, plus output
 byte-identity on all five backends, plus the tightened-bound reachability proof
 re-run for the x86-64 backend.
+
+---
+
+## RESOLVED 2026-08-30 (frankA, Track A) — slice 2 landed; **the campaign is CLOSED**
+
+**This ticket is done, not half-done.** It ran as two slices because
+`ir_codegen.inc` was held by another lane for the first one, and a two-slice
+ticket that closes on slice 2 is exactly the shape a later reader mistakes for
+abandoned work. All **157** sites are converted. There is no slice 3.
+
+### Slice 2: the 74 sites in `ir_codegen.inc`
+
+- 53 form-1 (`Code[p] := Byte(CodeLen - (p + 1))`) → `PatchRel8(p)`
+- 21 form-3 (`Patch8(p, CodeLen - (p + 1))`) → `PatchRel8(p)`
+- **0 skipped** — the converter refuses any site whose patch index and
+  subtrahend differ, and none did.
+
+### `Patch8` is DELETED, not deprecated
+
+After the 21 conversions it had **zero callers anywhere** — `compiler/`, `lib/`,
+`tools/`, `test/`. It was the third and worst-disguised spelling of this defect:
+a `v: Byte` parameter truncating an `Integer` argument silently, in a helper
+that already looked checked. Leaving an unused truncating byte-patcher in a file
+full of emitters is an invitation, not a convenience, so it is gone and the
+reason is recorded where it stood. `Code[pos] := v` is what to write if a raw
+byte store is ever genuinely wanted.
+
+### The helpers moved to `compiler/rel8.inc`, and that was the enabling change
+
+The condition on this slice was **one test that proves the refusal fires**. That
+test has to include the *real* shipped code, not a copy — a copy proves the copy
+works. Including `emit.inc`, where the helpers landed in slice 1, would need
+~30 mocks (`Procs`, `Syms`, `Strs`, `TargetArch`, …), and that is precisely how
+`test_asm_emit_rv32.pas` rotted three times, most recently on the morning of
+2026-08-30. `rel8.inc` needs **five**: `Code`, `CodeLen`, `EmitB`, `Error`,
+`AIntToStr`.
+
+So the extraction is not tidying. It is what makes the guard testable at a mock
+cost that will not rot.
+
+### `test/test_rel8_guard.pas` — and it is proven able to fail
+
+13 checks, wired into `test-core`. **Two-sided on every boundary**: +127
+accepted *and* +128 refused, −128 accepted *and* −129 refused, plus the stored
+byte asserted for an in-range forward span (100 → 100) and a negative back edge
+(−5 → $FB, since two's complement is what the field wants and "reject negatives"
+is the obvious wrong implementation).
+
+A guard that refused everything would pass a refusal-only test, so the
+acceptances are the half that gives it meaning.
+
+**Mutation-tested rather than assumed:**
+
+| mutation of `rel8.inc` | harness result |
+| --- | --- |
+| `if False then` — accept everything (the pre-fix behaviour) | **4 failures** |
+| `if True then` — refuse everything | **6 failures** |
+| `(d > 128)` — off-by-one bound | **2 failures** |
+
+The measured case is asserted by value: span **181** must be refused, and
+`Integer(Shortint(Byte(181))) = -75` is checked so the ticket's central number
+is executable rather than prose.
+
+### Gate
+
+- `make compiler/pascal26` — converged, 1 round, `02ad0bc54dfd`.
+- **Byte-identity 20/20** — four programs × five backends, baseline
+  `4bc7cd1205bc` vs `02ad0bc54dfd`, **both built at one HEAD** (stash, build,
+  emit, pop, *rebuild*, emit — a `stash pop` restores sources, not binaries).
+- **Reachability, attributed to this slice's sites specifically.** Slice 1's ±4
+  tightening proves *a* `PatchRel8` runs, not *which* file's. So all 74
+  `ir_codegen.inc` call sites were temporarily renamed to a `PatchRel8IRC` that
+  errors unconditionally, and the marked compiler was asked to build
+  `test/hello.pas`:
+
+  ```
+  pascal26:2: error: MARKER: an ir_codegen.inc converted site was reached
+  ```
+
+  Every compiled program takes these paths. Marker removed, rebuilt, fixedpoint
+  re-verified, byte-identity re-run.
+
+### Final state of the census
+
+| form | sites | status |
+| --- | --- | --- |
+| 1 `Code[p] := Byte(a - (p + 1))` | 121 | converted |
+| 2 `EmitB(Byte(t - (CodeLen + 1)))` | 15 | converted |
+| 3 `Patch8(p, CodeLen - (p + 1))` | 21 | converted, and `Patch8` deleted |
+| | **157** | **0 remaining** |
+
+Verified by re-running the shape census at the final tree: zero form-1 sites
+remain in `symtab.inc`, `ir_codegen386.inc` or `ir_codegen.inc`, zero form-2,
+and `Patch8` does not exist.
+
+**Measured at the final tree, not asserted:**
+
+```
+form 1 remaining, repo-wide          : none
+form 2 remaining, repo-wide          : 1  -> rel8.inc:69, PROSE
+procedure Patch8                     : deleted
+Code[...] := writes, repo-wide       : 28  (was 147)
+  of which displacement-shaped       : 0   (was 121)
+PatchRel8/EmitRel8 call sites        : symtab 43 + ir_codegen 74 + 386 40 = 157
+```
+
+157 call sites against a 157-site census is the closure check: every site the
+census found is now a checked call, and none were invented.
+
+The single form-2 "hit" is `rel8.inc:69` — the doc comment saying *"as the
+`EmitB(Byte(target - (CodeLen + 1)))` idiom it replaces"*. A sentence explaining
+the idiom matches a grep for the idiom. That is the same trap frankC hit on the
+`cir.inc` census (a comment naming a routine defeated a reached-only-from-C
+test), here in the harmless direction — it inflates a count rather than hiding
+a candidate. Worth noting because the harmful direction is invisible and this
+one is not: had I trusted the grep's number instead of opening the line, the
+closure check would have read "1 site remaining" forever.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -4762,6 +4762,22 @@ test-core: $(COMPILER)
 	# invisible on x86-64 -- an under-aligned qword array returns the right
 	# answer there, and faults on xtensa's l32i.
 	# bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section
+	# THE rel8 RANGE CHECK MUST REFUSE WHAT IT CANNOT ENCODE — AND BE SEEN TO.
+	#
+	# Mocks the byte sink and includes the real compiler/rel8.inc, the way the
+	# test_asm_emit_* harnesses include the real encoders. It exists because a
+	# guard nobody has watched fire is this repo's recurring failure: see
+	# bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire,
+	# whose declared check matched nothing on any tree, forever, and reported
+	# clean.
+	#
+	# Two-sided by construction — +127 accepted AND +128 refused, -128 accepted
+	# AND -129 refused — because a check that refuses everything would pass the
+	# refusal half on its own. Mutation-tested at fix time: accept-everything
+	# gives 4 failures, refuse-everything 6, and a 127->128 off-by-one 2.
+	# bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows
+	./$(COMPILER) -Fucompiler test/test_rel8_guard.pas $(TESTTMP)/test_rel8_guard26
+	tools/expect_same.sh test_rel8_guard26 "$$($(TESTTMP)/test_rel8_guard26)" "REL8-GUARD OK checks=13"
 	# AN AGGREGATE RESULT FROM A FUNCTION WITH MORE THAN 8 PARAMETERS.
 	#
 	# aarch64 refused this outright until the x8 load and the matching stack
