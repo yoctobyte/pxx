@@ -129,4 +129,4 @@ programs (bitfield, Duff's-device switch, char promotion, `__has_include`) still
 compile. Self-host: converged, 1 round, `3e437e986be5`.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 43cc17106.
