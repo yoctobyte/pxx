@@ -8113,6 +8113,37 @@ begin
             not ProcParamIsConst[procIdx * MAX_PROC_PARAMS + argNo];
 end;
 
+function RecIsReferenceShaped(rec: Integer): Boolean;
+{ Is this record id one of the two records that are really a FAT POINTER?
+
+  An interface (16 bytes {IMT, instance}) and a method pointer (16 bytes
+  {Code, Data}) both present as tyRecord, and both are nil-able and
+  pointer-assignable where a plain record is neither. So every rule phrased on
+  the type KIND is wrong for them, and the only way to tell is to consult the
+  record IDENTITY -- which is what this asks, once.
+
+  It is asked from three directions that had answered it differently, and the
+  third is how a regression got in. `ProcParamIsNilable` (below) had both
+  halves. `AssignSideKind` in ir.inc had only the INTERFACE half, because the
+  interface half is the one that showed up in a differential run -- so when the
+  assignment check was extended from identifiers to fields, elements and
+  derefs, `c.OnHit := nil` on a method-pointer FIELD started being refused as
+  "cannot assign Pointer to record". The identifier arm had never hit it: a
+  method-pointer VARIABLE exits earlier on SymProcSig, for an unrelated reason,
+  which is exactly the kind of accidental cover that hides a missing case until
+  a second shape reaches the same code.
+
+  Two is a smell and three is a design flaw (root-cause-over-microfix.md), so
+  the clause lives here and the callers ask.
+  bug-a-a-method-pointer-field-assigned-nil-is-refused-as-pointer-to-record }
+begin
+  Result := False;
+  if rec = REC_NONE then Exit;
+  if rec = MethodPtrRecId then begin Result := True; Exit; end;
+  if (rec < REC_UCLASS_BASE) or (rec - REC_UCLASS_BASE >= MAX_UCLASS) then Exit;
+  Result := UClsIsInterface[rec - REC_UCLASS_BASE];
+end;
+
 function ProcParamIsNilable(procIdx, j: Integer): Boolean;
 { Is parameter j REFERENCE-shaped — one of the types `nil` is assignment-
   compatible with? Pointer, class, interface, method pointer. The last two are
@@ -8136,8 +8167,7 @@ begin
   if (pTk = tyPointer) or (pTk = tyClass) then begin Result := True; Exit; end;
   if pTk <> tyRecord then Exit;
   rec := ProcParamRecId[procIdx * MAX_PROC_PARAMS + j];
-  if (rec = MethodPtrRecId) and (rec <> REC_NONE) then begin Result := True; Exit; end;
-  Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
+  Result := RecIsReferenceShaped(rec);
 end;
 
 function MatchArgNilOk(i, j: Integer): Boolean;

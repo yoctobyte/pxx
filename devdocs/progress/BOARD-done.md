@@ -2662,6 +2662,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-length-dynarray-call | P | 70 | regression | regression: test-core#src:test/test_length_dynarray_call.pas red at b936d125601e (auto-filed by twatch) | — |
 | regression-test-core-test-local-typed-const | P | 70 | regression | RESOLVED. A real regression from 3ed3e2653 (routine-local typed const made static): a SCALAR local const read in an expression stopped compiling — invalid IR symbol reference in load_sym — while the array shapes and the counter idiom the fix targeted both worked. Bisected by Track T; root cause was SymRollbackTo handing the index back and the -O2 inliner still loading it. Fixed in 467a4e5da, carried by pin v342. | — |
 | regression-test-core-test-managed-block-meta | T | 70 | regression | regression: test-core#src:test/test_managed_block_meta.pas red at 86da0606d916 (auto-filed by twatch) | — |
+| regression-test-core-test-methodptr-nil-assign | A | 70 | regression | regression: test-core#src:test/test_methodptr_nil_assign.pas red at dc798834ba33 (auto-filed by twatch) | — |
 | regression-test-core-test-mgmt-operators | P | 70 | regression | regression: test-core#src:test/test_mgmt_operators.pas red at 47277dd0e52b (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi-callarg | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_callarg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi-methptr | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_methptr.pas red at a2ae11a64191 (auto-filed by twatch) | — |
@@ -2670,6 +2671,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nested-class-type-b348 | P | 70 | regression | regression: test-core#src:test/test_nested_class_type_b348.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-cow | T | 70 | regression | regression: test-core#src:test/test_nested_cow.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-nested-dynarray-field | P | 70 | regression | regression: test-core#src:test/test_nested_dynarray_field.pas red at b936d125601e (auto-filed by twatch) | — |
+| regression-test-core-test-nil-argument-positions | A | 70 | regression | regression: test-core#src:test/test_nil_argument_positions.pas red at dc798834ba33 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy red at e8450c58d67e (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-bound-method-in-module | N | 70 | regression | regression: test-core#src:test/test_nilpy_bound_method_in_module.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-builtin-subclass-dunder-dispatch | N | 70 | regression | regression: test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy red at c28e07a89f03 (auto-filed by twatch) | — |

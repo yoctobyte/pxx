@@ -103,9 +103,7 @@ begin
           which FPC accepts. Measured, not guessed: it was the single regression
           in a 625-pair differential against fpc 3.2.2. The kind is not a
           reliable description here, which is exactly what this function is for. }
-        if (Syms[si].RecName >= REC_UCLASS_BASE) and
-           (Syms[si].RecName - REC_UCLASS_BASE < MAX_UCLASS) and
-           UClsIsInterface[Syms[si].RecName - REC_UCLASS_BASE] then Exit;
+        if RecIsReferenceShaped(Syms[si].RecName) then Exit;
         tk := Syms[si].TypeKind;
         AssignSideKind := True;
       end;
@@ -140,16 +138,17 @@ begin
         it cannot type must fall back to the old accept -- a false REJECT of
         working code is a worse defect than the false accept being fixed here.
 
-        The interface bail is the AN_IDENT arm's, one shape over and for the
-        same measured reason: an interface is spelled tyRecord (a 16-byte fat
-        pointer), so without it `p := o.IntfField` -- which FPC accepts -- would
-        be refused by the record rule. }
+        The reference-shaped bail: an interface AND a method pointer are both
+        spelled tyRecord -- each is a 16-byte fat pointer -- so the record rule
+        would refuse `p := o.IntfField` and `c.OnHit := nil`, which are both
+        legal. This arm shipped with only the interface half and the second half
+        was the regression; RecIsReferenceShaped is now the one place that
+        knows, and the AN_IDENT arm below asks it too. }
       begin
         nk := IntToTypeKind(ASTTk[node]);
         if nk = tyUnknown then Exit;
         rec := ResolveNodeRec(node);
-        if (rec >= REC_UCLASS_BASE) and (rec - REC_UCLASS_BASE < MAX_UCLASS) and
-           UClsIsInterface[rec - REC_UCLASS_BASE] then Exit;
+        if RecIsReferenceShaped(rec) then Exit;
         tk := nk;
         AssignSideKind := True;
       end;
