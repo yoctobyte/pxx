@@ -5,7 +5,7 @@ type: decide
 status: backlog
 owner: unassigned
 blocked-by: []
-summary: "tools/exit_observable_devtest.py fails when the count of stdout-only cross-target rows exceeds a high-water mark. The number grew 531 -> 551 in six hours from four commits across three lanes doing normal work. Bumping the ratchet each time measures nothing; holding the red makes a shared gate permanently owned by no one. Third option: report the drift and its attribution WITHOUT failing. Raised by pxx-a5, which deliberately did not make the change."
+summary: "tools/exit_observable_devtest.py fails when the count of stdout-only cross-target rows exceeds a high-water mark. AMENDED 2026-08-30 by frankT (904b26bd9) AND THE AMENDMENT CUTS AGAINST THE ORIGINAL RECOMMENDATION -- read the addendum before deciding. The filing measured 531 -> 551 in six hours from three lanes' normal work and leaned toward option 3 (report the drift, stop failing) on the grounds that a standing red nobody owns is the state a red exists to prevent. Re-measured per Makefile commit, the count peaked at 559 and then a lane paid it back to 531 EXACTLY within six hours (d9d166f7e, Track A; bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code is in done/). So the red WAS owned and paid, and the ratchet is what applied the pressure. Residual is 2 rows from one later commit, both exception/unwind subjects on xtensa -- two Makefile lines, Track S/A's to fix, unverified because it needs qemu. The fork is still open and still the owner's: nobody has bumped the mark or resolved it."
 ---
 
 # Decide: what should a shared gate do when the number it watches grows as a side effect of other lanes' normal work?
