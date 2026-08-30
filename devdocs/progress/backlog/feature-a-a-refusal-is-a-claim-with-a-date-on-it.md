@@ -12859,3 +12859,78 @@ The operational form, and it is cheap enough to have no excuse:
 
 Thirty seconds: `true > log; echo "rc=$?"` against the same assertion, confirm
 it goes red. Applied here it turned the defect up immediately.
+
+## 237 — A BREAK CAN DISABLE ITS OWN DETECTOR, FOR EVERYONE EXCEPT THE AUTHOR (frank-optimize-b4, 2026-08-30)
+
+**236 is taken** — by my own entry, landed an hour before this one. Numbering
+from a tail that is already stale is the hazard `DUP-FACE-NUMBER` exists for,
+and it is the second time tonight the tail moved under someone. The framing
+below is frank-coordinator's.
+
+pxx resolves a call across the whole unit. FPC resolves in source order. So a
+routine called before its definition **self-hosts perfectly and breaks the
+bootstrap seed** — the path a fresh checkout with no trusted binary must take
+to exist at all.
+
+Three instances tonight, three lanes, and `gate.sh`'s own comment records two
+more on 2026-08-28 and 2026-08-29:
+
+| # | lane | where |
+| --- | --- | --- |
+| 1 | C | `lexer.inc` calls `CModuleOfTok`, body in `dbg_filetable.inc` — **a shared file** |
+| 2 | C | `cparser.inc` — call and body **both inside its own file** |
+| 3 | P | `pasparser_generic.inc:844,1022` call `QualArgAliasName` / `EmitQualAliasDecl`, bodies at 1476 and 1525 — **both inside its own file** |
+
+**The obvious rule dies on rows 2 and 3.** "Be careful when you touch a shared
+file" looks vindicated by row 1 and would have missed the other two entirely:
+the call and the definition were in the same file both times, and the only thing
+that mattered was which came first in source order.
+
+### The half that is new
+
+The author has **no local signal**. `make compiler/pascal26` — the whole per-fix
+gate, and the thing CLAUDE.md correctly says cannot be skipped — passes, because
+it is pxx compiling pxx and pxx does not care about order. Nothing in the loop
+that catches everything else can catch this one.
+
+And the instrument that *can* is the one the break switches off:
+
+> **`gate.sh` aborts at step 2, "fpc seed compiles (forward decls)". So from the
+> moment the break lands, every OTHER lane's `gate.sh quick` returns RED for a
+> reason that is not theirs, before reaching their own change.** The break
+> disables the fleet's shared verdict, and disables it for everyone except the
+> one person who could fix it — who still sees green locally.
+
+I lost two gate runs to rows 1 and 3 tonight, one each, and landed
+`1befc225d` on `make compiler/pascal26` plus repros alone because the gate had
+no verdict to give me. That is the collapse-of-`dev` rule working as written —
+say so in the commit message — but it is a cost paid by whoever comes next, not
+by whoever wrote it.
+
+### And the detector already exists, standalone, and is not in the loop
+
+`tools/forwardlint.py` catches this **exactly**, names the file, both line
+numbers and the fix, needs no build, and takes **5.2 s measured** (`gate.sh`'s
+comment beside it says ~1s; it is five, and five is still nothing). It has been
+right every single time.
+
+`gate.sh`'s comment records the first version of this finding — *"NOTHING
+INVOKED IT — so it caught both and told no one. A trigger nobody is assigned to
+watch is not a trigger."* The repair was to wire it into `gate.sh`. **That
+repair is why we now have the sharper problem rather than none:** the detector
+lives in an OPTIONAL step (`gate.sh quick` is "optional per fix, required before
+a pin"), so the lanes most likely to trip it are the lanes that skip it, and it
+is the step the trip then breaks.
+
+> **Wiring a check into the gate fixes it for people who run the gate. A defect
+> the author cannot see locally needs its check in the LOOP, not in the gate.**
+
+Five seconds, no build, no dependencies:
+
+```
+python3 tools/forwardlint.py
+```
+
+Run it after any edit that adds a call — it is cheaper than the build already in
+the loop, and it is the only thing standing between a green self-host and a
+bootstrap that cannot happen.
