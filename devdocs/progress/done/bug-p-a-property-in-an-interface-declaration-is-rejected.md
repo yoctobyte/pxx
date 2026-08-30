@@ -175,4 +175,4 @@ Two things follow, and neither is "widen the loop":
   is" in one measurement rather than an argument.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 0f0fd6642.
