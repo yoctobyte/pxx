@@ -4193,6 +4193,43 @@ begin
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
+{ Allocate a record variable of a KNOWN record type.
+
+  A record's SIZE and its RecName both come from the global `LastTypeRecId`
+  side-channel, because AllocVar has no argument that could carry a record id.
+  So every caller that materialises a hidden record TEMP has to set that global,
+  allocate, and restore it. Four of the five sites in `ir.inc` did exactly that
+  dance by hand. The fifth did not, and the consequence was not a wrong type --
+  it was a 232-byte OUT-OF-BOUNDS WRITE:
+
+    zeroSym := AllocVar('', tyRecord);          -- LastTypeRecId was REC_NONE
+    SymTR[zeroSym].RecId := recId;              -- a MIRROR field nothing reads
+    IRAppend(IR_DEFAULT_MEM, ..., RecSize(recId), ...);   -- zeroes 240 bytes
+
+  The temp got `RecSize(REC_NONE)` = 8 bytes of BSS and the lowering right below
+  it zeroed `RecSize(recId)` = 240. The `SymTR` write looks like the repair and
+  is not: SymTR is the additive mirror of `Syms[].RecName` (see SymSyncTypeRef),
+  nothing reads it yet, and the storage had already been sized.
+
+  It survived because BSS is MAPPED A PAGE AT A TIME. The overrun landed in the
+  page round-up slack and hit nothing, for months, until an unrelated change to
+  the ELF layout left the image ending 60 bytes below a page boundary and the
+  same write went off the end of the mapping. A latent memory bug whose
+  visibility was decided by where the linker happened to stop
+  (regression-test-asm-compiler-2, diagnosed by frankA).
+
+  Hence a helper rather than a fifth copy of the dance: the caller says which
+  record it means, the side channel is set and restored in one place, and
+  "forgot to set LastTypeRecId" stops being a thing a caller can do. }
+function AllocRecVar(const name: AnsiString; recId: Integer): Integer;
+var savedRecId: Integer;
+begin
+  savedRecId := LastTypeRecId;
+  LastTypeRecId := recId;
+  AllocRecVar := AllocVar(name, tyRecord);
+  LastTypeRecId := savedRecId;
+end;
+
 { The ABI oracle answers both parameter-slot questions now — the SIZE rule that
   used to live here as ParamSlotIsPointer, and the SLOT-HOLDS rule the five
   backends each wrote out longhand. Implemented in abi.inc, which is included

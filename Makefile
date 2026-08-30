@@ -4399,9 +4399,21 @@ test-asm: $(COMPILER)
 	./$(COMPILER) test/test_asm_mvp.asm $(TESTTMP)/test_asm_mvp26
 	$(TESTTMP)/test_asm_mvp26; tools/expect_same.sh test_asm_mvp26-rc "$$?" "42"
 	./$(COMPILER) test/test_asmcore_x64.pas $(TESTTMP)/test_asmcore_x64_26
-	$(TESTTMP)/test_asmcore_x64_26 | tail -1 | grep -q "all asmcore_x64 checks passed"
+	# Redirect-then-check, not `| tail -1 | grep -q`: a pipeline reports GREP's
+	# status, so a binary that printed its success line and THEN died still
+	# passed. That is not hypothetical here -- this row ran green through the
+	# entire window in which test_asmcore_x64 was SIGSEGVing on a BSS
+	# under-allocation, and a bisect done by hand is what found it.
+	$(TESTTMP)/test_asmcore_x64_26 > $(TESTTMP)/test_asmcore_x64_26.out; tools/expect_same.sh test_asmcore_x64_26-rc "$$?" "0"
+	tools/expect_same.sh test_asmcore_x64_26 "$$(tail -1 $(TESTTMP)/test_asmcore_x64_26.out)" "all asmcore_x64 checks passed"
 	./$(COMPILER) test/test_asmcore_aarch64.pas $(TESTTMP)/test_asmcore_aarch64_26
-	$(TESTTMP)/test_asmcore_aarch64_26 | tail -1 | grep -q "all asmcore_aarch64 checks passed"
+	# Redirect-then-check, not `| tail -1 | grep -q`: a pipeline reports GREP's
+	# status, so a binary that printed its success line and THEN died still
+	# passed. That is not hypothetical here -- this row ran green through the
+	# entire window in which test_asmcore_x64 was SIGSEGVing on a BSS
+	# under-allocation, and a bisect done by hand is what found it.
+	$(TESTTMP)/test_asmcore_aarch64_26 > $(TESTTMP)/test_asmcore_aarch64_26.out; tools/expect_same.sh test_asmcore_aarch64_26-rc "$$?" "0"
+	tools/expect_same.sh test_asmcore_aarch64_26 "$$(tail -1 $(TESTTMP)/test_asmcore_aarch64_26.out)" "all asmcore_aarch64 checks passed"
 	./$(COMPILER) test/test_asmcore_i386.pas $(TESTTMP)/test_asmcore_i386_26
 	$(TESTTMP)/test_asmcore_i386_26 | tail -1 | grep -q "all asmcore_i386 checks passed"
 	./$(COMPILER) test/test_asmcore_arm32.pas $(TESTTMP)/test_asmcore_arm32_26

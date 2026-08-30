@@ -778,8 +778,14 @@ begin
         the epilogue pass that still visits it releases nothing a second time —
         the same "nil it and the old path becomes a no-op" safety the interface
         arm below relies on. }
-      zeroSym := AllocVar('', tyRecord);
-      SymTR[zeroSym].RecId := recId;
+      { AllocRecVar, not AllocVar: this temp is zeroed with RecSize(recId)
+        immediately below, so it must be ALLOCATED at RecSize(recId). It was
+        not -- LastTypeRecId is whatever the last declaration left behind, here
+        REC_NONE, so the temp got 8 bytes and the IR_DEFAULT_MEM wrote 240. The
+        SymTR line that used to sit here looked like it fixed that and could
+        not: SymTR is the additive mirror of Syms[].RecName and nothing reads
+        it, and the storage was already sized. }
+      zeroSym := AllocRecVar('', recId);
       SymIsHiddenArgTemp[zeroSym] := True;
       zeroAddr := IRAppend(IR_LEA, zeroSym, -1, -1, 0, Ord(tyPointer));
       IRAppend(IR_DEFAULT_MEM, zeroAddr, -1, REC_NONE, RecSize(recId), Ord(tyRecord));
@@ -2720,7 +2726,6 @@ var argTk: TTypeKind;
     needTemp: Boolean;
     argIsWholeArray: Boolean;
     argRecId: Integer;
-    savedLastTypeRecId: Integer;
     tmpSym: Integer;
     tmpAddr: Integer;
     srcAddr: Integer;
@@ -3646,12 +3651,9 @@ begin
      (pathIdx < Procs[cpi].ParamCount) and (pathIdx < MAX_PROC_PARAMS) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) then
   begin
-    savedLastTypeRecId := LastTypeRecId;
-    LastTypeRecId := ProcParamRecId[cpi * MAX_PROC_PARAMS + pathIdx];
-    if LastTypeRecId = REC_NONE then LastTypeRecId := EnsureMethodPtrRec;
-    argRecId := LastTypeRecId;
-    tmpSym := AllocVar('', tyRecord);
-    LastTypeRecId := savedLastTypeRecId;
+    argRecId := ProcParamRecId[cpi * MAX_PROC_PARAMS + pathIdx];
+    if argRecId = REC_NONE then argRecId := EnsureMethodPtrRec;
+    tmpSym := AllocRecVar('', argRecId);
     IRAppend(IR_DEFAULT_MEM,
       IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer)),
       -1, REC_NONE, RecSize(argRecId), Ord(tyRecord));
@@ -3664,10 +3666,7 @@ begin
 
   if needTemp then
   begin
-    savedLastTypeRecId := LastTypeRecId;
-    LastTypeRecId := argRecId;
-    tmpSym := AllocVar('', tyRecord);
-    LastTypeRecId := savedLastTypeRecId;
+    tmpSym := AllocRecVar('', argRecId);
     isComIntfArg := (argRecId >= REC_UCLASS_BASE) and
                     UClsIsInterface[argRecId - REC_UCLASS_BASE] and
                     UClsIsComInterface[argRecId - REC_UCLASS_BASE];
@@ -4171,15 +4170,12 @@ function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer;
 
   Memoised in ASTLiftedVar: the interface-call path takes the value's address more
   than once, so this must build it once. }
-var intfCi, tmpSym, instSym, instVal, endLbl, c, skipLbl, savedRec: Integer;
+var intfCi, tmpSym, instSym, instVal, endLbl, c, skipLbl: Integer;
     li, vmtSym, lv, va, eq: Integer;
 begin
   if ASTLiftedVar[node] >= 0 then begin Result := ASTLiftedVar[node]; Exit; end;
   intfCi := Integer(ASTIVal[node]);
-  savedRec := LastTypeRecId;
-  LastTypeRecId := REC_UCLASS_BASE + intfCi;
-  tmpSym := AllocVar('', tyRecord);          { size = TARGET_PTR_SIZE }
-  LastTypeRecId := savedRec;
+  tmpSym := AllocRecVar('', REC_UCLASS_BASE + intfCi);   { size = TARGET_PTR_SIZE }
   ASTLiftedVar[node] := tmpSym;
 
   instSym := AllocVar('', tyPointer);
@@ -5056,12 +5052,9 @@ end;
   taken through a base-typed variable captures the override.
   bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
 function IRMethodRefToTemp(mref: Integer): Integer;
-var savedRecId, tmpSym, tmpAddr, value, dataAddr, ofsNode: Integer;
+var tmpSym, tmpAddr, value, dataAddr, ofsNode: Integer;
 begin
-  savedRecId := LastTypeRecId;
-  LastTypeRecId := EnsureMethodPtrRec;
-  tmpSym := AllocVar('', tyRecord);
-  LastTypeRecId := savedRecId;
+  tmpSym := AllocRecVar('', EnsureMethodPtrRec);
   tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
   value := IRMethodRefCode(mref);                                  { Code @ +0 }
   IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));
