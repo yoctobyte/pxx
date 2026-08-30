@@ -11831,7 +11831,11 @@ architecture is fragile". Every sampled program in **both** groups was ≡3 (mod
 > reported nothing.
 
 So the pass rate was not measuring the property at all; it was measuring how many targets forgive
-its absence. Two consequences worth carrying:
+its absence. And it did not merely fail to reveal the defect:
+
+> **53 passing ARGUED AGAINST there being a problem.** It reads as "mostly fine, one fragile
+> architecture" — a conclusion, not an absence of one. **A misleading number is worse than a
+> missing number, because a missing number prompts a measurement.** Two consequences worth carrying:
 
 - **An oracle keyed to the faulting target confirms the property only where it was already
   visible.** Answering "check alignment" with "run everything under xtensa" makes the one
@@ -11858,6 +11862,16 @@ shell did not care.
 > **A chain of steps where each assumes its predecessor ran is only as good as whatever enforces
 > that, and often nothing does.** This generalises past shells: any pipeline, any `&&`-less
 > sequence, any orchestration where step N's precondition is "step N-1 worked" and no one checks.
+
+**A second instance landed within the hour, in a different lane, with a different tool** — the
+coordinator hit it while writing up the first one. A `python3 - <<'PY' … PY` heredoc whose anchor
+did not match raised `AssertionError`, and the `git add && git commit` after it ran anyway. It was
+harmless only by luck: the failed script had written nothing, so there was nothing to commit. Had
+it half-written the file, it would have committed a mangled dev doc **while writing the section
+warning about committing mangled files.**
+
+Two instances, two lanes, two tools, one hour, same shell semantics. That is the argument for
+this face being about **composition**, not about resolvers or about heredocs.
 
 The repair is the same one that keeps turning up, stated at the level that covers all of them:
 
