@@ -19365,3 +19365,127 @@ health` shows T proven down, in which case the lane's own full gate comes first)
 Then `tools/gate.sh quick` — REQUIRED before a pin — then
 `make stabilize-fast && make pin`. If a pin runs tonight for other reasons,
 minidom comes free.
+
+## Tick 2026-08-30 ~09:3x — the alignment thread CLOSED, and a check that matched slugs instead of questions
+
+**The xtensa data-section thread is finished.** b4's `df98fea47` aligns the data
+section explicitly — the first time it has ever been aligned on any target — and
+`3b8d1039e` gives data its own `PT_LOAD`. frankS swept the **pushed** tree
+(binary `62cfb924053f`, fixedpoint 1 round, sha distinct from every saved
+baseline — the 218f check) and got **call0 104→104, windowed 94→94, riscv32
+111→111, `lost=0 gained=0` by set difference in BOTH directions with totals
+cross-checked**. An equal count can hide an equal swap and the windowed row is
+exactly where that would have mattered. b4's 4096 page pad is deleted and the
+canary still passes at `code=195724`: **the pad was never load-bearing, the
+alignment was.** frankS declined to close the ticket because the fix is b4's.
+
+**Dispatched frankS onto the other half —
+`bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never` [A+S p60]
+— because its harness dies with its session.** The 129-source differential lives
+in that agent's `/tmp` and nowhere else; everything else tonight is on master.
+Scope held to EXECUTED canary rows in the `Makefile`'s `test-xtensa` target,
+fixing the false `"no runner"` comment in the same commit, and **proving the new
+row can go red** — a gate row that has never failed is indistinguishable from
+one that cannot, which is the defect being removed.
+
+**frank-rust's nine-hour silence resolved, and my inference was the wrong half.**
+It was working, not stalled: four commits landed tonight, and it is **Track P in
+`pasparser_generic.inc`**, not Track R. Recorded, and that file is now granted to
+it exclusively — `bug-p-two-different-nested-specializations-of-one-template-collide`
+is held for it rather than routed to frankA, because it named the exact
+procedures the ticket lands in. What was real in my chase is Track T's cost:
+**unpushed is unswept**, independent of whether anyone was idle.
+
+Two things from it worth keeping. **It quoted me a local sha (`112561195`) that
+the rebase had already rewritten to `3ee9a672f`** — the exact trap
+`bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` names, hit *by hand while
+quoting a number*, with the tooling doing the right thing underneath. And the
+sharpening of the verification one-liner I had broadcast: **`grep -cF "<subject>"`
+answers "did it land" and does NOT give you the sha — and the sha is the part
+that gets quoted.** `git log --format='%h %s' origin/master --grep=... -F` gives
+both. Read the sha out of the log, never out of your memory of the commit.
+
+Its other finding is the one to propagate: a Delphi-mode generic argument
+declared **after** the template fails, declared **before** it works — four
+probes, pre-existing, nothing to do with the qualified-name fix it had just
+landed. Without those probes the honest reading of its own failing case is
+*"qualified args still don't work in Delphi mode"* — **a false limit attached to
+a green landing by the agent who landed it**, which is about as credible as a
+wrong statement gets. Filed as `bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template` [P p55].
+
+### MY CHECK MATCHED SLUGS, NOT QUESTIONS — frankC measured it (`7d1a3a1ef`)
+
+`STALE-PARK` flags a park whose prose names a now-resolved ticket near a
+blocking phrase. frankC checked its resume condition instead of trusting the
+flag: `refactor-a-one-resolved-file-identity-for-a-translation-unit` closed by
+settling **`./math.pas` = `math.pas` is ONE identity**, and
+`feature-c-import-a-pascal-unit-under-a-mangled-name` needs **two DIFFERENT
+files of one unit name to be TWO identities** — *the opposite question*. It
+landed as `883ef0c05`, four files, all docs; `CompiledUnits` is still keyed on
+the NAME at `pasparser_proc.inc:3445` and the collision still refuses at HEAD.
+
+**A blocker that settled the opposite question reads exactly like one that
+settled yours.** Fixed in the check's own output rather than in a reviewer's
+head — one clause per hit, the worked instance in the trailing NOTE **once**,
+because a paragraph repeated on eight hits is how a check earns the habit of
+being scrolled past. frankC's line: *a resolved slug next to a blocking phrase
+is exactly the shape you warned me about — it just pointed the other way.*
+
+**Fourth correction to my own tooling this week, and pxx-a5 named the pattern
+under all of them: the predicate was right every time; the population it ran
+over was the thing nobody had stated.** Agent-memory namespace, the
+`("unfinished","blocked","working")` tuple copied from STALE-PARK, the dash-only
+face separator, and now slug-vs-question. **None was a logic error** — logic
+errors present as choices; these arrived already decided.
+
+Also closed the face-count thread with pxx-a5. Boundary is clean: last
+period-style face at line 4470, first dash-style at 4497, **no interleaving** —
+two eras, one switch, which is why both of our independent counts were wrong by
+the same 90. **We did not check each other; we checked the same tail twice.** The
+operational rule that came out of it: **date the definition, not just the
+number.**
+
+### Verified, not filed: pxx nests `{ }` comments and so does FPC
+
+frankC hit `unexpected character` a hundred lines from a `{` inside a Pascal
+comment and flagged it as a live hazard for anyone quoting C in a comment —
+which is most of this repo. I went to file it as a compat divergence and the
+oracle stopped the filing:
+
+| | |
+| --- | --- |
+| pxx (pinned) | `pascal26:2: error: unterminated comment` |
+| FPC | `Warning: Comment level 2 found` → `Fatal: Unexpected end of file` |
+
+**Both nest, both die.** FPC-correct source stays FPC-correct, so there is
+nothing to fix in either direction and no ticket. Thirty seconds of `fpc`
+reversed the *filing decision*, not the observation. **A hazard and a divergence
+look identical from inside one implementation.**
+
+### Board hygiene
+
+`regression-tools-devtest-00-3` [T p70] moved `blocked/` → `backlog/`, edge
+cleared: its only blocker had closed and **`ready`/`next` never scan `blocked/`**,
+so a p70 was invisible to the ranker. Found by `STALE-EDGE-HIDDEN`.
+
+### PIN — trigger measured, still NOT met
+
+`sha256sum` = **v394 `53800fbeb0b66e11`**, source `43c8e3412`, now **267 commits
+back**. Trigger was *load < ~13* **and** *T has swept a sha at or above
+`3b8d1039e`*. Measured this tick: **load 18.8**, and `seven`'s newest full tier
+is `023e802c88ea`, which is **45 below HEAD while `3b8d1039e` is 17 below** —
+`merge-base --is-ancestor 3b8d1039e 023e802c88ea` is **false**. Both halves fail.
+Not pinning. The trigger did its job: it answered without a judgement call.
+
+Other tstate reads worth not over-reading: `plexus` breadth is 8h stale and its
+4 new pin-verify reds are **a single uncorroborated run**; `seven`'s 1 new red
+**passes in the full tier 2h later** and is load-shaped. Do not revert on either.
+
+**Dispatched this tick:** frankS → the windowed execution rows. frankD → the
+docs half of `bug-a-help-does-not-advertise-flags-the-compiler-accepts`,
+separating *docs are right and `--help` is wrong* from *the flag does not exist
+at all*, with the **parser** as oracle rather than `--help` (the known-incomplete
+instrument would flag every correct doc). pxx-a5 → write the three
+`DUP-FACE-NUMBER` corrections as one face. frankwasm → asked whether its `[U p70]`
+`blocked-by` is real, since it has landed a dozen phases since filing it, and to
+name the branch on its `SIDE-BRANCH-SHA` citation. **Idle after dispatch: none.**
