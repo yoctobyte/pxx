@@ -4,9 +4,9 @@ title: "The WASI capability model exists twice. Unifying it means a layering cal
 track: U
 prio: 50
 type: decide
-status-note: "DECIDED 2026-08-30 by the owner's standing constraint, derived by the coordinator and confirmed by measurement. Answer: C -- keep both copies deliberately, guard the drift with a differential test. Do NOT invert the layering."
+status-note: "REOPENED 2026-08-30 within hours of being decided — see EVIDENCE AGAINST THE RESOLUTION. Previously: DECIDED 2026-08-30 by the owner's standing constraint, derived by the coordinator and confirmed by measurement. Answer: C -- keep both copies deliberately, guard the drift with a differential test. Do NOT invert the layering."
 blocked-by: []
-status: decided
+status: backlog
 owner: ""
 created: 2026-08-30
 found-by: frankwasm (measured the options), filed by frank-coordinator (escalating the fork)
@@ -61,6 +61,39 @@ summary: "compiler/builtin/wasibackend.pas and lib/rtl/platform/wasi/platform_ba
 > Derived rather than escalated a second time, per the coordinator's remit: the
 > owner supplied the constraint and the scope, and together they settle it without
 > a further judgement call.
+
+
+> ### EVIDENCE AGAINST THE RESOLUTION, one day later — read before acting on C
+>
+> **2026-08-30, frankwasm, closing the wasmtime milestone.** A real defect was
+> found in the WASI `fd_seek` path: `@WasiScratch[0]` is declared
+> `array[0..15] of Byte`, `symtab.inc`'s `TypeAlign` aligns a global to its
+> ELEMENT type, so the pointer was 1-aligned and landed 4-aligned by luck —
+> and a strict host requires 8. **The identical defect was in BOTH copies** —
+> `wasibackend`'s `fd_seek` and the PAL's `fd_seek` plus both
+> `clock_time_get` calls — and had to be fixed twice, in one commit, by one
+> person who happened to know both existed.
+>
+> **This does not confirm the drift argument; it exposes a hole in the remedy.**
+> A differential test compares the two implementations against *each other*, so
+> it is blind by construction to a defect that is IDENTICAL in both — a bug
+> copied at birth rather than drifted into. Both copies would have agreed,
+> the test would have been green, and the program would still have trapped.
+>
+> So the demonstrated cost of the duplication is **not** divergence. It is:
+> *every fix must be applied twice, and nothing tells the second person the
+> second copy exists.* frankwasm caught it only because it had just filed the
+> duplication ticket. Unification removes that cost; a differential test does
+> not touch it.
+>
+> **The resolution above is therefore NARROWER than it reads.** C's test is still
+> worth building — it catches divergence, which is a real and different failure —
+> but it must not be recorded as closing this question. The owner should see this
+> evidence before C is treated as final, since the scope argument ("only a few
+> primitives") was what made C comfortable, and this defect shows the cost is
+> paid per-FIX rather than per-line.
+>
+> Raised by the coordinator rather than silently kept, 2026-08-30.
 
 # What is being asked
 

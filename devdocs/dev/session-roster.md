@@ -201,6 +201,26 @@ into the work. Ones that have actually gone wrong:
   independently declined to use it on the grounds that it is the user's to grant,
   and they were right: a coordinator cannot grant it either. If a worker asks,
   the answer is to escalate to the owner, not to authorise it.
+- **A LENIENT HOST IS NOT A NEUTRAL INSTRUMENT.** frankwasm, 2026-08-30: node's
+  WASI does not enforce WASI's 8-alignment requirement on `fd_seek`'s `filesize`
+  pointer, so a genuine GUEST defect was invisible *as* a guest defect and
+  surfaced only as host death much later. Every check in `test/wasm/` ran under
+  node, so **the entire class was structurally invisible to all 33 of them**.
+  Generalise past wasm: when one implementation is your only oracle, its
+  tolerances silently define what your tests can detect. The mirror trap landed
+  the same day — a first version of the new check asserted
+  `PalMonotonicMillis > 0`, and wasmtime's monotonic clock starts near zero at
+  process start while node's does not, so a *correct* program failed the moment
+  it met the second host. **Monotonicity is promised; magnitude is not.**
+- **A THIRD "byte-identical" claim now exists and must not be merged with the
+  other two.** CLAUDE.md's claims table distinguishes the self-host fixedpoint
+  (our binary vs our own previous output) from behavioural parity against a gcc
+  oracle. 2026-08-30 adds: **the same compiler sources, executed on two different
+  machines — x86-64 natively and wasm32 under wasmtime — emit the same bytes for
+  the same input.** Same program, two hosts, one output. That is NOT a
+  fixedpoint claim and frankwasm was careful to say so unprompted. Anyone writing
+  release or website copy should treat it as a third row, not a rephrasing of the
+  first. Worth the owner deciding whether CLAUDE.md's table gains it.
 - **An A/B against a STASHED build poisons your own gate.** frank-optimize hit a
   RED `gate.sh quick` fixedpoint step on 2026-08-30 that was not its change: it
   had stashed to build a comparison binary and left the pre-change binary on disk
