@@ -1883,6 +1883,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-bignum-library | B | 50 | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-binary-integer-literals | A | 50 | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |
+| feature-c-a-directly-invocable-c-corpus-probe-that-is-not-a-make-test-target | C+B | 60 | feature | A C-lane agent making a C-wide change cannot measure it: every whole-program C target is a `make test-*` the no-full-suite hook refuses, so the evidence is whatever small tests it wrote, then a push and a hope. Give the lane a script that diffs a handful of real C programs against gcc in a couple of minutes. | — |
 | feature-c-alignment-attributes | C | 50 | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
 | feature-c-alloca-dynamic-stack | A | 55 | feature | alloca(): dynamic stack allocation for the C frontend | — |
 | feature-c-cmdline-define-flag | C | 40 | feature | C frontend: support `-D<name>[=<value>]` command-line macro defines | — |
