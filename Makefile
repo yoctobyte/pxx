@@ -4340,8 +4340,14 @@ test-threads: $(COMPILER)
 	# too, and EmitStrIncRefA64 already gets that right.
 	# Same deliberate break confirms it fires: MSTR_STATIC_RC=0 makes aarch64
 	# -O3 print `b=Zbcdef` while aarch64 -O0 stays correct.
+	# -O2 IS IN THIS LIST BECAUSE THE GATE SAYS `OptLevel < 2`, not `< 3`. When
+	# EmitStaticLitHandleA64 was promoted, this loop still read `0 3` -- so the
+	# only level aarch64 actually ships was the one level never asserted here,
+	# and -O3 covered the pass only incidentally. Proven live at -O2 rather than
+	# assumed: with MSTR_STATIC_RC=0 the aarch64 -O2 build prints `b=Zbcdef` and
+	# -O0 stays correct, so -O2 is sensitive to the pass in both directions.
 	@if command -v qemu-aarch64 > /dev/null 2>&1; then \
-	  for o in 0 3; do \
+	  for o in 0 2 3; do \
 	    ./$(COMPILER) --target=aarch64 -O$$o test/test_static_string_literals.pas $(TESTTMP)/test_ssl_a64_$$o >/dev/null || { echo "ssl aarch64 -O$$o compile FAIL"; exit 1; }; \
 	    tools/expect_same.sh aarch64/test_ssl_a64_$$o "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_ssl_a64_$$o; echo "exit=$$?")" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone\nexit=0')" || exit 1; \
 	  done; \
