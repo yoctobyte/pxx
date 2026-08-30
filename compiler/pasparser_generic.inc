@@ -428,6 +428,8 @@ end;
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body in pasparser_lval.inc, which also CALLS it above the body (the type-helper type-name receiver). pxx pre-scans and does not need this; FPC does. }
+function QualArgAliasName(const path: AnsiString): AnsiString; forward;
+procedure EmitQualAliasDecl(const aliasNm, path: AnsiString); forward;   { both bodies live below their first CALL (the qualified-type-name-as-generic-argument arms). pxx resolves across the unit; FPC resolves in source order and the seed build fails without these. }
 
 { Every name whose meaning DEPENDS ON A SPECIALIZATION, read straight out of
   Tokens[] rather than out of Templates[]. Two kinds, one concept:

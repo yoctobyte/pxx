@@ -178,4 +178,3 @@ frontend defect — see
 `regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload`.
 - 2026-08-30 — resolved, commit f5f361d74.
 
-- 2026-08-30 — resolved, commit f5f361d74.
