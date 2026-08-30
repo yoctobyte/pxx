@@ -17,7 +17,7 @@ _none_
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
-## unfinished (24)
+## unfinished (25)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -32,6 +32,7 @@ _none_
 | feature-c-gtk3-header-final-wiring | C | 55 | feature | Stock GTK3 headers import, link to libgtk-3.so.0 and run a real window — done and gated by test_c_gtk3_stock. The 2026-06-29 probe failure was a wrong include root, not an importer limit. Parked: dropping the explicit -I needs decide-which-gtk-a-bare-gtk-gtk-h-means, and the PCL migration is a Track B ticket. | decide-which-gtk-a-bare-gtk-gtk-h-means |
 | feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
+| feature-lib-tkinter-grid-pad-accepts-a-two-tuple | B | 45 | feature | CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence. | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
@@ -46,7 +47,7 @@ _none_
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 
-## blocked (9)
+## blocked (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -56,7 +57,6 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | bug-b-reportlab-mimic-multi-font-heap-corruption |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 50 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | decide-t-per-assertion-subjects-or-accept-the-file-level-label |
 | feature-esp-gpio-and-adc-callback-slices | B+S | 30 | feature | ESP peripheral callback API — GPIO (slice 2) and ADC (slice 3) | — |
-| feature-lib-tkinter-grid-pad-accepts-a-two-tuple | B | 45 | feature | CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence. | bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped |
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
@@ -851,6 +851,7 @@ _none_
 - [p 45] [A+O] feature-a-reentrant-heap-lock-and-per-thread-arenas
 - [p 45] [A] feature-dynamic-compiler-tables [parked — re-claim, do not duplicate]
 - [p 45] [P] feature-embed-pascal-script
+- [p 45] [B] feature-lib-tkinter-grid-pad-accepts-a-two-tuple [parked — re-claim, do not duplicate]
 - [p 45] [N] feature-n-from-accepts-a-quoted-foreign-file
 - [p 45] [N] feature-nilpy-hasattr-per-instance-assigned-tracking
 - [p 45] [N] feature-nilpy-methods-on-int-and-float

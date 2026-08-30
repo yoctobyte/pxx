@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:24 blocked:9 backlog:328 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2691 rejected:56`
+`working:4 unfinished:25 blocked:8 backlog:328 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2691 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
@@ -14,7 +14,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (24) — parked mid-flight; re-claim, do not duplicate
+## unfinished (25) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -27,6 +27,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-dynamic-compiler-tables` [A]
+- `feature-lib-tkinter-grid-pad-accepts-a-two-tuple` [B]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
@@ -41,7 +42,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (9) — has an unmet blocker; do not claim
+## blocked (8) — has an unmet blocker; do not claim
 
 - `bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works` [A+S] — blocked-by: bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
@@ -49,11 +50,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
-- `feature-lib-tkinter-grid-pad-accepts-a-two-tuple` [B] — blocked-by: bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 346, ranked
+## Ready — top 30 of 347, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -86,4 +86,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_316 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_317 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

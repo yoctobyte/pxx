@@ -2,9 +2,9 @@
 track: B
 prio: 45
 type: feature
-blocked-by: [bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]
+blocked-by: []
 summary: "CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence."
-status: blocked
+status: unfinished
 owner: frank-b
 ---
 
@@ -169,3 +169,47 @@ every option it is already setting.
 **Why this ticket stays open rather than being resolved:** its ask is that the
 short spelling work, and it does not. But there is nothing left for Track B to
 do, so it is parked on the N bug rather than held in `working/`.
+
+---
+
+## Re-verified 2026-08-30 (frankB) — the blocker is closed and this still fails, for a reason that is not a defect
+
+[[bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]]
+resolved earlier today. `tools/progress.sh check` then flagged this ticket as a
+STALE-EDGE: sitting in `blocked/` with every blocker closed, which makes it
+invisible to `ready`/`next` forever. Re-measured before moving it, and the
+answer is neither "fixed" nor "still broken":
+
+**The fix is not in the pin, and Track B builds only with the pin.** Pin is
+**v393** (`1d69760deabe`, blessed 2026-08-29 20:28 at `1fb9774b7417`); the N fix
+landed on master on 2026-08-30, *after* it. `compiler/pascal26` in this tree is
+byte-identical to `pinned`, so there is no binary here that carries the fix and
+this lane does not build one.
+
+Measured through v393 — the boundary is unchanged and exactly as the correction
+above describes:
+
+```
+grid(row=0, column=0, sticky="", columnspan=-1, rowspan=-1, padx=(8, 6), pady=2)   COMPILES
+grid(row=0, column=0, padx=8)                                                      COMPILES
+grid(row=0, column=0, padx=(8, 6))                                                 FAILS
+grid(padx=(8, 6))                                                                  FAILS
+```
+
+A NilPy-defined class with the same *shape* (`c.meth(a=0, v=(8, 6))` with an
+earlier default skipped) **passes** through v393. That is not evidence the fix
+arrived — it is the control that confirms the resolution's own diagnosis: the
+refusal comes from `FindUMethOverloadAhead`, the speculative overload probe,
+which a **Pascal-declared façade method** goes through and a NilPy class method
+does not. Two paths, one shape; only the façade arm is affected, and only the
+façade arm is what tkinter is.
+
+**So the gate is now pin advancement, not a ticket.** `blocked-by` is emptied
+because it named a closed ticket, and the ticket moves to `unfinished/` rather
+than `backlog/` — putting it in the ranker would dispatch work that cannot be
+done from this lane until the next `make pin` picks up the N fix.
+
+**To retire it:** after the next pin, re-run the four spellings above. If rows 3
+and 4 compile, close it — `lib/pcl` needs no change, which was this ticket's
+finding all along. If they still fail, that is a *new* N/A finding against a pin
+that contains the fix, and it should be filed as one rather than reopened here.
