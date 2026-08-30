@@ -228,4 +228,4 @@ coordinator to sequence rather than taken unilaterally.
   the lint is over-approximating. Track T/A.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f4fb9d31b.
