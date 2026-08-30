@@ -639,6 +639,32 @@ var
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
+{$ifdef PXX_ALLOC_CENSUS}
+  { ---- allocation census (-dPXX_ALLOC_CENSUS) ------------------------------
+    How much does this program allocate, and of what size? This runtime could
+    answer "was it read after free" (-dPXX_HEAP_DEBUG), "who retained it"
+    (-dPXX_OBJTRACE) and "what did the compiler infer" (PXXDBG), and could not
+    answer that one — so three sessions of
+    bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython reached for
+    callgrind instead, which is not installed on the box the work happens on
+    (and perf is blocked there too: perf_event_paranoid = 4). A share quoted
+    from an instrument nobody present can re-run is how that ticket ended up
+    ranking its own follow-ups on numbers it could not reproduce.
+
+    BSS-zeroed, so no initialiser and no startup hook. Counters only — there is
+    deliberately NO call-site attribution: that needs either a caller tag
+    threaded through every entry point or a stack walk, and both change what
+    they measure. Sizes plus rates answer the question this was built for. }
+  CensusAllocs : Int64;   { PXXAlloc calls }
+  CensusFrees  : Int64;   { PXXFree calls }
+  CensusBytes  : Int64;   { payload bytes handed out, after 8-rounding }
+  CensusReuse  : Int64;   { served from a size bin — the O(1) path }
+  CensusList   : Int64;   { served from the large first-fit list }
+  CensusBump   : Int64;   { served by bumping the arena (never yet freed) }
+  CensusArenas : Int64;   { HeapMmap calls }
+  CensusNext   : Int64;   { allocs at which the next report fires; 0 = first }
+  CensusBins   : array[0..HEAP_BIN_COUNT-1] of Int64;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   { --threadsafe on targets without x86-64's hand-emitted lock blobs (i386):
     a userspace spinlock guarding the allocator state (FreeList/HeapPtr/
@@ -703,14 +729,56 @@ var
 {$endif}
 
 {$ifdef CPU_WASM32}
-{ The wasm arena's base, as one named thing. HeapMmap's wasm arm calls this
-  instead of inlining @WasmArena[0] so the eventual memory.grow arm replaces a
-  single expression rather than a use site buried in a conditional chain.
-  Defined ABOVE its caller, not merely somewhere in the file: FPC resolves in
-  source order and the bootstrap seed build is the only thing that checks. }
-function WasmArenaBase: Int64;
+{ `external 'wasm'` is not a host module -- the wasm32 backend reads that
+  reserved module name as THIS MACHINE and emits the instruction inline instead
+  of declaring an import (ir_codegen_wasm32.inc, WasmInstrExtern). So this
+  declaration costs no import, and a host that supplies nothing still runs it.
+
+  memory.grow takes a PAGE count and returns the previous SIZE IN PAGES, or -1
+  if it could not grow -- not the new size, and not a byte address. Getting
+  that backwards yields a heap based inside the memory that was already in use,
+  which is the failure this comment exists to prevent. }
+function WasmMemoryGrow(pages: Integer): Integer;
+  external 'wasm' name 'memory.grow';
+
+{ The wasm arena's base, as one named thing -- the single expression HeapMmap's
+  arm goes through. Defined ABOVE its caller, not merely somewhere in the file:
+  FPC resolves in source order and the bootstrap seed build is the only thing
+  that checks.
+
+  It now grows linear memory rather than handing out the fixed BSS arena. The
+  arena stays as the FIRST block, so a program that allocates less than a
+  megabyte still never calls memory.grow -- and, more to the point, a host or a
+  toolchain that refuses to grow keeps exactly the behaviour it had. Past that,
+  each call takes fresh pages.
+
+  Pages are 64 KiB and memory.grow returns the previous size in pages, so the
+  base of what it just added is prev * 65536. New pages are ZERO by
+  specification, which is what lets PXXAlloc's bump path keep its zero-init
+  contract with no memset -- the same reasoning the BSS arena relied on, for
+  the same reason.
+
+  -1 on failure is passed straight through, because it is out of bounds on the
+  first touch. Returning 0 here would be the bug the note below describes:
+  address 0 is legal in linear memory, reads as zero, and has no page
+  protection, so an out-of-memory heap would silently overwrite the globals and
+  only trap thousands of allocations later. }
+function WasmArenaBase(len: Int64): Int64;
+var pages, prev: Integer;
 begin
-  Result := Int64(@WasmArena[0]);
+  if WasmArenaUsed = 0 then
+  begin
+    WasmArenaUsed := 1;
+    if len <= 1048576 then
+    begin
+      Result := Int64(@WasmArena[0]);
+      Exit;
+    end;
+  end;
+  pages := Integer((len + 65535) div 65536);
+  prev := WasmMemoryGrow(pages);
+  if prev < 0 then Result := -1
+  else Result := Int64(prev) * 65536;
 end;
 {$endif}
 
@@ -775,19 +843,15 @@ begin
     pointer leaves the declared memory. -1 is out of bounds on the first touch,
     which is the loud failure this target has no other way to produce.
 
-    WasmArenaBase is a named expression rather than @WasmArena[0] inlined at
-    the use site so that the eventual memory.grow arm replaces ONE thing.
-    Growth is not blocked by the module declaration -- the backend already
-    writes the no-maximum limits form, so memory.grow is legal on these modules
-    today; the only missing piece is an intrinsic to reach it from Pascal, which
-    is the wasm32 lane's half and deliberately NOT this ticket. }
-  if WasmArenaUsed <> 0 then
-    Result := -1
-  else
-  begin
-    WasmArenaUsed := 1;
-    Result := WasmArenaBase;
-  end;
+    IT GROWS. WasmArenaBase hands out the fixed BSS arena for the first request
+    that fits in it and calls memory.grow for everything after, so this arm is
+    no longer a one-megabyte ceiling. That was the half this note reserved for
+    the wasm32 lane: the module declaration never blocked growth (the backend
+    already writes the no-maximum limits form), only the lack of a way to reach
+    memory.grow from Pascal did, and `external 'wasm' name 'memory.grow'` is
+    that way. Measured: compiler.pas under WASI trapped in PXXAlloc, three
+    frames under EnsureTokCapacity, before this. }
+  Result := WasmArenaBase(len);
 {$elseif defined(CPUX86_64)}
   Result := __pxxrawsyscall(9, 0, len, 3, 34, -1, 0);
 {$elseif defined(CPUAARCH64)}
@@ -934,6 +998,11 @@ begin
   Result := np;
 end;
 {$else}
+{$ifdef PXX_ALLOC_CENSUS}
+{ Defined after PXXSysWrite, which is what it writes through. Forward here
+  because the trigger is inside PXXAlloc and the printer cannot be. }
+procedure PXXCensusReport; forward;
+{$endif}
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
@@ -949,6 +1018,12 @@ begin
 {$endif}
   if size <= 0 then size := 8;
   size := (size + 7) and (not NativeInt(7));   { round up to 8 -- see the note at PXXAlloc }
+{$ifdef PXX_ALLOC_CENSUS}
+  CensusAllocs := CensusAllocs + 1;
+  CensusBytes := CensusBytes + size;
+  if size <= HEAP_BIN_MAX then
+    CensusBins[Integer(size shr 3) - 1] := CensusBins[Integer(size shr 3) - 1] + 1;
+{$endif}
 
   { Free-list nodes are payload addresses; the size header is at [cur-8] and the
     next link is parked in the payload at [cur]. A reused block holds stale bytes,
@@ -965,6 +1040,9 @@ begin
     if cur <> 0 then
     begin
       FreeBins[bin] := PWord(cur)^;        { pop }
+{$ifdef PXX_ALLOC_CENSUS}
+      CensusReuse := CensusReuse + 1;
+{$endif}
       i := 0;
       while i < size do
       begin
@@ -976,6 +1054,9 @@ begin
       Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
       PXXHeapSpin := 0;
+{$endif}
+{$ifdef PXX_ALLOC_CENSUS}
+      if CensusAllocs >= CensusNext then PXXCensusReport;
 {$endif}
       Exit;
     end;
@@ -992,6 +1073,9 @@ begin
       begin
         if prev = 0 then FreeList := PWord(cur)^
         else PWord(prev)^ := PWord(cur)^;
+{$ifdef PXX_ALLOC_CENSUS}
+        CensusList := CensusList + 1;
+{$endif}
         i := 0;
         while i < size do
         begin
@@ -1001,6 +1085,9 @@ begin
         Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
         PXXHeapSpin := 0;
+{$endif}
+{$ifdef PXX_ALLOC_CENSUS}
+        if CensusAllocs >= CensusNext then PXXCensusReport;
 {$endif}
         Exit;
       end;
@@ -1028,6 +1115,9 @@ begin
     if arena < HEAP_ARENA then arena := HEAP_ARENA;
     HeapPtr := HeapMmap(arena);
     HeapEnd := HeapPtr + arena;
+{$ifdef PXX_ALLOC_CENSUS}
+    CensusArenas := CensusArenas + 1;
+{$endif}
     if (HeapLow = 0) or (HeapPtr < HeapLow) then HeapLow := HeapPtr;
     if HeapEnd > HeapHigh then HeapHigh := HeapEnd;
   end;
@@ -1035,8 +1125,19 @@ begin
   HeapPtr := HeapPtr + need;
   PWord(base)^ := size;                     { size header }
   Result := Pointer(base + 8);              { payload }
+{$ifdef PXX_ALLOC_CENSUS}
+  CensusBump := CensusBump + 1;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   PXXHeapSpin := 0;
+{$endif}
+{$ifdef PXX_ALLOC_CENSUS}
+  { Reported here and not on the reuse paths purely because this one already
+    ends the routine; the trigger reads CensusAllocs, which every path bumped.
+    Deliberately AFTER the spinlock is released: the printer takes no lock and
+    must not run inside one — the same rule PXXDbgFlush's header states, and
+    for the same reason (bug-a-threadsafe-plus-heap-debug-hangs-at-runtime). }
+  if CensusAllocs >= CensusNext then PXXCensusReport;
 {$endif}
 end;
 
@@ -1237,6 +1338,11 @@ var
 begin
   addr := Int64(p);
   if addr = 0 then Exit;
+{$ifdef PXX_ALLOC_CENSUS}
+  { Counted after the nil guard, so `frees` is comparable with `allocs`: a nil
+    free is not a free, and counting it would make live look negative. }
+  CensusFrees := CensusFrees + 1;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := 0;
   while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
@@ -1700,6 +1806,140 @@ begin
 {$endif}
 end;
 
+{$ifdef PXX_ALLOC_CENSUS}
+{ ---- allocation census report (-dPXX_ALLOC_CENSUS) -------------------------
+  One block to stderr each time the allocation count reaches the next power of
+  two. Geometric and not a fixed stride on purpose, and the reason is that
+  there is no exit hook to report from: the program's last line is emitted by
+  CODEGEN (EmitExit), not by this runtime, so a census that only printed at the
+  end would need a change outside this file. Doubling thresholds mean the last
+  report is always within 2x of the true total, a short program still gets one,
+  a long one gets a growth CURVE rather than a single number — and a program
+  that segfaults leaves its census behind, which a report-at-exit would not.
+
+  Read it as: `live` is allocs minus frees, so a flat live with a climbing
+  allocs is churn and a climbing live is retention. `reuse` versus `bump` says
+  whether the free lists are doing their job. The size histogram is where the
+  churn actually is.
+
+  ALLOCATES NOTHING, and that is a hard requirement rather than tidiness: this
+  runs from inside PXXAlloc, so an allocation here would re-enter the allocator,
+  and a managed string temp would be finalized on the way out into the release
+  blob which takes the heap lock. That is the hang PXXDbgFlush's header
+  documents (bug-a-threadsafe-plus-heap-debug-hangs-at-runtime); the rules are
+  the same here. Digits go out one byte at a time out of a local, and the label
+  text is indexed in place out of constants.
+
+  Cost when the define is OFF is zero — every counter and every trigger is
+  inside the ifdef, so the shipped allocator is unchanged.
+  bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+const
+  CEN_HDR   = 'pxx-census: allocs=';
+  CEN_FREE  = ' frees=';
+  CEN_LIVE  = ' live=';
+  CEN_BYTES = ' bytes=';
+  CEN_REUSE = ' reuse=';
+  CEN_LIST  = ' list=';
+  CEN_BUMP  = ' bump=';
+  CEN_AREN  = ' arenas=';
+  CEN_SIZES = 'pxx-census: sizes';
+
+procedure PXXCensusPut(kind: Integer);
+{ One byte at a time out of a string CONSTANT — no managed temp anywhere. }
+var i: NativeInt; b: Byte; r: Int64;
+begin
+  if kind = 1 then
+    for i := 1 to Length(CEN_HDR) do begin b := Byte(CEN_HDR[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 2 then
+    for i := 1 to Length(CEN_FREE) do begin b := Byte(CEN_FREE[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 3 then
+    for i := 1 to Length(CEN_LIVE) do begin b := Byte(CEN_LIVE[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 4 then
+    for i := 1 to Length(CEN_BYTES) do begin b := Byte(CEN_BYTES[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 5 then
+    for i := 1 to Length(CEN_REUSE) do begin b := Byte(CEN_REUSE[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 6 then
+    for i := 1 to Length(CEN_LIST) do begin b := Byte(CEN_LIST[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 7 then
+    for i := 1 to Length(CEN_BUMP) do begin b := Byte(CEN_BUMP[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 8 then
+    for i := 1 to Length(CEN_AREN) do begin b := Byte(CEN_AREN[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else
+    for i := 1 to Length(CEN_SIZES) do begin b := Byte(CEN_SIZES[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
+end;
+
+procedure PXXCensusNum(v: Int64);
+{ Decimal, no padding. Built high digit first into a local byte array so the
+  common case is one write; negatives cannot occur here but are printed rather
+  than hidden, because a negative `live` is exactly the bug this would be used
+  to find. }
+var buf: array[0..23] of Byte; n, i: Integer; d: Int64; r: Int64; neg: Boolean;
+begin
+  neg := v < 0;
+  if neg then v := -v;
+  n := 0;
+  if v = 0 then begin buf[0] := 48; n := 1; end
+  else
+    while v > 0 do
+    begin
+      d := v mod 10;
+      buf[n] := Byte(48 + d);
+      n := n + 1;
+      v := v div 10;
+    end;
+  if neg then begin buf[n] := 45; n := n + 1; end;
+  { buf holds the digits reversed; emit backwards. }
+  i := n - 1;
+  while i >= 0 do
+  begin
+    r := PXXSysWrite(2, Int64(@buf[i]), 1);
+    i := i - 1;
+  end;
+end;
+
+procedure PXXCensusReport;
+var i: Integer; b: Byte; r: Int64;
+begin
+  { Advance the threshold FIRST. If anything below ever allocated, the trigger
+    would otherwise still be armed and the report would recurse forever.
+
+    Geometric at 1.125 rather than doubling, and the ratio is the whole
+    usability of the tool. There is no exit hook, so the LAST report is the
+    closest thing to a total and its error is the step size: doubling leaves it
+    anywhere within 2x, which was measured to be too loose to A/B on — two runs
+    of the same program differing by half their allocations produced last-report
+    ranges that OVERLAPPED, so the honest reading was "no conclusion". At
+    +1/8 the tail is within 12.5% and about 180 lines cover 1e9 allocations.
+    Integer arithmetic throughout, and the +1 is what makes it move at all
+    below 8. }
+  if CensusNext = 0 then CensusNext := 1;
+  while CensusAllocs >= CensusNext do
+    CensusNext := CensusNext + (CensusNext div 8) + 1;
+
+  PXXCensusPut(1); PXXCensusNum(CensusAllocs);
+  PXXCensusPut(2); PXXCensusNum(CensusFrees);
+  PXXCensusPut(3); PXXCensusNum(CensusAllocs - CensusFrees);
+  PXXCensusPut(4); PXXCensusNum(CensusBytes);
+  PXXCensusPut(5); PXXCensusNum(CensusReuse);
+  PXXCensusPut(6); PXXCensusNum(CensusList);
+  PXXCensusPut(7); PXXCensusNum(CensusBump);
+  PXXCensusPut(8); PXXCensusNum(CensusArenas);
+  b := 10; r := PXXSysWrite(2, Int64(@b), 1);
+
+  PXXCensusPut(9);
+  for i := 0 to HEAP_BIN_COUNT - 1 do
+    if CensusBins[i] <> 0 then
+    begin
+      b := 32; r := PXXSysWrite(2, Int64(@b), 1);
+      PXXCensusNum((i + 1) * 8);
+      b := 58; r := PXXSysWrite(2, Int64(@b), 1);   { ':' }
+      PXXCensusNum(CensusBins[i]);
+    end;
+  b := 10; r := PXXSysWrite(2, Int64(@b), 1);
+end;
+{$endif}
+
+
 
 {$ifndef PXX_ESP_BARE}
 { ===== Console input (read/readln) for the cross targets =====
@@ -1997,6 +2237,18 @@ begin
   Result := __pxxrawsyscall(5, Int64(path), 0, 0);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$elseif defined(CPU_RISCV32)}
+  { asm-generic, like aarch64 above: there is NO plain `open` in that table, so
+    this is openat(AT_FDCWD = -100, path, O_RDONLY, 0). }
+  Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$elseif defined(CPU_XTENSA)}
+  { xtensa's OWN table, measured under qemu-xtensa -strace: openat is 288, not
+    the 56 riscv32 and aarch64 use. xtensa DOES still carry a legacy open (8),
+    and this deliberately does not use it -- openat is what the other generic
+    targets here issue, and the matching SysOpen builtin in
+    ir_codegen_xtensa.inc lowers to openat for the same reason, so the two
+    routes to a file descriptor on this target cannot drift apart. }
+  Result := __pxxrawsyscall(288, -100, Int64(path), 0, 0);
 {$else}
   { NO ARM FOR THIS TARGET — see the group comment above. Returning the POSIX
     failure value is the whole point: before this was one chain it was four
@@ -2009,6 +2261,10 @@ begin
 end;
 
 function PXXSysLseek(fd, offset, whence: NativeInt): Int64;
+{$if defined(CPU_RISCV32)}
+var res, r: Int64;   { STACK locals -- this group runs under the heap lock and
+                       must allocate nothing (see the group comment). }
+{$endif}
 begin
 {$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(8, fd, offset, whence);
@@ -2018,6 +2274,32 @@ begin
   Result := __pxxrawsyscall(19, fd, offset, whence);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(62, fd, offset, whence);
+{$elseif defined(CPU_RISCV32)}
+  { rv32's 62 is _llseek(fd, off_hi, off_lo, loff_t *result, whence), NOT plain
+    lseek -- rv32 has no plain lseek at all. The 3-arg form leaves the result
+    pointer NULL and the kernel returns EINVAL, which is not a hypothesis:
+    qemu-riscv32 -strace on test_cross_loadfile printed
+
+      openat(AT_FDCWD,"test/hello.pas",O_RDONLY) = 3
+      llseek(3,0,2,NULL,UNKNOWN)                 = -1 errno=22
+      read(3,0x2b2ad050,-22)                     = -1 errno=14
+
+    -- a size of -1 flowing into read as a count, and LoadFile publishing an
+    EMPTY string with no error anywhere. This mirrors PalBackendSeek in
+    lib/rtl/platform/posix/platform_backend.pas, which already carries the
+    identical split and the identical reason; the two must not drift.
+
+    NOTE the sibling comment in that same file's rv32 block still says the plain
+    form is tolerated by qemu-user for small offsets. The strace above falsifies
+    that for the RETURN VALUE case, which is the one this helper needs.
+    bug-b-platform-backend-rv32-comment-claims-plain-lseek-is-tolerated }
+  res := 0;
+  r := __pxxrawsyscall(62, fd, (offset shr 32) and $FFFFFFFF,
+                       offset and $FFFFFFFF, Int64(@res), whence);
+  if r < 0 then Result := r else Result := res;
+{$elseif defined(CPU_XTENSA)}
+  { xtensa's own table again: lseek is 15. Same small-offset caveat as rv32. }
+  Result := __pxxrawsyscall(15, fd, offset, whence);
 {$else}
   { No arm — see PXXSysOpenRO. A garbage size here is the worse half of the
     defect: PXXStrLoadFile feeds it straight to PXXAlloc(size + hdr + 1). }
@@ -2035,6 +2317,10 @@ begin
   Result := __pxxrawsyscall(6, fd);
 {$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(57, fd);
+{$elseif defined(CPU_RISCV32)}
+  Result := __pxxrawsyscall(57, fd);                { asm-generic }
+{$elseif defined(CPU_XTENSA)}
+  Result := __pxxrawsyscall(9, fd);                 { xtensa's own table }
 {$else}
   { No arm — see PXXSysOpenRO. }
   Result := -1;
