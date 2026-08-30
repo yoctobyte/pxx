@@ -20,6 +20,30 @@ actually perform on the tree they build. Two of those are silent when wrong:
 
 Assertions are on VALUES, never on presence: `hasattr(ET, "Element")` would have
 passed throughout every way this shim could have been wrong.
+
+EXTENDED 2026-08-30 (feature-b-sweep-mimic-shims-against-cpython, phase 2).
+The original 57 checks were dense on the tree model and the path walker. What
+was untouched was the mutation surface a treebuilder actually leans on --
+`extend`, `__setitem__`, `insert` at the ends and out of range, and `remove`'s
+RAISING arm -- plus qualified tags at a second path step, which is the real
+case the brace-aware splitter exists for. Every one of those agrees with
+CPython; the shim came out of this pass clean.
+
+TWO SPELLINGS BELOW ARE LOAD-BEARING WORKAROUNDS. Both are frontend bugs, not
+this shim's, and both are written the long way here rather than left to fail:
+
+  * fixtures are built as separate `a = Element("a")` statements, NEVER as
+    `a, b, c = Element("a"), Element("b"), Element("c")`. That spelling binds
+    every name to the whole right-hand LIST, so all three children come out
+    tagless -- bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-
+    iterable-values. It is triggered by Element declaring `__iter__`, and it
+    is silent: the assignment raises nothing.
+  * `len()` of a COMMENT is not asserted, though `len()` of an element is.
+    Comment() names itself (its `.tag` IS the factory, as upstream), and any
+    self-referencing def loses its inferred return type, after which `len`
+    alone stops dispatching `__len__` -- bug-n-len-does-not-dispatch-len-
+    dunder-on-a-dynamically-typed-value. `.text`, `.attrib` and `.keys()` on
+    the same Comment are fine and ARE asserted.
 """
 
 import xml.etree.ElementTree as ET
@@ -281,6 +305,112 @@ check("full_walk", "".join(pieces),
       '<DOCUMENT_ROOT><html><head><title>Hi</title></head><body>'
       '<!--a note--><p class="lead">one <em>two</em> three</p>'
       '</body></html></DOCUMENT_ROOT>')
+
+# ============================================================================
+# EXTENDED 2026-08-30 -- the mutation surface and the deeper paths.
+# NOTE the fixture style: separate statements, never `a, b = Element(), Element()`.
+# See the docstring -- that spelling silently binds both names to a list.
+# ============================================================================
+
+# ------------------------------------------------- extend / setitem / insert
+xr = ET.Element("root")
+xa = ET.Element("a")
+xb = ET.Element("b")
+xc = ET.Element("c")
+xr.extend([xa, xb, xc])
+check("extend_len", len(xr), 3)
+check("extend_order", [x.tag for x in xr], ["a", "b", "c"])
+xr2 = ET.Element("root")
+xr2.extend([])
+check("extend_empty", len(xr2), 0)
+# __setitem__ REPLACES rather than inserting
+xr[0] = ET.Element("z")
+check("setitem_tag", xr[0].tag, "z")
+check("setitem_len", len(xr), 3)
+# insert at the front, past the end (clamped, like list.insert), and negative
+xr.insert(0, ET.Element("first"))
+check("insert_0", [x.tag for x in xr], ["first", "z", "b", "c"])
+xr.insert(99, ET.Element("past"))
+check("insert_past_end", [x.tag for x in xr],
+      ["first", "z", "b", "c", "past"])
+xr.insert(-1, ET.Element("neg"))
+check("insert_negative", [x.tag for x in xr],
+      ["first", "z", "b", "c", "neg", "past"])
+
+# ------------------------------------------------------- remove's RAISING arm
+# Upstream lets list.remove's ValueError out; a shim that returned quietly
+# would turn a treebuilder's bookkeeping error into a silently wrong tree.
+absent = "no"
+try:
+    ET.Element("p").remove(ET.Element("q"))
+except ValueError:
+    absent = "ValueError"
+check("remove_absent_raises", absent, "ValueError")
+# ...and removal is by IDENTITY, so an equal-TAGGED stranger is still absent
+xp = ET.Element("p")
+xk = ET.Element("k")
+xp.append(xk)
+stranger = "no"
+try:
+    xp.remove(ET.Element("k"))
+except ValueError:
+    stranger = "ValueError"
+check("remove_by_identity", stranger, "ValueError")
+check("remove_identity_kept_child", len(xp), 1)
+
+# ---------------------------------- qualified tags at a SECOND path step
+# This is the case the brace-aware splitter exists for: a naive split("/") on
+# {http://...}body/{http://...}div produces six nonsense steps and find()
+# answers None -- for the RIGHT path. One qualified step cannot show it.
+NS = "{http://www.w3.org/1999/xhtml}"
+qh = ET.Element(NS + "html")
+qb = ET.Element(NS + "body")
+qh.append(qb)
+qb.append(ET.Element(NS + "div"))
+check("nested_qualified", qh.find(NS + "body/" + NS + "div").tag, NS + "div")
+check("star_in_middle", qh.find("*/" + NS + "div").tag, NS + "div")
+check("dot_then_step", qh.find("./" + NS + "body").tag, NS + "body")
+# a miss at the LAST step and a miss at an intermediate one both give None,
+# and neither raises
+check("deep_miss", qh.find(NS + "body/" + NS + "nope"), None)
+check("intermediate_ok_leaf_missing", qh.find(NS + "body/nope"), None)
+
+# ------------------------------------------------------------- get / items
+# An attribute whose value is falsy is still PRESENT: `get` must return "" and
+# not the default, which is the difference between `in` and truthiness.
+ga = ET.Element("e", {"empty": "", "n": "0"})
+check("get_falsy_value", ga.get("empty"), "")
+check("get_default_int", ga.get("missing", 0), 0)
+check("items_order", ga.items(), [("empty", ""), ("n", "0")])
+check("keys_order", ga.keys(), ["empty", "n"])
+
+# --------------------------------------------------------- Comment with no text
+# len() of a Comment is NOT asserted -- see the docstring.
+cm = ET.Comment()
+check("comment_no_text", cm.text is None, True)
+check("comment_attrib_len", len(cm.attrib), 0)
+check("comment_keys", cm.keys(), [])
+
+# ------------------------------------------------------------- ElementTree
+# A tree with no root answers None rather than raising, and _setroot is how a
+# hand-built tree acquires one.
+et0 = ET.ElementTree()
+check("empty_tree_root", et0.getroot(), None)
+et1 = ET.ElementTree(ET.Element("top"))
+check("tree_root_tag", et1.getroot().tag, "top")
+et2 = ET.ElementTree()
+et2._setroot(ET.Element("late"))
+check("setroot", et2.getroot().tag, "late")
+
+# ------------------------------------- clear() resets all five, tag excepted
+full = ET.Element("f", {"a": "1"})
+full.text = "t"
+full.tail = "l"
+full.append(ET.Element("kid"))
+full.clear()
+check("clear_all",
+      [len(full), full.text, full.tail, len(full.attrib), full.tag],
+      [0, None, None, 0, "f"])
 
 if fails == 0:
     print("MIMIC-XML-ETREE OK")

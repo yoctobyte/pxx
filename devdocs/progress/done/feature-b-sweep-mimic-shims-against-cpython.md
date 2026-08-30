@@ -4,7 +4,7 @@ prio: 40
 type: feature
 blocked-by: []
 summary: "Campaign: differential-test the mimic_ shims against CPython, after a two-shim pilot returned five findings including a SIGSEGV. Phase 1 is the codecs differential — the only shim with real surface and NO differential — whose encode half is blocked by bug-b-codecs-encode-segfaults-for-every-encoding-except-utf-8. Phase 2 is edge-coverage spot-checks on the already-covered shims, not re-testing their happy paths."
-status: working
+status: done
 owner: frankB
 ---
 
@@ -218,3 +218,107 @@ existing ticket recorded the `except Exception` case; this pass added the
 rather than a fallback, and recommended p60 without touching Track N's number.
 
 **Phase 1 is complete.** Both shims that had no differential now have one.
+
+### Phase 2 — DONE, 2026-08-30. All four candidates.
+
+Not re-testing happy paths: for each shim that already had a differential, the
+only question was whether it pushed the region its prose is silent about.
+**Three of four had a defect there, and it was the same region every time —
+the parameter or the argument, never the algorithm.**
+
+| shim | checks | outcome |
+| --- | --- | --- |
+| `saxutils` | 18 → 45 | `quoteattr` merged the caller's `entities` **over** the three whitespace ones; CPython merges them **under** |
+| `copy` | 13 → 35 | clean as a shim; surfaced a **frontend** bug |
+| `bisect` | 18 → 50 | `hi` is a **sentinel at -1**, not a sign test |
+| `etree` | 56 → 83 | **clean** — nothing found, and that is the result |
+
+**saxutils.** CPython writes `{**entities, "\n": "&#10;", ...}`, so the three
+come LAST and override the caller. Ours seeded with the three and let the
+caller overwrite them — the obvious way round, and wrong: numeric escaping of
+`\n`/`\r`/`\t` is not a default, it is the invariant that makes an attribute
+value survive a parser's normalisation, and CPython refuses to let it be
+switched off. Also pinned three CPython **quirks** so nobody "fixes" them:
+`escape("a&b", {"&": "X"})` is the mangled `"aXamp;b"` in both; `unescape`
+knows three entities and not `&quot;`/`&apos;`/numeric refs; the whitespace
+three are not overridable.
+
+**bisect.** The `-1` default was not an invention — CPython's `bisect` is the C
+`_bisect` module, whose argument clinic defaults `hi` to `-1` and does
+`if (hi == -1) hi = len(list)`. But the shim tested `hi < 0`, making every
+negative mean "the end". `bisect_right([1,2,2,2,3], 2, 0, -2)` was 4 here and 0
+in CPython. One character. The old docstring reasoned *"a negative hi is not
+meaningful for this function otherwise"* — almost right, and it conflated `-1`
+with negative, which is the kind of nearly-correct sentence a differential
+exists to catch.
+
+**etree came out clean and that is a real result.** Its 27 new checks cover the
+mutation surface a treebuilder leans on (`extend`, `__setitem__`, `insert` at
+both ends and out of range, `remove`'s raising arm) and qualified tags at a
+**second** path step — the actual case the brace-aware splitter exists for,
+which a single qualified step cannot exercise. Everything agreed. The shim was
+right; the file now says so under test rather than by assertion in its header.
+
+### Two frontend bugs, both found by writing fixtures rather than by testing
+
+Neither is in a shim, and neither would have been reachable without trying to
+write ordinary Python against one:
+
+1. [[bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values]]
+   (N, p65). `a, b = Element("a"), Element("b")` binds **both** names to the
+   whole right-hand list. Triggered by the value type declaring `__iter__` or
+   `__getitem__` — `__len__` alone is fine — and only for an **inline** tuple:
+   `a, b = tup`, `a, b = f()` and for-loop targets are all correct. **The swap
+   idiom `p, q = q, p` is hit.** Silent; a longer program built on it
+   segfaults. Sibling of the existing
+   [[bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value]] — same
+   statement, different value kind, two defects in one construct, so grep for
+   the other before closing either.
+2. [[bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value]]
+   (N, p60). `len(x)` raises whenever `x`'s static type was not inferred —
+   `lst[0]`, `d["k"]`, an unannotated parameter, or the return of any
+   **self-referencing** def, recursion included. On the same value `.attr`,
+   `.method()`, `for`-in and `x[i]` all dispatch fine, so `len` is the one
+   protocol with no dynamic fallback — and iteration already got exactly this
+   fix in [[feature-nilpy-for-loop-getitem-protocol-fallback]]. One concept,
+   two paths, second one broken.
+
+Both are written around **loudly** in the etree differential — separate
+fixture statements, and `len()` of a Comment left unasserted — with the reason
+named in the file and in the Makefile, so the workaround cannot be tidied away
+by someone who does not know why it is there.
+
+## Disposition
+
+**Campaign complete.** Six shims swept (2 in phase 1 with no gate at all, 4 in
+phase 2 with a thin one), **125 new checks in phase 1 and 88 added in phase 2**,
+every file byte-identical under both interpreters and wired into `lib-test`
+with its count pinned.
+
+**Findings: 5 in Track B (all fixed), 6 routed to Track N, 1 recorded on a
+decided U ticket.**
+
+### What the sweep learned, for whoever runs the next one
+
+**Test the header's claims first.** Three of three phase-1 shims and two of
+four phase-2 shims had their defect exactly where a past session had written a
+confident sentence: a gate that was cited and never existed; `__str__` methods
+claimed to "make the common arm right" when the common arm is what they miss;
+a "validity walk" that was not there; "a negative hi is not meaningful"
+conflating -1 with negative. The sentences a past session thought worth
+writing down mark where it was **least sure**, and they are the cheapest
+possible ranking of where to look.
+
+**Rank by parameter, not by size.** Every phase-2 defect was in a
+*parameter* — `entities`, `hi` — and none was in an algorithm. The shims'
+algorithms were all correct. Check counts were a bad proxy (recorded above for
+`mimic_warnings`); "which argument does the prose describe least?" was a good
+one.
+
+**Writing the test finds frontend bugs that reading it never would.** Both N
+bugs above came from building fixtures in idiomatic Python, not from any
+assertion. That is an argument for writing differentials in the ordinary
+style and only then working around what breaks — loudly.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

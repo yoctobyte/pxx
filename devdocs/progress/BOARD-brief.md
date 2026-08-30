@@ -5,13 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:30 blocked:7 backlog:383 backlog_new:20 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2822 rejected:58`
+`working:3 unfinished:30 blocked:7 backlog:383 backlog_new:22 experimental:20 rainy-day:44 float:24 done-followup:3 decided:125 done:2823 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets` [A] — owner: claude-A
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S] — owner: frankS
-- `feature-b-sweep-mimic-shims-against-cpython` [B] — owner: frankB
 - `feature-unicodestring-model` [A] — owner: frankwasm
 
 ## unfinished (30) — parked mid-flight; re-claim, do not duplicate
@@ -57,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 416, ranked
+## Ready — top 30 of 418, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -77,6 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
@@ -88,6 +88,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [A]` bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array (unblocks 1)
-- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_386 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_388 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

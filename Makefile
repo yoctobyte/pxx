@@ -17392,7 +17392,28 @@ endif
 	# byte; that diff is what caught `find("*")` matching a comment, which the
 	# plausible reading gets backwards.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_etree_elementtree.npy $(TESTTMP)/lib_mimic_xml_etree
-	tools/expect_same.sh lib_mimic_xml_etree.1 "$$($(TESTTMP)/lib_mimic_xml_etree | grep -c '=ok')" "56"
+	# etree -- 56 checks became 83 in phase 2 of feature-b-sweep-mimic-shims-
+	# against-cpython. The original set was dense on the tree model and the path
+	# walker; untouched was the mutation surface a treebuilder leans on (extend,
+	# __setitem__, insert at the ends and out of range, remove's RAISING arm)
+	# and qualified tags at a SECOND path step -- the real case the brace-aware
+	# splitter exists for, which one qualified step cannot show. All agree: this
+	# shim came out of the sweep CLEAN, and that is the result, not a null one.
+	#
+	# TWO SPELLINGS IN THAT FILE ARE LOAD-BEARING WORKAROUNDS for frontend bugs,
+	# not style. Do not "tidy" either.
+	# (1) Fixtures are separate `a = Element("a")` statements, never
+	# `a, b, c = Element("a"), Element("b"), Element("c")` -- that binds every
+	# name to the whole right-hand LIST, silently, so all three children come
+	# out tagless (bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-
+	# iterable-values, triggered by Element declaring __iter__).
+	# (2) len() of a COMMENT is not asserted, though len() of an element is:
+	# Comment() names itself (its .tag IS the factory, as upstream), any
+	# self-referencing def loses its inferred return type, and len alone then
+	# stops dispatching __len__ (bug-n-len-does-not-dispatch-len-dunder-on-a-
+	# dynamically-typed-value). .text/.attrib/.keys() on the same Comment are
+	# fine and are asserted.
+	tools/expect_same.sh lib_mimic_xml_etree.1 "$$($(TESTTMP)/lib_mimic_xml_etree | grep -c '=ok')" "83"
 	tools/expect_same.sh lib_mimic_xml_etree.2 "$$($(TESTTMP)/lib_mimic_xml_etree | tail -1)" "MIMIC-XML-ETREE OK"
 	# collections.abc's Mapping / MutableMapping, the ABC MIXIN pattern
 	# (feature-b-mimic-collections-abc-mapping-and-mutablemapping). The shim

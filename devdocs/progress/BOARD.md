@@ -8,13 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets | A | 50 | bug | The cdecl soundness reject still has its argument-shaped door on i386/arm32/aarch64/riscv32 | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 50 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
-| feature-b-sweep-mimic-shims-against-cpython | B | 40 | feature | Campaign: differential-test the mimic_ shims against CPython, after a two-shim pilot returned five findings including a SIGSEGV. Phase 1 is the codecs differential — the only shim with real surface and NO differential — whose encode half is blocked by bug-b-codecs-encode-segfaults-for-every-encoding-except-utf-8. Phase 2 is edge-coverage spot-checks on the already-covered shims, not re-testing their happy paths. | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
 ## unfinished (30)
@@ -452,7 +451,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (20)
+## backlog_new (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -462,7 +461,9 @@ _none_
 | bug-n-a-frozenset-returned-from-a-def-arrives-empty | N | 60 | bug | A frozenset returned from a def arrives at the caller EMPTY -- len 0, repr 'frozenset()', membership False -- no matter how it was built. set, list, dict and tuple returned from the same shape are all correct, and a frozenset that never crosses a return is correct too. Silent data loss, no crash, no error. | — |
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
 | bug-n-double-star-unpacking-is-rejected-at-a-method-call | N | 45 | bug | `obj.m(**d)` is a parse error — `expected expression` — while the identical `f(**d)` on a plain function WORKS. Dict-unpacking into any METHOD call is rejected, pure-Python classes included, so it is not a shim or binding issue but the call parser. CPython runs all of these, so it is an upward-compatibility break by Track N's own rule. | — |
+| bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value | N | 60 | bug | len(x) raises TypeError: expected an object with a length, got object whenever x's static type was not inferred, even though x's class defines __len__: an element of a list, a value out of a dict, an unannotated parameter, the return of any self-referencing or recursive function. The same value answers .attr, .method(), for-in and x[i] correctly, so len is the one protocol with no dynamic fallback. | — |
 | bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point | N | 60 | bug | `'\\xNN'` for NN >= 0x80 puts a RAW BYTE in the string instead of code point U+00NN, producing a malformed string: '\\xe9' encodes to [233] not [195,169], and '\\x80' reports len() == 0 with ord() raising TypeError. chr(233), '\\u00e9' and a literal 'é' are all correct, so it is the \\x escape specifically. | — |
+| bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values | N | 65 | bug | `a, b = X(), Y()` binds EVERY target to the whole right-hand list instead of unpacking it, when the values' type defines __iter__ or __getitem__. The swap idiom `p, q = q, p` is hit. A NAMED right-hand side (`a, b = tup`), a call (`a, b = f()`) and for-loop targets are all correct, and so is any class without __iter__/__getitem__ -- so it takes a container-ish class AND an inline tuple display to trigger. Silent: downstream sees a list, and a longer program segfaults. | — |
 | bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file | P | 30 | bug | `{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
@@ -718,9 +719,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2822)
+## done (2823)
 
-2822 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2823 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -805,6 +806,7 @@ _none_
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
+- [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
@@ -821,6 +823,7 @@ _none_
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
 - [p 60] [N] bug-n-async-def-and-await-are-not-implemented
+- [p 60] [N] bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
