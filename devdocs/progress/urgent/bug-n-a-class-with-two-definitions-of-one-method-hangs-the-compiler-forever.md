@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 summary: "9-line repro: a class defining the same method twice, whose body assigns a parameter to a SAME-NAMED attribute (`self.prefix = prefix`), plus any later scope holding a local of that name, makes the compiler spin at 100% CPU forever. RSS is flat, so it never OOMs and never self-terminates — it hangs until killed. CPython accepts the source (last definition wins). Any lane running a lib gate over such a file hangs with no output."
 status: urgent
-owner: unassigned
+owner: ""
 ---
 
 # A class with two definitions of one method hangs the compiler forever
@@ -146,3 +146,123 @@ implementation is written and its CPython differential is banked and passing
 `lib/rtl` until this is fixed. Per the platonic-code rule the source is **not**
 being reshaped to dodge this — renaming the local would silence it and hide the
 bug.
+
+## Diagnosis pass — 2026-08-30, frankD (Track D, out of lane: **measurement only, no compiler edit**)
+
+Dispatched here because D's queue was dry. **I hold Track D only, so the fix is
+not mine to make** — this pass narrows it and hands off. frankA confirmed
+`pyparser.inc` / `pylexer.inc` are free and that it holds `x64enc.inc` +
+`compiler.pas`, is *next* in `symtab.inc`, and that frank-rust holds
+`pasparser_generic.inc` uncommitted while unresponsive.
+
+### Reproduced on the CURRENT pin, which is not the one it was filed against
+
+Filed against `53800fbeb0b66e11`; reproduced against **v393
+`1d69760deabe2865`** (v394 was blessed and withdrawn in between). Both spellings
+hang: compiling the module **directly**, and compiling a file that imports it.
+So the import is not an ingredient — the module alone is enough, which makes the
+repro one file shorter than the ticket's.
+
+### The freeze point, located exactly
+
+`PXXDBG=all`, two runs, 8 s and 20 s:
+
+```
+8s : rc=124  42880 lines
+20s: rc=124  42880 lines
+cmp: IDENTICAL
+```
+
+**The spin emits nothing.** It is entered immediately after the last line, and
+the last three lines are:
+
+```
+PXXDBG a.mlzero sym=prefix tk=22 isarray=FALSE arrlen=0 -> 16
+PXXDBG n.shadow self   user=FALSE nilpyuser=TRUE curunit=-1
+PXXDBG n.shadow prefix user=FALSE nilpyuser=TRUE curunit=-1
+```
+
+That is the same instrument and the same verdict shape as
+`bug-nilpy-render-backend-py-compile-does-not-terminate` — and see below, they
+are still not the same bug.
+
+**What this rules out.** A retry loop spanning name-resolution *calls* would keep
+emitting `n.shadow`, and it does not. So this is a loop **inside one routine**,
+below the granularity of every channel `PXXDBG=all` turns on. Combined with flat
+RSS, it allocates nothing and calls nothing instrumented.
+
+### What the trace says about the shape
+
+Both definitions register, and are distinguished by token offset:
+
+```
+PXXDBG n.ret def@5  __init__ tk=1 rec=0 sawNone=0 trial=0
+PXXDBG n.ret def@24 __init__ tk=1 rec=0 sawNone=0 trial=0
+PXXDBG n.ret def@43 other    tk=1 rec=0 sawNone=0 trial=0
+```
+
+So the duplicate is **not** collapsed at registration — two rows survive, which
+is consistent with frankB's reading that two definitions supply two answers to
+one question.
+
+Immediately before the freeze the trace repeats a three-line unit —
+`n.shadow self` / `n.shadow prefix` / `a.mlzero sym=prefix … -> 16` — i.e. the
+compiler re-processing the same statement. **The managed local `prefix` is
+re-zeroed at the same slot (`-> 16`) every time**, which is why RSS is flat: the
+loop is not accumulating symbols, it is redoing one statement without advancing.
+
+### Not a duplicate of [N p68] — measured, not argued
+
+frankA proposed the resource signature as the cheap discriminator. It **fails to
+discriminate**: p68 is 95% CPU / state R / flat RSS and byte-identical
+`PXXDBG=all` at 20 s vs 45 s; this is 100% CPU / state R / flat RSS and
+byte-identical at 8 s vs 20 s. Same signature on both axes.
+
+So I checked the ingredient instead. **`render_backend.py` contains no
+duplicated method name at all** — parsed for `def` names per `class`, the
+duplicate set is empty — while it does carry six same-name `self.X = X`
+assignments. Ingredient 1 is absent, and frankB's control says a single
+definition compiles. **Different bug.** (Method note: a shallow line-based parse,
+so it would miss a duplicate hidden by unusual indentation; the negative is
+strong, not absolute.)
+
+That is worth more than a duplicate would have been: whoever takes p68 now knows
+the two-definitions lead does not apply there, and the shared spin/flat-RSS
+signature is evidence that **NilPy has more than one unbounded loop**, not that
+it has one bug filed twice.
+
+### A separate latent hazard found on the way — filed, not fixed
+
+**Four** functions in `compiler/symtab.inc` walk the ancestor chain
+`curr := UClsParent[curr]` with **no cycle guard** — `FindUField:1225`,
+`FindUMeth:1275`, `IsSubclassOf:1308`, `FindUProp:1366`. A parent cycle spins in
+any of them forever, silently, with flat RSS — exactly this failure signature.
+(I went to cite one and found four; the line I first wrote down, 1264, was wrong,
+which is why they were counted rather than quoted.) The
+2026-08-15 fix for `bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler`
+put its guard on the **declaration** path in `pyparser.inc` ("class X cannot
+inherit from itself"), so the *walk* is still unguarded and a second route to a
+cycle reproduces that hang.
+
+**Probably not this bug** — this repro has no inheritance, and a parent cycle
+would hang regardless of frankB's third ingredient, which the controls say is
+required. Filed separately as
+`bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard`.
+
+### Where the fix belongs, and what is still open
+
+The routine that spins is entered right after `PyUserShadowsProc` returns for
+`prefix`. `PyUserShadowsProc` itself lives in **`symtab.inc`** (shared, Track A);
+its callers are overwhelmingly in **`pyparser.inc`** (Track N). **Which of the
+two owns the loop is the open question, and it decides the lane.**
+
+Next instrument, for whoever takes it: this needs a stack, and `PXXDBG` cannot
+reach inside a single routine. `ptrace_scope=1` blocks *attaching*, but the loop
+is reached in under 10 s, so **gdb launching the compiler as its own child is
+allowed and cheap here** — unlike p68, where the same idea costs 25 minutes a
+try. My two attempts at the batch-mode SIGINT dance produced an empty log and I
+stopped rather than keep fighting the harness; an interactive gdb should get the
+frame in one go.
+
+**Left in `urgent/`, not claimed for the fix.** The diagnosis is banked; the
+fix needs a lane that owns compiler files.
