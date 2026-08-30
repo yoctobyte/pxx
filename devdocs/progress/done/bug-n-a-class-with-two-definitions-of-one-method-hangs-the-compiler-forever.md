@@ -496,4 +496,4 @@ rather than a fact about either chain — is the argument for a guard that a new
 walk cannot bypass, and it is next in this `symtab.inc` pass.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 0425a62c8.
