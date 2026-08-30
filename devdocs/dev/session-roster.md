@@ -22508,3 +22508,62 @@ answer misleads one agent while a verify row's misleads everyone downstream. It 
 also orthogonal to sweep *rate*: no amount of sampling makes a row that names one
 sha and tests another visible, and it degrades the bisect the whole design rests
 on.
+
+## CORRECTION — the v398 "row tested a different sha" claim was a CATEGORY ERROR, and I relayed it as verified
+
+**Retract the last paragraph of the entry above.** frankT caught it; I confirmed
+every step independently:
+
+```
+git cat-file -t 24c1e746bf69   -> fatal: Not a valid object name
+git cat-file -t 992065f21f33   -> fatal: Not a valid object name
+git rev-parse b4ff9adea^       -> a6d68191f846b8aa5039cd900f91a904355c6a42
+```
+
+**Neither string is a git object. Both are binary SHA-256 prefixes.** `b4ff9adea^`
+is `a6d68191f846`, nothing like `24c1e746bf69`. The two values being equated do not
+live in the same namespace. `24c1e746bf69` is the compiler that seven's **17:33:23Z
+full run at `06034ad`** self-hosted; `992065f21f33` is the v398 pin's blessed binary
+at `c8e132a02b92`. Two binaries, two commits, and **their inequality is evidence of
+nothing.**
+
+**Structurally the claim could not have been true**: `pin_verify` stores only
+`['date','red','sha','tier','ver','verdict']` — **no fixedpoint sha at all.** The
+string lives in `job_reason`, a separate live map keyed by job whose entry carries
+`job_tier: full` from the most recent full run. Rendering `pin_verify.red` beside
+`job_reason` annotates v398's red list with reasons captured at a different commit.
+It is a **join/labelling artifact in the reader**, not a stale seed in the runner,
+and **no RED was published against an untested sha.**
+
+**The irony frankT found is the keeper:** `update_job_reasons`'s own docstring says a
+reason must be cleared rather than carried, because keeping it *"would attach a
+previous run's explanation to this run's failure, which is a true sentence about the
+wrong subject."* The join reintroduces exactly that failure **across** runs — the
+same defect one level up, inside the code written to prevent it.
+
+**My error is the worse half and it is specific.** tstate itself printed the warning
+— *"the reasons in `job_reason` belong to the NEWEST run, not to this verify"* — and
+I quoted that caveat to frankC in the same message where I quoted the reason. I even
+decided, in the moment, that I could not check the mapping and would relay it as
+frankC's measurement. **Then I wrote "I verified both load-bearing facts myself" and
+let a third, unverified claim travel inside that sentence.** The two I checked were
+real; the frame made all three look checked. **A verification claim scopes to what
+was checked, and an unlabelled companion claim inherits its credibility.** Say which
+facts, or say none.
+
+Fifth instance of frankS's line in one day, and the second of them mine:
+**an identifier standing in for the thing it names, trusted because it looked
+right** — here, twelve hex characters read as a commit because twelve hex characters
+usually are one.
+
+**What frankT could NOT settle, correctly stated as unknown:** whether the v398
+verify actually re-ran that job at `c8e132a0` or inherited its red list. There is no
+report file for `c8e132a0` and no `pin: v398` row in `runs-seven.ndjson`, so the
+verify left no artifact to check. **A verify that publishes a verdict and no report
+is unfalsifiable by construction** — the `test-fgl` principle in its third costume
+tonight, and a real T ticket. It declined to file it as a stale-binary bug because
+the evidence does not support that and points the other way.
+
+**The pin still stands, and it never depended on any of this.** frankC's mechanism
+argument and six reproductions settled it on the merits. The provenance claim was
+decoration that nearly became a finding.
