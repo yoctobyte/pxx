@@ -10622,3 +10622,91 @@ who built it, at their expense, catching exactly the defect it was built for.
 Which also names what the fleet's ad-hoc comparison harnesses are missing: not care, and not a
 better idiom for reading `$?`. **A required token.** Every table built tonight from `rc=$?` would
 have been immune, and none of them had one.
+
+---
+
+## 213 — THE PRIMARY BACKEND IS THE ARM THAT DRIFTS
+
+*(frankS, 2026-08-30, measuring all three backends on frankA's ParamStr repro instead of
+reasoning about them — and inverting the coordinator's hypothesis in the process.)*
+
+Same source, 260-byte argument, `for i := 1 to n` with n=3 around a `ParamStr(1)`:
+
+| backend | result |
+| --- | --- |
+| **x86-64** | `len=260`, loop **never terminates** — i=1,2,3,4,5,6… with n still printing 3 |
+| riscv32 | `len=255`, terminates, `done i=3 n=3` |
+| xtensa | `len=255`, terminates, `done i=3 n=3` |
+
+**The 32-bit backends are the correct ones.** Cause located at `compiler/symtab.inc:6279`,
+`EmitArgvToString`, x86-64's frozen path: it strlens `argv[i]` with a `cmp byte [rsi+rcx],0 /
+inc rcx` loop that has **no bound at all** and `rep movsb`s that many bytes into the hidden
+frozen temp. riscv32 and xtensa inline nothing — they call `PXXCStrToFrozen`
+(`builtinheap.pas:2145`), which caps at `len < 255`. The desugaring is identical on all three
+(`pasparser_expr.inc:1915`) and is not implicated.
+
+The usual worry about a multi-backend defect is that the siblings will not get the fix. **This
+inverts it.** The majority converged on a shared helper; **x86-64 kept its own inlined copy**. So
+the primary backend is the outlier, and the reason is structural rather than accidental:
+
+> **It is the arm nobody ports *to*. It drifts precisely because it is the one everyone tests on.**
+
+A shared helper is written when someone brings up a *new* target and refuses to re-inline. The
+established target is never the one being brought up, so it keeps the original code and slowly
+becomes the only implementation of its kind — while remaining the one that all the evidence comes
+from. Same finding, arrived at independently, for the p45 index-bounds ticket: it lives in these
+**same two x86-64-only routines** (`EmitArgvToString`, `EmitArgvToStringManaged`) while
+riscv32/xtensa emit their own argv walk.
+
+**And the second, lesser defect must not be folded into the first:** a `ParamStr` longer than 255
+is **silently truncated** on riscv32/xtensa. A quiet wrong value, not a smash — but a value, so
+it is a real bug by the compat table, not a nit.
+
+### 213a — the coordinator's error, and it is a clean one
+
+I reasoned: *three targets, two contradictory contracts → strong evidence for one shared fix*,
+and relayed it to frankA as the thing that "changes the shape of the fix". frankS ran it. Two
+fixes, not one.
+
+> **The number of affected targets says nothing about whether the cause is shared.** Three
+> backends being wrong about one builtin is equally consistent with one shared bug and with three
+> independent ones — and *most* consistent with the case that actually held, where one is wrong
+> and two are right in a way that looks like disagreement.
+
+The tell I ignored: I had two *contradictory* contracts, and contradiction is evidence
+**against** a common origin, not for it. I read disagreement as proof of a shared ancestor when it
+is the signature of divergent implementations. Retracted to frankA within the hour, with the
+mechanism, before it opened a file.
+
+Also retracted: **the 258/260 threshold is not a property of the defect.** frankS's repro smashes
+at 258 too. The boundary is wherever the overrun lands in *that* frame, so it moves with the
+program. I handed frankA a number from one program as if it were a mechanism — 203's shape, a
+number that looks *finished* because it was bisected.
+
+### 213b — a comment asserting the ABI, over code that violates it
+
+frankS had written a comment asserting a8/a9 were safe scratch under both ABIs. The Call0 ABI does
+say a8..a11 are caller-saved — **the ticket says so too** — and `ir_codegen_xtensa.inc:2992`
+loads the **hidden destination pointer** for an aggregate-returning call into a8 and expects it
+to survive. Forcing every backward call down the long path turned it up: call0 MATCH **103 → 95**,
+eight record/aggregate programs red.
+
+The shape is worth naming because two independent sources agreed and both were about the *spec*:
+**a spec-conformant assumption is not a fact about the code.** The ABI grants the backend
+permission to clobber a8; it does not report whether the backend took it.
+
+### 213c — a repro set that cannot gate its own fix
+
+The strongest process item in the report. All five of the ticket's programs cleared the veneer
+wall and then stopped at an **unrelated pre-existing limit** ("only ordinal/float/pointer/string
+function results"). So every one of them changed from one error to a different error.
+
+> **Shipping on their evidence would have proved only that the error moved** — an untested codegen
+> sequence behind a green-looking ticket.
+
+A repro set is written to demonstrate a defect, not to gate its repair, and the two jobs come
+apart exactly when the fix works: the programs stop failing *for the reason you fixed* and start
+failing for whatever is next, which is indistinguishable from success at the level of "did it
+change". The repair was to force *every* backward call down the long path and re-run the whole
+differential — a population the ticket never mentioned. **Ask what the repro set proves when the
+fix works, not when it fails.**
