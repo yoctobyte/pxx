@@ -8501,3 +8501,53 @@ only make B worse, so it does not rescue the comparison).
 **Nothing implemented, nothing to revert, `compiler/builtin/**` restored byte-exact by
 sha256 against pre-experiment copies.** A measurement that changes a recommendation is a
 cheaper deliverable than the implementation it prevents.
+
+### 184c — THE FIX FOR 184a IS PROXIMITY, NOT DILIGENCE
+
+frankD, 2026-08-30, correcting the coordinator's over-generous read of 184b. Declining
+the +35 backlog delta was *not* an act of unusual discipline:
+
+> *"It was cheap in the moment, because I'd just spent two paragraphs arguing that a
+> wrong method reads as verification, and the number would have been produced by a method
+> I was mid-way through changing. The discipline that made it easy was having written the
+> rule down thirty lines earlier."*
+
+**That is 184a with the sign flipped.** Writing about a hazard reliably fails to protect
+the sentence being typed *in the same breath* — but it does protect a sentence typed
+**immediately afterwards about the same subject.**
+
+> Narrow window, and worth knowing it exists, because it suggests **the fix for 184a is
+> proximity rather than diligence.** Put the check next to the claim it guards, in time
+> as well as in the file; do not rely on having understood the rule.
+
+Consistent with everything else in this index that works: `_NODISPATCH_RE` fires where the
+ticket is read, the gate's stale-binary note fires at the failure, `progress check`'s
+scans fire on the board. Nothing that depends on someone recalling a rule at the right
+moment has survived here.
+
+### 184d — THE NULL RESULT AN AUDIT IS LEAST LIKELY TO REPORT
+
+Same audit. Its commissioned subject — public copy conflating the two byte-identical
+claims — **was not there.** Not one sentence in `docs/**` or the README claims or implies
+that PXX emits gcc's machine code; every gcc mention outside `--doctor`'s toolchain list
+is one of the two correct disclaimers, and `status.md:71` goes out of its way to deny
+FPC-indistinguishability.
+
+frankD reported it plainly, noting *"a null result is the outcome an audit is least likely
+to report"* — because an audit that finds nothing reads as an audit that was not needed,
+and the incentive is to promote a near-miss into the finding.
+
+**The real defect was the qualifier the ticket mentioned second: five of six self-host
+claims did not name their `-O` scope.** `features/index.md`'s was the predicted shape
+exactly — *"Byte-identical fixedpoint builds are part of the development gate"*, one
+clause in a bullet list of selling points, naming neither the scope nor which of the two
+claims it is. **The shortest version of the sentence really is the wrong one.** And
+`status.md`'s omission mattered for the opposite reason: being the *definitional*
+passage, it **taught** the gap rather than merely having it.
+
+Third: frankD's own new sentence said "output parity against gcc- **and FPC**-built
+references", so it checked that FPC is actually run as an output oracle
+(`tools/fpc_diff_probe.sh` — it is). **The claim it was most likely to get wrong was the
+one it had just written itself**, which arrives already believed. Same asymmetry as 184.
+
+Nothing was weakened: every edit adds a qualifier or a distinction, none hedges.
