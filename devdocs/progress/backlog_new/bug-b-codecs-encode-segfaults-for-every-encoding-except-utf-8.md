@@ -76,3 +76,12 @@ A `.npy` differential over `encode`/`decode` × `utf-8`/`ascii`/`latin-1` ×
 `test/lib_mimic_urllib_parse.npy` uses. `mimic_codecs.pas` has **no differential
 at all** today, which is why a total crash in two of its three encodings was
 sitting in a 574-line module unnoticed.
+
+That differential is phase 1 of
+[[feature-b-sweep-mimic-shims-against-cpython]], and **this crash blocks its
+encode half** — a differential that cannot run against half its subject will
+test one direction and be reported green, which is how the `urllib.parse`
+header came to claim a gate it did not have. Fix this first, or land the decode
+half with the encode half named as absent in both the test docstring and the
+Makefile comment. A green `MIMIC-CODECS OK` must not stand for "codecs works"
+while `encode` is untested.
