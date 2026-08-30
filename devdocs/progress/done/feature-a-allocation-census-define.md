@@ -125,3 +125,6 @@ empty.
   counts or wall-clock attribution, and those remain unanswerable on this box.
   Installing the packages is the owner's call — recorded here so the constraint
   is written down somewhere other than in a session that ended.
+
+## Log
+- 2026-08-30 — built and landed, commit PENDING-COMMIT.
