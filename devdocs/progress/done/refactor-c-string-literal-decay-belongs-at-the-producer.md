@@ -189,6 +189,5 @@ four keyed on `ASTKind = AN_STR_LIT`, which are the fragile ones, and leaves the
 value-keyed ones alone because they are the design being converged on.
 
 ## Log
-- 2026-08-30 — opened at HEAD, found live (not latent), fixed, resolved,
-  commit PENDING-COMMIT.
+- 2026-08-30 — opened at HEAD, found live (not latent), fixed, resolved, commit 31a3e6172.
 - 2026-08-30 — resolved, commit 31a3e6172.
