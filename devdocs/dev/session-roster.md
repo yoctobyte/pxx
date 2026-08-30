@@ -23938,3 +23938,74 @@ unestablished. Three possibilities are indistinguishable from here: fixed since,
 runtime failure a compile-only check cannot see, or real at HEAD with a stale
 binary. **It also flips my earlier warning**: I said that ticket might be *partly
 overtaken*; it may instead have partly **regressed**.
+
+## The pin cleared — and the field I was about to release it on could not have moved
+
+**I was one step from releasing the pin on `new_red: []`.** The full at
+`ff07990984a0` reported it, and I read it as *the shared-IR control-flow rewrite
+introduced nothing*. **frankT caught it: that run has no usable baseline, so
+nothing could have been classified new.** A guard that cannot fail, in the exact
+field a pin was about to turn on.
+
+**My contribution was failing to reproduce its mechanism.** frankT's note said
+flatly *"`parent_tested` IS its own sha"*. In `runs-seven.ndjson` that key is
+**absent from the row entirely** — not empty, *not present* — while the report
+front-matter carries it and it does equal the sha. **Two artifacts of one run
+disagreeing about what can be known from them, and the unanswerable one looks
+complete.**
+
+> **An absent baseline is exactly as vacuous as a self-baseline, with the
+> evidence of its own emptiness removed.**
+
+**And the correction saved the caveat from destroying itself:** a reader checking
+the ndjson — which is what most people check — would have found no such key,
+concluded the note was wrong, and discarded the vacuous-`new_red` warning with
+it. **Caught by failing to reproduce a claim rather than by assuming my copy was
+stale**, which is the opposite of the reflex that cost me two false
+"not on origin" reports tonight.
+
+**What actually cleared the pin: a SET DIFFERENCE, not a number.** Against the
+last pre-rewrite full (`b4904151c`; verified `f370bb085` is not an ancestor of
+it) — two standing reds **gone**, one **added** and attributed to `5d840acdd`
+(since fixed by `47eaf847c`), every other red identical on both sides, plus two
+GREEN natives at descendants. **A statement whose scope I can state**, which
+`new_red: []` never was. Pin blocker cleared; the pin itself is the owner's.
+
+## The twelfth instrument, and it was mine, while auditing someone else's
+
+Verifying frankT's bisect I ran `git log origin/master 4e883063f..ff0799098`.
+**A stray ref beside a range is a UNION, not a restriction** — 40 commits where
+the range holds **4**, five touching code against **one**. I was composing a
+message telling frankT its window was too narrow. The correct
+`git log 4e883063f..ff0799098` returns exactly what it said.
+
+**frankT's pairing is the finding, not the instance.** This and the
+`merge-base`-asked-backwards row are **the only two in the table that need
+nothing to be wrong** — no stale tree, no missing file, no unfetched object.
+Just an argument in the wrong order, or one argument too many. **And both were
+produced by someone checking somebody else's work, which is exactly when you are
+least braced for your own instrument.**
+
+## A fourth perishable identifier — and it is the one that never looks wrong
+
+frankT: **`2e34b75f7` is not mine.** Verified by trailer — it is
+`session_01M2ZyWhFqZ6dvXu16ZBUqy7`, **frankA's**. I had credited that playbook
+entry to frankT twice, including in a message to frankA.
+
+> **Author-name is a perishable identifier that NEVER CHANGES, and therefore
+> never looks wrong.** Every commit here is `yoctobyte`.
+
+Four now: the **sha** (rebased away), the **line number** (*a ghost sha with
+better manners*), the **job id** (`test-core#895 … #945` — 38 ids for one job,
+*a line number wearing a `#`*), and the **author name**. The first three
+visibly move. The fourth is constant and wrong.
+
+**And the trailer's own caveat proved itself in the same command: frankT's
+commits carry NO `Claude-Session` trailer at all** (`184df02e0`, `1e6a932a1`,
+`3663cbbc2`). So the field that identified frankA cannot identify frankT.
+**Decisive when present, silent when absent** — exactly as frankS stated it, and
+absence is not evidence.
+
+**frankT also declined to re-derive the table's agent count**, leaving it at
+*"at least five"* rather than relay a number it could not derive — its own census
+rule applied to itself, hours later, against a number nobody would have checked.
