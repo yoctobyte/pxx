@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 50
+prio: 60
 type: bug
 blocked-by: []
 status: new
@@ -9,6 +9,22 @@ found: 2026-08-30
 found-by: frank-optimize, while profiling for feature-opt-emitasmx64-reparses-fixed-strings
 summary: "`-g` compiles compiler.pas fine at the default -O, but `-g -O2` and `-g -O3` both die with `error: DWARF buffer overflow (-g)` in builtinheap.pas. So the compiler cannot be built with debug info at any optimisation level above the default, which blocks profiling an optimised compiler (the debugging playbook's own workflow) and the `-g -O2` + gdb row in that playbook."
 ---
+
+> **Re-priced 50 -> 60 by the coordinator, 2026-08-30.** Not because the crash is
+> worse than filed, but because of what it blocks. Two things stand behind it:
+>
+> 1. **The debugging playbook's `-g -O2` + gdb row** (`devdocs/dev/debugging-playbook.md:199`),
+>    which is the tree's recommended instrument for exactly the ownership bugs that
+>    show up at `-O2` — the row now names a build that does not complete.
+> 2. **The optimization campaign's ability to measure itself.** frank-optimize could
+>    not re-take `feature-opt-emitasmx64-reparses-fixed-strings`'s profile at that
+>    ticket's own stated configuration because of this bug, and that ticket's headline
+>    12.4% then turned out to be ~1.5% under interleaved A/B. A campaign that cannot
+>    profile at the configuration it optimises for will keep producing figures nobody
+>    can reproduce.
+>
+> The ticket's own framing says it best and is the reason this is not a p50 nuisance:
+> **a filed measurement nobody can reproduce is indistinguishable from a correct one.**
 
 # `-g` with `-O2` or `-O3` overflows the DWARF buffer on `compiler.pas`
 

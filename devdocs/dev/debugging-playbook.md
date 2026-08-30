@@ -204,6 +204,15 @@ gdb ./out
 ```
 
 `-g -O2` works and is usually right: `-O2` is where the ownership bugs appear.
+
+> **BROKEN on `compiler.pas` as of 2026-08-30, and this row is the reason it
+> matters.** `-g` alone builds the compiler; `-g -O2` and `-g -O3` both die with
+> `error: DWARF buffer overflow (-g)`. Smaller programs are unaffected, so the
+> instrument this row recommends is unavailable on precisely the largest program
+> in the tree. Tracked as
+> `bug-a-g-with-o2-or-o3-overflows-the-dwarf-buffer-on-compiler-pas` [A, p60].
+> Until it lands: `-g` alone still works, and for a value question
+> `PXXDBG` needs no debug info at all.
 Works for Pascal, NilPy, C, Rust, Zig, including breakpoints inside imported
 `.py` modules and C headers.
 

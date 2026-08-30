@@ -201,6 +201,23 @@ into the work. Ones that have actually gone wrong:
   independently declined to use it on the grounds that it is the user's to grant,
   and they were right: a coordinator cannot grant it either. If a worker asks,
   the answer is to escalate to the owner, not to authorise it.
+- **An A/B against a STASHED build poisons your own gate.** frank-optimize hit a
+  RED `gate.sh quick` fixedpoint step on 2026-08-30 that was not its change: it
+  had stashed to build a comparison binary and left the pre-change binary on disk
+  while the sources carried the change. Same class as the stale-binary red the
+  coordinator hit before the v395 pin, arrived at from the opposite direction, and
+  the gate named the cause precisely both times. If you are benchmarking two
+  builds, rebuild before you gate.
+- **A filed measurement nobody can reproduce is indistinguishable from a correct
+  one.** `feature-opt-emitasmx64-reparses-fixed-strings` carried a 12.4% figure
+  taken from a `pxxprof` sampling run. Under interleaved A/B, 8 runs each, both
+  compilers built at the ticket's own stated `-O3`, the real delta is **1.47%**
+  (~0.8% at default `-O`, inside noise) — and the arithmetic said so without a
+  profiler: 8106 `AsmTextLine` calls in a ~2.26s compile is ~16ms at a generous
+  2us each, so removing 99.1% of the parses cannot buy 12% when parsing was never
+  12%. **Sanity-check a profile figure against a call count before ranking work on
+  it.** The attempt to re-take the profile put 73% of samples outside `.text` and
+  could not reproduce the attribution at all.
 - **A pin ledger row carries THREE identifiers and only the third is a commit.**
   `stable_linux_amd64/default/pin.log` rows read
   `<timestamp>  pinned vN  <binary sha256>  (was <previous binary sha256>)  <git sha>`.
