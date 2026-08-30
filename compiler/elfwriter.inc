@@ -741,9 +741,34 @@ end;
   no-frame-pointer ABI, no gdb-over-qemu line path). Corrected 2026-08-30: read
   "x86-64 only for Tier 1". }
 
+{ DbgBuf grows on demand, exactly as Code does through GrowCode -- same doubling,
+  same "MAX_ is a ceiling, not an allocation" split. It was a fixed 1 MiB array,
+  and the fixed size was not a safety property: `-g -O2` on compiler.pas simply
+  exceeded it and died, so the compiler could not be built with debug info at any
+  optimisation level above the default. Debug info scales with the program and
+  with how much the optimiser has to say about it; a constant chosen once cannot
+  track that.
+  bug-a-g-with-o2-or-o3-overflows-the-dwarf-buffer-on-compiler-pas }
+procedure GrowDbg;
+var n: Integer;
+begin
+  { Name the numbers. The bare 'DWARF buffer overflow (-g)' this replaced said
+    nothing about how much was wanted or what the limit was, so establishing that
+    the old 1 MiB cap was being missed by 2,339 bytes -- not by an order of
+    magnitude -- took a measurement pass instead of a read. }
+  if DbgLen >= MAX_DWARF then
+    Error('DWARF buffer overflow (-g): emitted ' + AIntToStr(DbgLen) +
+          ' bytes of .debug_* content, ceiling MAX_DWARF is ' + AIntToStr(MAX_DWARF) +
+          '. Debug info scales with program size; raise MAX_DWARF in defs.inc.');
+  if DbgCapacity = 0 then n := 65536 else n := DbgCapacity * 2;
+  if n > MAX_DWARF then n := MAX_DWARF;
+  SetLength(DbgBuf, n + 16);
+  DbgCapacity := n;
+end;
+
 procedure DbgPutB(v: Integer);
 begin
-  if DbgLen >= MAX_DWARF then Error('DWARF buffer overflow (-g)');
+  if DbgLen >= DbgCapacity then GrowDbg;
   DbgBuf[DbgLen] := v and 255;
   Inc(DbgLen);
 end;

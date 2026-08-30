@@ -262,7 +262,10 @@ const
                                     threshold, so self-host/cross-bootstrap never
                                     exercise the heap path — it's addressable only by
                                     user code hitting the large-array shape. }
-  MAX_DWARF      = 1048576;   { DWARF -g: byte buffer for all .debug_* section content }
+  MAX_DWARF      = 33554432;  { DWARF -g: CEILING on .debug_* content, not an allocation --
+                                DbgBuf grows on demand like Code. Was a fixed 1 MiB array, which
+                                `-g -O2` on compiler.pas exceeded outright:
+                                bug-a-g-with-o2-or-o3-overflows-the-dwarf-buffer-on-compiler-pas }
   MAX_DWARF_ROWS = 131072;    { DWARF -g: (code-offset, line) rows for the .debug_line program }
   MAX_DBG_FILES  = 256;       { DWARF -g: distinct source files in the line table }
   MAX_DBG_RANGES = 65536;     { DWARF -g: token ranges mapping onto those files (C headers interleave) }
@@ -4263,7 +4266,8 @@ var
   DwarfRowCount : Integer;
   DwarfLastLine : Integer;   { dedup tracker, reset per proc }
   DwarfProcFirstRow : Boolean;  { next recorded row is this body's first → mark prologue_end }
-  DbgBuf : array[0..MAX_DWARF-1] of Byte;
+  DbgBuf : array of Byte;   { grown by GrowDbg (elfwriter.inc), exactly as Code is by GrowCode }
+  DbgCapacity : Integer;    { allocated bytes of DbgBuf[] }
   DbgLen : Integer;
   { Section metadata filled by BuildDwarfSections — offsets/sizes are WITHIN
     DbgBuf; name fields are byte offsets into the .shstrtab span. }
