@@ -1124,12 +1124,41 @@ acceptable response to UB — but its divergences need adjudication that the
 integer axis does not.
 
 Before `--builtins` is trusted at scale it wants a predicate that rejects UB
-candidates: cheapest is probably to reject any program whose bit-scan arguments
-are not provably non-zero, or to compare gcc against itself at two `-O` levels
-first and drop programs where gcc disagrees with gcc. The second is more general
-and needs no analysis of the source — and it is the same shape as the
-data-model oracle rule already in this ticket: **do not score a comparison whose
-oracle is not entitled to an opinion.**
+candidates. I proposed comparing gcc against itself at two `-O` levels and
+dropping programs where gcc disagrees with gcc — no source analysis, and the same
+shape as the data-model oracle rule already in this ticket: **do not score a
+comparison whose oracle is not entitled to an opinion.**
+
+**frankA measured it against the program that motivated it, and it returns
+GREEN.** `hang_builtins_700082.c` gives `checksum = 5ABA20EA` at `-O0`, `-O1`,
+`-O2` and `-O3` alike, so the predicate would have kept it. Correcting my own
+recommendation before it gets recorded as the fix.
+
+The measurement splits UB into two classes rather than condemning the idea:
+
+| UB class | operand | cross-`-O` check |
+| --- | --- | --- |
+| optimizer-resolved | compile-time constant | **caught** — `const` column moved from `-1558077993` at `-O0` to `64` at `-O1`+ |
+| runtime-operand | value computed at run time | **invisible** — `volatile` column is 63 at every level: same instruction, same deterministic garbage |
+
+The hang was the second class: `__builtin_clzl(safe_mul_func_uint8_t_u_u(255UL,
+...))`, a runtime value that happened to be 0, not a folded constant.
+
+So the predicate is **sound but not complete** — it rejects only genuinely-UB
+programs, which is the direction you want, and it is blind over exactly the class
+this finding came from. Note the shape: a check that looks like it covers the
+case and cannot see it, which is the same failure as the `if (u[i])` guard
+recorded above. Keep it — it is nearly free and stops a class that would
+otherwise manufacture tickets — but **it must not carry the claim that the axis
+is UB-clean.**
+
+Closing the runtime class costs more, and nothing here is measured yet:
+`-fsanitize=undefined` on the **oracle build only** is the closest fit to the
+"is this oracle entitled to an opinion?" shape — it answers per-program, catches
+bit-scan-at-zero directly, and needs no source analysis, at real runtime cost.
+The alternative is generating with csmith options that avoid the undefined
+builtin domains up front, if `--builtins` has such a knob. Worth a measurement
+before committing to either.
 
 Tuning the harness is Track T's file, so this is a note for whoever picks that
 up rather than work claimed here.
