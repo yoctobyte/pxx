@@ -5347,3 +5347,75 @@ own results, which is what makes the negatives trustworthy enough to build on.
 Contrast face 125: pessimism about the *world* goes unaudited and rots. Pessimism
 about **your own hypothesis**, measured and written down, is the cheapest thing you
 can leave behind.
+
+### 132 — a heuristic cannot tell the SUBJECT of a test from the MECHANISM by which it reports failure
+
+*pxx-a5, 2026-08-30, sweeping for rows that assert stdout when the subject is an
+exit code.*
+
+The obvious instrument is a scan for `Halt(n)` with nonzero `n`. It finds 117
+programs and 32 rows that do not capture `$?`. **All 32 are wrong**, and they are
+wrong for one reason:
+
+- `lib_dns_resolve` does `Halt(1)` on failure and `Halt(0)` on success. That is an
+  **assertion mechanism** — how the test says it failed — not the thing under test.
+- `crtl_atexit` is the best-looking candidate in the list and still isn't one: its
+  subject is LIFO handler **order**, and `exit()` is merely one of two paths that
+  must produce it. The ordering is on stdout, where the row already looks.
+
+So a nonzero exit appears in a test for two opposite reasons — *because the exit
+code is the observable*, or *because the harness needed a way to fail* — and *no
+syntactic property distinguishes them.* The heuristic gets 100% of them wrong while
+looking exactly like diligence, and 32 findings that cost nobody anything is the
+calibration failure that teaches people to scroll past a check (129, and
+`STALE-EDGE-HIDDEN`'s own comment).
+
+**Hence: the family is an explicit list with a reason per entry, not a pattern.**
+When the distinction you need is *intent*, enumerate and justify; a regex over
+free text will always find something, and finding something is what makes it look
+like it worked.
+
+**And the real result was a number, not a list.** All 10 rows whose subject is an
+exit status or signal **do** capture `$?` — including xtensa's, now fixed — and
+across all 603 programs with per-arch rows there are **zero** cross-arch splits.
+frankS's was the only one. The exposure is instead: **536 cross-target differential
+rows, 5 capture the exit code, 531 compare stdout alone.** Both operands are runs
+of the *same program*, so the exit code is free to add and unchecked everywhere.
+**That is a property of how rows are written, not an audit list** — which is
+precisely the habit-versus-guard distinction, quantified.
+
+### 132a — a ratchet on the part the guard CANNOT check
+
+The same devtest's section 3 holds the **531 at its measured size**. The guard
+cannot verify those rows; what it can do is ensure the ungoverned set does not
+**grow** while the governed one stays green.
+
+That is the move to copy whenever a fix is correct but too large to land safely:
+**freeze the remainder's size.** It converts an unbounded liability into a fixed
+one, costs one assertion, and fails loudly the first time someone adds a 532nd —
+which is the moment the decision is cheapest to revisit.
+
+### 132b — and the deferral was right, on a risk reading could not settle
+
+`run_target.sh` returns the **emulator's** exit status, and a signal death does not
+encode identically through qemu-user and through a native shell (`128+n`
+conventions, with qemu's own failure statuses in the same range). **A blanket
+append manufactures diffs on exactly the rows most worth checking: a crash whose
+stdout already matched.**
+
+The pilot order filed with it has the load-bearing step second: **classify every
+new red before continuing** — a real exit-code divergence goes to the owning lane,
+an encoding artefact gets fixed in `run_target.sh`, *never papered over at the
+row*. If the pilot arch yields more artefacts than findings, the normalisation
+belongs in `run_target.sh` before any further row changes.
+
+The lane's own sentence is the one to keep: **landing 531 blind, ungated edits
+would be the same class of act as the row that started the ticket — something that
+looks like coverage.**
+
+**Footnote, twice in one file, in a session about exactly this.** The guard's own
+coverage check read **5 of 10**, then **9 of 10**, and both were the instrument:
+`\b` matched nothing because native binaries carry a `26` suffix and `6` is a word
+character; then attributing each row to its *longest* match hid that a row naming
+`test_halt_exit_code` also names `test_halt_exit`. **Both would have been reported
+as findings about the Makefile.**
