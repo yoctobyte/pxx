@@ -3,7 +3,7 @@ slug: bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 track: P
 prio: 65
 type: bug
-status: working
+status: done
 blocked-by: []
 summary: "A unit that specializes another unit's generic IN ITS INTERFACE gets the template's method bodies streamed into the interface section, where a method implementation is not a declaration: `unexpected token in a unit interface section` pointing at the TEMPLATE's file. Pre-existing on pinned, objfpc binder form, no Delphi surface involved — the same-file and the program-level cases both work, and a template with only FIELDS works cross-unit too. This is the next wall for `uses Generics.Collections`, because real templates have methods. Named as tgeneric91 in test/test_generic_spec_per_unit.pas's own header but never ticketed."
 owner: frankR
@@ -170,8 +170,55 @@ Every row of the table above prints `7`. Plus:
 
 Gate: `make compiler/pascal26` converged, `d5a35c8de13a`.
 
-### Where the wall moves next
+### Where the wall moves next — **it does not. Measured, not predicted.**
 
 `uses Generics.Collections` is the reason this mattered — `generics.collections`
 specializes `Generics.Defaults`' comparers in its interface and those templates
-have methods. Re-measured after the fix; recorded below.
+have methods. So the expectation on dispatch was that the corpus would advance.
+
+**It did not move.** Same probe, same flags, before and after:
+
+| binary | probe | first error |
+| --- | --- | --- |
+| `b3c6858bdfbb` (pre-fix) | `pascal26 -dVER3_0_0 -Fu<rtl-generics/src> gcprobe.pas` | `generics.defaults.pas:78 unknown type: TKey` |
+| `d5a35c8de13a` (post-fix) | *identical* | `generics.defaults.pas:78 unknown type: TKey` |
+
+Byte-identical output, 1m12s both runs. The fix is real — its own six rows and
+three named suites prove it — but the corpus is stopped by something that fires
+**before** the splice placement can matter, so this fix buys the corpus nothing
+yet. Recording that plainly is the point: a fix that passes its gate and moves
+no wall is a fix, not progress on this corpus, and the two must not be conflated.
+
+### The next wall is mis-attributed, and that is itself a defect
+
+Worth handing on, because whoever takes the corpus next will lose time to it.
+The reported location is **wrong in both file and line**:
+
+```
+pascal26:78: error: unknown type: TKey
+  in: .../generics.defaults.pas
+  near: ) * SizeOf ( T ) >>> ) ; FillChar
+```
+
+- `TKey` does not occur anywhere in `generics.defaults.pas` (`grep`: no hits).
+- The `near:` text is `generics.collections.pas:1631` / `:1635`
+  (`FillChar(FItems[AIndex], ACount * SizeOf(T), #0)`), and the second error's
+  `near:` is `generics.collections.pas:1687`. Both are `TList<T>` bodies —
+  another unit, ~1550 lines further down.
+- The line numbers 78/79 are neither site.
+
+So a replayed template body carries **stale position info**: the specializer
+reports the position of something else entirely. Every corpus triage that
+trusts the `in:` line starts in the wrong file — and `near:` is the only field
+that survived, which is why this was catchable at all.
+
+Two things are tangled at the wall and should not be assumed to be one bug:
+`TKey` is not a parameter of `TList<T>`, yet it is what the substituted body
+complains about while `SizeOf(T)`'s `T` came through **un-substituted** in the
+same token run. That smells like a body being replayed against the wrong
+template's parameter set, which is a different mechanism from this ticket's
+placement bug. Not diagnosed here — filed as its own ticket rather than guessed
+at, per root-cause-over-microfix.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
