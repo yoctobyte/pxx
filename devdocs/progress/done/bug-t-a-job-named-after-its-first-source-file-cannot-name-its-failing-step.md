@@ -192,4 +192,4 @@ path snaps to ONE poll wakeup"*). Both fail identically at HEAD without this
 change.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit ae26693a3.
