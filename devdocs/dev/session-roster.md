@@ -219,6 +219,32 @@ into the work. Ones that have actually gone wrong:
   ticket at it explicitly. The change is deliberately ONE token
   (`if isDefinition then procIdx := -1` -> `procIdx := -1`), so a red is one
   revert — but reverting is also not the fix.
+- **YOUR OWN TREE STATE IS THE MOST COMMON CONTAMINANT OF YOUR OWN EXPERIMENT.**
+  Three instances on 2026-08-30, all self-caught, all different routes to the same
+  error:
+  1. frank-optimize gated with a **stashed comparison binary** on disk while the
+     sources carried the change — a RED fixedpoint that was not the change.
+  2. frank-optimize set `ELF_DATA_ALIGN=1` to disable a pad, not noticing the same
+     constant drives the assertion's own modulus — **one knob, two mechanisms**, so
+     the experiment could not say which it had disabled.
+  3. frankwasm removed a guard, rebuilt, saw `compiler.pas` change, and concluded
+     the guard was load-bearing — but the working tree still had the guard removed,
+     so `{$I}` pulled a different `ir.inc`. **It compared two SOURCES, not two
+     behaviours.** The conclusion survived re-measurement; the reasoning was
+     worthless.
+  The tell is the same each time: an experiment whose result is explained by the
+  state of the tree rather than by the change. **Before believing a differential,
+  say out loud what is on disk in each arm.**
+- **A PROBE WITH A HOLE IN IT IS WORSE THAN NO PROBE, because the silence reads as
+  an answer.** `PXXDBG=a.symptr` fires from the `Alloc*` chokepoints, i.e. BEFORE
+  `SetSymPointerType`, so for a PARAMETER it prints the recycled sym slot's
+  previous occupant. Read at face value its output says *"every parameter in a proc
+  takes the last pointer parameter's shape"* — a dramatic bug that does not exist,
+  and which cost a real ticket a false prerequisite that stood from 2026-08-24
+  until 2026-08-30. That is the probe's SECOND hole; its own header already warned
+  about the first (arrays). Cross-check a probe against a second one that fires at
+  a different moment — here `p.ptrparam`, now extended to print depth and ultimate
+  base, the one field that cannot tell `PChar` from `^PChar`.
 - **A LENIENT HOST IS NOT A NEUTRAL INSTRUMENT.** frankwasm, 2026-08-30: node's
   WASI does not enforce WASI's 8-alignment requirement on `fd_seek`'s `filesize`
   pointer, so a genuine GUEST defect was invisible *as* a guest defect and
