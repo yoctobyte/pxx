@@ -4034,6 +4034,244 @@ begin
   end;
 end;
 
+procedure EmitSignalRuntimeXtensa;
+{ Libc-free signal support, hosted xtensa Linux, Call0 only (feature-signal-handlers;
+  x86-64 = b336, aarch64 = b370, riscv32 = the model this is ported from).
+
+  EVERY NUMBER AND EVERY ABI FACT BELOW WAS MEASURED under qemu-xtensa, because
+  none of them are in the tree and xtensa carries its OWN syscall table -- write
+  is 13, not the generic 64. Recalling them would have compiled, linked, run, and
+  done something else. See addenda 4-6 of
+  ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired.
+
+    rt_sigaction  226   pinned by a WORKING install, not by an errno signature
+    sigaltstack   224   installed a real altstack and read it back
+    kill          123   the only candidate accepting a non-positive pid
+    getpid        120   see the caveat at its use -- one of three, indistinguishable here
+
+  Contract, measured, and it is riscv32's rather than i386/arm32's:
+
+  - **No SA_RESTORER.** struct sigaction is { handler(0), flags(4), mask(8,12) },
+    16 bytes on ILP32, sigsetsize 8. The kernel supplies the return path itself.
+  - **Returning from the handler works.** `ret` out of a Call0 handler unwinds.
+    (The first probe of this said otherwise and was confounded: SIGSEGV is blocked
+    inside its own handler, so a re-fault force-kills whether the return path works
+    or not. With SA_NODEFER: three entries, exit 0.)
+  - **The kernel enters a plain Call0 proc.** xtensa userland is conventionally
+    windowed and setup_frame is written for it, so this was the risk that decided
+    whether this ticket was a session or a campaign. It holds.
+  - Handler entry: a2 = sig, a3 = siginfo_t*, a4 = ucontext_t*, a0 = return address.
+  - Syscall map (NOT "argument registers in order" -- see the IR_SYSCALL arm):
+    nr -> a2, arg0 -> a6, arg1 -> a3, arg2 -> a4, arg3 -> a5, result -> a2.
+
+  WINDOWED IS DELIBERATELY EXCLUDED and the caller gates it: a windowed unwind
+  needs the register windows spilled first, which is the same reason
+  TargetHasProcCleanupFrame is Call0-only. Call0 is the DEFAULT ABI
+  (compiler.pas:862), so this serves the default path, not a corner.
+
+  Two layout constraints, both enforced by the encoders rather than by care:
+
+  1. Conditional branches encode an EIGHT-BIT displacement (-128..127,
+     XtensaRelCheck). Every short branch below is paired with a long `j` where the
+     span could grow. If a future edit pushes one past the range the encoder
+     RAISES -- it does not truncate, since
+     bug-a-xtensa-pc-relative-encoders-silently-truncate-an-out-of-range-offset.
+  2. Each EmitLoadGlobAddrXtensa injects ~12 bytes of literal header INTO those
+     spans. Adding one inside a branch span is how the range gets exceeded.
+
+  The sig is parked in the FRAME rather than a callee-saved register across the
+  hook call: a12-a15 are callee-saved by convention, but the hook is arbitrary
+  compiled Pascal and the frame slot costs one load to be independent of it. }
+var
+  jmpOver, dispatchAt, bNoSi, jSt, bLo, bHi, bHook, jDfl, jDflOut, outAt,
+  c0At, padTo, delta: Integer;
+begin
+  jmpOver := CodeLen; xtensa_j(0);            { skip the blob; patched at the end }
+
+  { ---------------- dispatch ---------------- }
+  XtensaAlignCode4;
+  SigDispatchAddr := CodeLen;
+  dispatchAt := CodeLen;
+
+  xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
+  xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 0);      { kernel return address }
+  xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 8);      { sig, in the frame }
+
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_CTX);
+  xtensa_s32i(reg_xtensa_a4, reg_xtensa_a8, 0);      { ucontext* for __pxxSigContext }
+
+  { siginfo_t is { si_signo(0), si_errno(4), si_code(8), union }. The union is
+    pointer-aligned, so on ILP32 the preamble is NOT padded and si_addr sits at
+    12 -- riscv32's offsets, not the 64-bit targets'. a3 nil is defensive. }
+  xtensa_movi(reg_xtensa_a10, 0);
+  bNoSi := CodeLen; xtensa_beq(reg_xtensa_a3, reg_xtensa_a10, 0);
+  xtensa_l32i(reg_xtensa_a10, reg_xtensa_a3, 8);     { si_code }
+  xtensa_l32i(reg_xtensa_a11, reg_xtensa_a3, 12);    { si_addr }
+  jSt := CodeLen; xtensa_j(0);
+  { .nosi -- a10 is already 0 from the compare }
+  Patch24(bNoSi, EncodeXtensaBranch(1, reg_xtensa_a3, reg_xtensa_a10, CodeLen - bNoSi));
+  xtensa_movi(reg_xtensa_a11, 0);
+  { .st }
+  Patch24(jSt, EncodeXtensaJ(CodeLen - jSt));
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_CODE);
+  xtensa_s32i(reg_xtensa_a10, reg_xtensa_a8, 0);
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_ADDR);
+  xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 0);
+
+  { bounds 1 <= sig <= 64, as two SIGNED compares: xtensa has no bgeu/bltu
+    encoder in-tree and adding one is a shared-file change this lane does not
+    hold. Signed is exact here because sig arrives from the kernel. }
+  xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 8);
+  xtensa_movi(reg_xtensa_a11, 1);
+  bLo := CodeLen; xtensa_blt(reg_xtensa_a2, reg_xtensa_a11, 0);
+  xtensa_movi(reg_xtensa_a11, 65);
+  bHi := CodeLen; xtensa_bge(reg_xtensa_a2, reg_xtensa_a11, 0);
+
+  { hook = BSS_SIG_HOOKS[(sig-1)*8]. The table is 64 * 8 on every target; the
+    stride is 8 even on ILP32, and only the low word is a pointer here.
+    *8 as three adds: no constant-shift encoder in-tree, same reason as above. }
+  xtensa_addi(reg_xtensa_a10, reg_xtensa_a2, -1);
+  xtensa_add(reg_xtensa_a10, reg_xtensa_a10, reg_xtensa_a10);
+  xtensa_add(reg_xtensa_a10, reg_xtensa_a10, reg_xtensa_a10);
+  xtensa_add(reg_xtensa_a10, reg_xtensa_a10, reg_xtensa_a10);
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_HOOKS);
+  xtensa_add(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a10);
+  xtensa_l32i(reg_xtensa_a10, reg_xtensa_a8, 0);
+  xtensa_movi(reg_xtensa_a11, 0);
+  bHook := CodeLen; xtensa_bne(reg_xtensa_a10, reg_xtensa_a11, 0);   { -> .call }
+  jDfl := CodeLen; xtensa_j(0);                { no hook -> .dfl, long hop }
+  { .call }
+  Patch24(bHook, EncodeXtensaBranch(9, reg_xtensa_a10, reg_xtensa_a11, CodeLen - bHook));
+  xtensa_callx0(reg_xtensa_a10);               { the Pascal hook; returning resumes }
+
+  { .out -- shared epilogue }
+  outAt := CodeLen;
+  Patch24(bLo, EncodeXtensaBranch(2,  reg_xtensa_a2, reg_xtensa_a11, outAt - bLo));
+  Patch24(bHi, EncodeXtensaBranch(10, reg_xtensa_a2, reg_xtensa_a11, outAt - bHi));
+  xtensa_l32i(reg_xtensa_a0, reg_xtensa_sp, 0);
+  xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+  xtensa_ret;                                  { -> kernel return path }
+
+  { .dfl: no hook -- revert to SIG_DFL and re-raise, so an unhandled signal still
+    terminates with proper killed-by-signal status. Returning instead would be
+    wrong for SIGINT/SIGTERM, which are exactly what the default install covers:
+    the fault is not re-executed, so the signal would simply be lost. }
+  Patch24(jDfl, EncodeXtensaJ(CodeLen - jDfl));
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_SCRATCH);
+  xtensa_movi(reg_xtensa_a10, 0);
+  xtensa_s32i(reg_xtensa_a10, reg_xtensa_a8, 0);    { handler = SIG_DFL }
+  xtensa_s32i(reg_xtensa_a10, reg_xtensa_a8, 4);    { flags }
+  xtensa_s32i(reg_xtensa_a10, reg_xtensa_a8, 8);    { mask lo -- NO restorer slot }
+  xtensa_s32i(reg_xtensa_a10, reg_xtensa_a8, 12);   { mask hi }
+  xtensa_l32i(reg_xtensa_a6, reg_xtensa_sp, 8);     { arg0 = sig }
+  xtensa_mov(reg_xtensa_a3, reg_xtensa_a8);         { arg1 = act }
+  xtensa_movi(reg_xtensa_a4, 0);                    { arg2 = oldact }
+  xtensa_movi(reg_xtensa_a5, 8);                    { arg3 = sigsetsize }
+  xtensa_movi(reg_xtensa_a2, 226);                  { rt_sigaction }
+  xtensa_syscall;
+  { getpid. MEASURED ONLY TO A SET: 120, 126 and 127 all answer the process's own
+    id and are indistinguishable in a single-threaded process by construction
+    (getpid / gettid / most likely set_tid_address). All three feed kill the right
+    number, so this is operationally settled; what is NOT settled is which name
+    belongs on this line. Do not "correct" it to a confident name without a
+    threaded measurement. 150 is getppid -- it matched a pid oracle exactly and
+    the oracle was the parent process. }
+  xtensa_movi(reg_xtensa_a2, 120);
+  xtensa_syscall;                                   { a2 = pid }
+  xtensa_mov(reg_xtensa_a6, reg_xtensa_a2);         { arg0 = pid }
+  xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, 8);     { arg1 = sig }
+  xtensa_movi(reg_xtensa_a2, 123);                  { kill }
+  xtensa_syscall;
+  jDflOut := CodeLen; xtensa_j(0);
+  Patch24(jDflOut, EncodeXtensaJ(outAt - jDflOut));
+
+  { ---------------- sethook (a2 = sig, a3 = handler) ---------------- }
+  XtensaAlignCode4;                            { CALL0 targets must be 4-aligned }
+  SigSetHookAddr := CodeLen;
+  xtensa_addi(reg_xtensa_a10, reg_xtensa_a2, -1);
+  xtensa_movi(reg_xtensa_a11, 63);
+  xtensa_and(reg_xtensa_a10, reg_xtensa_a10, reg_xtensa_a11);   { keep in-table }
+  xtensa_add(reg_xtensa_a10, reg_xtensa_a10, reg_xtensa_a10);
+  xtensa_add(reg_xtensa_a10, reg_xtensa_a10, reg_xtensa_a10);
+  xtensa_add(reg_xtensa_a10, reg_xtensa_a10, reg_xtensa_a10);
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_HOOKS);
+  xtensa_add(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a10);
+  xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 0);
+  { falls through into install. The alignment pad below is 3-byte NOPs, which
+    EXECUTE harmlessly -- that is why the fallthrough is safe here and why this
+    does not need riscv32's explicit jump. }
+
+  { ---------------- install (a2 = sig) ---------------- }
+  XtensaAlignCode4;
+  SigInstallAddr := CodeLen;
+  xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
+  xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 0);   { our OWN return address: the
+                                                    call0 below clobbers a0 }
+  xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 8);   { sig }
+
+  { sigaltstack(2) FIRST, then SA_ONSTACK in the flags -- neither works alone.
+    Without both, a stack-overflow SIGSEGV is unhandleable: the fault happens
+    BECAUSE there is no stack left, so the kernel cannot push a signal frame onto
+    the faulting stack and kills outright
+    (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack).
+    stack_t on ILP32 is { ss_sp(0), ss_flags(4), ss_size(8) } -- riscv32's
+    offsets; defs.inc's 0/8/16 describes the 64-bit shape. }
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_ALTSS);
+  EmitLoadGlobAddrXtensa(reg_xtensa_a10, BSS_SIG_ALTSTK);
+  xtensa_s32i(reg_xtensa_a10, reg_xtensa_a8, 0);
+  xtensa_movi(reg_xtensa_a11, 0);
+  xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 4);
+  EmitLoadConstXtensa(reg_xtensa_a11, SIG_ALTSTACK_SIZE);
+  xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 8);
+  xtensa_mov(reg_xtensa_a6, reg_xtensa_a8);       { arg0 = new }
+  xtensa_movi(reg_xtensa_a3, 0);                  { arg1 = old = nil }
+  xtensa_movi(reg_xtensa_a2, 224);                { sigaltstack }
+  xtensa_syscall;
+
+  { a10 := absolute address of the dispatch stub.
+
+    THE ONE PIECE WITH NO IN-TREE MODEL -- xtensa has no auipc, aarch64's adr and
+    x86-64's call/pop do not transfer, EmitGlobRef/EmitDataRef relocate DATA
+    addresses, and ProcAddrFix is keyed by PROC INDEX while this is a raw code
+    offset inside the runtime blob. Addendum 6 of the ruling.
+
+    CALL0 sets a0 to the address of the instruction AFTER it (PC+3) and jumps to
+    a 4-ALIGNED target, so the two differ by the pad and the delta must be taken
+    from PC+3 -- not from where control resumes. Getting that backwards installs a
+    handler pointing mid-instruction: a fault at delivery time, far from the
+    cause, on the one path a signal actually arrives on. }
+  c0At := CodeLen;
+  padTo := ((c0At + 3 + 3) div 4) * 4;
+  xtensa_call0(padTo - c0At);
+  while CodeLen < padTo do EmitB(0);              { jumped over, never executed }
+  delta := dispatchAt - (c0At + 3);               { a0 = c0At + 3 }
+  EmitLoadConstXtensa(reg_xtensa_a10, delta);     { addi's imm is only -128..127 }
+  xtensa_add(reg_xtensa_a10, reg_xtensa_a0, reg_xtensa_a10);
+
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_SCRATCH);
+  xtensa_s32i(reg_xtensa_a10, reg_xtensa_a8, 0);  { handler = dispatch }
+  { SA_RESTART|SA_ONSTACK|SA_SIGINFO. SA_SIGINFO ($04) is what makes the kernel
+    pass siginfo_t*/ucontext_t* in a3/a4 -- without it the fault CAUSE is
+    unknowable, si_code being its only carrier. No SA_RESTORER to flip alongside,
+    measured: the install works without one. }
+  EmitLoadConstXtensa(reg_xtensa_a11, $18000004);
+  xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 4);
+  xtensa_movi(reg_xtensa_a11, 0);
+  xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 8);
+  xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 12);
+  xtensa_l32i(reg_xtensa_a6, reg_xtensa_sp, 8);   { arg0 = sig }
+  xtensa_mov(reg_xtensa_a3, reg_xtensa_a8);       { arg1 = act }
+  xtensa_movi(reg_xtensa_a4, 0);                  { arg2 = oldact }
+  xtensa_movi(reg_xtensa_a5, 8);                  { arg3 = sigsetsize }
+  xtensa_movi(reg_xtensa_a2, 226);                { rt_sigaction }
+  xtensa_syscall;
+  xtensa_l32i(reg_xtensa_a0, reg_xtensa_sp, 0);
+  xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+  xtensa_ret;
+
+  Patch24(jmpOver, EncodeXtensaJ(CodeLen - jmpOver));
+end;
+
 procedure IREmitLeaveExceptionFramesXtensa(count: Integer);
 { Pop `count` exception frames: restore the saved prev EXC_TOP from each
   frame head and free the 32-byte frame (Call0 moving sp). }
