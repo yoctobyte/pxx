@@ -4163,7 +4163,7 @@ begin
           xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
           xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
           xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
-          xtensa_call0(ExcSetJmpAddr - CodeLen);
+          EmitXtensaCallToCode(ExcSetJmpAddr);
           xtensa_movi(reg_xtensa_a4, 0);
           xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);   { 0 = normal path: skip }
           if LabelPositions[lblId] <> -1 then
@@ -4194,7 +4194,7 @@ begin
             EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
             xtensa_s32i(reg_xtensa_a2, reg_xtensa_a3, 0);
           end;
-          xtensa_call0(ExcRaiseAddr - CodeLen);
+          EmitXtensaCallToCode(ExcRaiseAddr);
         end;
 
       IR_EXC_STORE:

@@ -12078,6 +12078,109 @@ begin
   Result := FindProc('PXXDivZero');
 end;
 
+function XtensaCallReaches(pc, target: Integer): Boolean;
+var w: Integer;
+begin
+  { The arithmetic EncodeXtensaCall0/8 will apply, MIRRORED rather than
+    approximated, so this predicate and the encoder cannot disagree about a
+    boundary case and send a reachable call down the long path or the reverse. }
+  w := (target - (pc div 4) * 4 - 4) div 4;
+  Result := (w >= -131072) and (w <= 131071);
+end;
+
+{ --- an internal call that CALL0/CALL8 cannot reach --------------------------
+  CALL0/CALL8 encode an 18-bit WORD offset, so a direct call reaches +-512 KiB
+  and no further. That sounds generous and is not: test_overflow_qplus_narrow is
+  758 KiB of code on riscv32, and five test programs became hard COMPILE ERRORS
+  ("call0 displacement -133294 is outside the encodable range") the moment the
+  xtensa syscall table let them reach codegen at all. It is a ceiling on the
+  whole corpus, not a property of unusual programs.
+
+  riscv32 hit the same wall and widened its direct call unconditionally to
+  auipc+jalr (its arm below says so: cross lua, 1.75 MB of code). Xtensa has no
+  auipc, and the obvious substitute -- an absolute target address in a literal --
+  would need a new "address of a code offset" fixup threaded through the ELF
+  writer, which is precisely what
+  bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb declined to build.
+  That ticket's answer transfers here unchanged: CALL0 leaves the address of the
+  instruction AFTER itself in a0, so a call0 to the next 4-aligned offset is a
+  read-PC instruction, and (target - anchor) is a difference of two .text
+  OFFSETS -- a compile-time constant, identical in the linked and the
+  --emit-obj image, needing no relocation in either.
+
+  Only calls that would otherwise not have encoded at all pay for this: ~20
+  bytes and four extra instructions, at a site that was previously a refusal to
+  compile. Everything in reach still emits the same three bytes.
+
+  REGISTERS, and this is the part that is NOT obvious -- the first version of
+  this routine got it wrong and eight record/aggregate programs went red.
+
+  a0: dead at a Call0 call site (a non-leaf has already spilled it, and CALL0
+  clobbers it regardless), but LIVE under windowed, where it is the caller's own
+  return address -- saved and restored there exactly as the entry stub does it.
+
+  The scratch pair CANNOT be the same under both ABIs, because the two ABIs
+  disagree about which registers are dead at a call site:
+
+    Call0     arguments are a2..a7, and `a8` HOLDS THE HIDDEN DESTINATION
+              POINTER across the call for a function returning an aggregate
+              (IR_CALL loads it with `l32i a8, sp, nArgs*4` and expects it to
+              survive). a8 is therefore live, and the scratch is a9/a10.
+    windowed  the outgoing arguments ARE a10..a15, so those are live; a8/a9 are
+              what CALL8 overwrites with the callee's a0/a1 and cannot hold a
+              live caller value. Scratch is a8/a9.
+
+  Verified by forcing EVERY backward call down this path and re-running the
+  whole 129-program differential on both ABIs -- with a8/a9 under Call0 the
+  aggregate-return programs (test_cross_aggregate_return, the record-temp
+  family, test_call_result_member) returned garbage; with a9/a10 the corpus is
+  unchanged. A register that is free "almost everywhere" is exactly the bug this
+  form of call is most likely to have, so it is worth proving rather than
+  arguing. }
+procedure EmitXtensaLongCall(target: Integer);
+var anchorPc, anchorTgt, rTgt, rTmp: Integer;
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    rTgt := reg_xtensa_a8; rTmp := reg_xtensa_a9;
+    xtensa_mov(rTmp, reg_xtensa_a0);             { save the return address }
+  end
+  else
+  begin
+    rTgt := reg_xtensa_a9; rTmp := reg_xtensa_a10;   { a8 is the hidden dest }
+  end;
+  { CALL0 targets must be 4-aligned, so aim at the next 4-aligned offset and
+    pad the gap with bytes the call jumps over. a0 still receives PC+3, which
+    is the anchor the delta is measured from -- not the padded target. }
+  anchorPc := CodeLen + 3;
+  anchorTgt := ((anchorPc + 3) div 4) * 4;
+  xtensa_call0(anchorTgt - CodeLen);
+  while CodeLen < anchorTgt do EmitB(0);
+  xtensa_mov(rTgt, reg_xtensa_a0);               { rTgt := anchor PC }
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_mov(reg_xtensa_a0, rTmp);             { restore it }
+  XtensaEmitLitHeader;
+  EmitI32(target - anchorPc);                    { pure .text-offset delta }
+  xtensa_l32r(rTmp, $FFFF);
+  xtensa_add(rTgt, rTgt, rTmp);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_callx8(rTgt)
+  else
+    xtensa_callx0(rTgt);
+end;
+
+{ A call to an already-emitted RUNTIME HELPER (the exception setjmp/raise
+  entry points) rather than to a proc row. Same reach problem, same answer, but
+  no CallFix entry is involved at all -- the target is final at emit time -- so
+  the choice here is unconditional and needs no note about fixups. }
+procedure EmitXtensaCallToCode(target: Integer);
+begin
+  if XtensaCallReaches(CodeLen, target) then
+    xtensa_call0(target - CodeLen)
+  else
+    EmitXtensaLongCall(target);
+end;
+
 procedure EmitCallProc(procIdx: Integer);
 var extIdx, rvHi, rvLo: Integer;
 begin
@@ -12215,6 +12318,18 @@ begin
   end;
   if TargetArch = TARGET_XTENSA then
   begin
+    if (Procs[procIdx].BodyAddr >= 0) and
+       not XtensaCallReaches(CodeLen, Procs[procIdx].BodyAddr) then
+    begin
+      { Deliberately NOT RecordInternalCall: ApplyCallFixups would Patch24 a
+        3-byte CALLn over the head of this sequence and re-run the very range
+        check that sent us here. CallFix has exactly one other consumer, DceRun,
+        and it exits on `TargetArch <> TARGET_X86_64` (dce.inc) before reading
+        the array -- so no xtensa site is reachable from it. If DCE ever grows
+        an xtensa arm, these sites need their own fixup list before it does. }
+      EmitXtensaLongCall(Procs[procIdx].BodyAddr);
+      Exit;
+    end;
     RecordInternalCall(procIdx);
     if Procs[procIdx].BodyAddr >= 0 then
     begin
@@ -12224,6 +12339,14 @@ begin
         xtensa_call0(Procs[procIdx].BodyAddr - CodeLen);
     end
     else
+      { A FORWARD call still reserves three bytes, so a forward reference more
+        than 512 KiB ahead remains the honest compile error -- the long form
+        cannot be chosen here, because the target address that decides it does
+        not exist yet. Every failure this ticket reported was BACKWARD (all five
+        displacements negative), so this is a strictly narrower hole than the
+        one being closed, and it fails loudly rather than silently. Closing it
+        too means reserving ~20 bytes at every forward call site in every xtensa
+        program, a real cost paid by programs that do not need it. }
       xtensa_nop;           { 3 bytes, same as CALLn -- see the note above }
     Exit;
   end;
@@ -12276,6 +12399,19 @@ begin
       Patch32(CallFix[i].CodePos, $94000000 or (((tgt - CallFix[i].CodePos) div 4) and $03ffffff))
     else if TargetArch = TARGET_XTENSA then
     begin
+      { Name the call before the encoder refuses it. A FORWARD reference is the
+        one shape EmitCallProc cannot widen -- it reserved three bytes before
+        the target existed -- so this is where that hole is felt, and the bare
+        encoder message ("displacement N is outside the encodable range") says
+        nothing about WHICH call or that the direction is what makes it
+        unfixable. bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code }
+      if not XtensaCallReaches(CallFix[i].CodePos, tgt) then
+        Error('target xtensa: the forward call to ' + Procs[procIdx].Name +
+              ' at code offset ' + AIntToStr(CallFix[i].CodePos) +
+              ' cannot reach its body at ' + AIntToStr(tgt) +
+              ' (CALL0/CALL8 reach +-512 KiB). A BACKWARD call this far is '
+              + 'widened automatically; a forward one cannot be, because the '
+              + 'call site was sized before the body existed');
       if XtensaABI = XTENSA_ABI_WINDOWED then
         Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, tgt))
       else
