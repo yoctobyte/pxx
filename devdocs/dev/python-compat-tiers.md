@@ -104,8 +104,32 @@ is the coordination point every program already names.
   "mimic-reportlab", "a reportlab-compatible canvas" — never "reportlab".
 
 Bare-name shims already in the tree (`re`, `configparser`, `tkinter`) are named
-directly, which was the quick path. They should move behind the same mapping when
-it lands, so the rule is one rule.
+directly, which was the quick path. They should move behind the same mapping so
+the rule is one rule.
+
+> **Status checked 2026-08-30 (frankD), at `ea5d7c6e7`.** *"When it lands"* has
+> happened — [[feature-nilpy-dotted-package-imports]] is in `done/` and the
+> resolver tries `<name>` first, then falls back to `mimic_<name>`
+> (`pyparser.inc`, `grep -n 'mimic_reportlab_lib'`). The three units have **not**
+> moved: `lib/rtl/re.pas`, `lib/rtl/configparser.pas` and `lib/pcl/tkinter.pas`
+> are still bare, next to `lib/pcl/mimic_tkinter_font.pas` — the convention is
+> applied inconsistently inside one package family.
+>
+> **The alarming reading was tested and is false, which is the part worth
+> recording.** A bare-named shim looks like it could shadow a user's own module,
+> since the resolver's *first* probe is the bare name. It does not: with a local
+> `re.py` defining `compile()` beside a program that does `import re`, the
+> compiled binary prints `USER-RE`. The user's module wins. Compiled with
+> `$(PXX_STABLE)`, two minutes, and it is the reason this is not a bug ticket.
+>
+> What is left is the naming rule's *other* purpose, from the section above —
+> **a reader who opens `mimic_reportlab.pas` knows it is a subset shim, and a
+> reader who opens `re.pas` has no such signal.** That is an expectation cost,
+> not a correctness one, and no compiling program behaves differently either
+> way. Deliberately **not** filed: a ticket that cannot name a program whose
+> behaviour changes is one that sits in the ranker's scan forever at zero value.
+> Recorded here instead so the next person to read this paragraph does not
+> re-run the shadowing test.
 
 ## The blocker for T1-by-naming — RESOLVED 2026-07/08, kept for the reasoning
 
