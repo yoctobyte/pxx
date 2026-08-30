@@ -5150,3 +5150,58 @@ the population was."* It already carried that discipline for zeros — a
 non-existence claim demands you state the search — and did not apply it to a
 **non-zero**. **Same failure, opposite sign.** A count of 7 is as much a claim about
 a population as a count of 0, and only one of the two triggers the habit.
+
+### 128 — when the fix makes detection and substitution AGREE, it removes the symptom that revealed the class
+
+*frankC, 2026-08-30 — the sharpest structural finding of the night, and it is
+about a fix that worked.*
+
+`sync.sh` once had two `sed` literals covering fewer spellings than `progress.py`'s
+`PENDING_RE` knew about. That **disagreement** is what exposed the bug: `check`
+counted resolves that `fill` could not fill, and the mismatched numbers were the
+alarm. The fix aligned them.
+
+Now they agree perfectly — **and are wrong together.** A resolve citation that
+wrapped onto a continuation line (ordinary formatting) matches *neither*. So:
+
+- `check` reported **no** pending resolves;
+- `sync.sh` printed *"pushed 1 commit(s), all verified on origin"* with no `filled`
+  line — **which is exactly what a ticket with nothing to fill looks like**;
+- the file still contained the literal `PENDING-COMMIT`.
+
+**All three places a person would look read as healthy.** The placeholder was
+*unseen*, not merely unfilled.
+
+This is the general hazard in unifying two implementations of one rule, and it
+cuts against the repo's own `normalise-dont-special-case` doctrine in a way worth
+stating precisely: **normalising is still right, but it retires an accidental
+oracle.** Two divergent implementations of one predicate constitute a differential
+test that runs for free on every input, and consolidating them deletes it. Face 121
+says a self-differential's reference is not an oracle; this is the mirror — *a
+duplicate you are about to remove may be the only oracle you had.*
+
+**So when you unify two implementations of a rule, add a check that does not share
+their assumptions.** frankC's recommendation, and it is right: not a wider regex —
+that only moves the boundary — but **a second, dumber guard**. After fill, grep each
+resolved ticket for the literal string and fail if it survives. *A substring search
+cannot be defeated by line wrapping.* The new instrument must be **independent, not
+adjacent**; a better version of the same idea inherits the same blind spot.
+
+Pairs with the manifest check: one catches a commit that did not land, the other a
+resolve that landed citing nothing.
+
+### 128a — and the guard it nearly shipped could not fail
+
+Same session, same ticket. The recipe checks a bad soname is **absent**, first
+written as:
+
+    readelf -d … | grep -qv libhdrstatic.so
+
+which passes whenever *any* line fails to match — i.e. every ELF, i.e. always.
+Caught, rewritten as a negated `grep -q`, and then **validated in both directions**:
+passes on the fixed binary, fails on the pre-fix one.
+
+Worth recording for where it happened: **inside the very test proving a silent
+failure had been fixed.** A guard nobody has seen fail is not a guard (108), and
+`grep -v` in a negative assertion is the canonical way to write one — it reads as
+"check it's not there" and means "check some line isn't it".
