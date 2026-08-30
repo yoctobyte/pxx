@@ -500,13 +500,97 @@ merely empirical even though the failure is unexplained. **If anyone touches
 external registration order, this is a latent trap: it fails at LOAD with a
 plausible-looking library name, not at compile time.**
 
-## Remaining: increment 3, the residual 9
+## Increment 3 — done (`c4db6474f`), and its own scope was wrong twice
 
-The last 9 kernel-entry instructions are emitters that do not route through
-`EmitSyscall` — the `_start` stub and the per-frontend/thread-runtime sites
-(`thread_emit.inc` ×3, `asmfront.inc`, `cparser/eparser/rparser/zparser`). The
-`_start` half is what the ticket's original scout note already flagged. Track B's
-`InternStr` caution applies to that work specifically: the static managed-string
-header lives at **negative** offsets from `Strs[].Offset` and the entry is
-8-aligned before the write, so anything reordering data emission near `_start`
-must preserve both.
+Landed. Residual kernel entries **73 → 1**, the one remaining being deliberate
+(below). The paragraph this section replaces was wrong in both of its claims,
+and how it was wrong is the useful part.
+
+### The scope was built from one idiom, and a grep is one idiom
+
+It said "the residual 9 are the `_start` stub plus `thread_emit.inc` ×3,
+`asmfront.inc`, and the frontend sites". Every element of that is false:
+
+- **Not the `_start` stub.** Disassembling the nine showed one
+  `arch_prctl(ARCH_SET_GS)` TLS install (`EmitTlsMainInstall`, ir_codegen.inc:928)
+  and eight in the signal/fault runtime — `sigaltstack`(131), `rt_sigaction`(13)×2,
+  `rt_sigreturn`(15), and the reporter's `write`/`getpid`(39)/`kill`(62)/
+  `exit_group`(231). `EmitProgramEntryForTarget` contributes none of them.
+- **Not `thread_emit.inc`.** Its stub is emitted only when a program clones;
+  a hello-world has none.
+- **Nine is not the emitter population, it is one binary's reachable subset.**
+  The real population is the **17** `EmitAsmX64([… 'syscall' …])` sites in
+  `ir_codegen.inc` alone — kernel entries written as a *mnemonic string*, which
+  the grep for `EmitB($0F); EmitB($05)` cannot match. A program using threads,
+  fork/exec or more signals pulls in more of them.
+
+The tell was site 1 resolving to `ir_codegen.inc:928` — **a line the enumeration
+said did not exist**. The defence generalises: *enumerate from the artefact, not
+from the source.* The binary contains every site by construction; a grep contains
+every site that matches one spelling.
+
+### The seam, and an exclusion that came free
+
+All 17 funnel through `asmtext.inc:389` → `x64_syscall` (`x64enc.inc:164`), so
+the conversion is **one function**, not 17 call sites. User-written inline
+`asm … syscall … end` cannot be caught by it: `asmfront.inc` has zero
+`EmitAsmX64` uses and reaches `lib/asmcore`'s `AsmEncodeX64` instead. Two
+encoders, already separate — the guard this looked like it needed does not exist
+because the separation is structural.
+
+`EncB` is dual-mode (`EncToAsmBuffer` → `AsmB` staging, else `EmitB` direct).
+The staged path is IR_ASM replay, where `CodeLen` is *not* the instruction's
+address, so rerouting must be conditioned on direct mode for correctness — and
+that is the same condition policy wants. One condition, two reasons.
+
+### `rt_sigreturn` must stay raw — and this nearly shipped
+
+It takes no arguments and restores the **entire context** from a signal frame at
+a **fixed offset from rsp**. The thunk's return address plus six register pushes
+move that frame out from under the kernel. Measured: a libc-mode program sent
+SIGTERM died with **SIGSEGV (139)** where the default build exits **143**.
+
+Now emitted through a new **`syscall_raw`** mnemonic that never becomes a call,
+on any flag. `clone`'s child-stack stub in `thread_emit.inc` is raw for the same
+reason — previously true by omission, now true by statement. Anything rsp-relative
+or non-returning belongs on `syscall_raw`.
+
+**The near-miss is the reportable part.** Before the signal test this change
+showed: syscall count **0**, `hello` correct, div0 identical to default,
+self-host converged, and default codegen byte-identical to `pinned`. Six green
+signals over a build that segfaults on the first signal it receives. A metric is
+never the verdict, and a *perfect* metric is the most persuasive wrong one — the
+zero was the thing that made it look finished.
+
+### Verified at `222370c819c9`
+
+| check | result |
+| --- | --- |
+| self-host fixedpoint | converged after 1 round |
+| default codegen vs `pinned` **compiler's output** | byte-identical |
+| libc hello | `hello`, rc=0; real `write`/`exit_group` via libc under strace |
+| libc div0 | rc=200, message identical to default |
+| libc SIGTERM | rc=143 = default (was **139** before `syscall_raw`) |
+| residual kernel entries | 73 → **1** = the rt_sigreturn restorer, at the address the kernel is handed as `sa_restorer` |
+
+The second row is the one self-host cannot give: a uniformly-wrong compiler
+reproduces itself perfectly, so comparing *emitted programs* against the pinned
+binary is the disjoint oracle. (b4 hit the same blind spot the same day from the
+other side — `dataBase := AlignTo(dataBase, 4096)` would desync vaddr from file
+offset and sail through a fixedpoint.)
+
+### What is left, honestly
+
+Not "done to zero", and it should not be. Still raw, by design: `rt_sigreturn`;
+`thread_emit.inc`'s clone stub (child runs on a fresh stack, and libc's errno
+path would touch the *parent's* TLS); user inline asm. Still **unconverted and
+untested**, because no hello-world reaches them: the frontend sites
+(`cparser`/`eparser`/`rparser`/`zparser`) and the majority of the 17 that need
+threads, fork/exec or richer signal use to be emitted at all. **`--rtl-libc` is
+exercised on Pascal hello/div0/signal paths only** — that is the honest scope of
+the green above.
+
+Track B's `InternStr` caution still applies to any future work that reorders
+data emission: the static managed-string header lives at **negative** offsets
+from `Strs[].Offset`, 24 bytes are written into `Data[]` before the offset is
+recorded, and the entry is 8-aligned before that write.
