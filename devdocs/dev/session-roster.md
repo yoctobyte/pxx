@@ -19804,3 +19804,59 @@ any rebase; check whether a red seed is yours before assuming it is*) with the
 dated red-master fact beside the branch's own green sha, so the two cannot be
 confused in three weeks. **A finding that changes the risk for whoever comes next
 is not finished until it is written where they will be standing.**
+
+## Tick 2026-08-30 ~10:5x — the silent lane was BLOCKED ON A PROMPT, not slow
+
+**`frank-rust` has been stuck on a permission dialog for the better part of an
+hour, and that is why `origin/master`'s FPC seed has stayed red.** I chased it
+twice on the assumption it was working through other things. It was not working
+at all:
+
+```
+Dangerous rm operation on possibly-empty variable path: $SP/*
+Do you want to proceed?
+❯ 1. Yes   2. No
+```
+
+**`ListAgents` said `waiting`, and I had written in my own tick procedure that
+`idle`/`shell`/`waiting` are AMBIGUOUS and must be resolved by measuring the
+tree — so I measured the tree, saw `M compiler/pasparser_generic.inc`, and
+concluded "live in the file, do not touch it".** That conclusion was right about
+the file and wrong about the session. **A dirty tree proves an edit happened, not
+that anything is happening now.** The measurement that would have settled it is
+`tmux capture-pane`, which I have never once run in a tick, and which took two
+seconds.
+
+**Two chases went into a queue behind a modal dialog.** A message to a blocked
+session is not delivered-and-ignored, it is **not delivered** — and from the
+outside those are the same observation, which is face 235's shape again: the
+sentence *"I have chased twice with no reply"* is true and means something
+completely different from what I took it to mean.
+
+**Added to the tick procedure: when a session is silent and its lane is blocking
+others, `tmux capture-pane -p -t "=roost:@<n>" | tail` BEFORE chasing a second
+time.** The pane is the only instrument that distinguishes *working*, *idle* and
+*blocked*, and it is cheaper than the message I sent instead.
+
+**Note also what the prompt is: the `rm` with a possibly-empty variable** the
+owner flagged on frankC this morning (`$SP/*` with `SP` unset expands to `/*`).
+The guard is doing exactly what it exists to do. **This is the owner's to clear —
+a peer cannot answer another session's permission prompt, and asking one to is
+permission laundering.**
+
+### Tick numbers
+
+pin **v394 `53800fbeb0b66e11`** (unchanged), load **17.2**, forwardlint **2
+FAILs**, U queue **32**, `working/` holds one lock (`bug-o-uforth-blocktest`,
+not from tonight's fleet), `urgent/` empty, **41 commits** since the last tick
+note. **All three pin conditions still fail.**
+
+### Stale facts in my own carried prompt, corrected
+
+- *"TWO SESSIONS ON TRACK A — unresolved"* — **resolved.** frankA holds A; b4
+  has a filed bounded slice (`grant-elf-writer-and-object-writers-to-b4`).
+- *"EXPECT BACK"* listing frankS / frankwasm / frankD / pxx-a5 / frankB — **all
+  five delivered and stood down.** Nothing outstanding from any of them.
+- *"past FACE 231"* — now past **237**; b4 holds 236 and 237, frankC is writing
+  238. I gave frankC 237 from a stale tail read, which is the same append-only
+  race I had warned it about, made by me.
