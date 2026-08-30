@@ -11410,12 +11410,18 @@ test-core: $(COMPILER)
 	# to skip -- and these rows are what says so. fchdir/ttyname_r have no PAL
 	# syscall and resolve the fd through /proc/self/fd/N; the row asserts the
 	# chdir LANDED, not merely that it returned 0 -- and prints NO path,
+	# The temp templates read their DIRECTORY from TESTMGR_TMP / TESTTMP / /tmp
+	# in that order: they are written at RUN TIME, so no sweep reaches them and
+	# two concurrent runs would share one file. The `len` row asserts UNCHANGED
+	# rather than 19 for the same reason -- 19 was an artefact of the hardcoded
+	# directory, and in-place rewrite is the property that is actually being
+	# tested. bug-c-three-hardcoded-tmp-paths-in-the-new-crtl-tempfile-test
 	# because testmgr rewrites an absolute /tmp path in an EXPECTED string but
 	# not in the test SOURCE, which is what made this row red on the sweeping
 	# host and green locally (regression-test-core-c-crtl-tempfile-and-unlocked).
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_crtl_tempfile_and_unlocked.c $(TESTTMP)/c_crtl_tmp26
-	tools/expect_same.sh c_crtl_tmp26 "$$($(TESTTMP)/c_crtl_tmp26)" "$$(printf 'mkstemp fd>=0: 1\nmkstemp name changed: 1\nmkstemp len: 19\nmkstemp write: 5\nmkstemp readback: 5 [hello]\nmkstemp unlink: 0\nmkstemp bad: -1 errno=22\nmkdtemp ok: 1 changed: 1\nfileno_unlocked(stdout): 1\nferror_unlocked(stdout): 0\nfeof_unlocked(stdout): 0\nfputs_unlocked ok\npc\nfwrite_unlocked ok\nftrylockfile: 0\nfchdir: 0\nfchdir landed: 1\nttyname_r(0) rc class: 1')"
+	tools/expect_same.sh c_crtl_tmp26 "$$($(TESTTMP)/c_crtl_tmp26)" "$$(printf 'mkstemp fd>=0: 1\nmkstemp name changed: 1\nmkstemp len same: 1\nmkstemp write: 5\nmkstemp readback: 5 [hello]\nmkstemp unlink: 0\nmkstemp bad: -1 errno=22\nmkdtemp ok: 1 changed: 1\nfileno_unlocked(stdout): 1\nferror_unlocked(stdout): 0\nfeof_unlocked(stdout): 0\nfputs_unlocked ok\npc\nfwrite_unlocked ok\nftrylockfile: 0\nfchdir: 0\nfchdir landed: 1\nttyname_r(0) rc class: 1')"
 	# The crtl calls with NO PAL syscall behind them. Each must fail -1/ENOSYS
 	# and never report a success it did not perform -- a silent success here
 	# would make a privilege drop or a chroot look done when nothing happened.

@@ -6,6 +6,7 @@ blocked-by: []
 found-by: frankT
 created: 2026-08-30
 summary: "test/c_crtl_tempfile_and_unlocked.c (f157966e0) writes /tmp/noXs, /tmp/pxxprobeXXXXXX and /tmp/pxxprobedXXXXXX at RUNTIME, so no Makefile sweep reaches them and testmgr cannot privatize them — two concurrent runs share the file. Caught by tools/testmgr_hardcoded_tmp_devtest.py, which is red on master because of it. The guard's own message carries the exact fix."
+status: done
 ---
 
 # Three hardcoded /tmp paths in the new crtl tempfile test
@@ -54,3 +55,6 @@ template's DIRECTORY is still shared, and `/tmp/noXs` has no template at all.
 T owns the tool, never the bug. The file is Track C's and the change is three
 lines, but a C test's runtime behaviour is the owning lane's to verify — and
 the guard is red on master until it lands, so this is not a background item.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

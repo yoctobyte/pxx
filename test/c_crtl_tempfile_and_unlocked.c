@@ -20,17 +20,41 @@
 
 int main(void)
 {
-  char tmpl[]  = "/tmp/pxxprobeXXXXXX";
-  char tmpl2[] = "/tmp/pxxprobedXXXXXX";
+  /* THE DIRECTORY COMES FROM THE ENVIRONMENT, and the order is not cosmetic.
+     These templates are written at RUN TIME by this compiled program, so no
+     Makefile sweep reaches them and testmgr's per-run privatisation cannot
+     either -- two concurrent runs (a watcher beside a dev session is the normal
+     state) would share one file, and what that produces is a WRONG RESULT, not
+     a crash. TESTMGR_TMP first because testmgr launches jobs through an
+     environment allowlist (PXX_ TESTMGR_ LC_ QEMU_), so $TESTTMP alone does not
+     reach the job; TESTTMP second because that is what
+     `make test TESTTMP=$(mktemp -d)` exports; /tmp last so a bare run is
+     byte-identical. mkstemp's own XXXXXX does NOT solve this -- it randomises
+     the leaf, never the directory, and `noXs` has no template at all.
+     bug-c-three-hardcoded-tmp-paths-in-the-new-crtl-tempfile-test */
+  const char *dir = getenv("TESTMGR_TMP");
+  char tmpl[512], tmpl0[512], tmpl2[512], tmpl20[512], bad[512];
   char buf[64];
   int fd, n;
+
+  if (!dir) dir = getenv("TESTTMP");
+  if (!dir) dir = "/tmp";
+  snprintf(tmpl,  sizeof(tmpl),  "%s/pxxprobeXXXXXX",  dir);
+  snprintf(tmpl2, sizeof(tmpl2), "%s/pxxprobedXXXXXX", dir);
+  snprintf(bad,   sizeof(bad),   "%s/noXs",            dir);
+  strcpy(tmpl0,  tmpl);
+  strcpy(tmpl20, tmpl2);
 
   /* mkstemp: creates, is read/write, and the template was rewritten in place
      to the same LENGTH (the XXXXXX is replaced, never extended or trimmed). */
   fd = mkstemp(tmpl);
   printf("mkstemp fd>=0: %d\n", fd >= 0);
-  printf("mkstemp name changed: %d\n", strcmp(tmpl, "/tmp/pxxprobeXXXXXX") != 0);
-  printf("mkstemp len: %d\n", (int)strlen(tmpl));
+  printf("mkstemp name changed: %d\n", strcmp(tmpl, tmpl0) != 0);
+  /* The LENGTH row asserts "unchanged", not a number: the number was 19 only
+     because the directory was hardcoded, and the property being tested is that
+     mkstemp rewrites the template IN PLACE -- replacing the XXXXXX, never
+     extending or trimming it -- which is dir-independent. */
+  printf("mkstemp len same: %d\n", (int)strlen(tmpl) == (int)strlen(tmpl0));
   n = (int)write(fd, "hello", 5);
   printf("mkstemp write: %d\n", n);
   lseek(fd, 0, SEEK_SET);
@@ -41,12 +65,12 @@ int main(void)
   printf("mkstemp unlink: %d\n", unlink(tmpl));
 
   /* A template without the trailing XXXXXX is EINVAL, not a silent success. */
-  { char bad[] = "/tmp/noXs"; int r = mkstemp(bad);
+  { int r = mkstemp(bad);
     printf("mkstemp bad: %d errno=%d\n", r, errno); }
 
   { char *r = mkdtemp(tmpl2);
     printf("mkdtemp ok: %d changed: %d\n", r != 0,
-           strcmp(tmpl2, "/tmp/pxxprobedXXXXXX") != 0);
+           strcmp(tmpl2, tmpl20) != 0);
     if (r) rmdir(tmpl2); }
 
   printf("fileno_unlocked(stdout): %d\n", fileno_unlocked(stdout));
