@@ -17173,7 +17173,19 @@ endif
 	# bisect boundary, a colour space with one sector wrong, an escape() that
 	# also escapes quotes), none of which raises anything.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_bisect.npy $(TESTTMP)/lib_mimic_bisect
-	tools/expect_same.sh lib_mimic_bisect.1 "$$($(TESTTMP)/lib_mimic_bisect | grep -c '=ok')" "18"
+	# bisect -- 18 checks became 50 in phase 2 of feature-b-sweep-mimic-shims-
+	# against-cpython. The original set covered the algorithm's shape well; what
+	# was thin was the lo/hi WINDOW (one check), the degenerate lists, and the
+	# fact that bisect compares with `<` and so works on anything orderable --
+	# asserting only over ints would let an int-coercing implementation pass.
+	#
+	# The finding was in the window: `hi` is a SENTINEL at -1, not a sign test.
+	# CPython's bisect is the C _bisect module, whose argument clinic defaults
+	# hi to -1 and does `if (hi == -1) hi = len(list)`; any OTHER negative is a
+	# literal bound. The shim tested `hi < 0`, so bisect_right(r, 2, 0, -2) was
+	# 4 here and 0 in CPython. One character, and "negative" and "-1" are not
+	# the same set.
+	tools/expect_same.sh lib_mimic_bisect.1 "$$($(TESTTMP)/lib_mimic_bisect | grep -c '=ok')" "50"
 	tools/expect_same.sh lib_mimic_bisect.2 "$$($(TESTTMP)/lib_mimic_bisect | tail -1)" "MIMIC-BISECT OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"

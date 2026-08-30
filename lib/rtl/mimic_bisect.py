@@ -33,11 +33,22 @@ rather than a silently ignored key.
 def bisect_left(a, x, lo=0, hi=-1):
     """Leftmost index where x can be inserted keeping a sorted.
 
-    hi=-1 means "the end of the list". CPython spells that default None; -1 is
-    used here because it keeps the parameter a plain int, and a negative hi is
-    not meaningful for this function otherwise.
+    hi=-1 means "the end of the list", and that is not an invention: CPython's
+    `bisect` is the C `_bisect` module, whose argument clinic gives `hi` the
+    default `-1` and then does exactly `if (hi == -1) hi = len(list)`. The
+    pure-Python `Lib/bisect.py` spells the same default `None`; -1 is used here
+    because it keeps the parameter a plain int, and it agrees with the C module
+    a caller actually gets.
+
+    `hi == -1`, NOT `hi < 0`. That distinction is measured, not stylistic: this
+    read `if hi < 0` until 2026-08-30, which made every negative hi mean "the
+    end", where CPython treats -1 as the sentinel and any other negative as a
+    literal bound that leaves `lo < hi` false. `bisect_left([1,2,2,2,3], 2, 0,
+    -2)` was 4 here and 0 in CPython. Meaningless input, agreed — but agreeing
+    with CPython on it costs one character, and "negative" and "-1" are not the
+    same set.
     """
-    if hi < 0:
+    if hi == -1:
         hi = len(a)
     while lo < hi:
         mid = (lo + hi) // 2
@@ -49,8 +60,11 @@ def bisect_left(a, x, lo=0, hi=-1):
 
 
 def bisect_right(a, x, lo=0, hi=-1):
-    """Rightmost index where x can be inserted keeping a sorted."""
-    if hi < 0:
+    """Rightmost index where x can be inserted keeping a sorted.
+
+    `hi == -1` is the sentinel, not `hi < 0` — see bisect_left's note.
+    """
+    if hi == -1:
         hi = len(a)
     while lo < hi:
         mid = (lo + hi) // 2

@@ -93,6 +93,85 @@ lo = [0, 1, 1, 9]
 insort_left(lo, 1)
 check("insort_left_pos", bisect_left(lo, 1), 1)
 
+# ============================================================================
+# EXTENDED 2026-08-30 -- feature-b-sweep-mimic-shims-against-cpython, phase 2.
+# The checks above cover the algorithm's shape. What was thin was the lo/hi
+# WINDOW (one check), the degenerate lists, and the fact that bisect compares
+# with `<` and therefore works on anything orderable, not on ints. The finding
+# was in the window: `hi` is a SENTINEL at -1, not a sign test.
+# ============================================================================
+
+# --------------------------------------------------------- the lo/hi window
+# lo alone: search the tail. The answer is an index into the WHOLE list, not
+# into the window -- the off-by-one a hand-written version gets wrong.
+check("lo_only_left", bisect_left(r, 2, 2), 2)
+check("lo_only_right", bisect_right(r, 2, 2), 4)
+# hi alone: the window ends mid-run, so right() cannot walk past it
+check("hi_only_left", bisect_left(r, 2, 0, 3), 1)
+check("hi_only_right", bisect_right(r, 2, 0, 3), 3)
+# a window that excludes the value entirely still answers with a real index
+check("window_excludes", bisect_right(r, 2, 1, 2), 2)
+# degenerate windows: empty, at the end, and inverted
+check("lo_eq_hi", bisect_left(r, 2, 3, 3), 3)
+check("hi_zero", bisect_left(r, 2, 0, 0), 0)
+check("lo_past_run", bisect_left(r, 2, 4, 5), 4)
+check("lo_gt_hi", bisect_left(r, 2, 4, 2), 4)
+
+# hi == -1 IS the sentinel meaning "the end", and that is CPython's C _bisect
+# behaviour, not ours: its argument clinic defaults hi to -1 and does
+# `if (hi == -1) hi = len(list)`. Any OTHER negative is a literal bound that
+# leaves `lo < hi` false straight away. The shim tested `hi < 0` until
+# 2026-08-30 and answered 4 for the second line below, where CPython says 0.
+check("hi_sentinel_minus1", bisect_left(r, 2, 0, -1), 1)
+check("hi_minus2_is_literal", bisect_right(r, 2, 0, -2), 0)
+
+# ------------------------------------------------------- degenerate lists
+check("one_lt", bisect_left([5], 3), 0)
+check("one_eq_left", bisect_left([5], 5), 0)
+check("one_eq_right", bisect_right([5], 5), 1)
+check("one_gt", bisect_right([5], 9), 1)
+# every element equal: left pins the front, right the back
+check("all_eq_left", bisect_left([2, 2, 2], 2), 0)
+check("all_eq_right", bisect_right([2, 2, 2], 2), 3)
+# a run flush against each end, where a loop that mis-handles an empty half
+# would fall off
+check("start_run_left", bisect_left([2, 2, 5], 2), 0)
+check("start_run_right", bisect_right([2, 2, 5], 2), 2)
+check("end_run_left", bisect_left([1, 4, 4], 4), 1)
+check("end_run_right", bisect_right([1, 4, 4], 4), 3)
+
+# ------------------------------- bisect compares with `<`, so any order works
+# Nothing here is int-specific, and asserting only over ints would let an
+# int-coercing implementation pass.
+sl = ["ant", "bee", "cow"]
+check("str_left", bisect_left(sl, "bee"), 1)
+check("str_right", bisect_right(sl, "bee"), 2)
+check("str_gap", bisect_left(sl, "bat"), 1)
+tl = [(1, "a"), (1, "b"), (2, "a")]
+check("tuple_left", bisect_left(tl, (1, "b")), 1)
+check("tuple_right", bisect_right(tl, (1, "b")), 2)
+fl = [1.0, 2.5, 2.5, 9.0]
+check("float_left", bisect_left(fl, 2.5), 1)
+check("float_right", bisect_right(fl, 2.5), 3)
+
+# --------------------------------------------------------- insort variations
+# insort honours the window too -- it inserts at the index bisect returns, so a
+# window that excludes the run puts the value somewhere sorted order would not
+iw = [1, 2, 2, 3]
+insort_left(iw, 2, 2, 4)
+check("insort_left_window", iw, [1, 2, 2, 2, 3])
+iw2 = [1, 2, 2, 3]
+insort_right(iw2, 2, 0, 2)
+check("insort_right_window", iw2, [1, 2, 2, 2, 3])
+# into an empty list, and against both ends
+ie = []
+insort_left(ie, 5)
+check("insort_empty", ie, [5])
+ib = [2, 4]
+insort_left(ib, 1)
+insort_right(ib, 9)
+check("insort_ends", ib, [1, 2, 4, 9])
+
 if fails == 0:
     print("MIMIC-BISECT OK")
 else:
