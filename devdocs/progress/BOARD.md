@@ -391,7 +391,7 @@ _none_
 | grant-ir-codegen-xtensa-cleanup-arm-to-franks-b4-verified-off | A+S | 55 | grant | Discharges grant-the-xtensa-cleanup-arm-in-ir-codegen-to-track-s. frankS may edit the `if TargetArch = TARGET_XTENSA then` block inside EmitManagedLocalCleanupForTarget at ir_codegen.inc:10680 and nothing else in that file. b4's release verified three independent ways, not relayed from its word alone. | — |
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 5 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
-| idea-a-fold-the-asm-emit-harness-mock-preludes-into-one | A | 15 | idea | Fold the five asm-emit harnesses' mock preludes into one shared include | — |
+| idea-a-fold-the-asm-emit-harness-mock-preludes-into-one | A | 35 | idea | Fold the five asm-emit harnesses' mock preludes into one shared include | — |
 | idea-adaptive-heap-growth | A | 5 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
 | idea-c-realworld-test-targets | C | 60 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | idea-cross-namespace-ambiguity-warning | A | 15 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
@@ -1029,6 +1029,7 @@ _none_
 - [p 35] [T] feature-t-lint-token-text-compared-against-a-keyword
 - [p 35] [T] feature-twatch-full-tier-coverage-age
 - [p 35] [W] feature-web-blog-bootstrap
+- [p 35] [A] idea-a-fold-the-asm-emit-harness-mock-preludes-into-one [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 35] [A] refactor-a-the-const-cast-width-table-is-the-third-copy
 - [p 35] [A] refactor-a-unify-the-five-remaining-pascal-postfix-suffix-walks
 - [p 35] [P] refactor-p-five-dispatch-sites-for-one-named-type-cast
@@ -1150,7 +1151,6 @@ _none_
 - [p 15] [P] feature-p-tobject-api-classparent-instancesize-tostring
 - [p 15] [W] feature-promo-launch-plan
 - [p 15] [T] feature-t-uforth-bench-restore-the-elfhash-outlier
-- [p 15] [A] idea-a-fold-the-asm-emit-harness-mock-preludes-into-one [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 15] [A] idea-cross-namespace-ambiguity-warning [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 15] [P] task-pascal-conformance-long-tail
 - [p 12] [A] bug-a-riscv32-sa-onstack-has-no-effect-under-qemu

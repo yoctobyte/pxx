@@ -1,9 +1,25 @@
 ---
 track: A
-prio: 15
+prio: 35
 type: idea
 blocked-by: []
 ---
+
+> **Re-priced 15 -> 35 by the coordinator, 2026-08-30.** frankA's call to file
+> this rather than do it during the p70 red was right, and the reasoning for 15
+> was sound at the time it was written. What moves it is the count, not the risk:
+> this is the THIRD instance in the same file (`AsmRv32ProcessInlineLine`,
+> `InlineAsmLineHoleN`, now `AIntToStr`), and `devdocs/dev/root-cause-over-microfix.md`
+> prices two as a smell and three as a design flaw. It also has the one property
+> a low-prio ticket must not have: it re-arms itself. Every encoder change from
+> here can turn a green harness red for a reason that is not in the encoder, and
+> the five harnesses were only recently wired into `test-asm`, so the population
+> that can trip it just grew.
+>
+> Not raised further, for frankA's own reasons, which stand: the rot is no longer
+> silent, the refactor risks five green harnesses to close nothing currently red,
+> and the preludes are not identical so it is not mechanical. 35 says "do it
+> deliberately, on a quiet lane, before the next encoder campaign" — not "do it now".
 
 # Fold the five asm-emit harnesses' mock preludes into one shared include
 
