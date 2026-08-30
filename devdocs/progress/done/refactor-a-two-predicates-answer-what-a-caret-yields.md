@@ -174,4 +174,4 @@ population is six files, not a suite. That is why nothing was deleted.
 Follow-up: [[refactor-a-collapse-nodeptrelem-into-the-deref-walk]].
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 72b4bd51a.
