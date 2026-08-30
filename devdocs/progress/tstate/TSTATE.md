@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `22340a4b54f3` | 2026-08-30T03:16:22Z | RED (native) | 372.3s | `e46dbffaa80d` RED |
+| plexus | `feaed93b2038` | 2026-08-30T03:24:26Z | RED (native) | 387.9s | `e46dbffaa80d` RED |
 | seven | `9ced9bbc3e2d` | 2026-08-30T03:15:57Z | RED (native) | 111.3s | `b94f5190181b` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
@@ -11,7 +11,7 @@
 - **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
 - **demos#00** (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 135 commit(s) in range
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 217 commit(s) in range
-- **test-core#src:test/test_generic_arg_is_enclosing_template_param_objfpc.pas** — test/test_generic_arg_is_enclosing_template_param_objfpc.pas tools/expect_same.sh (plexus): bad `1d8b44e59042`, last good `0bcef8f3f2ab`, 3 commit(s) in range
+- **test-core#src:tools/expect_same.sh@276** — tools/expect_same.sh (plexus): bad `feaed93b2038`, last good `unknown`, 0 commit(s) in range
 - **CASCADE 18 jobs** (seven): bad `154d1aa3fba6`, last good `e417731e9007`, 12 commit(s) in range
   <details><summary>jobs</summary>
 
