@@ -2978,6 +2978,73 @@ def cmd_claim(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_park(args: argparse.Namespace) -> int:
+    """Release a lock: working/ (or anywhere) -> unfinished/, owner cleared.
+
+    THE ONE LIFECYCLE TRANSITION THE TOOL DID NOT SUPPORT, AND THE ONE THAT GETS
+    SKIPPED. `claim` and `resolve` were one command each; parking was a manual
+    `git mv` plus two frontmatter edits, so a session that stopped mid-ticket
+    left the lock standing and the board could not distinguish it from live
+    work. Observed twice on 2026-08-30 during a fleet pause: two locks whose
+    owners had stopped, each needing a message to chase. Raised by
+    frank-optimize-b4 after doing the move by hand.
+
+    THE REASON IS A REQUIRED POSITIONAL, ON PURPOSE. A park with no note is the
+    failure this command exists to prevent, not a convenience it should allow --
+    making parking one command while letting the note be optional would make it
+    cheaper to park BADLY. What is lost when a session stops is never the
+    measurements (those get written into the ticket as they are made); it is the
+    SHAPE OF THE RESUME, which lives only in the holder's head. So the reason is
+    the argument, and the printed guidance asks for the resume condition rather
+    than a status summary.
+    """
+    src = find_ticket(args.slug)
+    dst = PROG / "unfinished" / f"{args.slug}.md"
+    if src == dst:
+        print(f"{args.slug} already in unfinished/", file=sys.stderr)
+        return 1
+    was_held = src.parent.name == "working"
+    move_ticket(src, dst)
+    set_field(dst, "Status", "unfinished")
+    set_field(dst, "Owner", "")
+    reason = " ".join(args.reason).strip()
+    text = dst.read_text(encoding="utf-8")
+    if not text.endswith("\n"):
+        text += "\n"
+    text += (
+        f"\n## Parked {_dt.date.today().isoformat()}\n\n"
+        f"{reason}\n\n"
+        f"**Before resuming:** read the reason above, then the ticket body. If "
+        f"the reason does not tell you what would make this worth picking up "
+        f"again, establishing that is the first step -- a park is a handoff to a "
+        f"stranger who may be you.\n"
+    )
+    dst.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "add", str(dst)], cwd=ROOT,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"parked {args.slug} -> unfinished/ (owner cleared{', lock released' if was_held else ''}).",
+          file=sys.stderr)
+    # The Track A warning is not decoration: CLAUDE.md makes a Track A ticket in
+    # unfinished/ CRITICAL, because a HALF-APPLIED compiler change can break the
+    # self-host gate for every lane. The distinction that matters and that the
+    # folder cannot express: a park is a BOOKKEEPING state, and the rule is about
+    # a CODE state. A clean tree parks freely; a dirty one owes a decision.
+    head = dst.read_text(encoding="utf-8")[:600]
+    m = re.search(r"^track:\s*(\S+)", head, re.M)
+    if m and "A" in m.group(1).upper().replace("+", ""):
+        print("NOTE: this is a Track A ticket. `check` treats an A ticket in "
+              "unfinished/ as critical -- but that rule is about a HALF-APPLIED "
+              "compiler change, not about bookkeeping. If your tree is clean and "
+              "everything is pushed, there is nothing to revert and the park is "
+              "fine; if it is NOT, decide now whether to land or revert, because "
+              "the folder cannot tell the two apart.", file=sys.stderr)
+    print("staged, not committed. write what a resumer needs INTO the ticket "
+          "(what you measured, what the next step was, what is deliberately NOT "
+          "next), regenerate the board (%s board-md) and commit the move + edits "
+          "together." % Path(sys.argv[0]).name, file=sys.stderr)
+    return 0
+
+
 def cmd_pending(args: argparse.Namespace) -> int:
     """`<path>\t<sha>` per ticket owing a citation — sync.sh's input.
 
@@ -3090,6 +3157,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     sp = sub.add_parser("claim")
     sp.add_argument("slug")
     sp.add_argument("owner")
+    # park: the reason is a REQUIRED positional (nargs="+"), so the tool cannot
+    # be used to release a lock without saying what resumes it.
+    sp = sub.add_parser("park")
+    sp.add_argument("slug")
+    sp.add_argument("reason", nargs="+")
     sub.add_parser("pending")
     sp = sub.add_parser("fill")
     sp.add_argument("path")
@@ -3118,6 +3190,8 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     if args.cmd == "claim":
         return cmd_claim(args)
+    if args.cmd == "park":
+        return cmd_park(args)
     if args.cmd == "pending":
         return cmd_pending(args)
     if args.cmd == "fill":
