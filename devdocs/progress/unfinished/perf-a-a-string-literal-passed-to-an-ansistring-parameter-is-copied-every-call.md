@@ -4,10 +4,10 @@ track: A
 prio: 70
 type: perf
 blocked-by: []
-status: done
+status: unfinished
 created: 2026-08-30
 owner: frankB
-summary: "Passing a string LITERAL to an AnsiString parameter allocates and copies it on every call — 28x slower than passing a typed constant, and the cost scales with the literal's length. `const` does not help, though by definition it needs no copy. Comparing against a literal INLINE is free, so this is parameter marshalling specifically. Compiler-wide: every CaseEqual(x,'lit') pays it, and so does every pxx program. Found while diagnosing perf-p-parsefactorcore, whose 9.4% is this defect rather than the 92-arm walk the ticket describes."
+summary: "REOPENED 2026-08-30 -- the fix LANDED (9588c8535, 849ms -> 84ms) and was REVERTED (72b4c47a7) because it broke NilPy string repeat with a LITERAL left operand: `x = \"a\" * 3; len(x)` gives 285 instead of 3, while `a = \"a\"; len(a * 3)` is correct. ~24 test-nilpy jobs + 4 test-core. Confirmed mine by reverse-applying the ir.inc hunk alone and rebuilding (285 -> 3). The perf win is real and re-landable; what it needs is a guard that excludes the callee paths which already do their own +8, and a way to GATE it -- test-nilpy is full-tier only, so gate.sh quick could not see the failing population at all. Do not re-land without a NilPy repeat repro in the evidence."
 ---
 
 # A string literal passed to an `AnsiString` parameter is copied on every call
@@ -244,3 +244,72 @@ row 3 **and rows 2 and 3 are unchanged**.
 
 ## Log
 - 2026-08-30 — resolved, commit 9588c8535.
+
+
+---
+
+## REOPENED 2026-08-30 (frankB) — landed, broke NilPy, reverted
+
+`9588c8535` landed the win (849 ms -> 84 ms, unchanged ShortString/variable arms)
+and `72b4c47a7` reverted its `ir.inc` hunk. **The optimisation is sound in
+principle and the measurement stands; the guard was too wide.**
+
+### The defect
+
+```python
+x = "a" * 3 ;  len(x)      ->  285      CPython and pinned: 3
+a = "a" ;      len(a * 3)  ->  3        correct
+               len(a+a+a)  ->  3        correct
+```
+
+**A string literal as the LEFT operand of repeat, and nothing else.** The same
+value in a variable is correct. `print("a" * 3)` emits the RTTI type-name table
+instead of `aaa` — it reads from a wrong base and runs until it hits something.
+285 / 288 / 49982 are what a length field reads as when it is *not* the length
+field.
+
+### Attribution — measured, not inferred
+
+frankwasm supplied `pinned` green / HEAD red plus the literal-vs-variable
+boundary, and explicitly called it **a strong lead, not a verdict** (correlation
+plus mechanism, with 55 commits in the window). Confirmed by **reverse-applying
+this commit's `ir.inc` hunk alone and rebuilding**: 285 -> 3, binaries
+`d0ff891ec0f2` (with) vs `9cc036445ccf` (without). The change was removed and the
+symptom went with it.
+
+### Why it was reverted rather than fixed
+
+The failing population is **~24 `test-nilpy` jobs + 4 in `test-core`**, and
+`test-nilpy` is **full-tier only** — the per-fix hook denies it. A fix I cannot
+run against the red tests is a guess, and the pin was blocked behind this with
+frank-optimize's `-O2` promotion waiting. Unblocking beat being clever.
+
+### What the re-land needs
+
+The suspected mechanism, **unverified and to be measured before acting on it**:
+the NilPy repeat helper's path already resolves its source to the managed handle,
+so my unconditional `+8` at the call boundary double-adds and the length is read
+8 bytes off. If so the guard must exclude callees that do their own resolution
+rather than assuming the parameter's `TypeKind` settles it.
+
+**The condition frankwasm identified and I left implicit — write it down this
+time.** I justified leaving `ParamWantsManagedStrTemp` alone with "managed ->
+managed on a saturated refcount is a no-op", and *saturated is a property of the
+OBJECT, not of the path*. The safety argument was contingent on a fact never
+stated as a condition, which is how it read as unconditional.
+
+### The gate lesson, which is the durable part
+
+Eight string-heavy tests, both widestring canaries, `argLW=6` and `gate.sh quick`
+were green at push time **and are still green now** — they were never wrong. The
+affected population was invisible to every gate available: `gate.sh quick`
+deliberately drops `test-nilpy` because it was 625 of the gate's 649 seconds.
+**This is coverage geometry, not diligence** — the change landed exactly inside
+the hole the quick tier is defined by.
+
+The operational consequence is narrow and worth keeping: **a change to a
+cross-frontend marshalling path has its affected population in a tier the author
+cannot run.** The answer is not to widen the gate (that spends the machine that
+produces Track T's median-8 sampling); it is to carry **one NilPy canary in the
+evidence** for any change to argument marshalling. `x = "a" * 3` would have
+caught this in under a second.

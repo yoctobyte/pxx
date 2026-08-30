@@ -15,7 +15,7 @@ _none_
 | bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback | C | 60 | bug | `#include <sys/param.h>` with no `-I` recurses until it hits the include-nesting cap, whatever that cap is — it reported level 17 with sixteen buffers and level 129 with 128. With `-I/usr/include/x86_64-linux-gnu` the same header compiles fine, gcc compiles it fine, and every one of its own includes compiles fine both alone and all together. So it is the host-fallback RESOLUTION of `sys/param.h`, not the header's content or the depth limit. This is what actually blocks busybox — raising the include-buffer cap does NOT unblock it. | — |
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 40 | chore | BATCH 5 LANDED 2026-08-30 (frankwasm): 6 top-level subjects wired against PROVEN oracles, 2 C helpers exempted, 1 stale exemption removed — 45 unwired down to 37, and ALL 37 REMAINING ARE test/wasm/**, i.e. one campaign's staging and not a general backlog. RE-PRICED 20 -> 40 with the measurement, not as a bare frontmatter edit: p20 priced a DRAIN OF 15 DEFERRED FILES, and the object is a LEAK — every one of batch 5's eight top-level files was created THAT DAY (--diff-filter=A), while `tools-devtest#00`, which runs check_test_wiring, has been STILL-RED in the full tier since 49bd043. DECIDED 2026-08-19: sweep them in — one job, not 45 tickets. Track A, not T, precisely because A can FIX a red in place. These are repro tests from fix commits, so the bug already has a ticket in done/ — reference it, do not re-file. NEVER record current output as the expectation; a file with no constructible oracle is left UNWIRED WITH A STATED REASON, which is the honest form of a skip. | — |
 
-## unfinished (34)
+## unfinished (35)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -50,6 +50,7 @@ _none_
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-target-wasm | A+B | 25 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
+| perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call | A | 70 | perf | REOPENED 2026-08-30 -- the fix LANDED (9588c8535, 849ms -> 84ms) and was REVERTED (72b4c47a7) because it broke NilPy string repeat with a LITERAL left operand: `x = \"a\" * 3; len(x)` gives 285 instead of 3, while `a = \"a\"; len(a * 3)` is correct. ~24 test-nilpy jobs + 4 test-core. Confirmed mine by reverse-applying the ir.inc hunk alone and rebuilding (285 -> 3). The perf win is real and re-landable; what it needs is a guard that excludes the callee paths which already do their own +8, and a way to GATE it -- test-nilpy is full-tier only, so gate.sh quick could not see the failing population at all. Do not re-land without a NilPy repeat repro in the evidence. | — |
 | perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 | ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expired | A+S | 55 | ruling | RULING: reversing the xtensa signal-runtime exclusion is DERIVABLE, not a Track U fork | — |
@@ -737,9 +738,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2864)
+## done (2863)
 
-2864 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2863 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (66)
 
@@ -817,6 +818,7 @@ _none_
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- [p 70] [A] perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 70] [P] bug-p-generic-constraints-are-checked-before-the-type-section-closes [parked — re-claim, do not duplicate]
 - [p 70] [P] bug-p-generic-type-param-unresolved-in-class-abstract-template [parked — re-claim, do not duplicate]
 - [p 70] [A+O] feature-opt-o3-register-pressure
@@ -1277,3 +1279,4 @@ _none_
 - **1** — feature-port-freebsd-native
 - **1** — feature-t-freebsd-image-and-runner
 - **1** — feature-tls13-from-scratch
+- **1** — perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
