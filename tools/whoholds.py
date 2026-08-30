@@ -28,6 +28,21 @@ TO BE SEEN BY THIS TOOL, put a `Lane:` trailer on your commits:
 
     Lane: frankA
 
+GRAMMAR, stated because two lanes got it wrong within hours of the field existing
+-- which is a docs defect, not two mistakes: letters, digits, `_` `.` `-`, starting
+with a letter, at most 32 chars. NO `@`, no spaces, no parentheses in the name
+itself (a parenthesised id AFTER the name is fine and is stripped). So
+`claude@plexus` is rejected and `claude-plexus` is not.
+
+USE THE NAME `ListAgents` SHOWS, because the field exists to answer "who do I ask"
+and that name is what `SendMessage` takes. A ticket's `owner:` or `found-by:` field
+is a different thing and may not be reachable.
+
+THE FAILURE THIS TOOL CANNOT DETECT: a wrong-but-PARSEABLE name. `!bad` is loud;
+`Lane: someone-elses-name` is silent and will be believed. That is the one input
+error you must catch yourself, and it is the mirror of the state below -- present
+and rejected is visible, present and wrong is not.
+
 Put it anywhere in the message -- this tool scans the whole body, deliberately.
 git itself parses trailers only from the LAST contiguous block, so a `Lane:` line
 one paragraph too high is invisible to `%(trailers:...)` with no error at all, and
