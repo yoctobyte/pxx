@@ -6,7 +6,7 @@ blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
 # ESP PAL: exact POSIX fd semantics over ESP-IDF VFS
 
 - **Type:** feature (Track B PAL / ESP-IDF)
-- **Status:** working
+- **Status:** unfinished — blocked-by bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier; the fs-c3 baseline is landed and independent of it
 - **Owner:** pxx-b
 - **Opened:** 2026-06-21 (PAL file IO expansion)
 - **Relation:** follows `feature-platform-abstraction-layer`
