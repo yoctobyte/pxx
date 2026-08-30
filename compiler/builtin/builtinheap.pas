@@ -203,7 +203,16 @@ const
   PXX_KIND_MASK    = $FF;
 
   { Flags, bits 8-15 }
-  PXX_FLAG_STATIC   = $0100;   { .rodata, never freed — reserved, unused }
+  { Built by the COMPILER, not by this allocator: the block lives in the data
+    section in front of a pooled string literal (InternStr, emit.inc), its
+    refcount is born saturated so no PXXStrDecRef can reach the free, and it
+    carries no PXX_FLAG_APPENDABLE and no allocator size word worth trusting.
+    Nothing here BRANCHES on it — every in-place path already refuses a shared
+    block on its own terms (rc <= 1, plus APPENDABLE for the append). The flag
+    is what makes such a block identifiable in a dump or a debugger, and the
+    reason a `p` that never came from PXXAlloc can be sitting in this heap's
+    protocol at all. bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+  PXX_FLAG_STATIC   = $0100;
   PXX_FLAG_INTERNED = $0200;   { reserved, unused }
   PXX_FLAG_ASCII    = $0400;   { verified: no byte >= $80 }
   { The ASCII bit ANSWERED. Without this, 0 means both "scanned, has high bytes"

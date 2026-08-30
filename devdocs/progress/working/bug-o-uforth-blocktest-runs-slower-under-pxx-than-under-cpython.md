@@ -702,3 +702,60 @@ the table is for.
   the small subjects are the proxy the ticket already established for exactly
   this reason. A blocktest number should come from T's sweep, not from here.
 - `SLOW_SHARDS` still should NOT be dismantled.
+
+## 2026-08-30 — aarch64 ported, and where the next cost is
+
+`90b4d2b51` ports the same pass to aarch64: one predicate and three emit sites,
+because the header is in the **pool** and not in a per-backend shim, so the
+representation was already shared. `EmitAnsiStringFromNodeA64` is one central
+conversion where x86-64 has eight. Parity counts move together, x86-64 22→23
+and aarch64 10→11 — the gap does not widen. Verified under qemu-aarch64, -O3
+and -O0 byte-identical to each other and to x86-64, and the same
+`MSTR_STATIC_RC = 0` break shows there too.
+
+aarch64 takes its reference by CALLING `PXXStrIncRef` where x86-64 emits a
+four-byte `inc qword [rax-16]`; a hand-emitted aarch64 retain has to reproduce
+the threadsafe arm as well (LSE or ldxr/stxr) and `EmitStrIncRefA64` already
+gets that right. Still a fraction of the allocate-copy-free it replaces.
+
+### Banked, not started: PXXAlloc zeroes a span the caller is about to overwrite
+
+Read while looking for what is left, and worth writing down before it is
+forgotten. `PXXAlloc` is already O(1) — size-class bins, exact-fit head, no
+walk except for the rare large blocks. What it spends its instructions on is
+the **zero-init contract**: a block taken off a free bin is zeroed a machine
+word at a time across its whole size before it is handed back.
+
+For the string path that zeroing is almost entirely a double write.
+`PXXStrFromLit` immediately stamps three header words and then copies `len`
+bytes plus a nul over the rest — every byte of the block except the tail
+padding is written twice, once with zero and once with the answer.
+
+The shape that would fix it is the one this ticket keeps arriving at: not a
+flag on the existing entry point, but a **second entry point** for callers that
+provably overwrite what they are given. Note the contract is deliberately
+global and the comment in `PXXAlloc` says so ("Anything that changes the bump
+path ... must re-produce the guarantee here, not push it back onto callers"),
+so this is an addition beside it, never a relaxation of it.
+
+What has to be established before writing any of it, and none of it is done:
+
+- which callers really do overwrite the WHOLE payload, tail padding included —
+  `PXXStrFromLit` writes up to the nul and not past it, and the block is
+  rounded up to 8, so the padding is stale under a raw alloc;
+- whether anything reads that padding. Nothing should, but "should" is what
+  this runtime's expensive bugs are made of, and `PXXStrAllocSize` already
+  invites an appender into exactly those bytes;
+- and it needs a MEASUREMENT first, which this box cannot currently give:
+  `perf_event_paranoid` is 4 and valgrind is not installed, so the callgrind
+  shares quoted higher up this ticket cannot be reproduced here at all. The
+  numbers in the 2026-08-30 table are wall-clock A/B against a toggled gate,
+  which is enough to size a change already made and NOT enough to rank two
+  changes not yet made.
+
+That missing instrument is the real blocker on the next slice, and it is a
+Track A gap rather than a Track O one: this runtime has `-dPXX_HEAP_DEBUG`,
+`-dPXX_OBJTRACE` and `PXXDBG` for correctness questions and nothing at all for
+"how much does it allocate, and of what size". A census under its own define —
+counts and a size histogram, no call-site attribution — would have answered in
+one run what three sessions have reached for callgrind to learn.
