@@ -39,3 +39,6 @@ expect_same: MISMATCH [c_crtl_tmp26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-30 — auto-closed by the seven watcher: `test-core#src:test/c_crtl_tempfile_and_unlocked.c` passes at dbab98d339c7 (tier native); it was red at 7227f3e0f1f8. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
