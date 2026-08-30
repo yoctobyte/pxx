@@ -7,7 +7,10 @@ prio: 75
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** unfinished (parked 2026-08-30 — rung 6 blocked on decide-revisit-object-types-rtl-generics-fired-the-trigger)
+- **Status:** unfinished — **UNBLOCKED 2026-08-30**, rung 6 is available. The
+  blocker `decide-revisit-object-types-rtl-generics-fired-the-trigger` is in
+  `decided/`: option C, and its own Consequences section says *"Rung 6 of
+  feature-pascal-corpus-expansion (p75) unblocks."* See the note at the bottom.
   neglected by comparison — user call).
 - **Owner:** frankA
 
@@ -1468,3 +1471,36 @@ most like verification is the one least likely to be verified.**
   `:146` and HEAD `ea5a8ef96` (binary `6319b892f517`) stops at `:135`.
 - **Every corpus figure written here from now on states the probe, the sha, the
   binary — and is pasted from a run, not reconstructed.**
+
+## UNBLOCKED — rung 6 is available (coordinator, 2026-08-30)
+
+**The status line said "parked, rung 6 blocked" while its blocker sat in
+`decided/`.** Corrected in place rather than only here, because a note at the
+bottom of a long ticket does not reach the person who reads the status line and
+moves on — the same failure frankB reported today about a frontmatter `summary`
+outliving what it summarised, one field over.
+
+`decide-revisit-object-types-rtl-generics-fired-the-trigger` [U p70] is decided:
+**option C**. `generics.collections.pas`'s single `= object` — no fields, no
+inheritance, no virtual methods, no constructor — becomes a `TObject`, and the
+measurement backs it: identical output on every use (widening assignment from any
+class, cast-back with virtual dispatch, `array of`, record field, parameter, `nil`
+compare) at `code=63287B data=4276B bss=42532B`, unchanged. `TObject` is strictly
+*better* here, permitting `Free`/`ClassName`/`Destroy` without the cast the bare
+reference required. The decision's original cost driver — a second object model
+with its own storage, lifetime, assignment and VMT — was never what this rung
+needed.
+
+**Residual risk, carried forward from the decision and accepted by the owner:**
+Pascal source *outside* this checkout using `var x: object` would break. Four
+uses in this repo, all in its own tests.
+
+**Also from that decision's Consequences, not yet done:**
+[[feature-p-legacy-value-object-types]] [P p15] is framed against option B's full
+scope and should be rewritten to option C's scope or closed in favour of the new
+P bug. Not urgent at p15, but it will mislead whoever reaches it.
+
+**Ownership:** `owner: frankA` is stale — frankA has taken
+`bug-c-a-c-function-s-calling-convention-depends-on-the-target`. Re-`claim`
+before the first commit; resuming parked work is the one transition with no
+prompt to re-claim.
