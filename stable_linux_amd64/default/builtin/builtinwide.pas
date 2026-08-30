@@ -33,6 +33,26 @@ function PXXWideConcat(bytesA: NativeInt; srcA: Pointer; srcB: Pointer; bytesB: 
 function PXXWideFromUtf8(src: Pointer; byteLen: NativeInt): Pointer;
 function PXXUtf8FromWide(src: Pointer; byteLen: NativeInt): Pointer;
 
+{ ---- HANDLE-taking wrappers: the three the COMPILER calls ----
+
+  The four above take (src, byteLen) because that is what a transcoder wants.
+  The frontend has neither: at IR-lowering time a managed string is ONE value,
+  a handle, and the length is a load from handle-8 that the lowering would have
+  to synthesise -- per operand, per site, in IR, for something the runtime can
+  read in one instruction.
+
+  So the compiler calls these instead. They exist to keep the width lowering in
+  ir.inc a plain one-argument call that every backend already emits, which is
+  the whole reason 7c costs no per-backend code: the seven backends lower
+  IR_CALL and have never heard of UTF-16.
+
+  nil in, nil out, in both directions -- an empty managed string IS the nil
+  handle, and a transcode of nothing is nothing. Do NOT read the header of a
+  nil handle to discover that; there isn't one. }
+function PXXWideFromStr(h: Pointer): Pointer;
+function PXXStrFromWide(h: Pointer): Pointer;
+function PXXWideCat(a: Pointer; b: Pointer): Pointer;
+
 implementation
 
 uses builtinheap;
@@ -281,6 +301,54 @@ begin
   PByte(d + out_)^ := 0;
   PWord(base + PXX_HDR_META)^ := PXX_KIND_BYTESTR;
   Result := Pointer(d);
+end;
+
+{ ===== The handle-taking wrappers ===== }
+
+{ Byte length of a managed handle: the header's LEN word, which is a BYTE count
+  for both widths (see the unit header). Factored out so the three wrappers
+  below state `PXXHandleBytes(h)` rather than repeating a -8 that is easy to
+  write as -16. }
+function PXXHandleBytes(h: Pointer): Int64;
+begin
+  if h = nil then
+    Result := 0
+  else
+    Result := PWord(Int64(h) - 8)^;
+end;
+
+{ UTF-8 handle -> UTF-16 handle. Under the compiler's width lowering this is
+  what `w := s` and `w := 'lit'` become when w is wide and the source is not. }
+function PXXWideFromStr(h: Pointer): Pointer;
+begin
+  if h = nil then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  Result := PXXWideFromUtf8(h, PXXHandleBytes(h));
+end;
+
+{ UTF-16 handle -> UTF-8 handle. `s := w`, and every `Write(w)`: the write path
+  emits bytes, so a wide string is transcoded back rather than taught to the
+  seven backends' inline write blobs. }
+function PXXStrFromWide(h: Pointer): Pointer;
+begin
+  if h = nil then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  Result := PXXUtf8FromWide(h, PXXHandleBytes(h));
+end;
+
+{ Wide + wide. Argument ORDER is the plain one, unlike PXXWideConcat's
+  (bytesA, srcA, srcB, bytesB) -- that shape exists because the backends had
+  those four values in registers already, and nothing outside them should
+  inherit it. }
+function PXXWideCat(a: Pointer; b: Pointer): Pointer;
+begin
+  Result := PXXWideConcat(PXXHandleBytes(a), a, b, PXXHandleBytes(b));
 end;
 
 
