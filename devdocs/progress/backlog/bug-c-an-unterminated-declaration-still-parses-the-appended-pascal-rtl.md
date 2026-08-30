@@ -91,3 +91,79 @@ code also tests.
 **And the part a blind conversion breaks:** two of the fifteen top-level passes
 *deliberately* walk the appended region and must be taught to step over the
 sentinel. Converting them along with the rest fails every C compile.
+
+**Superseded in its costing, not in its ranking — see the next section.** That
+estimate was mine and it was too big: the sentinel does not need planting,
+because it already exists and is being deleted. No index shift, no
+`AdjustSrcRanges`, no three tables. The 50 stands; the day-of-work does not.
+
+## ROOT CAUSE FOUND — one line, one branch, and NilPy already does it right. frankC, 2026-08-30
+
+Measured, not reasoned. The chain is complete and it is shorter than the
+"terminator" design this ticket originally costed.
+
+**1. Every appender deletes a trailing `tkEOF`, and both guard it the same way.**
+`CLexAppend` (`clexer.inc:874`) and its Pascal twin (`lexer.inc:2723`) both open:
+
+```pascal
+if (MainProgramTokCount = TOK_UNBOUNDED) and (TokCount > 0)
+   and (Tokens[TokCount-1].Kind = tkEOF) then Dec(TokCount);
+```
+
+So the deletion is **conditional on `MainProgramTokCount` never having been
+set**. `TOK_UNBOUNDED` is `High(Integer)` and `compiler.pas:1829` sets it once,
+commented *"= not set yet; the frontends overwrite it"*.
+
+**2. The C branch does not overwrite it.** `compiler.pas:1923`:
+
+```pascal
+CLexAll;
+DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
+TokPos := 0;
+```
+
+**3. The NilPy branch, thirty lines above, sets BOTH:**
+
+```pascal
+PyLexAll(False);
+DbgMainTokEnd := TokCount;
+MainProgramTokCount := TokCount;
+```
+
+with a comment about why the *first* one matters. Nothing says why the second
+does, and the C branch copied the line that was explained.
+
+### So the fix is one line
+
+`MainProgramTokCount := TokCount;` after `CLexAll`. Both appenders then stop
+deleting the C `tkEOF`, the C stream gets a real end, and **all three loop
+families work unchanged** — the `while ... tkEOF` in `ParseCUnitPass`, the
+`while (tkEnd) and (tkEOF)` that is now `CBlockContinues`, and the
+scan-to-semicolon in `ParseCStructDecl:13077`. Both guards added by
+`bug-c-an-unterminated-construct-parses-past-eof` become dead and delete, and so
+does the `(TokPos - 1) >= userTokEnd` arm at `cparser.inc:9939`, which exists
+only because the pass ran into the appended region.
+
+**It is one line in `compiler.pas`, which is Track A ground** — Track C files
+this rather than editing it. The C-side dead-code removal is Track C's and
+follows.
+
+### What to verify, because a one-line fix here is not a small change
+
+- The crtl pull already repositions by index (`crtlStart := CPullCrtlForPrototypes;
+  TokPos := crtlStart; Next;`), so pass 1 stopping at the user EOF is what that
+  code already expects. **Pass 2 and the RTL/`pxxcio` appends must be checked the
+  same way** — if either relies on walking *through* the boundary, it needs the
+  same explicit reposition.
+- `MainProgramTokCount` is read by `bparser`, `pyparser` and `rparser`, never by
+  the C path, so setting it cannot change another frontend's behaviour — but it
+  is a global, so confirm rather than assume.
+- The three C corpora (zlib, lua, quickjs) are the population that would notice a
+  boundary landing one token early.
+
+### Why the earlier "give it a terminator" estimate was too big
+
+That design planted a sentinel and shifted every token index, which would have
+touched `CModRange*`, `PasSrcRange*` and `DbgRange*` through `AdjustSrcRanges`.
+None of that is needed: **the sentinel already exists and is being deleted.**
+The work is to stop deleting it, then remove what grew around its absence.
