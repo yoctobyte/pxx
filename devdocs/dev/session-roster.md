@@ -23672,3 +23672,56 @@ points the right way is the case nothing prompts.
 mine to make, and I made it.** The rule I take from it: **a relayed measurement
 inherits my credibility and not its own error bars** — quote the floor beside the
 number, or do not quote the number.
+
+## CORRECTION — I read a TICKET REFERENCE as an AUTHORSHIP claim, and it cost two records
+
+`c9a1f6f2a` is **frankS's** pass. I told frankS it was frankC's, told frankC it
+was theirs, told frankA "frankC's fix landed", wrote it into a Track U ticket and
+into this roster, and reported it to the owner. **frankA and frankC caught it
+independently**; frankC nearly wrote it into a commit message.
+
+**The whole error is one line of the commit body: `frankC's p70`.** That names
+the **ticket** the commit closes. I read it as naming the **author**. All commits
+here carry the same git identity, so the body is the only handle — and I had
+already told two agents that the body was how I distinguished authors, which is
+true and was not enough. **I checked the right field and asked it the wrong
+question.**
+
+**The second-order cost is worse than the misattribution.** Believing frankC
+wrote it, and frankC never having mentioned a decide ticket, I never looked at
+what `c9a1f6f2a` actually ADDED — and what it added was
+`decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0`, filed by
+frankS. **So I filed a duplicate Track U ticket about a fork that was already
+open**, having spent the night telling other lanes to check whether work already
+existed. Merged and deleted at `525ecb355`; `found-by: frankS` restored.
+
+> **A wrong identifier does not just misname a thing. It stops you looking at
+> the thing, and everything you then fail to see is invisible in the same way.**
+
+Not the same as the ghost-sha class: those fail to resolve. **This one resolves
+perfectly** — `c9a1f6f2a` is a real commit, its body is accurate, and every check
+I ran returned a true answer to a question I had not meant to ask.
+
+## The EXPECTED-string `/tmp` trap fired, exactly as documented, on someone who knew
+
+frankC put an absolute `/tmp` in an **expected** string. testmgr rewrites paths in
+the expected file, **not in the test SOURCE**, so the binary printed `/tmp` and
+the comparison saw `-fchdir landed /tmp/testmgr-scratch-1722017` against
+`+fchdir landed /tmp`. **Deterministic, and it never reproduces locally.**
+
+I had relayed frankT's read of this as a *concurrency* bug — `/tmp/noXs` shared
+between runs, a wrong value under contention. **That was wrong and it was the
+more interesting story, which is why it travelled.** The fix is a row that prints
+no path at all: both sides from `getcwd()`, which is also immune to `/tmp` being
+a symlink.
+
+The other two were real: a `wait`/`waitpid` **declared in `<sys/wait.h>` and
+defined in `unistd.c`**, so a TU including only that header silently imported
+glibc's real `waitpid` and waited on a process never forked — *a definition in
+the wrong file is worse than a missing one, because the link succeeds*. And a C
+frontend ordering bug where `CPullCrtlForPrototypes` marked an appended block as
+one module **after** the lexer had marked each pulled `.c`, so the coarse range
+**shadowed** every finer one instead of being refined by them. The comment above
+it had claimed the refinement happened since the original fix. **Blast radius:
+any C program reaching two crtl modules through the prototype-pull path —
+`extern int printf(const char *, ...);` and nothing else was enough.**
