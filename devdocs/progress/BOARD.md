@@ -60,16 +60,18 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (330)
+## backlog (332)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol | A | 45 | audit | `TypeKind = tyRecord` is not a guard, and 20 reads use it as one | — |
 | bug-a-2d-array-row-as-a-const-array-param-still-segfaults | A | 45 | bug | One arm of bug-aggregate-member-array-as-var-param (done) never got fixed: a ROW of a 2D array passed as a CONST array parameter still segfaults, on all five targets. The var form of the same row works, and the record-field form works in both modes, so three of the four cells that ticket's own acceptance named pass and the fourth does not. It is what still blocks reverting lib/rtl/ed25519.pas's 4-standalone-TGf workaround. | — |
+| bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address | A+S | 65 | bug | A by-value wide record on xtensa renders a live address as a decimal number | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
 | bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section | A | 55 | bug | The typed-const data path does not align at all. A const array lands at whatever offset the preceding emitted bytes leave -- ANY residue, ODD ones included -- while the `var` path is 8-aligned in every cell measured. Originally filed as `a Double typed const misaligns the NEXT const array`; that framing is WRONG and is kept only so the links resolve. The Double is not a trigger, nothing is: with nothing declared before it, `const A: array[0..3] of Int64` is already misaligned, on all six targets. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
+| bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable | A+S | 70 | bug | A shortstring write on xtensa corrupts a NEIGHBOURING variable | — |
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
 | bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params | A | 55 | bug | jsondemo and life do not build for aarch64 at all -- 'aggregate result with more than 8 params not supported', raised from builtin/pylib.pas, so it fires for any program pulling that unit in. The sharp part is not the two programs: it silently narrows the corpus available for BEHAVIOURAL verification on aarch64, while census tables built from target-independent IR keep listing those same programs as aarch64 data points. Two purposes, one list, only one of them ever checked. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
@@ -712,12 +714,14 @@ _none_
 
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- [p 70] [A+S] bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable
 - [p 70] [U] decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - [p 70] [P] regression-test-core-test-generic-arg-is-enclosing-template-param-objfpc [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - [p 65] [P] bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
+- [p 65] [A+S] bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - [p 65] [P] bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets

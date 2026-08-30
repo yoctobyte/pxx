@@ -7292,3 +7292,52 @@ header lies to every tool that reads headers. **The scanner reads the header; th
 check says the header is wrong; fixing the header fixes both.** A scanner taught to route
 around bad metadata removes the pressure that gets metadata fixed — and the ranker reads
 frontmatter, so a header that lies is not a cosmetic problem.
+
+### 164 — A NUMBER THAT IS TRUE ONLY UNDER A FLAG WILL BE QUOTED WITHOUT THE FLAG
+
+*frankS, 2026-08-30, handing back the hosted-xtensa corpus — flagging its own headline
+number, to the seat that was about to quote it.*
+
+The result is **99 of 129 matching the oracle**, up from 69, with divergences 21 → 8. True,
+measured at a named HEAD with a verified fixedpoint whose sha differs from `pinned`.
+
+And it is true **under `--xtensa-soft-mulhigh`**, which **labels** the multiply divergence
+rather than removing it — no qemu-xtensa core implements `MUL32HIGH`. So:
+
+> *"99 of 129 match the oracle"* is true, and is **not** the same claim as *"xtensa is
+> correct on 99 programs"*.
+
+frankS's reason for telling me specifically: **I am where the number will be quoted from.**
+The lane that measures a flag-qualified number knows the flag. The seat that relays it holds
+a figure and a lane name, and the qualifier is the first thing a one-line summary drops —
+which is CLAUDE.md's own claims-discipline warning (*"terse styles drop the qualifying words
+first"*) arriving one layer out from the docs it was written about. Tonight frankD found
+that exact warning had itself been tersely edited, losing the scope column. **The
+compression failure reaches the warning about compression failures.**
+
+Same structure as the two "byte-identical" claims the repo already separates: both strong,
+strong for different reasons, and identical once shortened. The general rule this generalises
+to: **a measurement taken under a flag must carry the flag into every restatement, and the
+restatement most at risk is the coordinator's.**
+
+### 164a — A FULL PARTITION IS A HANDBACK; A SUMMARY IS AN INVITATION TO RE-MEASURE
+
+The handback names **every one of the 8 divergences and all 21 compile failures**, each with
+a ticket or explicitly marked as needing one, at the bottom of the divergence ticket with a
+pointer from the `test-xtensa` header — so a lane arriving cold hits it from either
+direction. Not "the remaining failures are mostly X".
+
+**A partition can be checked for completeness; a summary cannot.** 8 + 21 against a stated
+129 either accounts for the corpus or does not, and the next holder can verify the handover
+before trusting it. This is the antidote to face 144 applied to a *handover* rather than to a
+diagnostic: an unspecific summary merges the remaining work into a bucket whose members
+nobody has looked at, and the next lane re-derives the classification that already existed.
+
+**Where I overturned it, and the reason is tonight's own evidence.** frankS left three
+divergences unticketed on purpose — *"a ticket I do not work is worth less than a row
+someone reads, and I would rather hand over an honest gap than four thin tickets that look
+like coverage."* That rule is right, and it is wrong for the two that are **wrong-VALUE**
+bugs, because **the ranker reads frontmatter and a prose row has no owner.** Three
+independent instances of prose-declared state going unread landed tonight alone. The table
+stays; the two wrong-value rows also got frontmatter. The third, which is a genuine gap
+rather than a defect, stays a row.
