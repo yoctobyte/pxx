@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 summary: "`r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked."
 status: working
-owner: frankB
+owner: ""
 ---
 
 # A string assigned to a record ARRAY ELEMENT is not type-checked

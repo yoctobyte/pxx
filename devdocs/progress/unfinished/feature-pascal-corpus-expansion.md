@@ -289,7 +289,16 @@ re-run, so the *line numbers* below are still the 08-28 measurement.
 > [[bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line]]
 > [P p60] — the errors name `generics.defaults.pas:78`, which contains neither
 > `TKey` nor `SizeOf`, while the `near:` context is `collections.pas:1309-1310`.
-> The `near:` context is the only trustworthy field. Budget a pass for it.
+> **CORRECTED 2026-08-30 (frank-rust): `near:` is NOT trustworthy either.**
+> I wrote that it was the only reliable field; the `in:` half is now fixed
+> (`dc7757a11`), but `near:` is stale after a token splice — `InsertTokens`
+> shifts `Tokens[]` and the range tables but not the parallel
+> `TokSrcOff[]`/`TokSrcLen[]` that the context window reads, so it prints the
+> spelling that lived at those indices BEFORE the splice. A
+> specialization-heavy corpus is nothing but splices. Filed as
+> [[bug-a-the-near-context-window-is-stale-after-a-token-splice]] [A p45].
+> **Identify a wall by SYMBOL NAME — symbol counts do not ride on token
+> indices, and no coordinate field currently does.**
 
 | # | wall | owner | status |
 | --- | --- | --- | --- |

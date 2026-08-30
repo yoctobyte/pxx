@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:34 blocked:8 backlog:390 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2845 rejected:59`
+`working:3 unfinished:34 blocked:8 backlog:391 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:125 done:2845 rejected:59`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given` [A] — owner: frankA
-- `bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked` [P] — owner: frankB
 - `feature-unicodestring-model` [A] — owner: frankwasm
+- `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — owner: frankB
 
 ## unfinished (34) — parked mid-flight; re-claim, do not duplicate
 
@@ -61,7 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 431, ranked
+## Ready — top 30 of 432, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -69,6 +69,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` bug-p-generic-constraints-are-checked-before-the-type-section-closes
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
+- `[p 70] [A]` perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [P]` regression-test-core-test-warn-ignored-directives
@@ -92,6 +93,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-adopt-a-second-string-model-or-refuse-utf16-honestly
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 60] [A]` bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array (unblocks 1)
 
-_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

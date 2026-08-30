@@ -370,8 +370,13 @@ Evidence, from my run:
 | `near: ) * SizeOf ( T ) >>> ) ; FillChar` | matches `generics.collections.pas:1309-1310`, inside `TCustomList<T>.DoRemove` |
 | a stop **in `lib/rtl/sysutils.pas`** | `TKey`/`TValue`/`TDictionaryPair` are not in sysutils at all |
 
-The `near:` token context is the **only** trustworthy field; the file and line
-should be ignored until this is fixed. Filed separately as
+The file and line should be ignored until this is fixed. **I originally wrote
+that `near:` is the only trustworthy field, and that is ALSO wrong** —
+frank-rust showed the same day that `near:` is stale after a token splice (it
+reads `TokSrcOff[]`/`TokSrcLen[]`, which `InsertTokens` does not shift), so on a
+specialization-heavy corpus no coordinate field is dependable. `in:` is fixed
+(`dc7757a11`); `near:` is [[bug-a-the-near-context-window-is-stale-after-a-token-splice]]
+[A p45]. **Identify by SYMBOL NAME** — symbol counts do not ride on token indices. Filed separately as
 [[bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line]] [P p60].
 
 So this ticket's "reproducible under one probe and absent under another" is
