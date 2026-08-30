@@ -59,7 +59,130 @@ order to read them in. Route by what you are holding:
 **A measurement or a verdict is telling you something and you are about to believe it**
 - ``## Profile the SHIPPING binary`` -- `-g` alone silently means `-O0`, so
   `make pxx-debug` profiles a different program and says nothing about it
-- `## Two traps that produced confident wrong readings`
+- `## Reading a NEGATIVE result — the gap four agents named on the same day
+
+The rest of this playbook is about finding a wrong **value**. Most of the work in
+some lanes is disproving a **hypothesis**, and nothing here covered it. Filed
+2026-08-30 after four agents independently reported the same hole in four
+different words.
+
+**A change of yours that measures as NO CHANGE is data about your model, not
+about the change.** Track A built `ProcCdecl and (not CProgramMode)` — the gate
+anyone would write for a C callee prologue — and got a table byte-identical to
+baseline. Three readings were available and only the third was right:
+`CProgramMode` means *"the source in front of me is C"* and was True in **both**
+populations, so the guard partitioned nothing. A null is a measurement of your
+instrument at least as much as of your subject.
+
+**Before treating a zero count as evidence, ask what the count would be if
+nothing were wrong.** `TKey occurs 0 times in generics.defaults.pas` was read by
+two agents as proof of mis-attribution. It is what a *correct* specialization
+looks like — the argument is not in the template's text. **If the answer is also
+zero when nothing is wrong, the grep told you nothing.**
+
+**Verify a new instrument against a control before believing a null from it.** An
+agent nearly recorded "TKey is not collected" from a probe written twenty minutes
+earlier; the probe's own `sort -u | head -12` was truncating its output and the
+real number was 4800.
+
+**An unmeasured baseline in a control does not weaken a comparison — it inverts
+it.** A control asserting "green on all five targets" was written having checked
+one. Two later results would have read backwards: a real regression as
+pre-existing, and a pre-existing failure as newly caused. Build the baseline from
+the **same source in the same run**.
+
+**Elimination by intervention is legitimate work and should be recorded as
+such.** Build the change, measure that it does *nothing*, cross the hypothesis
+off. Track O did this four times in one day (integer arithmetic, threading
+dispatch, exec, every `-O3` gate group) and it is most of that lane's real
+output. **Table your negative results** so the next agent does not re-run eight
+shapes.
+
+**Two instruments agreeing on ONE HALF of a claim reads as corroboration for all
+of it.** This is how a correct measurement grew a false explanation: `-O3`'s
+23-34% win survived every check, and the *cause* attached to it — the removed
+instruction counts — was never tested at all. Both instruments measured that the
+code changed; neither measured that the change was what made it fast. Split a
+claim into its measured half and its causal half before deciding you have
+corroboration.
+
+**When two agents disagree about a mechanism, the tie-breaker is a paired
+measurement — not seniority, not who edited the file first.** Three disagreements
+were settled this way in one day, each reversing the more confident party. Nobody
+should have to happen to have a measurement handy in order to win.
+
+## Do not read a green as coverage
+
+**One shape passing is not the shape space passing.** arm32 passed five of six
+argument shapes and was red on `(int, double)` — AAPCS32 wants a 64-bit argument
+in an even core-register pair. Two people nearly filed "two targets affected" for
+a three-target defect.
+
+**A green needs a control proving it is not vacuous.** "It compiles" and "it is
+correct" are different claims when an uninstantiated generic body is never
+type-checked; gate it with something that must move, such as a proc-count delta
+(1661 → 1672). Without that, a green means the compiler agreed to say nothing.
+
+**Name which direction of the result is a FAILURE before you run it.** For a
+string-copy fix: `cmp` identical = pass, `cmp` differs = the change altered
+semantics and is a failure — *not* an interesting result to investigate. Deciding
+afterwards is how a nice-looking diff gets rationalised.
+
+**Before widening any check that can REFUSE code, build a false-reject canary:**
+a program containing everything that must keep compiling, run it, and diff its
+stdout against FPC's. The fail-side test is the obvious half; the accept-side
+half is the one that catches the regression, because *accepted* and *correct* are
+different claims and only the running program separates them. This is how a fix
+that would have started refusing `ptr := o.I` — which FPC accepts — was caught:
+an interface is spelled `tyRecord`.
+
+**`make compiler/pascal26` is not sufficient evidence for widening a
+diagnostic.** What is cheap and decisive: compile two or three `examples/*` plus
+a Rust and a Zig sample as individual commands. Twenty seconds, catches a
+false-reject class the fixedpoint cannot see, and goes nowhere near the
+no-full-suite hook.
+
+## Where is the time going — profiling on these boxes
+
+**`perf` is dead here** (`perf_event_paranoid=4`) and that is NOT the same as
+profiling being unavailable — the fleet was told it was, and it was wrong.
+
+**gdb SIGINT-sampling works.** It needs three non-obvious settings and
+**omitting any one yields zero samples with no error**, which reads exactly like
+"the program was not running". Recipe: `devdocs/dev/session-roster.md`.
+
+**`objdump -d` on a binary built without `-g` disassembles nothing and exits
+0**, so any static instruction count over it silently reads zero. Same shape as
+the above and the same tell: a clean exit with an empty result.
+
+**Compare with min-of-N, interleaved A/B — never before-then-after, never
+means.** On a contended box a mean mostly measures the other agents; load moved
+7.7 → 5.4 during one session, and a sequential comparison would have credited
+~20% of that session's win to the box. **Keep the previous binary** rather than
+rebuilding it afterwards, and name each binary's sha beside its number.
+
+## Match by SYMBOL, never by coordinate
+
+**No line/column field in a diagnostic is trustworthy.** Three independent cases
+in one day of a position field disagreeing with its own message text. When you
+are deciding which ticket a diagnostic belongs to, match on the **symbol** it
+names; matching on the coordinate got it wrong at real cost.
+
+## Building an FPC oracle — two traps that read as findings
+
+**pxx accepts case-insensitive identifier collisions that FPC rejects** — `PStr`
+the type against `pstr` the variable, `PI`/`pi`, `PC`/`pc`. The symptom is "my
+canary compiles under pxx and FPC refuses it", which reads like a divergence
+finding. It is a name clash in your test, and it cost three rebuild rounds.
+
+**FPC's default source codepage is not ours**, so a non-ASCII literal is not a
+clean oracle: `'caf' + #$C3 + #$A9` gives Length 5 under FPC's default and 4
+under `{$codepage utf8}`, which is our answer. And **an ASCII oracle cannot see a
+width bug at all**, because a UTF-8 byte count and a UTF-16 unit count are the
+same number on ASCII — which is how `UTF8Encode`/`UTF8Decode` survived as the
+identity function.
+
+## Two traps that produced confident wrong readings`
 - `## A bisect can name the RIGHT commit and still be wrong` -- the tell is that
   the named commit looks like an improvement
 - `## A number moving in the direction you hoped is not a check` -- the

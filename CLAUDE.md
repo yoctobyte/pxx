@@ -273,6 +273,8 @@ cheap case. So reach for the tool that makes a wrong VALUE visible:
 | who retained/released it? | `-dPXX_OBJTRACE`, then `grep <addr>` |
 | step through it | `-g -O2` + gdb, `source tools/pxx-gdb.py`, `pxxrc <obj>` for the refcount |
 | what did the COMPILER infer? | `PXXDBG=n.locals`, `n.ctorargs`, `a.ir:<proc>`, `a.ast:<proc>`; `make pxx-debug` |
+| my change measured as NO CHANGE | that is data about your MODEL — playbook, "Reading a NEGATIVE result" |
+| where is the time going? | not `perf` (dead here) — gdb SIGINT-sampling; min-of-N interleaved A/B, never means |
 
 `PXXDBG` exists specifically because editing a probe into the compiler and
 self-compiling (~90s) is how a **wrong root cause got recorded in a ticket** —
