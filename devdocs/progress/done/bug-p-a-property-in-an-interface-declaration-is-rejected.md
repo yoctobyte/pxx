@@ -156,9 +156,19 @@ for a body. Any class property then matched a branch that consumed nothing, and
 the member loop spun forever.
 
 `make compiler/pascal26` **passed**, twice, printing `converged after 1
-round(s)`: the compiler is written in a deliberately procedural Pascal subset and
-**declares no class properties**, so its own sources never reach the loop that
-hangs. The fixedpoint is exactly as load-bearing as CLAUDE.md says — it just
+round(s)`: nothing the fixedpoint build compiles reaches the loop that hangs.
+
+> **CORRECTION (frank-coordinator, same day), and it sharpens the finding rather
+> than weakening it.** This paragraph first said *"the compiler declares no class
+> properties"*, and that is **false** — `compiler/builtin/pylib.pas` declares
+> five and `compiler/builtin/exceptions.pas` three. The refutation is one grep
+> away, so the wrong version had to go. What survives is the true and more useful
+> statement: **`compiler/**` is a PATH, not the set of files the gate compiles.**
+> The builtins are DATA to the fixedpoint build — parsed only when a user program
+> imports them — which is *exactly* why a NilPy canary caught this hang and the
+> self-host did not. I had written a claim about a directory and meant a claim
+> about a build, which is this repo's own "the name is not the thing" arriving in
+> my own correction to it. The fixedpoint is exactly as load-bearing as CLAUDE.md says — it just
 cannot see a construct the compiler does not use. `gate.sh quick`, the step the
 loop calls OPTIONAL, is what caught it, as a **timeout** on
 `quick_canary_nilpy.npy` (pylib is full of class properties) rather than as an
