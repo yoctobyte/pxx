@@ -21251,3 +21251,39 @@ right answer because its spill and its caller were wrong in the same direction.
 So: **state in the test file's header what the test does NOT prove, and name the
 instrument that does.** Then mutate one site and confirm the file notices. A
 guard nobody has broken on purpose is a guard nobody has tested.
+
+## Stating a sample as the population — the general form of two coordinator errors
+
+frankS, 2026-08-30, after catching both of them in one afternoon:
+
+> Taking the worst configuration for the condition, and taking the first line for
+> the list, are both **stating a sample as the population.**
+
+Three instances the same day, at three different scales:
+
+| the sample | stated as the population | what it cost |
+| --- | --- | --- |
+| bare ESP fails | *"`random.pas` does not compile on xtensa or riscv32 at all"* | hosted xtensa compiles fine; two distinct defects merged into one urgent claim, and someone would have hunted one bug and found two |
+| the first error name past a `head` | *"`PxxSciDigits17` is the unresolved symbol"* | `PXXVarBinOp` fails **ahead** of it; N was 2, not 1, and the ticket's whole framing turned on N |
+| one guarded declaration with a caller | *"the guard is protecting nothing"* | the guard removes 17 declarations and is right about 15; it was two leaked callers, not a design fault |
+
+**The tell is the same every time: a claim about a set, sourced from one member
+of it.** And it survives review because the member is real — every one of these
+was a true observation, promoted one quantifier too far.
+
+Three checks, cheap, in the order they would have caught these:
+
+1. **Ask what the instrument truncates.** `defs.inc:189` caps error reporting at
+   `MAX_REPORTED_ERRORS = 20`; that is what makes "N = 2" a fact rather than a
+   reading. A `head` in your own earlier command is the same cap wearing a
+   different hat.
+2. **Run the control configuration**, not only the failing one. An empty program;
+   the hosted profile; the sibling target. frankB's empty-program control is what
+   separated three unrelated ESP failures that would otherwise have read as one.
+3. **Enumerate the set and count the members that agree.** 17 declarations, 15
+   with no caller. A grep over the whole set beats an inference from its first
+   element, and it is usually one command.
+
+Related, above: *a native-green repro does not close a bug that was never
+native-only*; *an alarming measurement earns a second instrument, not a ticket*;
+*"I looked again" is not a check*.
