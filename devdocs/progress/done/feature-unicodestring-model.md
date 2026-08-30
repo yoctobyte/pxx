@@ -2,7 +2,7 @@
 prio: 62
 track: A
 blocked-by: []
-status: working
+status: done
 owner: frankwasm
 ---
 
@@ -24,7 +24,7 @@ owner: frankwasm
 # A real UnicodeString / WideChar model (UTF-16), or an honest refusal
 
 - **Type:** feature (string model — Track A/P)
-- **Status:** working
+- **Status:** done
 - **Blocks:** fcl-json's `jsonparser`/`jsonscanner` (the `\uXXXX` escape path). fpjson itself
   (the DOM, the formatter, every accessor) is DONE and does not need this.
 
@@ -1575,3 +1575,66 @@ byte alias it has always been, measured this session:
 That gate is a separate decision from the wall and should stay until the
 element-width model has run against real code. What this section establishes is
 narrower and more useful: **the escape path does not depend on it.**
+
+## CLOSED 2026-08-30 — acceptance criterion met, in a default build
+
+The line this ticket opened with compiles and produces FPC-identical bytes with
+no pxx define:
+
+```pascal
+S := Utf8Encode(WideString(WideChar(u1) + WideChar(u2)));
+```
+
+`E9 + 20AC -> 5: 195 169 226 130 172`; `D83D + DE00 -> 4: 240 159 152 128`
+(U+1F600). Oracle FPC 3.2.2 with `uses cwstring`.
+
+**What shipped:** one managed-string kind carrying an element WIDTH (option B,
+not a second type kind); five element-width carriers and four pointee-width
+ones; the transcoders in the runtime, called from the frontend at assignment,
+concat, `Write` and call arguments; `UTF8Encode`/`UTF8Decode` in sysutils made
+real with their bodies unchanged, because `Result := s` across a width boundary
+IS the conversion. Nine tests, wired into `test-core` at `d24df3f09` — which is
+the last thing that happened here, and see below.
+
+**The one deliberate residue,** filed rather than left in prose:
+`chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload`.
+Declaring `w: WideString` still needs `{$define PXX_WIDE_PAYLOAD}`. The gate
+does not hold back the escape path, which is what this campaign was for.
+
+### Three things this campaign is worth remembering for, none of them about UTF-16
+
+**A carrier and its reader are one change.** Four instances in one day, one of
+them a carrier I had built myself in an earlier step and then failed to read.
+Split across two commits the gap is invisible from both sides: the writer sees a
+slot correctly filled, and the reader does not exist to be missing.
+
+**A test matrix inherits the shape of the list it was derived from.** Four
+instances. Entity-shaped when the bug was position-shaped; direct-call-only when
+a result is three call shapes; ASCII when the whole subject is that two encodings
+agree on ASCII; and define-on when real source will never carry a define. Each
+time the list was the one I had used to do the work, and *the work's list is
+never the user's list*.
+
+**Sizing by grep counts the wrong end.** "71 write sites" counted reads as
+writes; `ArrTypePtrElemStrTk` was sized at two sites and cost eighteen. Both
+errors ran the same direction, because a carrier's name appears mostly where the
+fact is CONSUMED, and `grep -c` hands you that number while instinct reads it as
+the other one.
+
+### And the one that lands hardest, because it was the last thing found
+
+**None of the nine tests had ever run.** Not one was wired into the Makefile;
+`check_test_wiring.py` had been reporting all nine, exit 0, all day. That
+included the acceptance test above — written, measured against FPC, celebrated
+in three messages, and executed by nothing but my own hand. The campaign was one
+message from closing on it.
+
+The reason it survived is the exact shape of everything else here: I audited the
+test family and found the `PXX_WIDE_PAYLOAD` blind spot, because I was reading
+the test SOURCES. **Whether a test executes is not a property visible from
+inside it.** The tool that answers it was sitting there with the answer and I
+never asked, on the same day I wrote three times that the fix is to measure
+rather than reason.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

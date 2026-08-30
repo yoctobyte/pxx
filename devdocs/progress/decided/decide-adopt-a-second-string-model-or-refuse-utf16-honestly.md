@@ -210,3 +210,24 @@ frozen-vs-ansistring split — and that context is exactly what option A would
 need and is stale within a day. If A is ever going to be chosen, choosing it while
 a lane is warm on the string paths is materially cheaper than choosing it later.
 That is a scheduling argument, not an argument for A.
+
+---
+
+## Moved to `decided/` 2026-08-30 — the answer AND the implementation are both done
+
+This carried `status: decided` in its frontmatter while sitting in `backlog/`,
+so `ready` was still offering it at **p62** — the top of Track U's queue was a
+question the owner answered the same day it was asked, and whose implementation
+(`feature-unicodestring-model`) closed a few hours later.
+
+Folder and status disagreed and the folder is what the ranker reads. Same shape
+as `grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break` retired
+tonight: nothing looked broken from either end — the frontmatter was correct,
+the resolution was written, the work got done — and the only symptom was a
+ranked line nobody could act on.
+
+**The decision was carried out and the acceptance test passes**: `Utf8Encode(
+WideString(WideChar(u1) + WideChar(u2)))` produces FPC-identical bytes for both
+a BMP pair and a surrogate pair, in a default build with no pxx define. Option B
+as decided — one managed-string kind carrying an element width, not a second
+kind. See `done/feature-unicodestring-model.md`.

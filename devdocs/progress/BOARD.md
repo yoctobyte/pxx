@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-the-f-suffix-on-a-float-literal-is-ignored | C | 40 | bug | `16777217.0f` keeps its double value where C requires the single-precision 16777216.0, and `0.1f` prints 0.100000000 instead of 0.100000001. The explicit `(float)` cast rounds correctly and a store into a float lvalue rounds correctly -- only the literal SUFFIX is ignored. All five targets, so it is a frontend defect, not an ABI or backend one. | — |
-| feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
 ## unfinished (34)
 
@@ -216,6 +215,7 @@ _none_
 | bug-t-two-public-surfaces-answer-how-big-is-the-backlog-differently | T | 30 | bug | The published status dashboard says 338 backlog tickets; tools/factsheet.sh says 351. Both defensible -- factsheet counts backlog_new/, the dashboard appears to break those out alongside '20 experimental'. Not a defect in either, but two public surfaces answer the same question with different numbers and the generator's owner should pick one. | — |
 | bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile | A | 25 | bug | The residual after the WASI u64-alignment defect was fixed. On the SAME module, wasmtime compiles a program to a byte-identical ELF five times out of five at exit 0; node segfaults five times out of five, leaving a 0-3 byte artifact. Node handles --version, --where and --list-libraries (a directory walk) at exit 0 and dies only on a full compile. A sandboxed guest cannot fault its host, only trap, so this is host-side — and unlike the predecessor ticket that inference now has a control behind it. LOW PRIO: wasmtime is the campaign's host and the milestone is met without node. | — |
 | chore-a-adopt-allocrecvar-at-the-twenty-remaining-record-temp-sites | A | 35 | chore | chore(A): adopt AllocRecVar at the 20 remaining `AllocVar(…, tyRecord)` sites | — |
+| chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload | A | 25 | chore | Declaring `w: WideString` gives UTF-8 bytes by default and UTF-16 units only under {$define PXX_WIDE_PAYLOAD} — a live behavioural difference (Length 5 / w[4]=195 vs 4 / 233 for 'café'). The gate is DELIBERATE, left in place when feature-unicodestring-model closed, and this ticket exists so the next reader can tell that from forgotten. Retiring it is a measurement, not a decision. | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
@@ -242,7 +242,6 @@ _none_
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable | U | 55 | decide | f4fb9d31b made generic constraints load-bearing while bug-p-generic-constraints-are-checked-before-the-type-section-closes sat open at p40 describing exactly why the placement was wrong. The regression was predicted in writing before it happened, and nothing in the board could express the dependency. Same shape hit three times on 2026-08-30. Options: a new edge type, a convention on blocked-by, a check in tools/progress.sh, or accept it. | — |
-| decide-adopt-a-second-string-model-or-refuse-utf16-honestly | U | 62 | decide | feature-unicodestring-model [A p62] says in its own body that this is a MODEL DECISION, not a function to write -- and its title offers the alternative outright: a real UTF-16 model, or an honest refusal. pxx has one string model (bytes, CP_UTF8 passthrough) and the RTL is already candid about it at the declaration: UTF8Decode/UTF8Encode are the identity, WideChar casts to a 2-byte ordinal. Adopting UTF-16 is a second model in a compiler whose whole design pushes generality DOWN into one substrate. Refusing means fcl-json's \\uXXXX surrogate path stays uncompilable. Neither is derivable from the code or from a sensible default, so it is Track U. | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
 | decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it | U | 65 | decide | The fix for bug-c-a-c-function-s-calling-convention-depends-on-the-target has two shapes and they differ in principle, not just size. (A) A C function ALWAYS uses the C ABI and every call site marshals it, including intra-C calls. (B) A C function uses the C ABI only when its unit belongs to a PASCAL program, keeping pxx's internal convention for pure C programs. B is smaller and safer for the C corpus; it also makes the convention depend on WHO INCLUDED THE UNIT, which is a second axis of exactly the disease the ticket exists to remove. | — |
 | decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused | U | 60 | decide | make revert DELETES the row from history.log and pin.log, and the next pin REUSES the counter -- so v394 names two different binaries and the withdrawn one appears nowhere in the ledger. Two forks: erase vs annotate, and reuse vs burn. It touches a public claim: the launch fact sheet says pins are in git with their sha256 and landing commit 'so the trajectory is reconstructible', which is true of git and false of the ledger a reader would actually check. | — |
@@ -601,7 +600,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (125)
+## decided (126)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -609,6 +608,7 @@ _none_
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: version scheme — pin count / N, not semver | — |
 | decide-3rd-party-vendor-vs-fetch | U | 45 | decide | Policy: how to carry dependency-grade third-party source — vendor in-tree vs fetch-gitignored vs system-dynamic | — |
 | decide-a-cross-unit-define-name-and-semantics | U | 40 | decide | A define that crosses unit boundaries is order-dependent BY CONSTRUCTION — `{$DEFINEGLOBAL}` reads as 'global' while the mechanism is claim-and-skip. Four questions (name, undefinability, scope, visibility to earlier units) must be settled before anyone builds it, and nothing currently pulls on the feature: its motivating case was closed as synthetic. | — |
+| decide-adopt-a-second-string-model-or-refuse-utf16-honestly | U | 62 | decide | feature-unicodestring-model [A p62] says in its own body that this is a MODEL DECISION, not a function to write -- and its title offers the alternative outright: a real UTF-16 model, or an honest refusal. pxx has one string model (bytes, CP_UTF8 passthrough) and the RTL is already candid about it at the declaration: UTF8Decode/UTF8Encode are the identity, WideChar casts to a 2-byte ordinal. Adopting UTF-16 is a second model in a compiler whose whole design pushes generality DOWN into one substrate. Refusing means fcl-json's \\uXXXX surrogate path stays uncompilable. Neither is derivable from the code or from a sensible default, so it is Track U. | — |
 | decide-assertion-default-vs-fpc | U | 25 | decide | pxx evaluates Assert() by default; FPC ignores it unless -Sa. So Assert(False) raises EAssertionFailed here and is a no-op there — code that passes its own test suite under FPC can die under pxx, and vice versa. With -Sa the two agree exactly, so this is purely a question of which default we want. Options: keep ours, match FPC, or add {$ASSERTIONS}/-Sa and pick a default. | — |
 | decide-assertions-directive-and-message-format | U | 40 | decide | FPC compiles Assert OUT unless -Sa/{$ASSERTIONS ON} and appends '(file, line N)' to the message; pxx always evaluates and omits the position. Adopt both, neither, or one? | — |
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
@@ -731,9 +731,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2859)
+## done (2860)
 
-2859 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2860 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (65)
 
@@ -839,7 +839,6 @@ _none_
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
-- [p 62] [U] decide-adopt-a-second-string-model-or-refuse-utf16-honestly
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
@@ -1157,6 +1156,7 @@ _none_
 - [p 25] [P] bug-p-set-membership-item-constant-truncated-to-32-bits
 - [p 25] [T] bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference
 - [p 25] [A] bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
+- [p 25] [A] chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [T] chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it
 - [p 25] [T] chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at

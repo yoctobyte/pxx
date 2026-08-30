@@ -2450,6 +2450,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-typeinfo-ttypedata-payloads | A | 65 | feature | TypeInfo(T) now answers kind + name for every category that has a consumer, but every non-class/record blob writes a nil DataPtr — no TTypeData. The data is all already in the compiler (subrange bounds, set element enum, array element type and dims); this is emission, not discovery. Plus the three categories with no consumer yet: interfaces (14), metaclasses (28), Currency (4, which needs a type-system change first). | — |
 | feature-types-unit | B | 50 | feature | `types` unit (System.Types core) — geometry records + TDuplicates | — |
 | feature-typinfo-facade-unit | B | 72 | feature | `typinfo` facade unit: FPC's RTTI API shapes over OUR blobs | feature-typeinfo-all-types |
+| feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 | feature-unified-heap-allocator | A | 50 | feature | Unified syscall-free heap allocator | — |
 | feature-untyped-parameters | B | 50 | feature | Untyped `var` / `const` / `out` parameters | — |
 | feature-uses-alias-as | P | 50 | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
