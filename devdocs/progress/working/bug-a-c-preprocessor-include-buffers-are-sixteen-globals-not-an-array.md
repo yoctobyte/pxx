@@ -228,3 +228,52 @@ matched its destination as a SYMBOL only.
 
   Pin requested from the coordinator rather than run here: it holds the repo-wide
   lock and Track A had an atomic two-file commit in flight.
+
+## CORRECTION to this ticket's justification: it does NOT unblock busybox
+
+Verified with a stage-2 build (fixedpoint `f812166486cd`), 2026-08-30, frankS.
+
+Every assertion this ticket asks for holds:
+
+| assertion | result |
+| --- | --- |
+| 16-deep still compiles and gives gcc's values | `0 15`, matches gcc |
+| a depth between 17 and the new limit now WORKS | 18, 40, 128 all compile and match gcc |
+| one past the new limit is the NESTING diagnostic | level 129 → *"the preprocessor has 128 include buffers"* |
+| self-host fixedpoint | converged, 1 round |
+
+**But the busybox repro still fails — now at level 129 instead of 17.** The
+failure depth tracks the cap, which is runaway recursion, not depth. `libbb.h:55`
+reaches `<sys/param.h>`, and that header **alone** recurses to whatever the cap
+is; with `-I/usr/include/x86_64-linux-gnu` it compiles fine, as does every one of
+its own includes separately and all of them together. Filed as
+[[bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback]]
+[C p60] with the five controls and a first move for whoever takes it.
+
+The earlier *"cumulative depth, not one pathological header"* conclusion came
+from a sweep of seven headers that did not include `sys/param.h`. No criticism of
+the sweep — it is the right instinct and it eliminated the obvious suspects. It
+just did not contain the one that mattered, and "no single header reaches the
+cap" reads identically whether the set was exhaustive or not.
+
+**So this ticket reverts to what it was originally filed as:** a real
+`normalise-dont-special-case` cleanup that removes three ladders, one datum
+wearing sixteen names, and a latent out-of-bounds read — worth landing on those
+merits, at that priority. It is not the busybox blocker.
+[[feature-c-corpus-busybox-applet]] should be `blocked-by` the new ticket instead.
+
+### Also needed in stage 2, found while verifying
+
+`Makefile` ~6871 asserts that **18-deep nesting is refused**:
+
+```
+elif grep -q 'C include nesting too deep' $(TESTTMP)/cnest18.err; then \
+  echo "ok: 18-deep include nesting reports the limit"; \
+```
+
+With the array, 18-deep must **compile** — that is the point of the change — so
+this recipe goes red as written. It needs its depth moved past the new limit
+(129 generated headers), keeping both halves: one depth that must compile and
+match gcc, one that must produce the nesting diagnostic. The ticket's own "what a
+fix must assert" list already called for this ("already a test; update the
+depth"); recording the exact recipe so it is not missed under the pin.
