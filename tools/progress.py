@@ -1998,19 +1998,44 @@ pre code{background:none;padding:0}
                     missing.setdefault(nm, other)
             if missing:
                 prose_edges.append((t, missing))
+        # THE CONSEQUENCE DEPENDS ON THE FOLDER, AND THE MESSAGE USED NOT TO
+        # PRINT THE FOLDER. `ready`/`next` scan only RANKED_STATUSES, so
+        # "the ranker will offer this as though nothing gated it" is FALSE for a
+        # ticket in rainy-day/ float/ experimental/ blocked/ -- the ranker never
+        # offers it at all. Measured 2026-08-30: of six hits, TWO were in
+        # rainy-day/ and both carried that sentence, and a lane acted on one of
+        # them and reported it as a live mis-ranking. The finding was real (the
+        # prose does lie to readers); the CONSEQUENCE was invented by this
+        # message. Same shape as the checks corrected earlier that week: the
+        # predicate was right and the population was never stated.
+        RANKED = ("backlog", "backlog_new", "unfinished", "urgent")
         for t, missing in prose_edges:
             warning_count += 1
             shown = sorted(missing)[:3]
             more = f" (+{len(missing) - 3} more)" if len(missing) > 3 else ""
             worst = max(missing.values(), key=lambda o: o.prio)
+            if t.status in RANKED:
+                consequence = (
+                    f"THE RANKER READS FRONTMATTER AND NOTHING ELSE, so no "
+                    f"priority propagates: `{worst.slug}` sits at p{worst.prio} "
+                    f"while this p{t.prio} waits on it, and `ready`/`next` will "
+                    f"offer this ticket as though nothing gated it. "
+                )
+            else:
+                consequence = (
+                    f"IT IS IN {t.status}/, WHICH `ready`/`next` NEVER SCAN, so "
+                    f"nothing is mis-ranked today and there is no urgency: the "
+                    f"cost is that the prose tells every READER it is gated while "
+                    f"the frontmatter does not, and the edge will not come with "
+                    f"it if it is ever promoted into a ranked folder. Fix it when "
+                    f"you promote it, not before. "
+                )
             lines.append(
-                f"PROSE-EDGE-NOT-IN-FRONTMATTER: {t.slug} [{t.track} p{t.prio}] "
+                f"PROSE-EDGE-NOT-IN-FRONTMATTER: {t.slug} [{t.track} p{t.prio}, "
+                f"in {t.status}/] "
                 f"states in PROSE that it is blocked by {len(missing)} still-OPEN "
                 f"ticket(s) ({', '.join(shown)}{more}) that its `blocked-by` "
-                f"frontmatter does not name. THE RANKER READS FRONTMATTER AND "
-                f"NOTHING ELSE, so no priority propagates: `{worst.slug}` sits at "
-                f"p{worst.prio} while this p{t.prio} waits on it, and `ready`/"
-                f"`next` will offer this ticket as though nothing gated it. Two "
+                f"frontmatter does not name. " + consequence + "Two "
                 f"different repairs and they are NOT interchangeable -- if the "
                 f"edge is real, add it to `blocked-by` (the prose was right and "
                 f"the ticket was mis-ranked); if it is stale or was only ever a "
