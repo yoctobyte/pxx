@@ -7856,3 +7856,116 @@ Related, and left un-"fixed" on purpose: those comments say *"RegisterProc leave
 `Params[].SymIdx` = -1"*, while the Pascal path measures **363**. The premise is narrower
 than the comment's conclusion; the conclusion (*don't trust it*) still holds. frankA noted
 that rather than editing a comment whose history it had not traced.
+
+### 174 — THE PROBE'S FORMATTER COULD NOT REPRESENT THE ANSWER
+
+*frankC, 2026-08-30. Three wrong measurements preceded the right one, each of which would
+have become a confident sentence in the ticket.*
+
+1. **Reasoned about `CModuleOfTok` instead of printing it** — the exact thing the debugging
+   playbook exists to prevent, by a lane that had read it.
+2. Then printed it through **`IncSmallIntStr`, whose contract is *small NON-NEGATIVE int***.
+   It renders `-1` as `0`. So **the one value meaning "no module" was indistinguishable from
+   a real module id** — the probe was working, the formatter was lying, and the output looked
+   entirely reasonable. `differential-probes.md` has this exact warning (*"a probe that
+   FORMATS its output can answer a different question than you asked"*) and frankC had read
+   that section **earlier the same night**.
+3. Then a full round of *"every include defeats it, even one placed after the static"* that
+   was **the harness**: the test program and test header shared a stem, so `uses foo`
+   resolved to `foo.pas` — the program itself. **The compiler was reporting a real error and
+   it was read as the bug under investigation.**
+
+Only the third attempt, with distinct names and a formatter that can represent the answer,
+produced the table that localised the defect. Note the ordering: each failure was *further
+from* reasoning and *closer to* measurement, and each still produced a plausible wrong
+answer. **Reaching for the instrument is necessary and not sufficient — the instrument has
+its own aperture, and a formatter is part of it.**
+
+### 174a — "THE LAST `.c` WE ENTERED" AND "THE MODULE THAT INCLUDES THIS TOKEN" AGREE UNTIL THE FIRST RETURN EDGE
+
+The defect: `CMarkTokModule` is called only for a path ending in `.c`, so **returning from a
+crtl impl into the enclosing header never resets the attribution.** `CModuleOfTok` is *the
+last `.c` we entered*, not *the module that includes this token* — and those two agree
+everywhere except across a return edge.
+
+Which is why it looked correct to the duplicate-definition check that consumes it today:
+
+> **Today it gets that right the way a stopped clock does.**
+
+The boundary is visible in the measurement and nowhere else — `stddef.h` fine, `stdio.h`
+broken, `stdio.h` **placed below the static** fine — and the two headers differ in exactly
+one thing: whether crtl has an impl to auto-pull. Nothing about the static changes.
+
+Filed as a Track A ticket rather than worked, because the table lives in `dbg_filetable.inc`.
+And the argument that the fix **improves** the consuming check rather than trading against it
+is carried with it: `stdarg.h` pulled from `fcntl.c` attributes to `fcntl.c`, from `unistd.c`
+to `unistd.c` — still two modules, still no false warning.
+
+### 174b — AND IT PRICED MY SUGGESTION DOWN, BY MEASURING
+
+I suggested the nested-include cliff (`case depth of 0..15` with no `else`, guard erroring at
+128, so the 17th header vanishes into an **unset function Result** with no diagnostic) was
+worth p60 rather than its filed p45, on the reasoning that *nothing nests 17 deep by accident,
+so the blast radius is unknown rather than small.*
+
+frankC set it to **50**, having measured instead of leaving it unknown: `gtk/gtk.h` reaches a
+modelled (deliberately over-estimating) depth of **15 against a cliff at 16**, and the one
+header the model flagged at 18 does not actually take that chain — gcc shows the same macro
+absent. **Severe failure mode, one level of margin, and "real code hits this today" is not
+supported** — so the ticket now says that rather than implying it.
+
+My reasoning converted *unmeasured* into *high*. That is the right default under uncertainty
+and the wrong answer once someone spends ten minutes removing the uncertainty. **An unknown
+blast radius is an argument for measuring it, not for assuming the worst and ranking on the
+assumption.**
+
+### 175 — A CONTROL THAT *CREATES* ITS SUBJECT — the mirror of 168a, and mine
+
+Building the `UNFILLED-PLACEHOLDER` guard, I ran a positive control: back up a ticket, append
+the placeholder Log line, confirm the check fires, restore. The `cp` failed — I had the wrong
+path — and the `printf >>` **created a new file**. The check then fired on a two-line file I
+had just manufactured, with no frontmatter, and reported it at a defaulted prio.
+
+**The control passed. It proved nothing**, because its subject was an artefact of the control
+rather than a real ticket perturbed. And it left an untracked stray in `backlog/` that also
+created a duplicate-slug condition, since the real ticket was in `unfinished/`.
+
+168a is a control that **destroys** its subject and shows maximum sensitivity. This is a
+control that **creates** its subject and shows a clean fire. **Both fail in the flattering
+direction, and both look exactly like a working guard.** The shared cause is that a control's
+own setup is unverified — I never checked the `cp` succeeded, exactly as pxx-a5 never checked
+its deletion had removed the right lines.
+
+Redone properly: backup verified by line count before perturbing, control run against the
+real ticket in `unfinished/`, 0 → 1 naming it correctly → 0, and a clean `git status`.
+**Verify the apparatus's state, then measure** — 158b, on the fourth encounter tonight.
+
+### 175a — A CODE SET THAT COMPILES, LINKS AND RESOLVES CORRECTLY, THEN MISREPORTS EVERY FAILURE
+
+*frankB, same night, binding lwIP's `getaddrinfo` on ESP.*
+
+lwIP's `EAI_*` codes are **positive 200-204**; glibc's are **negative −2…−5**, and the sets
+differ — no `EAI_AGAIN`, no `EAI_NODATA`. A binding that reused glibc's numbers *compiles,
+links, and resolves every valid name correctly*, then misreports every failure: `EAI_NONAME`
+misses every arm of `EaiToRcode`, falls out as `DNS_ERR_LIBC_UNAVAIL`, and drops the facade
+back to `dns_wire` — which on ESP has no nameserver config.
+
+**A name that does not exist would be reported as "resolver unavailable."** Plausible, wrong,
+far from the cause, and **it would have passed any test that only resolved names that exist.**
+
+It was caught by a line added as a *diagnostic*, not planned as proof: `nx-rc=2` — lwIP
+returning `EAI_FAIL` (202), mapped to SERVFAIL. With glibc's table the same run prints −22.
+frankB added it precisely because the EAI mapping was the one place this could be silently
+wrong, and it became the evidence.
+
+Controls, because `status=0` is the shape to distrust: the riscv32 object carries
+`U lwip_getaddrinfo` and **no bare `getaddrinfo`** (a wrong external name compiles identically
+and fails only at link); `liblwip.a` defines it, so both sides are checked; and the smoke
+calls the **backend directly**, because the facade falls back on unavailability and a
+facade-level green cannot distinguish *"lwIP answered"* from *"lwIP was skipped."*
+
+**And the scope note is in the README, not just the report**: the smoke resolves numeric
+literals, which `getaddrinfo` converts locally with no query and no server — *which is exactly
+why they work under QEMU with no network.* This is the binding and the ABI, **not "DNS works
+on ESP".** A green invites over-reading, and the place to stop that is where someone stands
+before trusting the example.
