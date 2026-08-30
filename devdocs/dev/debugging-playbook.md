@@ -293,7 +293,7 @@ KB proves reachability and effect in one step, where a green run proves neither.
 
 ## The instrument answered, correctly, about something else
 
-**The dominant failure of 2026-08-30 — thirteen measured instances, from at
+**The dominant failure of 2026-08-30 — fourteen measured instances, from at
 least five agents, and not one of them produced an error.** Every probe ran, returned, and
 was right. About a different question than the one asked.
 
@@ -316,6 +316,7 @@ reader checks whether the instrument worked, and it did.
 | was my commit in the tree Track T tested? | is the TESTED sha an ancestor of MY FIX? (the question backwards — `merge-base --is-ancestor A B` is not symmetric) | **NO** — it was there; I "corrected" a peer's correct attribution |
 | which commits are in this range? | which commits are reachable from `origin/master` **OR** from the range? (a stray ref beside a range is a **union**, not a restriction) | **40 commits, 5 touching code** — the range holds **4**, and **1**. Produced while auditing someone else's ancestry arithmetic |
 | is this `new_red: []` vacuous? | here is `new_red: []`. (`parent_tested` lives in the REPORT front-matter and is **absent from the ndjson row** — not empty, *not present*) | correct about the field, silent about its scope, and **no sign that the question cannot be answered from here** |
+| did my edit land? | did `git commit` succeed? (the script before it printed a traceback and exited nonzero; a shell newline is `;`, not `&&`) | **a commit whose SUBJECT announces a playbook row, whose DIFF touches only the logbook** |
 
 **The two git rows are the cleanest instances in the table and the only ones
 that need nothing to be wrong.** No stale tree, no missing file, no unfetched
@@ -324,6 +325,22 @@ argument too many. `git log <ref> A..B` is legal, silent, and returns a
 *plausible superset*: 40 where the range holds 4. Both were produced by someone
 **checking somebody else's work**, which is when you are least braced for your
 own instrument.
+
+**The last row is the mirror of those two, and it is the one that generalises
+furthest.** They need nothing to be wrong; this one had an error, **loudly**, and
+the next line did not read it. `python3 edit.py` then `git commit` on the
+following line is `;`, not `&&` — so a failed edit and a successful commit are
+the normal outcome of a normal-looking shell block.
+
+**A commit message is a claim about a diff, and nothing checks it.** The shell
+operator is the cause; the exposure is that **the message and the diff are
+written in the same breath by the same author and verified against each other
+never.** Every commit in this repo carries it. The instance that demonstrated it
+was a commit *about* instruments that lie, claiming a row it did not add and
+crediting itself with someone else's paragraph.
+
+The cheap guard is `&&` between an edit and its commit, and `git show --stat`
+before you believe your own subject line.
 
 **And the last row is the one to carry into any archive question: two artifacts
 of the same run disagreed about what could be known from them.** The report's
