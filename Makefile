@@ -12781,8 +12781,10 @@ test-riscv32: $(COMPILER)
 # (IR_INDEX gaining the two managed-string base shapes it never had), then
 # 69/7 (Track A's pointer-aligned array frame slot, 599000083 — not an xtensa
 # change at all), 84/6 (the dyn-array + managed-record IR ops, the whole-array
-# store arm they unmasked, and Halt(n)) and 90/7 (rtti_reg, `in`, the set family,
-# and the by-value set parameter). No sweep has regressed a program.
+# store arm they unmasked, and Halt(n)), 90/7 (rtti_reg, `in`, the set family,
+# and the by-value set parameter), 96/7 (SetLength on a var-array param, the
+# read family and Eof) and 97/8 (xtensa's row of the POSIX syscall table —
+# a lib/rtl change, not a backend one). No sweep has regressed a program.
 # Every one of those fixes was a MISSING ROW of a rule the other five backends
 # already carried — see
 # bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element.
@@ -12792,6 +12794,25 @@ test-riscv32: $(COMPILER)
 # compile, 129 sources. Earlier notes here said 142 and that figure cannot be
 # reproduced from this Makefile — treat the partition as N/matching, not as a
 # fixed denominator.
+#
+# THE SYSCALL-TABLE SWEEP BOUGHT ONE ROW, and that is the honest number.
+# lib/rtl had per-arch syscall blocks for five arches and no xtensa row, so 14
+# sources died at `undefined variable (SYS_openat)`. Supplying the row moved
+# exactly two of them off CFAIL: this one, and test_cross_float_const, which now
+# compiles, runs, and BUS ERRORS. The other twelve did not become green either —
+# they became five DIFFERENT, individually filed defects:
+#   * 5 x call0 displacement > +-512 KiB, no veneer
+#     (bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer)
+#   * 1 x no IR_SET_SIGNAL arm  (bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does)
+#   * 6 x the scheduler, which needs a CoSwitch xtensa does not have
+#     (feature-a-coswitch-for-xtensa-and-riscv32-...) — deliberately still
+#     failing to COMPILE, because their syscall numbers alone would turn six
+#     honest errors into six jumps into code that was never emitted
+#   * 1 x a Double typed const misaligning the next const array
+#     (bug-a-a-double-typed-const-misaligns-the-next-const-array-in-the-data-section)
+# That is the point rather than a disappointment: a missing thing hides every
+# bug in the programs it stops from compiling, and what a sweep like this buys
+# is usually NAMED DEFECTS, not green rows.
 test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/hello.pas $(TESTTMP)/test_xtensa_hello
 	./$(COMPILER) test/hello.pas $(TESTTMP)/test_xtensa_hello_x64
@@ -13117,7 +13138,15 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_xtensa_eof_stdin_x64
 	tools/expect_same.sh xtensa/test_eof_stdin "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_eof_stdin)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_xtensa_eof_stdin_x64)"
-	@echo "hosted xtensa: 97 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	# The first row the xtensa syscall table unblocked. ASSERTS THE EXIT STATUS,
+	# not stdout: the program's whole subject is dying by SIGTERM (-> 143) once
+	# the dispatch stub restores SIG_DFL and re-raises, and its stdout is one
+	# line that would match whether or not that happened. Same form as the
+	# riscv32/i386/aarch64/arm32 rows for this test, deliberately — a row that
+	# asserts the wrong observable is a green that means nothing.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_xtensa_sigdfl
+	tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigdfl > /dev/null 2>&1; tools/expect_same.sh xtensa/test_xtensa_sigdfl-rc "$$?" "143"
+	@echo "hosted xtensa: 98 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

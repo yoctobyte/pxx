@@ -2273,6 +2273,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-rust-generics-trait-bounds | R | 65 | feature | Rust frontend — generics with trait bounds | — |
 | feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 | feature-rv32-asm-emitter | A | 50 | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
+| feature-s-the-xtensa-row-of-the-posix-syscall-table | B+S | 40 | feature | 14 of 129 cross programs fail to COMPILE for hosted xtensa on `undefined variable (SYS_openat)` / `(SYS_gettid)` — lib/rtl has per-arch syscall-number blocks for x86-64/i386/aarch64/arm32/riscv32 and no xtensa row anywhere. Measuring the table (not recalling it) splits the 14 cleanly in two: 8 are exactly the missing table and are this ticket; 6 are the scheduler and are blocked on a Track A change, and giving them numbers WITHOUT it would replace a compile error with a jump into code that was never emitted. | — |
 | feature-sat-solver-library | B | 50 | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-selfhost-guard-ir-unsupported | A | 60 | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-setlength-var-array-param-abi | A | 50 | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
