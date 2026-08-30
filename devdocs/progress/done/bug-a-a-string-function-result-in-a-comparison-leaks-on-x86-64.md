@@ -251,3 +251,82 @@ is the signal the ticket predicted, not a regression.
 
 ## Log
 - 2026-08-29 — resolved, commit 0d91dc88f.
+
+## 2026-08-30 (frank-optimize) — RE-VERIFIED at HEAD; the stale twin in `backlog_new/` removed
+
+Dispatched to me as the top-ranked open Track A ticket. It was not open: the fix
+landed at `0d91dc88f` on 2026-08-29 and a **second copy of this file was sitting
+in `backlog_new/` with `status: new`**, so the ranker offered finished work at
+p70. It had already been queued once for frankA before reaching me.
+
+**Verified fixed before concluding anything**, at HEAD, self-host fixedpoint
+`converged after 1 round(s)`, binary sha256 `aa78a7faf63a` (≠ pinned):
+
+```
+0 iterations -> heap advanced 1032
+1000 iterations -> heap advanced 1032
+10000 iterations -> heap advanced 1032
+```
+
+Flat, against the filed 1032 / 41032 / 401032. The helpers are live in
+`ir_codegen.inc`: `IRStrCmpOwnsOperand` / `IRStrCmpNeedsRelease` /
+`IREmitStrCmpSaveOperands` / `IREmitStrCmpReleaseOperands` at `:4763-4789`,
+called at `:7131`/`:7179` (block 1, `=`/`<>`) and `:7241`/`:7244` (block 3,
+ordered). `0d91dc88f` is an ancestor of HEAD.
+
+### How a resolved ticket got back into a ranked folder
+
+Not a mis-move. The file was correctly renamed `backlog_new/` → `done/` by
+`0d91dc88f`. The copy came back with the **`wasm` branch landing**:
+
+| commit | branch | `backlog_new/` | `done/` |
+| --- | --- | --- | --- |
+| `4af569658` (08-28) | wasm — filed it | yes | no |
+| `0d91dc88f` (08-29) | master — fixed it, moved it | **no** | yes |
+| `0571f4f9e` | master | no | yes |
+| HEAD | after wasm landed | **yes** | yes |
+
+`4af569658` is **not** an ancestor of `0d91dc88f`: the wasm lane filed this
+ticket on its own branch, master fixed and moved it independently, and when the
+long-lived `wasm` branch came back (three `Merge remote-tracking branch
+'origin/master' into wasm` commits) it carried its own still-in-`backlog_new`
+copy with it. A branch that outlives a ticket's whole lifecycle re-files it on
+landing.
+
+**`tools/progress.sh check` already catches this** and was reporting it:
+
+```
+DUPLICATE-SLUG: bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64
+exists in 2 status folders (backlog_new/, done/) — the folder is the lock, so
+the copy in the earlier folder reads as a live claim on finished work.
+```
+
+So the tooling gap is not detection. The finding sat in `check`'s output while
+the ticket was dispatched twice from `next`, which does not run `check`.
+
+### Diffed before deleting, per `check`'s own instruction
+
+The `backlog_new/` copy is a strict prefix of this one — identical but for
+`status`/`owner` frontmatter, with this file carrying 114 additional lines of
+resolution. Nothing was lost; there was nothing to concatenate. Deleted.
+
+**Swept for siblings:** every ticket slug across all status folders, exactly one
+appeared twice (this one; the per-folder `README.md`s are by design). An isolated
+resurrection, not a class — no campaign needed.
+
+### Still open, and now filed
+
+The "sixteenth copy" problem this ticket named is **not** fixed and now has its
+own ticket:
+`refactor-a-the-owned-string-release-predicate-is-hand-copied-across-five-backends`.
+Census at HEAD — x86-64 routes its 5 comparison sites through the shared helper,
+the four cross backends still hand-write `IRNodeOwnsManagedStr` 6-7 times each:
+
+| backend | `IRNodeOwnsManagedStr` sites | via shared helper |
+| --- | ---: | --- |
+| `ir_codegen.inc` (x86-64) | 9 | yes (5) |
+| `ir_codegen386.inc` | 6 | no |
+| `ir_codegen_arm32.inc` | 6 | no |
+| `ir_codegen_aarch64.inc` | 7 | no |
+| `ir_codegen_riscv32.inc` | 6 | no |
+| `ir_codegen_wasm32.inc` | 3 | no |

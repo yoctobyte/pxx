@@ -59,7 +59,6 @@ _none — no lane is locked._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [A]` bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64
 - `[p 70] [P]` bug-p-generic-type-constraints-are-parsed-and-discarded
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
@@ -86,5 +85,6 @@ _none — no lane is locked._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [A+S]` bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 
 _374 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
