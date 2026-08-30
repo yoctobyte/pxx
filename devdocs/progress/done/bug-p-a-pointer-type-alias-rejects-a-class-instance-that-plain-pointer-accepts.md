@@ -252,4 +252,4 @@ measured. `lib_synapse_ssl` passing is necessary, not sufficient — a full
 that, and it is a prerequisite for the pin, not for this ticket.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3dab2c9cb.
