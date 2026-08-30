@@ -3,10 +3,10 @@ slug: bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 track: P
 prio: 65
 type: bug
-status: backlog
+status: working
 blocked-by: []
 summary: "A unit that specializes another unit's generic IN ITS INTERFACE gets the template's method bodies streamed into the interface section, where a method implementation is not a declaration: `unexpected token in a unit interface section` pointing at the TEMPLATE's file. Pre-existing on pinned, objfpc binder form, no Delphi surface involved — the same-file and the program-level cases both work, and a template with only FIELDS works cross-unit too. This is the next wall for `uses Generics.Collections`, because real templates have methods. Named as tgeneric91 in test/test_generic_spec_per_unit.pas's own header but never ticketed."
-owner: unassigned
+owner: frankR
 ---
 
 # A cross-unit specialization streams method bodies into the interface section
@@ -89,3 +89,89 @@ suggests.
 The three-file repro printing `7`; `test_generic_spec_per_unit` still 4/4; the
 Delphi cross-unit tests still green with their templates given methods back;
 the per-fix loop.
+
+## 2026-08-30 (frankR) — fixed; and the ticket's "where to look" was right
+
+Reproduced exactly. Then finished drawing the boundary the ticket had half-drawn
+— one row it did not have turned out to be the one that explains the whole thing.
+
+| specialization written in | template has | before | after |
+| --- | --- | --- | --- |
+| the main program's declaration part | methods | OK | OK |
+| the **same unit** as the template (interface) | methods | OK | OK |
+| a using unit's **implementation** | methods | **OK** | OK |
+| a using unit's **interface** | methods | **the error** | **OK** |
+| a using unit's interface | fields only | OK | OK |
+
+The third row is the new one: a specialization in the using unit's
+IMPLEMENTATION is fine. So this is not "cross-unit" — it is **the interface
+section specifically**, and only when the template has methods.
+
+### Why same-unit worked and cross-unit did not
+
+The pend is gated on `GenericMethodCount > 0` (`ParseSpecialization`):
+
+```pascal
+  if GenericMethodCount > 0 then
+  begin
+    PendingSpecTi[PendingSpecCount] := ti; ...
+```
+
+- **Template in THIS unit** — its method bodies live in this unit's
+  implementation and are still unparsed while the interface is being read, so
+  `GenericMethodCount` is 0, nothing is pended, and `BufferGenericMethod`
+  materialises them later *from the implementation*, once it holds both halves.
+  Its own comment says so: *"Only specializations already registered are
+  streamed here; ones declared later stream this method from
+  ParseSpecialization."*
+- **Template from a USED unit** — already fully parsed, so its methods are
+  buffered, the pend fires, and `FlushPendingClassSpecializations` runs at the
+  end of the interface's type section and splices bodies **into the interface**.
+- **Fields only** — nothing to splice either way.
+
+So the two materialisation paths partition by ordering, and the cross-unit case
+is the only one that lands on the wrong side of the partition while inside an
+interface. The ticket's "where to look" was correct, and the `GenericMethodCount`
+gate is the missing half of the explanation.
+
+### Fix — `pasparser_generic.inc` only
+
+`SpecializeStream` splices at the parse cursor, which is exactly wrong here.
+Split into `SpecializeStreamAt(..., at)` returning the token count inserted, with
+`SpecializeStream` as the `at := TokPos` wrapper so all five existing callers are
+untouched. `FlushPendingClassSpecializations` then, **when `InInterface`**,
+splices at `UnitImplAnchor` instead: just past the unit's `implementation`, and
+past its `uses` clause if it has one.
+
+Two details that are not incidental:
+
+- **`implementation` is a plain `tkIdent`, not a keyword token.** `ParseUnit`
+  scans for it by name (`pasparser_proc.inc`), and `UnitImplAnchor` matches that
+  scan deliberately — two different notions of where the section starts would be
+  a drift bug waiting.
+- **The `uses` skip is load-bearing.** `implementation uses ugm;` is the ordinary
+  spelling of an impl-private import, and a body spliced in front of it leaves a
+  `uses` that is no longer first in its section. Tested.
+- **The anchor advances by each splice's return.** Two specializations in one
+  interface would otherwise each land in front of the previous one, reversing
+  them. Tested with two.
+
+### Verified — all six rows compile AND run
+
+Every row of the table above prints `7`. Plus:
+
+- `implementation` opening with `uses`, and **two** specializations of the same
+  template in one interface → prints `109` (7 + 2 + 100), so ordering and the
+  uses-skip both hold;
+- `test_generic_spec_per_unit` — **4 / 4** (the ticket's named gate);
+- `test_delphi_generic_cross_unit` — **4 / 4** (Delphi cross-unit, templates
+  with methods, still green);
+- `test_generic_cross_unit_inline_specialize` — **1 / 1**.
+
+Gate: `make compiler/pascal26` converged, `d5a35c8de13a`.
+
+### Where the wall moves next
+
+`uses Generics.Collections` is the reason this mattered — `generics.collections`
+specializes `Generics.Defaults`' comparers in its interface and those templates
+have methods. Re-measured after the fix; recorded below.

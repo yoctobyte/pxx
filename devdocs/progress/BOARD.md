@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface | P | 65 | bug | A unit that specializes another unit's generic IN ITS INTERFACE gets the template's method bodies streamed into the interface section, where a method implementation is not a declaration: `unexpected token in a unit interface section` pointing at the TEMPLATE's file. Pre-existing on pinned, objfpc binder form, no Delphi surface involved — the same-file and the program-level cases both work, and a template with only FIELDS works cross-unit too. This is the next wall for `uses Generics.Collections`, because real templates have methods. Named as tgeneric91 in test/test_generic_spec_per_unit.pas's own header but never ticketed. | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
 ## unfinished (34)
@@ -26,7 +27,7 @@ _none_
 | bug-nilpy-render-backend-py-compile-does-not-terminate | N | 55→68 | bug | It loops forever after a known point emitting nothing — not slowness. PXXDBG=all output is byte-identical at 20s and 45s (54,577 lines, cmp-clean) with VmRSS flat at 7,616 kB, so it is a tight non-allocating spin entered right after _text's parameter list (render_backend.py:244); the method-block bisect agrees independently. NOT minimised: seven candidate shapes are recorded as DISPROVED, including the tuple-unpack cycle that was the leading suspect. | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 25 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
-| bug-p-an-alias-to-a-named-dynamic-array-type-cannot-be-indexed | P | 50 | bug | `type TA = array of Integer; TB = TA;` — indexing a TB is `error: this value cannot be indexed`, while indexing a TA is fine. One extra level of naming loses the array-ness. Six-line repro, same file, no generics and no units involved; it is not about TArray, which is only how it was found. SetLength on the alias is accepted, so the type is array enough to resize and not array enough to read. | — |
+| bug-p-an-alias-to-a-named-dynamic-array-type-cannot-be-indexed | P | 50 | bug | `type TA = array of Integer; TB = TA;` — a type alias to a NAMED array type resolves to the array's ELEMENT type, so `SizeOf(y)` is 4 and indexing raises `this value cannot be indexed`. Static arrays fail identically; strings and pointers are fine, because they have alias carriers (`AliasStrElemTk`, `AliasElemTk`) and arrays do not. Root cause `pasparser_decl.inc:6154`. Not generics, not `TArray`, not cross-unit. DIAGNOSIS COMPLETE — only the write remains. | — |
 | bug-p-generic-type-param-unresolved-in-class-abstract-template | P | 70 | bug | A generic template's own type parameter is not in scope inside a `class abstract(...)` body: generics.collections' TCustomPointersEnumerator<T, PT> reports `unknown type: PT` for its own PT. This is the wall the rtl-generics corpus hits now that bug-p-object-value-types-standard-meaning cleared the one 26 lines later that used to abort the parse first. | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
@@ -65,7 +66,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (387)
+## backlog (386)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -180,7 +181,6 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected | P | 50 | bug | `TD<T> = class abstract(TEnumBase<T>);` — a bodiless generic class with the `abstract` modifier and a generic parent — is rejected with `unexpected token in a unit interface section`. All three ingredients are required: dropping `abstract`, or making the parent non-generic, compiles. FPC compiles it. rtl-generics uses this exact shape. | — |
-| bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface | P | 65 | bug | A unit that specializes another unit's generic IN ITS INTERFACE gets the template's method bodies streamed into the interface section, where a method implementation is not a declaration: `unexpected token in a unit interface section` pointing at the TEMPLATE's file. Pre-existing on pinned, objfpc binder form, no Delphi surface involved — the same-file and the program-level cases both work, and a template with only FIELDS works cross-unit too. This is the next wall for `uses Generics.Collections`, because real templates have methods. Named as tgeneric91 in test/test_generic_spec_per_unit.pas's own header but never ticketed. | — |
 | bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template | P | 55 | bug | In mode Delphi, `TE = TBox<TOuter>;` fails with `unknown type: TOuter` when TOuter is declared AFTER TBox in the same type section — reorder the two declarations and the identical program compiles and runs. FPC accepts both orders. DelphiRewriteGenericUses splices its minted alias declarations immediately behind the TEMPLATE, so they can only name types already declared at that point. objfpc is unaffected (its aliases are emitted at the use). 20-line repro, both orders. | — |
 | bug-p-a-different-specialization-of-the-same-template-inside-its-own-body | P | 35 | bug | `TOuter<T> = class FOther: TOuter<ShortInt>; end;` -- a reference to a DIFFERENT specialization of the SAME template, from inside that template's own body -- does not compile. A different TEMPLATE's specialization in the same position is fine, and same-template-same-args was fixed by bug-p-a-nested-class-naming-its-enclosing-template-is-substituted-twice. Pre-existing: fails identically on pinned. | — |
 | bug-p-a-forward-interface-declaration-is-not-parsed | P | 45 | bug | `IFoo = interface;` (forward) is rejected with `Expected: end, but got: ;` while the CLASS arm of the same double case, `TBar = class;`, parses fine. Pre-existing on pinned and HEAD alike -- not a regression. Costs tgenconstraint37, which is otherwise the only corpus test that exercises specializing against a forward-declared type. | — |
@@ -819,7 +819,6 @@ _none_
 - [p 65] [A+C] bug-c-a-c-function-s-calling-convention-depends-on-the-target
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
-- [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]

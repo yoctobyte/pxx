@@ -3,12 +3,16 @@ track: P
 prio: 50
 type: bug
 blocked-by: []
-summary: "`type TA = array of Integer; TB = TA;` — indexing a TB is `error: this value cannot be indexed`, while indexing a TA is fine. One extra level of naming loses the array-ness. Six-line repro, same file, no generics and no units involved; it is not about TArray, which is only how it was found. SetLength on the alias is accepted, so the type is array enough to resize and not array enough to read."
+summary: "`type TA = array of Integer; TB = TA;` — a type alias to a NAMED array type resolves to the array's ELEMENT type, so `SizeOf(y)` is 4 and indexing raises `this value cannot be indexed`. Static arrays fail identically; strings and pointers are fine, because they have alias carriers (`AliasStrElemTk`, `AliasElemTk`) and arrays do not. Root cause `pasparser_decl.inc:6154`. Not generics, not `TArray`, not cross-unit. DIAGNOSIS COMPLETE — only the write remains."
 status: unfinished
 owner: 
 ---
 
-# An alias to a named dynamic-array type cannot be indexed
+# An alias to a named array type resolves to the ELEMENT type
+
+*(The slug still says "dynamic-array" and stays that way deliberately: four
+files cite it, and a slug is an address. Breaking addresses to improve a label
+is a bad trade — the title and summary carry the correction.)*
 
 - **Type:** bug (Pascal frontend) — **Track P**.
 - **Filed:** 2026-08-30 by frankB, found while adding `TArray<T>` to the RTL
@@ -40,7 +44,15 @@ pascal26:9: error: this value cannot be indexed — only arrays, strings and
 `x` and `y` have the same structural type. The only difference is that `TB` is
 named via `TA` instead of via `array of Integer`.
 
-## The sharp part: `SetLength` accepts it
+## ~~The sharp part: `SetLength` accepts it~~ — DISPROVEN, see below
+
+> **This section is the ticket as originally filed and is wrong.** `SetLength`
+> is NOT accepted: it fails with *"SetLength expects a string variable in IR
+> codegen"*. It only looks accepted here because the indexing errors are raised
+> during PARSING and the compile never reaches IR codegen, where SetLength's
+> check lives. There is no resize-vs-read split. Kept unedited below because it
+> is what was measured and filed; the correction is in section 3 of the
+> 2026-08-30 diagnosis.
 
 `SetLength(y, 2)` is **not** rejected — the error is on the index. So the alias
 is array enough to be resized and not array enough to be read, which means the

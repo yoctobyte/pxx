@@ -553,13 +553,18 @@ begin
 end;
 
 { Substitute one template range and SPLICE it at the parse cursor. }
-procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
+function SpecializeStreamAt(tokStart, count: Integer; const specName: AnsiString;
+                            at: Integer): Integer;
+{ The splice, at an EXPLICIT index rather than at the parse cursor, returning how
+  many tokens it inserted so a caller placing several in a row can advance its own
+  anchor. SpecializeStream below is this with `at` = TokPos, which is what every
+  caller but the unit-interface deferral wants. }
 var i, subCount: Integer;
 begin
   subCount := SpecializeToBuffer(tokStart, count, specName);
   EnsureTokCapacity(TokCount + subCount + 1);
   i := TokCount - 1;
-  while i >= TokPos do
+  while i >= at do
   begin
     Tokens[i + subCount].Kind := Tokens[i].Kind;
     Tokens[i + subCount].IVal := Tokens[i].IVal;
@@ -571,11 +576,11 @@ begin
   i := 0;
   while i < subCount do
   begin
-    Tokens[TokPos + i].Kind := SpecializeTokens[i].Kind;
-    Tokens[TokPos + i].IVal := SpecializeTokens[i].IVal;
-    Tokens[TokPos + i].Line := SpecializeTokens[i].Line;
-    Tokens[TokPos + i].SOffset := SpecializeTokens[i].SOffset;
-    Tokens[TokPos + i].SLen := SpecializeTokens[i].SLen;
+    Tokens[at + i].Kind := SpecializeTokens[i].Kind;
+    Tokens[at + i].IVal := SpecializeTokens[i].IVal;
+    Tokens[at + i].Line := SpecializeTokens[i].Line;
+    Tokens[at + i].SOffset := SpecializeTokens[i].SOffset;
+    Tokens[at + i].SLen := SpecializeTokens[i].SLen;
     Inc(i);
   end;
   Inc(TokCount, subCount);
@@ -586,7 +591,7 @@ begin
     file boundary deep into the WRONG unit: the `in:` line then named a 707-line
     RTL file for an error on line 2074 of the corpus unit.
     bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
-  AdjustSrcRanges(TokPos, subCount);
+  AdjustSrcRanges(at, subCount);
   { …and NOT AdjustPass2Spans, unlike InsertTokens, which calls both. That is
     correct here, not an omission: no splice site can be reached while
     Pass2Active is true, so the span adjustment would be a no-op.
@@ -622,7 +627,16 @@ begin
     supply: these tokens are the TEMPLATE's, not this file's. Without it the
     specialized body's diagnostics carried fgl.pp's line numbers under the
     program's file name. }
-  PasSpliceTokFile(TokPos, subCount, TemplateSrcKeyOfTok(tokStart));
+  PasSpliceTokFile(at, subCount, TemplateSrcKeyOfTok(tokStart));
+  SpecializeStreamAt := subCount;
+end;
+
+procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
+{ Splice at the parse cursor: the parser reads the inserted tokens next. }
+var n: Integer;
+begin
+  n := SpecializeStreamAt(tokStart, count, specName, TokPos);
+  if n < 0 then Error('specialize splice');   { n is used; keeps the FPC seed quiet }
 end;
 
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
@@ -2802,9 +2816,69 @@ end;
   streamed `procedure`/`function` bodies land after the whole `type` block and
   are parsed as ordinary top-level subroutines. Inserting at TokPos prepends
   before the section-terminating token, which was un-read by the caller. }
-procedure FlushPendingClassSpecializations;
-var p, gm, ti, si: Integer;
+function UnitImplAnchor: Integer;
+{ Where a method body must land when the specialization that needs it was
+  written in a unit's INTERFACE: just inside the implementation section, past
+  its `uses` clause if it has one. -1 when there is no implementation ahead.
+
+  `implementation` is a plain tkIdent here, not a keyword token -- ParseUnit
+  scans for it exactly this way (pasparser_proc.inc: `(CurTok.SVal =
+  'implementation') or (CurTok.SVal = 'Implementation')`), and this must agree
+  with that scan or the two disagree about where the section starts.
+
+  Skipping a leading `uses` is not a detail: `implementation uses ugm;` is the
+  ordinary spelling for an impl-private import, and a method body spliced in
+  front of it produces a `uses` that is no longer the first thing in the
+  section. }
+var i, guard: Integer;
 begin
+  Result := -1;
+  i := TokPos;
+  while i < TokCount do
+  begin
+    if (Tokens[i].Kind = tkIdent) and
+       CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), 'implementation') then
+    begin
+      Inc(i);   { past `implementation` }
+      if (i < TokCount) and (Tokens[i].Kind = tkUses) then
+      begin
+        guard := 0;
+        while (i < TokCount) and (Tokens[i].Kind <> tkSemicolon) and (guard < TokCount) do
+        begin
+          Inc(i);
+          Inc(guard);
+        end;
+        if i < TokCount then Inc(i);   { past the `;` }
+      end;
+      Result := i;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+procedure FlushPendingClassSpecializations;
+var p, gm, ti, si, anchor: Integer;
+begin
+  { A specialization written in a unit's INTERFACE cannot have its method bodies
+    materialised where it stands: an interface section holds signatures, and a
+    `procedure TFoo$LongInt.M; begin ... end;` spliced into one is
+    `unexpected token in a unit interface section` -- reported against the
+    TEMPLATE's file, because the streamed tokens carry the template's source
+    offsets, so the diagnostic names a file whose text is fine.
+
+    Only the CROSS-UNIT case reaches here in an interface, and the reason is the
+    `GenericMethodCount > 0` gate on the pend above. When the template is in
+    THIS unit its method bodies are still unparsed while the interface is being
+    read, so nothing is pended and BufferGenericMethod materialises them later,
+    from the implementation, once it has both halves. When the template came
+    from a USED unit its methods are already buffered, the pend fires, and this
+    flush runs inside the interface. Same-unit worked and cross-unit did not for
+    exactly that reason -- and a fields-only template worked cross-unit too,
+    because with no methods there is nothing to splice.
+    bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface }
+  anchor := -1;
+  if InInterface then anchor := UnitImplAnchor;
   for p := 0 to PendingSpecCount - 1 do
   begin
     ti := PendingSpecTi[p];
@@ -2813,8 +2887,14 @@ begin
     SetSpecSubs(ti, si);
     for gm := 0 to GenericMethodCount - 1 do
       if GenericMethods[gm].TemplateIdx = ti then
-        SpecializeStream(GenericMethods[gm].TokStart, GenericMethods[gm].TokCount,
-          Specializations[si].Name);
+        if anchor >= 0 then
+          { Advance the anchor by what each splice inserted, so several bodies
+            keep their order instead of each landing in front of the last. }
+          anchor := anchor + SpecializeStreamAt(GenericMethods[gm].TokStart,
+                      GenericMethods[gm].TokCount, Specializations[si].Name, anchor)
+        else
+          SpecializeStream(GenericMethods[gm].TokStart, GenericMethods[gm].TokCount,
+            Specializations[si].Name);
   end;
   PendingSpecCount := 0;
 end;
