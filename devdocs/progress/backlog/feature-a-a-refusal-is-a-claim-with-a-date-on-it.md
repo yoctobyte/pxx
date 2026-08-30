@@ -12101,3 +12101,50 @@ cover. It is a permanent false negative that arrived labelled as a fix's own evi
 **Run the new test against the old binary before you commit it.** If it passes, the test is
 wrong — not the binary, not the fix. Record the failure output in the commit or the ticket,
 because that output, and nothing else, is what proves the test tests the thing.
+
+## 229 — A PRINCIPLE WITHOUT ITS INSTANCE IS AGREED WITH MORE READILY THAN IT DESERVES
+
+This one is about **this file**. 73 top-level faces and 385 sub-entries as of 2026-08-30, and the
+ones that survive contact are the ones with a measurement stapled to them.
+
+Face 226 says: *check a property where the thing that would hide it is absent.* That is correct
+and it was, as written, **not actionable** — because I had named the concealer by assumption. The
+ticket said the concealer was "an optimisation's padding" and required the check at `-O0`.
+Measurement said the concealer is `PadCodeToPageBoundary`, which is not an optimisation and is
+**unconditional** for Linux executables. `-O0` would not have removed it. A `-O0` check would have
+been exactly as vacuous as any other, and the ticket would have been built, passed, and proved
+nothing.
+
+> **"Check where the concealer is absent" is not actionable until someone names the concealer.**
+> The principle was right, the instance was assumed, and the assumption was invisible precisely
+> because the principle around it was sound.
+
+### 229a — an abstraction gains confidence by being handed up and back
+
+The clause was called "the sharper half" and returned as the face's spine. Nothing was added but
+agreement — and agreement is exactly what an abstraction is cheap to get, because there is nothing
+in it to disagree with. It came back with more authority than it left with, and neither party had
+measured the thing it asserted.
+
+Sharpest where the amplifier is a **coordinator**: a seat whose context is destroyed and rebuilt
+while the work continues is the least well-placed party to be adding confidence to anything. It
+should be routing claims, not endorsing them.
+
+> The tell is that the exchange felt productive. Two parties agreeing about a mechanism neither
+> has measured produces no friction at all, which is why it does not register as a risk.
+
+### 229b — the operational rule for this file
+
+**Every face carries the measurement it came from, or it is a slogan.** Not a rewrite of the
+existing entries — most already do this — but the standard for adding one, and the thing to check
+when a face is being *quoted* rather than written:
+
+- name the instance, with numbers: `.data` at `0x414000` on four targets, `294 programs, 0
+  divergences`, `53 that passed were never safe, only untested`;
+- name the mechanism, not its category. "An optimisation's padding" and "an unconditional page
+  pad" are the same sentence at one level of abstraction apart, and only one of them can be acted
+  on;
+- state what the measurement does **not** support. 294 seeds is evidence about a rate.
+
+A face without those is still true. It is just true in a way that cannot be wrong, which is the
+same property that makes it useless as a check — face 212's problem, one level up.
