@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_string.pas's `Template` against CPython's real string.Template.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where `import string`
+finds the stdlib module, and every line below produces identical output both
+ways. Run it as `python3 test/lib_mimic_string_template.npy` to see that.
+
+THE MAPPING FORM IS USED THROUGHOUT, AND THAT IS DELIBERATE. CPython accepts
+both `t.substitute({'who': 'tim'})` and `t.substitute(who='tim')`; only the
+first is expressible in this dialect, because NilPy binds a keyword to a
+DECLARED parameter name and a Template's keyword names are the caller's own
+placeholders. The mapping form is ordinary CPython and equals the keyword form,
+so this file measures the placeholder engine and not that limitation. See the
+shim's header, and bug-n-double-star-unpacking-is-rejected-at-a-method-call for
+why `substitute(**values)` is separately unavailable today.
+
+WHAT THIS ASSERTS. A differential pins what the two implementations AGREE on.
+The two rows most worth having are the ones the prose docs do not state and
+which would have shipped wrong from the plausible reading:
+
+  - safe_substitute KEEPS THE BRACES on an unresolved `${who}` (-> '${who}',
+    not '$who');
+  - an unterminated `${who` is a ValueError EVEN WHEN 'who' is in the mapping,
+    because the placeholder is malformed and the key is never looked up.
+"""
+
+from string import Template
+
+fails = [0]
+
+
+def check(label, got, want):
+    if got == want:
+        print(label + '=ok')
+    else:
+        fails[0] = fails[0] + 1
+        print(label + '=FAIL got=' + repr(got) + ' want=' + repr(want))
+
+
+def sub(tpl, mapping):
+    """substitute, with the two exception kinds flattened to a marker string.
+
+    The kind is reported, not the message: CPython's ValueError text carries a
+    line/col ('Invalid placeholder in string: line 1, col 4') and pinning that
+    would assert a diagnostic rather than a behaviour. The KeyError arm reports
+    the key, which IS behaviour a caller branches on.
+    """
+    try:
+        return Template(tpl).substitute(mapping)
+    except KeyError as e:
+        return '<KeyError:' + str(e.args[0]) + '>'
+    except ValueError:
+        return '<ValueError>'
+
+
+def safe(tpl, mapping):
+    try:
+        return Template(tpl).safe_substitute(mapping)
+    except Exception as e:
+        return '<' + type(e).__name__ + '>'
+
+
+# ---------------------------------------------------------------- resolution
+d = {'who': 'tim', 'what': 'kung pao'}
+check('two_placeholders', sub('$who likes $what', d), 'tim likes kung pao')
+check('braced', sub('${who}', d), 'tim')
+check('braced_adjacent', sub('${noun}ification', {'noun': 'foo'}), 'fooification')
+check('adjacent_bare', sub('$x$y', {'x': 'a', 'y': 'b'}), 'ab')
+check('braced_pair', sub('${x}${y}', {'x': '1', 'y': '2'}), '12')
+check('empty_template', sub('', {}), '')
+check('no_placeholders', sub('no placeholders', {}), 'no placeholders')
+
+# ------------------------------------------------------------------ $$ rules
+# $$ is consumed WHOLE and is not a placeholder introducer, so '$$who' is the
+# text '$who' and never a lookup of `who` -- the mapping below would resolve it
+# if the rule were wrong, which is the point of passing one.
+check('dollar_dollar', sub('$$', {}), '$')
+check('dollar_dollar_name', sub('$$who', {'who': 'x'}), '$who')
+check('dollar_dollar_mid', sub('cost is $$5', {}), 'cost is $5')
+check('dollar_dollar_then_ph', sub('$$$x', {'x': 'v'}), '$v')
+check('dollar_dollar_then_braced', sub('$$${x}', {'x': 'v'}), '$v')
+check('ph_then_dollar_dollar', sub('$x$$y', {'x': 'a'}), 'a$y')
+
+# --------------------------------------------------------------- identifiers
+# [_A-Za-z][_A-Za-z0-9]*, ASCII, case-insensitive, and GREEDY: 'x_y' wins over
+# 'x' even though both are present.
+check('ident_underscore', sub('$_x', {'_x': 'u'}), 'u')
+check('ident_mixed_case', sub('$WhO', {'WhO': 'C'}), 'C')
+check('ident_digit_inside', sub('$a9b', {'a9b': 'n'}), 'n')
+check('ident_greedy', sub('$x_y', {'x_y': 'ok', 'x': 'no'}), 'ok')
+# the identifier STOPS at a non-identifier character, which stays literal
+check('ident_stops_at_dash', sub('$a-b', {'a': 'A'}), 'A-b')
+check('ident_stops_at_dot', sub('$a.b', {'a': 'A'}), 'A.b')
+
+# ------------------------------------------------------------ value coercion
+check('value_int', sub('$x', {'x': 5}), '5')
+check('value_none', sub('$x', {'x': None}), 'None')
+
+# -------------------------------------------------------------- missing keys
+check('missing_bare', sub('$who', {}), '<KeyError:who>')
+check('missing_braced', sub('${who}', {}), '<KeyError:who>')
+# ...and the safe form leaves the ORIGINAL text. The braced case is the one
+# that would have shipped wrong: the braces are KEPT, not collapsed to '$who'.
+check('safe_missing_bare', safe('$who', {}), '$who')
+check('safe_missing_braced', safe('${who}', {}), '${who}')
+
+# --------------------------------------------------- malformed placeholders
+check('bare_dollar_end', sub('$', {}), '<ValueError>')
+check('dollar_space', sub('$ ', {}), '<ValueError>')
+check('dollar_at_end', sub('a$', {}), '<ValueError>')
+check('dollar_digit', sub('$1abc', {}), '<ValueError>')
+check('empty_braces', sub('${}', {}), '<ValueError>')
+check('braced_with_space', sub('${bad name}', {}), '<ValueError>')
+check('trailing_dollar', sub('100$', {}), '<ValueError>')
+# unterminated brace: a ValueError EVEN WHEN the key is present, because the
+# placeholder is malformed and CPython never reaches the lookup
+check('unterminated_present', sub('${who', {'who': 't'}), '<ValueError>')
+check('unterminated_absent', sub('${who', {}), '<ValueError>')
+
+# ...and safe_substitute raises NEITHER kind, leaving every one of them as-is
+check('safe_bare_dollar', safe('$', {}), '$')
+check('safe_dollar_space', safe('$ ', {}), '$ ')
+check('safe_dollar_at_end', safe('a$', {}), 'a$')
+check('safe_dollar_digit', safe('$1abc', {}), '$1abc')
+check('safe_empty_braces', safe('${}', {}), '${}')
+check('safe_braced_with_space', safe('${bad name}', {}), '${bad name}')
+check('safe_trailing_dollar', safe('100$', {}), '100$')
+check('safe_unterminated', safe('${who', {'who': 't'}), '${who')
+
+# a resolvable template goes through safe_substitute unchanged, so a green
+# above is not just "safe_substitute never raises"
+check('safe_resolves', safe('$who likes $what', d), 'tim likes kung pao')
+
+if fails[0] == 0:
+    print('MIMIC-STRING-TEMPLATE OK')
+else:
+    print('MIMIC-STRING-TEMPLATE FAILED ' + str(fails[0]))

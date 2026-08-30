@@ -17120,6 +17120,25 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_weakref.npy $(TESTTMP)/lib_mimic_weakref
 	tools/expect_same.sh lib_mimic_weakref.1 "$$($(TESTTMP)/lib_mimic_weakref | grep -c '=ok')" "11"
 	tools/expect_same.sh lib_mimic_weakref.2 "$$($(TESTTMP)/lib_mimic_weakref | tail -1)" "MIMIC-WEAKREF OK"
+	# string.Template -- the $$-placeholder class (feature-lib-mimic-string-
+	# template). A DIFFERENTIAL against CPython's real string.Template: the .npy
+	# runs unmodified under python3 and both outputs are byte-identical.
+	#
+	# It uses the MAPPING form throughout, and that is not a stylistic choice --
+	# `t.substitute(who='tim')` cannot work here, because NilPy binds a keyword
+	# to a DECLARED parameter name and a Template's keyword names are the
+	# caller's own placeholders, unknown when the shim is compiled. The mapping
+	# form is ordinary CPython and equals the keyword form, so this measures the
+	# placeholder engine rather than that limit. Do not "fix" the test to the
+	# keyword spelling: it fails loudly and by design.
+	#
+	# The two rows worth protecting are the ones the prose docs do not state,
+	# and both would have shipped wrong from the plausible reading:
+	# safe_substitute KEEPS THE BRACES on an unresolved braced placeholder, and
+	# an unterminated one is a ValueError EVEN WHEN its name is in the mapping.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_string_template.npy $(TESTTMP)/lib_mimic_string_template
+	tools/expect_same.sh lib_mimic_string_template.1 "$$($(TESTTMP)/lib_mimic_string_template | grep -c '=ok')" "43"
+	tools/expect_same.sh lib_mimic_string_template.2 "$$($(TESTTMP)/lib_mimic_string_template | tail -1)" "MIMIC-STRING-TEMPLATE OK"
 	# A real minidom DOM -- Document/Element/Attr/Text/Comment/DocumentFragment/
 	# DocumentType/NamedNodeMap/DOMImplementation, namespace-aware create+set,
 	# deep and shallow cloneNode, normalize (feature-b-a-real-minidom-is-an-
