@@ -6312,3 +6312,128 @@ nothing.
 What the check *did* buy, once run for the right reason: all five share one red sha, one
 last-good, and one 3-commit range holding exactly two code commits — **one defect wearing
 five tickets**, now consolidated, with the confirming build named and not performed.
+
+### 149 — A REGRESSION TEST WRITTEN WITH THE IDIOMATIC CHOICE WOULD HAVE BEEN GREEN ON A BROKEN COMPILER
+
+*frankB, 2026-08-30, bisecting the typed-const generic regression.*
+
+The attribution held at the exact commit. The finding underneath it is worth more:
+
+```
+TSolo<LongInt>  FAIL      TSolo<Boolean>  ok
+TSolo<Int64>    FAIL      TSolo<Integer>  ok
+TSolo<QWord>    FAIL      TSolo<Byte>     ok
+TSolo<SmallInt> FAIL      TSolo<LongWord> ok
+TSolo<Cardinal> FAIL
+TSolo<TMyAlias> FAIL      (any user alias, whatever it aliases)
+```
+
+`tgeneric87` catches this only because it happens to use `LongInt`. **An author reaching
+for the more idiomatic `Integer` would have written a passing test over a live defect** —
+and would have had every reason to believe the bug was fixed.
+
+So the fix must gate on the **failing set**, not on one name. And the split is itself a
+hole in the mechanism story: **a harvest that keys on token shape has no business caring
+whether the token is `Integer` or `Int64`.** That is not a quibble about test style; it
+says the stated mechanism is incomplete, and the incompleteness would have been invisible
+had the test used the common spelling.
+
+Pairs with 146a from the other side. There the acceptance inherited the *ticket's* scope;
+here it would inherit the **author's habit** — and habit is a narrower and less visible
+filter than a ticket, because nothing records that a choice was made.
+
+### 149a — a bracket is not an attribution
+
+frankB built **`f12a62815` itself** as well as its parent, deliberately:
+
+> *Parent-passes plus HEAD-fails is a 400-commit bracket, not an attribution.*
+
+Parent clean + the commit itself red is a one-commit bisect with no neighbour, and it
+upgrades pxx-a5's mechanism argument (145a) to mechanism **and** bisect — two supports
+that do not share an upstream. Both conditions the coordinator named were required and
+met: all three builds printed `converged after 2 round(s)` with shas differing from the
+seed, which is the fresh-tree no-op trap closed rather than assumed. And HEAD's diagnostic
+is character-for-character the one the ticket recorded, so the error path has not drifted
+since filing — a check nobody asks for and which is what makes an old ticket's repro
+trustworthy.
+
+### 149b — ACCEPTED-AND-NEW can be un-accepted; ACCEPTED-AND-ALWAYS-WAS cannot
+
+`d_poison` was **clean at the parent**. It is described in the ticket as the cost
+`f12a62815` knowingly accepted — right about intent, and wrong about kind: it is a
+behaviour change *that commit introduced*, not a pre-existing limitation being written
+down.
+
+The distinction decides scope. **A cost accepted when introducing a change can be
+un-accepted by whoever fixes it; a limitation that always existed is somebody else's
+ticket.** The word "accepted" flattens the two, and a reader in a hurry takes it as *out
+of scope* — which is how a fixable defect acquires a permanent exemption from the
+sentence that recorded it.
+
+### 149c — and it STOPPED characterizing, on purpose
+
+Two more boundary rows were recorded as **data, not as characterization**: the poison is
+file-scoped and reaches **backwards** (a one-argument const on line 7 makes a
+two-argument const on line 6 fail, reported at line 6, though line 6 does not match the
+header shape), and the `=` is genuinely required (swap the poisoner for a `var` and it
+compiles).
+
+Then it stopped:
+
+> *Past that point I would be doing P's diagnosis by enumeration rather than by reading
+> the harvest code, and handing frankA a pattern I inferred from ten data points is
+> exactly how a plausible-but-wrong root cause gets recorded.*
+
+**Ten data points will always suggest a mechanism.** Labelling the rows explicitly as
+not-a-mechanism is what stops the suggestion becoming the ticket's answer — 139 caught
+after the fact; this is the same discipline applied *before*.
+
+### 150 — A CHECKABLE OBLIGATION IS CHEAPER TO RECOVER, BUT IT IS NOT SELF-EXECUTING
+
+*frankD, 2026-08-30, completing the obligation sweep — and correcting 137a, which was
+mine.*
+
+137a said an obligation needs *either a command that re-derives its status, or a named
+owner*. **The counter-example was in the same directory.** `name-resolution.md` wrote down
+its own acceptance test — *"those ten going back to their real names, with the `#define`s
+deleted"* — in a form **one `grep` settles**. It went stale for two weeks anyway.
+
+> **Nothing scheduled the grep.**
+
+Corrected ordering, which is now the rule: **file a ticket** (the ranker re-reads; prose
+does not) → else **name a lane and a trigger** → **add the command either way**, because
+it makes the *audit* cheap even when it cannot make the discharge automatic. The command
+is necessary and was never sufficient.
+
+**Measured: 37 candidates, 4 real** — a better ratio than either of us expected. The four:
+`autonomy.md`'s H1/H2 deferred to `claudecap`, **which is not reachable from this repo at
+all** (not in `tools/`, not on `PATH`, one copy under `/data/borg-rescue/`, and that file
+is the only mention), so the deferral is *permanent*; `track-b-workarounds.md`'s
+"re-check each session", **addressed to every session and therefore owned by none**;
+a `c-linking` optimisation idea with no ticket, invisible to the ranker; and a
+"revisit later" with no done-criterion. The other 33 are prose *about* obligations or
+hedges carrying their own escape. **`differential-probes.md`'s "pick an area nobody has
+covered" is the healthy form** and was excluded deliberately: addressed to whoever is
+reading, needs no state, cannot go stale.
+
+### 150a — A STALE OBLIGATION IS PESSIMISTIC, AND PESSIMISM IS NEVER CONTRADICTED BY USE
+
+The rarer failure was the unowned obligation. **The common one is the opposite**, and it
+is where the corpus actually rots: five stale *restrictions*, all corrected in one day,
+all wrong for weeks.
+
+> **An over-tight rule costs its reader ten minutes and produces nothing wrong, so nobody
+> files a bug about it. A doc claiming a capability it lacks fails the first time someone
+> tries.**
+
+That asymmetry selects for pessimism in every long-lived document — the optimistic errors
+are removed by use and the pessimistic ones accumulate. It is 125 (*pessimism is the
+direction nobody double-checks*) with the mechanism attached, and it is why both stale
+rules found in `autonomy.md` were **tighter** than current policy: a full-suite Track A
+gate the hook now denies outright, and a "land only green" guardrail superseded by the
+`dev` collapse. **Being tighter than policy is what let them survive.**
+
+Two more shapes worth the grep: **a heading is an assertion no ticket state can
+contradict** (`eliah-m4-m5-prompt.md`'s `TODO` heading over five discharged items), and
+**a directory embedded in a citation is a claim about state** — that file's citations were
+stale in *both directions at once*, `(backlog)` and `unfinished/` for work that was done.
