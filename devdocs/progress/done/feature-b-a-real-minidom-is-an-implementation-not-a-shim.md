@@ -280,4 +280,4 @@ code does not change it.
 not on the corpus file it was motivated by.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d84323289.
