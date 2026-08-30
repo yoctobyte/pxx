@@ -8,15 +8,16 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64. | — |
 | feature-opt-static-literal-blocks-should-never-be-written-to | A+O | 40 | feature | Static literal blocks should never be written to at all | — |
+| feature-pascal-corpus-expansion | P | 75 | feature | The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge. Re-measured 2026-08-30 late (frankwasm) at fixedpoint 414252435fb1, corpus content-hashed identical to frankB's: 6a Generics.Defaults ok (procs=1661); 6b BOTH known walls are DOWN -- bug-b-rtl-provides-no-ienumerable-generic-interface and bug-a-max-template-params-is-4-but-rtl-generics-declares-6 are both landed -- and the INTERFACE SECTION NOW COMPILES CLEAN on its own (all 948 lines, both dictionary includes, procs=1783, non-vacuous). 6b full stops on EXACTLY ONE error at generics.collections.pas:4165, which is the file's LAST LINE, the bare `end.`: 'unexpected token in a unit implementation section'. So the remaining defect is in the implementation section (949-4165) and the parser has a scope it thinks is still open at EOF -- same family as 28b2851cd. Truncation bisect over the 316 declaration boundaries is the localisation. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy: near: is now stale across a UNIT boundary (it points into our lib/rtl/classes.pas while the error is in the corpus file), and file/line has been mispaired before. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit. | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 
-## unfinished (33)
+## unfinished (32)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,7 +43,6 @@ _none_
 | feature-nilpy-user-defined-decorators | N | 68 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython | O | 55 | feature | Container subscript is NilPy's worst primitive against CPython: b[2] 234 ns vs 12 (19x), d['k'] 495 vs 30 (16x), while pxx BEATS CPython at isinstance, len, exec and a zero-arg call. One allocation removed (PyVarSlotSet's unconditional s := ''), giving b[2] -41%. RESOLVED SINCE (2026-08-30): all three remaining candidates are now measured and NONE is worth chasing here -- per-call managed-temp init was a codegen bug, fixed by frankA in d27b4a28a; the dict half is the static-literal pass, now named in decide-the-o3-tier-*; the 16-byte rep-stosb clears are ~4%, under the noise floor. What is left of this ticket is a re-measurement, not an investigation. | — |
 | feature-pal-esp-posix-fd-semantics | S | 20→30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier |
-| feature-pascal-corpus-expansion | P | 75 | feature | The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and is RED, but the edge MOVED on 2026-08-30: the four-identifier TKey/TValue/TDictionaryPair/PDictionaryPair wall is FIXED (frank-rust, 28b2851cd -- a bodiless nested class made TList<T> overrun its template capture by 10,914 tokens). Re-compiled at HEAD 4dae78ad9 / fixedpoint e8cbe7767cc6: 6a Generics.Defaults clean and control-verified non-vacuous (+11 procs); 6b Generics.Collections now stops on EXACTLY TWO errors, both unknown type: IEnumerable at generics.collections.pas:259. That is a MISSING RTL DECLARATION, not a compiler defect (control: a locally-declared generic interface used as a generic class parameter compiles and runs), and it is bug-b-rtl-provides-no-ienumerable-generic-interface [B p55] -- do NOT open a new ticket. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy by default: near: is stale after a token splice and file/line has been mispaired, so corroborate whichever you use. library_candidates/ is gitignored, so cross-checkout comparison needs a CONTENT HASH, not a commit. | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
@@ -810,7 +810,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [A] bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
 - [p 70] [P] bug-p-generic-constraints-are-checked-before-the-type-section-closes [parked — re-claim, do not duplicate]

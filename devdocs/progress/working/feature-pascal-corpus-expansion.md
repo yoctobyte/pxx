@@ -1,9 +1,9 @@
 ---
 prio: 75
 track: P
-status: unfinished
+status: working
 owner:
-summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and is RED, but the edge MOVED on 2026-08-30: the four-identifier TKey/TValue/TDictionaryPair/PDictionaryPair wall is FIXED (frank-rust, 28b2851cd -- a bodiless nested class made TList<T> overrun its template capture by 10,914 tokens). Re-compiled at HEAD 4dae78ad9 / fixedpoint e8cbe7767cc6: 6a Generics.Defaults clean and control-verified non-vacuous (+11 procs); 6b Generics.Collections now stops on EXACTLY TWO errors, both unknown type: IEnumerable at generics.collections.pas:259. That is a MISSING RTL DECLARATION, not a compiler defect (control: a locally-declared generic interface used as a generic class parameter compiles and runs), and it is bug-b-rtl-provides-no-ienumerable-generic-interface [B p55] -- do NOT open a new ticket. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy by default: near: is stale after a token splice and file/line has been mispaired, so corroborate whichever you use. library_candidates/ is gitignored, so cross-checkout comparison needs a CONTENT HASH, not a commit."
+summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge. Re-measured 2026-08-30 late (frankwasm) at fixedpoint 414252435fb1, corpus content-hashed identical to frankB's: 6a Generics.Defaults ok (procs=1661); 6b BOTH known walls are DOWN -- bug-b-rtl-provides-no-ienumerable-generic-interface and bug-a-max-template-params-is-4-but-rtl-generics-declares-6 are both landed -- and the INTERFACE SECTION NOW COMPILES CLEAN on its own (all 948 lines, both dictionary includes, procs=1783, non-vacuous). 6b full stops on EXACTLY ONE error at generics.collections.pas:4165, which is the file's LAST LINE, the bare `end.`: 'unexpected token in a unit implementation section'. So the remaining defect is in the implementation section (949-4165) and the parser has a scope it thinks is still open at EOF -- same family as 28b2851cd. Truncation bisect over the 316 declaration boundaries is the localisation. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate field on this corpus is trustworthy: near: is now stale across a UNIT boundary (it points into our lib/rtl/classes.pas while the error is in the corpus file), and file/line has been mispaired before. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -23,7 +23,7 @@ summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-gen
   note inside THE ONE CANONICAL TABLE below. **Re-measure after
   `regression-p-generic-constraint-check-rejects-a-class-declared-in-the-same-type-section`
   lands — independence is unproven.**
-- **Owner:** frankB
+- **Owner:** frankwasm
 
 ---
 
@@ -281,6 +281,61 @@ last — right for the record, wrong for anyone asking "where is this now", who
 then reads whichever table they scroll to first. Wall 4 sat `filed` in one table
 and `(to file / relay to frankB)` in another while it was actually **done**.
 **Update THIS table. Leave the snapshots alone.**
+
+> **RUNG 6b ADVANCED AGAIN, 2026-08-30 LATE (frankwasm) — BOTH known walls are
+> down and the INTERFACE SECTION IS CLEAN.** Supersedes every note below,
+> including frankB's, which are kept as snapshots.
+>
+> Binary: HEAD, self-host fixedpoint `414252435fb1` (`converged after 1
+> round(s)`, not a copied-in seed). Corpus content hashes — quote these, not
+> commits, the directory is gitignored: `generics.collections.pas`
+> `5a3402725ab53181…`, `generics.defaults.pas` `0c4f53b5cf13781e…`. **Identical
+> to frankB's bytes**, so this is a like-for-like comparison and not a
+> different corpus.
+>
+> | rung | probe | result | wall |
+> | --- | --- | --- | --- |
+> | 6a | `uses Generics.Defaults` | **ok**, `procs=1661`, 23 s | — |
+> | 6b interface only | truncated at `implementation` (line 948) + `end.` | **ok**, `procs=1783`, 369 s | — |
+> | 6b full | `uses Generics.Collections` | **ERROR — exactly 1**, 454 s | `generics.collections.pas:4165` |
+>
+> Both walls in the table below are closed:
+> [[bug-b-rtl-provides-no-ienumerable-generic-interface]] (B, `IEnumerator<T>` /
+> `IEnumerable<T>` now in `lib/rtl/classes.pas:127`) and
+> [[bug-a-max-template-params-is-4-but-rtl-generics-declares-6]] (A,
+> `defs.inc:1818` is now 6).
+>
+> **The interface-only control is the load-bearing measurement here**, and it is
+> what makes the remaining error cheap to locate: all 948 interface lines,
+> *including both dictionary includes*, compile clean and produce 122 MORE procs
+> than 6a, so it is not vacuous. Whatever is left is in the implementation
+> section, lines 949-4165.
+>
+> **`generics.collections.pas:4165` is the file's LAST LINE — the bare `end.`.**
+> The reported error is
+> `unexpected token in a unit implementation section: it starts no declaration`.
+> A parser that consumed 4164 lines and then refused the closing `end.` has a
+> scope it thinks is still open, which is the same *family* as `28b2851cd`
+> (a construct counted as opening a body) though not necessarily the same
+> construct. Localisation by truncation bisect over the 316 declaration
+> boundaries in the implementation section is in progress; the invariant is that
+> truncating ABOVE the opener compiles and truncating at-or-below it errors.
+>
+> **Two instrument facts, both new and both expensive to rediscover:**
+>
+> 1. **`near:` is now stale across a UNIT boundary, not merely a line.** It
+>    prints `( Index : Integer ; const >>> S : string`, and that signature does
+>    not occur anywhere in the corpus — it is `lib/rtl/classes.pas:315`, *our
+>    RTL*, while the error is reported `in:` the corpus file. Third documented
+>    instance of [[bug-a-the-near-context-window-is-stale-after-a-token-splice]]
+>    and the widest: a reader who greps the corpus for the `near:` text finds
+>    nothing and may conclude the error text is corrupt. It is not; the field is.
+> 2. **The probe time is RISING as the compiler gets FURTHER: 75 s -> 118 s ->
+>    454 s.** Each of the three readings was taken after a wall came down. A
+>    timeout tuned to the previous measurement cuts off the next success and
+>    reads as a hang. Budget from the trend, not the last reading — and note the
+>    interface-only truncation still costs 369 s, so 80% of the time is spent
+>    before the implementation section is even reached.
 
 > **RUNG 6b ADVANCED TWICE MORE, same evening (frankB) — it is now ONE error.**
 > Supersedes every note below, which are kept as snapshots.
