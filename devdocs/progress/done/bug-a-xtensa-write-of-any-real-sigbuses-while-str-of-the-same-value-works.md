@@ -150,7 +150,7 @@ fix is one line in Track A's files and belongs to A.
   ```
 
   Identical to the x86-64 oracle. No SIGBUS.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit b3b8c3ada.
 
 ### It is NOT an instance of the data-section alignment defect — checked, not assumed
 
@@ -175,4 +175,4 @@ that made it look fixed, which is what the retirement note asked for.
 The float-width divergence remains
 `bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc`.
 Different cause, different evidence, still open.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit b3b8c3ada.
