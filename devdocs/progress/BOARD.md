@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback | C | 60 | bug | `#include <sys/param.h>` with no `-I` recurses until it hits the include-nesting cap, whatever that cap is — it reported level 17 with sixteen buffers and level 129 with 128. With `-I/usr/include/x86_64-linux-gnu` the same header compiles fine, gcc compiles it fine, and every one of its own includes compiles fine both alone and all together. So it is the host-fallback RESOLUTION of `sys/param.h`, not the header's content or the depth limit. This is what actually blocks busybox — raising the include-buffer cap does NOT unblock it. | — |
+| regression-test-core-test-methodptr-nil-assign | P | 70 | regression | regression: test-core#src:test/test_methodptr_nil_assign.pas red at dc798834ba33 (auto-filed by twatch) | — |
 
 ## unfinished (35)
 
