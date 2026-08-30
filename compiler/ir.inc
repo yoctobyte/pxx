@@ -2417,9 +2417,15 @@ begin
     symId := ASTIVal[node];
     if (symId >= 0) and (symId < SymCount) then
     begin
-      { feature-a-typeref-migrate-consumers lane 1: PtrElemTk read via
-        SymTR[symId].PtrBaseTk (kept in sync by SymSyncTypeRef). }
+      { feature-a-typeref-migrate-consumers step 2: SymTR[symId].PtrBaseTk is
+        now the ULTIMATE base (kept in sync by SymSyncTypeRef), so the base
+        alone no longer separates `PChar` from `^PChar` -- both have a tyChar
+        base and differ ONLY in depth. Hence the explicit depth guard: ONE
+        level remaining over a char base is a PChar; two is a pointer to one.
+        This is the same depth+base pair arm 4's `q[i]` case below already
+        spells out for depth 2. }
       if (Syms[symId].TypeKind = tyPointer) and
+         (SymTR[symId].PtrDepth = 1) and
          ((SymTR[symId].PtrBaseTk = Ord(tyChar)) or
           (SymTR[symId].PtrBaseTk = Ord(tyUInt8)) or
           (SymTR[symId].PtrBaseTk = Ord(tyInt8))) then

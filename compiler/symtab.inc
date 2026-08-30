@@ -3965,8 +3965,15 @@ begin
   SymTR[idx].RecId      := Syms[idx].RecName;
   SymTR[idx].ElemTk     := Ord(Syms[idx].ElemType);
   SymTR[idx].ElemRec    := Syms[idx].ElemRecName;
-  SymTR[idx].PtrBaseTk  := Ord(Syms[idx].PtrElemTk);
-  SymTR[idx].PtrBaseRec := Syms[idx].PtrElemRec;
+  { The ULTIMATE base, not the immediate pointee -- the field is named
+    PtrBaseTk and now finally holds a base. Paired with PtrDepth below it
+    reconstructs the immediate pointee (depth>1 implies a pointee of
+    tyPointer), so this loses nothing; reading the immediate pointee into a
+    field named `base` was the half-migration, and the sole reader
+    (ir.inc's IsNodePChar identifier arm) gained its `PtrDepth = 1` guard in
+    the same commit. feature-a-typeref-migrate-consumers step 2 }
+  SymTR[idx].PtrBaseTk  := SymPtrBaseTk[idx];
+  SymTR[idx].PtrBaseRec := SymPtrBaseRec[idx];
   if Syms[idx].IsArray then
     SymTR[idx].ArrLen := Syms[idx].ArrLen
   else
