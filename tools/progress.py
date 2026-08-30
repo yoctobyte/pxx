@@ -1773,12 +1773,45 @@ pre code{background:none;padding:0}
             # wherever it sits, because it resolves to nothing anywhere, and
             # the counters that misread it do not check for a condition word
             # either. Different signal, different aperture.
+            # THE VOCABULARY IS DERIVED FROM THE BOARD, NOT HAND-LISTED.
+            # A hand-written prefix list misses whatever was added since it was
+            # written -- frankD, 2026-08-30: a list drafted that day would have
+            # omitted `refactor-` (37 tickets), which owns one of the eleven
+            # real findings. So the set of legitimate ticket prefixes is read
+            # off the live slugs each run and cannot go stale.
+            #
+            # WHY A PREFIX AT ALL, AND NOT JUST "not a known slug": because
+            # `[[...]]` is used for MORE than tickets. `project_*` and
+            # `feedback_*` are the AGENT-MEMORY namespaces -- 270 references,
+            # 129 distinct names, and no such file has ever existed in this
+            # repo, because they were never meant to. feature-dynamic-compiler-
+            # tables:149 says it in words: "see [[project_dynamic_compiler_
+            # arrays_pattern.md]] IN AGENT MEMORY". Snake_case, where every
+            # ticket slug on this board is kebab-case.
+            #
+            # This exclusion was SPECIFIED before the check was written, in the
+            # ticket the check implements -- chore-t-a-wikilink-to-a-ticket-
+            # that-does-not-exist-is-never-detected [T p30], whose fix sketch
+            # says "ignoring the project_* / feedback_* memory namespaces AND
+            # devdocs filenames", and which records that its own first count
+            # was 252 for exactly this reason. The first shipped version
+            # implemented the devdocs half and shipped past the other, having
+            # calibrated only against the namespace its author thought of.
+            # Grep for the incumbent applies to a SPEC as much as to a tool.
+            if not hasattr(self, "_ticket_prefixes"):
+                pfx = set()
+                for known in self.by_slug:
+                    head = known.split("-", 1)[0]
+                    if head and head.isalpha():
+                        pfx.add(head)
+                self._ticket_prefixes = pfx
             for j in range(len(rows)):
                 for m in re.finditer(r"\[\[([a-z0-9][a-z0-9_-]{6,})\]\]", rows[j]):
                     cand = m.group(1)
                     if (cand != t.slug
                             and self.by_slug.get(cand) is None
-                            and cand not in self._doc_basenames):
+                            and cand not in self._doc_basenames
+                            and cand.split("-", 1)[0] in self._ticket_prefixes):
                         dangling.add(cand)
             for i, line in enumerate(rows):
                 if not PARK_COND.search(line):
@@ -1807,13 +1840,19 @@ pre code{background:none;padding:0}
                 dmore = f" (+{len(dangling) - 3} more)" if len(dangling) > 3 else ""
                 lines.append(
                     f"DANGLING-LINK: {t.slug} [{t.track} p{t.prio}] names "
-                    f"{len(dangling)} wiki-link(s) near a blocking phrase that "
-                    f"resolve to NO ticket at all ({', '.join(dshown)}{dmore}). "
-                    f"A dangling link reads as an OPEN dependency to anything "
-                    f"counting them and as a typo to a human, so nothing fixes "
-                    f"it and every count is wrong -- a park can look blocked on "
-                    f"four things and be blocked on one. Fix the slug or delete "
-                    f"the link; do not leave it to be re-counted"
+                    f"{len(dangling)} wiki-link(s) ANYWHERE IN ITS BODY whose "
+                    f"prefix is a live ticket prefix but which resolve to no "
+                    f"ticket ({', '.join(dshown)}{dmore}). A dangling link "
+                    f"reads as an OPEN dependency to anything counting them "
+                    f"and as a typo to a human, so a park can look blocked on "
+                    f"four things and be blocked on one. READ IT BEFORE "
+                    f"CHANGING IT: it may be a RENAME (point it at the new "
+                    f"slug), a ticket that was PLANNED AND NEVER FILED (file "
+                    f"it, or de-link and say so), work ALREADY DELIVERED under "
+                    f"another name (say so -- the link is advertising finished "
+                    f"work as pending), or prose that was never a ticket at "
+                    f"all (de-link, keep the sentence). Deleting is one of four "
+                    f"outcomes and is rarely the right one"
                 )
             if hits and live_block:
                 warning_count += 1
