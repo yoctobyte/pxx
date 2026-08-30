@@ -106,3 +106,34 @@ record from live reference without the git log, and that classification must com
 Its own scoping holds — 24 of 58 pages *mention* a denied command and only these four
 *prescribe* one; `project-state.md:155` looks prescriptive to a grep and is a past-tense
 record. **The grep overstates by 6x and the sweep must not be run on the grep.**
+
+## Discharge record — 2026-08-30, frankD
+
+**The sweep this grant authorises was performed under the grant's first issue**
+(the verbal one this ticket retro-files), earlier the same session. It is done,
+and this ticket's own header says why the confusion is possible: *"second issue;
+the first was given in conversation earlier the same session and should have been
+filed then."* An unfiled authorisation is invisible to the board, so the board
+re-offers the work — which is the same defect the grant was filed to fix, arriving
+from the other side.
+
+**What the sweep covered:** 42 live references of the 53 top-level `.md` (the rest
+are session records, which are never edited). 13+ pages corrected across ~20
+commits; three tickets filed into owning lanes; `tools/docaudit.py` shipped with
+five modes. The findings this grant cites as its own rationale — the `--threadsafe`
+scope wrong in two pages, six superseded gate rules, the `-O0` claim asserting the
+**inverse** of the 2026-08-19 incident's lesson — are that sweep's output.
+
+**Residual worked on this pass, and it is a null result.** One lens was new: *a
+false limit is quieter than a false fix and survives longer.* Applied to every
+limitation sentence in `devdocs/dev/*.md`. **All passed** — see the new subsection
+in `devdocs/dev/README.md` §4 for the finding that fell out of it: the three
+surviving limits each name the instrument that gets past them, so the cheap
+sweepable question is not *"is this limit true?"* but *"does it say what to do
+instead?"*. A caveat that ends in a full stop is the one to check.
+
+**Not resolved here.** A permission slip is not a unit of work, and the same
+coordinator noted earlier tonight that this ticket ranking at all is the board
+failing to distinguish "unblocked" from "has work in it". Closing it is the
+grantor's call, not the grantee's — a grantee who resolves their own authorisation
+is marking their own homework.

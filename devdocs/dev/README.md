@@ -129,6 +129,38 @@ So, for a new obligation, in order of what actually works:
 4. If it is a standing invitation rather than a debt, phrase it as one — see
    `differential-probes.md` above.
 
+### The failure that was NOT here — limitation sentences
+
+Swept 2026-08-30 on the premise that **a false limit is quieter than a false fix
+and survives longer.** A wrong instruction gets re-tested by the next person who
+follows it. A wrong *caveat* — "this cannot be checked", "no oracle exists for
+this", "this only applies to X" — gets believed, reads as conscientious, and
+**stops anyone re-checking**. So limitation sentences deserve more scepticism
+than instruction sentences, not less.
+
+Every candidate in the live references passed. `differential-probes.md`'s
+*"`crtl_decl_probe` is the odd one out: it has no oracle"*, and
+`debugging-playbook.md`'s *"from outside there is no way to tell whether the
+ranges drifted"* and *"there is no way to tell which you are holding from the
+report alone"* — all three are true, and all three are correctly scoped.
+
+**They are safe for a reason worth copying, because it is a property of the
+sentence rather than of the author.** Each pairs its limit with the instrument
+that gets past it, in the same breath:
+
+| the limit | the escape, named immediately |
+| --- | --- |
+| no oracle for `crtl_decl_probe` | it is a **census**, and `readelf -d` is the check |
+| can't tell drift from lookup *from outside* | `PXXDBG=a.srcmap:*` — "settled it in one run" |
+| can't tell which profile you hold *from the report* | record the `-O` level the way you record the sha |
+
+**A bare limit is the dangerous shape; a limit with a named escape route defuses
+itself**, because the reader who wants past it is handed the way past it instead
+of being told to stop. So the sweepable question is not "is this limitation
+true?" — which is expensive — but **"does this limitation say what to do
+instead?"**, which is visible at a glance. A caveat that ends in a full stop is
+the one to check.
+
 ## Adding a file
 
 New session record → prefix `handover-` or `next-session-` **and add it to the
