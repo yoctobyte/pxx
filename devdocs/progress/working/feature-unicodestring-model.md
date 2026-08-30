@@ -169,3 +169,109 @@ Blast radius for the alias change is small: 10 mentions of
 real consumers being sysutils' identity functions and rtl-generics' comparers.
 Essentially all remaining risk is in the type half; the runtime was the cheap
 end, as the owner predicted.
+
+## 2026-08-30 (frankwasm) — STOP: the blast radius is 636, not 10
+
+I measured the wrong thing earlier and reported it confidently. **"10 mentions
+of `WideString`/`UnicodeString` across lib+test+examples" counted the NAME**,
+which is what has to be re-spelled. The number that governs this ticket is
+different: **how many places must learn that a second MANAGED STRING kind
+exists.** Measured at HEAD, in `compiler/*.inc`:
+
+| | count |
+| --- | --- |
+| `tyAnsiString` mentions, all | 824 |
+| ...of those, code-level kind TESTS | **636** |
+| ...of those, the `(x = tyAnsiString) or (x = tyString)` "any string" shape | 97 |
+| `TypeIsManagedStr` — the predicate that exists to normalise this | **5 call sites** |
+| `tyWideChar` sites, for contrast (a scalar kind that DID take its own ordinal) | 19 |
+
+The last two rows are the finding. There IS a chokepoint —
+`symtab.inc:3157 TypeIsManagedStr`, whose entire body is
+`Result := (tk = tyAnsiString)` — and it is **essentially unadopted**: five
+calls against 636 direct tests. So there is no single place to teach about a
+second kind. Under the plan as decided, every one of those 636 sites that means
+*"is this a string"* rather than *"is this specifically an AnsiString"* needs a
+third arm, one at a time, with no way to find the ones that were missed except
+by the bug they cause.
+
+That is `normalise-dont-special-case.md`'s exact failure — *"the second path is
+the one that stays broken"* — at 636x. And it is the SAME shape as the stride
+objection the coordinator raised and retracted: the objection was aimed at the
+six backends, where it was measured wrong; the real second-arm cost is in the
+TYPE SYSTEM, where nobody looked.
+
+### Why this is a fork and not just work
+
+**Option A — `tyWideString` as a distinct `TTypeKind`** (what the RESOLUTION
+says, and what is landed today as ordinal 32, readers-free). Matches the
+`tyWideChar` precedent and is explicit at every use. Costs the 636-site audit
+with no chokepoint, and a missed site does not fail loudly — it treats a wide
+string as not-a-string, which is a silent wrong value or a leak.
+
+**Option B — ONE managed-string kind carrying an ELEMENT WIDTH.**
+`tyAnsiString` stays *the* managed string kind; what differs is the element:
+`tyChar` (UTF-8 byte) or `tyWideChar` (UTF-16 unit). All 636 sites keep working
+untouched, because a wide string IS a managed string; only the genuinely
+width-sensitive sites change — `Length` (>> 1), indexing (stride 2), literal
+encoding, `Write`, and the transcode boundary.
+
+Option B is what the runtime half already does and is the same insight one
+level up. The runtime needed no second block shape, no second refcount path and
+no second free path, because **the difference was never the kind — it was the
+element width**, and the header stayed a byte count. Modelling it as a new KIND
+in the type system contradicts the way it is modelled in the runtime.
+
+It also has a natural home in the structure this repo just built: `TTypeRef`
+already carries `Kind` PLUS sub-attributes (`ElemTk`, `PtrDepth`, `DynDepth`,
+`ArrLen`) for exactly this "same kind, different shape" situation. A wide
+string is `Kind = tyAnsiString, ElemTk = tyWideChar`, which is the existing
+field doing the job it already has.
+
+**Recommendation: B**, and I hold it moderately rather than weakly — the 636
+vs 5 measurement is what moves it, not taste.
+
+**The open question I could not settle, and the reason this is escalated rather
+than decided:** under B the element width must ride on an EXPRESSION node, not
+only on a symbol, because the wall is `WideChar(u1) + WideChar(u2)` — the width
+of that `+` result is not attached to any declaration. `ASTTk` carries a kind
+per node; whether there is a node-level element slot, or whether one has to be
+added, is the thing that decides whether B is actually cheaper than A. That is
+a design call about the AST, not something to settle while implementing.
+
+### State: nothing is half-done
+
+The alias is NOT broken. `tyWideString` is landed additive and readers-free
+(`ce693b1d5120`), the runtime half is landed and tested, and `WideString` still
+resolves to `tyAnsiString`/`tyString` exactly as before. If the fork resolves to
+B, the ordinal-32 kind is deleted or repurposed at zero cost; if it resolves to
+A, the work continues from where it stands. Stopping here was the point.
+
+### Also settled while measuring: BOTH `PXX_MANAGED_STRING` arms are live
+
+The coordinator asked for this as a gate rather than advice. Measured — both
+arms build today and both agree with fpc 3.2.2 for ASCII:
+
+    default (PXX_MANAGED_STRING defined)   w=abc lw=3 sz=8  cat=abcde len=5
+    -uPXX_MANAGED_STRING (frozen tyString) w=abc lw=3 sz=8  cat=abcde len=5
+    fpc 3.2.2                              w=abc lw=3 sz=8  cat=abcde len=5
+
+So there is no excuse for testing one arm and letting the other inherit the
+verdict: the untested arm is buildable, and whichever option wins must state
+which arm its acceptance test ran under and run both.
+
+### And a correction to my own earlier lockstep list
+
+I named `rtti_emit.inc:942` as a site needing a `tyWideString` case. **Wrong** —
+that function classifies ORDINALS, and `tyAnsiString` correctly is not in it
+either. The real `rtti_emit.inc` sites are five others, and they are the
+managed-field ones, which is what makes them matter: `FieldIsManaged` (:24) and
+four finalizer/RTTI member-kind sites (:1337, :1367, :1456, :1490) that all
+spell `UFldTk[fi] = Ord(tyAnsiString)`. Under option A every one is a leak if
+missed; under option B none of them changes at all, which is the argument in
+miniature.
+
+`PxxTkToFPCKind` maps to FPC's numbering, and measured against fpc 3.2.2:
+`TypeInfo(WideString)^.Kind` and `TypeInfo(UnicodeString)^.Kind` are **both 24**
+(`tkUString`) on Linux — FPC's own RTTI collapses the two spellings exactly as
+this ticket does, which is independent support for the one-kind call.
