@@ -4136,6 +4136,30 @@ test-threads: $(COMPILER)
 	else \
 	  echo "=== test_static_string_literals: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
+	# -dPXX_ALLOC_CENSUS: how much does this program allocate, and of what size.
+	# There is no expected VALUE to pin -- it answers a cost question -- so what
+	# this row protects is the define itself. Every counter and trigger lives
+	# inside the ifdef, so the ordinary build never compiles them and a breaking
+	# edit stays invisible until somebody reaches for the tool, which by
+	# construction is while they are debugging something else.
+	# Both directions, because each catches a different rot: WITH the define a
+	# well-formed census must reach stderr (the code still compiles and runs),
+	# and WITHOUT it nothing may (the ifdefs still guard everything, so the
+	# shipped allocator is unchanged -- the compiler's own binary is
+	# byte-identical across this change, which is the stronger form of the same
+	# claim). Program stdout must be identical either way: a diagnostic that
+	# perturbs the program it measures is worse than no diagnostic.
+	# bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_alloc_census.pas $(TESTTMP)/test_tac_on
+	./$(COMPILER) test/test_alloc_census.pas $(TESTTMP)/test_tac_off
+	tools/expect_same.sh test_tac_stdout_on "$$($(TESTTMP)/test_tac_on 2>/dev/null)" "n=180000"
+	tools/expect_same.sh test_tac_stdout_off "$$($(TESTTMP)/test_tac_off 2>/dev/null)" "n=180000"
+	@n=$$($(TESTTMP)/test_tac_on 2>&1 >/dev/null | grep -c 'pxx-census: allocs='); \
+	  [ "$$n" -gt 0 ] || { echo "test_alloc_census: FAIL -- define ON produced no census line"; exit 1; }; \
+	  echo "ok: test_alloc_census on  ($$n census reports)"
+	@n=$$($(TESTTMP)/test_tac_off 2>&1 >/dev/null | grep -c 'pxx-census'); \
+	  [ "$$n" = "0" ] || { echo "test_alloc_census: FAIL -- define OFF still printed $$n census line(s)"; exit 1; }; \
+	  echo "ok: test_alloc_census off (silent)"
 	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
 	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
 	# "evaluate both bounds before assigning the control variable"; eliding it

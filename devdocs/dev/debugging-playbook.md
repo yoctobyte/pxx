@@ -150,6 +150,49 @@ grep 0x7fffd7e00018 trace.log       # one object's whole life, in order
 Use *after* step 2 has told you there IS a use-after-free. Poison says which
 read hits it; the trace says which release caused it.
 
+**3b. How much does it allocate, and of what size?**
+
+```sh
+compiler/pascal26 -dPXX_ALLOC_CENSUS prog.py out
+./out 2>census.log
+grep 'allocs=' census.log | tail -1        # the closest thing to a total
+grep 'sizes'  census.log | tail -1         # where the churn actually is
+```
+
+The three defines above answer *correctness* questions. This one answers a
+*cost* question, and it exists because the answer used to require callgrind —
+which is **not installed on plexus**, where `perf_event_paranoid` is 4 and
+blocks even user-space sampling. Three sessions of
+`bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` ranked their
+own follow-ups on shares nobody present could re-run.
+
+```
+pxx-census: allocs=14482408 frees=14040465 live=441943 bytes=595241560 reuse=13999247 list=41000 bump=442161 arenas=1
+pxx-census: sizes 8:37176 16:558 24:509 32:11710484 40:899237 48:571422 ...
+```
+
+Read it as: **`live` flat with `allocs` climbing is churn; `live` climbing is
+retention.** `reuse` vs `bump` says whether the free lists are working. The
+histogram is bin size in bytes → count, and it is what makes a change legible
+as a mechanism rather than as a percentage: turning string literals into static
+blocks took uforth's `core.fr` from 14.48M allocations to 8.04M, and the
+histogram said *why* — the 32-byte class alone fell by 6.14M, which is 95% of
+the whole reduction and exactly the size of a short literal's block.
+
+*Two things to know before you use it.* There is **no exit hook** — the
+program's exit is emitted by codegen, not by the runtime — so the report fires
+on a schedule instead: at each 12.5% growth in the allocation count. The last
+line is therefore a floor within 12.5% of the true total, never the total. In
+exchange it gives a growth *curve*, and **a program that segfaults still leaves
+its census**, which a report-at-exit would not. And there is deliberately **no
+call-site attribution**: that needs a caller tag threaded through every entry
+point or a stack walk, and both change what they measure.
+
+*Tell:* you are about to argue that some routine is "most of the allocation
+cost". Count it first. This is a counting instrument, so it is immune to the
+box being busy — unlike every timing number, which on plexus drifts enough that
+the same binary measured 2.514s and 2.817s twenty minutes apart.
+
 **4. Step through it.**
 
 ```sh

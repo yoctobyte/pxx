@@ -809,3 +809,35 @@ reason.
 Note also what did NOT catch it: the compiler self-hosted **byte-identically**
 with the zeroing disabled. A fixedpoint proves the compiler reproduces itself,
 not that the runtime is sound.
+
+### COUNTED at last — 44.5% of every allocation in `core.fr` is gone
+
+Built `-dPXX_ALLOC_CENSUS` first ([[feature-a-allocation-census-define]])
+rather than ranking the next candidate on a hunch, because this ticket has now
+produced two bad rankings from missing instruments in one night. The census is
+a counting instrument, so unlike everything else measured here it is immune to
+the box being busy.
+
+uforth `core.fr`, same driver, `-O2` against `-O3`:
+
+| | allocations | bytes | live | 32-byte class |
+| --- | --- | --- | --- | --- |
+| -O2 | 14,482,408 | 595,241,560 | 441,943 | 11,710,484 |
+| -O3 | **8,036,705** | 384,315,424 | 195,746 | **5,567,269** |
+
+**44.5% fewer allocations, 35% fewer bytes** — and the histogram says where:
+the 32-byte class alone falls by **6.14M**, which is 95% of the entire
+reduction and is exactly a short literal's block (24-byte header + up to 7
+bytes + nul, rounded to 8). The pass is doing what it was designed to do, in
+the size class it was designed to do it in, and this is the first statement
+about it on this ticket that is a mechanism rather than a percentage.
+
+It also explains why the wall-clock win is 10-25% and not 44%: halving the
+allocations leaves the rest of the interpreter — the concatenations, the
+dictionary walk, the inner loop — untouched, and those are now the majority.
+**A halved allocation count is not a halved runtime, and the census is what
+makes the difference legible instead of disappointing.**
+
+The two figures now sit at different confidence levels and should be quoted
+that way: the allocation counts are exact and reproducible on any box, the
+timings are min-of-interleaved-reps on a contended workstation.
