@@ -277,3 +277,59 @@ this table as its boundary — not a reopen of this one.
 Still in `unfinished/` and still owned by this lane: it cannot be completed from
 Track B until the pin carries the fix, and claiming it into `working/` would be
 a lock over work that cannot proceed.
+
+### Pre-answered at HEAD, 2026-08-30 — every row flips, but the pin has NOT moved
+
+The retirement run above was executed early, against a compiler built from
+source at HEAD rather than against `$(PXX_STABLE)`. **This does not retire the
+ticket** — Track B ships against the pin, the pin is still **v393**
+(`1d69760deabe2865`), and nothing in `lib/pcl` changes either way. It answers
+the one question the wait was hiding: *will the post-pin check close this
+cleanly, or fragment into an N ticket?* Cleanly.
+
+Provenance of the binary under test, because a verification build that silently
+no-ops is the failure mode here:
+
+```
+worktree at HEAD d9b663137, seed = stable_linux_amd64/default/stable_pinned
+converged after 2 round(s)
+self-host fixedpoint: verified — 2 round(s), 837193ea839c
+```
+
+Built sha `837193ea839c` differs from the seed `1d69760deabe`, and `converged`
+was printed — so the compiler under test is genuinely HEAD's, not the pin's
+wearing a new mtime.
+
+All eleven rows — the seven above plus the original four `grid` spellings:
+
+```
+grid(row=0, column=0, padx=(8, 6), pady=2)            COMPILES
+grid(padx=(8, 6))                                     COMPILES   <- was FAILS
+pack(padx=(8, 6))                                     COMPILES   <- was FAILS
+pack(side="left", fill="x", expand=0, padx=(8, 6))    COMPILES
+configure(scrollregion=(0, 0, 100, 100))              COMPILES   <- was FAILS
+configure(state="normal", scrollregion=(0,0,1,1))     COMPILES
+create_text(1.0, 2.0, "hi", font=("Arial", 12))       COMPILES   <- was FAILS
+create_text(..., anchor="w", fill="red", font=...)    COMPILES
+askopenfilename(filetypes=[("a", "*.b")])             COMPILES
+```
+
+Nine of nine green is exactly the shape that should be distrusted, because a
+compiler that accepted *everything* would produce the same table. Controls, on
+the same binary:
+
+```
+grid(nosuchkeyword=(8, 6))   REJECTED: Widget.grid has no parameter named 'nosuchkeyword'
+lbl.no_such_method(...)      REJECTED: Label has no method no_such_method
+grid(row=0, column=0, padx=(8, 6), pady=2)   binary built, runs, prints "grid-pad ok"
+```
+
+Rejection is still real and still specific to the right thing, and the accepted
+row does not merely typecheck — it links and runs. So `51b0753e7` reached all
+four façade methods, not just `grid`; there is no sibling residue and no new N
+ticket to file.
+
+**What is left is purely the pin.** When the pin moves past `51b0753e7`, re-run
+the eleven rows against `$(PXX_STABLE)` and close this — the answer is already
+known, but the ticket's gate is the *stable* compiler, and a pre-answer at HEAD
+is not that. Until then it stays in `unfinished/`.
