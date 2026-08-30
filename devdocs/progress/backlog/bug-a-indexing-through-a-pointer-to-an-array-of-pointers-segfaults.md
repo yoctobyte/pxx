@@ -85,3 +85,94 @@ the current error names the problem at compile time. The property should land
 
 `make compiler/pascal26` + the element-type table above, **run, not just built** —
 every row compiles.
+
+---
+
+## Diagnosis at the IR, and it is TWO defects (frank-rust, 2026-08-30)
+
+Reproduced independently, binary `2df3a1efab85`, self-host fixedpoint at HEAD.
+The `Integer` and `Pointer` rows in one program, dumped with
+`PXXDBG=a.ir:<proc>`, and the divergence is one node:
+
+```
+  array of Int64 (WORKS)                array of Pointer (SEGFAULT)
+  2: load_sym  pia                      3: load_sym  ppa
+                                        4: load_mem  a=3          <-- EXTRA DEREF
+  4: index a=2 b=3 [lo=0 size=8]        5: index a=4 b=2 [lo=0 size=1]   <-- size 1
+  5: load_mem                           6: load_mem
+```
+
+So `ppa^[1]` computes `[[ppa]] + 1*1` — it takes **element 0's contents as the
+base address** and then steps ONE byte. That is why putting a valid address into
+`pa_[1]` does not survive either: the extra load reads `pa_[0]`, not `pa_[1]`.
+The crash is not a bad index, it is a bad base.
+
+The ASTs are structurally identical; only the tags differ (`AN_DEREF` tk 13 vs
+17, and the `AN_INDEX` comes out **tk 0, tyUnknown**, which is where `size=1`
+comes from).
+
+### Defect 1 — `tk = tyPointer` on a deref means two different things
+
+`pasparser_lval.inc`, the `p^[i]` arm (`(tk = tyPointer) and (ASTKind[node] =
+AN_DEREF)`) resolves the element from the pointer DEPTH parked on the deref
+node: *"one level left means the element IS the base type, two or more means the
+element is still a pointer."*
+
+That is correct for `^PChar`. It is wrong for `^TPtrArr`, because there `tk` is
+not the pointee's kind — it is the pointee ARRAY's ELEMENT kind, and it happens
+to be `tyPointer`. The arm cannot tell the two apart, so a pointer to an array
+of pointers is processed as a pointer to a pointer. **`array of Integer` escapes
+only because `tyInteger` cannot collide with the test at all** — which is
+exactly why the bug looks element-type-specific and is not: the discriminator is
+an ambiguous tag, not the element type.
+
+The information to disambiguate is already on the symbol and is correct:
+
+```
+PXXDBG a.symptr ppa   kind=17 depth=1 ptrElemTk=17 ptrElemArrLen=4
+PXXDBG a.symptr pia   kind=17 depth=1 ptrElemTk=13 ptrElemArrLen=4
+```
+
+`ptrElemArrLen=4` on both — the pointee IS known to be a 4-element array in both
+cases. Nothing needs to be computed; the arm needs to ask.
+
+### Defect 2 — the ALIAS loses the pointee's base kind, the inline type does not
+
+Same program, same pointee, two spellings:
+
+```
+var ppa: PPtrArr;    (PPtrArr = ^TPtrArr)   ->  baseTk=0
+var ppa: ^TPtrArr;                          ->  baseTk=17
+```
+
+`AliasPtrBaseTk` is not carried for a pointer alias whose pointee is a named
+fixed array. That is separable and it is a **Track P** file
+(`pasparser_decl.inc` / the alias registration in `symtab.inc`), not Track A.
+
+**Fixing defect 2 alone does NOT fix the crash** — measured, not assumed: with
+the inline spelling `baseTk` is right, the index element resolves to `tyPointer`
+correctly, and it still segfaults, because defect 1's extra `load_mem` is
+independent of it.
+
+### A hypothesis this ruled OUT, recorded so nobody re-runs it
+
+`ParseTypeKind`'s `tkCaret` arm reads `childDepth := LastTypePointerDepth`
+*after* an if/else whose array branch never calls `ParseTypeKind` — so it reads a
+STALE depth, and `(elemTk = tyPointer) and (childDepth > 0)` looked like it would
+register the alias as a pointer-to-pointer. It is a real smell and it is **not
+this bug**: setting `childDepth := 0` there produced **byte-identical IR** and
+the identical segfault. The symbol already had `depth=1`. Do not spend the
+build on it again.
+
+### What a fix has to do
+
+Make the `p^[i]` arm (and whatever in `IRLowerAddress` decides to materialise
+the deref) recognise that the pointee is an ARRAY, so `p^` yields the array's
+ADDRESS rather than a loaded pointer, and the index takes the array's element
+stride. The `array of Int64` path already does exactly this — it simply gets
+there by never entering the pointer arm. The two paths should reach it for the
+same stated reason, not by one of them missing a test.
+
+**Not started.** I have no measurement of which of the two sites is the right
+one to change, and guessing between them is how a plausible-looking fix that
+moves the crash somewhere else gets written.
