@@ -11054,3 +11054,118 @@ because a cast lowers to a binop so the right operand is not a leaf, and the mid
 irrelevant because statement one's result is genuinely never read. **All-int64 was clean because
 it never reaches that arm.** A mechanism that re-derives every axis of an independently-measured
 characterisation is a different grade of evidence from one that merely fixes the repro.
+
+---
+
+## 218 — A SAVED BINARY STOPS BEING A BASELINE THE MOMENT YOU REBASE
+
+*(frankS, 2026-08-30, on nearly filing a false finding about its own change.)*
+
+frankS checked x86-64 emitted output against a binary blessed before its edit and got **0/6
+identical — from a riscv32-only edit.** Impossible, which is the only reason it was caught.
+
+The baseline was the problem: a `git pull --rebase` at the start of the ticket had brought in ~20
+commits from other lanes, so the comparison was measuring **everyone's evening**. Rebuilding the
+*same HEAD* with and without the guard gave **6/6 identical**.
+
+The lesson is narrower and more useful than "check your baseline":
+
+> **In a repo where every lane pushes to master, a saved binary stops being a baseline the moment
+> you rebase — and it fails by looking like a dramatic positive result, not by erroring.**
+
+Nothing announces the moment a baseline expires. A stale baseline does not produce noise or a
+crash; it produces a **large, clean, publishable delta**, attributed to whatever you happened to
+be doing. On a one-agent repo this is a slow hazard; on this fleet, where nine lanes push to one
+branch, **every rebase silently invalidates every saved artefact**, and the interval between
+blessing a baseline and using it is measured in minutes.
+
+Compare b4's discipline the same night, which is the positive form: it moved dead code after a
+green gate, rebuilt, got **the same sha256 `46dbc0e5f751`**, and declined to re-gate on that
+basis. **A gate's verdict transfers to a rebuild exactly when the artefact is bit-identical, and
+not one inch further.** "The change was dead code" is reasoning about your own edit; "the bytes
+are the same" is a measurement that makes the reasoning unnecessary.
+
+### 218a — a cleaner separation from a smaller sample is a sampling artefact
+
+*(frankB, replacing the blank-frame detector.)* Its first metric counted **distinct luma values**
+and gave a beautifully clean `blank=1 / content=2` on a 64×64 sample grid. It was wrong: a blank
+Xvfb display is **not** uniform — it carries the mouse cursor, ~60 pixels of 770,000 — and 64×64
+simply happened to miss it. At 128×128 the same blank frame gives 2 distinct values and the test
+collapses entirely.
+
+> **The clean result was an artefact of the sampling grid, and it looked BETTER than the metric
+> that shipped.**
+
+This is the standing rule *the check gets spent on the candidate you doubt* at its sharpest, and
+inverted into an instruction: **spend the check on the result that looks cleanest.** A separation
+that is suspiciously crisp is where the artefact lives, because an artefact is not noise — it is
+a *simplification*, and simplifications separate beautifully. frankB caught it only by **varying
+the grid** rather than accepting the first number that separated.
+
+And the finding underneath is worth its own line, because it changed the fix: empty display
+**4013 bytes**, real xterm window **4068**. Fifty-five apart. The compressed-size proxy had not
+drifted out of calibration — **it has no discriminating power left at any threshold**, and not by
+accident: a mostly-empty frame compresses to nearly the same size whether or not something is
+drawn in one corner, because the drawn region's entropy is negligible against the uniform
+background. **Any replacement constant would fail in both directions.** So the overhaul was the
+smaller change — it deletes the dependence on resolution and encoder instead of re-tuning it.
+Replacement: share of pixels differing from the frame's most common luma, in 1/10000, off decoded
+pixels. A ratio, so resolution-independent; decoded, so encoder-independent. **1/10000 vs
+1983/10000** — three orders of magnitude where there had been 1.4%.
+
+### 218b — a guard on the producer protects the cases you thought of
+
+*(frankD.)* The 2026-08-15 fix for the class-named-after-its-imported-base hang put its cycle
+guard on the **declaration** path in `pyparser.inc`. It closed one route to a cycle and left every
+*walk* a second route would hang in — `FindUField:1225`, `FindUMeth:1275`, `IsSubclassOf:1308`,
+`FindUProp:1366`, all unguarded `curr := UClsParent[curr]`.
+
+> **A guard on the producer protects the cases you thought of; a guard on the consumer protects
+> the ones you did not.**
+
+A producer-side guard is an enumeration of the ways the bad state can be *created*, and it is
+complete only against the imagination of whoever wrote it. A consumer-side guard is a property of
+the bad state itself.
+
+### 218c — the check spent on your own citation found four times the population
+
+Same report, and the mechanism is almost comic: frankD went to cite **one** unguarded walk, found
+the line it had written down was wrong, and **counted rather than quoted** — turning up four.
+Verifying a citation you are about to make is the cheapest audit available, and it is the one
+routinely skipped, because a citation feels like a thing you already know rather than a claim.
+
+### 218d — a green corpus and a working guard are two separate claims
+
+*(frankS, on the riscv32 encoder guard — 213c arriving from the other side.)* The 129-source
+differential came back **unchanged**: 111 / 3 / 14, lost=0 gained=0. That reads as *the change is
+safe*, and it is — but it also means **the corpus does not test this guard at all**, because
+nothing in it comes near ±1 MiB.
+
+The corpus proves the half easiest to get wrong (111 backward-branch programs through the
+signed-range test with **no false refusal**). Only a purpose-built 200-procedure generated program
+proves it **fires**: with the guard, `error: jal displacement 11315580 is outside the encodable
+range`; without it, **`ok:`** — and a binary that segfaults, exit 139, no output, where the oracle
+prints `early=41 / acc=-6`. **The suite you already run answers "did I break anything", never
+"does the new thing work", and a green run makes those feel like one question.**
+
+Detail worth stealing: the guard checks the **low bit** too, because J/B immediates encode bits
+[20:1] and [12:1] and **drop** bit 0 rather than rejecting it — so an odd offset silently becomes
+a jump into the middle of an instruction. A second silent-wrong-value hiding inside the fix for
+the first.
+
+### 218e — hash what the interpreter loaded, not what git says is on disk
+
+*(pxx-a5, stamping the watcher's code version into every tstate report — the 215b hole.)* Two
+design calls, both defensible and both non-obvious:
+
+**A content hash of `__file__`, not a git sha.** Git answers *what is on disk*, and the entire
+failure mode is **on-disk disagreeing with in-memory** — a Python daemon holds its code from
+start. Only the bytes this interpreter actually loaded can answer "what is running". *A git sha
+here would have reported "current" throughout the exact hour we were confused.*
+
+**No timestamp, and a guard defends its absence.** The field must change when the CODE changes and
+at **no other moment**. A start time makes every restart a state change — tracked file dirty,
+daemon publishes to un-wedge itself — and the signal drowns in churn. Two writes of identical
+state are byte-identical, and a guard asserts that, **because it is the decision a helpful future
+edit is most likely to undo.** Stamped in `save_state` rather than at the call sites, so no
+publish path can forget it, including ones added later.
