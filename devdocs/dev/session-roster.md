@@ -18236,3 +18236,51 @@ each. **131** (frankwasm + frankA, converging independently) **bank what you
 ELIMINATED** — a positive finding is self-preserving because it becomes the fix; a
 negative one evaporates unless written down, and it costs more to produce. An
 exclusion set is also what makes a park honest.
+
+## 2026-08-30 ~01:10 — tick: four dispatched, one NEW-RED retracked
+
+**Live (8 fleet sessions + the owner's own ad-hoc ones).** `neo-76`,
+`vibestorm-38`, `neuzelaar2-a7` are **not fleet** — not in `~/frank.sh`'s FLEET
+array, so they are the owner's and are never dispatched by me.
+
+| session | state | on |
+| --- | --- | --- |
+| frankA | busy | Pascal corpus ladder (`6437ae67b`, five of six units compile) — **holds A/P** |
+| frankB | dispatched | `bug-b-seven-of-eight-workarounds-waiting-on-an-open-bug-are-waiting-on-nothing` [B p35] |
+| frankС→frankC | shell | last seen on the C lane; `shell` is AMBIGUOUS, not a park line |
+| frankD | dispatched | continue the `devdocs/dev/**` live-reference audit, read-only, file into owning lanes |
+| frankS | busy | `feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45`; queued the emit-obj red |
+| frank-optimize-b4 | asked | shows idle but **holds `feature-opt-o3-register-pressure` in `working/`** — asked for live/park/done rather than releasing a lock I cannot prove stale |
+| frank-rust | waiting | `feature-rust-option-type` in `working/` |
+| frankwasm | busy | wasm lane |
+| pxx-a5 | dispatched | `UNCITED-RESOLVE` in `progress.py`, under a filed grant |
+
+**Track U queue: 24** (was 17 at 22:00 on 08-29). Growing, and that is the lane
+only the owner can drain.
+
+**The retrack worth remembering.** `regression-test-emit-obj-test-emit-obj` was
+auto-filed **Track P** — the watcher guesses from the test source, and `external
+name 'ext_aliased_link'` is a Pascal directive, so the guess was honest. Corrected
+to **A+S** on one fact: `_rv.o`, `_xt.o` and `_xt_windowed.o` all emit `ok` and only
+the **riscv32 link** fails, and **one frontend produced all of them from the same
+source — so a frontend bug cannot be target-specific.** Left as P it sits in a queue
+nobody working riscv32 reads, because *the ranker reads frontmatter, not the body*.
+
+Generalises: **the watcher's track guess is a guess, and it is load-bearing.** It
+decides who ever sees the ticket. Auto-filed regressions are worth a frontmatter
+check on every tick — cheap, and the failure is silent in the direction of "nobody
+was assigned" rather than "assigned wrongly".
+
+**Grants filed this tick** (an authorisation is a finding; an unfiled grant reads as
+*covered*, not as missing): `grant-progress-py-to-pxx-a5-for-the-uncited-resolve-check`
+[T p45], scoped to one check and its devtest. I am not editing `progress.py` while it
+is open.
+
+**Faces banked: 132 / 132a / 132b** (pxx-a5) and **133 / 133a** (frankB). The two
+with reach outside their tickets:
+- **freeze the remainder's size** — when a fix is correct but too large to land
+  safely, hold the ungoverned set at its measured count. One assertion, unbounded
+  liability becomes fixed, fails at the first addition.
+- **when you convert silence into checks, the risk moves to the success path** —
+  the positive control is the one that gets skipped and the one this class of change
+  breaks on.
