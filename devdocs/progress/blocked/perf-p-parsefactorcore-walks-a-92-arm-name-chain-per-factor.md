@@ -1,8 +1,10 @@
 ---
 track: P
 prio: 60
+status: blocked
+owner: ""
 type: perf
-blocked-by: []
+blocked-by: [perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call]
 summary: "Measured at 13e196cc8 on the real -O2 compiler: ParseFactorCore is 9.4% of the whole run — the largest single named function — because 41,032 calls issue 1,583,871 CaseEqual, i.e. 38.6 string compares per factor, walking a linear `else if CaseEqual(name, '...')` chain of 92 arms spread over ~7,180 lines."
 status: working
 owner: frankB
