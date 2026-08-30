@@ -235,4 +235,4 @@ by-ref slot holds an **address**, and `AssignSideKind`'s `IsRef` bail is what
 stands down there. It did not fall out of this fix and no gate here claims it.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 0baea296c.
