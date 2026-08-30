@@ -164,4 +164,4 @@ a launch-facing page.
 No compiler rebuild; no `lib/**`; no code touched.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit ef229ba7d.
