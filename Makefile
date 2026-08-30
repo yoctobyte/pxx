@@ -10998,6 +10998,12 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/c_pasunit_collide_fail.c $(TESTTMP)/c_pasunit_collide_fail26 2>&1 \
 	  | grep -q "two Pascal units are both named 'mymod'" \
 	  || { echo 'c_pasunit_collide_fail: FAIL - two units of one name must be refused, not silently resolved to the first'; exit 1; }
+	# clz/ctz at ZERO must TERMINATE (they used to spin: no shift of 0 reaches the
+	# bit the loop waits for). All six spellings, four routines. A timeout, because
+	# the failure mode is a HANG -- a plain run of a hanging test hangs the suite.
+	@./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/c_builtin_bitscan_zero.c $(TESTTMP)/c_builtin_bitscan_zero26 >/dev/null \
+	  && timeout 20 $(TESTTMP)/c_builtin_bitscan_zero26; \
+	  tools/expect_same.sh c_builtin_bitscan_zero-rc "$$?" "42" && echo "c_builtin_bitscan_zero: OK"
 	# case is significant: the mangled name carries the Pascal spelling
 	@./$(COMPILER) test/c_pasunit_case_fail.c $(TESTTMP)/c_pasunit_case_fail26 2>&1 \
 	  | grep -q "call to undeclared function: mymod_pas_twice" \

@@ -25,6 +25,10 @@ not from this repo — third-party source is never vendored here.
 
 ## Contents
 
-| file | bug | symptom |
-| --- | --- | --- |
-| `hang_builtins_700082.c` | `bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc` | infinite loop in `func_58`; gcc prints `checksum = 5ABA20EA` |
+*(empty)*
+
+`hang_builtins_700082.c` lived here until its bug was fixed: `clz`/`ctz` of zero
+spun forever in `lib/crtl`. Per the lifecycle above it left this directory in the
+fixing commit, replaced by `test/c_builtin_bitscan_zero.c` — six spellings, four
+routines, a timeout, and runs in milliseconds instead of compiling 1,939 lines.
+Git history has the original if a wider regression corpus is ever wanted.

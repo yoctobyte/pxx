@@ -517,26 +517,49 @@ double strtold(const char *s, char **end) { return strtod(s, end); }
 
 /* ---- gcc bit-scan builtins (see stdlib.h; cfront renames __builtin_*) ----- */
 
+/* ZERO HANGS THESE FOUR WITHOUT THE GUARD. No shift of 0 ever reaches the bit
+   the loop is waiting for, so the program spins forever -- it does not return a
+   wrong answer, it never returns. A csmith program did exactly that: it compiled
+   clean at every -O level and hung, while a gcc-built binary of the same source
+   ran to completion (bug-c-clz-ctz-of-zero-spin-forever-in-crtl).
+
+   ffs below already guards zero, under a comment noting that ffs is DEFINED at
+   zero "unlike clz/ctz". The defined case was protected and the two UNDEFINED
+   ones were left to spin -- which is backwards: undefined means we may return
+   anything we like, and "anything" is much cheaper to supply than an infinite
+   loop is to debug.
+
+   WHY THE FULL WIDTH, and this argument does NOT come from the corpus: the
+   program that found the hang prints the same checksum whether this returns 0,
+   7 or 63, because the checksum cannot see the value -- so an oracle match here
+   would be citing a constant. The value is chosen instead because x86 `lzcnt`
+   and `tzcnt` answer with the operand width at zero, and gcc's own constant
+   folder gave 64 for a literal `__builtin_clzll(0)`. C leaves it undefined, so
+   this is a deliberate convention, not a conformance claim. */
 int __pxx_builtin_clz32(unsigned int x) {
   int n = 0;
+  if (x == 0u) return 32;
   while (!(x & 0x80000000u)) { x <<= 1; n++; }
   return n;
 }
 
 int __pxx_builtin_clz64(unsigned long long x) {
   int n = 0;
+  if (x == 0ull) return 64;
   while (!(x & 0x8000000000000000ull)) { x <<= 1; n++; }
   return n;
 }
 
 int __pxx_builtin_ctz32(unsigned int x) {
   int n = 0;
+  if (x == 0u) return 32;
   while (!(x & 1u)) { x >>= 1; n++; }
   return n;
 }
 
 int __pxx_builtin_ctz64(unsigned long long x) {
   int n = 0;
+  if (x == 0ull) return 64;
   while (!(x & 1ull)) { x >>= 1; n++; }
   return n;
 }
