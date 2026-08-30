@@ -618,7 +618,7 @@ function CPExprCond: Int64; forward;   { `?:` level, above Or — see its body }
 { The include search itself, shared with `#include` — see its body, far below,
   for why `__has_include` must not get a search of its own. }
 function CPSearchInclude(const nm, baseDir: AnsiString;
-                         depth: Integer; probe: Boolean): Boolean; forward;
+                         depth: Integer; probe, angled: Boolean): Boolean; forward;
 
 { Forward decls for the recursive macro expander, hoisted above CPExprAtom
   which calls them at #if-eval time. pascal26 sees these via whole-section
@@ -652,6 +652,19 @@ procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString); forward
   operator must not be reached BY expansion (a `<a.h>` operand cannot survive
   ordinary macro rules), and its operand must be expanded WHEN it is not already
   a header-name. Same paragraph of C23 6.10.1. }
+function CPHeaderNameIsAngled(const s: AnsiString): Boolean;
+{ Which BRACKET a header-name operand used, for the one caller that has only the
+  expanded text. Kept beside CPHeaderNameOf and reading the same leading
+  character, because "what is the name" and "which search does it ask for" must
+  answer about the same operand. }
+var i, n: Integer;
+begin
+  Result := False;
+  i := 1; n := Length(s);
+  while (i <= n) and ((s[i] = ' ') or (s[i] = #9)) do Inc(i);
+  Result := (i <= n) and (s[i] = '<');
+end;
+
 function CPHeaderNameOf(const s: AnsiString): AnsiString;
 { `<foo/bar.h>` or `"foo.h"` -> `foo/bar.h`; anything else -> ''.
 
@@ -681,6 +694,7 @@ end;
 
 function CPExprHasInclude: Int64;
 var a, closer, opEnd: Integer; nm, savedPath, raw, expanded: AnsiString;
+    hiAngled: Boolean;
 begin
   Result := 0;
   CPSkipExprSpace;
@@ -689,9 +703,12 @@ begin
   CPSkipExprSpace;
   if CPExprPos > CPExprEnd then Exit;
   nm := '';
+  hiAngled := False;
   if (CPExprText[CPExprPos] = '<') or (CPExprText[CPExprPos] = '"') then
   begin
-    if CPExprText[CPExprPos] = '<' then closer := Ord('>') else closer := Ord('"');
+    if CPExprText[CPExprPos] = '<' then
+      begin closer := Ord('>'); hiAngled := True; end
+    else closer := Ord('"');
     Inc(CPExprPos);
     a := CPExprPos;
     while (CPExprPos <= CPExprEnd) and (Ord(CPExprText[CPExprPos]) <> closer) do
@@ -729,6 +746,11 @@ begin
       SetLength(expanded, 0);
       CPAppendExpandedArgToDst(0, expanded);
       nm := CPHeaderNameOf(expanded);
+      { A macro operand carries its own form: `#define HDR <a.h>` asks the
+        angled question, `"a.h"` the quoted one. Reading it off the expansion
+        keeps the probe answering the same question the directive would ask,
+        which is the whole reason the two share one search. }
+      hiAngled := CPHeaderNameIsAngled(expanded);
     end;
   end;
   CPSkipExprSpace;
@@ -740,7 +762,7 @@ begin
     0 is then the honest answer rather than a read of an unwritten Result. }
   if (CPCurDepth < 0) or (CPCurDepth > 15) then Exit;
   savedPath := CPrepPath;
-  if CPSearchInclude(nm, CPCurBaseDir, CPCurDepth, True) then Result := 1;
+  if CPSearchInclude(nm, CPCurBaseDir, CPCurDepth, True, hiAngled) then Result := 1;
   CPrepPath := savedPath;
 end;
 
@@ -2404,13 +2426,43 @@ end;
   primitive here, LoadFile leaves the buffer empty on a miss, and reusing the
   real load is what makes the two answers identical by construction. }
 function CPSearchInclude(const nm, baseDir: AnsiString;
-                         depth: Integer; probe: Boolean): Boolean;
+                         depth: Integer; probe, angled: Boolean): Boolean;
 var k: Integer;
 begin
   { 1. The including file's own directory (baseDir is threaded as the resolved
-       dir of each nested include via CPProcessInclude). }
-  CPConcat2(baseDir, nm, CPrepPath);
-  CPLoadInclude(depth);
+       dir of each nested include via CPProcessInclude) -- for a QUOTED include
+       only. C 6.10.2 gives `"..."` the including file's directory and `<...>`
+       only the implementation's own places, and the difference is not
+       cosmetic: glibc ships one-line forwarding headers, and
+       /usr/include/sys/signal.h is exactly `#include <signal.h>`. Searching
+       baseDir for that angled name finds sys/signal.h again -- itself -- and
+       the preprocessor recurses until it runs out of include buffers,
+       reporting "nesting too deep" at whatever the cap happens to be (level 17
+       with sixteen, level 129 with 128; the depth tracking the cap is the
+       signature). It is what blocked the whole busybox corpus, reached from
+       libbb.h via <sys/param.h>.
+
+       This search deliberately still differs from gcc's in its OTHER
+       dimensions -- the crtl anchor, -I winning over the system root, the
+       -nostdinc rule -- but not in this one, because here the standard's split
+       is load-bearing rather than stylistic.
+       bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback }
+  if not angled then
+  begin
+    CPConcat2(baseDir, nm, CPrepPath);
+    CPLoadInclude(depth);
+  end
+  else
+    { The slot MUST be cleared, and this line is the whole reason the guard is
+      not a bare `if`. Step 1 was unconditional, so its CPLoadInclude doubled as
+      the reset: every loop below is `while CPIncludeLength(depth) = 0`, and a
+      slot still holding the PREVIOUS search's file makes all three loops
+      no-ops, silently resolving the new name to the old file's text. Measured
+      when the guard was first written without this else: `<endian.h>` re-read
+      bits/wordsize.h 32 times and never reached bits/endian.h, so __BYTE_ORDER
+      went undefined and busybox's platform.h answered "Can't determine
+      endianness" -- a plausible wrong answer three files away from the cause. }
+    SetLength(CPrepInclude[depth], 0);
   { 2. User `-I` project/library roots, in order — these win over any system
        header so a project's own header (e.g. our zlib.h) is not shadowed. }
   k := 0;
@@ -2512,13 +2564,18 @@ begin
     end;
     { The search itself lives in CPSearchInclude, shared with `__has_include`
       so the operator cannot answer a different question from the directive. }
-    if not CPSearchInclude(incName, baseDir, depth, False) then
+    if not CPSearchInclude(incName, baseDir, depth, False, b = Ord('>')) then
     begin
       { Report the requested NAME and the search list, not the last dir probed
         (which pointed triage at the wrong place — bug-cpp-include-not-found-
         diagnostic-path). }
       searchList := '';
-      if baseDir <> '' then searchList := baseDir;
+      { Only name baseDir when it was actually searched. An angled include does
+        not look there (C 6.10.2), and listing it said we had tried a directory
+        we had not -- which is the same class of wrongness the diagnostic was
+        rewritten to remove in the first place
+        (bug-cpp-include-not-found-diagnostic-path). }
+      if (baseDir <> '') and (b <> Ord('>')) then searchList := baseDir;
       for k := 0 to CIncludeDirCount - 1 do
       begin
         if searchList <> '' then searchList := searchList + ', ';

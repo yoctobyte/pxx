@@ -8949,8 +8949,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cvararg_stack_spill26 "$$($(TESTTMP)/cvararg_stack_spill26)" "$$(printf '7060\n950.25\n7807800.75')"
 	./$(COMPILER) -Ilib/crtl/include -Ilibrary_candidates/tiny-regex-c test/crtl_tiny_regex_match.c $(TESTTMP)/crtl_tiny_regex_match26
 	tools/expect_same.sh crtl_tiny_regex_match26 "$$($(TESTTMP)/crtl_tiny_regex_match26)" "tiny-regex: all cases pass"
+	# Three rows, one question: which directories does each include form search.
+	# Row 3 is the one that ran away -- a forwarder whose body is `#include
+	# <cinc_shadow.h>`, which found ITSELF while angled includes searched the
+	# including file's directory, and recursed to the include-buffer cap. That is
+	# glibc's sys/signal.h verbatim, and it blocked every busybox TU via
+	# <sys/param.h>. The fixture is used rather than <sys/param.h> itself because
+	# the real instance needs a particular glibc layout: /usr/include/sys exists
+	# on this box and does not on another, which is exactly why the original
+	# report's "-I makes it work" control looked clean and was not.
+	# bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c $(TESTTMP)/cinc_main26
-	tools/expect_same.sh cinc_main26 "$$($(TESTTMP)/cinc_main26)" "$$(printf 'local-ok\ninc-ok')"
+	tools/expect_same.sh cinc_main26 "$$($(TESTTMP)/cinc_main26)" "$$(printf 'local-ok\ninc-ok\nangled-skips-file-dir-ok')"
 	./$(COMPILER) test/test_declared_directive.pas $(TESTTMP)/test_declared_directive26
 	tools/expect_same.sh test_declared_directive26 "$$($(TESTTMP)/test_declared_directive26)" "$$(printf '1\n2\n3\n4\n5')"
 	./$(COMPILER) test/dotted/test_dotted_uses.pas $(TESTTMP)/test_dotted_uses26
