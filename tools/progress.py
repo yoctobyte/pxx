@@ -1916,7 +1916,9 @@ pre code{background:none;padding:0}
                         f"({', '.join(shown)}{more}). DO NOT CLAIM IT — tell "
                         f"the holder. A long-lived lock is where a stale prose "
                         f"dependency hides longest, because the holder has "
-                        f"stopped re-reading the park they wrote"
+                        f"stopped re-reading the park they wrote. THE SLUG "
+                        f"MATCHED, NOT THE QUESTION -- see the STALE-PARK note "
+                        f"below"
                     )
                 else:
                     lines.append(
@@ -1925,7 +1927,8 @@ pre code{background:none;padding:0}
                         f"ticket(s) near a blocking phrase ({', '.join(shown)}"
                         f"{more}) — the resume condition may already be met. "
                         f"Read the park; a prose condition has no owner and "
-                        f"nothing else re-checks it"
+                        f"nothing else re-checks it. THE SLUG MATCHED, NOT THE "
+                        f"QUESTION — see the NOTE below"
                     )
 
         # DUPLICATE FACE NUMBERS -- an append-only index that numbers its
@@ -2431,7 +2434,16 @@ pre code{background:none;padding:0}
         # prior investigation and pre-empts the check that would have caught
         # it.
         lines.append(
-            "NOTE stale-edge reads FRONTMATTER; STALE-PARK reads PROSE in "
+            "NOTE a STALE-PARK hit matches SLUGS, not questions: a blocker "
+            "that settled the OPPOSITE question reads exactly like one "
+            "that settled yours, so read what it resolved rather than "
+            "that it closed. Measured 2026-08-30 by frankC — "
+            "`refactor-a-one-resolved-file-identity-for-a-translation-unit` "
+            "settled that `./math.pas` and `math.pas` are ONE identity; "
+            "`feature-c-import-a-pascal-unit-under-a-mangled-name` needs two "
+            "DIFFERENT files of one unit name to be TWO identities, the "
+            "opposite question, and the collision still refuses at HEAD. "
+            "stale-edge reads FRONTMATTER; STALE-PARK reads PROSE in "
             "unfinished/, blocked/ and working/ (the last as STALE-PARK-HELD: "
             "tell the holder, never claim it), where a resume condition is "
             "load-bearing. Prose in a RANKED folder is still unchecked — a "
