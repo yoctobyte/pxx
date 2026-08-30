@@ -44,11 +44,55 @@ SKIP_DIRS = ("test/pascal-conformance/", "test/c-conformance/", "test/fixtures/"
              "test/cjson/", "test/quickjs/", "test/lua/", "test/nilpy-stack/")
 
 
+# Folders whose presence means a ticket is still open. `working/` counts: a
+# ticket held right now is as live as one in the queue.
+_OPEN_DIRS = ("urgent", "working", "unfinished", "backlog", "backlog_new",
+              "blocked")
+_CLOSED_DIRS = ("done", "rejected", "decided")
+
+
+def _ticket_state(slug):
+    """'open' | 'closed' | 'missing' — where a ticket slug lives on the board."""
+    base = os.path.join(ROOT, "devdocs", "progress")
+    for d in _OPEN_DIRS:
+        if os.path.exists(os.path.join(base, d, slug + ".md")):
+            return "open"
+    for d in _CLOSED_DIRS:
+        if os.path.exists(os.path.join(base, d, slug + ".md")):
+            return "closed"
+    return "missing"
+
+
 def read_exemptions():
-    """{path: reason}. A line with no reason is fatal, not ignored."""
-    out, bad = {}, []
+    """({path: reason}, bad, {path: (slug, reason)}).
+
+    A line with no reason is fatal, not ignored.
+
+    TWO KINDS OF ENTRY, and conflating them is what this split fixes:
+
+      <path>  <reason>
+          A true EXEMPTION. "Nothing runs it" is the correct END STATE and the
+          reason says why -- a helper unit reached through a wired subject, say.
+
+      <path>  parked:<ticket-slug> <reason>
+          A PARK. Nothing runs it *here*, *yet*, and a live ticket owns that.
+          This is not an exemption and must not become one: the checker refuses
+          the park once the ticket closes, so the files come back into the
+          census the moment their owner is done rather than staying hidden
+          forever behind a sentence nobody re-reads.
+
+    A path ending in `/` covers everything beneath it. That is the honest unit
+    for a whole directory that is developed elsewhere: `test/wasm/` was 37
+    identical rows saying one thing, which is how a real census becomes
+    unreadable and a gate becomes permanently red.
+
+    Same three-way shape as tools/fpc_diff_probe.sh's DIFF / [known] /
+    [by design]: tagging a temporary state as permanent is a lie with a cost,
+    and so is the reverse.
+    """
+    out, bad, parked = {}, [], {}
     if not os.path.exists(EXEMPT):
-        return out, bad
+        return out, bad, parked
     with open(EXEMPT) as f:
         for n, line in enumerate(f, 1):
             line = line.split("#", 1)[0].strip()
@@ -58,8 +102,26 @@ def read_exemptions():
             if len(parts) < 2 or not parts[1].strip():
                 bad.append((n, parts[0] if parts else line))
                 continue
-            out[parts[0]] = parts[1].strip()
-    return out, bad
+            path, reason = parts[0], parts[1].strip()
+            if reason.startswith("parked:"):
+                rest = reason[len("parked:"):].split(None, 1)
+                if len(rest) < 2 or not rest[1].strip():
+                    bad.append((n, path))
+                    continue
+                parked[path] = (rest[0], rest[1].strip())
+            else:
+                out[path] = reason
+    return out, bad, parked
+
+
+def _covered(path, entries):
+    """True when `path` is named by an entry, directly or under a `dir/` one."""
+    if path in entries:
+        return path
+    for e in entries:
+        if e.endswith("/") and path.startswith(e):
+            return e
+    return None
 
 
 def wired_paths(prov=None, dir_refs=None):
@@ -361,7 +423,7 @@ def main(argv=None):
               % argv[0])
         return 2
 
-    exempt, bad = read_exemptions()
+    exempt, bad, parked = read_exemptions()
     if bad:
         print("check-test-wiring: %s has %d entr(y/ies) with no REASON:"
               % (os.path.relpath(EXEMPT, ROOT), len(bad)))
@@ -376,8 +438,39 @@ def main(argv=None):
     wired = wired_paths(prov, dir_refs)
     subs = subjects()
     reached = consumed_by(wired, subs, dir_refs)
+    # A PARK WHOSE TICKET HAS CLOSED IS NOT A PARK, and this is the whole
+    # reason parks are a separate kind. An exemption is forever by design; a
+    # park borrows a live ticket's authority, so when that ticket closes the
+    # authority is gone and the files must come back into the census. Refused
+    # loudly rather than quietly downgraded -- a park that decays into an
+    # exemption is exactly the silent widening this checker exists to stop.
+    expired = []
+    for path, (slug, _reason) in sorted(parked.items()):
+        st = _ticket_state(slug)
+        if st != "open":
+            expired.append((path, slug, st))
+    if expired:
+        print("check-test-wiring: %d PARK(S) whose ticket is no longer open:"
+              % len(expired))
+        for path, slug, st in expired:
+            print("  %-38s parked:%s is %s" % (path, slug, st))
+        print("  A park borrows a live ticket's authority to say 'not yet'. "
+              "When the ticket closes, so does the park — wire the files, or "
+              "convert the line to a real exemption with a reason that stands "
+              "on its own. Do not repoint it at another open ticket to quiet "
+              "this.")
+        return 1
+
     unwired = [p for p in subs
-               if p not in wired and p not in reached and p not in exempt]
+               if p not in wired and p not in reached
+               and not _covered(p, exempt) and not _covered(p, parked)]
+    parked_hits = {}
+    for p in subs:
+        if p in wired or p in reached or _covered(p, exempt):
+            continue
+        e = _covered(p, parked)
+        if e:
+            parked_hits.setdefault(e, []).append(p)
 
     # An exemption for a file that IS wired (or no longer exists) is stale, and
     # a stale exemption silently widens the check's blind spot over time.
@@ -406,7 +499,9 @@ def main(argv=None):
     def _mk_backed(path):
         return any(f == "Makefile" for f, _ in prov.get(path, []))
 
-    gone = [p for p in exempt if not os.path.exists(os.path.join(ROOT, p))]
+    gone = [p for p in exempt
+            if not p.endswith("/")
+            and not os.path.exists(os.path.join(ROOT, p))]
     stale = [p for p in exempt if p in wired and _mk_backed(p)] + gone
     advisory = [p for p in exempt
                 if p in wired and p not in stale and not _mk_backed(p)]
@@ -448,6 +543,20 @@ def main(argv=None):
 
     print("check-test-wiring: scanned %d test subject(s) against %s"
           % (len(subs), os.path.relpath(EXEMPT, ROOT)))
+
+    # PARKS ARE PRINTED, ALWAYS, AND WITH THEIR COUNT. A park is not a pass and
+    # must not read like one: the whole risk of the category is that a number
+    # moved out of the census and nobody sees it again. Naming the ticket on the
+    # line is what makes the park re-checkable by a reader as well as by the
+    # expiry rule above.
+    if parked_hits:
+        n = sum(len(v) for v in parked_hits.values())
+        print("check-test-wiring: %d file(s) PARKED against a live ticket — "
+              "not wired here, and that is tracked, not forgotten:" % n)
+        for e in sorted(parked_hits):
+            slug, reason = parked[e]
+            print("  %-22s %4d file(s)  [%s]" % (e, len(parked_hits[e]), slug))
+            print("      %s" % reason)
 
     if not unwired and not stale and not advisory:
         print("check-test-wiring: OK — all referenced by a rule or explained")

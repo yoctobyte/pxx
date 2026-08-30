@@ -396,6 +396,70 @@ def t_since_that_cannot_resolve_its_rev_is_NOT_a_pass():
     return "an unresolvable --since says so instead of passing"
 
 
+# --------------------------------------------------- PARKS: not-yet, owned --
+# A park borrows a live ticket's authority to say "nothing runs this HERE, YET".
+# The entire reason it is a separate kind from an exemption is that it EXPIRES,
+# so these four guards are the mechanism, not decoration: without the expiry a
+# park is just an exemption with a longer sentence, and the 37 wasm files would
+# be hidden forever behind a ticket that closed months ago.
+
+
+def _park_tree(reason, ticket_dir=None, ticket_slug="feature-target-wasm"):
+    root = _tree(makefile="all:\n\techo hi\n",
+                 tests=["wasm/a_slice.pas", "wasm/b_slice.pas", "wired.pas"],
+                 unwired="test/wasm/  %s\n" % reason)
+    open(os.path.join(root, "Makefile"), "w").write(
+        "all:\n\t$(PXX) test/wired.pas\n")
+    if ticket_dir:
+        d = os.path.join(root, "devdocs", "progress", ticket_dir)
+        os.makedirs(d, exist_ok=True)
+        open(os.path.join(d, ticket_slug + ".md"), "w").write("# t\n")
+    return root
+
+
+def t_a_park_on_a_live_ticket_covers_a_whole_directory():
+    rc, out = _run(_park_tree("parked:feature-target-wasm developed elsewhere",
+                              "backlog"))
+    assert rc == 0, out
+    assert "2 file(s) PARKED" in out, out
+    assert "test/wasm/" in out and "feature-target-wasm" in out, out
+    # The point of the directory form: one row, not one row per leaf.
+    assert "wasm/a_slice.pas" not in out, "the park listed leaves instead of the directory"
+    return "a `dir/` park covers everything beneath it and reports as ONE row"
+
+
+def t_a_park_is_printed_not_silently_passed():
+    rc, out = _run(_park_tree("parked:feature-target-wasm developed elsewhere",
+                              "backlog"))
+    assert "PARKED against a live ticket" in out, out
+    assert "not wired here, and that is tracked, not forgotten" in out, out
+    return "a park is reported with its count and ticket, never silent"
+
+
+def t_a_park_whose_ticket_CLOSED_is_refused():
+    # The mechanism. If this ever passes, a park has become an exemption
+    # without anyone deciding that it should.
+    rc, out = _run(_park_tree("parked:feature-target-wasm shipped", "done"))
+    assert rc == 1, out
+    assert "PARK(S) whose ticket is no longer open" in out, out
+    assert "is closed" in out, out
+    return "a park expires the moment its ticket reaches done/"
+
+
+def t_a_park_naming_no_ticket_at_all_is_refused():
+    rc, out = _run(_park_tree("parked:no-such-ticket nothing owns this"))
+    assert rc == 1, out
+    assert "is missing" in out, out
+    return "a park citing a ticket that does not exist is refused, not trusted"
+
+
+def t_a_park_with_no_reason_is_refused_like_any_exemption():
+    rc, out = _run(_park_tree("parked:feature-target-wasm", "backlog"))
+    assert rc == 1, out
+    assert "no REASON" in out, out
+    return "a ticket slug is not a reason — the sentence is still required"
+
+
 TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_a_hash_comment_inside_a_recipe_body_does_not_wire,
          t_a_real_rule_still_wires,
@@ -417,7 +481,12 @@ TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_since_names_a_test_THIS_push_added_and_did_not_wire,
          t_since_ignores_an_orphan_that_was_ALREADY_there,
          t_since_passes_when_the_new_test_IS_wired,
-         t_since_that_cannot_resolve_its_rev_is_NOT_a_pass]
+         t_since_that_cannot_resolve_its_rev_is_NOT_a_pass,
+         t_a_park_on_a_live_ticket_covers_a_whole_directory,
+         t_a_park_is_printed_not_silently_passed,
+         t_a_park_whose_ticket_CLOSED_is_refused,
+         t_a_park_naming_no_ticket_at_all_is_refused,
+         t_a_park_with_no_reason_is_refused_like_any_exemption]
 
 
 def main():

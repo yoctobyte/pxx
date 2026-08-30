@@ -92,3 +92,12 @@ test/strhelperprobe.pas  Pascal unit imported by test/test_nilpy_str_method_vs_p
 # bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
 # and delete this line -- the two Makefile lines are given in
 # feature-b-a-real-minidom-is-an-implementation-not-a-shim.
+
+# --- PARKED: not wired HERE, YET, and a live ticket owns that ---
+# A park is not an exemption. It borrows the named ticket's authority to say
+# "not yet", and check_test_wiring REFUSES it the moment that ticket leaves an
+# open folder — so these files return to the census when their owner is done
+# rather than staying hidden behind a sentence nobody re-reads.
+# A path ending in `/` covers everything beneath it: 37 rows saying one thing is
+# how a real census becomes unreadable and a gate becomes permanently red.
+test/wasm/  parked:feature-target-wasm the wasm backend and its slice tests are developed in a standalone checkout on branch `wasm`, which is what that ticket records; nothing on master references this tree except a generator inside it, and nothing here should wire it until that work lands
