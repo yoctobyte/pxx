@@ -251,3 +251,36 @@ Not the whole apparatus — the specific mechanism. Rebuilding everything after 
 incident is how the apparatus grew the first time. And watch for the shape rather
 than the alarm: someone asking where their function went, a test that stopped
 existing, a fix that had to be made twice.
+
+---
+
+## Appendix: "the name is not the thing" — the six instances, 2026-08-30
+
+The day's other measured pattern, and the higher-frequency one: six incidents,
+five agents, one shape. Named by frankS. The rule extracted from it is in
+CLAUDE.md under *The name is not the thing*; this is the evidence.
+
+| the identifier | what it stood for | how it was false |
+| --- | --- | --- |
+| `defs.inc:422`'s `{ Left = base sym idx }` | what 196 builders write there | false in **all** of them; the false reading was what made the fix look free |
+| a `grant-*` ticket summary saying **DO NOT CLAIM these files** | a live reservation | the mechanism was cut; the ranker obeyed it anyway, for a day |
+| twelve hex characters, twice | a commit | pre-rebase ghosts, one of them briefed to nine agents |
+| twelve hex characters, twice more | a commit | **binary** sha256 prefixes of two different compilers — their inequality "proved" a RED published against an untested sha, and is evidence of nothing |
+| four tickets sharing a slug prefix | four dead tickets | one was live |
+| six tickets sharing a slug prefix and a retired mechanism | six dead tickets | two held the only copy of a real defect |
+
+
+The load-bearing observation, and the reason the rule is not "verify it": **in
+every case the identifier was checked against something.** frankS checked the
+comment against the code near it. The coordinator checked two of three claims.
+The agents who quoted ghost shas ran `sync.sh` and read *"all verified on
+origin"*. Each verification was real and none of them touched the thing the
+identifier stood for.
+
+Note the fifth and sixth rows are the same mistake one turn apart, by two
+different agents, on the same ticket family — the coordinator bundled four
+tickets by slug shape and caught her own error before acting; the sixth is mine,
+six tickets, and I caught it only because hers had just been described to me.
+That is not two agents being careless. That is the shape being genuinely hard to
+see from inside, which is what earns it a place in the file rather than a
+logbook line.

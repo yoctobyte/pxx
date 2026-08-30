@@ -256,6 +256,36 @@ genuinely changed a design decision — not for a bug. If the body is longer tha
 the diff it describes, ask whether you are filing because it needs filing or
 because filing is the habit.
 
+## The name is not the thing (all tracks)
+
+Six incidents on 2026-08-30, five agents, one shape — named by frankS:
+**an identifier standing in for the thing it names, trusted because it looked
+right.**
+
+Three of the six, to show the range: a comment at `defs.inc:422` describing what
+196 builders write there, false in all of them; a `grant-*` ticket summary saying
+**DO NOT CLAIM these files** for a day after the mechanism was cut, obeyed by the
+ranker throughout; and twelve hex characters read as a commit — twice as
+pre-rebase ghosts, twice as **binary** sha256 prefixes of two different
+compilers, whose inequality "proved" a RED published against an untested sha and
+is evidence of nothing. Full ledger:
+`devdocs/dev/coordination-overhead-2026-08-30.md`.
+
+**In every case the identifier WAS checked — against something, just not against
+the thing it stood for.** That is why "verify it" is the wrong instruction: each
+of these agents did verify. Ask instead **what would this be if it were false**,
+and go look at that. A comment: read a caller. A slug: open the ticket. Twelve
+hex characters: `git merge-base --is-ancestor <sha> origin/master` (not `git
+cat-file -e`, which answers about your own object store and so cannot tell a
+ghost from a commit).
+
+Its companion, from the coordinator, who broke it while arguing for it:
+**a verification claim scopes to exactly what was checked, and an unlabelled
+claim travelling beside it inherits that credibility.** "I checked both facts
+myself" carried a third, unchecked one into a decision. Name the facts you
+checked, or claim none — an unlabelled companion is how a bad claim *travels*
+rather than merely exists.
+
 ## Debugging — measure, do not reason
 
 **Read `devdocs/dev/debugging-playbook.md` before hand-patching a probe or
@@ -398,14 +428,13 @@ routes:
    not lying; it is answering about a tree that moved. This one briefly read as a
    Makefile bug.
 
-The habits that defeat all three, from the agents who lost hours to them:
-**rebuild after any sync that touched `compiler/**` before you measure**, and
-**print `sha256sum compiler/pascal26` beside every number you report.** A wrong
-47x measurement was caught by exactly that, and a correct day's work was nearly
-retracted for want of it. Related trap in the same family: the pinned compiler is
-reached through `stable_linux_amd64/default/pinned`, a **13-byte symlink** — `git
-log` on that path reads the symlink's history (frozen since July), not the
-binary's.
+The habits that defeat all three: **rebuild after any sync that touched
+`compiler/**` before you measure**, and **print `sha256sum compiler/pascal26`
+beside every number you report.** A wrong 47x measurement was caught by exactly
+that, and a correct day's work was nearly retracted for want of it. Same family:
+the pinned compiler is reached through `stable_linux_amd64/default/pinned`, a
+**13-byte symlink** — `git log` on that path reads the symlink's history (frozen
+since July), not the binary's.
 
 **`tools/gate.sh quick` (~30s) is OPTIONAL per fix** — run it when you touched
 something you are nervous about, skip it when you are not. It is **REQUIRED
@@ -592,20 +621,13 @@ fix the doc, not the loop.
   watcher publishes tstate continuously), so it cites a commit that exists only
   in your reflog — `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`. Full
   model: `devdocs/progress/README.md`.
-- **The same trap applies to every sha you QUOTE, not just `resolve`'s.** A sha
-  from `git log -1` straight after `git commit` is pre-rebase and usually dies in
-  the sync. **Read landed shas off `git log origin/master` AFTER the push** —
-  `git log origin/master --grep='<subject>' -1` is the reliable form. Measured
-  2026-08-30: eight of nine shas quoted in one session were ghosts, and nine
-  agents were briefed with one of them.
-  **"Confirm it landed" and "read the sha it landed as" are TWO steps, and doing
-  the first does not cover the second.** `sync.sh` printing *"pushed 2 commit(s),
-  all verified on origin"* is a true statement about the **content**; it says
-  nothing about the id you wrote down beforehand. An agent who *did* verify — at
-  the wrong moment — still published a ghost, because his sync had hit a conflict
-  he finished by hand and the rebase rewrote the commit. So the rule is not
-  "verify your shas", it is **read them afterwards**. A sha that resolves to
-  nothing is worse than no sha, because the reader cannot tell it is wrong.
+- **The same trap applies to every sha you QUOTE, not just `resolve`'s** — see
+  *The name is not the thing*. **Read landed shas off `git log origin/master`
+  AFTER the push**: `git log origin/master --grep='<subject>' -1`.
+  **"Confirm it landed" and "read the sha it landed as" are two steps, and the
+  first does not cover the second** — `sync.sh`'s *"all verified on origin"* is
+  true of the **content** and says nothing about an id you wrote down beforehand.
+  An agent who did verify, at the wrong moment, still published a ghost.
 - **Cold start — "continue on tickets" (no track named):** self-dispatch,
   auto-pick the global top.
   1. `git pull --rebase` (origin is truth).
