@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
-| regression-test-asm-test-asm-emit-x64-2 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 94492d162332 (auto-filed by twatch) | — |
 
 ## unfinished (33)
 
@@ -65,7 +64,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (386)
+## backlog (387)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -439,6 +438,7 @@ _none_
 | refactor-p-the-field-declaration-parser-exists-twice | P | 45 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
 | refactor-p-the-overload-probe-cannot-see-the-argument-match-channels | P | 45 | refactor | The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
+| refactor-t-the-automated-pin-stages-the-stable-tree-by-a-hardcoded-path | T | 20 | refactor | NOT a present fault -- verified correct today. The automated pin path in tools/testmgr.py stages the stable tree with `git add -u <root>` plus an explicit `git add <root>/default/builtin`. The second call is what saves it, and it saves it by NAMING the one directory that has ever needed saving. `git add -u` stages tracked files only, so any FUTURE directory added under the stable root is silently left untracked in the pin commit, exactly as builtin/ was before that line existed. Correct by hardcoded path rather than by rule. | — |
 | regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-asm-compiler-3 | P | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at 5944ee686c10 (auto-filed by twatch) | — |
@@ -729,9 +729,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2838)
+## done (2839)
 
-2838 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2839 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -1195,6 +1195,7 @@ _none_
 - [p 20] [M] feature-t-windows-wine-harness
 - [p 20] [A] feature-typeinfo-last-categories
 - [p 20] [A] meta-constant-normalisation
+- [p 20] [T] refactor-t-the-automated-pin-stages-the-stable-tree-by-a-hardcoded-path
 - [p 18] [S] feature-c-esp-conformance-coverage
 - [p 18] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
 - [p 15] [P] bug-p-sysopen-intrinsic-shadows-a-user-function-name

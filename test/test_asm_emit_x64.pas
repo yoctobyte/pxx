@@ -129,6 +129,40 @@ begin
   Result := False;
 end;
 
+{ --- the environment asmtext.inc reaches into defs.inc for --------------------
+  This harness supplies its own environment rather than {$include}ing defs.inc,
+  which is the whole reason it stays small enough to maintain. The cost is that
+  a NEW reference from asmtext.inc into defs.inc surfaces HERE, as `undefined
+  variable`, while the compiler itself builds fine -- so the error names this
+  file's configuration, not a defect in the declaration.
+
+  Both symbols below arrived with the a.asmmemo memoisation
+  (asmtext.inc:1040-1076) and are mocked, not forwarded.
+
+  MEASURED, because "why here and not elsewhere" is the question that matters:
+  asmtext.inc has exactly TWO including configurations -- compiler.pas:113,
+  which includes defs.inc, and this file, which does not. That is the entire
+  difference. lexer.inc calls PxxDbgWants at four sites and never complains
+  because its own standalone harness, test/manual/test_pylexer.pas, includes
+  compiler/defs.inc at line 9 before including lexer.inc at line 10. So this is
+  not a visibility quirk to be silenced with a forward declaration; it is a
+  harness that owns its environment and was missing two pieces of it.
+  regression-test-asm-test-asm-emit-x64-2 }
+
+var
+  { asmtext.inc's memo poisons an entry when emitting a line moves a counter.
+    Nothing in this harness lowers a libc syscall, so this stays 0 and the
+    check correctly never fires -- 0 is the honest value here, not a placeholder. }
+  LibcSyscallCallCount: Integer = 0;
+
+{ PXXDBG channel selector. Always False here: this harness asserts exact byte
+  sequences, so a debug line on stdout would be noise in the thing being
+  measured. }
+function PxxDbgWants(const prefix, name: AnsiString): Boolean;
+begin
+  Result := False;
+end;
+
 {$include ../compiler/x64enc.inc}
 {$include ../compiler/asmtext.inc}
 
