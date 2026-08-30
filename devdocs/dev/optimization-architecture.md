@@ -413,8 +413,15 @@ commands):
 
 **Benchmark harness:** `make benchmark-opt-levels` builds the compiler at each
 `-O` tier, asserts every tier emits identical (correct) output, reports each
-tier binary's size, and hyperfines each tier self-compiling. `-O3` still tracks
-`-O2` (aliases it until a nested-inline / higher-tier pass lands).
+tier binary's size, and hyperfines each tier self-compiling. **`-O3` no longer aliases `-O2`** — that was true when this line was
+written and stopped being true once the register-pressure campaign started
+landing there; `grep -c 'OptLevel' compiler/**` finds dozens of gate sites
+today. Re-derive the count, never quote one: six different counts of it were
+published on 2026-08-30, all correct about what they measured, ranging 13 to
+45 — the answer depends on the spelling (`OptLevel < 3` is the MINORITY form),
+on whether prose counts, and on which files are in scope.
+`tools/check_o3_backend_parity.py` is the shape to copy: it carries no number,
+it re-derives one for the two backend files and fails when it moves.
 
 **Cumulative result (2026-07-04, pin v173, self-compiling `compiler.pas`,
 hyperfine, identical output):**
@@ -431,6 +438,45 @@ whole-body register allocation (all params/locals in regs, not just 2), caller-
 side arg passing without push/pop (regcall phase 3), and non-leaf inlining
 (slice 4) — the remaining tickets. `-O0` output stays byte-identical across all
 tiers (the sacred gate); pins are -O2-built and transparent.
+
+### Differential coverage for `-O3`, and what it does and does not cover
+
+`-O3` is the landing tier for new passes *because* nothing gates it, and the
+cost of that freedom is that a `-O3`-only miscompile has no oracle behind it.
+`tools/csmith_fuzz.py --opts 0,2,3` supplies one, and it is the strongest kind
+available here because it is **self**-differential: the same compiler builds the
+same csmith program at `-O0`, `-O2` and `-O3` and the checksums must match.
+No oracle is involved, so there is no "gcc is wrong here" conversation; the
+programs are UB-free by construction, so a divergence is not the test's fault;
+and it reaches code no human-written corpus does.
+
+**Run it when a pass lands in the free tier**, in unused seed space, and record
+the range so the next author does not re-walk it. Ranges used so far: 1-200,
+2000, 5000, 20000, 40000-40299, 50000-50099, 95000, 300100-300249,
+310100-310219, 320000-320099, 330000-330149, 700000.
+
+**Two limits, and the second one bit in practice.**
+
+- It is evidence a pass does not miscompile the kind of code csmith writes,
+  which is narrower than correctness. It does not replace the full gate on
+  promotion to `-O2`.
+- **`--opts` defaults to `0,2`, so a batch run without it never builds `-O3` at
+  all.** The aarch64 cross batch of 2026-08-30 (`--target aarch64 --iters 150
+  --seed-start 300100`, no `--opts`) was reported as *"136 ran clean across pxx
+  `-O` levels"* and had compared `-O0` against `-O2` — while the aarch64 backend
+  carried ten `-O3` gate sites, every W1 slice that was ported. A default,
+  quoted back as a result. **A per-backend `-O3` arm needs `--target <arch>
+  --opts 0,2,3` explicitly**, and the two flags are independent: neither implies
+  the other.
+
+**The general form of that second limit, which is worth more than the instance:
+when a gate moves, nothing moves the things that enumerate levels with it.**
+The same day, `EmitStaticLitHandleA64` was promoted from `OptLevel < 3` to
+`< 2` and the Makefile's qemu-aarch64 loop for it still read `for o in 0 3` —
+so the only level aarch64 actually ships was the one level never asserted, and
+`-O3` covered the promoted pass incidentally, as a superset. Nothing connects a
+gate's tier to the rows that test it. **Every `-O` gate change should ask which
+loops, flags and defaults enumerate levels, and whether they know.**
 
 ---
 
