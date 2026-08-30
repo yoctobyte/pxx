@@ -8,7 +8,7 @@ blocked-by: []
 status: done
 owner: frankA
 created: 2026-08-25
-summary: "Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25."
+summary: "DONE 72b4bd51a: ResolveDerefShape is now a superset of NodePtrElem in shapes as well as richer per shape — it gained an AN_INDEX over a non-IDENT base and an AN_BINOP pointer-arithmetic arm — so a call site can be swapped towards it safely, which is the trade that shipped a regression in 15ec54d7a. It fixed two unfiled silent wrong values on the way: `(pp + 1)^` over a ^PChar and `PRec2(raw2)^.q[1]^` both printed a raw address. NOT collapsed into one function: NodePtrElem has no external callers left, only the walk's own two fallbacks, and those branch on a False return the walk answers as tyInteger — follow-up refactor-a-collapse-nodeptrelem-into-the-deref-walk."
 ---
 
 # The two
