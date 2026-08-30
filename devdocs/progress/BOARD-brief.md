@@ -5,14 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:31 blocked:8 backlog:367 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2775 rejected:57`
+`working:3 unfinished:30 blocked:8 backlog:368 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2775 rejected:57`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `bug-p-object-value-types-standard-meaning` [P] — owner: frank-user
+- `regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload` [N] — owner: frankA
 
-## unfinished (31) — parked mid-flight; re-claim, do not duplicate
+## unfinished (30) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -44,7 +45,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
-- `regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload` [N]
 
 ## blocked (8) — has an unmet blocker; do not claim
 
@@ -63,10 +63,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [N]` regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload (unblocks 1)
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [P]` regression-test-asm-test-asm-emit-rv32
+- `[p 70] [P]` regression-test-core-test-object-reference
 - `[p 70] [P]` regression-test-core-test-opt-store-reload
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
