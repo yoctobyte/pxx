@@ -65,7 +65,7 @@ lives in git, not in a timestamp._
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (363)
+## backlog (364)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -271,6 +271,7 @@ lives in git, not in a timestamp._
 | feature-a-report-fixed-cap-headroom | A | 40 | feature | Three fixed caps in defs.inc have now been raised AFTER a user hit them — MAX_CODE 8->16 MB, MAX_STRS 8192->65536, MAX_CODE 16->32 MB — and each was found by a program failing, never by anyone looking. Nothing reports how close a compile came to any cap, so the only headroom signal the project has is an overflow. Proposal: a PXXDBG=a.caps topic printing per-cap utilisation at end of compile, so `the next one` is a number someone can read instead of an incident. Small, additive, no behaviour change. | — |
 | feature-a-second-pt-load-so-data-is-not-executable | A | 30 | feature | Give data its own PT_LOAD (R+W, no X) instead of one RWX segment | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 10 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
+| feature-a-typeinfo-integer-name-under-strict-fpc | A | 20 | feature | TypeInfo of a plain Integer rename reports `Integer`; FPC reports `LongInt`. decide-typeinfo-scalar-name-spelling settled this on 2026-08-21 -- keep ours by default, report FPC's under --strict-fpc -- and cited this slug as its Implementation. It was never filed. Measured NOT delivered: the name is `Integer` under default, --mimic-fpc and --strict-fpc alike. | — |
 | feature-a-typeref-migrate-consumers | A | 62 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
 | feature-a-wasm32-sys-intrinsics-and-ir-syscall-lowering | A | 60 | feature | The last 36 unlowered bodies in compiler.pas on wasm32: 35 sys builtins (writeELF*, writeU8/16/32/64, LoadFile) plus IR_SYSCALL (value op 54), which is the same question wearing a different hat. Blocked on the Track U decision, not on any missing mechanism. Filed so the ranker can SEE that a U item is holding a p60 lane — the edge did not exist, so prio propagation had nothing to work with and the decision sat at 40. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
@@ -1094,6 +1095,7 @@ lives in git, not in a timestamp._
 - [p 20] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
 - [p 20] [U] decide-should-writeableconst-off-be-honoured
 - [p 20] [A+S] feature-a-promoint-variant-esp-targets
+- [p 20] [A] feature-a-typeinfo-integer-name-under-strict-fpc
 - [p 20] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [A] feature-cross-frontend-interop-contract
