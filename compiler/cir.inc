@@ -44,6 +44,31 @@
   dispatchers and the C bodies call each other in both directions. }
 
 
+function IRBitStorageTk(bytes: Integer): TTypeKind;
+{ Which integer type a C bit-field's STORAGE UNIT is loaded and stored as.
+
+  C, not arithmetic -- and that is why this sits here while IRBitMask, which
+  qualifies on the same reached-only-from-C test, deliberately does not. A
+  general size-to-typekind map would be exact; this one ROUNDS, and every
+  rounding step is a C rule: a 3-byte unit loads as 4 (C11 6.7.2.1 lets the
+  implementation pick the unit, and ours is the next power of two), and
+  anything past 4 loads as 8 because a `long long` bit-field's unit does. Its
+  only input is RecFieldBitBytes, reading UFldBitBytes, which defs.inc
+  documents as "C named bit-field width" -- Pascal parses `bitpacked` as a
+  synonym for `packed` and allocates no bit-fields at all, so there is no
+  Pascal caller to lose and no Pascal meaning for the rounding to be wrong for.
+
+  UNSIGNED at every width, on purpose: the read path sign-extends by hand, so a
+  signed field of exactly the unit's width must arrive zero-extended. See the
+  note in IRLowerBitFieldRead. }
+begin
+  if bytes <= 1 then Result := tyUInt8
+  else if bytes = 2 then Result := tyUInt16
+  else if bytes <= 4 then Result := tyUInt32
+  else Result := tyUInt64;
+end;
+
+
 function IRLowerBitFieldRead(fieldNode: Integer; storageAddr: Integer; storageTk: TTypeKind): Integer;
 var recId, width, shift: Integer; fieldName: AnsiString; value, maskNode: Integer;
     fieldTk: TTypeKind; signBit: Int64; sbNode: Integer;

@@ -967,14 +967,6 @@ begin
   Result := m;
 end;
 
-function IRBitStorageTk(bytes: Integer): TTypeKind;
-begin
-  if bytes <= 1 then Result := tyUInt8
-  else if bytes = 2 then Result := tyUInt16
-  else if bytes <= 4 then Result := tyUInt32
-  else Result := tyUInt64;   { long-long bitfield: a >4-byte storage unit loads 8 bytes }
-end;
-
 { ===== PROMOTABLE INT lowering (feature-a-promotable-int stage 3) =====
 
   A promotable-int slot is two native machine words: the storage tag, then the

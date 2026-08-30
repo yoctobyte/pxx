@@ -711,3 +711,79 @@ gate was launched as `tools/gate.sh quick > log 2>&1; tail -12 log`, so the
 Read the log's `gate: GREEN|RED` line; do not trust a wrapper's status. Launch it
 as `tools/gate.sh quick > log 2>&1` alone, or capture `rc=$?` before appending
 anything.
+
+## SLICE 1c — the candidate a COMMENT had hidden. frankC, 2026-08-30
+
+The census tool was counting **mentions, not calls**, and in Pascal the prose
+lives in the same files as the code. Fixed in `fe78e0cb9`. It failed in both
+directions, and only one of them is visible:
+
+- It **invented** callers — `cir.inc`'s own charter prose about `IRBitMask`
+  scored as two call sites under `<top>`. Noisy; someone would have caught it.
+- It **suppressed** a candidate — `cparser.inc:12547` is a *comment* reading
+  "A long-long bitfield unit is LOADED/STORED as 8 bytes (`IRBitStorageTk`)".
+  That mention is outside `ir.inc`/`cir.inc`, so `IRBitStorageTk` failed the
+  reached-only-from-C test and **never entered the candidate list at all**.
+
+**A sentence explaining the routine disqualified it.** Two censuses had already
+run over this file and neither could see it — there was no wrong row to be
+suspicious of, only a routine that silently was not there. That asymmetry is
+why the false-negative direction is the expensive one, and it is the same shape
+as a skip counted as a verdict.
+
+A third bug was mine: `is_forward` tested `line.endswith('forward;')`, and the
+forward slice 1b added wraps across two lines, so the tool read **my own
+forward as a definition** and attributed the following mentions to it. A tool
+that does not model the language it measures.
+
+### `IRBitStorageTk` — MOVED, at zero forward cost
+
+6 lines, `ir.inc` → `cir.inc`. **Both call sites are already in `cir.inc`**, so
+`ir.inc` loses the routine and gains nothing — cheaper than slice 1b, which
+cost the sixth forward.
+
+It moves where `IRBitMask` stayed, and the pair is the charter's second half
+working: both qualify on reached-only-from-C, only this one **is** C. A general
+size→typekind map would be exact; this one **rounds**, and every rounding step
+is a C rule — 3 bytes loads as 4 (C11 6.7.2.1 leaves the storage unit to the
+implementation and ours is the next power of two), anything past 4 loads as 8
+because a `long long` bit-field's unit does. Its only input is
+`RecFieldBitBytes` over `UFldBitBytes`, which `defs.inc:4309` documents as *"C
+named bit-field width in bits"*. Pascal parses `bitpacked` as a synonym for
+`packed` (`pasparser_generic.inc:512`) and allocates no bit-fields — no Pascal
+caller to lose, and no Pascal meaning for the rounding to be wrong for.
+
+### The gate, and the first attempt was wrong
+
+Same structural blindness as slices 1 and 1b: `make compiler/pascal26` compiles
+*Pascal*, `CProgramMode` is never set, this routine is never called — it would
+go green with the body deleted. So: the eight C bitfield tests through both arms.
+
+**The first run reported 0/8 identical, every binary ~7 KB larger, and it was
+not the move.** `tools/sync.sh` had rebased between the two builds, landing
+`df98fea47` (explicit data-section alignment) and `be4caba1a`. I compared two
+different upstreams and attributed the delta to six lines — the provenance
+failure "verify against a known sha" exists for, arriving as a *plausible*
+result rather than an error.
+
+Redone as one script that stashes → builds → measures → pops → builds →
+measures at **one** HEAD, writing both arms to **one fixed output path** so the
+output filename could not be a variable either:
+
+```
+pre  62cfb924053f (stashed)          post 6e112243efb2 (applied)
+8/8 byte-identical, exit codes and outputs identical, both arms self-host in 1 round
+BITSTORAGE-DIFFERENTIAL-COMPLETE compared=8 identical=8
+```
+
+That closing line is a **positive token the subject must emit**, not a status
+the harness interprets (frankwasm's repair) — a status can be produced by
+something other than the subject; a token the subject prints cannot.
+`forwardlint` clean (218,351 lines).
+
+### Where the census stands
+
+**Dry.** After the move the only remaining "callers all already C-only" row is
+`IRBitMask`, which is the deliberate non-move. There is no further driven
+extraction available without a decision about the arms, and slice 2 stays ruled
+off pending that.
