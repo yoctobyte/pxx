@@ -240,3 +240,41 @@ coverage at that tier, where it had none. It does not close arm32 / riscv32 /
 i386 — those are ILP32 and belong to the D3 class, a different evidentiary
 question — and it does not make the tier proven; 129 dry programs narrow the
 space, they do not clear it.
+
+### The residual is CLOSED: both unprobed slices fire on csmith code
+
+Two probes written, measured with a **scratch** build (`./compiler/pascal26
+compiler/compiler.pas $SCRATCH/p26-probe`) so the x86-64 batch running against
+`compiler/pascal26` never saw its binary move. On csmith seed 330502,
+`--target=aarch64`:
+
+| `-O` | cmp site reached | **folded** | widen **fused** |
+| ---: | ---: | ---: | ---: |
+| 0 | 2867 | **0** | 0 |
+| 2 | 2891 | **0** | 0 |
+| 3 | 2903 | **485** | **6** |
+
+**Both slices this session landed fire on csmith code**, so the clean
+150-program batch above is coverage for them and not merely for the family.
+Compare fold (slices 5+7, which collapse into one arm on aarch64): 485 firings,
+16.7% of the sites it sees. Widen fusion (slice 10's aarch64 twin): 6.
+
+**The probes are built so a zero cannot be ambiguous, which is the whole lesson
+of the four false rows above.** Each prints on *every* call with
+`folded=`/`fused=` TRUE or FALSE, so the ~2900 `FALSE` rows are a standing
+positive control: the instrument is demonstrably able to print both values, and
+a total of 0 would mean *the site was never reached* rather than *no probe
+exists*. The `-O0`/`-O2` rows are then the gate control, and they are exactly 0.
+`a.reload` could never have produced a table like this — it has no call site, so
+its only possible output is the one that looks like a firing count of zero.
+
+**Parked as a patch** (`git diff -- compiler/ir_codegen_aarch64.inc > …patch`,
+then `git checkout --`), not a file copy, and lands once the batch releases the
+compiler — the per-fix loop needs `make compiler/pascal26`, and running that
+mid-batch would swap the binary underneath 300 programs and produce a result
+measured against no particular compiler, with nothing on disk to show it.
+
+**Noted, not filed** (coordinator's call): the separator that sorts a real probe
+from the four kinds of non-probe is one command —
+`grep -rc "PxxDbgEnabled('<tag>')" compiler/` plus which file the site is in.
+Running it over every `PXXDBG` tag in the tree is cheap and nobody has.
