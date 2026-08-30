@@ -6448,7 +6448,14 @@ test-core: $(COMPILER)
 	# line is the assertion that matters; the five before it are the operator.
 	# Every value here matches gcc on the same file, and all six differ pre-fix.
 	./$(COMPILER) test/chas_include.c $(TESTTMP)/chas_include26
-	tools/expect_same.sh chas_include26 "$$($(TESTTMP)/chas_include26)" "$$(printf 'ifdef 1\ndefined 1\nstdio 1\nbogus 0\nrel 1\npdfgen little')"
+	tools/expect_same.sh chas_include26 "$$($(TESTTMP)/chas_include26)" "$$(printf 'ifdef 1\ndefined 1\nstdio 1\nbogus 0\nrel 1\nmacro 1 1 0 1\npdfgen little')"
+	# The one row where we diverge from gcc on purpose, in its own file so the
+	# one above stays gcc-compilable for tools/gcc_diff_probe.sh. gcc REJECTS a
+	# non-header-name operand; we answer 0. Asserted, not merely allowed:
+	# "answers 0", "errors" and "loops forever" are indistinguishable from a
+	# test that never runs it, and the operand goes through the macro expander.
+	./$(COMPILER) test/chas_include_lax.c $(TESTTMP)/chas_include_lax26
+	tools/expect_same.sh chas_include_lax26 "$$($(TESTTMP)/chas_include_lax26)" "$$(printf 'lax 0 0')"
 	# A `static` DEFINED in a header reached by `uses`. The header walk dropped
 	# the body, marked it external and synthesised a soname from the header's own
 	# stem, so calling it produced a DT_NEEDED on a lib<header>.so that cannot

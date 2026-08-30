@@ -83,12 +83,46 @@ static const int have_rel = 0;
 #endif
 #endif
 
+/* 5. a MACRO operand is expanded first, then read as a header-name (C23 6.10.1,
+      same paragraph as the rule that keeps the operator itself out of ordinary
+      expansion). Before this, all four rows below answered 0 while gcc answered
+      1/1/0/1 -- silently, since a skipped #include just leaves things undefined.
+
+      THIS FILE STAYS gcc-COMPILABLE so it can be run through
+      tools/gcc_diff_probe.sh -- which is why the one row where we deliberately
+      diverge from gcc lives in chas_include_lax.c instead. Measured: gcc gives
+      exactly the numbers asserted here. */
+#define CHAS_ANGLE_MACRO   <stdio.h>
+#define CHAS_QUOTE_MACRO   "chas_include_rel.h"
+#define CHAS_MISSING_MACRO <no_such_header_xyz_pxx.h>
+#if __has_include(CHAS_ANGLE_MACRO)
+static const int macro_angle = 1;
+#else
+static const int macro_angle = 0;
+#endif
+#if __has_include(CHAS_QUOTE_MACRO)
+static const int macro_quote = 1;
+#else
+static const int macro_quote = 0;
+#endif
+#if __has_include(CHAS_MISSING_MACRO)
+static const int macro_missing = 1;
+#else
+static const int macro_missing = 0;
+#endif
+#if __has_include(CHAS_ANGLE_MACRO) && !__has_include(CHAS_MISSING_MACRO)
+static const int macro_combined = 1;
+#else
+static const int macro_combined = 0;
+#endif
 int main(void) {
   printf("ifdef %d\n", seen_ifdef);
   printf("defined %d\n", seen_defined);
   printf("stdio %d\n", have_stdio);
   printf("bogus %d\n", have_bogus);
   printf("rel %d\n", have_rel);
+  printf("macro %d %d %d %d\n", macro_angle, macro_quote, macro_missing,
+         macro_combined);
 #if defined(__LITTLE_ENDIAN__)
   printf("pdfgen little\n");
 #elif defined(__BIG_ENDIAN__)

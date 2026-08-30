@@ -605,11 +605,42 @@ procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString); forward
   rule of its own). A probe with a search of its own would answer a question
   nobody asked and drift the moment either search changed.
 
-  Not handled: a macro-expanded operand, `__has_include(HEADER)`. gcc supports
-  it; nothing in our corpora writes it. It answers 0, which is the same answer
-  the whole operator gave before this existed. }
+  A MACRO operand, `__has_include(HDR)`, is handled too, and it is the standard's
+  own rule rather than a bonus: when the operand does not already look like a
+  header-name, it is macro-expanded FIRST and the result re-read as one. The two
+  facts sit oddly together only until you see which way each points -- the
+  operator must not be reached BY expansion (a `<a.h>` operand cannot survive
+  ordinary macro rules), and its operand must be expanded WHEN it is not already
+  a header-name. Same paragraph of C23 6.10.1. }
+function CPHeaderNameOf(const s: AnsiString): AnsiString;
+{ `<foo/bar.h>` or `"foo.h"` -> `foo/bar.h`; anything else -> ''.
+
+  One reader for both the literal operand and the macro-expanded one, so the two
+  cannot drift: a header-name that works spelled out is the same header-name when
+  a macro produced it, and that identity is the whole content of the fix. An
+  UNTERMINATED operand answers '' rather than everything-to-the-end -- a macro
+  expanding to `<stdio.h` is not a header-name, and guessing one would turn a
+  typo into a silent wrong include. }
+var i, n: Integer; closer: Char;
+begin
+  Result := '';
+  i := 1; n := Length(s);
+  while (i <= n) and ((s[i] = ' ') or (s[i] = #9)) do Inc(i);
+  if i > n then Exit;
+  if s[i] = '<' then closer := '>'
+  else if s[i] = '"' then closer := '"'
+  else Exit;
+  Inc(i);
+  while (i <= n) and (s[i] <> closer) do
+  begin
+    AppendChar(Result, s[i]);
+    Inc(i);
+  end;
+  if i > n then Result := '';   { no closer: not a header-name }
+end;
+
 function CPExprHasInclude: Int64;
-var a, closer: Integer; nm, savedPath: AnsiString;
+var a, closer, opEnd: Integer; nm, savedPath, raw, expanded: AnsiString;
 begin
   Result := 0;
   CPSkipExprSpace;
@@ -617,27 +648,49 @@ begin
   Inc(CPExprPos);
   CPSkipExprSpace;
   if CPExprPos > CPExprEnd then Exit;
-  if CPExprText[CPExprPos] = '<' then closer := Ord('>')
-  else if CPExprText[CPExprPos] = '"' then closer := Ord('"')
+  nm := '';
+  if (CPExprText[CPExprPos] = '<') or (CPExprText[CPExprPos] = '"') then
+  begin
+    if CPExprText[CPExprPos] = '<' then closer := Ord('>') else closer := Ord('"');
+    Inc(CPExprPos);
+    a := CPExprPos;
+    while (CPExprPos <= CPExprEnd) and (Ord(CPExprText[CPExprPos]) <> closer) do
+      Inc(CPExprPos);
+    while a < CPExprPos do
+    begin
+      AppendChar(nm, CPExprText[a]);
+      Inc(a);
+    end;
+    if CPExprPos <= CPExprEnd then Inc(CPExprPos);   { the > or " }
+  end
   else
   begin
-    { unrecognised operand — consume to the closing paren so the rest of the
-      expression still parses, and answer 0 }
+    { Not a header-name yet, so it is a macro. Take the operand text up to the
+      closing paren, expand it, and read the result as a header-name.
+
+      Expanded at ARG level 0, which is free here by construction: the arg
+      buffers are indexed by the expander's own recursion level, and that level
+      is 1 or more for every call the normal path makes (CPExpandRangeForLevel
+      passes level+1). Nothing else can be using slot 0 while an `#if` operand
+      is being read.
+
+      Anything that does not expand to a header-name still answers 0 -- no
+      error, no loop -- which is the behaviour every non-macro nonsense operand
+      had before, kept deliberately: `#if __has_include(x)` is a question, and
+      the honest answer to a malformed one is "no". }
+    a := CPExprPos;
     while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] <> ')') do Inc(CPExprPos);
-    if CPExprPos <= CPExprEnd then Inc(CPExprPos);
-    Exit;
+    opEnd := CPExprPos - 1;
+    if opEnd >= a then
+    begin
+      SetLength(raw, 0);
+      CPSetExpandedArgLength(0, 0);
+      CPExpandRangeForArgLevel(0, CPExprText, a, opEnd);
+      SetLength(expanded, 0);
+      CPAppendExpandedArgToDst(0, expanded);
+      nm := CPHeaderNameOf(expanded);
+    end;
   end;
-  Inc(CPExprPos);
-  a := CPExprPos;
-  while (CPExprPos <= CPExprEnd) and (Ord(CPExprText[CPExprPos]) <> closer) do
-    Inc(CPExprPos);
-  nm := '';
-  while a < CPExprPos do
-  begin
-    AppendChar(nm, CPExprText[a]);
-    Inc(a);
-  end;
-  if CPExprPos <= CPExprEnd then Inc(CPExprPos);   { the > or " }
   CPSkipExprSpace;
   if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = ')') then Inc(CPExprPos);
   if Length(nm) = 0 then Exit;

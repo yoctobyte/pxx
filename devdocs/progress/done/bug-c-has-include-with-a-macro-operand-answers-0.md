@@ -4,8 +4,8 @@ track: C
 type: bug
 blocked-by: []
 summary: "`__has_include(HDR)` where HDR is a macro expanding to `<stdio.h>` answers 0 under pxx and 1 under gcc. Same silent shape as the pdfgen endian bug it was found beside: no error, no warning, the guarded #include is simply skipped and whatever the header would have defined stays undefined. The literal forms `__has_include(<x>)` and `__has_include(\"x\")` are correct; only a macro-expanded operand is affected."
-status: new
-owner: ""
+status: done
+owner: frankC
 ---
 
 # `__has_include(MACRO)` answers 0 where gcc answers 1
@@ -76,3 +76,71 @@ of `CPExprAtom`).
   against gcc on the same file, and filed rather than folded in: the fix is a
   different mechanism (macro expansion of the operand) from the one that
   ticket needed, and it deserves its own assertions.
+
+## Fixed. frankC, 2026-08-30
+
+`CPExprHasInclude` now does what C23 6.10.1 describes: when the operand is not
+*already* a header-name, macro-expand it and re-read the result as one.
+
+| form | gcc | pinned `53800fbeb0b6` | now |
+| --- | --- | --- | --- |
+| `__has_include(HDR)`, `HDR` = `<stdio.h>` | 1 | **0** | 1 |
+| `__has_include(QHDR)`, `QHDR` = `"rel.h"` | 1 | **0** | 1 |
+| `__has_include(NOPE)`, missing header | 0 | 0 | 0 |
+| `__has_include(HDR) && !__has_include(NOPE)` | 1 | **0** | 1 |
+| the five literal forms | — | correct | unchanged |
+
+`test/chas_include.c` run through pxx and through gcc is **byte-identical, all
+seven lines** — the file was kept gcc-compilable specifically so it can be an
+oracle target (`tools/gcc_diff_probe.sh`).
+
+### The two halves of the rule point opposite ways, and both are in the same paragraph
+
+The operator must **not** be reached *by* expansion — `<endian.h>` is not a token
+sequence ordinary macro rules survive — and its operand **must** be expanded
+*when it is not already a header-name*. The function's comment used to record the
+first as the reason the second was impossible. It is the reason the second has to
+be done by hand, which is not the same thing.
+
+### One reader for both operand shapes
+
+`CPHeaderNameOf` parses `<x>` / `"x"` out of a string, and both the literal path
+and the expanded path go through it. A header-name that works spelled out is the
+same header-name when a macro produced it, and keeping that in one function is
+the entire content of the fix; two readers would have drifted on the first edge
+case (leading space, missing closer).
+
+Expansion runs at **arg level 0**, which is free by construction rather than by
+luck: the arg buffers are indexed by the expander's own recursion level, and
+that level is ≥1 for every call the normal path makes
+(`CPExpandRangeForLevel` passes `level + 1`).
+
+### A divergence found by asking the oracle, and kept
+
+gcc **rejects** an operand that does not expand to a header-name —
+`error: operator '__has_include' requires a header-name`. This ticket's own
+"what a fix must assert" said such an operand should *answer 0 rather than
+erroring*; that was written before anyone asked gcc. Measured, gcc errors.
+
+Kept lax, and it is the compat table's *"we accept a form the reference
+rejects"* row: **no program gcc accepts can observe the difference**, because
+gcc refuses to compile every program containing one. Not a defect, and not
+error-reporting parity worth chasing.
+
+It is **asserted** rather than merely allowed, in `test/chas_include_lax.c`:
+"answers 0", "errors" and "loops forever" are indistinguishable from a test that
+never runs it, and the operand now goes through the macro expander, which is
+exactly where a loop would live. Its second row is an operand that *starts* like
+a header-name and never closes (`<stdio.h`), which is the case where a sloppy
+reader would run to the end of the buffer and call it a name.
+
+Split into its own file so `chas_include.c` stays gcc-compilable — a test that
+can be diffed against the oracle is worth more than one assertion's worth of
+tidiness.
+
+### Gate
+
+`make compiler/pascal26` — converged, 1 round, `6c337931e11c`. Six-row gcc
+differential agrees. `chas_include` (7 lines) and `chas_include_lax` green;
+malformed operands terminate, no loop, no error.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
