@@ -12349,6 +12349,28 @@ test-core: $(COMPILER)
 	./$(COMPILER) $(PXXFLAGS) --threadsafe $(COMPILER_SRC) $(TESTTMP)/pascal26-threadsafe-self.$$$$.tmp && mv -f $(TESTTMP)/pascal26-threadsafe-self.$$$$.tmp $(TESTTMP)/pascal26-threadsafe-self
 	$(TESTTMP)/pascal26-threadsafe-self $(PXXFLAGS) --threadsafe $(COMPILER_SRC) $(TESTTMP)/pascal26-threadsafe-next.$$$$.tmp && mv -f $(TESTTMP)/pascal26-threadsafe-next.$$$$.tmp $(TESTTMP)/pascal26-threadsafe-next
 	cmp $(TESTTMP)/pascal26-threadsafe-self $(TESTTMP)/pascal26-threadsafe-next
+	# LIFETIME of a by-value managed-record TEMP created inside a branch.
+	# d27b4a28a moved the finalize of such a temp out of the merge block into
+	# the arm that created it, and made the epilogue skip an all-zero record's
+	# heap lock -- a ~23x win whose failure modes are all silent: finalize twice
+	# is a double release, finalize never is a leak, and skipping a record that
+	# DOES own something is a leak that looks like a speedup. Nothing in the
+	# suite covered any of it.
+	#
+	# Four shapes in one program: the branch never taken (the case the fix is
+	# about), always taken (the temp really is created and must go exactly
+	# once), an `Exit` out of the arm (which skips the sunk flush, so the
+	# epilogue is the backstop), and both arms minting one.
+	#
+	# The ANSWER is the assertion, not a time -- the pinned binary that predates
+	# the fix prints the same three lines, which is the point: this catches a
+	# lifetime regression, not a performance one. A leak shows up as a crash or
+	# a wrong sum here; the RSS half of the measurement (flat 392 KB across a
+	# 10x iteration count, against a control that goes 3.4 -> 35 MB) lives in
+	# the ticket, since RSS is not a thing a diff can assert.
+	# bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized
+	./$(COMPILER) $(PXXFLAGS) -O2 test/test_managed_temp_branch_lifetime.pas $(TESTTMP)/test_managed_temp_branch_lifetime26
+	$(TESTTMP)/test_managed_temp_branch_lifetime26 | diff -u test/test_managed_temp_branch_lifetime.expected -
 	@echo "=== progress board check (non-fatal) ==="
 	@./tools/progress.sh check || echo "WARNING: progress board stale or invalid — run 'tools/progress.sh board-md' (non-fatal)"
 
