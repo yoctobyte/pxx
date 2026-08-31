@@ -175,3 +175,27 @@ for every caller passing 0.
 
 ## Log
 - 2026-08-31 — resolved, commit f79fb6578.
+
+### Follow-up 2026-08-31 — the "every caller is a socket" claim, measured
+
+The resolution above justified the `write(2)` → `sendto(2)` swap with *"safe
+because every caller of PalSend is a socket by contract."* That was reasoning
+from an enumeration, not a measurement, and it is the shape frankwasm's rule
+warns about — an exoneration is only evidence if you check the ingredient that
+would falsify it. The ingredient here is a caller passing a **non-socket** fd.
+
+Measured on pin v398 (`992065f21f33`), against a plain file descriptor:
+
+    PalWrite to file  -> 5      (bytes land; this is what PalSend used to do)
+    PalSend  to file  -> -88    (ENOTSOCK)
+
+So the exposure is real but **bounded and loud**: a hypothetical tenth caller
+that passes a plain descriptor gets a negative return — the same signal every
+one of the nine existing callers already tests — rather than a silent success or
+a corrupted write. It cannot be mistaken for a short write, and it cannot pass
+unnoticed.
+
+Re-checked the two call sites whose fd is least obviously a socket:
+`net.pas:287` takes a distinct `TNetSocket` type, and `asyncnet.pas:181` is
+`TcpSend` on a plain `Integer` — contract-typed rather than type-enforced, which
+is why the measurement above is the useful record for whoever adds the tenth.
