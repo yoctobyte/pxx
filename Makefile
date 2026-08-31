@@ -11770,8 +11770,9 @@ test-core: $(COMPILER)
 	# a backtrace naming a function the program never calls. The parser now
 	# lifts each such alloca into a temporary evaluated before the call.
 	# `still here:` is the row that catches a fix which merely stops the crash
-	# by handing back memory the next call overwrites. x86-64 only by design:
-	# IR_ALLOCA is not ported to the other backends, which refuse it outright.
+	# by handing back memory the next call overwrites. x86-64 AND aarch64: the
+	# aarch64 arm is below, and the other three backends refuse IR_ALLOCA
+	# outright (feature-a-port-alloca-to-i386-arm32-and-riscv32).
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_alloca_in_call_argument.c $(TESTTMP)/c_alloca_arg26
 	tools/expect_same.sh c_alloca_arg26 "$$($(TESTTMP)/c_alloca_arg26)" "$$(printf 'dup: [hello]\n[hello]\ntwo: 1\nsized: 7\nplain: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nstill here: hello')"
@@ -11786,6 +11787,26 @@ test-core: $(COMPILER)
 	  tools/expect_same.sh aarch64/c_alloca_arg_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_alloca_arg_a64)" "$$(printf 'dup: [hello]\n[hello]\ntwo: 1\nsized: 7\nplain: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nstill here: hello')" || exit 1; \
 	else \
 	  echo "=== c_alloca_in_call_argument: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
+	# The OTHER alloca defect, and the one the hoist above could never have
+	# reached: a value already on the EXPRESSION STACK when the alloca fires.
+	# `long b = a + (long)(alloca(32) != 0)` has no call in it, so nothing
+	# hoists; `a` was pushed, the alloca lowered the stack pointer under it, and
+	# the pop read the alloca'd hole -- 1 instead of 101, on x86-64 and aarch64
+	# alike. Both backends now carve the hole at the bottom of the fixed frame
+	# and relocate the live region down to make room.
+	# Rows 1-8 were already correct and are the CONTROLS: a fix that breaks one
+	# of them has traded one defect for another. Row 6 (three live allocations
+	# in a loop) and row 8 (two in one declaration) are the rows that catch a
+	# fix which hands back memory the next alloca overwrites.
+	# bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer
+	./$(COMPILER) test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr26
+	tools/expect_same.sh c_alloca_expr26 "$$($(TESTTMP)/c_alloca_expr26)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr_a64 >/dev/null || { echo "c_alloca_expression_stack aarch64 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh aarch64/c_alloca_expr_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_alloca_expr_a64)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')" || exit 1; \
+	else \
+	  echo "=== c_alloca_expression_stack: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
 	# `extern T name[];` in a header + `T name[] = {...};` in the .c -- the
 	# ordinary way C shares a table. The declarator is an INCOMPLETE array type,
