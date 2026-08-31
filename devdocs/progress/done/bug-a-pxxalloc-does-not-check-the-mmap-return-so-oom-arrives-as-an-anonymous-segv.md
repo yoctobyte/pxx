@@ -189,3 +189,6 @@ which already carries the open obligation: whoever lands the append fix re-runs
 the 32-bit self-build and reports the arena count. This ticket never claimed
 that half. What changes is that if the count does NOT drop, the next person sees
 a message instead of a core file.
+
+## Log
+- 2026-09-01 — resolved, commit 4419e1aa7.
