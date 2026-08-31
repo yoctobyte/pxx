@@ -1291,6 +1291,35 @@ begin
   Patch32(donePos, $0A000000 or ((((CodeLen - donePos) div 4) - 2) and $00ffffff));
 end;
 
+{ `s := s + x` appended into s's own block rather than built fresh from both
+  halves. Shared recogniser (IRIsSelfStrAppend, forwarded in compiler.pas), and
+  the right operand's unpacking is in the runtime, so this is an ordinary
+  2-argument call: r0 = address of s's slot, r1 = the handle or character code.
+  r9 is the scratch EmitLoadImmArm32 uses and does not touch r1. }
+procedure EmitAnsiStrAppendToSymArm32(symIdx, rhs: Integer);
+var procIdx: Integer;
+begin
+  IREmitNodeArm32(rhs);                     { r0 = handle, or char code }
+  EmitI32($E1A01000);                       { mov r1, r0 (arg1) }
+  if Syms[symIdx].Kind = skGlobal then
+  begin
+    EmitI32($E59F0000);                     { ldr r0, [pc] }
+    EmitI32($EA000000);                     { b .+8 }
+    EmitGlobRef(Syms[symIdx].Offset);
+  end
+  else
+  begin
+    EmitLoadImmArm32(9, Syms[symIdx].Offset);
+    EmitI32($E08B0009);                     { add r0, fp, r9 (arg0 = &slot) }
+  end;
+  if IntToTypeKind(IRTk[rhs]) = tyChar then
+    procIdx := FindProc('PXXStrAppendChar')
+  else
+    procIdx := FindProc('PXXStrAppendStr');
+  if procIdx < 0 then Error('compiler error: PXXStrAppendStr/Char not found in builtin unit');
+  EmitCallProc(procIdx);
+end;
+
 procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
@@ -1475,6 +1504,16 @@ begin
         if Syms[si].TypeKind = tyAnsiString then
         begin
           valNode := IRB[node];
+          { `s := s + x`: append in place. The helper does the whole slot update,
+            so none of the retain/release below runs. tyString is recognised too
+            but stays on the concat path -- it has no runtime wrapper yet. }
+          if IRIsSelfStrAppend(si, valNode) and
+             ((IntToTypeKind(IRTk[IRB[valNode]]) = tyAnsiString) or
+              (IntToTypeKind(IRTk[IRB[valNode]]) = tyChar)) then
+          begin
+            EmitAnsiStrAppendToSymArm32(si, IRB[valNode]);
+            Exit;
+          end;
           if (IRKind[valNode] = IR_CALL) and (IRA[valNode] = -Ord(tkArgStr)) then
           begin
             argNode := IRB[valNode];

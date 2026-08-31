@@ -67,6 +67,11 @@ begin
   dummyNames[1] := 'srcB';    dummyTypes[1] := tyPointer;
   dummyNames[2] := 'lenB';    dummyTypes[2] := tyNativeInt;
   i := RegisterProc('PXXStrAppend', False, tyPointer, 3, dummyNames, dummyTypes);
+  dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'srcH';    dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXStrAppendStr', False, tyPointer, 2, dummyNames, dummyTypes);
+  dummyNames[1] := 'chCode';  dummyTypes[1] := tyNativeInt;
+  i := RegisterProc('PXXStrAppendChar', False, tyPointer, 2, dummyNames, dummyTypes);
   dummyNames[0] := 'dest';    dummyTypes[0] := tyPointer;
   dummyNames[1] := 'right';   dummyTypes[1] := tyPointer;
   i := RegisterProc('PXXVarStrAppend', True, tyInt64, 2, dummyNames, dummyTypes);
@@ -915,6 +920,11 @@ begin
   dummyNames[1] := 'srcB';    dummyTypes[1] := tyPointer;
   dummyNames[2] := 'lenB';    dummyTypes[2] := tyNativeInt;
   i := RegisterProc('PXXStrAppend', False, tyPointer, 3, dummyNames, dummyTypes);
+  dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'srcH';    dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXStrAppendStr', False, tyPointer, 2, dummyNames, dummyTypes);
+  dummyNames[1] := 'chCode';  dummyTypes[1] := tyNativeInt;
+  i := RegisterProc('PXXStrAppendChar', False, tyPointer, 2, dummyNames, dummyTypes);
 
   dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrIncRef', False, tyPointer, 1, dummyNames, dummyTypes);

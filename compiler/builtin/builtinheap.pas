@@ -154,6 +154,14 @@ function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: Nativ
   silent-wrong-value bug (`t := s + 'x'` with a refcount-1 s would grow s); the
   slot is what removes the guess. }
 procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
+{ The two shapes a backend actually needs for `s := s + x`, so that the work of
+  unpacking the right operand lives HERE, in Pascal, once -- rather than being
+  hand-encoded into each instruction set. x86-64 open-codes that unpacking in
+  EmitAnsiStrAppendToSym and predates these; every other backend calls these.
+  Both are plain 2-argument registered procedures, which is the whole point:
+  emitting a call is the one thing every backend already does. }
+procedure PXXStrAppendStr(strSlot: Pointer; srcH: Pointer);
+procedure PXXStrAppendChar(strSlot: Pointer; chCode: NativeInt);
 { Word-at-a-time forward block copy; answers $80 if any byte copied had its high
   bit set (the one bit PXXStrMeta reads), else 0. Word loop only when both ends
   are machine-word aligned — ARM32 faults otherwise. }
@@ -1983,6 +1991,29 @@ begin
   newH := Pointer(d);
   PWord(strSlot)^ := Int64(newH);
   PXXStrDecRef(Pointer(h));
+end;
+
+{ Append another managed string. The length is in the source's own header, so
+  the caller only has to produce the handle. A nil or empty source is a no-op,
+  which is what makes `s := s + t` safe for an unset t without the backend
+  emitting a branch for it. }
+procedure PXXStrAppendStr(strSlot: Pointer; srcH: Pointer);
+var len: Int64;
+begin
+  if srcH = nil then Exit;
+  len := PWord(Int64(srcH) - 8)^;
+  if len <= 0 then Exit;
+  PXXStrAppend(strSlot, srcH, len);
+end;
+
+{ Append one character, passed by CODE rather than by address: a backend has the
+  char in a register and would otherwise have to spill it somewhere addressable
+  to hand over a pointer. The byte to copy is this routine's own local. }
+procedure PXXStrAppendChar(strSlot: Pointer; chCode: NativeInt);
+var b: Byte;
+begin
+  b := Byte(chCode and 255);
+  PXXStrAppend(strSlot, @b, 1);
 end;
 
 { PChar/PAnsiChar of a managed string: the handle is already the NUL-terminated
@@ -4208,8 +4239,52 @@ begin
     Exit;
   end;
 
-  newBase := PXXAlloc(newLen + PXX_HDR_SIZE + 1, 8);
+  { IN PLACE, on exactly the terms PXXStrAppend uses: sole owner, a block THIS
+    code allocated with spare capacity (so the allocator's size word means what
+    we think it means), and that capacity is enough. Both guards are load-bearing
+    and neither is redundant -- a static literal fails the refcount test on
+    PXX_STATIC_RC_FLOOR and the flag test on not being APPENDABLE.
+
+    Without this, `SetLength(s, Length(s) + 1)` reallocated and copied the WHOLE
+    string on every call, which is what AppendChar in lexer.inc does per
+    character on the self-hosted build. That made the compiler's own string
+    building O(n^2) on every backend that routes here -- i.e. every backend
+    except x86-64, which has an inline resize. The 32-bit hosted compiler wanted
+    4.4 GB and 13 arenas of 256 MiB to build compiler.pas and died at ENOMEM.
+    bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
+
+    The meta ends up EXACTLY as the realloc path below leaves it -- LEGACY plus
+    APPENDABLE, both ASCII bits clear, i.e. "unknown". That is deliberate rather
+    than lazy: on a SHRINK a known-non-ASCII string can become all-ASCII, so
+    carrying the old answer forward would be wrong in a way no test would catch
+    quickly. Unknown is the state the old code already produced. }
+  if oldData <> nil then
+  begin
+    oldLen := PWord(Int64(oldData) - 8)^;
+    if (PWord(Int64(oldData) - 16)^ <= 1) and
+       ((PXXHdrMeta(oldData) and PXX_FLAG_APPENDABLE) <> 0) and
+       (PXXStrAllocSize(oldData) >= newLen + PXX_HDR_SIZE + 1) then
+    begin
+      if newLen > oldLen then
+        PXXMemZero(Pointer(Int64(oldData) + oldLen), newLen - oldLen);
+      PWord(Int64(oldData) - 8)^ := newLen;
+      PByte(Int64(oldData) + newLen)^ := 0;
+      PWord(Int64(oldData) - PXX_HDR_SIZE + PXX_HDR_META)^ :=
+        PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
+      Exit;
+    end;
+  end;
+
+  { GROW GEOMETRICALLY, but only when this is an existing string getting BIGGER
+    -- the append-loop signature. A first SetLength (oldData = nil) and a shrink
+    allocate exactly, so a one-shot `SetLength(buf, FileSize)` does not quietly
+    ask for twice the file. }
+  if (oldData <> nil) and (newLen > PWord(Int64(oldData) - 8)^) then
+    newBase := PXXAlloc((newLen + PXX_HDR_SIZE + 1) * 2, 8)
+  else
+    newBase := PXXAlloc(newLen + PXX_HDR_SIZE + 1, 8);
   PXXHdrInit(Int64(newBase));
+  PWord(Int64(newBase) + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
   PWord(Int64(newBase) + PXX_HDR_RC)^ := 1;        { refcount }
   PWord(Int64(newBase) + PXX_HDR_LEN)^ := newLen;  { length }
   newData := Pointer(Int64(newBase) + PXX_HDR_SIZE);

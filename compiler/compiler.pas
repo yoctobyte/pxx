@@ -201,6 +201,17 @@ function IRTopLevelStmt(k: Integer): Boolean; forward;
   copy of "which comparisons are safe to fold" is how the string arms get
   quietly included on one target and not another. }
 function CmpFusible(node: Integer): Boolean; forward;
+{ "is this store the accumulation shape `s := s + x`" — the ONE recogniser for
+  the in-place append, body in ir_codegen.inc. Forwarded here for the same
+  reason as the four above, and it is the reason stated in the sharpest form
+  yet: this predicate and its emitter lived in ir_codegen.inc and NOWHERE else,
+  so `s := s + x` was O(n) on x86-64 and O(n^2) on every other backend --
+  identical 19780 allocations on i386, arm32, aarch64 and riscv32 where x86-64
+  needs 10 (bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-
+  backend-is-quadratic). The cross backends are included BEFORE ir_codegen.inc;
+  a second hand-rolled copy of "which stores may append in place" is how the
+  guards get quietly weakened on one target and not another. }
+function IRIsSelfStrAppend(symIdx, valueNode: Integer): Boolean; forward;
 {$ifndef PXX_NO_AARCH64}{$include ir_codegen_aarch64.inc}{$endif}
 {$ifndef PXX_NO_I386}{$include ir_codegen386.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include ir_codegen_arm32.inc}{$endif}

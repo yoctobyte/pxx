@@ -1355,6 +1355,36 @@ begin
   EmitB($B9); EmitI32(cap);               { mov ecx, cap }
 end;
 
+{ `s := s + x` appended into s's own block instead of built fresh from both
+  halves — the difference between an append loop being O(n) and O(n^2). The
+  recogniser IRIsSelfStrAppend is shared (forwarded in compiler.pas); the work
+  of unpacking the right operand is in the runtime, so this emits nothing but an
+  ordinary 2-argument call.
+
+  cdecl, args pushed LEFT TO RIGHT as everywhere else in this backend (see the
+  PXXStrConcat call site): arg0 = the address of s's slot, arg1 = the handle or
+  the character code. The value is parked in ecx across the slot-address
+  computation, which is a lea or a mov-immediate and cannot clobber it. }
+procedure EmitAnsiStrAppendToSym386(symIdx, rhs: Integer);
+var procIdx: Integer;
+begin
+  IREmitNode386(rhs);                             { eax = handle, or char code }
+  EmitB($89); EmitB($C1);                         { mov ecx, eax }
+  if Syms[symIdx].Kind = skGlobal then
+    begin EmitB($B8); EmitGlobRef(Syms[symIdx].Offset); end        { mov eax, &slot }
+  else
+    begin EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end; { lea eax, [ebp+off] }
+  EmitB($50);                                     { push eax (arg0 = strSlot) }
+  EmitB($51);                                     { push ecx (arg1 = srcH/chCode) }
+  if IntToTypeKind(IRTk[rhs]) = tyChar then
+    procIdx := FindProc('PXXStrAppendChar')
+  else
+    procIdx := FindProc('PXXStrAppendStr');
+  if procIdx < 0 then Error('compiler error: PXXStrAppendStr/Char not found in builtin unit');
+  EmitCallProc(procIdx);
+  EmitB($81); EmitB($C4); EmitI32(8);             { add esp, 8 }
+end;
+
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
@@ -1643,6 +1673,18 @@ begin
           { Managed-string assignment to a variable: build the new handle, then
             publish into the slot (release old). }
           valNode := IRB[node];
+          { `s := s + x`: append into s's own block. PXXStrAppendStr/Char do the
+            whole slot update, so none of the retain/release paths below run.
+            tyString is recognised too but stays on the concat path here — its
+            unpacking has no runtime wrapper yet, and claiming it without one
+            would be the silent-wrong-value half of this fix. }
+          if IRIsSelfStrAppend(si, valNode) and
+             ((IntToTypeKind(IRTk[IRB[valNode]]) = tyAnsiString) or
+              (IntToTypeKind(IRTk[IRB[valNode]]) = tyChar)) then
+          begin
+            EmitAnsiStrAppendToSym386(si, IRB[valNode]);
+            Exit;
+          end;
           if (IRKind[valNode] = IR_CALL) and (IRA[valNode] = -Ord(tkArgStr)) then
           begin
             argNode := IRB[valNode];
