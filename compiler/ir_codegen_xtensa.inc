@@ -556,6 +556,30 @@ begin
   Patch24(pSkip, EncodeXtensaBranch(9, testReg, reg_xtensa_a9, CodeLen - pSkip));
 end;
 
+procedure EmitOvfTrapXtensa(condR, s, t: Integer);
+{ {$Q+} overflow trap, xtensa leg. `condR` is the branch condition that SKIPS
+  the trap (beq=1, bne=9, blt=2, bltu=3, bge=10, bgeu=11), so the caller states
+  the no-overflow case and everything else reaches PXXOverflow.
+
+  Xtensa has no flags and no `slt`, so there is nothing to test after the fact:
+  the caller builds the predicate out of the operands. Same branch-patch and
+  register-lifetime rules as EmitDivZeroCheckXtensa -- the displacement is only
+  8 bits so the branch is re-encoded once the call length is known,
+  XtensaRelCheck raises rather than truncating if it will not fit, and the
+  scratch registers are dead at the branch because PXXOverflow never returns.
+  bug-a-xtensa-has-no-q-plus-overflow-check-emitter-so-it-wraps-silently }
+var pSkip, procIdx, val: Integer;
+begin
+  procIdx := FindProc('PXXOverflow');
+  if procIdx < 0 then
+    Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
+  pSkip := CodeLen;
+  val := EncodeXtensaBranch(condR, s, t, 4);      { placeholder, patched below }
+  EmitB(val and $FF); EmitB((val shr 8) and $FF); EmitB((val shr 16) and $FF);
+  EmitCallProc(procIdx);
+  Patch24(pSkip, EncodeXtensaBranch(condR, s, t, CodeLen - pSkip));
+end;
+
 procedure IREmitNodeXtensa(node: Integer); forward;
 
 procedure EmitAnsiStringFromNodeXtensa(valNode: Integer);
@@ -1739,6 +1763,58 @@ begin
         else
         begin
           IREmitNodeXtensa(IRB[node]);
+          { {$Q+}: a Q-tagged binop feeding a NARROWER slot wraps at THIS store,
+            which is why there is no checked-add arm in the binop emitter and why
+            xtensa wrapped silently before this. Pascal widens Q+ arithmetic to
+            Int64 in the frontend, so `Integer + Integer` arrives here as the
+            a2(lo):a3(hi) pair and the 4/2/1-byte destination truncates it --
+            MEASURED, not assumed: a canary Error() planted in a 32-bit checked
+            add was never reached by any {$Q+} program.
+
+            Re-extend to the destination width and trap when it differs from the
+            full value. ILP32 leg of the x86-64 narrow-store check, same shape as
+            riscv32's. bug-a-xtensa-has-no-q-plus-overflow-check-emitter-so-it-wraps-silently }
+          if (IRB[node] >= 0) and (IRKind[IRB[node]] = IR_BINOP) and
+             (IRIVal[IRB[node]] = 1) and
+             TypeIsOrdinal(Syms[IRA[node]].TypeKind) and
+             (not Syms[IRA[node]].IsArray) and
+             (TypeSize(Syms[IRA[node]].TypeKind) < 8) and
+             (Is64BitXtensa(IntToTypeKind(IRTk[IRB[node]])) or
+              (TypeSize(Syms[IRA[node]].TypeKind) < 4)) then
+          begin
+            { a4 = the value as the destination width would keep it }
+            if TypeSize(Syms[IRA[node]].TypeKind) >= 4 then
+              xtensa_mov(reg_xtensa_a4, reg_xtensa_a2)
+            else
+            begin
+              xtensa_movi(reg_xtensa_a9,
+                          (4 - TypeSize(Syms[IRA[node]].TypeKind)) * 8);
+              xtensa_ssl(reg_xtensa_a9);
+              xtensa_sll(reg_xtensa_a4, reg_xtensa_a2);
+              xtensa_ssr(reg_xtensa_a9);
+              if TypeSigned(Syms[IRA[node]].TypeKind) then
+                xtensa_sra(reg_xtensa_a4, reg_xtensa_a4)
+              else
+                xtensa_srl(reg_xtensa_a4, reg_xtensa_a4);
+            end;
+            xtensa_xor(reg_xtensa_a4, reg_xtensa_a4, reg_xtensa_a2);   { lo diff }
+            if Is64BitXtensa(IntToTypeKind(IRTk[IRB[node]])) then
+            begin
+              { the high word the destination's sign rule implies }
+              if TypeSigned(Syms[IRA[node]].TypeKind) then
+              begin
+                xtensa_movi(reg_xtensa_a9, 31);
+                xtensa_ssr(reg_xtensa_a9);
+                xtensa_sra(reg_xtensa_a5, reg_xtensa_a2);    { sign fill of lo }
+              end
+              else
+                xtensa_movi(reg_xtensa_a5, 0);               { must be zero }
+              xtensa_xor(reg_xtensa_a5, reg_xtensa_a5, reg_xtensa_a3);
+              xtensa_or(reg_xtensa_a4, reg_xtensa_a4, reg_xtensa_a5);
+            end;
+            xtensa_movi(reg_xtensa_a9, 0);
+            EmitOvfTrapXtensa(1, reg_xtensa_a4, reg_xtensa_a9);   { beq => ok }
+          end;
           EmitStoreVarXtensa(IRA[node]);
         end;
       end;

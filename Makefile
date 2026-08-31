@@ -11861,6 +11861,51 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-i386 absent, i386 arm NOT verified ==="; \
 	fi
+	# {$Q+} raises Runtime error 215 when a checked binop's result does not fit
+	# the destination. THE CHECK IS AT THE NARROWING STORE, not the binop: Pascal
+	# widens Q-tagged arithmetic to Int64, so `Integer + Integer` reaches codegen
+	# as a 64-bit binop that cannot overflow and the wrap happens at the store
+	# into a 4/2/1-byte slot. A canary Error() planted in a 32-bit checked-add arm
+	# of the xtensa binop emitter was NEVER REACHED by any {$Q+} program -- so if
+	# you are adding an overflow trap to a binop emitter, you are editing dead
+	# code. xtensa had no check at either place and wrapped silently on all five
+	# shapes (-2147483648, 2147483647, 144, -56, 54464).
+	# Shape is chosen by ARGUMENT COUNT: 0..4 must trap, and the 5-arg run is the
+	# CONTROL that must NOT -- a fix that traps unconditionally passes the first
+	# five rows.
+	# STILL UNCOVERED, on riscv32 too and pre-existing: a 64-bit*64-bit product
+	# that overflows Int64. x86-64 catches it; both 32-bit backends do not. That
+	# is parity with the closest sibling, not a regression.
+	# bug-a-xtensa-has-no-q-plus-overflow-check-emitter-so-it-wraps-silently
+	./$(COMPILER) test/test_qplus_narrowing_store.pas $(TESTTMP)/qnarrow26
+	@for n in 0 1 2 3 4; do \
+	  a=""; i=0; while [ $$i -lt $$n ]; do a="$$a A$$i"; i=$$((i+1)); done; \
+	  tools/expect_same.sh qnarrow26/shape$$n "$$($(TESTTMP)/qnarrow26 $$a 2>&1)" "$$(cat test/test_qplus_narrowing_store.expected)" || exit 1; \
+	done
+	tools/expect_same.sh qnarrow26/control "$$($(TESTTMP)/qnarrow26 A B C D E 2>&1)" "$$(cat test/test_qplus_narrowing_store_ok.expected)"
+	@for tgt in aarch64 riscv32 arm32 i386; do \
+	  case $$tgt in aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; arm32) q=qemu-arm;; i386) q=qemu-i386;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$tgt test/test_qplus_narrowing_store.pas $(TESTTMP)/qnarrow_$$tgt >/dev/null || { echo "test_qplus_narrowing_store $$tgt compile FAIL"; exit 1; }; \
+	    for n in 0 1 2 3 4; do \
+	      a=""; i=0; while [ $$i -lt $$n ]; do a="$$a A$$i"; i=$$((i+1)); done; \
+	      tools/expect_same.sh $$tgt/qnarrow/shape$$n "$$(tools/run_target.sh $$tgt $(TESTTMP)/qnarrow_$$tgt $$a 2>&1)" "$$(cat test/test_qplus_narrowing_store.expected)" || exit 1; \
+	    done; \
+	    tools/expect_same.sh $$tgt/qnarrow/control "$$(tools/run_target.sh $$tgt $(TESTTMP)/qnarrow_$$tgt A B C D E 2>&1)" "$$(cat test/test_qplus_narrowing_store_ok.expected)" || exit 1; \
+	  else \
+	    echo "=== test_qplus_narrowing_store: $$q absent, $$tgt arm NOT verified ==="; \
+	  fi; \
+	done
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_qplus_narrowing_store.pas $(TESTTMP)/qnarrow_xt >/dev/null || { echo "test_qplus_narrowing_store xtensa compile FAIL"; exit 1; }; \
+	  for n in 0 1 2 3 4; do \
+	    a=""; i=0; while [ $$i -lt $$n ]; do a="$$a A$$i"; i=$$((i+1)); done; \
+	    tools/expect_same.sh xtensa/qnarrow/shape$$n "$$(qemu-xtensa $(TESTTMP)/qnarrow_xt $$a 2>&1)" "$$(cat test/test_qplus_narrowing_store.expected)" || exit 1; \
+	  done; \
+	  tools/expect_same.sh xtensa/qnarrow/control "$$(qemu-xtensa $(TESTTMP)/qnarrow_xt A B C D E 2>&1)" "$$(cat test/test_qplus_narrowing_store_ok.expected)" || exit 1; \
+	else \
+	  echo "=== test_qplus_narrowing_store: qemu-xtensa absent, xtensa arm NOT verified ==="; \
+	fi
 	# Division by zero raises Runtime error 200 on EVERY target, in all FOUR
 	# shapes (32-bit div/mod, 64-bit div/mod) -- selected by ARGUMENT COUNT, so
 	# each of the four runs below enters a different branch. An earlier draft put
