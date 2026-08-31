@@ -3,7 +3,7 @@ prio: 75
 track: P
 status: working
 owner:
-summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current` near TOpenAddressing<TKey,TValue,THashFactory>, which is the LIVE EDGE and is not yet reduced. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
+summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current`, REDUCED to `for LValue in AEnumerable` over an IEnumerable<T> at :1480 -- which is NOT a bug but a PIN-ORDERING dependency: our IEnumerator<T> lacks `property Current` only because the pinned compiler still rejects a property in an interface, while HEAD accepts it (bug-p-a-property-in-an-interface-declaration-is-rejected is DONE). Track B builds lib/rtl with the PINNED compiler, so the one-line RTL addition must wait for a make pin. Remaining distance on rung 6b: one pin, one RTL line, re-measure. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit."
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
@@ -370,10 +370,29 @@ and `(to file / relay to frankB)` in another while it was actually **done**.
 > [[bug-b-rtl-provides-no-ienumerable-generic-interface]], and built with the
 > STABLE compiler per Track B's rule.
 >
-> **Wall 3 is the live edge and is NOT yet reduced:** `for-in: enumerator has no
-> readable Current`, `near:` at `TOpenAddressing<TKey, TValue, THashFactory>`.
-> Do not trust either coordinate without reducing from the SHAPE — that is the
-> standing rule on this unit and it has now been earned three separate ways.
+> **Wall 3 is REDUCED, and it is not a bug — it is a PIN-ORDERING dependency.**
+> The site is `generics.collections.pas:1480`, `for LValue in AEnumerable` where
+> `AEnumerable: IEnumerable<T>` — a for-in over an INTERFACE. (Reduced from the
+> shape, not the coordinate: the reported `:1481` and its `near:` at
+> `TOpenAddressing<...>` both point elsewhere, for the third distinct reason on
+> this unit.)
+>
+> for-in needs a readable `Current`. Our `IEnumerator<T>` (`lib/rtl/classes.pas`)
+> deliberately ships without `property Current: T read GetCurrent;` because pxx
+> used to reject a property inside an interface. **That compiler bug is FIXED**
+> — [[bug-p-a-property-in-an-interface-declaration-is-rejected]] is in `done/`,
+> and an instantiated generic interface carrying a property compiles and runs on
+> a HEAD-built compiler (probe prints `1 2 3`).
+>
+> **It still fails on `stable_linux_amd64/default/pinned`, and Track B builds
+> `lib/rtl` with the pinned compiler** — `gate.sh quick`'s first step is exactly
+> "pinned builds live lib/rtl". So adding the property today reds that step for
+> every lane until a `make pin` lands. The RTL comment now says this and names
+> the pin as the trigger; nothing is left to diagnose.
+>
+> **So rung 6b's remaining distance is: one `make pin`, then a one-line RTL
+> addition, then re-measure.** A pin is irreversible, holds the repo lock, and is
+> the coordinator's to sequence — it is not something this ticket should take.
 >
 > `MAX_GENERIC_METHODS` is a plain slot, not a stride: measured linear at **12 B
 > of bss per slot** (512 → 101076508, 1024 → 101082652, 2048 → 101094940), so

@@ -107,13 +107,26 @@ type
     silent gap.
 
     NO `property Current: T read GetCurrent;` — FPC's IEnumerator has one and
-    ours deliberately does not, because pxx REJECTS a property inside an
-    interface declaration outright (`expected 'end' before 'property'`). That is
-    bug-p-a-property-in-an-interface-declaration-is-rejected, filed with the
-    control that proves it: an uninstantiated generic interface carrying a
-    property compiles fine — its body is never parsed — and only fails once you
-    instantiate it, so the obvious quick check on this returns a FALSE GREEN.
-    Call GetCurrent directly until that lands.
+    ours still does not. **The compiler bug is FIXED; the blocker is now the
+    PIN, not the parser.** bug-p-a-property-in-an-interface-declaration-is-
+    rejected is in `done/`, and an instantiated generic interface carrying a
+    property compiles and runs on a HEAD-built compiler (probe prints 1 2 3).
+    It still fails on `stable_linux_amd64/default/pinned` with
+    `expected 'end' before 'Integer'`, and Track B builds lib/rtl with the
+    PINNED compiler — `gate.sh quick`'s first step is exactly that. So adding
+    the property today turns that step red for every lane until a `make pin`
+    lands, which is why it is still absent.
+
+    ADD IT ON THE FIRST PIN THAT POSTDATES ba99a4e81, and delete this note. Until
+    then, call GetCurrent directly. That residue is what rtl-generics' rung 6b
+    now stops on: `for LValue in AEnumerable` at generics.collections.pas:1480,
+    over an `IEnumerable<T>`, needs a readable Current and reports
+    `for-in: enumerator has no readable Current`.
+
+    Keep the FALSE-GREEN warning when you do it: an UNINSTANTIATED generic
+    interface carrying a property compiles fine because its body is never
+    parsed, so the obvious quick check passes on a compiler that cannot do it.
+    Instantiate.
 
     The non-generic TObject-based pair FPC keeps in objpash.inc:273/280 is not
     here either; nothing in the corpus references it. Add it when something
