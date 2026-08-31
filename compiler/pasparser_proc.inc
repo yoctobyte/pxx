@@ -1293,8 +1293,21 @@ begin
     begin
       { MAX_PROC_PARAMS, not a smaller round number: the staging arrays and
         TProc.Params are both 32 wide, so 32 is the real bound and the literal
-        16 refused half the space that exists. }
-      if nparams >= MAX_PROC_PARAMS then Error('nested routine: too many params after capture');
+        16 refused half the space that exists.
+
+        The message NAMES THE NUMBER, which is the other half of that bug. For
+        as long as the bound was 16 the text read "too many params after
+        capture" -- a limit asserted without a value, which the reader can only
+        accept. Anyone who hit it counted their captures, got a number under
+        what they would have guessed, and reshaped the routine instead of
+        disbelieving the compiler; the code they wrote instead cannot be found
+        from this side. Printing the cap and the count makes the claim
+        CHECKABLE: a reader whose routine captures 17 things and is told the
+        max is 32 has a contradiction in front of them, and a wrong bound
+        becomes a bug report instead of a workaround. }
+      if nparams >= MAX_PROC_PARAMS then
+        Error('nested routine: too many params after capture (' +
+              AIntToStr(nparams + 1) + ', max ' + AIntToStr(MAX_PROC_PARAMS) + ')');
       pnames[nparams] := '__nestself';
       ptypes[nparams] := tyClass;
       ptypesRec[nparams] := REC_UCLASS_BASE + LiftSelfCi[liftIdx];
@@ -1313,7 +1326,10 @@ begin
     lcb := LiftCapStart[liftIdx];
     for i := 0 to LiftCapCount[liftIdx] - 1 do
     begin
-      if nparams >= MAX_PROC_PARAMS then Error('nested routine: too many params after capture');
+      { names the number, for the reason at the sibling site above }
+      if nparams >= MAX_PROC_PARAMS then
+        Error('nested routine: too many params after capture (' +
+              AIntToStr(nparams + 1) + ', max ' + AIntToStr(MAX_PROC_PARAMS) + ')');
       pnames[nparams] := LiftCapName[lcb + i];
       ptypes[nparams] := LiftCapTk[lcb + i];
       ptypesRec[nparams] := LiftCapRec[lcb + i];

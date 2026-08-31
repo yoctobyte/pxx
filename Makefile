@@ -11851,6 +11851,18 @@ test-core: $(COMPILER)
 	# pinned refuses the scalar half, and 40 is still refused today.
 	./$(COMPILER) test/test_nested_capture_param_bound.pas $(TESTTMP)/test_nested_cap_bound26
 	tools/expect_same.sh test_nested_cap_bound26 "$$($(TESTTMP)/test_nested_cap_bound26)" "NESTED CAPTURE PARAM BOUND OK checked=2"
+	# The UPPER half of that bound, which was a claim in the sibling's header and
+	# nothing else: 40 captures must still be REFUSED. Raising MAX_PROC_PARAMS or
+	# dropping the guard would have gone unnoticed by every wired test.
+	# The grep demands the CAP AND THE COUNT, deliberately. While the bound was
+	# the literal 16 the message named a limit with no value in it, and a limit
+	# you cannot check is one you can only accept -- whoever hit it reshaped
+	# their routine instead of disbelieving the compiler, and that code cannot be
+	# found from this side afterwards. `pinned` refuses this file too but WITHOUT
+	# the numbers, so the grep is a control that can genuinely fail.
+	@./$(COMPILER) test/test_nested_capture_param_over_bound.pas $(TESTTMP)/test_nested_cap_over26 2>&1 \
+	  | grep -q 'too many params after capture (33, max 32)' \
+	  || { echo 'test_nested_capture_param_over_bound: FAIL - expected refusal naming the count and the cap'; exit 1; }
 	./$(COMPILER) test/test_dynarray_managed_field_reassign.pas $(TESTTMP)/test_dynarray_managed_field_reassign26
 	tools/expect_same.sh test_dynarray_managed_field_reassign26 "$$($(TESTTMP)/test_dynarray_managed_field_reassign26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_fixed_array_of_dynarray.pas $(TESTTMP)/test_fixed_array_of_dynarray26
