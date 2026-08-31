@@ -3,7 +3,7 @@ track: U
 prio: 45
 type: decide
 blocked-by: []
-summary: "Layer 2 of the pattern-pkill ticket is a PreToolUse hook refusing `pkill -f <toolname>` / `killall` with a bare pattern. It is a .claude/ config change binding every agent on this box, so it is the owner's call, not a track agent's or a peer's. Layers 1 and 3 landed without it; this is the only part left."
+summary: "MOOT 2026-08-31, not ruled on its merits. The owner is retiring fuzzing: 'i think we can stop fuzzing in general. i think we found all that csmith is able to discover by now. so that makes the hook question irrelevant.' The hook existed to stop agents pattern-killing each other's csmith batches; with no batches there is nothing to protect. Layers 1 and 3 stay landed and keep their value (docs no longer teach pkill -9 -f, tools/whokilled.sh still answers what killed a job). Worth recording that the hook was never evidence-backed either: pattern-pkill was NEVER OBSERVED -- kernel OOM and systemd-oomd were excluded, and peer SIGKILL survived as the hypothesis precisely because it leaves no trace. SCOPE NOT SETTLED: the reasoning is csmith-specific; whether it extends to the Pascal source mutator is separate, and it must NOT be read as retiring the differential probes, which are oracles rather than fuzzers."
 ---
 
 # Should a hook refuse unscoped pattern kills?
@@ -74,3 +74,54 @@ the evidence that justifies A.
 
 ## Log
 - 2026-08-26 — filed by Track T; layers 1 and 3 landed, layer 2 escalated here.
+
+---
+
+# MOOT 2026-08-31 — the activity it protects is being retired
+
+Owner: *"to be fair, i think we can stop fuzzing in general. i think we found all
+that csmith is able to discover by now. so that makes the hook question
+irrelevant."*
+
+Closed as **moot, not ruled**. If fuzzing ever returns, the analysis below is
+still good and the fork is still open.
+
+## What survives, and it is most of the value
+
+Layers 1 and 3 landed and keep their value with or without a hook:
+`debugging-playbook.md` no longer teaches `pkill -9 -f <path>`, `csmith_fuzz.py`
+stamps a unique `--run-tag`, and `tools/whokilled.sh` answers what killed a job.
+Only the refusal surface is dropped.
+
+## The hook was never evidence-backed, which is worth recording
+
+**Pattern-pkill was never observed.** Kernel OOM and systemd-oomd were excluded
+on evidence; a peer's SIGKILL survived as the hypothesis *precisely because it is
+the one that leaves no trace*. It would have guarded a plausible, undiagnosed
+mechanism whose detector had just been built and never fired.
+
+Cost side, measured the same day and then again while closing this ticket: the
+sibling hook `no-full-suite.sh` refused a **read-only `grep` counting which NilPy
+tests use `random`** — twice, mid-investigation — and then refused the **commit
+message for this very ticket**, because the prose describing those refusals
+contained the glob. Three false positives in one session, zero true positives,
+and the third fired on a document rather than an action. That is the shape this
+hook would have added more of.
+
+## SCOPE NOT SETTLED — do not over-read this
+
+The stated reasoning is **csmith-specific** (*"all that csmith is able to
+discover"*). Three things could be meant and only the first is clearly covered:
+
+1. **csmith** — random C program generation. Covered.
+2. **The Pascal source mutator** (`fuzz.sh`) — a different generator with a
+   different exhaustion argument; not covered by csmith's evidence.
+3. **The differential probes** — `pydiff.py`, `gcc_diff_probe.sh`,
+   `fpc_diff_probe.sh`. **Oracles, not fuzzers.** They compare our output against
+   a reference on deliberately written programs. Retiring them would remove the
+   instrument this repo's debugging discipline rests on. Nothing here touches
+   them.
+
+Get a one-word scope answer before decommissioning anything.
+
+*Closed 2026-08-31 as moot by the owner's retirement of the activity.*
