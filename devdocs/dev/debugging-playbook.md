@@ -4114,6 +4114,14 @@ probe population separates them.
 - **A clean census is a claim about the probe population first and the system
   second.** Before believing one, ask what the population cannot express. Here it
   was user-declared types, and that is also exactly what the change endangered.
+- **The mechanical form, and it is the one to apply without thinking: a control
+  sampled from INSIDE the old boundary cannot detect that you moved the
+  boundary.** When the same merge was built a second time and landed
+  (`ce4d9004c`), its accept-side control ran **37 names, every one a builtin** --
+  drawn entirely from the population the change was about. The change moved
+  *which names the table answers for*, so the only arm that could fail was the
+  missing one: a **user** type. Sample the control from the other side of the
+  line you are moving.
 
 ## A reader that drops a byte it does not know does not report "unknown" — it makes a confident statement about a different instruction
 
