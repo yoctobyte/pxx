@@ -6,7 +6,8 @@ status: open
 found: 2026-08-31
 found-by: frankC
 owner: frankC
-summary: "A C function taking a struct BY VALUE is compiled to take a POINTER, on every target. Self-consistent inside pxx, so every existing test passes; a gcc caller passes the struct's bytes, our callee dereferences the first word as an address, SEGFAULT. Measured on x86-64 and i386 with gcc on the other side of the link, with a scalar-parameter control passing across the identical link. Root cause is one line: ABIParamSlotIsPointer in compiler/abi.inc returns True for tyRecord, so the whole C-ABI family -- direct, indirect, variadic, callee spill -- allocates one 8-byte pointer slot where the psABI wants the aggregate's own bytes classified into eightbytes."
+summary: "A C function taking a struct BY VALUE is compiled to take a POINTER, on every target. Self-consistent inside pxx, so every existing test passes; a gcc caller passes the struct bytes, our callee dereferences the first word as an address, SEGFAULT. Confirmed at instruction level: take_p2 does `mov %rdi,-0x8(%rbp)` then `movslq (%rax)` on it. GATE NOW EXISTS and is RED: `make test-c-abi-mixed-link` (gcc main + pxx object, both call directions, x86-64 and i386 -- no gcc cross exists for the other targets), unwired while this is open. Root cause is one predicate: ABIParamSlotIsPointer returns True for tyRecord, so the whole C-ABI family allocates one pointer slot where the psABI wants the aggregate classified into eightbytes. Two things the first pass got wrong and are now corrected: the ir_codegen.inc warning about a duplicate SysV prologue in cparser.inc is STALE (the collapse is done, and its line citation had drifted onto unrelated code) so there is ONE site; and i386 has a PRIOR gap -- it refuses by-value records in any convention, Pascal included, so it needs them at all before it can have them correctly. Lands whole per target or not at all: a partial classification shifts every later parameter, which is how the xtensa two-of-three state turned data loss into active corruption."
+
 ---
 
 # A by-value struct parameter is passed as a POINTER to every C-ABI callee
@@ -80,8 +81,65 @@ sound and the hypothesis was unreachable: the move is correct *by construction*
 precisely because the slot is a pointer. Chasing why it could not fail is what
 found this.
 
-## Gate
+## Gate — BUILT, and RED
 
-A pxx object linked against a gcc caller, which nothing in the tree does for
-structs yet. `test-c-abi-glibc-oracle`'s pattern extends to it: the new subject
-must be `gcc main.c pxx.o`, not a pxx-only pair.
+`make test-c-abi-mixed-link` (deliberately NOT wired into any suite while this
+ticket is open; wire it in when it closes). `test/c_abi_mixed_link_pxx.c` is
+compiled by pxx to an object; `test/c_abi_mixed_link_main.c` is compiled by gcc
+and links against it. **Both directions**, because they fail independently:
+`take_*` is a pxx CALLEE reading what gcc laid down, `relay_*` is a pxx CALLER
+laying down what a gcc callee reads. Shapes hit the SysV boundaries — 1
+eightbyte / 2 eightbytes / MEMORY past 16 / all-SSE / mixed INTEGER+SSE /
+sub-word / an aggregate arriving after the GP bank is nearly full.
+
+Current state: `2 of 2 targets measured`, **FAIL x86_64, FAIL i386**, both a
+segfault. gcc-on-both-sides gives the expected text, so the values are gcc's
+and not ours.
+
+**x86-64 and i386 only, and that is a hard limit, not a shortcut:** there is no
+gcc cross for arm32, aarch64 or riscv32 on this box, so no mixed link is
+constructible for them. The glibc substitute oracle does not extend here either
+— it needs a glibc entry point that takes a struct by value.
+
+## What the investigation added (2026-08-31, later)
+
+**Instruction-level confirmation.** `objdump` of the pxx object:
+
+```
+take_p2:  mov %rdi,-0x8(%rbp)      ; store the incoming register
+          mov -0x8(%rbp),%rax
+          movslq (%rax),%rax       ; DEREFERENCE it
+```
+
+gcc puts the struct's eight bytes *in* `rdi` (0x0000000700000003 here), so the
+callee dereferences data as an address. Not inference: that is the emitted code.
+
+**The duplication blocker named in `ir_codegen.inc` is GONE, and its warning was
+stale in the more dangerous direction.** That comment said cparser.inc carried a
+second full SysV classification and *"do not fix one of these two without the
+other"*, citing `cparser.inc:11282`. The collapse was already done
+(`refactor-a-collapse-the-c-frontend-sysv-prologue-copy`, in `done/`), and the
+cited line had drifted onto unrelated `va_arg` code — a real line that was not
+the thing it named. Corrected in place: there is now **one** SysV prologue, so
+this fix has one site, not two.
+
+**i386 has a PRIOR gap that must be closed first.** i386 refuses a by-value
+record in *any* convention, not just the C one — a plain Pascal
+`function TakeP2(p: TP2)` gives `target i386: only ordinal/pointer parameters
+supported yet` (`ir_codegen.inc:1279`, since 2797638e5, 2026-08-21). x86-64,
+arm32, aarch64 and riscv32 all compile and run that same Pascal. So i386 needs
+by-value aggregates at all before it can have them *correctly*.
+
+**Not established, and deliberately not claimed:** whether the INTERNAL (Pascal)
+convention passes a record by value or by pointer on x86-64. The Pascal probe
+runs correctly, but that is self-consistency again and proves nothing about the
+representation. pxx executables carry no section headers so `objdump -d` reads
+nothing; measuring it needs a different instrument. Whoever takes this should
+settle it first — if the internal convention already copies bytes, the machinery
+is there to reuse.
+
+**Why this was not started here:** partial aggregate classification is worse
+than none. The precedent is in this repo — a two-of-three xtensa state
+*"turned the data loss into active corruption"*, because a caller pushing two
+words and a spill consuming one shifts every later parameter rather than
+failing. The same applies per-target here, so it lands whole or not at all.

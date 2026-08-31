@@ -16522,6 +16522,52 @@ test-c-abi-cross: $(COMPILER)
 # oracle available on this box.
 # bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area
 .PHONY: test-c-abi-glibc-oracle
+# THE MIXED-LINK GATE. Deliberately NOT wired into any suite: it is RED today,
+# by design, and it is the gate named by
+# bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee.
+# Run it with `make test-c-abi-mixed-link`; wire it in when that ticket closes.
+#
+# Every other subject in this family is pxx on BOTH sides of the call, so it can
+# only prove pxx agrees with itself. A calling convention is agreed by
+# construction inside one implementation, so a self-consistent pair cannot judge
+# one -- which is why all of them stayed green while a gcc caller handing a
+# struct BY VALUE to a pxx callee segfaults. Here gcc compiles main and links it
+# against a pxx-compiled object, in BOTH directions: `take_*` is a pxx callee
+# reading what gcc laid down, `relay_*` is a pxx caller laying down what a gcc
+# callee reads. They fail independently.
+#
+# x86-64 and i386 only, and that is not a shortcut: there is no gcc cross for
+# arm32, aarch64 or riscv32 on this box, so no mixed link is constructible for
+# them at all. The glibc substitute oracle used by test-c-abi-glibc-oracle does
+# not extend here either -- it needs a glibc entry point taking a struct by
+# value, and the ones this corpus calls take scalars and varargs.
+.PHONY: test-c-abi-mixed-link
+test-c-abi-mixed-link: $(COMPILER)
+	@exp="$$(printf 'take_p2 37\ntake_p4 1234\ntake_p6 91\ntake_d2 17.50\ntake_mix 700.25\ntake_c3 123\ntake_late 1234537\nrelay_p2 37\nrelay_p4 1234\nrelay_p6 91\nrelay_d2 17.50\nrelay_mix 700.25\nrelay_late 1234589')"; \
+	overall=0; ran=0; want=0; \
+	for t in x86_64 i386; do \
+	  want=$$((want+1)); \
+	  case $$t in \
+	    x86_64) tgt=""; gccflag="-no-pie" ;; \
+	    i386)   tgt="--target=i386"; gccflag="-m32" ;; \
+	  esac; \
+	  if ! ./$(COMPILER) $$tgt --emit-obj test/c_abi_mixed_link_pxx.c $(TESTTMP)/ml_$$t.o >$(TESTTMP)/ml_$$t.err 2>&1; then \
+	    echo "test-c-abi-mixed-link: PXX COMPILE FAIL $$t"; tail -2 $(TESTTMP)/ml_$$t.err; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  if ! gcc -O0 $$gccflag -o $(TESTTMP)/ml_$$t test/c_abi_mixed_link_main.c $(TESTTMP)/ml_$$t.o 2>$(TESTTMP)/ml_$$t.link; then \
+	    echo "test-c-abi-mixed-link: LINK FAIL $$t"; tail -2 $(TESTTMP)/ml_$$t.link; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  got="$$($(TESTTMP)/ml_$$t 2>&1)"; \
+	  if [ "$$got" = "$$exp" ]; then echo "test-c-abi-mixed-link: PASS $$t"; \
+	  else echo "test-c-abi-mixed-link: FAIL $$t (pxx disagrees with gcc across the link)"; \
+	       printf '%s\n' "$$got" | sed 's/^/    /'; overall=1; fi; \
+	  ran=$$((ran+1)); \
+	done; \
+	echo "test-c-abi-mixed-link: $$ran of $$want targets measured"; \
+	test "$$overall" = "0" || { echo "test-c-abi-mixed-link: RED"; exit 1; }; \
+	test "$$ran" = "$$want" || [ -n "$$PXX_ALLOW_SKIPPED_TARGETS" ] || \
+	  { echo "test-c-abi-mixed-link: RED -- $$want targets were asked for and only $$ran ran"; exit 1; }
+
 # WHAT THE ran/want ASSERT BELOW PROVES, AND WHAT IT DOES NOT.
 # It catches a SKIP: an iteration that ran and bailed (qemu absent) while
 # leaving `overall` untouched, which before 19090ba72 printed PASS and exited 0

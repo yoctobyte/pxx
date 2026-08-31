@@ -1965,15 +1965,20 @@ begin
       LANDMINE comment on the internal arm below applies here too -- this is a
       second place x86-64 decides where tySingle gets narrowed.
 
-      DUPLICATION, STATED RATHER THAN HIDDEN: cparser.inc:11282 already contains
-      this classification, because the C frontend needed a SysV prologue before
-      this shared layer existed. These bytes are mirrored from it deliberately,
-      not reinvented. They should be ONE routine -- that is what
-      EmitParamSpillsForTarget was created for, and its own header comment names
-      the private per-frontend copies it already absorbed from NilPy and Rust.
-      cparser.inc is held by another agent right now, so collapsing its copy into
-      this arm is filed as refactor-a-collapse-the-c-frontend-sysv-prologue-copy
-      rather than done here. Do not fix one of these two without the other. }
+      THE DUPLICATE IS GONE -- this is now the ONLY SysV classification.
+      cparser.inc used to carry a second full copy, because the C frontend
+      needed a SysV prologue before this shared layer existed, and this comment
+      used to warn "do not fix one of these two without the other" and point at
+      cparser.inc:11282. Both halves of that are now false and the second was
+      the more dangerous: the line had drifted onto unrelated va_arg code, so
+      the citation sent a reader to a real line that was not the thing it named.
+      refactor-a-collapse-the-c-frontend-sysv-prologue-copy did the collapse
+      (it is in done/); cparser.inc's block is now a comment explaining what it
+      used to hold, ending in a bare call to EmitParamSpillsForTarget. Its
+      dispatch stays correct by construction: this arm is taken only for
+      ProcCdecl[procIdx], which is False for a C declaration bound to a Pascal
+      routine, and that case must keep the Pascal prologue.
+      So edit here and only here. }
     intIdx := 0;
     sseIdx := 0;
     stackOff := 16;
