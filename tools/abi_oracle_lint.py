@@ -178,6 +178,7 @@ def scan(paths):
         raw = open(path, encoding='utf-8', errors='replace').read()
         src = strip_comments(raw)
         rawlines = raw.split('\n')
+        striplines = src.split('\n')
         # Lines covered by a routine-scoped exemption.
         exempt, active = set(), False
         for i, l in enumerate(rawlines):
@@ -196,7 +197,24 @@ def scan(paths):
                 continue
             if NOT_A_PARAM.search(cond):
                 continue
-            window = '\n'.join(rawlines[max(0, ln - 8):ln + 6])
+            # The marker may sit ANYWHERE in the contiguous comment block above
+            # the condition, however long that block is. A fixed look-back
+            # window silently fails to pick up a marker that a long
+            # justification has pushed out of range -- measured by frankS, who
+            # placed one correctly and had the site keep reporting. That failure
+            # is safe (the site stays visible) but it is silent, which is the
+            # property this tool exists to object to.
+            #
+            # A line is comment-only when it is non-blank in the raw source and
+            # blank after comment stripping. Walk up over those and over blank
+            # lines, stopping at the first line carrying code.
+            top = ln - 1                        # 1-based ln -> index of line above
+            while top > 0:
+                rawl, stripl = rawlines[top - 1], striplines[top - 1]
+                if rawl.strip() and stripl.strip():
+                    break                       # real code: the block ends here
+                top -= 1
+            window = '\n'.join(rawlines[max(0, top - 1):ln + 6])
             if MARKER.search(window):
                 continue
             hits.append((path, ln, ' '.join(cond.split())[:110]))
@@ -217,6 +235,16 @@ def selftest():
     # comment. The old grep's only 2026-08-31 hit. Must NOT be reported.
     neg1 = "  { note names the exact shape it exists to stop -- a `Syms[x].IsRef or`\n" \
            "    chain with a Syms[x].TypeKind test beside it }\n"
+    # NEGATIVE: a marker at the TOP of a long comment block must still take.
+    # 14 filler lines put it far outside any fixed 8-line look-back.
+    neg6 = ("{ abi-divergence: stated at the top of a long justification }\n"
+            + "{ filler }\n" * 14
+            + "if Syms[si].IsRef and (Syms[si].TypeKind = tyAnsiString) then Foo;\n")
+    # POSITIVE: but a marker separated from the condition by real CODE is not
+    # this condition's marker, however close it is.
+    pos4 = ("{ abi-divergence: belongs to the statement below, not the one after }\n"
+            "Bar(1);\n"
+            "if Syms[si].IsRef and (Syms[si].TypeKind = tyAnsiString) then Foo;\n")
     # NEGATIVE: a routine-scoped exemption covers the site below it...
     neg5 = ("procedure EmitSomething(p: Integer);\n"
             "{ abi-oracle-reviewed: asks slot width, not slot-holds-address }\n"
@@ -240,7 +268,8 @@ def selftest():
 
     import tempfile
     for name, body, want in (('pos1', pos1, 1), ('pos2', pos2, 1),
-                             ('pos3', pos3, 1),
+                             ('pos3', pos3, 1), ('pos4', pos4, 1),
+                             ('neg6', neg6, 0),
                              ('neg1', neg1, 0), ('neg2', neg2, 0),
                              ('neg3', neg3, 0), ('neg4', neg4, 0),
                              ('neg5', neg5, 0)):

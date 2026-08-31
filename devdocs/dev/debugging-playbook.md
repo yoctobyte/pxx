@@ -4345,11 +4345,65 @@ Only the real file has the properties you did not think of. So:
   print `control armed` first. Same day, same session, both halves of this:
   *"I edited it"* and *"the edit landed"* are two claims and only the second is
   worth anything.
+- **Assert the instrument can SEE its input before trusting any verdict.** The
+  cheapest form is a count: *how many files did you actually open?*
 - Keep the fixture selftest anyway — it is fast and it catches logic
   regressions. Just do not let green there mean the tool works.
+
+**The A/B control has the same exposure as the tool, and it bit immediately.**
+To prove a linter fix mattered, I built the pre-fix variant and ran both. The
+old variant reported **clean** — apparently disproving the bug I had just
+measured by hand. It was a copy living in the scratchpad, and it resolved its
+repo root relative to `__file__`, so it globbed a directory containing **zero**
+`ir_codegen*.inc` files and correctly reported no findings in nothing.
+
+*The instrument answered, correctly, about something else* — third instance in
+one day, and this one was **the control built to validate the fix**. A script
+copied out of its tree takes its path resolution with it. The tell is free and
+it is the bullet above: printing `files scanned: 7` before the verdict makes
+`files scanned: 0` impossible to read as a pass. Nothing errored; it never
+does.
 
 The sting is that this was `abi.inc`'s dead review grep reproduced from scratch,
 hours after replacing it, by the same author, in the tool written to prevent
 that class of thing. **A checker satisfied by prose is this repo's house failure
 mode**, and it gets *more* likely as the comments get better — which means the
 usual remedy, write a clearer comment near the hazard, feeds it.
+
+## A condition's bug is as likely to be in the half it LETS THROUGH — and a diff against the predicate cannot tell you which
+
+Measured 2026-08-31, and it cost a wrong analysis in a filed ticket.
+
+A linter flagged `ir_codegen_aarch64.inc` for deciding a parameter question by
+hand instead of asking the ABI oracle. Diffing the two:
+
+```pascal
+  hand:   (Kind = skParam) and TypeIsFrozenString(tk) and not IsArray
+  oracle: IsRef or IsArray or TypeIsFrozenString(tk) or (tk = tyVariant)
+```
+
+The delta is `not IsArray`, so I built a truth table on `IsArray`, wrote out the
+two outcomes that follow from it — *reachable, so call the oracle*, or
+*unreachable, so the text is dead* — and called them exhaustive.
+
+**Both were wrong.** The bug was a two-line SIGSEGV with `IsArray` **False
+throughout**: the arm fires *because* `not IsArray` is true, and the emitter one
+line above has already dereferenced the by-ref param, so the extra load is a
+second dereference. And the site legitimately cannot call the oracle at all —
+the real question is *"has the emitter one line up already consumed that
+fact?"*, which a `symIdx` cannot express.
+
+Two things generalise:
+
+- **A diff tells you where two things differ, not where either is wrong.** I
+  anchored every branch of the analysis on the token that differed, and the
+  defect was in the region both spellings agreed on. Enumerate outcomes over
+  what the code *does*, not over the delta you just computed.
+- **A condition-vs-predicate comparison is blind to the call site.** The
+  correct answer here was a property of *what ran one line earlier*. No amount
+  of staring at the two boolean expressions could contain it — and a truth table
+  is seductive precisely because it looks like the whole analysis.
+
+The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
+two-branch enumeration built from a one-token delta is a claim that the token
+is the only thing in play. Write the repro instead; it took two lines.
