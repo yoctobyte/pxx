@@ -7,7 +7,10 @@ owner: frankA
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A
-- **Status:** working
+- **Status:** unfinished (parked 2026-08-31 — nothing is applied; the 04:40
+  note ends "Still parked". Moved out of `working/` by frankA, who is not on
+  it: the last code landed 2026-08-20 and the folder was claiming otherwise.
+  Free to take.)
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Follows the M0 contract
   [[feature-threadsafe-heap-contract]] (correctness) — this is the *speed* half.
