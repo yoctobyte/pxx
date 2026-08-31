@@ -509,6 +509,53 @@ begin
     EmitCallProc(procIdx);   { a2, a3 already hold arg0, arg1; result in a2 }
 end;
 
+procedure EmitDivZeroCheckXtensa(divisorIsA2A3Pair: Boolean);
+{ Pre-divide zero check, xtensa leg -- the LAST target to get one. The other
+  five landed 2026-08-23; this one was left because xtensa cannot be run under
+  the bare profile, its conditional branches carry only an 8-bit displacement,
+  the windowed ABI rotates the register window on a call, and the divide has two
+  shapes depending on XtensaSoftDivide. Hosted xtensa under qemu is the oracle
+  that made it testable.
+
+  The 32-bit form tests a3 (the divisor); the 64-bit form ORs the a2:a3 pair,
+  because a4:a5 hold the dividend there and only the pair being zero is a
+  division by zero. Branches over a call to PXXDivZero, which never returns.
+
+  Register choice, and it is not arbitrary: a9 holds the zero to compare
+  against and a8 is the OR temp. Under the WINDOWED ABI a call8 rotates the
+  window so the caller's a8..a15 become the callee's a0..a7 -- a8 receives the
+  return address. That is harmless here ONLY because both registers are dead the
+  instant the branch is evaluated, which happens BEFORE the call: if the branch
+  is not taken there is no call, and if it is taken PXXDivZero never comes back.
+  Do not hoist either write past the branch.
+
+  The branch is re-encoded once the call's length is known, exactly as riscv32
+  does. If EmitCallProc ever emits more than the 8-bit displacement can span,
+  XtensaRelCheck raises rather than silently truncating -- so this cannot
+  degrade into a branch to the wrong place.
+
+  Xtensa's hardware quos/rems and the __pxx_divsi3/__pxx_modsi3 soft helpers
+  BOTH have undefined-to-us behaviour on a zero divisor, so before this the
+  answer was simply whatever fell out.
+  bug-a-the-div-by-zero-check-is-still-missing-on-xtensa }
+var pSkip, dzProc, testReg: Integer;
+begin
+  dzProc := DivZeroCheckProc;
+  if dzProc < 0 then Exit;          { policy: no PXXDivZero => emit no check }
+  if divisorIsA2A3Pair then
+  begin
+    xtensa_or(reg_xtensa_a8, reg_xtensa_a2, reg_xtensa_a3);  { zero iff both are }
+    testReg := reg_xtensa_a8;
+  end
+  else
+    testReg := reg_xtensa_a3;
+  xtensa_movi(reg_xtensa_a9, 0);
+  pSkip := CodeLen;
+  xtensa_bne(testReg, reg_xtensa_a9, 0);        { -> .ok, patched below }
+  EmitCallProc(dzProc);
+  Patch24(pSkip, EncodeXtensaBranch(9, testReg, reg_xtensa_a9, CodeLen - pSkip));
+end;
+
 procedure IREmitNodeXtensa(node: Integer); forward;
 
 procedure EmitAnsiStringFromNodeXtensa(valNode: Integer);
@@ -871,6 +918,7 @@ begin
   if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
   begin
     { dividend in a4:a5, divisor in a2:a3 }
+    EmitDivZeroCheckXtensa(True);            { the PAIR is the divisor here }
     if signedOp then EmitIDivMod64Xtensa(op = Ord(tkMod))
     else EmitUDivMod64Xtensa(op = Ord(tkMod));
   end
@@ -2374,11 +2422,13 @@ begin
         else if op = Ord(tkStar) then xtensa_mull(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkDiv) then
         begin
+          EmitDivZeroCheckXtensa(False);       { divisor in a3 }
           if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_divsi3')
           else xtensa_quos(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
         end
         else if op = Ord(tkMod) then
         begin
+          EmitDivZeroCheckXtensa(False);       { divisor in a3 }
           if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_modsi3')
           else xtensa_rems(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
         end

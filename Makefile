@@ -11861,6 +11861,49 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-i386 absent, i386 arm NOT verified ==="; \
 	fi
+	# Division by zero raises Runtime error 200 on EVERY target, in all FOUR
+	# shapes (32-bit div/mod, 64-bit div/mod) -- selected by ARGUMENT COUNT, so
+	# each of the four runs below enters a different branch. An earlier draft put
+	# three of them in an `else` the harness never entered and passed everywhere
+	# while exercising one path; that is why the loop passes 0..3 args rather
+	# than running the binary once.
+	# xtensa was the LAST target without a pre-divide check and is what this row
+	# was written for: before the fix it printed -1 for div and 10 for mod and
+	# carried on, on all 8 of its rows. The other five targets pass both before
+	# and after -- controls, not evidence.
+	# BOTH XTENSA DIVIDE SHAPES ARE RUN: hardware quos/rems, and the software
+	# __pxx_divsi3/__pxx_modsi3 path under --xtensa-cpu=lx6. One of them is not
+	# the target cleared.
+	# bug-a-the-div-by-zero-check-is-still-missing-on-xtensa
+	./$(COMPILER) test/test_xtensa_div_zero_check.pas $(TESTTMP)/divzero426
+	@for n in 0 1 2 3; do \
+	  a=""; i=0; while [ $$i -lt $$n ]; do a="$$a A$$i"; i=$$((i+1)); done; \
+	  tools/expect_same.sh divzero426/shape$$n "$$($(TESTTMP)/divzero426 $$a 2>&1)" "$$(cat test/test_xtensa_div_zero_check.expected)" || exit 1; \
+	done
+	@for tgt in aarch64 riscv32 arm32 i386; do \
+	  case $$tgt in aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; arm32) q=qemu-arm;; i386) q=qemu-i386;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$tgt test/test_xtensa_div_zero_check.pas $(TESTTMP)/divzero4_$$tgt >/dev/null || { echo "test_xtensa_div_zero_check $$tgt compile FAIL"; exit 1; }; \
+	    for n in 0 1 2 3; do \
+	      a=""; i=0; while [ $$i -lt $$n ]; do a="$$a A$$i"; i=$$((i+1)); done; \
+	      tools/expect_same.sh $$tgt/divzero4/shape$$n "$$(tools/run_target.sh $$tgt $(TESTTMP)/divzero4_$$tgt $$a 2>&1)" "$$(cat test/test_xtensa_div_zero_check.expected)" || exit 1; \
+	    done; \
+	  else \
+	    echo "=== test_xtensa_div_zero_check: $$q absent, $$tgt arm NOT verified ==="; \
+	  fi; \
+	done
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  for cpu in hw lx6; do \
+	    if [ $$cpu = lx6 ]; then cf=--xtensa-cpu=lx6; else cf=; fi; \
+	    ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $$cf test/test_xtensa_div_zero_check.pas $(TESTTMP)/divzero4_xt >/dev/null || { echo "test_xtensa_div_zero_check xtensa/$$cpu compile FAIL"; exit 1; }; \
+	    for n in 0 1 2 3; do \
+	      a=""; i=0; while [ $$i -lt $$n ]; do a="$$a A$$i"; i=$$((i+1)); done; \
+	      tools/expect_same.sh xtensa-$$cpu/divzero4/shape$$n "$$(qemu-xtensa $(TESTTMP)/divzero4_xt $$a 2>&1)" "$$(cat test/test_xtensa_div_zero_check.expected)" || exit 1; \
+	    done; \
+	  done; \
+	else \
+	  echo "=== test_xtensa_div_zero_check: qemu-xtensa absent, xtensa arms NOT verified ==="; \
+	fi
 	# {$Q+} left ON at `end.` -- the ordinary way to write it. This used to FAIL
 	# TO COMPILE on arm32 and riscv32: the switch is a lexer global with one reset
 	# per compilation, so it leaked out of the user's source into the compiler's
