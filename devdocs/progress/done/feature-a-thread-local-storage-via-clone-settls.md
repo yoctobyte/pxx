@@ -170,3 +170,39 @@ Docs: `devdocs/dev/threading.md` gained a "Thread-local storage (x86-64)" sectio
 
 ## Log
 - 2026-08-20 — resolved, commit 00b51fd03.
+
+---
+
+## Note appended 2026-09-01 (frankB) — read this before the tail above
+
+Body left intact as the session record; this corrects one line and answers a
+question two sessions arrived here with.
+
+**1. One stale claim in "What this unblocks".** It says *"threading is
+x86-64-only today anyway (the clone stub exists on four arches but
+`--threadsafe` gates the rest)"*. That is false and was already false when
+written: `--threadsafe` has accepted **x86-64, i386, aarch64 and arm32** since
+`07fee0844` (2026-07-06). It is the same assertion swept from five source sites
+by [[bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july]]
+(resolved `4eb58366c`) — but that sweep covered `compiler/**` comments and
+`devdocs/dev/threading*.md` and **never looked in `devdocs/progress/done/`**.
+So the claim survives here, in the document `pasparser_expr.inc`'s
+`__pxxTlsBase` Error sends every reader to. Verified today at `emit.inc:434`,
+`ir_codegen_xtensa.inc:434` and the gate at `lexer.inc:1291`.
+
+**2. Why a compile-time Error cites a ticket that is `done` — the citation is
+precise, not stale.** The confusion is that this ticket is named after a
+mechanism it did not use. TLS landed via `arch_prctl(ARCH_SET_GS)` in the clone
+stub (`thread_emit.inc:86-88`), which acts on the *calling* thread and so needed
+no clone flag: `PXX_CLONE_THREAD` is still `$350F00` and still omits
+`CLONE_SETTLS`. The Error cites this ticket for the residue the section above
+records as **not** done — i386/aarch64/arm32 have a readable thread register and
+no way to SET one. Both halves are true at once; only the slug misleads, and it
+is load-bearing in five source files so it is not being renamed.
+
+**3. `__pxxTlsBase` is Pascal-reachable and nothing uses it yet.** Those are two
+facts, and `grep -rn TLS_SLOT compiler/builtin/ lib/rtl/` returning nothing
+proves only the second. It cost two sessions a wrong "a Pascal-reachable TLS
+accessor comes first" — retracted in
+[[feature-a-reentrant-heap-lock-and-per-thread-arenas]], which now carries the
+slot budget and the x86-64-only scope question.

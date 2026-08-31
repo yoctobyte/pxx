@@ -3,7 +3,7 @@ track: A+O
 prio: 45
 type: feature
 blocked-by: []
-summary: "PROMISE MEASURED 2026-09-01, and a PREREQUISITE nobody had named. Promise: 2M GetMem/FreeMem pairs, total fixed, split across N workers (flat = perfect scaling) goes 0.14s at 1 worker to 0.39s at 12 — 2.8x WORSE, i.e. adding threads makes fixed allocator work slower. A null with the identical loop and per-iteration call but no heap traffic is flat at <=0.01s at every worker count, so dispatch is under 3% and the degradation is entirely the global heap lock. Measured at f23f141f997d, AFTER the refcount path went lock-free (274a9da6c), so it is allocator contention and nothing else. PREREQUISITE: TLS is NOT reachable from where the arenas would live — every TLS_SLOT read is hand-emitted code in ir_codegen.inc, and builtinheap.pas (PXXAlloc, HeapPtr, HeapEnd) has no TLS reference of any spelling. A Pascal-reachable TLS accessor comes first. The reentrancy half stays parked by the owner 2026-08-21; do not re-litigate it."\n
+summary: "PROMISE MEASURED 2026-09-01, and the blocker is SCOPE, not a missing primitive. Promise: 2M GetMem/FreeMem pairs, total fixed, split across N workers (flat = perfect scaling) goes 0.14s at 1 worker to 0.39s at 12 — 2.8x WORSE, i.e. adding threads makes fixed allocator work slower. A null with the identical loop and per-iteration call but no heap traffic is flat at <=0.01s at every worker count, so dispatch is under 3% and the degradation is entirely the global heap lock. Measured at f23f141f997d, AFTER the refcount path went lock-free (274a9da6c), so it is allocator contention and nothing else. NO ACCESSOR PREREQUISITE — an earlier version of this summary claimed one and was wrong. `__pxxTlsBase` (pasparser_expr.inc, AN_TLSBASE, IR_TLSBASE) is Pascal-reachable today, verified compiling and running inside parallel workers, and four TLS slots are free (TLS_SLOT_FIRST_FREE=12 of 16) where an arena needs two. THE REAL CONSTRAINT IS THE TARGET SET: `__pxxTlsBase` is x86-64-only while --threadsafe covers x86-64/i386/aarch64/arm32, so per-thread arenas built on it are an x86-64-only optimisation and the other three stay on the global lock. That is a scope decision to take before starting, not a missing primitive. The reentrancy half stays parked by the owner 2026-08-21; do not re-litigate it."
 status: backlog
 owner: unassigned
 ---
@@ -148,31 +148,82 @@ Measured AFTER `274a9da6c` made retain/release lock-free, so this is allocation
 and freeing only. A pre-274a9da6c whole-program number would have conflated the
 two.
 
-### The prerequisite: TLS is not reachable from the allocator
+### CORRECTED 2026-09-01: there is no accessor prerequisite
 
-This ticket says the TLS clause in `EmitAcquireHeapLock`'s comment "is now
-stale" because TLS landed 2026-08-20. **Half right, and the surviving half is
-the blocker.**
+**An earlier revision of this ticket (and of `EmitAcquireHeapLock`'s comment, commit
+`10bbc6f3b`) claimed per-thread arenas need "a Pascal-reachable TLS accessor
+first". That is false and this section is the retraction.**
 
-- TLS exists, with the slot convention in `compiler/defs.inc`
-  (`TLS_SLOT_SELF`, `_TID`, `_STACK_LO`, `_STACK_HI`, `_SIG_*`) and free slots.
-- **Every read of a slot is hand-emitted machine code in `ir_codegen.inc`.**
-  `grep -rn 'TLS_SLOT' compiler/builtin/ lib/rtl/` returns nothing, and
-  `builtinheap.pas` — which is where `PXXAlloc`, `HeapPtr` and `HeapEnd`
-  actually live — contains no TLS reference of any spelling.
+`__pxxTlsBase` is a compiler intrinsic and has been since 2026-08-20:
 
-`PXXAlloc` is Pascal and cannot ask which thread it is on. So per-thread arenas
-need **a Pascal-reachable TLS accessor first**. That is a prerequisite rather
-than a detail, and it is the real answer to "why has nobody done this" — not
-that nobody got to it.
+    compiler/pasparser_expr.inc:4112   if CaseEqual(name, '__pxxTlsBase') then
+    compiler/defs.inc:758              AN_TLSBASE = 96
+    compiler/defs.inc:971              IR_TLSBASE = 73
 
-The comment in `ir_codegen.inc` has been corrected to say this. I had first
-written it as "the stated blocker is gone and the work is open on its merits",
-which is what this ticket says and is wrong in the direction that would have
-sent the next agent straight into `builtinheap.pas` looking for a TLS read that
-is not there.
+Parser arm, AST node, IR op. Verified empirically, not read: a Pascal program at
+`-O2 --threadsafe` calls it, gets a base, and gets a *distinct, correct* one from
+inside `parallel for` workers.
 
-### What the job actually is, in order
+**Why the original grep missed it, which is the reusable part.**
+`grep -rn TLS_SLOT compiler/builtin/ lib/rtl/` returns nothing, and every clause I
+built on that is still true: `builtinheap.pas` really has no TLS reference, and
+`HeapPtr`/`HeapEnd` really are process-wide `Int64` globals. But `TLS_SLOT` is the
+name of the slot *constant*; the accessor has a different name. **The grep was
+correct and it was correct about the wrong name** — it proved "nothing uses TLS
+here", and I read it as "TLS is not reachable from here". Those are different
+statements and only the first was measured. Same family as everything in
+*The name is not the thing*: it did not error, it answered.
+
+**Slot budget.** `TLS_BLOCK_SIZE` = 128 bytes = 16 slots; 0..11 are taken
+(`SELF, TID, STACK_LO, STACK_HI, SIG_CODE, SIG_ADDR, SIG_CTX, SIG_NUM, EXC_TOP,
+EXC_OBJ, EXC_CLS, EXC_ADDR`) and `TLS_SLOT_FIRST_FREE = 12`. Four free; a bump
+region needs two (ptr, end). It fits.
+
+### The real constraint: target set, not primitive
+
+`__pxxTlsBase` refuses on everything but x86-64, and the Error says why:
+
+> the other targets have a readable thread register (aarch64 `tpidr_el0`, arm32
+> `tpidruro`) but this runtime has no way to SET one yet
+
+`--threadsafe` accepts **x86-64, i386, aarch64 and arm32**. So arenas built on
+`__pxxTlsBase` are an **x86-64-only** optimisation, and the other three threaded
+targets keep the global lock and the 2.8x negative scaling measured above.
+
+That is the decision to take before starting — an x86-64-only allocator win is a
+live option against a measured 2.8x regression, not a blocked one — and it is a
+scope question, not a missing-primitive question.
+
+### Residual settled: why the Error cites a ticket in `done/`
+
+The Error names `feature-a-thread-local-storage-via-clone-settls`, which is in
+`done/`. **The citation is precise, not stale**, and the resolution is that the
+ticket is named after a mechanism it did not use:
+
+- TLS landed via **`arch_prctl(ARCH_SET_GS)`**, emitted in the clone stub
+  (`compiler/thread_emit.inc:86-88`), which acts on the *calling* thread — so it
+  needed no clone flag, no sixth `__pxxclone` argument and no per-arch IR_CLONE
+  change. `PXX_CLONE_THREAD` is therefore **still `$350F00`** and still omits
+  `CLONE_SETTLS`; that decode is correct and is no longer the blocker it was
+  when the ticket was filed.
+- The ticket's own closing section records what it did **not** do: i386,
+  aarch64 and arm32 have a readable thread register and no way to set one
+  (i386 wants a `struct user_desc`). The Error cites the ticket for exactly that
+  residue.
+
+**One stale line in it, worth knowing before you read it.** Its tail says
+*"threading is x86-64-only today anyway (the clone stub exists on four arches but
+`--threadsafe` gates the rest)"*. That is the same false claim swept from five
+source sites by
+[[bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july]]
+(resolved `4eb58366c`) — `--threadsafe` has accepted four arches since
+`07fee0844`, 2026-07-06. **That sweep covered `compiler/**` comments and two
+`devdocs/dev/` docs; it never looked in `devdocs/progress/done/`**, so the claim
+survives in the one document the compile-time Error points every reader at. Left
+in place as a session record with a dated note appended there rather than
+rewritten.
+
+### What the work actually is
 
 1. A Pascal-reachable TLS accessor (or move the arena bookkeeping to where TLS
    already is). **Unmeasured** — I did not price this.

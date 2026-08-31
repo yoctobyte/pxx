@@ -73,14 +73,25 @@ procedure EmitAcquireHeapLock;
   and `compiler/defs.inc` carries the slot convention — TLS_SLOT_SELF, _TID,
   _STACK_LO, _STACK_HI, _SIG_* — with free slots reserved.
 
-  BUT IT IS NOT REACHABLE FROM WHERE THE ARENAS WOULD LIVE. Every read of a TLS
-  slot is hand-emitted machine code in THIS file; `grep -rn TLS_SLOT` finds
-  nothing under `compiler/builtin/` or `lib/rtl/`, and `builtinheap.pas` — which
-  is where PXXAlloc, HeapPtr and HeapEnd actually are — contains no TLS
-  reference of any spelling. PXXAlloc is Pascal and has no way to ask which
-  thread it is on. So per-thread arenas need a Pascal-reachable TLS accessor
-  FIRST; that is a prerequisite, not a detail, and it is the real reason this
-  has not happened. feature-a-reentrant-heap-lock-and-per-thread-arenas.
+  Reachable from Pascal, so `builtinheap.pas` can use it: `__pxxTlsBase` is a
+  compiler intrinsic (`pasparser_expr.inc`, AN_TLSBASE) returning the calling
+  thread's TLS block, and it compiles and runs inside parallel workers today.
+  `grep -rn TLS_SLOT compiler/builtin/ lib/rtl/` finds nothing only because
+  NOTHING USES IT YET — which is not the same fact and is the one worth
+  recording, since the first reading sends you looking for an accessor that is
+  already here.
+
+  Slot budget: TLS_BLOCK_SIZE is 128 bytes = 16 slots, 0..11 are taken and
+  TLS_SLOT_FIRST_FREE = 12, so four are free and a per-thread bump region needs
+  two (ptr, end). It fits.
+
+  THE REAL CONSTRAINT IS THE TARGET SET. `__pxxTlsBase` refuses on everything
+  but x86-64 — the others have a readable thread register (aarch64 tpidr_el0,
+  arm32 tpidruro) and no way to SET one yet. `--threadsafe` itself covers
+  x86-64, i386, aarch64 and arm32, so per-thread arenas built on this would be
+  an x86-64-only optimisation and the other three threaded targets stay on the
+  global lock. That is the thing to decide before starting, not a missing
+  accessor. feature-a-reentrant-heap-lock-and-per-thread-arenas.
 
   What this blob still is: the part of the cliff that was pure contention
   overhead rather than serialisation.
