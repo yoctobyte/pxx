@@ -123,7 +123,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-xtensa test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-xtensa test-c-abi-glibc-oracle test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest tools-devtest-sh c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -16418,8 +16418,8 @@ test-c-float-const-cross: $(COMPILER)
 .PHONY: test-c-abi-cross
 test-c-abi-cross: $(COMPILER)
 	@overall=0; \
-	exp="$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"; \
-	iexp="$$(printf 'dbl_first 1000\nint_first 1000\nthree_ints 123\ntwo_dbl 1750\nflt 1000\ndbl_arg_int_ret 1000')"; \
+	exp="$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00\nmix4 1234.00\neight 204\npairsum 17.50')"; \
+	iexp="$$(printf 'dbl_first 1000\nint_first 1000\nthree_ints 123\ntwo_dbl 1750\nflt 1000\ndbl_arg_int_ret 1000\nmix4 123400\neight 204\npairsum 1750')"; \
 	for t in aarch64 arm32 riscv32 i386; do \
 	  if [ "$$t" != "i386" ] && ! command -v qemu-$$t >/dev/null 2>&1 && \
 	     ! { [ "$$t" = "arm32" ] && command -v qemu-arm >/dev/null 2>&1; }; then \
@@ -16446,7 +16446,39 @@ test-c-abi-cross: $(COMPILER)
 	    else echo "test-c-abi-cross: INTRA-C FAIL $$t"; printf '%s\n' "$$igot" | sed 's/^/    /'; overall=1; fi; \
 	  fi; \
 	done; \
-	test "$$overall" = "0" || { echo "test-c-abi-cross: RED (expected until bug-c-a-c-function-s-calling-convention-depends-on-the-target lands)"; exit 1; }
+	test "$$overall" = "0" || { echo "test-c-abi-cross: RED"; exit 1; }
+
+# THE ONE ROW WITH AN OUTSIDE OPINION. Every other subject in this family is
+# pxx on both sides of the call, so it can only prove pxx agrees with itself --
+# and arm32's stack-argument layout is exactly the kind of thing that is
+# self-consistent while wrong (bug-a-riscv32-passes-stack-arguments-in-reverse-
+# psabi-order lived for months that way). There is no arm32 gcc on this box, so
+# the usual tools/gcc_diff_probe.sh --target move is unavailable; GLIBC is the
+# substitute oracle. dprintf is not implemented by crtl, so it resolves to the
+# armel sysroot's libc, and glibc decides what the argument bytes mean.
+# The expected text is not a pxx artefact: it is what `gcc` prints for the same
+# source natively.
+# riscv32 is absent by construction, not by omission: that backend emits no
+# dynamic segment, so it cannot reach a shared glibc at all and has no external
+# oracle available on this box.
+# bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area
+.PHONY: test-c-abi-glibc-oracle
+test-c-abi-glibc-oracle: $(COMPILER)
+	@exp="$$(printf 'ints 11 22 33 44 55 66\nmixed 7 2.50 9\nwide 1 1.50 2 2.50 3')"; \
+	overall=0; \
+	for t in arm32 i386; do \
+	  if [ "$$t" != "i386" ] && ! command -v qemu-$$t >/dev/null 2>&1 && \
+	     ! { [ "$$t" = "arm32" ] && command -v qemu-arm >/dev/null 2>&1; }; then \
+	    echo "test-c-abi-glibc-oracle: SKIP $$t (qemu absent)"; continue; \
+	  fi; \
+	  if ! ./$(COMPILER) --target=$$t --system-libs=c test/c_abi_glibc_oracle.c $(TESTTMP)/c_abi_oracle_$$t >$(TESTTMP)/c_abi_oracle_$$t.err 2>&1; then \
+	    echo "test-c-abi-glibc-oracle: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/c_abi_oracle_$$t.err; overall=1; continue; \
+	  fi; \
+	  got="$$(tools/run_target.sh $$t $(TESTTMP)/c_abi_oracle_$$t 2>&1)"; \
+	  if [ "$$got" = "$$exp" ]; then echo "test-c-abi-glibc-oracle: PASS $$t"; \
+	  else echo "test-c-abi-glibc-oracle: FAIL $$t (pxx disagrees with glibc)"; printf '%s\n' "$$got" | sed 's/^/    /'; overall=1; fi; \
+	done; \
+	test "$$overall" = "0" || { echo "test-c-abi-glibc-oracle: RED"; exit 1; }
 
 test-c-conformance-aarch64: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target aarch64

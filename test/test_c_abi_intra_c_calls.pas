@@ -10,4 +10,7 @@ begin
   Writeln('two_dbl ',        IntraTwoDbl);
   Writeln('flt ',            IntraFlt(4));
   Writeln('dbl_arg_int_ret ', IntraDblArgIntRet(4));
+  Writeln('mix4 ',           IntraMix4);
+  Writeln('eight ',          IntraEight);
+  Writeln('pairsum ',        IntraPairSum);
 end.

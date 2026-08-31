@@ -3002,13 +3002,18 @@ var
     populations and discriminates nothing (measured with a probe: every function
     of a C unit reached from a Pascal program reports cprog=1).
 
-    The distinction is a CONVENTION one, and it has to be read on both sides of
-    a call or neither. A C unit's functions are called from Pascal, which
-    marshals the true C ABI; a C program's functions are called from C, which
-    marshals pxx's internal positional convention. Deleting the positional
-    prologue arms without this flag moves only the callee and breaks every
-    intra-C-program call on i386/arm32/aarch64.
-    bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given }
+    The distinction WAS a convention one, read on both sides of a call by
+    CProcUsesCAbi. It is NOT any more, and nothing reads this flag today: Track U
+    ruled 2026-08-31 that a C function ALWAYS uses the C ABI, so ProcCdecl alone
+    answers it and the clause naming this flag is gone from symtab.inc. The flag
+    is still set by ParseCUnit and is still an accurate statement about the
+    source; it is kept because it is cheap, correct and the one thing that can
+    tell the two C populations apart if a later question needs to.
+    Do not restore it to CProcUsesCAbi: making a C function's ABI depend on who
+    included its unit is the answer that was measured wrong at a gcc -m32
+    boundary.
+    decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
+    bug-c-a-c-function-s-calling-convention-depends-on-the-target }
   CHasWideBitfield : Boolean; { the current C translation unit declared a bitfield
     of width 33..63. gcc treats such a field as an integer of EXACT bit-precision
     = width; +,-,*,<< wrap mod 2^width. Gates the CMakeBinop normalize so normal C

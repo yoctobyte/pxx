@@ -12,6 +12,9 @@ function IntFirst(n: Integer; x: Double): Double;
 function ThreeInts(a, b, c: Integer): Integer;
 function TwoDbl(a, b: Double): Double;
 function Flt(f: Single; n: Integer): Single;
+function Mix4(i1: Integer; d1: Double; i2: Integer; d2: Double): Double;
+function Eight(a, b, c, d, e, f, g, h: Integer): Integer;
+function PairSum(a, b: Double): Double;
 implementation
 uses './cabi_bridge.c';
 function DblFirst(x: Double; n: Integer): Double; begin DblFirst := cee_dbl_first(x, n); end;
@@ -19,4 +22,9 @@ function IntFirst(n: Integer; x: Double): Double; begin IntFirst := cee_int_firs
 function ThreeInts(a, b, c: Integer): Integer;    begin ThreeInts := cee_three_ints(a, b, c); end;
 function TwoDbl(a, b: Double): Double;            begin TwoDbl := cee_two_dbl(a, b); end;
 function Flt(f: Single; n: Integer): Single;      begin Flt := cee_flt(f, n); end;
+function Mix4(i1: Integer; d1: Double; i2: Integer; d2: Double): Double;
+  begin Mix4 := cee_mix4(i1, d1, i2, d2); end;
+function Eight(a, b, c, d, e, f, g, h: Integer): Integer;
+  begin Eight := cee_eight(a, b, c, d, e, f, g, h); end;
+function PairSum(a, b: Double): Double;           begin PairSum := cee_pairsum(a, b); end;
 end.

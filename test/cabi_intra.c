@@ -21,10 +21,12 @@
    argument ORDER. riscv32 is clean here by construction, its prologue is not
    gated.
 
-   A seventh shape, (double,int,double,int,double,int), is deliberately ABSENT:
-   arm32 refuses it at compile time -- "argument block exceeds 4 core registers",
-   bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area -- and a compile-time
-   refusal would take the other six down with it on that target.
+   Two further shapes, mix4 and eight, USED to be absent for that reason: arm32
+   refused an argument block over four core registers at compile time, and a
+   compile-time refusal takes the other six down with it on that target. The
+   refusal is gone (bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area) and they
+   are the only shapes here that reach a stack argument -- so C-to-C stack
+   arguments inside a Pascal-used unit were untested until 2026-08-31.
 
    bug-a-the-c-abi-gate-moved-the-callee-but-not-the-intra-c-call-sites
    bug-c-a-c-function-s-calling-convention-depends-on-the-target */
@@ -35,6 +37,15 @@ static int    in_three_ints(int a, int b, int c)     { return a*100 + b*10 + c; 
 static double in_two_dbl(double a, double b)         { return a*10.0 + b; }
 static float  in_flt(float f, int n)                 { return f * (float)n; }
 static int    in_dbl_arg_int_ret(double x, int n)    { return (int)(x * (double)n * 100.0); }
+static double in_mix4(int i1, double d1, int i2, double d2)
+{ return (double)i1*1000.0 + d1*100.0 + (double)i2*10.0 + d2; }
+static int    in_eight(int a, int b, int c, int d, int e, int f, int g, int h)
+{ return a*1 + b*2 + c*3 + d*4 + e*5 + f*6 + g*7 + h*8; }
+struct in_pair { double hi; double lo; };
+static struct in_pair in_mkpair(double a, double b)
+{ struct in_pair p; p.hi = a; p.lo = b; return p; }
+static double in_pairsum(double a, double b)
+{ struct in_pair p = in_mkpair(a * 10.0, b); return p.hi + p.lo; }
 
 int cee_intra_dbl_first(int n)     { return (int)(in_dbl_first(2.5, n) * 100.0); }
 int cee_intra_int_first(int n)     { return (int)(in_int_first(n, 2.5) * 100.0); }
@@ -42,3 +53,6 @@ int cee_intra_three_ints(void)     { return in_three_ints(1, 2, 3); }
 int cee_intra_two_dbl(void)        { return (int)(in_two_dbl(1.5, 2.5) * 100.0); }
 int cee_intra_flt(int n)           { return (int)(in_flt(2.5f, n) * 100.0); }
 int cee_intra_dbl_arg_int_ret(int n) { return in_dbl_arg_int_ret(2.5, n); }
+int cee_intra_mix4(void)           { return (int)(in_mix4(1, 2.0, 3, 4.0) * 100.0); }
+int cee_intra_eight(void)          { return in_eight(1, 2, 3, 4, 5, 6, 7, 8); }
+int cee_intra_pairsum(void)        { return (int)(in_pairsum(1.5, 2.5) * 100.0); }

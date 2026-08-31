@@ -11598,34 +11598,43 @@ end;
   Requirement 3 of bug-c-a-c-function-s-calling-convention-depends-on-the-target
   is a single such place, and it is the requirement the original defect kept
   failing: the same idea spelled out at eight sites is how it reached strike
-  three. Both new call sites go through here, so if the answer ever changes --
-  Track U is deciding exactly that in
+  three. All nine read sites go through here, which is what made the option-A
+  flip below a one-line edit rather than a second archaeology pass -- and what
+  makes callers and callee move together by construction, so
+  bug-a-the-c-abi-gate-moved-the-callee-but-not-the-intra-c-call-sites cannot
+  return by the other route.
+
+  RULED OPTION A 2026-08-31 and the answer is now unconditional: a C function
+  ALWAYS uses the C ABI. `ProcCdecl` alone answers the question, everywhere, for
+  every caller -- Pascal, C, a function pointer, a future frontend, a gcc-built
+  caller through an exported symbol.
+
+  This body used to carry a second clause, `(not CProgramMode) or
+  CUnitOfPascalProgram`, and the reasoning for it is worth one paragraph because
+  the shape recurs. `CProgramMode` does not mean "this is a C program" -- it
+  means "the source in front of me is C", and ParseCUnit sets it exactly as
+  ParseCProgram does. So it is True both for a standalone C program and for a C
+  translation unit that a PASCAL program uses, and it discriminates nothing on
+  its own; `CUnitOfPascalProgram` was the half it could not express. Together
+  they made a C function's ABI depend on WHO INCLUDED ITS UNIT, which
+  re-parameterised the original defect rather than removing it.
+
+  What settled it was an instrument, not an argument. Until the i386 object
+  writer landed there was no caller outside pxx's own convention, and the whole
+  corpus is self-consistent under either answer -- which is exactly why this was
+  wrong for eight months without a single failing test. With `gcc -m32` linking
+  a pxx i386 object, a standalone C translation unit gave i_ii(1,2) = 21 (the
+  arguments reversed) and -nan for every double, while the same signatures as
+  Pascal cdecl were all correct. The population an external C caller gets wrong
+  was exactly the population this clause excluded.
   decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
-  -- it changes in one line rather than at eight.
 
-  TWO populations reach the C ABI and a guard that names only one of them is
-  wrong at the other. A PASCAL caller of a cdecl proc has CProgramMode False --
-  that is the `not CProgramMode` the seven call-site guards were written with,
-  and it is correct as far as it goes. But an INTRA-C call inside a Pascal-used
-  unit has CProgramMode True, and it must marshal the same way, because that
-  unit's callee prologue is now on the C ABI. Naming only the first population
-  left positional callers calling a C-ABI callee -- the ticket's original
-  disagreement, relocated from the Pascal<->C boundary to the C<->C one
-  (bug-a-the-c-abi-gate-moved-the-callee-but-not-the-intra-c-call-sites, found
-  by frankC on the one subject neither wired test can reach).
-
-  `CUnitOfPascalProgram` is the half `not CProgramMode` cannot express: ParseCUnit
-  sets CProgramMode
-  True exactly as ParseCProgram does, so inside C source it is True in both
-  populations and discriminates nothing. Measured twice, independently: a probe
-  here reported cprog=1 for every function of a C unit reached from a Pascal
-  program, and frankC got 1000/1000 on all five targets calling a double-taking
-  C function from other C code in such a unit -- which the positional prologue
-  can only do if the flag is True there. }
+  `CUnitOfPascalProgram` is deliberately still SET and still live in defs.inc:
+  removing it is a separate change from removing its use here, and this is the
+  only site that read it. }
 function CProcUsesCAbi(procIdx: Integer): Boolean;
 begin
-  Result := (procIdx >= 0) and ProcCdecl[procIdx] and
-            ((not CProgramMode) or CUnitOfPascalProgram);
+  Result := (procIdx >= 0) and ProcCdecl[procIdx];
 end;
 
 { Does the routine being closed have to leave its float result in the target's

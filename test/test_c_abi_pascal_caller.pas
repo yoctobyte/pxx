@@ -21,10 +21,13 @@ program test_c_abi_pascal_caller;
   never go red-to-green. test/c_abi_pure_c_control.c is that regression half,
   and the two belong together.
 
-  `f(int,double,int,double)` is deliberately absent: it is refused on arm32
-  (an argument block over four core registers) by
-  bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area, and a compile-time refusal
-  would take the other five shapes down with it on that target.
+  `mix4` and `eight` USED to be absent here, refused on arm32 as an argument
+  block over four core registers, and a compile-time refusal takes the other
+  shapes down with it on that target. That refusal is gone
+  (bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area), and the two shapes are
+  the only ones in this family that reach a stack argument at all -- so until
+  2026-08-31 the part of the ABI with no implementation was also the part with
+  no test.
   bug-c-a-c-function-s-calling-convention-depends-on-the-target }
 uses unit_cabi_bridge;
 begin
@@ -33,4 +36,7 @@ begin
   Writeln('three_ints ', ThreeInts(1, 2, 3));
   Writeln('two_dbl ',    TwoDbl(1.5, 2.5):0:2);
   Writeln('flt ',        Flt(2.5, 4):0:2);
+  Writeln('mix4 ',       Mix4(1, 2.0, 3, 4.0):0:2);
+  Writeln('eight ',      Eight(1, 2, 3, 4, 5, 6, 7, 8));
+  Writeln('pairsum ',    PairSum(1.5, 2.5):0:2);
 end.

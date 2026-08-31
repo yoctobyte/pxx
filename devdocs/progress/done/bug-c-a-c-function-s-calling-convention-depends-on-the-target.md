@@ -2,10 +2,10 @@
 track: A+C
 prio: 65
 type: bug
-status: blocked
-blocked-by: [bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given]
+status: done
+blocked-by: []
 owner: frankC
-summary: "On x86-64 a C function uses the C ABI (SysV); on aarch64 and arm32 it uses pxx's INTERNAL positional convention, because cparser.inc's per-target prologue spills disagree. So `is this proc reached by the C ABI?` has a different answer per target, nothing names that in one place, and the `and (not CProgramMode)` guards on the aarch64/arm32 call arms exist to compensate. Split out of refactor-a-collapse-the-c-frontend-sysv-prologue-copy, whose x86-64 half landed byte-identical; this half is an ABI CHANGE and needs a behavioural gate, not byte-identity."
+summary: "RESOLVED 2026-08-31 by the option-A flip Track U ruled: CProcUsesCAbi drops its third clause, so ProcCdecl alone answers 'is this proc reached by the C ABI?' -- requirement 3, one place, for good, and the per-target axis this ticket is named after is gone. Measured red-to-green at the only boundary that can judge it: gcc -m32 linking a pxx i386 object built from a standalone C translation unit went from i_ii(1,2)=21 (arguments reversed), d_d(2.5)=-nan and i_id(2,3.5)=1074528256 to all seven rows correct. The flip needed two backend gaps closed first, both latent because option B never routed into them: the i386 cdecl CALL arm could not make a variadic call at all (a hard Error, hit by crtl's own bodied printf, so every standalone C program on i386 stopped compiling), arm32 had no AAPCS32 stack-argument area (bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area, resolved in the same group), aarch64 refused past 8 arguments in four places (bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds, two of three kinds landed, indirect still open), and a struct RETURNED BY VALUE was miscompiled on all three because the cdecl call arms never set the hidden-destination register the callee prologue reads -- crtl's own sin() segfaulted. Gates: test-c-abi-cross green on all four cross targets and all three subjects, the new test-c-abi-glibc-oracle green on arm32 and i386, gate.sh quick green, self-host fixedpoint converged."
 ---
 
 # A C function's calling convention depends on which target it is built for
@@ -359,3 +359,127 @@ so the pair is honest, refuses a dirty tree, fails a build that does not print
 `converged after`, and leads its report with the control verdict — because a
 bridge row going green does not offset a control regression: the first says the
 change is incomplete, the second says it is wrong.
+
+
+---
+
+# RESOLVED 2026-08-31 — the option-A flip, frankC
+
+Held as one group with [[bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area]]
+and the i386 variadic gap below, because the flip cannot land without either of
+them and neither is visible without the flip.
+
+## The change
+
+```pascal
+Result := (procIdx >= 0) and ProcCdecl[procIdx];
+{ was: and ((not CProgramMode) or CUnitOfPascalProgram) }
+```
+
+That is requirement 3 of this ticket met: **one predicate, nine read sites, one
+answer.** The axis the ticket is named after — a C function's convention
+depending on which target it is built for — is gone, and so is the axis option B
+replaced it with, its depending on who included the unit.
+
+## Red to green at the only boundary that can judge it
+
+The gates this family already had are self-consistent under either answer and so
+can only detect a regression. The instrument that can go red-to-green is a
+foreign caller, and it exists now: `gcc -m32 -no-pie` linking a pxx i386 object
+emitted from a **standalone** C translation unit, i.e. exactly the population
+option B excluded. Same source, same writer, same caller, one variable.
+
+| call | expect | before (`f92c42a69850`) | after (`9ecfb33b4f47`) |
+| --- | --- | --- | --- |
+| `i_none()` | 7 | 7 | 7 |
+| `i_ii(1,2)` | 12 | **21** — arguments reversed | 12 |
+| `i_d(2.5)` | 5 | 5 | 5 |
+| `i_id(2,3.5)` | 5 | **1074528256** | 5 |
+| `d_none()` | 1.5 | **-nan** | 1.50 |
+| `d_d(2.5)` | 3.5 | **-nan** | 3.50 |
+| `d_ii(3,4)` | 7 | **-nan** | 7.00 |
+
+This reproduces the ruling's own table on a third binary, independently.
+
+## The two prerequisites, and why neither had ever been seen
+
+Both are the same shape: **an arm nothing routed into cannot be observed to be
+missing.** Option B kept every C program out of the cdecl path, so the cdecl
+path's holes were invisible for as long as the gate was there — and the gate was
+there because of the holes.
+
+1. **i386's cdecl CALL arm could not make a variadic call at all.** Not a wrong
+   answer — a hard `Error('target i386: external call argument count mismatch')`
+   whenever `nArgs <> ParamCount`. The first thing to hit it after the flip is
+   **crtl's own bodied `printf`**, so *every standalone C program on i386 stopped
+   compiling*, in the `builtinheap` unit, with a message about externals. Fixed
+   by counting and placing the variadic tail under C's default argument
+   promotions (float widens to double, everything else is one 4-byte slot) in
+   **both** the sizing loop and the emit loop — they walk the same list and a
+   disagreement silently shifts every argument after the first float. i386 cdecl
+   needed nothing else: the block is already arg0-lowest and ascending, which is
+   where `va_arg` walks from, and the caller already cleans `argBytes`.
+
+   Worth noting what the counting loop did before: for `nArgs >= ParamCount` it
+   incremented nothing, so a tail argument was stored into the frame but not
+   counted — and `argBytes` is both the frame reservation and the offset of the
+   saved-esp slot. That is a saved-esp overwrite, not merely a short block.
+
+2. **aarch64 refused past 8 arguments in four places**, each counting its own
+   `lo`/`hi` bank totals and refusing separately. A nine-parameter C function is
+   ordinary code — `lua/src/lcode.c` has one — so the flip took c-testsuite from
+   219/0 to 217/2, and broke the lua and sqlite cross builds outright, on that
+   target alone. Its ticket said *"nothing reaches it today"*, which was true of
+   the externals pxx declares and false of the C code pxx compiles.
+   **I told the coordinator this one was in the group but not a blocker. That
+   was wrong**, and the baseline that settled it was measured rather than
+   argued: stashed, rebuilt clean origin/master (`3d5308a75742`), nine-int C
+   function prints 285 on aarch64.
+
+3. **A struct RETURNED BY VALUE was miscompiled on i386, arm32 AND aarch64.**
+   The callee prologue takes the hidden destination from `ecx` / `r12` / `x8`
+   whatever the convention; the three cdecl CALL arms never set it. Nothing
+   returning a struct had come down that path, so the arms had no code and no
+   test. The first thing that does is **crtl's own `sin`** — its kernels return
+   a two-double `crtl_dd` by value — so `sin(2)` SEGFAULTED on all three while
+   `sqrt(4.0)` was fine. Found by c-testsuite 00174/00204 on i386, then
+   reproduced by hand on the other two.
+
+4. **arm32 had no AAPCS32 stack-argument area**, on either side of the call.
+   `__pxx_va_start_impl` is five words, so `lib/crtl/src/stdarg.c` refused.
+   Written up in its own ticket, including the glibc oracle that stands in for
+   the arm32 gcc this box does not have, and the per-target alignment the shared
+   `__pxx_va_arg_cross32` walk had to learn.
+
+## What was checked, and what was not
+
+**Checked, and these are the claims I make**, all on binary `332312fb142a`:
+`make test-c-abi-cross` PASS on aarch64/arm32/riscv32/i386 across all three
+subjects — bridge, pure-C control and intra-C — including three new shapes that
+reach a stack argument and a struct return for the first time;
+`make test-c-abi-glibc-oracle` PASS on arm32 and i386; `make test-emit-obj` PASS;
+**c-testsuite 219 pass / 0 fail on i386, arm32, aarch64 and riscv32**; **lua
+cross, all six scripts on all four targets**; **sqlite threads, all four
+arches**; the self-host fixedpoint converged at every step; the gcc -m32
+boundary table above.
+
+**One measurement I made was void and I am recording it rather than quietly
+dropping it:** an earlier corpus run reported `test-c-abi-cross` FAIL on all four
+targets. That was me editing the test subjects and their expected strings *while
+the run was measuring them*. The instrument did not fail — it answered correctly
+about a tree that had moved underneath it, which is this repo's most-repeated
+shape. The conformance, lua and sqlite rows in that same log predate the edits
+and were valid, and are what found the aarch64 blocker.
+
+**Not covered, stated because a green here should not be read as more than it
+is:** arm32 and aarch64 have no object writer, so the *foreign-caller* boundary
+that settled i386 cannot be run on them —
+[[feature-a-object-output-for-arm32-and-aarch64]] is that instrument, and the
+ruling accepted this residual knowingly. For those two targets the evidence is
+the wired cross rows (pxx on both sides) plus, on arm32 only, glibc.
+
+**And the aarch64 residual this work made visible:** a nine-parameter C function
+does not compile for aarch64 at all. That is
+[[bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds]],
+whose summary said *"nothing reaches it today"* — false, and corrected there.
+aarch64 is now the only target that refuses a stack-argument C signature.
