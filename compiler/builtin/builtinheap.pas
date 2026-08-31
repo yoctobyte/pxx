@@ -785,6 +785,8 @@ var
     path may allocate nothing. }
   HeapDbgBytes  : array[0..15] of Byte;
   HeapDbgNBytes : Integer;
+  HeapDbgStack  : array[0..31] of Int64;
+  HeapDbgNStack : Integer;
 {$endif}
   { A single shared, read-only NUL byte. PChar of an empty managed string (a nil
     handle) returns its address so the C boundary sees a valid empty C string, as
@@ -1288,6 +1290,11 @@ const
     as the string routines and carried NO poison check and no static-floor
     guard, which left them the only unguarded writer of a managed refcount
     once the string and object paths were both instrumented and both silent. }
+  { Poor-man's backtrace: gdb on this box has no arm target and the guest
+    carries no unwind info anyway, so the report emits RAW STACK WORDS and the
+    resolving happens offline against the --map file. A word landing inside the
+    code segment is a return address; the rest is noise and is meant to be. }
+  DBG_M12 = ' stack=';
   DBG_M10 = 'pxx-heap: RELEASE of a FREED dynarray 0x';
   DBG_M11 = 'pxx-heap: RETAIN of a FREED dynarray 0x';
   DBG_M5 = '  size=0x';
@@ -1328,6 +1335,9 @@ begin
   else if kind = 11 then
     for i := 1 to Length(DBG_M11) do
     begin b := Byte(DBG_M11[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 12 then
+    for i := 1 to Length(DBG_M12) do
+    begin b := Byte(DBG_M12[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else
     for i := 1 to Length(DBG_M4) do
     begin b := Byte(DBG_M4[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
@@ -1350,6 +1360,17 @@ begin
   end;
 end;
 
+procedure PXXDbgGrabStack(anchor: Int64);
+{ Copy raw words upward from a local's address. The stack grows down, so higher
+  addresses are older frames. No unwind is attempted and none is needed: a
+  return address is recognised offline by falling inside the code segment. }
+var i: Integer;
+begin
+  HeapDbgNStack := 32;
+  for i := 0 to HeapDbgNStack - 1 do
+    HeapDbgStack[i] := PWord(anchor + i * SizeOf(Pointer))^;
+end;
+
 procedure PXXDbgFlush;
 var i: NativeInt; b: Byte; r: Int64; kind: Integer;
 begin
@@ -1368,6 +1389,15 @@ begin
   if (kind = 8) or (kind = 9) or (kind = 10) or (kind = 11) then
   begin
     PXXDbgPutConst(5); PXXDbgPutHex(HeapDbgSize, 8);
+  end;
+  if ((kind = 10) or (kind = 11)) and (HeapDbgNStack > 0) then
+  begin
+    PXXDbgPutConst(12);
+    for i := 0 to HeapDbgNStack - 1 do
+    begin
+      if i > 0 then begin b := 32; r := PXXSysWrite(2, Int64(@b), 1); end;
+      PXXDbgPutHex(HeapDbgStack[i], SizeOf(Pointer) * 2);
+    end;
   end;
   if kind = 2 then
   begin
@@ -3367,6 +3397,7 @@ begin
     HeapDbgPend := 11;
     HeapDbgAddr := Int64(p);
     HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
+    PXXDbgGrabStack(Int64(@rcAddr));
     PXXDbgFlush;
     Exit;
   end;
@@ -3395,6 +3426,7 @@ begin
     HeapDbgPend := 10;
     HeapDbgAddr := Int64(arrData);
     HeapDbgSize := PWord(Int64(arrData) - PXX_HDR_SIZE - 8)^;
+    PXXDbgGrabStack(Int64(@rcAddr));
     PXXDbgFlush;
     Exit;
   end;
