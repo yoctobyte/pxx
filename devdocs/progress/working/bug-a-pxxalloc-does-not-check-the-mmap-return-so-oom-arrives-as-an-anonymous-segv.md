@@ -3,10 +3,10 @@ slug: bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymo
 track: A
 prio: 45
 type: bug
-status: backlog
+status: working
 found: 2026-08-31
 found-by: frankA
-owner: ""
+owner: frankB
 blocked-by: []
 summary: "PXXAlloc does not check the mmap return -- deliberately, per builtinheap.pas:977 -- so when an arena request fails the -ENOMEM becomes the heap base and the next write faults. An out-of-memory condition therefore arrives as an anonymous SIGSEGV with no diagnostic, which is how it cost two sessions. Guest core: pc in PXXAlloc, `STR r1,[r0]` with r0 = 0xfffffff4 = -12 = -ENOMEM. THE APPETITE HALF OF THIS TICKET IS NO LONGER OPEN and this was renamed for it: the 15-arenas-vs-4 divergence is bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic, and it is not arm32-specific -- frankS reproduced the identical 15-arena failure NATIVELY on i386, with no emulator present. What remains here is only the unchecked return, which stays a real defect after that fix because any future OOM will still arrive as a SIGSEGV."
 ---
