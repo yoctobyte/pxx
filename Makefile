@@ -14871,7 +14871,22 @@ test-riscv32: $(COMPILER)
 # reproduced from this Makefile — treat the partition as N/matching, not as a
 # fixed denominator.
 #
-# HANDBACK STATE (frankS, 2026-08-30, HEAD fa01f7111, compiler a6b4e6e1816c):
+# CURRENT STATE (frankA, 2026-08-31, compiler db19ff591808):
+# Call0 115 match / 5 differ / 20 do not compile, of 140 — and only TWO of the
+# five differing are compiler bugs. Two are artifacts of the SWEEP: a re-derived
+# source list drops the per-row assertions the rows below carry, so test_rtti
+# (which needs -dPXX_MANAGED_STRING and the pointer/RTTI/InstanceSize filter,
+# carried identically on i386, aarch64 and arm32) and test_signal_altstack
+# (whose expected literal encodes code=2, because SEGV_ACCERR vs SEGV_MAPERR is
+# a per-arch guard-page difference) both compare unequal to a naive oracle while
+# their real rows pass. A third, test_asm_ifdef_multiarch, is a test-coverage
+# gap: the source has arms for CPUX86_64/CPURISCV32/CPUAARCH64 and none for
+# xtensa. The two real ones are test_cross_syscall and test_cross_float (Track
+# F, formatting). Reconcile a non-matching row against its recipe here BEFORE
+# filing it. 140 is the union at this sha, not a constant — the note above
+# already says why, and it moved from 129 in one day.
+#
+# PRIOR HANDBACK (frankS, 2026-08-30, HEAD fa01f7111, compiler a6b4e6e1816c):
 # Call0 100 match / 7 differ / 21 do not compile, of 129. Over the night 69 -> 100
 # matching and 21 -> 8 diverging across nine changes, no sweep regressing a
 # program. Windowed is 50/55/23 and is a different target in practice. The full
@@ -14883,6 +14898,9 @@ test-riscv32: $(COMPILER)
 # same signature as the var-string-param bug fixed earlier that night, now on
 # by-value wide records. (The other one named there, test_shortstring_trunc's
 # `b-CLOBBERED`, was NOT memory corruption -- see the row below -- and is fixed.)
+# NO LONGER A LEAD (frankA, 2026-08-31): test_arm32_record_byval_wide is
+# byte-identical to the oracle at db19ff591808. Nobody claimed it; something
+# else in that night's ABI work took it out, so the pointer outlived the bug.
 #
 # THE SYSCALL-TABLE SWEEP BOUGHT ONE ROW, and that is the honest number.
 # lib/rtl had per-arch syscall blocks for five arches and no xtensa row, so 14
