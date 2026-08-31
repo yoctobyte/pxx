@@ -161,6 +161,51 @@ this repo. But the pair only proves *this binary was once a fixedpoint of some
 sources* and *nobody has swapped it since*. **Nothing in it ties the binary to
 the sources on disk now.**
 
+### How it is reached in the wild (coordinator's construction)
+
+My measurement above `touch`ed the binary by hand, which proves the mechanism
+but not that anyone would meet it. The coordinator hit it for real and then
+reconstructed it deliberately: plant `f92c42a69850` (a correct fixedpoint for
+pre-`d782926ce` sources, wrong for these) **with a stamp naming
+`f92c42a69850`, so the pair is consistent**, mtimes newer than the sources,
+`make compiler/pascal26` at `c2545bd6a`:
+
+```
+self-host fixedpoint: verified — 2 round(s), f92c42a69850
+=== after: f92c42a69850 ===        exit 0, binary unchanged, no rebuild
+```
+
+The route in is ordinary: **let a gate rebuild your binary as a side effect,
+then let the sources move under it** (a pull, a rebase, a sibling's commit).
+That is how their binary and stamp came to be a consistent pair from older
+sources with newer mtimes. So the precise statement of the hole is: *a
+consistent binary+stamp pair produced from older sources, carrying a newer
+mtime, is accepted without rebuilding.*
+
+This also locates the failing component. frankB's mismatched-binary test
+refused loudly, so **the stamp sha guard is not the hole — the mtime gate in
+front of it is**, because it decides whether to compare against the current
+sources at all. Naming the sources in the stamp closes both layers, which is
+why this stays one fix.
+
+### The exact tell is the VERB, not the round count (frankB)
+
+Sharper than the grep counts below and worth using in preference:
+
+```
+GENUINE build:    converged after 2 round(s)
+                  self-host fixedpoint: verified — 2 round(s), 3d5308a75742
+
+REPLAY (planted): self-host fixedpoint: verified — 2 round(s), f92c42a69850
+```
+
+`converged after N` is a **result** — the iteration ran. `verified — N, <sha>`
+is a **report of stored state**, emitted either way. Both lines appear in a
+genuine build, which is precisely why the pair reads as normal, and why two
+agents pattern-matched on the second one. **`verified` with no `converged`
+above it means nothing was rebuilt** — free to check, and independent of the
+round count, which cannot separate stale from planted anyway.
+
 ### CLAUDE.md's prescribed tell is NOT broken — do not "fix" it
 
 The coordinator's report said the documented tell *"does not discriminate"* this
@@ -174,11 +219,21 @@ no-op verify: grep -c 'converged after' -> 0     (summary line only)
 
 CLAUDE.md says to grep for `converged after N round(s)`, and that string is
 emitted by the BUILD, never by the verify recipe. The doc is correct as written
-and needs no change. What is true is the weaker, human-factors claim: the
+and needs no change. Concurred independently by the coordinator and
+frankB after their own construction; the coordinator owns the original report
+and has retracted it. What is true is the weaker, human-factors claim: the
 summary line *reads* like proof, so an agent eyeballing output rather than
 grepping the prescribed string will be satisfied by it. That is an argument for
 the verify line naming what it is ("stamp only — no build ran"), not for
 rewriting the tell.
+
+**Write this as "the replay line is confusable with a result", never as "the
+check is inadequate."** The second phrasing sends the next reader looking for
+something weaker than the `converged` rule — which is the one instruction in
+CLAUDE.md that would have caught this entire evening. Its only failure was
+readers matching on the adjacent line. frankB is filing the Makefile half as a
+Track A ticket (the failing component is the fixedpoint target, not
+`tools/**`); this ticket keeps the `gate.sh` half.
 
 ### Consequence for the round-count heuristic below
 
