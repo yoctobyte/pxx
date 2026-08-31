@@ -709,7 +709,7 @@ absence "is NOT proof it is down", and points at the second instrument
 (`twatch.py --status`, which needs a `git fetch` first). **An instrument that
 states its own blind spot cannot be mistaken for one that has none.**
 
-### The five shapes
+### The six shapes
 
 1. **Wrong scope** — the answer is about your tree, your object store, your
    checkout. Staleness is the commonest, and *the tell is a partial result*: crash
@@ -759,6 +759,42 @@ states its own blind spot cannot be mistaken for one that has none.**
    about with the last stage's. The artifact check is still the better
    instrument — its failure is `invalid object name`, a different KIND of answer
    rather than a plausible one — but it is only better if you let it speak.
+6. **Wrong subject** — the probe is reached, runs, and answers correctly, but
+   about a *neighbouring construct* rather than the one under test. Distinct from
+   shape 3: nothing is unreached and nothing is vacuous. The program is
+   well-formed, the output is right, and it is right about the wrong thing.
+
+   Measured 2026-08-31. The coordinator broadcast, to four agents, that a nested
+   routine capturing a fixed-size array is refused by `pinned` and accepted at
+   HEAD, naming both binaries. Checking it, I wrote the obvious repro — an
+   `array[0..3] of Integer` at **program level**, read by a nested function. It
+   compiled and printed the right answer *on the very binary said to reject it*.
+
+   A program-level variable is a **global**, not a capture. The nested routine
+   reads it directly; no uplevel access is generated; the code path under test is
+   never involved — yet nothing about the run says so. Moving the array to be
+   local to an enclosing procedure produces the error verbatim, exit 1.
+
+   **Two things make this the expensive one.** First, it **fails in the
+   reassuring direction**: the wrong repro says *the compiler accepts this, there
+   is no blocker*, which is the answer nobody re-checks, and it would have gone
+   back up as "there is nothing behind the pin." Second, a passing probe reads as
+   *proof the other agent was wrong* — so the error propagates as a confident
+   correction of a correct claim, which is worse than a silent wrong answer.
+
+   **The guard, which is frankwasm's rule specialised:** when the bug is about
+   the BOUNDARY of a concept — what counts as a capture, a copy, an alias, an
+   escape — a probe drawn from the middle of the concept cannot see it. Ask what
+   makes this instance the thing at all, and check that the probe has it. Here:
+   *what makes it a capture is that the variable is local to an ENCLOSING
+   ROUTINE.* A repro missing that property is not a weaker test of the claim, it
+   is a test of something else.
+
+   **And the cheap positive control that settles it in one command:** a probe for
+   an unsupported construct must FAIL on the binary said to lack it. If it
+   passes, you have not confirmed support — you have learned your probe does not
+   exercise the construct. Same rule as "a guard that cannot fail is not a
+   guard", pointed at the repro instead of the guard.
 
 ### The bias that has a trigger: a tool you were *just* told is broken
 
