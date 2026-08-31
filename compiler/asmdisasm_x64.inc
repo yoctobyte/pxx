@@ -33,6 +33,21 @@
 const
   DIS_MAX_LINE = 256;
 
+var
+  { The segment override in effect for the instruction being decoded, as its
+    prefix byte ($64 fs / $65 gs), or 0 for none. File-scoped rather than a
+    parameter because DisParseModRM has 30 call sites and threading it through
+    all of them would be pure churn; it is RESET at the top of DisOneReal
+    beside legacyPfx, so it cannot leak from one instruction to the next. }
+  DisSegPfx : Byte;
+
+function DisSegText(pfx: Byte): AnsiString;
+begin
+  if pfx = $65 then DisSegText := 'gs:'
+  else if pfx = $64 then DisSegText := 'fs:'
+  else DisSegText := '';
+end;
+
 function DisHexByte(b: Byte): AnsiString;
 const hexd: AnsiString = '0123456789abcdef';
 begin
@@ -167,7 +182,7 @@ begin
   end;
 
   mrm.IsReg := False;
-  s := '[';
+  s := DisSegText(DisSegPfx) + '[';
   disp := 0; hasDisp := False;
 
   if rmf = 4 then
@@ -318,6 +333,7 @@ begin
   brTarget := -1;
   rexW := False; rexR := False; rexX := False; rexB := False; hasRex := False;
   legacyPfx := 0;
+  DisSegPfx := 0;
 
   { x86 prefix order is [legacy: 66/F2/F3] [REX] [opcode] -- REX is always
     the LAST prefix before the real opcode, so it must be checked *after*
@@ -325,9 +341,17 @@ begin
     misparsed every REX.W SSE2 form, e.g. `66 48 0F 6E` movq or `F2 48 0F 2A`
     cvtsi2sd -- the REX byte sat between the legacy prefix and 0F, which the
     original REX-first check never accounted for). }
-  if (p < len) and ((Code[p] = $66) or (Code[p] = $F2) or (Code[p] = $F3)) then
+  { A segment override and an SSE prefix may appear in either order, so take
+    them in a loop rather than assuming the one the backend happens to emit.
+    gs: arrived with the per-thread status slots (StatusSlotTlsIndex): the
+    per-thread form of `mov rax, [abs]` is the SAME instruction with a $65 in
+    front, so before this existed the prefix fell through to the raw-byte path
+    and printed `db 65` above a mov that then read as absolute. }
+  while (p < len) and ((Code[p] = $66) or (Code[p] = $F2) or (Code[p] = $F3)
+                    or (Code[p] = $64) or (Code[p] = $65)) do
   begin
-    legacyPfx := Code[p];
+    if (Code[p] = $64) or (Code[p] = $65) then DisSegPfx := Code[p]
+    else legacyPfx := Code[p];
     Inc(p);
   end;
   if (p < len) and (Code[p] >= $40) and (Code[p] <= $4F) then
