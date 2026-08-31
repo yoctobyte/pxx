@@ -70,7 +70,13 @@ Status line SURVIVES a claim. The current guard has never been able to protect
 anything through `claim`, and nothing said so.
 
 `resolve` (:3210) and the `unfinished` path (:3114) call `set_field` the same
-way and have the same exposure.
+way and have the same exposure — **and `resolve` was then observed doing it, in
+the same session, on the same ticket**: a restored 6-line Status bullet was
+flattened to the bare word `done` an hour after the `claim` instance. So this is
+not one command with an oversight; it is the shared writer, and both callers
+reproduce it on demand. That also makes the positive control easy to specify:
+claim a ticket with a prose Status line, resolve it, and assert the prose
+survived both.
 
 ## Related
 

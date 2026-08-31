@@ -2411,6 +2411,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-setlength-var-array-param-abi | A | 50 | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
 | feature-short-circuit-eval | A | 50 | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
+| feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-single-first-class | A | 50 | feature | Single (32-bit float) first-class on the internal-call ABI | — |
 | feature-sizeof-const-intrinsic-in-const-eval | A | 50 | feature | `SizeOf(...)` (and const-intrinsics) not accepted by the compile-time ConstEval | — |
 | feature-softfloat-lib | B | 50 | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |

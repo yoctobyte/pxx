@@ -9,7 +9,7 @@ owner: frankA
 # Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** working (frankA). Items 1 (SA_SIGINFO/ucontext) and 3 (sigaltstack) DONE. Item 4's COMPILER half DONE on all five hosted targets as of 2026-08-31 — `__pxxSigNum` parks on x86-64/i386/aarch64/arm32/riscv32 and the x86-64-only refusal is gone; its RTL half is Track B's [[feature-b-fpc-signal-compat-unit]]. Item 2 (`--threadsafe`) is **defined and tested** as of 2026-08-31, and the definition turned up a defect filed separately ([[bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads]]). **Item 5 (SIGPIPE policy) is all that is left here, and it is deliberately parked until the net library.** (`progress.sh claim` overwrote this line with the bare word `working` on 2026-08-31; restored, because this ticket has no frontmatter `summary` and this line is what a reader routes on.)
+- **Status:** DONE 2026-08-31. Items 1 (SA_SIGINFO/ucontext + PC rewrite), 2 (`--threadsafe`: defined and tested), 3 (sigaltstack) and 4's COMPILER half (`__pxxSigNum`, all five hosted targets) are complete. Item 4's RTL half is [[feature-b-fpc-signal-compat-unit]]; item 5 (SIGPIPE) turned out to be a Track B defect and is [[bug-b-fpsend-to-a-closed-peer-kills-the-process-msg-nosignal-is-never-passed]]. Two defects found on the way out, both filed with measurements. (`progress.sh resolve` flattened this line to the bare word `done`, the SECOND live instance of `bug-t-claim-truncates-a-prose-status-line-the-guard-against-it-runs-first` in one session; restored by hand.)
 - **Opened:** 2026-07-16, split out of [[feature-signal-handlers]] once the base
   slice (libc-free `rt_sigaction` handler install + `SetSignalHandler`) shipped
   and pinned on all five hosted targets (x86-64 b336, aarch64 b370,
@@ -693,3 +693,53 @@ measured.
 
 It is filed rather than fixed here because the fix is a TLS-layout decision, not
 a signal one.
+
+## Progress — 2026-08-31: item 5 discharged, and it was not a policy question
+
+Item 5 was parked as *"revisit with the net library"*. **That condition had
+already fired and nobody noticed** — `lib/rtl` carries `net.pas`, `sockets.pas`,
+`http.pas`, `asyncnet.pas` and `netdb.pas`. The same stale-trigger shape that
+kept the reduced-compiler ticket parked earlier the same day.
+
+Measured, and it is not a question of taste:
+
+```
+socketpair(AF_UNIX, SOCK_STREAM), close one end, write to the other
+  raw write(2):         exit 141   (128 + 13 = SIGPIPE)
+  RTL fpSend(s,...,0):  exit 141
+```
+
+A pxx server dies when a client disconnects. `EPIPE` is never observed because
+the process is already dead.
+
+Census: `MSG_NOSIGNAL` occurs **once** in the whole tree — its own `const` at
+`sockets.pas:108` — and is never passed. `PalIgnoreSignal` is called only from
+the FPC-compat `Signal(sig, SIG_IGN)` wrapper. **No networking code touches
+SIGPIPE.** `platform.pas:132` states the opposite as fact: *"Networking code
+ignores SIGPIPE so a closed peer yields an error, not death."* The comment is a
+correct description of the intent and the code does not implement it, so this is
+a bug and NOT a comment fix.
+
+**And the policy fork dissolves rather than needing a ruling.** The base ticket
+deliberately left SIGPIPE not-default-ignored so a write-loop program still dies
+on a closed stdout — a wanted behaviour, and the reason this sat parked.
+`MSG_NOSIGNAL` is **per-call and socket-only**, so it fixes networking without
+touching stdout. There is nothing left to decide, which is why this closes here
+rather than going to Track U.
+
+`lib/rtl` is Track B's file-lane, so the fix is filed, not made:
+[[bug-b-fpsend-to-a-closed-peer-kills-the-process-msg-nosignal-is-never-passed]]
+(p60), which also warns that the census counts the CONSTANT and not the send
+sites — `http`/`asyncnet` may write through another path — and that the fix must
+be asserted by observing `EPIPE`, not by the program reaching the next line.
+
+## This ticket is done
+
+Items 1, 2, 3 and 4's compiler half are complete on all five hosted targets.
+Item 4's RTL half is [[feature-b-fpc-signal-compat-unit]]; item 5 is the Track B
+bug above. Two defects found on the way out, both filed with measurements:
+[[bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads]] and
+the SIGPIPE one.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
