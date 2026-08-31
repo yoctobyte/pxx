@@ -321,7 +321,7 @@ _none_
 | feature-demo-portable-userland | E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 68 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | bug-nilpy-render-backend-py-compile-does-not-terminate |
 | feature-dns-esp-wire-nameservers-from-lwip | B+S | 15 | feature | Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets. | — |
-| feature-dynamic-include-paths-config | A | 55 | feature | Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. STILL OPEN: tools/pxx-scan, dynamic soname mapping, and incpath/unitpath inside a manifest. | — |
+| feature-dynamic-include-paths-config | A | 25 | feature | Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. DEMOTED 55 -> 25 on 2026-08-31: all three remaining bullets lack a named consumer and two are partly superseded by work that landed AFTER they were written (soname DISCOVERY is done; the /usr/include table is now discovered, not hardcoded). Do not take this for its title - the big half is landed. | — |
 | feature-embed-dwscript-rtti | P | 40 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
@@ -899,7 +899,6 @@ _none_
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
 - [p 55] [U] decide-settextbuf-needs-buffered-text-io-or-stays-missing
 - [p 55] [U] decide-what-a-reduced-compiler-must-still-self-host
-- [p 55] [A] feature-dynamic-include-paths-config
 - [p 55] [N] feature-n-a-kwargs-collecting-callee-through-a-callable-value
 - [p 55] [N] feature-nilpy-lambda-compiled-closure
 - [p 55] [N] feature-nilpy-no-type-inference-switch
@@ -1173,6 +1172,7 @@ _none_
 - [p 25] [U] decide-release-signing-key-custody
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
 - [p 25] [U] decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner
+- [p 25] [A] feature-dynamic-include-paths-config
 - [p 25] [S] feature-esp-hardware-flash-validation
 - [p 25] [A] feature-nilpy-arc-cross-parity
 - [p 25] [N] feature-nilpy-ascii-flag-fast-path

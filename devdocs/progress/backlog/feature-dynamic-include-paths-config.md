@@ -1,9 +1,9 @@
 ---
 track: A
-prio: 55
+prio: 25
 type: feature
 blocked-by: []
-summary: "Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. STILL OPEN: tools/pxx-scan, dynamic soname mapping, and incpath/unitpath inside a manifest."
+summary: "Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. DEMOTED 55 -> 25 on 2026-08-31: all three remaining bullets lack a named consumer and two are partly superseded by work that landed AFTER they were written (soname DISCOVERY is done; the /usr/include table is now discovered, not hardcoded). Do not take this for its title - the big half is landed."
 status: backlog
 owner: frankS
 ---
@@ -320,3 +320,38 @@ unknown-directive warning today, which names the set this `pxx` knows.
 - `tools/pxx-scan` (probe host / IDF trees, emit a config).
 - Dynamic system-library soname mapping (`uses sqlite3` -> `libsqlite3.so.0`).
 - `incpath` / `unitpath` in a manifest, per above.
+
+---
+
+## 2026-08-31 — demoted 55 -> 25, because the title still prices the whole feature
+
+The ranker kept offering this at 55 to every idle Track A agent after the
+load-bearing slice landed, which is the stale-metadata failure this repo has a
+name for: **the ticket's TITLE is still the big one, so it ranks at the value the
+whole feature had rather than the value of what is left.** Each remaining bullet,
+checked rather than assumed:
+
+- **`tools/pxx-scan`.** Its host half is now redundant, and this is measured, not
+  argued: `pxx --where` on this box resolves every library root and prints
+  `/usr/lib/gcc/x86_64-linux-gnu/15/include/` — **discovered** by scanning the
+  parent directory, on a box where the previously hardcoded `13` was stale (the
+  2026-08-26 slice). A generated `pxx.cfg` would restate what the compiler
+  already finds. Its IDF half overlaps `tools/install_esp32_target.sh`, which
+  already locates the toolchain. **Needs a named consumer before it is worth
+  writing.**
+- **Dynamic soname mapping into config.** Largely superseded:
+  `feature-dynamic-soname-discovery` is in `done/` (2026-08-21) and reads
+  `/etc/ld.so.cache` directly, so an unmapped library already resolves to its
+  real versioned soname. What is left is moving the static FALLBACK table
+  (`CSonameForStem`, pasparser_proc.inc) into config, and that fallback now fires
+  only when the cache misses.
+- **`incpath` / `unitpath` inside a manifest.** Needs the search-path lists
+  push/popped, which is a second unwind path with no existing owner — the define
+  slice needed none, which is exactly why it was cheap — and the hazard it would
+  close is much milder than the one the define slice closed. An unused include
+  root costs nothing; a leaked define changes what compiles. **No named
+  consumer.**
+
+**None of this says the remaining work is wrong — it says it is worth 25.** If a
+consumer appears (an IDF build that actually needs generated paths, a library
+whose headers need a scoped `incpath`), raise it back and say which.
