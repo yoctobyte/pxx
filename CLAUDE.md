@@ -317,7 +317,16 @@ which compiler is on disk. Three routes to a stale one: a seeded tree (`cp`
 stamps a newer mtime, so `make` no-ops and exits 0), a reverted experiment, and a
 sync that pulled someone else's `compiler/**`. **Rebuild after any sync touching
 `compiler/**` before you measure, and print `sha256sum compiler/pascal26` beside
-every number you report.**
+every number you report — and the COMMIT beside the sha.** A sha names the
+binary; it is not a source identity. `compiler/.pascal26.fixedpoint` holds
+exactly `rounds N` and `sha256 <hex>`, so `verified` can tell you *which* binary
+and never *what built it*; the `make pin` commit line (Makefile:18374) carries
+the same sha-without-commit. `git diff HEAD -- compiler/ lib/` is not the
+control it looks like: it proves the tree matches HEAD while saying nothing
+about where HEAD is, and **107 commits touched `compiler/` or `lib/` on
+2026-08-31, 11 in one hour.** Two agents on different commits legitimately hold
+different binaries that both print `verified` — that is determinism, not
+nondeterminism, and it was reported as a bug once (`9d867ee4d`).
 
 **`make` has TWO success verbs and only one of them recomputed anything.**
 `converged after N round(s)` (Makefile:284) is the recompute. `self-host
