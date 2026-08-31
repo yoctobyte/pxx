@@ -1636,15 +1636,29 @@ end;
 
 { The high bit of every byte in a machine word — the word-wise form of the
   `orAll and $80` test PXXStrMeta does, so an ASCII scan folded into a word
-  copy answers exactly what the byte loop answered. }
-function PXXHighBits: Int64;
-var i, m: Int64;
-begin
-  m := 0;
-  for i := 0 to SizeOf(NativeInt) - 1 do
-    m := (m shl 8) or $80;
-  PXXHighBits := m;
-end;
+  copy answers exactly what the byte loop answered.
+
+  A CONST, not a function, and the difference was measured: this was an
+  eight-iteration `m := (m shl 8) or $80` loop in a function called once per
+  PXXBlockCopy, and a gdb-sampled profile of uforth put 5.1% of the program's
+  ENTIRE runtime inside it — the fifth-hottest routine in a 134-routine profile,
+  more than the whole compiled body of uforth.py. The loop was not folded and
+  could not be: it loads and stores `m` and `i` through memory eight times, and
+  our IR does not constant-fold a loop. bug-a-pxxhighbits-recomputes-a-compile-
+  time-constant-in-a-loop.
+
+  Keyed on CPU64/CPU32, which the lexer predefines for every target, rather than
+  on a list of target names — the ENUMERATION is what goes stale, and a mask one
+  word too wide is a silently wrong ASCII verdict rather than a build error. The
+  32-bit value is deliberately only 4 bytes: PWord on a 32-bit target reads 4
+  bytes, and a hardcoded 8-byte step in this same routine already copied every
+  other word once. }
+const
+{$ifdef CPU64}
+  PXX_HIGH_BITS = Int64($8080808080808080);
+{$else}
+  PXX_HIGH_BITS = Int64($80808080);
+{$endif}
 
 { Copy n bytes forward, words first. Returns the OR of every byte COLLAPSED to
   the one bit PXXStrMeta looks at: $80 when any byte had its high bit set, else
@@ -1662,7 +1676,7 @@ begin
       acc := acc or PWord(s + i)^;
       i := i + w;
     end;
-  if (acc and PXXHighBits) <> 0 then acc := $80 else acc := 0;
+  if (acc and PXX_HIGH_BITS) <> 0 then acc := $80 else acc := 0;
   while i < n do
   begin
     PByte(d + i)^ := PByte(s + i)^;
