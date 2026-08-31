@@ -662,10 +662,35 @@ evidence is genuine -- that `near:` line really was printed by that binary.
 
 **Honest note on this subsection, by the criterion at the top of this file:
 nothing prints it.** It is prose that must be recalled at the moment you are
-composing a pipeline, which is the weak category. The only guard-shaped remedy
-here is `pipefail` where the shell supports it; a detector over `tools/*.sh` was
-measured and is not cheap (29 candidate pipe-to-`tail`/`head` sites, with no way
-to tell from the text which then consult `$?`).
+composing a pipeline, which is the weak category. The only guard-shaped remedy is
+`pipefail` where the shell supports it.
+
+**And the detector was PRICED, by frank-rust, before anyone built it -- the
+answer is do not.** I had said "not cheap"; the measurement is stronger than
+that. Over `tools/*.sh`:
+
+| stage | n |
+| --- | --- |
+| pipelines into a passthrough (`tail head cut sed cat tr`) | 89 |
+| ...whose status is *immediately* consumed (`\|\|`, `&&`, `; echo $?`) | 5 |
+| ...excluding comment lines | 2 |
+| ...that are not `\|\| true` | **0** |
+
+Both survivors (`release.sh:224`, `sync.sh:555`) end in `|| true` -- a **dead
+suppressor**, where the intent on failure is "empty, don't abort" and that
+happens either way. Verified here rather than taken on report. So the narrow
+discriminator finds **no defects**, and the two it surfaces are the ones this
+file's own rule already excludes. **An unenforceable rule is the correct form
+when the enforceable version has a zero hit rate.**
+
+**The reason the funnel loses three of its five: a grep for a hazard matches the
+careful notes warning about it.** `gate.sh:180`, `gate.sh:475` and `sync.sh:254`
+are all *comments describing this exact trap*. Third instance for frank-rust in
+one day, after a dead grep in `abi.inc` matching a comment that quoted it, and
+`iropname_lint` counting its own comment as coverage. **The better the
+surrounding documentation, the more convincing the false hit** -- so for any scan
+over a well-commented tree, **comment-stripping is not a refinement, it is most
+of the signal.**
 
 #### The family, because it is four operators and it caught three agents in four hours
 
