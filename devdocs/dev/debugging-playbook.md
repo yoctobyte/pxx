@@ -496,6 +496,52 @@ assertion rather than the reading.
 **Practical form: branch on `$?` explicitly when the distinction matters, keep the
 query off a pipe, and never redirect the stream carrying the only diagnostic.**
 
+**A fourth instance, and the first in code that SHIPS** — frankwasm asked the
+question none of the other three had (*is this also in the committed tooling?*),
+which is the "then what?" behind the finding. One live hit, in the pin gate:
+
+```
+tools/gate.sh:180   tools/twatch.py --status 2>/dev/null | sed 's/^/  /' || echo "  (twatch status unavailable)"
+```
+
+`||` reads `sed`'s status and `sed` exits 0 on empty input, so with `twatch.py`
+missing or broken `gate.sh check` printed **nothing** where the status block
+belongs, and the fallback written for exactly that case **was unreachable for its
+whole life**. Verified here: `(exit 3) | sed 's/^/  /' || echo fallback` prints
+neither the status nor the fallback, and the pipeline exits 0.
+
+The near-miss is in the pin ledger itself (`Makefile`, the `OLDSHA=` line): the
+`||` sits downstream of `awk`, so it only ever fired because `test -e`
+short-circuited *before* the pipeline. Any other failure — present but
+unreadable, `sha256sum` absent — left `OLDSHA` empty and wrote `(was )` into
+`pin.log`. **Both are the labelled-blank shape**: an empty status block reads as
+*"the watcher had nothing to say"*, not *"I could not ask"*.
+
+#### Two rules that keep this from becoming a churn campaign
+
+**1. A dead suppressor is noise; a dead fallback is a LIE.** `… | cut … || true`
+appears all over the tooling and the `||` is equally dead there — but the
+intended behaviour on failure is *"empty, don't abort"*, which is what happens
+either way. **The shape is a defect only when the `||` branch is meant to be
+reachable.** frankwasm triaged several such sites and deliberately left them
+alone; that distinction is the whole difference between a fix and a sweep.
+
+**2. The obvious grep for it is WRONG, and a SCAN needs a positive control too.**
+`… | grep -q X || fail` is the *correct* idiom and dominates the hits — `grep` is
+last and its status is exactly what is wanted. The defect requires the pipeline
+to end in a **passthrough that succeeds regardless**:
+
+```
+\|[[:space:]]*(cut|head|tail|tr|sed|awk|wc|tee|sort|uniq|xargs)\b[^|]*\|\|
+```
+
+He gave that scan a positive control — a file containing its own pre-fix line,
+asserted to match — on the grounds that **a scan finding nothing and a scan that
+CANNOT find anything print the same result.** That is the guard doctrine applied
+to a *search* rather than to a check, and it is the more useful generalisation:
+an empty result set is only evidence if the query has been shown capable of
+returning a non-empty one.
+
 #### And why all three were long-lived: an instrument fails silently in whichever direction resembles CAUTION
 
 frankwasm's polarity note, generalised past the guard case above.
