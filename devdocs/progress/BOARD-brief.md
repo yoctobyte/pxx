@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:6 unfinished:30 blocked:9 backlog:399 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2912 rejected:68`
+`working:6 unfinished:29 blocked:10 backlog:400 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2912 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -16,7 +16,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 
-## unfinished (30) — parked mid-flight; re-claim, do not duplicate
+## unfinished (29) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S]
@@ -47,9 +47,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A] — blocked-by: decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
-- `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## blocked (9) — has an unmet blocker; do not claim
+## blocked (10) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
@@ -60,6 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
+- `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A] — blocked-by: bug-t-the-sqlite-thread-runner-is-the-one-qemu-runner-with-no-load-factor
 
 ## Ready — top 30 of 435, ranked
 
