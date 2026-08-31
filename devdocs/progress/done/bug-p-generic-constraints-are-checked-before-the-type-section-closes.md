@@ -389,4 +389,4 @@ So closing p45 should take this corpus to 40/40 **or** surface exactly that one
 line. Either is fine; being surprised by it is not.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit ec1fd6754.
