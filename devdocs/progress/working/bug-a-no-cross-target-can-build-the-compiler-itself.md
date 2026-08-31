@@ -617,3 +617,51 @@ scoring pass/fail on "was the artifact produced", and that build is slow enough
 that the tool timeout killed runs mid-compile — a killed run produces no artifact
 and scores identically to a SIGSEGV. Those rows were not measurements and are not
 reported here. On this defect, score the bash SIGSEGV notice, not the artifact.
+
+## Addendum (frankS, 2026-08-31): the corrupt bin head is STRING PAYLOAD — this is a use-after-free, not a stale meta write
+
+franka-d5's localisation to the free-list pop holds, and their aliasing premise
+checks out rather than merely sounding right: `PXXFree(p)` writes the next-link
+at `PWord(addr)^` where `addr` is the raw pointer `PXXAlloc` returned, and that
+same address IS the managed block base, so `PXX_HDR_META = 0` aliases the link
+exactly. Worth stating because the constant is an offset from the BLOCK BASE and
+the link is written at the *payload* address — two names for one address only if
+you check which pointer the free path is handed.
+
+**Their objection is answered by the data, and it retires their own hypothesis.**
+Four cores at four pads, same binary (`p26d.arm32`, fixedpoint `4f6b70995c3a`),
+resolved against its map:
+
+| pad | corrupt bin head | bytes | lr |
+| --- | --- | --- | --- |
+| 20 | `0x17534800` | `00 48 53 17` | `PXXStrFromLit+0x114` |
+| 50 | **`0x72616843`** | **`43 68 61 72` = `"Char"`** | `PXXStrSetLen+0x1b0` |
+| 80 | `0x187df800` | `00 f8 7d 18` | `PXXStrFromLit+0x114` |
+| 200 | `0x7c54c000` | `00 c0 54 7c` | `PXXStrFromLit+0x114` |
+
+`pc = PXXAlloc+0x290` in all four, a fifth and sixth independent confirmation of
+the site. **One of the values is the ASCII string `Char`** — a Pascal identifier
+out of the compiler's own token stream.
+
+A stale META write cannot produce that: meta is a small kind/flag word, which is
+what franka-d5's `0x28` looked like and why the hypothesis was reasonable. String
+payload at a free-list head means **the block was written while it was on the
+free list** — a use-after-free write, or the same block handed out twice and one
+holder writing into it while the other still has it linked. `PXXStrFromLit` and
+`PXXStrSetLen` as the two `lr` values fit: both write string bytes at the base.
+
+That reframes the arm32-only question. A use-after-free in shared RTL code should
+break x86-64 too, so the arm32 half is most likely **which address gets freed or
+written**, not the allocator's logic — an off-by-header or a size computed with a
+64-bit assumption would put a write into a neighbouring free block. `PXX_HDR_SIZE
+= 24` with 4-byte `PWord` on 32-bit is the place to look first.
+
+**Next, and cheap:** `-dPXX_HEAP_DEBUG` makes freed bytes `$DD` and quarantines
+rather than recycling, so a UAF write is caught at the write. Heed franka-d5's
+instrument warning when running it: that build is slow enough that a tool timeout
+kills runs mid-compile, which produces no artifact and scores identically to a
+SIGSEGV. **Score the SIGSEGV notice, never the artifact.** The open fork is
+double-free versus write-after-free; `-dPXX_OBJTRACE` plus `grep <addr>` answers
+which.
+
+Gate: no code changed in this addendum; cores deleted (376 MB each).
