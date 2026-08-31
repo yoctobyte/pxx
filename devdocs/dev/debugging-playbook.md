@@ -156,6 +156,18 @@ measurement — not seniority, not who edited the file first.** Three disagreeme
 were settled this way in one day, each reversing the more confident party. Nobody
 should have to happen to have a measurement handy in order to win.
 
+**A CONTROL that never ran is the worst place for a silent instrument, because a
+null is the answer you are half-expecting.** frankA, 2026-08-31, one command from
+publishing *"CONTROL DID NOT FIRE"* over a binary that had never been rebuilt:
+the control's edit script asserted `count == 2`, found 2 where he expected 1,
+raised, and changed nothing — so the probe ran the OLD binary and dutifully
+reported no divergence. Every step behaved correctly. **What caught it was
+printing `sha256sum` beside the result and seeing it unchanged**, which is
+CLAUDE.md's rule for measurements doing duty as a rule for controls.
+The general form: a control asks "does this test still fail when I break the
+thing?", and *no* is both the alarming answer and the answer a control that never
+executed gives. **Assert that the artifact CHANGED before you read the result.**
+
 **A null from two COMPENSATING defects recommends the fix that breaks it**
 (frankA's phrasing, 2026-08-31, for a case measured that day). arm32, riscv32 and
 xtensa take no `PXXObjRetain` when boxing an object into a variant, *and* no cross
@@ -1520,6 +1532,32 @@ Both directions cost:
 **A "not found" is only evidence once you have proved your own tree is
 current.** `git rev-list --count HEAD..origin/master` is that proof and costs
 nothing.
+
+### `git log <mysha>..HEAD` is EMPTY BY CONSTRUCTION after your own push
+
+frankA, 2026-08-31, twenty minutes chasing his own tail. A rebuild produced a
+different binary from one built minutes earlier off what he believed were the
+same sources. To rule out a teammate's commit he ran:
+
+```
+git log <mysha>..HEAD -- compiler/      # empty
+```
+
+**His push had just rebased that commit to the tip, so `<mysha>` WAS `HEAD` and
+the range was empty by construction.** The command could not have answered; it
+reported the absence of anything after the newest commit, which is always true.
+The unbounded form found it immediately: `git log -8 -- compiler/` showed a
+sibling's commit sitting one below his, arrived during his own `sync.sh`.
+
+**In a repo where every push rebases, the bounded form is the wrong default.**
+The anchor you are most likely to reach for — your own sha — is precisely the one
+the rebase has just moved to the tip, so a range starting there is empty however
+much landed. And an empty range and "nothing landed" print identically.
+
+Same family as `--is-ancestor` above and the same cure: **ask what this would be
+if it were false.** For the range to be able to answer, `<mysha>` would have to
+be strictly behind `HEAD` — one `git rev-list --count <mysha>..HEAD`, or just
+read the unbounded log and look at the dates.
 
 ## A sha that EXISTS can still be the wrong sha for the question
 
