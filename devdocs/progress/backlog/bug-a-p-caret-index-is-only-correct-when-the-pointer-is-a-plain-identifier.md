@@ -41,6 +41,16 @@ and re-running, then restoring. And the record-field case is wrong for a
 
 ## Diagnosis (banked, not acted on)
 
+**ESTABLISHED vs HYPOTHESIS, explicitly, because the rest of this section is a
+design argument and only part of it was run.** ESTABLISHED by measurement: the
+six-row table above (each compiled and run, FPC diffed on the same source); that
+all four faces reproduce on `5c3a2ab5324d3b97`, i.e. they predate the
+dynamic-stride fix; and the carrier census below, which is a direct read of the
+declarations in `compiler/defs.inc`. HYPOTHESIS, NOT run: that widening the
+predicate's return is the right fix, and the per-face effort estimates that
+follow from the census. No code was written for any of it.
+
+
 `IsNodeArray`, `NodePtrElem` and the selector chain all decide "is this an
 array?" for a deref by asking `DerefPtrArraySym` / `DerefPtrArrayInfo`. That
 predicate's own docstring says what it covers:
@@ -54,11 +64,39 @@ root-cause sentence puts it — *"whichever arm that element kind collides with
 claims the node, and the symptom is a property of the ARM, not of the type."*
 That is why one shape is silent, two crash and one hangs: four arms, one cause.
 
-The metadata to answer properly already exists per source kind and is already
-consulted elsewhere in `NodePtrElem`: `UFldPtrElemTk`/`Rec` for a field,
-`ProcRetPtrElemTk`/`Rec` for a call result. What is missing is that
-`DerefPtrArraySym` cannot express them, because it returns a **symbol index**
-and a field or a call result has none.
+What is missing is that `DerefPtrArraySym` cannot express them, because it
+returns a **symbol index** and a field or a call result has none.
+
+**CORRECTION to an earlier draft of this paragraph, which said "the metadata to
+answer properly already exists per source kind". That is only one-third true,
+and the census matters more than the sentence did:**
+
+| carrier | symbol | record field | call result |
+| --- | --- | --- | --- |
+| element kind / rec / str-kind | `SymPtrElem*`, `Syms[].PtrElem*` | `UFldPtrElemTk/Rec/StrTk` | `ProcRetPtrElemTk/Rec/StrTk` |
+| pointee ARRAY shape (`ArrLen`, `NDims`, `DynDepth`, `StrCap`) | `SymPtrElem*` — **present** | **absent** | **absent** |
+| alias handle back to the pointee type | absent | `UFldPtrAlias` — **present, populated** | **absent** |
+
+So the three faces need three different amounts of work, and that is the useful
+thing to know before starting:
+
+- **Record field** — reachable **with no new storage**. `UFldPtrAlias[fIdx]` is
+  set at field declaration (`symtab.inc:1746`) and `AliasPtrElemArrAi[alias]`
+  gives the pointee's ArrType index, which carries the whole shape
+  (`ArrTypeLo/Hi/NDims/ElemTk/ElemRec/IsDyn/DynDepth/ElemStrCap`). This is the
+  face with the SILENT wrong values, so it is also the one worth most.
+- **Call result** — needs a new `ProcRetPtrAlias` carrier, recorded where the
+  result type is registered. This is the HANG.
+- **Array element holding the pointer** — needs the equivalent for an array
+  symbol's element. This is the second SIGSEGV.
+
+That changes the earlier "do it once rather than teaching three call sites"
+advice only in emphasis: the predicate widening is still the right shape, but
+two of the three sources must be given something to answer WITH first. The
+alias route is the pattern to copy, because it stores one integer instead of
+four and cannot drift from the type it points at — which is precisely the
+"a fifth field means four more chances for the copies to drift" hazard
+`SetPtrElemArrayInfo`'s header already records.
 
 **So the shape of the fix is a widening of the predicate's return, not another
 arm** — something that answers "element kind, element rec, extent" for any
