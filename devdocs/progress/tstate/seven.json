@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-31T03:16:49Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "440ca32689dba3a217e77d3c2940690576fba1c2",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-31T03:19:41Z",
    "fixed": [],
    "new_red": [],
@@ -478,6 +469,17 @@
    "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-31T08:06:12Z",
+   "fixed": [],
+   "new_red": [
+    "optdiff#shard4/12"
+   ],
+   "sha": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+   "tier": "opt",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "seven",
@@ -699,18 +701,18 @@
   "lib-test#src:test/test_tcomponent.pas": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "lib-test#src:test/test_tlist_notify.pas": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "lib-test#src:tools/crtl_reachability.py": "d28b77ce5d8887b6c143aaeafa9e77666b643d8b",
-  "optdiff#shard0/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard1/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard10/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard11/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard2/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard3/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
+  "optdiff#shard0/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard1/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard10/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard11/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard2/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard3/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "optdiff#shard4/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard5/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard6/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard7/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard8/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "optdiff#shard9/12": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
+  "optdiff#shard5/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard6/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard7/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard8/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "optdiff#shard9/12": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "size-canary#src:tools/size_canary.py": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "test-aarch64#src:compiler/.pascal26.fixedpoint": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
@@ -3750,11 +3752,11 @@
   "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "test-nilpy#src:test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
-  "test-opt#src:compiler/.pascal26.fixedpoint": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "test-opt#src:compiler/compiler.pas@1": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "test-opt#src:compiler/compiler.pas@2": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "test-opt#src:compiler/compiler.pas@3": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
-  "test-opt#src:test/test_atomic64.pas": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
+  "test-opt#src:compiler/.pascal26.fixedpoint": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "test-opt#src:compiler/compiler.pas@1": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "test-opt#src:compiler/compiler.pas@2": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "test-opt#src:compiler/compiler.pas@3": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
+  "test-opt#src:test/test_atomic64.pas": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "test-pascal-conformance#shard0/6": "17fd5566a65e365a97d0080b78c32a650f0b05e0",
   "test-pascal-conformance#shard1/6": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
   "test-pascal-conformance#shard2/6": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
@@ -4164,6 +4166,7 @@
  },
  "job_reason": {
   "lib-test#src:tools/crtl_reachability.py": "lib track pinned to: stable_linux_amd64/default/pinned -> stable_pinned   (newest checkpoint: latest -> stable_latest) | frozen builtin RTL: stable_linux_amd64/default/builtin/ (11 src) -- isolates track A's compiler/builtin/ edits | === lib-test: library smoke against stable_linux_amd64/default/pinned === | crtl-reachability: OK -- 56 headers, 29 modules, every declared function reachable from i\u2026",
+  "optdiff#shard4/12": "OPT DIFF -O1: test/test_threadsafe_io_lock_foreign.pas (rc 0 vs 0) | OPT DIFF -O2: test/test_threadsafe_io_lock_foreign.pas (rc 0 vs 0) | OPT DIFF -O3: test/test_threadsafe_io_lock_foreign.pas (rc 0 vs 0) | optdiff skip TIMEOUT-O0: lib_mimic_urllib_request_server.pas test_signal_handlers.pas | optdiff skip BUILD-FAIL: c_cross_ns_arity.c c_def_hijack.c c_pasunit_missing_fail.c cpthread_needs_threa\u2026",
   "test-core#src:test/test_setlen_in_parallel_for_body.pas": "expect_same: MISMATCH [test_setlen_parfor26] | --- expected | +++ actual | @@ -1 +1 @@ | -PARALLEL SETLEN OK total=8000 | +PARALLEL SETLEN OK total=7992",
   "test-pascal-conformance#shard0/6": "pascal26:14: error: expected 'begin' before 'deprecated' | SKIP tover1.pp \u2014 gap: overload resolution across shortstring/ansistring/widestring/pchar params | SKIP tprocvar3.pp \u2014 gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses | SKIP tset2a.pp \u2014 gap: explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics | SKIP tstring11.pp \u2014 gap: overload \u2026",
   "tools-devtest#00": "FAILED 4 check(s): the real commit landed on origin; says so explicitly, since the reflex is to reach for it; says what actually happened instead; exits 0, so fill_pending_commits still runs | PASS and every member carries the reason it is in the family | 9 guard(s), 1 FAIL | tools-devtest: tools/expect_same_devtest.py | tools-devtest: tools/fpc_oracle_wide_devtest.py | tools-devtest: tools/fpc_t\u2026"
@@ -8046,7 +8049,7 @@
   "optdiff#shard11/12": "pass",
   "optdiff#shard2/12": "pass",
   "optdiff#shard3/12": "pass",
-  "optdiff#shard4/12": "pass",
+  "optdiff#shard4/12": "fail",
   "optdiff#shard5/12": "pass",
   "optdiff#shard6/12": "pass",
   "optdiff#shard7/12": "pass",
@@ -11475,14 +11478,14 @@
  },
  "last": {
   "code_fp": "802e5ed96a48",
-  "date": "2026-08-31T07:50:32Z",
+  "date": "2026-08-31T08:06:12Z",
   "deadline": 3600.0,
   "sha": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 202.7
+  "verdict": "RED",
+  "wall": 797.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -11521,14 +11524,15 @@
    "wall": 102.5
   },
   "opt": {
-   "date": "2026-08-30T11:08:56Z",
+   "code_fp": "802e5ed96a48",
+   "date": "2026-08-31T08:06:12Z",
    "deadline": 3600.0,
-   "sha": "6c88a2afc82b3d5d8c4dfcc7b5060672b70d0be3",
+   "sha": "d74c7fbe9ffeca26a3991fcf80ca1d1b4318564d",
    "tier": "opt",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "GREEN",
-   "wall": 308.2
+   "verdict": "RED",
+   "wall": 797.6
   },
   "slow": {
    "code_fp": "802e5ed96a48",
