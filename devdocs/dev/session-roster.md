@@ -24540,3 +24540,41 @@ rejection, it was the fallthrough. And it read the table header saying *"callers
 must consult a user type alias FIRST where that matters"* **while writing the
 change**: the warning was correct, present, and in view, which is the argument for
 the control rather than for care.
+
+### A dispatch collision, and the signal the ticket system cannot carry
+
+I dispatched frank-rust to `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-
+copy-and-dynarray-setlength` [A+S, p50] from `unfinished/`, telling it "parked, not
+abandoned — re-claim rather than restart". Right about the ticket, wrong about the
+world: **frankS was in it.** Same root cause found independently (a7 is the
+windowed frame pointer and both string-marshalling arms used it as scratch), same
+both-arms patch, same new test filename. frank-rust discarded its two commits with
+`git reset --hard origin/master`; frankS's stands. ~40 minutes of two agents.
+
+**The gap is structural and it is mine.** `owner: frankS` on a parked ticket is
+*attribution, not a claim* — correct, and I do not want it changed — and
+`unfinished/` cannot distinguish "parked an hour ago and resumed" from "parked last
+week". **The one field that would have warned was the field the rules correctly
+told the worker to ignore.** So the signal does not exist in the ticket system at
+all; it exists in `ListAgents`, which shows busy/idle per session and which only I
+was holding.
+
+**Adopted: a parked ticket whose `owner:` names a session `ListAgents` reports BUSY
+gets one message before dispatch — "are you back in this?"** Small set, cheap, and
+it is the relay half of the job rather than the babysitting the charter cuts. Ran
+it before the next dispatch: frankS still `busy`, `refactor-a-target-dispatch-
+chains-fail-open` unowned, dispatched clean.
+
+**frank-rust's honesty about the loss is worth more than my apology for it.** 23
+independently derived programs passing on frankS's compiler is real corroboration.
+And it named *why frankS's fix is better than its own*: a3 staged for a structural
+reason, versus a14 justified by "the helpers only take four arguments" — a
+coincidence of the current signatures that a five-argument helper would have
+re-broken **silently**. That is a latent bug report about its own reasoning, and it
+should outlive the duplicated work.
+
+**One more instrument, same family:** stores at `[a1+64..88]` from a frame whose
+`entry a1, 32` is 32 bytes read as "writes past the frame end". The prologue lowers
+sp again with **`sub a1, a1, a8`**, and a grep for `addi a1` found nothing. **The
+control that caught it was checking the instrument could see any sp write at all** —
+not reasoning harder about the numbers.
