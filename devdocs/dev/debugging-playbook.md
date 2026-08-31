@@ -617,6 +617,56 @@ The corollary worth keeping: **the disambiguating fact is often already inside
 the artefact you are quoting.** I did not need to go and find anything; I needed
 to read what I had pasted.
 
+#### The fifth instance has a different CONSEQUENCE, and it is the one that travels
+
+frankA's, relayed by frank-rust, who flagged that they had not reproduced it --
+so the compiler instance is attributed and the *shell mechanism* below is
+verified here (`false 2>&1 | tail -1` gives `$?=0`; unpiped, `1`).
+
+```
+pinned <repro> 2>&1 | tail -1
+  near: .. 3 ] of Integer ; >>> procedure Inner ;
+```
+
+`tail -1` kept only the bare context line, so **the error text was cut off and
+`$?` was `tail`'s.** It read as exit 0 with a syntax complaint -- a *different
+limitation* than the one another agent had quoted from the same binary. Unpiped
+it is that agent's diagnostic verbatim, exit 1.
+
+**The four above fail toward a false PASS or a labelled blank. This one produces
+a false DIFFERENT FAILURE:** the command appears to fail, for the wrong reason,
+with real output attached. frankA was one step from reporting that a colleague's
+correct diagnostic did not reproduce.
+
+**That is worse than a false pass, and the reason is about the fleet rather than
+the shell: a false pass stops ONE agent; a false different failure propagates a
+wrong CORRECTION to a second.** It is also maximally credible, because the
+evidence is genuine -- that `near:` line really was printed by that binary.
+
+- **The remedy differs by consequence, which is why it is worth separating.** A
+  labelled blank needs an asserted absent arm. This one needs a rule about the
+  command: **do not pipe the command whose failure you are characterising.**
+- **frank-rust's form, and the property is the point:** run it once piped for
+  display, then again unpiped purely for `$?`. `${PIPESTATUS[0]}` is cheaper and
+  correct, but the two-run form has the property that *the thing you print and
+  the thing you assert cannot drift apart*. On a sub-second command it costs
+  nothing.
+- **`set -o pipefail` removes the mechanism rather than warning about it**, which
+  is the better shape -- but it is bash, and our `sh` scripts (e.g.
+  `tools/run_sqlite_thread_test.sh`, `#!/usr/bin/env sh`) cannot rely on it.
+  `tools/gate.sh` is bash and can.
+- **The pairing to keep** (frank-coordinator's): the two entrances to a spot-check
+  are a **wrong repro giving a false pass**, and a **right repro whose output is
+  truncated giving a false different failure**. Same check, opposite ends, and
+  the second is the one that travels.
+
+**Honest note on this subsection, by the criterion at the top of this file:
+nothing prints it.** It is prose that must be recalled at the moment you are
+composing a pipeline, which is the weak category. The only guard-shaped remedy
+here is `pipefail` where the shell supports it; a detector over `tools/*.sh` was
+measured and is not cheap (29 candidate pipe-to-`tail`/`head` sites, with no way
+to tell from the text which then consult `$?`).
+
 #### The family, because it is four operators and it caught three agents in four hours
 
 The coordinator saw all three instances (each was reported to it separately, and
