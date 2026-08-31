@@ -11759,6 +11759,18 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_alloca_in_call_argument.c $(TESTTMP)/c_alloca_arg26
 	tools/expect_same.sh c_alloca_arg26 "$$($(TESTTMP)/c_alloca_arg26)" "$$(printf 'dup: [hello]\n[hello]\ntwo: 1\nsized: 7\nplain: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nstill here: hello')"
+	# aarch64 too, since IR_ALLOCA is no longer x86-64 only. The cross arm is
+	# the one that would catch a rounding slip: AArch64 faults on ANY
+	# sp-relative access while sp is unaligned, and every temp in that backend
+	# is sp-relative, so an odd alloca(1) takes the body down at the next spill
+	# rather than at the alloca. `sized: 7` allocates 8, `two:` allocates 8
+	# twice; the round-up to 16 is what keeps them legal.
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/c_alloca_in_call_argument.c $(TESTTMP)/c_alloca_arg_a64 >/dev/null || { echo "c_alloca_in_call_argument aarch64 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh aarch64/c_alloca_arg_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_alloca_arg_a64)" "$$(printf 'dup: [hello]\n[hello]\ntwo: 1\nsized: 7\nplain: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nstill here: hello')" || exit 1; \
+	else \
+	  echo "=== c_alloca_in_call_argument: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
 	# `extern T name[];` in a header + `T name[] = {...};` in the .c -- the
 	# ordinary way C shares a table. The declarator is an INCOMPLETE array type,
 	# so the declaration reserved ONE element and fixed the symbol's offset

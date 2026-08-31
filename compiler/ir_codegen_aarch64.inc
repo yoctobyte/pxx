@@ -2119,6 +2119,35 @@ begin
       { get_frame: x29 is the frame pointer (stp x29,x30,[sp,#-16]!; mov x29,sp). }
       EmitI32($AA1D03E0); { mov x0, x29 }
 
+    IR_ALLOCA:
+      begin
+        { x0 = size -> round up to 16 -> grow the dynamic stack area -> x0 = hole.
+
+          Unwinding is free here and it is why aarch64 was the cheap port: the
+          prologue does `mov x29, sp` BEFORE `sub sp, sp, #frame`, the epilogue
+          is `mov sp, x29`, and locals are addressed off x29 -- so a lowered sp
+          costs nothing on the way out and disturbs no local.
+
+          The rounding is not decoration. AArch64 faults on an sp-relative
+          access whenever sp is not 16-aligned, and every temp in this backend
+          is sp-relative, so an odd `alloca(1)` would take the whole body down
+          at the next spill rather than at the alloca.
+
+          The same fixed-offset-from-sp exposure x86-64 has applies here --
+          expression temps are `str x0,[sp,#-16]!` / `ldr x0,[sp],#16` pairs and
+          a lowered sp moves what the load reads. The frontend's invariant is
+          what holds it: an IR_ALLOCA must not be reachable from inside a call's
+          argument evaluation (cparser.inc, CHoistAllocaArgs). See the IR_ALLOCA
+          note in ir_codegen.inc and
+          bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer. }
+        IREmitNodeAarch64(IRA[node]);
+        EmitI32($91003C00);   { add x0, x0, #15 }
+        EmitI32($D344FC00);   { lsr x0, x0, #4  }
+        EmitI32($D37CEC00);   { lsl x0, x0, #4  -> size rounded up to 16 }
+        EmitI32($CB2063FF);   { sub sp, sp, x0 }
+        EmitI32($910003E0);   { mov x0, sp }
+      end;
+
     IR_MULHI:
       begin
         { Unsigned 64x64->128, high half. Same operand dance as an integer

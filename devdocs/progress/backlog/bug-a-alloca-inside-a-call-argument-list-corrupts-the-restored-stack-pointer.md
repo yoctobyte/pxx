@@ -4,7 +4,7 @@ prio: 60
 type: bug
 status: backlog
 blocked-by: []
-summary: "x86-64's call sequence restores the caller's rsp from a FIXED offset below the outgoing argument area; alloca() moves rsp, so an alloca evaluated during argument evaluation shifts that slot out from under the restore and rsp comes back holding the alloca'd bytes. The C frontend now hoists allocas out of argument lists (af26fa968+), which covers every shape busybox reaches, but the BACKEND invariant is undocumented and three shapes still bypass the hoist."
+summary: "alloca() moves rsp, and so does everything else in the x86-64 value model -- the call sequence's saved-rsp slot AND the push/pop expression stack are both addressed at fixed offsets from it. So an alloca evaluated mid-expression reads back somebody else's bytes. The C frontend hoists allocas out of ARGUMENT LISTS (d7df19543), which is what busybox needed; a binop arm is still wrong and measured. Eight realistic alloca shapes all pass, so nothing reachable is broken today."
 ---
 
 # alloca inside a call sequence corrupts the restored stack pointer
@@ -78,3 +78,41 @@ and the next frontend to emit `IR_ALLOCA` will not know it exists.
 (`target aarch64: IR op not yet supported: alloca`). Porting it is what the
 aarch64 half of [[feature-c-corpus-busybox-applet]] needs, and whatever lands
 there must not repeat this arrangement.
+
+
+## 2026-08-31 — it is NOT only argument lists
+
+The call sequence's saved-rsp slot is one victim; the value model's push/pop
+expression stack is another, and the frontend hoist does not cover it.
+
+```c
+long a = 100;
+long b = a + (long)(size_t)(alloca(32) != 0);   /* gcc: 101 */
+```
+
+pxx: **140722091760129**. `a` was pushed, the alloca lowered rsp, and the `pop`
+that should have read `a` back read the alloca'd hole instead. Same mechanism
+as the call sequence, different fixed-offset-from-rsp consumer — which is the
+argument for fixing this in the backend rather than growing the hoist a second
+time.
+
+**But nothing reachable is broken.** All eight realistic shapes are
+byte-identical to gcc, measured at `d7df19543`: declaration-with-initializer,
+plain assignment, pointer arithmetic on the result, assignment through a struct
+field, as a call argument, inside a loop (three iterations, each allocation
+distinct and live), in a ternary arm, and two allocas in one declaration. The
+failing shape needs a value already on the expression stack *and* an alloca in
+the same expression *and* no call boundary between them, which is why it took a
+contrived binop to produce.
+
+So: real, measured, and not urgent. The fix is the same one the section above
+names — stop addressing anything from an rsp that alloca can move.
+
+## Porting note for the other backends
+
+aarch64 unwinds correctly already (`mov x29, sp` before the frame reserve,
+`mov sp, x29` in the epilogue, locals addressed off x29), and it manages
+expression temps with explicit `str x0,[sp,#-16]!` / `ldr x0,[sp],#16` — the
+same fixed-offset-from-sp exposure. A port must either keep the frontend's
+invariant or fix the model; it must not assume the arrangement is safe because
+the epilogue is.

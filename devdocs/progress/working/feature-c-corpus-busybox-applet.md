@@ -292,11 +292,15 @@ allocator has no trim threshold to set).
 
 Two things, in this order:
 
-- **`IR_ALLOCA` is x86-64 only.** `--target=aarch64` refuses outright:
-  `target aarch64: IR op not yet supported: alloca`. busybox uses `alloca`
-  unconditionally in `getopt32.c`, so no applet builds for any cross target
-  until the op is ported. Track A, and whatever lands there must not repeat
-  the fixed-offset restore that bug (1) came from.
+- ~~**`IR_ALLOCA` is x86-64 only.**~~ **Ported to aarch64 the same day.** Five
+  instructions: round the size up to 16, `sub sp, sp, x0`, `mov x0, sp`. It was
+  the cheap port because aarch64 already does `mov x29, sp` BEFORE the frame
+  reserve and `mov sp, x29` in the epilogue, with locals addressed off x29 — so
+  a lowered sp needs no unwinding and disturbs no local. `test/c_vla.c` and
+  `test/c_alloca_in_call_argument.c` are now byte-identical to gcc on aarch64
+  as well as x86-64, which also means **every C VLA now builds for aarch64**.
+  i386, arm32 and riscv32 still refuse:
+  [[feature-a-port-alloca-to-i386-arm32-and-riscv32]].
 - **The cross targets get no host-header fallback** (correctly — `/usr/include`
   is x86-64's). The x86-64 build silently resolved `byteswap.h`,
   `sys/param.h`, `endian.h`, `pwd.h`, `grp.h`, `mntent.h`, `paths.h`,
