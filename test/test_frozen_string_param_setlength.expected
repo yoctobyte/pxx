@@ -5,3 +5,5 @@ byref  len=3 [abc]
 caller after byref: [abc]
 short  len=3 [abc]
 const  len=4 [wxyz] first=w
+uses   copy=[hey] ansi=[hey] eq=TRUE cat=[hey!]
+uses   copy=[hey] ansi=[hey] eq=TRUE cat=[hey!]

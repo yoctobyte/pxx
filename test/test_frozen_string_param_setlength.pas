@@ -57,6 +57,24 @@ begin
   WriteLn('const  len=', Length(s), ' [', s, '] first=', s[1]);
 end;
 
+{ The shapes a real caller actually writes, and on i386 they were unreachable
+  until the prologue stopped refusing a by-value frozen-string param: copy to a
+  frozen local, cross-assign to a managed string, compare, concatenate, and
+  forward to a second routine. Widening the prologue is what made these
+  compile, so they are the population that widening has to be right for. }
+procedure Uses_(s: TS);
+var loc: TS; a: AnsiString;
+begin
+  loc := s;
+  a := s;
+  WriteLn('uses   copy=[', loc, '] ansi=[', a, '] eq=', s = loc, ' cat=[', s + '!', ']');
+end;
+
+procedure Forwards(s: TS);
+begin
+  Uses_(s);
+end;
+
 var t: TS; u: ShortString; L: TS;
 begin
   L := 'abcdef'; SetLength(L, 3);
@@ -67,4 +85,6 @@ begin
   WriteLn('caller after byref: [', t, ']');            { by REF: the caller must see the truncation }
   u := 'abcdef'; ShortByRef(u);
   t := 'wxyz';   ReadsOnly(t);
+  t := 'hey';    Uses_(t);
+  t := 'hey';    Forwards(t);
 end.
