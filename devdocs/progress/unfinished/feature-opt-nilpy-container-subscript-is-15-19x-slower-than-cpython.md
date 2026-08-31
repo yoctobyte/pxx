@@ -7,7 +7,7 @@ status: unfinished
 owner: 
 found: 2026-08-30
 found-by: frank-optimize, profiling bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
-summary: "Container subscript is NilPy's worst primitive against CPython. RE-MEASURED 2026-08-31 on a quiet box: b[2] is now 117 ns vs 11 (10.6x, was 234 vs 12 = 19.2x) and d['k'] 262 vs 25 (10.6x, was 16.5x) -- the absolute cost roughly HALVED, and the -O3 reserve this ticket recorded as 30-40% is now 3-7% because the static-literal pass promoted to -O2 exactly as predicted. All FOUR previously-named drivers are now resolved, so a ~10x gap remains with no cause. New suspect, named categorically: a subscript costs 11 out-of-line calls, 8 of them into three tag-dispatch routines sharing an identical 18-instruction preamble that re-tests the type tag with six compares. Benchmark committed as bench/nilpy_primitives.npy. Next step is confirm-then-decide, not a fix."
+summary: "Container subscript is NilPy's worst primitive against CPython. RE-MEASURED 2026-08-31 on a quiet box: b[2] is now 117 ns vs 11 (10.6x, was 234 vs 12 = 19.2x) and d['k'] 262 vs 25 (10.6x, was 16.5x) -- the absolute cost roughly HALVED, and the -O3 reserve this ticket recorded as 30-40% is now 3-7% because the static-literal pass promoted to -O2 exactly as predicted. All FOUR previously-named drivers are now resolved, so a ~10x gap remains with no cause. New suspect, named categorically and then CORRECTED the same night: a subscript costs 11 out-of-line calls, 8 into retain/release/release-and-clear -- three genuinely DIFFERENT operations (confirmed by which refcount helpers each calls), not duplicates, so do not merge them. What is real is that each re-derives the value's type tag with six compares, so the tag is classified ~8x per subscript for a value whose type never changes. Benchmark committed as bench/nilpy_primitives.npy. Next step is confirm-then-decide, not a fix."
 ---
 
 # NilPy container subscript is 15-19x slower than CPython
@@ -310,5 +310,59 @@ later because the benchmark lived in a scratchpad.
 ## Parked 2026-08-31
 
 re-measurement and re-scope done; the fix is a fresh investigation (out-of-line tag dispatch), not this ticket's remaining work
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+### CORRECTION to the section above, by me, same night — the three are NOT duplicates and must not be merged
+
+The section above called the three tag dispatchers *"one concept served by three
+near-identical mechanisms, which `root-cause-over-microfix.md` calls a design
+flaw"*, hedged with *"confirm the tails are genuinely specialisations before
+proposing to merge them."* **I ran that confirm step. The answer is no, and the
+design-flaw reading is withdrawn.**
+
+Neither of the two shorter routines calls the longer one, and each calls a
+**different** pair of helpers. Disassembling those helpers settles what they are:
+
+| helper | first instructions | what it is |
+| --- | --- | --- |
+| `0x40036a` | `test rax,rax; je; incq -0x10(%rax)` | string **retain** |
+| `0x400378` | `test rax,rax; je; decq -0x10(%rax); jne; sub $0x18` | string **release** + free path |
+| `0x4003aa` | `push rax,rcx,rdx,rsi,rdi,r8…` | object **retain** (saves all registers) |
+| `0x4003cd` | same prologue | object **release** |
+
+So the family is:
+
+| routine | calls | therefore |
+| --- | --- | --- |
+| `0x40057e` | str retain + obj retain | **RETAIN** |
+| `0x400529` | str release + obj release | **RELEASE** |
+| `0x4004c5` | str release + obj release, **then writes the tag back** | **RELEASE-AND-CLEAR** (`PyVarSlotClear`: `dst^.VType := 0; dst^.Payload := 0`) |
+
+**Three genuinely different operations that happen to share a prologue.** That
+prologue is `PyVarSlotManaged` + `PyVarSlotIsObj` (`pylib.pas:5334,5345`)
+inlined into each — the same *classification*, not the same *routine*. Merging
+them would be wrong.
+
+**What survives, and it is the real finding:** a subscript makes **11 out-of-line
+calls, 8 of them into retain/release/clear, and every one of those re-derives
+the value's type tag from scratch** with six compare-and-branch pairs. The tag
+is classified ~8 times per subscript for a value whose type never changes across
+those 8 operations.
+
+**So the lever is not merging routines. It is one of three, in increasing order
+of ambition:** inline the classification so the *call* disappears; classify once
+per statement and pass the result to the slot ops; or know the type statically
+and emit no dispatch at all. Which of those is right is a real design question
+and is **not** settled by this measurement — it is the next investigation, and
+it now starts from a correct picture instead of my wrong one.
+
+**Recorded rather than quietly edited**, because the wrong version was published
+in the section immediately above and someone could have acted on it: "merge the
+three duplicates" would have been a refactor toward a bug.
+
+## Parked 2026-08-31
+
+confirm step done and it refuted my own suspect framing; next is a design choice between inlining the tag classification, hoisting it per statement, or eliminating it statically
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
