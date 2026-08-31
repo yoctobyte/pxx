@@ -1,17 +1,48 @@
 ---
 slug: bug-a-an-int64-multiply-dies-with-an-illegal-instruction-on-xtensa
 track: A
-prio: 60
+prio: 25
 type: bug
-status: backlog
+status: rejected
 found: 2026-08-31
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "`b := a * 2` with a, b: Int64 dies with SIGILL on xtensa; Int64 add and subtract are correct and every other target is correct. So does `WriteLn(i)` for a plain Integer, which is very likely the same root cause (digit extraction is div/mod). Both reproduce on the PINNED compiler, so neither is a regression -- they were found because a runtime change became the first code in builtinheap.pas to use an Int64 multiply. NOT YET ESTABLISHED, and the ticket deliberately does not claim it: whether this is our codegen or the EMULATED CORE lacking the mul/div option. Four qemu cores (dc232b, dc233c, de212, lx106) fail identically, which weakens the core-config theory but does not kill it -- they may share the gap. What settles it is naming the faulting instruction, or running on real S2/S3 hardware."
+summary: "REJECTED 2026-08-31, the same day I filed it: NOT A DEFECT. Both SIGILLs are one documented qemu limitation with an existing flag -- no qemu-xtensa core implements MUL32HIGH (measured across all 8 cores, before either of us arrived), so ANY 64-bit multiply dies, and integer formatting strength-reduces div-by-10 into one, which is why `WriteLn(i)` died too. `--xtensa-soft-mulhigh` makes both pass; I verified that on the PINNED compiler with only the flag varying. tools/run_target.sh:95 has carried the explanation all along. Real xtensa hardware has the instruction. The cost of filing this was not the ticket -- it is that I REMOVED A WORKING xtensa codegen arm because it produced this signal, and had to restore it. What the ticket got right is the one thing worth keeping: it refused to label the cause codegen-vs-core, and named what would settle it, so nothing false was published. Any verdict produced under the flag must SAY so -- run_target.sh notes the emulator is not bit-identical to hardware for multiplies under it."
 ---
 
-# An Int64 multiply dies with an illegal instruction on xtensa
+# An Int64 multiply dies with an illegal instruction on xtensa — REJECTED, it is the emulator
+
+## Why this is rejected (2026-08-31, found by frankS, verified here)
+
+`--xtensa-soft-mulhigh`. Same source, PINNED compiler, only the flag varying:
+
+```
+  <no flag>              start int-ok i64-add-ok i64-sub-ok  SIGILL
+  --xtensa-soft-mulhigh  start int-ok i64-add-ok i64-sub-ok i64-mul2-ok i64-mul-ok end
+```
+
+`tools/run_target.sh:95` documents it: no qemu-xtensa core implements
+MUL32HIGH -- all 8 measured -- and integer formatting strength-reduces div-by-10
+into a 64-bit multiply, which is why numeric output SIGILLs by the same
+mechanism. My "four cores fail identically" was right and understated.
+
+**The real cost of this ticket:** the signal made me pull a *working* xtensa
+in-place-append arm from `ir_codegen_xtensa.inc`, on the theory that my a2/a3
+register handling was wrong. It was not. Rebuilt and run with the flag, that arm
+gives 16 allocations for 20000 appends where the concat path gave 19780, with
+every correctness check passing. Restored.
+
+**The lesson, which is not "check for a flag":** every xtensa probe I wrote
+crashed at its own output, so the newest thing I had changed always looked
+guilty. A broken *reporting channel* blames the thing under test. Running the
+baseline is what should have caught it, and did -- I noticed the pinned compiler
+died identically -- but I read that as "xtensa is broken here" rather than
+"my instrument is".
+
+## Original report follows
+
+
 
 ## Repro — five lines
 

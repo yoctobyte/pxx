@@ -1460,6 +1460,32 @@ begin
   xtensa_syscall;
 end;
 
+{ `s := s + x` appended into s's own block rather than built fresh from both
+  halves. Shared recogniser (IRIsSelfStrAppend, forwarded in compiler.pas); the
+  right operand's unpacking is in the runtime, so this is an ordinary 2-argument
+  call. The value goes to a3 BEFORE the slot address is computed into a2:
+  EmitSlotAddrXtensa writes only its rd, so a3 survives it. }
+procedure EmitAnsiStrAppendToSymXtensa(symIdx, rhs: Integer);
+var procIdx: Integer;
+begin
+  IREmitNodeXtensa(rhs);                          { a2 = handle, or char code }
+  xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);       { a3 = arg1 }
+  EmitSlotAddrXtensa(reg_xtensa_a2, symIdx);      { a2 = arg0 = &slot }
+  if IntToTypeKind(IRTk[rhs]) = tyChar then
+    procIdx := FindProc('PXXStrAppendChar')
+  else
+    procIdx := FindProc('PXXStrAppendStr');
+  if procIdx < 0 then Error('compiler error: PXXStrAppendStr/Char not found in builtin unit');
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);    { arg0 }
+    xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);    { arg1 }
+    EmitCallProc(procIdx);
+  end
+  else
+    EmitCallProc(procIdx);                        { call0: a2, a3 already in place }
+end;
+
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
@@ -1600,18 +1626,16 @@ begin
         end;
         if Syms[si].TypeKind = tyAnsiString then
         begin
-          { NO in-place `s := s + x` arm here yet, deliberately, and this comment
-            is the record of an attempt that did not work rather than of an
-            oversight. i386, arm32, aarch64 and riscv32 all call
-            IRIsSelfStrAppend here and emit a 2-argument call to
-            PXXStrAppendStr/Char; the xtensa version of that (a2 = &slot,
-            a3 = value, CALL0) compiled but died with an illegal instruction on
-            `s := s + 'b'` for a LOCAL as well as a global, where the concat
-            path below is correct. Not shipped in that state.
-            bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
-            carries what was tried. This target wants it MOST -- on ESP the
-            quadratic path is functional, not merely slow -- so it is worth
-            someone who can debug xtensa codegen picking it up. }
+          { `s := s + x`: append in place; the helper does the whole slot update,
+            so none of the publish/DecRef below runs. tyString is recognised too
+            but stays on the concat path -- it has no runtime wrapper yet. }
+          if IRIsSelfStrAppend(si, IRB[node]) and
+             ((IntToTypeKind(IRTk[IRB[IRB[node]]]) = tyAnsiString) or
+              (IntToTypeKind(IRTk[IRB[IRB[node]]]) = tyChar)) then
+          begin
+            EmitAnsiStrAppendToSymXtensa(si, IRB[IRB[node]]);
+            Exit;
+          end;
           { Managed-string assignment: build the new handle in a2, then publish
             into the slot (DecRef old). Mirrors i386/riscv32. }
           EmitStrHandleForStoreXtensa(IRB[node]);

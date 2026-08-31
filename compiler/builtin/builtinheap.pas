@@ -4280,16 +4280,16 @@ begin
     -- the append-loop signature. A first SetLength (oldData = nil) and a shrink
     allocate exactly, so a one-shot `SetLength(buf, FileSize)` does not quietly
     ask for twice the file. }
-  { Doubling by ADDITION, not `* 2`, and that is not a style choice: an Int64
-    `a * 2` dies with an illegal instruction on xtensa, while add and subtract
-    are correct, and it does so on the PINNED compiler too and on no other
-    target -- so it is not something this change introduced, it is something
-    this change was the first code here to step on.
-    bug-a-an-int64-multiply-dies-with-an-illegal-instruction-on-xtensa has the
-    five-line repro, and deliberately does NOT yet claim whether the defect is
-    in our codegen or in the emulated core. Restore the multiply if it turns out
-    there is nothing to fix; the two forms are exactly equal, so waiting to find
-    out costs nothing. }
+  { Doubling by ADDITION rather than `* 2`, and the reason is NOT a defect --
+    an earlier version of this comment said it was and that was wrong. On a
+    32-bit target an Int64 multiply is a helper call where an add is inline, so
+    `want + want` is strictly cheaper on exactly the targets this path was made
+    geometric for, and the two forms are identical in value.
+    (The SIGILL that first sent me looking was qemu-xtensa, not us: no
+    qemu-xtensa core implements MUL32HIGH, so ANY 64-bit multiply -- and
+    therefore any numeric output, whose div-by-10 strength-reduces into one --
+    needs --xtensa-soft-mulhigh. tools/run_target.sh has carried that for
+    longer than this bug has existed. Real xtensa hardware has the instruction.) }
   want := newLen + PXX_HDR_SIZE + 1;
   if (oldData <> nil) and (newLen > oldLen) then want := want + want;
   newBase := PXXAlloc(want, 8);

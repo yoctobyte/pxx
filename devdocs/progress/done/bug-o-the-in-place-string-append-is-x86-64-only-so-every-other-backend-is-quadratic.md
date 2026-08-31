@@ -3,12 +3,13 @@ slug: bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-
 track: A
 prio: 92
 type: bug
-status: urgent
+status: done
+resolved: PENDING-COMMIT
 found: 2026-08-31
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "MOSTLY FIXED 2026-08-31; ONE BACKEND LEFT (xtensa). Two defects of one shape -- an optimisation living only in the x86-64 emitter with every other backend routed to a correct-but-quadratic shared path -- and the one this title names was NOT the one that mattered. (a) FIXED in the runtime, so ALL SIX targets get it: PXXStrSetLen always reallocated and copied, so `SetLength(s, Length(s)+1)` copied the whole string per call; AppendChar in lexer.inc does exactly that per character, which made the COMPILER'S OWN string building O(n^2) everywhere but x86-64. It now grows in place when sole-owner and APPENDABLE with capacity, and over-allocates 2x only when an existing string grows. (b) FIXED on i386, arm32, aarch64 and riscv32: IRIsSelfStrAppend is forwarded in compiler.pas and each backend emits a 2-argument call to the new runtime wrappers PXXStrAppendStr/Char. XTENSA STILL TAKES THE CONCAT PATH -- an arm was written, crashed on a local as well as a global, and was REMOVED rather than shipped; xtensa wants it most because there the quadratic path is functional rather than slow. ACCEPTANCE: the i386-hosted compiler now builds compiler.pas natively (rc=0), and the x86-64-CROSS-built i386 compiler, its self-built child and its grandchild are all THREE byte-identical (95b703fd1bc5bc5d) -- a true i386 fixedpoint, which it has never reached; arenas 13-then-SIGSEGV -> 4, matching x86-64 exactly. NOT a 32-bit bug -- aarch64 is 64-bit and was equally quadratic."
+summary: "FIXED 2026-08-31, all six backends. Two defects of one shape -- an optimisation living only in the x86-64 emitter with every other backend routed to a correct-but-quadratic shared path -- and the one this title names was NOT the one that mattered. (a) PXXStrSetLen always reallocated and copied, so `SetLength(s, Length(s)+1)` copied the whole string per call; AppendChar in lexer.inc does exactly that per character, which made the COMPILER'S OWN string building O(n^2) everywhere but x86-64. Fixed in the runtime -- in place when sole-owner and APPENDABLE with capacity, 2x only when an existing string grows -- so all six targets got it at once. (b) `s := s + x` had IRIsSelfStrAppend and its emitter in ir_codegen.inc and nowhere else; the recogniser is now forwarded in compiler.pas and i386, arm32, aarch64, riscv32 AND xtensa each emit a 2-argument call to the new runtime wrappers PXXStrAppendStr/Char. 20000 appends: 19780 allocations -> 16 on every target. ACCEPTANCE: the i386-hosted compiler builds compiler.pas natively (rc=0), and the x86-64-cross-built i386 compiler, its child and its grandchild are all three byte-identical (95b703fd1bc5bc5d) -- a true i386 fixedpoint it had never reached; arenas 13-then-SIGSEGV -> 4. NOT a 32-bit bug: aarch64 is 64-bit and was equally quadratic. Every xtensa measurement here was taken under --xtensa-soft-mulhigh, which qemu-xtensa requires for any 64-bit multiply."
 ---
 
 # The in-place string append is x86-64 only, so every other backend is quadratic
@@ -137,7 +138,24 @@ comparing lengths and characters, and both loops are correct on it.)
 Semantics checked as well as cost: grow, shrink, regrow-with-zero-fill, and
 shrink of a static literal, all correct on both hosts.
 
-### Still open — xtensa only, and it was attempted
+### xtensa — landed, after I removed it once by mistake
+
+I wrote the xtensa arm, saw `s := s + 'b'` die with an illegal instruction on a
+local as well as a global, could not explain it, and REMOVED it rather than ship
+it. That was the right instinct applied to a wrong reading: the SIGILL was
+qemu-xtensa refusing MUL32HIGH, which no core implements, and which every
+numeric output hits too because div-by-10 strength-reduces into a 64-bit
+multiply. frankS pointed at `tools/run_target.sh:95`, which has documented it
+all along. Rebuilt with `--xtensa-soft-mulhigh`, the identical arm passes:
+16 allocations for 20000 appends, all correctness checks green.
+
+**Every xtensa verdict must name that flag**, per run_target.sh -- under it the
+emulator is not bit-identical to hardware for multiplies.
+
+Filed and then rejected the same day:
+`rejected/bug-a-an-int64-multiply-dies-with-an-illegal-instruction-on-xtensa`.
+
+### The original write-up of the attempt, kept because the diagnosis was wrong
 
 aarch64 and riscv32 landed the same ~20-line arm as i386 and arm32.
 
