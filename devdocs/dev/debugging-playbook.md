@@ -194,6 +194,11 @@ order to read them in. Route by what you are holding:
   eight, and it answers *which hunk* rather than *which commit*
 - `## Ancestry is not existence` -- a behind checkout makes a real commit look
   like a ghost; only `cat-file -t` proves one
+- `## A CONTROL has to be the commit under test, not the nearest binary lying
+  around` -- the pinned compiler is days old BY DESIGN, so it is never a
+  "before"; a control that wrongly FAILS is invisible because it confirms what
+  you expect, and one that fails harder than expected gets written into the
+  ticket
 - `## A wrong fact gets challenged. A MISSING fact collides with nothing.` --
   why a compressed relay is invisible from both ends; give the LOCATION
 - ``## Profile the SHIPPING binary`` -- `-g` alone silently means `-O0`, so
@@ -2306,6 +2311,60 @@ Catching it before the sweep runs is cheap. The version where it runs is the
 expensive shape: a RED with real evidence attached, pointing at the wrong author,
 in a record that outlives the session that knew better. **The archive is what the
 next person reads**, and no footnote travels with it.
+
+## A CONTROL has to be the commit under test, not the nearest binary lying around
+
+Sibling of the section above, one step earlier in the work. That one is about
+the sha you HAND someone. This one is about the binary you measure *yourself*
+when you want a "before".
+
+Measured 2026-08-31, fixing the alloca / expression-stack miscompile. A 14-row
+differential program, and the baseline needed a pre-fix compiler. The pinned one
+was right there — `stable_linux_amd64/default/pinned`, a working binary, no
+build to wait for. It **segfaulted at row 5**, four rows before the row under
+test.
+
+That reads as a much bigger bug than the one being fixed, and it is a very
+attractive thing to believe: the baseline is *supposed* to fail. It was an
+older defect already fixed between the pin and HEAD. Building the actual pre-fix
+HEAD binary showed the truth — all 14 rows run to completion, exactly one
+diverges, and it is the row the fix is about.
+
+**A pinned compiler is days old by design; that is what pinning is for.** So it
+is never a control for a change measured against HEAD. It answers a real
+question, correctly — *"did this work at the pin?"* — which is not the question
+asked. Same family as the stale-seed and reverted-experiment cases above: the
+instrument did not error, it answered about a different tree.
+
+**The cost is asymmetric and that is why it earns a section.** A control that
+wrongly PASSES gets caught immediately — your fix appears to fix nothing, and
+you go looking. A control that wrongly FAILS, *and fails harder than expected*,
+is invisible: it confirms the bug, oversells its severity, and you write both
+into the ticket. Here it would have shipped "the pre-fix binary crashes on
+realistic alloca shapes", which is false and was two commands from being
+published.
+
+**So: build the control from the commit you are testing.** With the work
+committed first, that is two commands and no risk to it:
+
+```
+git checkout HEAD~1 -- <the files you changed>   # or the whole subtree
+make compiler/pascal26                            # grep for `converged after N round(s)`
+<run the repro>
+git checkout HEAD -- <the same files>
+make compiler/pascal26
+```
+
+Commit first, so the restore is a checkout from a commit and not a copy-back —
+`git checkout -- <file>` is file-granular and eats anything uncommitted beside
+the injected control. Print the binary's sha256 beside each arm's numbers; the
+two arms MUST differ, and if they do not you measured one binary twice.
+
+And run **per-shape, not just the combined program**: the crash at row 5 also
+hid what rows 6-14 would have said. A multi-row repro is one measurement with a
+single early exit, not N measurements — which is the other half of what the
+pinned binary cost here. Splitting the 14 rows into 14 programs is what turned
+"the baseline crashes" into "exactly one row diverges, and it is this one".
 
 ## A bisect can name the RIGHT commit and still be wrong
 

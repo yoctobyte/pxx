@@ -101,6 +101,30 @@ Recorded here rather than as its own ticket, at frankC's request via the
 coordinator, so it is waiting for whoever takes the port rather than expiring
 in a message.
 
+**Then frankC went and found the real one, and it is i386.** Verified in the
+source rather than taken on report — `ir_codegen386.inc:3328-3331` and `:3388`,
+in the `ProcExternal or CProcUsesCAbi` arm:
+
+```
+mov ecx, esp                  ; the caller's esp, ABSOLUTE
+and esp, -16                  ; SysV i386 alignment
+sub esp, base
+mov [esp+argBytes], ecx       ; parked in the outgoing frame
+... args, call ...
+mov esp, [esp+argBytes]       ; restored from the parked ABSOLUTE value
+```
+
+That is the exact i386 twin of the x86-64 rsp this fix converted to a
+`base + delta` pair, so **the i386 port needs the delta treatment, and needs it
+by construction rather than by choice**: the `and esp, -16` means the amount
+subtracted is not a compile-time constant, so the restore cannot be rewritten as
+a relative `add`. Latent today only because i386 has no IR_ALLOCA arm to reach
+it.
+
+frankC's arm32 AAPCS32 block is all relative on purpose (`sub sp,#blk` /
+`add sp,#16` / `add sp,#blk-16`, no saved pointer), so it is safe as written —
+the aarch64 situation. riscv32 is the one still unaudited.
+
 ## Verification
 
 `test/c_vla.c` and `test/c_alloca_in_call_argument.c` against a glibc-built
