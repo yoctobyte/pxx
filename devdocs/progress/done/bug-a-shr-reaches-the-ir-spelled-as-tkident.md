@@ -265,4 +265,4 @@ different blast radius, and no symptom asks for it today. `ir.inc`'s rewrite now
 states the cancellation out loud so the next reader does not simplify one half.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit bae0b7e34.
