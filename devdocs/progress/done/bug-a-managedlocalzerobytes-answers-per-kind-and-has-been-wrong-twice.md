@@ -180,3 +180,22 @@ base-kind number, so it is not folded in.
 
 ## Log
 - 2026-08-30 — resolved, commit f4bc4cc54.
+
+## 2026-08-31 (frankA) — the family has a SECOND AXIS, and this ticket's census cannot see it
+
+A third instance of "a managed local started from stack garbage" landed today,
+and it is **not** a missing `IsArray` in this table. `ManagedLocalZeroBytes`
+answered correctly — the byte COUNT was right. What was wrong was the **width of
+each store the backend then emitted**: `EmitStoreVar` on arm32, riscv32 and
+xtensa sized the access with `TypeSize(Syms[idx].TypeKind)`, the ELEMENT type,
+so a dynamic array with a byte-sized element got `strb` into a pointer slot —
+low byte zeroed, three stale bytes surviving. Same outcome as a missed zero (a
+release of a handle made of stack garbage, found three layers away as a
+write-after-free), reached through a different mechanism.
+
+So the `PXXDBG a.mlzero` channel this ticket built is sound and would have
+reported `zeroBytes` correctly here, and been no help: **it answers HOW MANY
+bytes, never HOW WIDE the stores are.** If the census is ever extended, that is
+the second column to add. Fixed in
+[[bug-a-no-cross-target-can-build-the-compiler-itself]]; aarch64 had the guard
+already, the three siblings did not.
