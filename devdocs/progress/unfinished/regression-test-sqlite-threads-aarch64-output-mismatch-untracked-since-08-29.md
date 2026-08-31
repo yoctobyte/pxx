@@ -77,10 +77,14 @@ the "no local repro" blocker in the section above is gone — copy it into
 ### It passes here
 
 Four runs at HEAD (`d63c01aab`, compiler `209010b3252f`):
-`PASS aarch64 (libc-free, shared+per-thread)`, every time. The binary is the
-same SIZE as seven's, to the byte: `code=6946584B data=84424B bss=118128B
-procs=4393` in both. So the build is not in question and the divergence is in
-the RUN.
+`PASS aarch64 (libc-free, shared+per-thread)`, every time. The binary matches a size tuple seven
+has produced: `code=6946584B data=84424B bss=118128B procs=4393`.
+**That comparison is NOT controlled** (frankT, checking the archive): the tuple
+drifts with the tree and seven has written four distinct ones —
+`bss=113840/procs=4343`, `118120/4392`, `118120/4393`, `118128/4393` — so
+"identical" only means anything **sha-matched**, and this was not. The
+conclusion survives it, because the build succeeds on both and only the run
+diverges; the word "identical" must not travel onward.
 
 ### The report was structurally unable to distinguish two very different failures
 
@@ -122,6 +126,12 @@ with a guess.
 
 Two things about the harness, neither of which is mine to change:
 
+**RULED, 2026-08-31, by frankT, who owns both:** leave item 1 exactly as it is —
+sizing it before seven's first honest report is the guess this ticket was parked
+to avoid, and *"if it turns out to be needed, move the OUTER first, then the
+inner"*. Item 2 is confirmed and filed as its own ticket (`c20f500fb`). Seven
+sweeps full tier about every 13 minutes, so the answer arrives on its own.
+
 1. **The inner budget does not stretch under load.** `run_c_conformance.sh` and
    `run_fgl_corpus.sh` both multiply their inner `timeout` by
    `TESTMGR_LOAD_SCALE` as well as `TESTMGR_TIME_SCALE`, with a comment saying
@@ -134,11 +144,18 @@ Two things about the harness, neither of which is mine to change:
    and the inner aarch64 budget is already 120s: doubling the inner one can push
    past the outer, converting a diagnosable inner failure into a less
    informative outer kill. That is a budget decision that needs seven's numbers.
-2. **The auto-ticket never fired.** Two CLOSED tickets exist for this exact job,
-   both filed by twatch; this one had to be filed by hand after three days.
-   frankA's read is worth checking: a job that goes red without ever presenting
-   a NEW-RED transition (watcher restart, or first-seen-already-red) appears to
-   get no ticket and then reads as furniture in every later report.
+2. **The auto-ticket never fired — CONFIRMED, and the number is worse than
+   "fourteen sweeps".** frankA's read was right and frankT checked it twice:
+   filing is gated on `new_red`, which is a TRANSITION against the stored job
+   state, so a job that is red in the baseline can only ever be ticketed by
+   going green and red again. And **81 of 81 full-tier reports on seven carry
+   this job red** — every full report that host has ever written, from
+   2026-08-29T16:51:31Z to 2026-08-31T02:09:38Z. It has never once been green
+   there, so it never presented a transition, so it could never have been
+   ticketed. A guard that cannot fire and prints nothing at all.
+   The fix is NOT to loosen the suppression (all three gates correctly refuse to
+   LOCALIZE a red they cannot attribute) — it is that localizing and noticing are
+   different jobs and only the first needs a transition. Filed by frankT.
 
 ### What decides this
 
