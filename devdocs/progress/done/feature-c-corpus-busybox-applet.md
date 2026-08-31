@@ -2,10 +2,10 @@
 track: C
 prio: 78
 type: feature
-status: working
+status: done
 blocked-by: []
 owner: frankC
-summary: "OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64."
+summary: "OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target. MET 2026-08-31 on BOTH targets: busybox `cat` built by pxx from upstream unvendored source is byte-identical to a gcc-built binary across 12 input cases on x86-64 AND aarch64 (under tools/run_target.sh), and agrees with upstream's own separately-linked busybox_CAT. Repeatable: tools/busybox_cat_diff.sh configures the tree, builds tools/busybox_cat_unity.c three ways and diffs. Cost three compiler fixes (alloca in an argument list, extern arrays with no size, alloca.h), the aarch64 IR_ALLOCA port, and the crtl headers the cross targets get no host fallback for."
 ---
 
 # busybox `cat` via cfront — one applet, real syscall load
@@ -307,3 +307,99 @@ Two things, in this order:
   `sys/statfs.h` and friends from the host; aarch64 stops at the first one.
   That is crtl surface to write, mechanical but real — and note it means the
   x86-64 result above leans on host headers for those declarations.
+
+## 2026-08-31 (later still) — rung 1 is MET on BOTH targets, and is repeatable
+
+`tools/busybox_cat_diff.sh` is GREEN:
+
+```
+  ORACLE  gcc unity build
+  ORACLE  busybox_CAT agrees with the gcc unity
+  PASS    x86_64   byte-identical to the gcc oracle over 11 cases
+  PASS    aarch64  byte-identical to the gcc oracle over 11 cases
+```
+
+(11 argument cases plus the no-args stdin case = the 12 in the success
+criterion. aarch64 runs under `tools/run_target.sh`, as specified.)
+
+**Two oracles, and the second is the one that matters.** gcc on the same unity
+is the first; upstream's own `busybox_CAT`, linked from 25 separate `.o`
+files, is the second. A unity build can share a mistake with itself; it cannot
+share one with a real link. All three binaries agree byte for byte.
+
+The harness fetches nothing and asks for nothing — it **configures the tree
+itself**. That is not a convenience: `make defconfig && make` does **not**
+build busybox 1.36.1 against a current kernel-headers package
+(`networking/tc.c` wants `struct tc_cbq_lssopt`, gone from
+`<linux/pkt_sched.h>`), which also rules out upstream's
+`make_single_applets.sh` — it needs `include/applets.h` from a completed
+build. `allnoconfig` + `CONFIG_CAT` never compiles `tc.c` at all. The one
+non-obvious line is `CONFIG_SH_IS_ASH`: "sh" aliasing defaults to ash even
+with every applet off, so leaving it on yields `NUM_APPLETS 2` and it is no
+longer a single-applet build. Verified from a `git clean` tree.
+
+### The gcc control was broken, and the fault was mine
+
+gcc's build of the unity segfaulted on every missing-file case while both
+upstream and pxx printed the diagnostic. Not a compiler difference — an
+**include-order** bug in the unity, and upstream states the rule in a comment
+at `libbb/appletlib.c:30`: *"Define this accessor before we #define 'errno'
+our way."* `get_perrno()` must compile while `errno` is still the libc's;
+`libbb.h` then redefines `errno` to `(*bb_errno)` and `lbb_prepare` fills
+`bb_errno` in from `get_perrno()`. Include any other libbb TU first and
+`&errno` is already `&(*bb_errno)` — so `get_perrno` returns `bb_errno`
+itself, still NULL. A real link never hits this because each `.o` is its own
+TU; the unity is the one place the ordering is load-bearing.
+
+**pxx never took that path at all**: crtl's `errno` is a plain `extern int`,
+not a macro, so busybox's `#if defined(errno)` is false, `bb_errno` never
+exists and every reference is the real variable — the path busybox takes on
+any libc that does not macro-define errno. Worth stating plainly because it
+cuts the other way too: a control that disagrees is not automatically the
+subject's fault, and reading "gcc crashes, we do not" as a win would have
+buried the real defect.
+
+### The crtl surface aarch64 needed
+
+Seven headers, and **four of them deliberately declare no functions at all**:
+`sys/resource.h`, `sys/statfs.h`, `pwd.h`, `grp.h`, `mntent.h` (plus
+`sys/param.h` and `sys/sysmacros.h`, which are macros through and through).
+
+The reasoning is `tools/crtl_reachability.py`'s, applied one step earlier. The
+PAL has no `getrlimit`/`statfs` and crtl has no passwd/group lookup, so a
+prototype would be a declaration crtl cannot satisfy: the call keeps its
+default soname, the ELF writer emits a `DT_NEEDED` nobody asked for, and on a
+glibc host the **system** function answers while every cross target fails to
+link. Without the declaration the call is a compile error naming the function.
+For `pwd`/`grp` a stub is worse than either: "root does not exist" is a wrong
+answer, not a failure, and wrong answers are what cost time in this repo. Each
+header says which case it is and what implementing it would take.
+
+`sys/sysmacros.h` is the one with real content, and it earns a test.  Linux's
+`dev_t` splits **both** the major and the minor across two fields, so a naive
+`(dev >> 8) & 0xfff` is right for every device on a desktop and wrong only for
+minors past 255 — `test/c_sysmacros_dev.c` is eleven rows against glibc
+including `loop300` and a full-width `/dev/pts` minor.
+`test/c_libgen_basename_dirname.c` is the same shape for `<libgen.h>`, where
+`dirname("//")` is `"//"` (POSIX's implementation-defined two-slash prefix,
+which glibc preserves) while `"///"` collapses to `"/"` — a plain "all slashes
+→ /" rule passes the other sixteen rows and fails that one.
+
+Note what this changes about the earlier x86-64 claim: it no longer leans on
+host headers for those declarations, because there are no declarations to
+lean on.
+
+### What rung 1 does NOT establish
+
+- Nothing here says a **second** applet works. `cat` reaches 25 of libbb's
+  ~145 TUs; the ones it does not reach are where `pwd`/`grp`/`statfs`/
+  `getrlimit` actually get called, and those are stubs-by-omission today.
+- `i386`, `arm32` and `riscv32` still have no `alloca`
+  ([[feature-a-port-alloca-to-i386-arm32-and-riscv32]]), so the unity cannot
+  even build there.
+- The backend invariant behind bug 1 above is filed and unfixed
+  ([[bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer]]);
+  the frontend hoist covers what programs reach, not what the IR permits.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

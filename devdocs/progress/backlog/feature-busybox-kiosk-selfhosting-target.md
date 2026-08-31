@@ -30,13 +30,18 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
 
 ## The rungs, in order
 
-1. **busybox `cat`, standalone** — `feature-c-corpus-busybox-applet` [C, p60,
-   `blocked-by: []`]. Unblocked 2026-08-30 by `1672aeaad`; `libbb.h` compiles and
-   the 145 TUs are reachable. Residue is busybox's own `libbb` symbols, not crtl
-   gaps. Bar: output byte-identical to a gcc-built `cat` under
-   `tools/run_target.sh`, x86-64 + aarch64.
-2. **busybox multi-applet + `ash`** — the shell half. `feature-eliah-shell` is
+1. **busybox `cat`, standalone** — ~~`feature-c-corpus-busybox-applet`~~
+   **DONE 2026-08-31.** Byte-identical to a gcc-built binary across 12 input
+   cases on x86-64 AND aarch64 under `tools/run_target.sh`, and equal to
+   upstream's own separately-linked `busybox_CAT`. Repeatable:
+   `tools/busybox_cat_diff.sh`. Cost three compiler fixes and the aarch64
+   `IR_ALLOCA` port; see the resolved ticket.
+2. **busybox multi-applet + `ash`** — the shell half.
+   `feature-c-corpus-busybox-multi-applet` [C]. `feature-eliah-shell` is
    `done/` and is our own shell, a separate artifact; this rung is busybox's.
+   Rung 1 says explicitly what it does NOT establish: `cat` reaches 25 of
+   libbb's ~145 TUs, and the ones it misses are where `pwd`/`grp`/`statfs`/
+   `getrlimit` are actually called — stubs-by-omission today.
 3. **qemu-system + a kernel.** **BLOCKED, and not on us** — see below.
 4. **The compiler self-hosting *inside* the image.** Related and not identical:
    `bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one`.

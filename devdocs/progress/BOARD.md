@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-no-cross-target-can-build-the-compiler-itself | A | 60 | bug | PARTLY FIXED 2026-08-30. i386, aarch64 and arm32 now BUILD the compiler, and the i386 and aarch64 binaries RUN under qemu and compile a working program -- their shared blocker was `LoadFile` with an array-element destination (cpreproc.inc), fixed by normalising in the frontend rather than teaching five backends a slot-address shape. TWO TARGETS REMAIN, with DIFFERENT causes, neither related to the first: riscv32 `jal displacement 2197196 is outside the encodable range` (reach) and xtensa `stack frame too large (> 32 KB) for a single ADDMI` (frame size) -- the latter is a THIRD defect this ticket originally missed. And the title claim was too strong: wasm32 built the compiler all along and was never measured. arm32 builds but its cross-built compiler SEGFAULTS, which is a fourth, separate defect. | — |
-| feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -67,7 +66,7 @@ _none_
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (396)
+## backlog (397)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -319,6 +318,7 @@ _none_
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | BLOCKED on decide-posix-master-vs-fpc-named-master-for-the-socket-facades: the design says Posix.* is canonical and the FPC-named units wrap it, but the tree shipped the FPC-named units AS the implementation on PAL, and all three of the design's selectable backends already exist one layer down at the PAL. Building as designed would invert a working layer with 15 in-tree consumers plus Synapse, for zero current consumer. Not implementation work until the layering question is re-decided. | decide-posix-master-vs-fpc-named-master-for-the-socket-facades |
 | feature-bare-esp-supports-uses-builtin | A+S | 20 | feature | Make `uses builtin;` compile on a bare ESP boot | — |
 | feature-busybox-kiosk-selfhosting-target | B | 80 | feature | Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- the work lives in the rungs below, each of which is filed or exists. HOST DEPENDENCY RESOLVED 2026-08-30: the owner granted sudo and qemu-system is now installed for EVERY pxx target -- aarch64, arm, riscv32, riscv64, xtensa, x86_64, i386 -- plus /dev/kvm. Rungs 1-2 (busybox) and rung 3 (image) can all proceed. | — |
+| feature-c-corpus-busybox-multi-applet | C | 70 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. Rung 1 (cat, byte-identical to gcc on x86-64 + aarch64) is done and REACHED ONLY 25 of libbb's ~145 TUs; the applet-dispatch table and the TUs cat never touches are what is untested. First bar: a two-applet binary that dispatches by argv[0]/argv[1]. Second: ash. tools/busybox_cat_diff.sh is the harness to extend, not to rewrite. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-package-namespace-decision | A | 35 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
@@ -739,9 +739,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2939)
+## done (2940)
 
-2939 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2940 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -821,6 +821,7 @@ _none_
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- [p 70] [C] feature-c-corpus-busybox-multi-applet
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [C] regression-lib-test-crtl-reachability-6 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2

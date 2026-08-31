@@ -1986,6 +1986,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-c-cmdline-define-flag | C | 40 | feature | C frontend: support `-D<name>[=<value>]` command-line macro defines | — |
 | feature-c-compiler-dynarrays | A | 60 | feature | Compiler: port fixed-size in-RAM tables to dynarrays / source-size allocation | — |
 | feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
+| feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target. MET 2026-08-31 on BOTH targets: busybox `cat` built by pxx from upstream unvendored source is byte-identical to a gcc-built binary across 12 input cases on x86-64 AND aarch64 (under tools/run_target.sh), and agrees with upstream's own separately-linked busybox_CAT. Repeatable: tools/busybox_cat_diff.sh configures the tree, builds tools/busybox_cat_unity.c three ways and diffs. Cost three compiler fixes (alloca in an argument list, extern arrays with no size, alloca.h), the aarch64 IR_ALLOCA port, and the crtl headers the cross targets get no host fallback for. | — |
 | feature-c-corpus-chess | A | 60 | feature | C corpus: chess engine — perft as a compiler-independent oracle | — |
 | feature-c-corpus-duktape | A | 55 | feature | C corpus: Duktape — JS engine (GC + IEEE-754 corners) | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
