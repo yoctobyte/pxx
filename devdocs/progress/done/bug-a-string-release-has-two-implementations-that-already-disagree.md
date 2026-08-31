@@ -215,4 +215,4 @@ a separate change. Written up in
 [[bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower]].
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit d782926ce.
