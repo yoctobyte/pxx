@@ -3,7 +3,7 @@ track: A+O
 prio: 45
 type: feature
 blocked-by: []
-summary: "PROMISE MEASURED 2026-09-01, and the blocker is SCOPE, not a missing primitive. Promise: 2M GetMem/FreeMem pairs, total fixed, split across N workers (flat = perfect scaling) goes 0.14s at 1 worker to 0.39s at 12 — 2.8x WORSE, i.e. adding threads makes fixed allocator work slower. A null with the identical loop and per-iteration call but no heap traffic is flat at <=0.01s at every worker count, so dispatch is under 3% and the degradation is entirely the global heap lock. Measured at f23f141f997d, AFTER the refcount path went lock-free (274a9da6c), so it is allocator contention and nothing else. NO ACCESSOR PREREQUISITE — an earlier version of this summary claimed one and was wrong. `__pxxTlsBase` (pasparser_expr.inc, AN_TLSBASE, IR_TLSBASE) is Pascal-reachable today, verified compiling and running inside parallel workers, and four TLS slots are free (TLS_SLOT_FIRST_FREE=12 of 16) where an arena needs two. THE REAL CONSTRAINT IS THE TARGET SET: `__pxxTlsBase` is x86-64-only while --threadsafe covers x86-64/i386/aarch64/arm32, so per-thread arenas built on it are an x86-64-only optimisation and the other three stay on the global lock. That is a scope decision to take before starting, not a missing primitive. The reentrancy half stays parked by the owner 2026-08-21; do not re-litigate it."
+summary: "PROMISE MEASURED 2026-09-01, and the blocker is SCOPE, not a missing primitive. Promise: 2M GetMem/FreeMem pairs, total fixed, split across N workers (flat = perfect scaling) goes 0.14s at 1 worker to 0.39s at 12 — 2.8x WORSE, i.e. adding threads makes fixed allocator work slower. A null with the identical loop and per-iteration call but no heap traffic is flat at <=0.01s at every worker count, so dispatch is under 3% and the degradation is entirely the global heap lock. Measured at f23f141f997d, AFTER the refcount path went lock-free (274a9da6c), so it is allocator contention and nothing else. NO ACCESSOR PREREQUISITE — an earlier version of this summary claimed one and was wrong. `__pxxTlsBase` (pasparser_expr.inc, AN_TLSBASE, IR_TLSBASE) is Pascal-reachable today, verified compiling and running inside parallel workers, and four TLS slots are free (TLS_SLOT_FIRST_FREE=12 of 16) where an arena needs two. THE REAL CONSTRAINT IS THE TARGET SET: `__pxxTlsBase` is x86-64-only while --threadsafe covers x86-64/i386/aarch64/arm32, so per-thread arenas built on it are an x86-64-only optimisation and the other three stay on the global lock. ONE ALLOCATOR (settled 2026-09-01): builtinheap.pas is the only one, its three PXXAlloc bodies are mutually exclusive PROFILES, and the native one already carries a {$ifdef PXX_TS_SOFTLOCK} arm — so arenas are a second capability arm in an existing function, an ordinary Track A change with NO fork and no decide-* needed. Scope to agree before starting, not a blocker. The reentrancy half stays parked by the owner 2026-08-21; do not re-litigate it."
 status: backlog
 owner: unassigned
 ---
@@ -223,7 +223,60 @@ survives in the one document the compile-time Error points every reader at. Left
 in place as a session record with a dated note appended there rather than
 rewritten.
 
+### ONE ALLOCATOR, settled 2026-09-01 — so there is no fork and no `decide-*`
+
+Asked because "two allocators" would make this a `normalise-dont-special-case`
+question (the second path is the one that stays broken, and three targets on an
+unexercised path is how it stays broken silently). It is one.
+
+**There is exactly one allocator: `compiler/builtin/builtinheap.pas`.** `lib/rtl`
+has no heap unit, no `PXXAlloc`, and no `HeapPtr`/`HeapEnd` — checked by
+definition site, not by filename.
+
+The four `PXXAlloc` hits in that file are **one forward declaration plus three
+mutually exclusive PROFILES**, and exactly one is compiled into any binary:
+
+| lines | selected by | backing |
+| --- | --- | --- |
+| 115 | — | forward declaration |
+| 1013 | `{$ifdef PXX_ESP_IDF}` | IDF `calloc`/`free` |
+| 1064 | `{$else}{$ifdef PXX_LIBC_HEAP}` | libc `calloc`, debug only, "NOT for production" |
+| 1172 | `{$else}` | **native** bump + size-class bins — the one measured above |
+
+Both alternate profiles delegate to an allocator that already has its own lock
+discipline, so arenas concern the native profile only.
+
+**And the native `PXXAlloc` already carries a capability arm for exactly this
+concern** — `{$ifdef PXX_TS_SOFTLOCK}` at 1176-1184, taking the spinlock inside
+the function. Per-thread arenas are a second arm in a function that already has
+one, gated on a target predicate in the shape of `TargetHasProcCleanupFrame`.
+That is an ordinary Track A change, not a design fork: nothing on
+i386/aarch64/arm32 becomes incorrect, they keep today's behaviour exactly.
+
+### Two stale claims in the done ticket's "What this unblocks, and what is left"
+
+[[feature-a-thread-local-storage-via-clone-settls]] says the remaining arena work
+is `lib/rtl` — *"palthreadobj's launcher installing a block per TThread, and the
+allocator magazine itself — which is Track B's file-lane, not A's"*. **Both
+halves are wrong, and they are wrong in opposite directions.**
+
+1. **The magazine is not Track B's.** The allocator is `compiler/builtin/`, which
+   is Track A's file-lane. `lib/rtl` never had it.
+2. **The launcher work does not exist at all.** `thread_emit.inc:79-85` installs
+   the TLS block in the clone stub, before any Pascal runs, and says why that
+   location was chosen: *"Doing it here rather than in the RTL launcher is what
+   makes that unreachable: every pxx thread passes through this stub, whatever
+   frontend or library created it."* Verified there is no other path —
+   `palthread.pas` is the single M1 wrapper over `__pxxclone`, and
+   `palthreadobj` (M3), `palparallel` and `palpthread` all build on it.
+
+So the whole job is one lane, one file, one function. The lane split in that
+ticket was the reason to suspect two allocators; it was a stale claim, not a
+second allocator.
+
 ### What the work actually is
+
+
 
 1. A Pascal-reachable TLS accessor (or move the arena bookkeeping to where TLS
    already is). **Unmeasured** — I did not price this.

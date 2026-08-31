@@ -4119,7 +4119,7 @@ begin
           feature-a-thread-local-storage-via-clone-settls). }
         Next; { consume '__pxxTlsBase' }
         if TargetArch <> TARGET_X86_64 then
-          Error('__pxxTlsBase is x86-64 only: the other targets have a readable thread register (aarch64 tpidr_el0, arm32 tpidruro) but this runtime has no way to SET one yet, and answering with the parent thread''s block would be a plausible wrong pointer -- see feature-a-thread-local-storage-via-clone-settls');
+          Error('__pxxTlsBase is x86-64 only: the other targets have a readable thread register (aarch64 tpidr_el0, arm32 tpidruro) but this runtime has no way to SET one yet, and answering with the parent thread''s block would be a plausible wrong pointer. x86-64 installs its block with arch_prctl(ARCH_SET_GS) in the clone stub; the others need an equivalent before this can answer.');
         node := AllocNode(AN_TLSBASE);
         ASTTk[node] := Ord(tyPointer);
         if CurTok.Kind = tkLParen then
