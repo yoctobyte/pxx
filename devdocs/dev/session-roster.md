@@ -24146,3 +24146,68 @@ two days and is true again — and frankA declining to edit the owner's file whi
 the tool owner fixed the tool produced the better outcome, not merely the more
 cautious one. Editing the doc would have permanently removed a working instrument
 to route around a two-hour bug.
+
+### A pin rider, and the pin record cites a sha that does not exist (2026-08-31)
+
+**The rider (sequencing, job 3).** frankwasm reduced rung 6b's last wall to a
+non-bug: `for LValue in AEnumerable` over an `IEnumerable<T>` needs a readable
+`Current`, and our `IEnumerator<T>` in `lib/rtl/classes.pas` ships without
+`property Current: T read GetCurrent;`. The compiler bug that forced the omission
+is fixed (`0f0fd6642`, `bug-p-a-property-in-an-interface-declaration-is-rejected`
+in `done/`). It still fails on `stable_linux_amd64/default/pinned`, and
+`gate.sh quick`'s FIRST step is *"pinned builds live lib/rtl"* — so adding the
+one RTL line before a pin reds that step for **every lane**. frankwasm correctly
+did not make the change and instead made the note name its own trigger
+(`69f847fed`).
+
+Verified here: pin commit `4c4a5c125` is 2026-08-30 19:34; the fix is 21:37;
+`ba99a4e81` is 22:32. Neither is an ancestor of the pin. **534 commits from the
+pin to tip.** So the rider stands: *first `make pin` postdating `ba99a4e81`, then
+the RTL line, then re-measure.* Not urgent, nothing blocked behind it, and `make
+pin` remains the owner's call.
+
+**The discovery, which is worse than the rider.** Establishing that ordering I
+first ran `merge-base --is-ancestor 0f0fd6642 992065f21f33`, taking the second
+sha from the pin commit's own subject: *"pin v398 -- 992065f21f33"*. It returned
+non-zero and I wrote down "pinned predates the fix" — the right answer, by
+accident. **`992065f21f33` does not resolve.** It is a pre-rebase ghost, recorded
+in the subject line of the commit that is our authoritative record of which tree
+was blessed. `merge-base --is-ancestor` cannot distinguish "not an ancestor" from
+"that is not an object", and it reports both as a bare exit code with no text at
+all.
+
+So the ghost-sha problem has reached the **pin ledger**, which is the one place a
+sha is supposed to be durable: the pin's identity is still recoverable from the
+pin commit itself, but the id it advertises points at nothing. This is the fourth
+perishable-identifier class biting in its most load-bearing location, and it is
+the second time tonight I nearly published a conclusion drawn from a resolution
+failure rather than a comparison.
+
+**Guard, and it is exact: an `--is-ancestor` test must first prove BOTH operands
+resolve.** A bare exit code is not a comparison unless both sides exist. Same
+family as `cat-file` on an unfetched commit (frankwasm) — the tool is correct
+about your object store and silent about the question you asked.
+
+**frankwasm's own guard, which generalises past this ticket and is the thing to
+spread:** a workaround note must name the event that retires it and instruct its
+own deletion. *"Until that lands"* has no trigger and no owner; *"add it on the
+first pin that postdates `ba99a4e81`, and delete this note"* has both. His stale
+comment was accurate when written and outlived the bug it described — a true
+statement about the past, read as a statement about the present, with nothing
+marking the transition. Same object as the `grant-*` DO-NOT-CLAIM summary.
+Neither errored; both were obeyed.
+
+**Third truncation instance, and it makes it a rule.** frankA ran
+`--status | head -15` against 35 lines of output; line 21 names seven and line 35
+is `UP`. Its conclusion survived only because it went to the artefact — reports
+landing every few minutes — rather than reasoning from either command's text.
+frankA also found a real asymmetry: both `open CASCADE:` lines lack the *"bad
+touches NO buildable file — not a lead"* caveat that all nine `open regression:`
+lines carry, so the most alarming line the tool prints is the one missing its
+defusing clause. Both cascade bads are docs/tstate-only.
+
+And frankA's correction to my framing, which I accept: it left CLAUDE.md alone
+**not** out of deference to the owner's file but because the doc's rule was right
+and the instrument implementing it was broken — opposite fixes. "Don't edit the
+owner's file" would have produced the same action for the wrong reason, and would
+have been wrong had the doc itself been at fault.
