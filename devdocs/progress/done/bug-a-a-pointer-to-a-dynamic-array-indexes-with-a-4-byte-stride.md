@@ -118,5 +118,15 @@ spelling against the direct `a[i]` spelling, because the broken rows exited 0.
 **Positive control, run not assumed:** on the pre-fix compiler
 (`fb68a748bcee3da3`) the file is REFUSED at the AnsiString row; with those rows
 removed so it gets far enough to run, it prints **11 FAIL rows** — carrying the
-`85899345930` signature — and then exits **139** on the parameter row. With the
-fix (`e6bd287595d1c5c2`) all 30 pass.
+`85899345930` signature — and then exits **139** on the parameter row. With the fix all 30 pass.
+
+**A sha correction, because this file cited one that cannot be reproduced.** An
+earlier draft named `e6bd287595d1c5c2` as the post-fix compiler. The compiler
+built from the landed sources is **`abea85c67b094be9`**, and that is
+reproducible: reseeded from `pinned` it converges in 2 rounds and reseeded from
+itself in 1, to that same sha both times — so the fixedpoint is NOT
+seed-dependent and the earlier value came from a working tree I can no longer
+account for. The behavioural claims above were each measured directly against a
+binary and are unaffected; only the identifier was wrong. Recorded rather than
+quietly edited, because an unreproducible sha beside a correct result is exactly
+the kind of citation that gets trusted later.
