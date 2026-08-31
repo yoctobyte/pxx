@@ -612,6 +612,93 @@ your idiom invites you to change it.
 **So: branch on `$?` being 1 versus 128. Never test an ancestry query with `!` or
 `||`. Do not redirect its stderr.**
 
+## Assert the PRECONDITION, not just the comparison
+
+The section above says what goes wrong. This is the form of the fix, and it
+generalises past any one tool: **a comparison whose INPUTS were never proven to
+exist is a guard that cannot fail.** It does not error, because the comparison
+genuinely ran. It just ran on nothing.
+
+Four instances, all mine, all inside twenty-four hours (frankB, 2026-08-31 to
+09-01) — the fourth while writing this section, which is why it is here.
+
+**1. `cmp` on two files that were never built.** Verifying that a codegen change
+left the default build byte-identical:
+
+```sh
+./compiler/pascal26   -O2 $f $S/new_$b >/dev/null 2>&1
+$W/compiler/pascal26  -O2 $f $S/old_$b >/dev/null 2>&1
+cmp -s $S/new_$b $S/old_$b && echo IDENTICAL || echo DIFFERS
+```
+
+Two of six inputs used `parallel for`, which needs `--threadsafe`, so **both
+compiles failed** — and the `2>&1` added to keep the output tidy ate the only
+thing that was talking. `cmp` compared two files that did not exist, returned
+non-zero, and `DIFFERS` read as *my change altered the default build* — the
+exact claim the check existed to refute. Correct about absence, silent about
+bytes. The fix is one line, and it is not a better `cmp`:
+
+```sh
+if ! ./compiler/pascal26 -O2 $f $S/new_$b >/dev/null 2>&1; then echo "SKIP $1 — refused"; return; fi
+```
+
+**2. The same harness stayed untrustworthy until it had a row that MUST differ.**
+Six `IDENTICAL` lines prove the change is invisible *or* that the comparison is
+broken, and nothing in the output separates those. Adding the two `--threadsafe`
+programs — which the change is supposed to alter — made it a discrimination:
+
+```
+== DEFAULT (-O2) — MUST be identical ==   5 rows IDENTICAL (incl. compiler.pas, 10,272,640 bytes)
+== --threadsafe — MUST differ ==          2 rows DIFFERS
+```
+
+**3. A test that printed `OK` while failing.** `test_threadsafe_refcount_lockfree`
+ended with an unconditional `WriteLn('TSRCLOCKFREE OK')`, so a deliberately
+broken compiler produced `fail=2` followed by `TSRCLOCKFREE OK`. Caught only
+because the positive control was actually RUN.
+
+**4. An assert that fired, into a shell that ignored it.** Adding this very
+section:
+
+```sh
+python3 - <<'EOF'
+assert s.count(anchor)==1     # correct: the heading also appears as a citation
+...
+EOF
+cat >> LOGBOOK.md <<'EOF'
+... | new section "Assert the PRECONDITION" ...
+EOF
+git add -A && git commit -m 'docs: assert the precondition ...' && sync
+```
+
+The assert was right and refused to edit. The `;` between the commands meant the
+LOGBOOK line and the commit ran anyway, so `3a0d2de9c` landed **claiming a
+section that did not exist** — a false record, pushed, about the discipline it
+was documenting. `&&` between the stages, or `set -e`, is the whole fix.
+
+### The two questions are different and neither implies the other
+
+CLAUDE.md already says *"A GUARD THAT CANNOT FAIL IS NOT A GUARD, AND IT PRINTS
+PASS. Every guard needs a positive control."* Same family, different check:
+
+| | asks | catches |
+| --- | --- | --- |
+| **positive control** | *can this guard ever say FAIL?* | a guard testing nothing — instances 2, 3 |
+| **precondition assert** | *did the thing under test actually happen?* | a guard testing nothing **that had a positive control and still passed it** — instance 1 |
+| **acting on the assert** | *did anything READ the answer?* | instance 4 — the check existed, fired, and was discarded |
+
+Instance 1 shows the first two are independent: that harness would have passed a
+positive control on any row where both compiles succeeded, and still reported
+`DIFFERS` for two rows where neither did. The control proves the instrument CAN
+fire; the precondition proves it was AIMED at something. Instance 4 shows a
+third failure below both — **a precondition you do not branch on is a comment.**
+
+**Operationally, in this repo:** never send a build to `/dev/null` and then
+measure its output; branch on the exit status first. Never `diff`/`cmp` a path
+you did not just assert exists. Join the stages of a scripted edit with `&&`,
+never `;`. And when a comparison run is all-green, ask which row in it was
+supposed to be red — if there is none, you have not measured yet.
+
 ## A RADIX is part of a value, and `db 65` was hex
 
 Measured 2026-08-31, and it is small enough to be worth stating plainly because
