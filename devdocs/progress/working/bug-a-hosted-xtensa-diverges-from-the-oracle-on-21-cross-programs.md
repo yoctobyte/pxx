@@ -6,7 +6,7 @@ status: working
 found: 2026-08-30
 found-by: frankS
 owner: frankA
-summary: "Hosted xtensa vs the x86-64 oracle. Re-measured 2026-08-31 at compiler db19ff591808: 140 sources, 115 MATCH / 5 DIFF / 20 CFAIL. Of the 5, only 2 are compiler bugs (test_cross_syscall; test_cross_float is Track F) -- 2 are sweep artifacts and 1 is a test-coverage gap, all reconciled below. The slug's `21 cross programs` and the body's `142 sources` are BOTH stale; the denominator is derived from the Makefile and moves."
+summary: "Hosted xtensa vs the x86-64 oracle. Re-measured 2026-08-31 at binary f996aace9d75, commit 97e96fc1b (both labelled deliberately -- the old baseline e866cc16d4fe is a BINARY sha in a commit-shaped slot, so no row of the original table can be re-checked by anyone): 140 sources, 116 MATCH / 4 DIFF / 20 CFAIL. ZERO unexplained compiler divergences remain -- of the 4, two are artifacts of a naive oracle comparison, one is a test-coverage gap, and one is Track F float formatting. The slug's `21 cross programs` and the body's `142 sources` are both stale; the denominator is derived from the Makefile and moves."
 ---
 
 # Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs
@@ -348,6 +348,36 @@ riscv32   MATCH 127   DIFF 4   CFAIL  8     of 140   (same harness, for contrast
 **State the denominator as derived, never as a constant.** 140 is what the two
 recipes name today; it was 129 yesterday. The slug's 21 and the body's 142 are
 both stale, which is how three numbers in one ticket came to disagree.
+
+## FINAL — 116/4/20, and nothing unexplained is left
+
+**binary `f996aace9d75`, commit `97e96fc1b`** — labelled, because the previous
+baseline `e866cc16d4fe` is a binary sha256 sitting in a slot the sentence reads
+as a commit, which is why no row of the original 21-row table can be re-checked
+by anyone. Both ids here are verifiable: the commit is an ancestor of
+origin/master, the binary is a self-host fixedpoint whose sha differs from
+`pinned`.
+
+```
+xtensa    MATCH 116   DIFF 4   CFAIL 20     of 140
+```
+
+| remaining DIFF | what it is |
+| --- | --- |
+| `test_cross_float` | **the only real compiler divergence — Track F**, float formatting (exponent digits, mantissa width). Low prio by charter, wants a ticket in `float/` |
+| `test_asm_ifdef_multiarch` | test-coverage gap: the source has `CPUX86_64`/`CPURISCV32`/`CPUAARCH64` arms and none for xtensa, so no branch is taken. Wants an arm, not a fix |
+| `test_rtti` | sweep artifact — the real row needs `-dPXX_MANAGED_STRING` and filters the exact lines flagged |
+| `test_signal_altstack` | sweep artifact — the real row asserts a literal carrying the arch-expected `code=2`; its actual assertion passes |
+
+**Fixed this session:** `test_cross_trunc_round_saturate` (and riscv32's Single
+arm with it) and `test_cross_syscall` — the latter was filed here as a
+divergence, was really a missing test arm, and adding that arm exposed a genuine
+`PalBackendMmapAnon` bug (xtensa's `MAP_ANONYMOUS` is `$800`, not `$20`; every
+anonymous mapping through the POSIX PAL returned EBADF). Both rows are now wired
+into `test-xtensa`. `97e96fc1b`, `9da47b2cc`.
+
+**The frankC ABI flip (`fc9c8ade2`, `eb22cc325`) moved nothing** — identical
+partitions measured before and after it, on xtensa and riscv32 both.
 
 ## The five, reconciled against how the Makefile actually asserts each row
 
