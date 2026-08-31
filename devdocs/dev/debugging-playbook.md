@@ -1323,6 +1323,55 @@ means.** On a contended box a mean mostly measures the other agents; load moved
 ~20% of that session's win to the box. **Keep the previous binary** rather than
 rebuilding it afterwards, and name each binary's sha beside its number.
 
+### The symbol map is right there, and two profiling tickets said it was not
+
+`.symtab` is empty even under `-g` (the binary carries `.debug_info`,
+`.debug_line`, `.debug_frame` and nothing else), so `nm` reports nothing. That
+is TRUE, it is written into the profiling tickets as a method note, and it is
+why two agents accepted a self-compile profile that was **46% unresolved `??`
+frames** and reasoned about the rest.
+
+**`pinned prog out` also writes `out.map`** — 3846 entries of
+`0x<16 hex> <name>`, with the base address in the header. Resolving the `??`
+addresses through it by nearest preceding symbol turned the biggest block in
+that profile from unattributed into `PXXStrFromLit` / `PXXAlloc` / `PXXFree` /
+the inline refcount thunks, which WAS the finding
+(`perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why`,
+2026-08-31). The runtime units have no DWARF; they are all in the map.
+
+**Nearest-preceding-symbol ALWAYS answers, so it manufactures a plausible name
+for anything in a gap.** Eight samples resolved to `_start`, which is absurd
+mid-compile: they sat in a 1117-byte unnamed gap after it. Disassembling the
+gap named them properly — a register-save thunk calling `PXXStrFromLit`, a
+string incref (`incq -0x10(%rax)`), and a decref falling into `PXXFree`. So
+print the OFFSET with the name, and disassemble anything whose offset is not
+plausibly inside a body. This is the guard rule in its map-shaped form: the
+resolver cannot return "unknown".
+
+### A sampling aggregator needs a positive control, because a regex that matches nothing still ranks
+
+Same day, two agents, two instruments. An aggregation over `gdb bt` output used
+`^#\d+\s+(?:0x\S+ in )?(\S+) \(\)` — which requires an EMPTY argument
+list. Every frame gdb prints with arguments (`AppendChar (dst=0x…, c=117 'u')`)
+was dropped, and `AppendChar` was the one symbol the profile existed to
+measure. The script did not error, did not warn, and printed a clean plausible
+ranking headed by the caller two frames up.
+
+**So assert a known-present symbol before trusting a ranking.** The cheap form
+is one line and needs no fixture:
+
+```python
+ctrl = FRAME_RE.findall("#0  0x1 in Foo (a=1, b=2) at x.inc:9\n")
+assert ctrl and ctrl[0][1] == 'Foo', "regex cannot see argument-bearing frames"
+```
+
+The tell that saved it was not diligence, it was **implausibility**: a profile
+of `AppendChar` in which `AppendChar` does not appear. When an aggregation
+reports that the thing you are hunting is absent, suspect the aggregator before
+you believe the finding — and note that the reverse (it appears, ranked
+plausibly) has no such tell, which is why the control has to be asserted rather
+than eyeballed.
+
 ## Min-of-N tells you HOW to sample. It does not tell you your RESOLUTION — run a null
 
 The rule above is necessary and **not sufficient**, and the gap is where most of
