@@ -213,4 +213,4 @@ absolute esp in its call sequence, so it needs both halves); arm32 and riscv32
 need checking against the aarch64 question.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit e88ec7528.
