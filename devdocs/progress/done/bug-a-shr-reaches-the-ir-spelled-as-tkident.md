@@ -5,10 +5,10 @@ track: A
 prio: 60
 type: bug
 blocked-by: []
-status: open
+status: done
 owner: ""
 created: 2026-08-28
-summary: "The IR spells LOGICAL shift-right as Ord(tkIdent) — Pascal `shr` and C `>>` on an unsigned operand both write it — while Ord(tkShr) means ARITHMETIC shr (C `>>` on a signed operand). One meaning per ordinal, both frontends agreeing; what is wrong is the NAME, across ~25 sites. So the fix is a RENAME (a new ordinal appended to TTokenKind), and the `# Fix` section below, which says to substitute Ord(tkShr), is a MISCOMPILE — measured: `i shr 1` for i: Integer = -8 would emit `sar` and answer -4 on all five native backends. First live symptom found and FIXED 2026-08-31 (5b12e6a5e): ASTConstIntValue had no tkIdent arm, so a constant containing `shr` did not fold and `IntToHex(-(256 shr 4), 8)` printed 16 digits. Repriced 20 -> 60 on 2026-08-31."
+summary: "DONE 2026-08-31 as a RENAME (314481dd7): the IR's logical shift-right is now Ord(tkShrLogical) — appended at the tail of TTokenKind — instead of Ord(tkIdent), across 25 sites. NOT the merge onto Ord(tkShr) this ticket originally prescribed: tkShr is the ARITHMETIC shr (C `>>` on a signed operand) and the merge was measured to turn test_shr_width rows 1-3 into -4, unsigned row included. Acceptance was byte-identity of emitted output on seven targets at -O0..-O4. Two predicted failures had already fired: ASTConstIntValue declined every shr (fixed 5b12e6a5e), and IRValidate admitted the operator only because Ord(tkIdent) is 1. Left open deliberately: the wasm32 fold (that backend's own missing shr_s, not a duplicate) and the variant runtime's third vocabulary."
 ---
 
 # The shape
@@ -212,3 +212,57 @@ stronger than any test in the tree.
 Not attempted in this session: the two live wrongs above were worth more than
 the rename, and a 25-site cross-backend rename deserves its own gate run rather
 than the tail of someone else's.
+
+## 2026-08-31 — done as a RENAME, with byte-identity as the acceptance test (frankC)
+
+`tkShrLogical`, appended at the tail of `TTokenKind` so no existing ordinal
+moves. `ParseTerm` renames on the way in — once, at the parser boundary, where
+the loop condition has already established that this `tkIdent` is `shr` and
+nothing else — and all 25 downstream sites read the new name. `314481dd7`.
+
+**The merge was measured, not argued.** Building `op := tkShr` instead and
+running `test_shr_width.pas`:
+
+```
+row 1  i shr 1     (Integer -8)   9223372036854775804  ->  -4
+row 2  c shr 1     (Cardinal)              2147483644  ->  -4
+row 3  q shr 1     (Int64 -8)     9223372036854775804  ->  -4
+```
+
+Row 2 is the one that settles it: an UNSIGNED operand, where no reading of any
+dialect makes -4 right. And the self-host fixedpoint **converged cleanly in 2
+rounds** under that miscompile — `compiler.pas` shifts nothing negative — which
+is CLAUDE.md's "the fixedpoint cannot see a construct the compiler never writes"
+earning itself a fourth time.
+
+**Acceptance was byte-identity of emitted output**, against a compiler built
+from the parent commit: shift, set, bitfield, C-shift and demo inputs, on
+x86-64 / i386 / arm32 / aarch64 / riscv32 / wasm32 / xtensa-bare, at -O0..-O4
+and under `--strict-fpc`. The three renamed paths byte-identity cannot reach
+were checked by OUTPUT instead: `operator shr` overloading (the overload key and
+`ASTIVal` must move together, and `test_operator_unary_and_keyword_forms.pas`
+covers it), Variant `shr`, and NilPy `>>`.
+
+Both predicted failures had already fired by the time the rename landed:
+`ASTConstIntValue` declined every `shr` for two months (`5b12e6a5e`), and
+`IRValidate`'s binop range check admitted the operator only because
+`Ord(tkIdent)` is 1 — it now has to name `tkShrLogical` explicitly, which is
+that check doing its job on this operator for the first time.
+
+### What is deliberately NOT closed with it
+
+The `wasm32` fold survives, and it is no longer a second arm of anything: that
+backend has one right-shift instruction per width because it does not implement
+C's signed `>>` yet, so it folds `tkShr` onto `shr_u` **by its own gap**. The
+comment now says that, and names the line to delete (`shr_s` for `tkShr`) when
+the gap closes. That is Track A/wasm work, not this ticket.
+
+The **third vocabulary is untouched and stays that way**: the variant runtime,
+where 119 is arithmetic and out-of-band 1119 is logical, reached through two
+cancelling rewrites in two files. Unifying it means changing an opcode the
+RUNTIME hardcodes because it cannot see `defs.inc` — a different job with a
+different blast radius, and no symptom asks for it today. `ir.inc`'s rewrite now
+states the cancellation out loud so the next reader does not simplify one half.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

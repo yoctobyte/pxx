@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:10 backlog:398 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2949 rejected:71`
+`working:4 unfinished:28 blocked:10 backlog:398 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2950 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
@@ -64,6 +64,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [C]` feature-c-corpus-busybox-multi-applet
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [C]` regression-lib-test-crtl-reachability-6
@@ -87,7 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [A]` bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer
-- `[p 60] [A]` bug-a-shr-reaches-the-ir-spelled-as-tkident
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 
