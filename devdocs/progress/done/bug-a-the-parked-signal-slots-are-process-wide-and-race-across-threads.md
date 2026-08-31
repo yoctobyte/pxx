@@ -149,4 +149,4 @@ is a separate question with a separate repro, and guessing it here would be the
 same mistake as premise 1.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 47439504c.
