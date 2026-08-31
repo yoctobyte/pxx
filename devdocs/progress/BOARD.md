@@ -84,7 +84,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 85 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 70 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (138)
+## backlog-core (137)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -136,7 +136,6 @@ _none_
 | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help | A | 35→40 | bug | The "no FPU" diagnostic tells you to `uses softfloat`, and doing so changes nothing | — |
 | bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings | A | 25 | bug | RE-SCOPED 2026-08-30 after an attempt: this is NOT eleven mechanical lexer edits. SOffset/SLen is an OVERLOADED channel, not a text field -- for tkInteger, SLen>0 MEANS 'wider than Int64', so giving ordinary tokens their text makes every integer literal promotable and `writeln(42)` fails to compile. A correct fix needs a SEPARATE span channel, i.e. new parallel arrays in defs.inc, before any lexer is touched. Original finding stands: every lexer stores token text for tkIdent and tkString only; keywords, punctuation, operators and numbers get SOffset := 0. That if/else is hand-copied across eleven lexers. So the `near:` window under EVERY diagnostic in the compiler prints the identifiers and silently discards the syntax -- `near: begin x >>> end` for `x := (1 ;` -- and no diagnostic can name an offending keyword. Sized: 3.24 MiB of token text against a fixed 8 MiB STRING_CAP, 40.5%, so this is a mechanical change to eleven files, not a pool redesign. | — |
 | bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 25 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
-| bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree | A | 55→75 | bug | `make compiler/pascal26` converged to TWO different binaries from one unmodified source tree on the same machine within an hour: abea85c67b094be9 and b11f52fb431669ab, differing in SIZE (10292256 vs 10292312 bytes) and in 7.8M bytes throughout -- not an embedded timestamp, a different amount of emitted code. BOTH print `self-host fixedpoint: verified`, both compile the test suite correctly, and the SAME seed binary produced each of them at different times with `git diff HEAD -- compiler/ lib/` empty both times. So the fixedpoint check proves SELF-REPRODUCTION, which is all CLAUDE.md claims for it, but the compiler sha is NOT a function of the source tree -- and agents are told to report that sha as provenance beside every measurement. ROOT CAUSE NOT ISOLATED. Named lead, checked and real: compiler/builtin/builtinheap.pas and stable_linux_amd64/default/builtin/builtinheap.pas DIFFER right now, so 'the builtin sources' is a build input living in two places that disagree, and which one a given round reads depends on which binary seeds it. | — |
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
 | bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp | A+S | 45 | bug | Every windowed xtensa prologue emits `entry a1, 32` then moves sp again with a plain addi/addmi. The windowed ABI requires MOVSP for that, because the caller's 16-byte register save area sits at [a1-16] and a plain add relocates sp while leaving the area behind. Ten executed entry sites, all immediate 32. NOT known to cause a fault -- the obvious mechanism was tested and falsified. | — |
@@ -823,9 +822,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2967)
+## done (2968)
 
-2967 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2968 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (71)
 
@@ -911,7 +910,6 @@ _none_
 - [p 80] [A] meta-a-pxx-produces-linkable-code
 - [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa (unblocks 1)
-- [p 75] [A] bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree (unblocks 1)
 - [p 75] [A+O] feature-a-reentrant-heap-lock-and-per-thread-arenas (unblocks 1)
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 70] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm (unblocks 1)
@@ -1348,7 +1346,6 @@ _none_
 - **1** — bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults
 - **1** — bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
-- **1** — bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
