@@ -210,3 +210,51 @@ remaining 1.25x at 256 bytes is now mostly that second pass.
 - **The double zeroing above.**
 - Claim 2's residual: 1.22x at 8 bytes, which is per-call overhead, not per-byte,
   and is a different investigation again.
+
+## 2026-08-31 (frankA) — I was WRONG about the double zeroing: removing it measures 1.00x, at every size
+
+Correcting my own paragraph two sections up, which predicted "plausibly another
+~1.2-1.4x". It is not. **Removing the redundant pass entirely changes nothing
+measurable**, and the prediction should not have been written as a number.
+
+The redundancy is real: `PXXDynSetLen` calls
+`PXXMemZero(newArrData, newLen * elSize)` on a block `PXXAlloc` has already
+zeroed on every path (bin reuse, large-list reuse, bump, and the ESP/libc
+`calloc` profiles). I deleted the call and measured, interleaved, min of 3,
+against a stash-built control — **both binaries' sha256 confirmed different**,
+because an A/B where the two arms are secretly one binary is the standing trap
+here:
+
+| alloc size | with 2nd pass | without | gain |
+| --- | --- | --- | --- |
+| 8 B | 0.28 | 0.27 | 1.04x |
+| 32 B | 0.30 | 0.31 | 0.97x |
+| 128 B | 0.33 | 0.33 | 1.00x |
+| 256 B | 0.35 | 0.35 | 1.00x |
+| 2048 B | 0.69 | 0.70 | 0.99x |
+| 64 KB | 0.11 | 0.11 | 1.00x |
+| 1 MB | 1.98 | 1.98 | 1.00x |
+
+The last two rows are the ones that killed the hypothesis. At 1 MB per
+allocation the second pass would be 20 GB of extra stores across the run — well
+past any cache — and it costs **nothing**. Reading back from the total: 20 GB in
+1.98 s is ~10 GB/s, i.e. the cost of exactly ONE pass. So at that size only one
+pass is doing real work anyway; the large path bump-allocates fresh mmap pages
+the kernel has already zeroed, and the redundant `rep stosb` runs over lines the
+fault just brought in.
+
+**Why the earlier 1.71x/4.59x was real and this is not, since the two look like
+the same edit.** What that commit removed was a *word loop* at ~2.1 GB/s. What
+this removes is a *second `rep stosb`* over bytes the first pass just left in
+L1. The redundancy was never the defect — **the slow spelling was**. Deleting
+duplicated work and deleting duplicated *mechanism* are different edits, and only
+the second one had a number behind it.
+
+**Not landed, deliberately.** No promise, so it does not proceed: it would move
+a live correctness guarantee onto a contract established a call away, in
+exchange for nothing measured. The knowledge stays here so the next reader does
+not re-derive it — and so nobody "optimises" it later on the strength of how
+obviously redundant it looks. That obviousness is exactly what I acted on.
+
+`PXXStrSetLen` has the same shape and was not measured; assume the same answer
+until someone shows otherwise.
