@@ -3491,3 +3491,41 @@ Two details that are the actual reusable part:
 Same family as frankA's *a read-back test verifies agreement, not correctness*
 (same day, `feature-signal-siginfo-ucontext`): the instrument answered honestly
 about the wrong question. Here the honest answer was "it finished".
+
+## A guard whose failure mode is a SILENT FALLBACK cannot be distinguished from a guard that is absent
+
+frankS's, handed over rather than written by them, because the case that names it
+is one I would have walked into. Measured 2026-08-31, in the same hour as the two
+sections above.
+
+The `--threadsafe` I/O lock validates its cached owner by checking that the
+reader's own `rsp` lies inside the stack bounds its TLS block records. Reusing
+that check for the **signal** slots looks obviously right and is a trap: a
+handler installed with `SA_ONSTACK` runs on the **sigaltstack**, i.e. deliberately
+*outside* the thread's stack bounds. The check would therefore miss on **every
+single delivery**, fall back to the process-wide slot, and fix nothing.
+
+Nothing about that failure is visible:
+
+- it never errors — a fallback is a valid path, taken deliberately elsewhere;
+- it is self-consistent — the same wrong answer every time, so no flapping;
+- and the fallback **is the pre-fix behaviour**, which is the part that closes
+  the loop: *the fix not working and the fix not being present produce
+  byte-identical behaviour.* There is no observation that separates them.
+
+**So the rule is not "prefer a guard that errors".** It is: when a guard's miss
+path silently restores the old behaviour, **the guard needs a positive control
+that asserts the HIT path was taken** — a counter, a distinct value, anything
+that could not be produced by the fallback. Without it you have written a
+no-op with the shape of a fix, and every test agrees with you.
+
+The generalisation of the trap is worth stating separately, because it survives
+the specific case: **a check borrowed from a working use is validated for that
+use's population, not for yours.** The bounds check is correct in the I/O lock —
+there a miss genuinely means "not my block" and falling back to `gettid` is the
+right answer. Moving it to a caller whose population includes the alt stack
+changes what a miss MEANS while changing nothing about what it DOES.
+
+Same family as the two sections above and named the same way: *the instrument
+answered honestly about the wrong question.* Here it would have answered
+honestly about the wrong stack.
