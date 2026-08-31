@@ -8,13 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
-| perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why | A | 60→50 | perf | ANSWERED and partly fixed. Profiled: the managed-string + heap runtime is ~47% of a self-compile (PXXStrFromLit 17%, PXXAlloc 10%, PXXFree 8.6%, refcount thunks 8.6%) — resolved through the compiler's own .map file, not DWARF. GetTokenStr built every token string a char at a time and was 17 of the 18 AppendChar samples; fixed in 4b3d34f74 for 13.8% off a self-compile. Top remaining item split out as perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass. FPC oracle now measured: we are 1.28x fpc 3.2.2 on the same file, i.e. inside the 2x band the ticket set as its own de-escalation criterion. Still open: the July-3.4s vs today-21.7s discrepancy. | — |
 | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops | A | 45 | refactor | The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead. | — |
 
 ## unfinished (28)
@@ -85,7 +84,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 85 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 70 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (140)
+## backlog-core (139)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -211,7 +210,6 @@ _none_
 | idea-cross-namespace-ambiguity-warning | A | 15 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
 | meta-a-pxx-produces-linkable-code | A | 80 | meta | Standing umbrella, priced ABOVE bug fixing by the owner 2026-08-31. OBJECT OUTPUT NOW WORKS ON FOUR TARGETS: x86-64 (41045d7b4, frankC), i386 (writeELFRel386General, frankC), riscv32 and xtensa -- a gcc-built main links a pxx object and calls into it; clang and tcc link the same object; export surface is the C-convention routines; a link needs -no-pie. i386 ALREADY PAID THE DEBT IT WAS PRICED FOR: the C-ABI trigger fired and says OPTION A, and it exposed bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function (fixed 7a30658e7 -- ebx, esi AND edi, all three unrestored across an exported cdecl call). What remains: arm32 + aarch64 object output (p45, feature-a-object-output-for-arm32-and-aarch64, explicitly NOT urgent -- they are a second and third oracle for a ruling already made, and aarch64 is gated on making cparser.inc's positional param spill AAPCS first), position-independent x86-64 output, --shared for compiled sources (a .so is relocated at load, so -no-pie cannot rescue it), and a Pascal `library` unit (worth LESS than it looked -- `cdecl` on a definition is already a working export spelling). pxx can now be linked into most things; it still cannot be linked into everything. | — |
 | meta-constant-normalisation | A | 20 | meta | Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed. | — |
-| perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why | A | 50 | perf |  | — |
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 25 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
 | refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed | A | 60 | refactor | C owns its lexer/parser/preproc but NOT its lowering: ir.inc carries 40 CProgramMode references. So most Track C work needs Track A's files, and a C agent cannot be staffed independently -- measured 2026-08-29, four of six ranked C tickets need an A file. | — |
 | refactor-a-collapse-nodeptrelem-into-the-deref-walk | A | 30 | refactor | After the deref-shape widening, NodePtrElem in pasparser_lval.inc is reached from exactly two places, both inside ResolveDerefShape itself: the final else and the tyUnknown backstop added by bfb7b4c59. Measured with a counter and an arms-disabled control, neither fallback fires on any shape tried, including the compiler's own 436 deref-walk calls -- the new arms take those hits one for one. Not deleted on that: the population is six files, and NodePtrElem's False return is what both fallbacks branch on. | — |
@@ -825,9 +823,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2964)
+## done (2965)
 
-2964 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2965 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (71)
 
@@ -1028,7 +1026,6 @@ _none_
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-a-shared-library-output-for-compiled-sources
 - [p 50] [A] feature-a-x86-64-object-output-is-position-dependent
-- [p 50] [A] perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
 - [p 45] [A] bug-a-2d-array-row-as-a-const-array-param-still-segfaults

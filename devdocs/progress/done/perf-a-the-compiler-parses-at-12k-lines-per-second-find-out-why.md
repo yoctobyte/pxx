@@ -4,8 +4,8 @@ prio: 60
 type: perf
 blocked-by: []
 created: 2026-08-31
-summary: "ANSWERED and partly fixed. Profiled: the managed-string + heap runtime is ~47% of a self-compile (PXXStrFromLit 17%, PXXAlloc 10%, PXXFree 8.6%, refcount thunks 8.6%) — resolved through the compiler's own .map file, not DWARF. GetTokenStr built every token string a char at a time and was 17 of the 18 AppendChar samples; fixed in 4b3d34f74 for 13.8% off a self-compile. Top remaining item split out as perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass. FPC oracle now measured: we are 1.28x fpc 3.2.2 on the same file, i.e. inside the 2x band the ticket set as its own de-escalation criterion. Still open: the July-3.4s vs today-21.7s discrepancy."
-status: working
+summary: "ANSWERED, de-escalated by its own written criterion, and its headline number was WRONG. (1) ~12,000 lines/s was measured under box load: on a quiet box the same self-compile runs 12.61s for 237,025 lines = ~18,700 lines/s, reproducible to a 1% spread. (2) The FPC oracle says 1.28x fpc 3.2.2, inside the 2x band this ticket set as its own de-escalation criterion. (3) THE ~47% MANAGED-STRING PROFILE IN THIS SUMMARY WAS FALSE AND IS RETRACTED — it was measured on a -O0 binary (make pxx-debug forces -O0). The real -O2 profile is 18.2% total, with PXXStrFromLit at 0.18%, not 17%; the hot item is the refcount RELEASE thunk at 7.72% over 300,745 call sites, plus PXXAlloc 4.07% / PXXFree 2.48%. Both follow-ups are now closed: the literal pass was already working (848f51734) and the release blobs are fixed (d782926ce, ea7e16939). (4) GetTokenStr remains genuinely fixed, 13.8% off a self-compile, 4b3d34f74. Residual, NOT chased: normalising for source growth (110,369 lines in July vs 237,025 today, 2.15x) the July 3.406s implies ~32,400 lines/s against today's ~18,700 — about 1.7x slower per line. Real if the July figure is trustworthy, and it may not be, since load alone moves this measurement 56%."
+status: done
 owner: frankB
 ---
 
@@ -471,3 +471,165 @@ Nothing in flight; tree clean at `7ef9c2204`, everything below is on origin.
 
 **DO NOT** re-run the census-ordered call-site conversion; see the measured
 negative above.
+
+
+---
+
+> **Restored 2026-08-31 by frankB.** Everything from here to the RESOLUTION
+> below was orphaned by `be154a3ca` ("board: split the backlog into per-lane
+> sections"), which left it in `backlog-core/` as an 88-line file with no
+> frontmatter while the rest of the ticket stayed in `working/`. 69 of its 88
+> lines existed nowhere else. Merged back verbatim; the stray file is deleted
+> in the same commit.
+
+---
+
+## RESULT 2026-08-31 (frankB) — 13.8% off a self-compile from two lines, and the call-site plan is WRONG
+
+Landed `4b3d34f74` (verified on origin/master by merge-base, not by a pre-push
+`log -1`). **21.650s -> 18.673s**, min-of-5 interleaved, base `101c9a7ea8b0`
+vs mod `a5ca167411d8`, load 6.46 start / 6.17 end. Distributions do not overlap:
+the *worst* modified run (20.193) beats the *best* baseline run (21.650). Output
+byte-identical — both binaries compiled `compiler.pas` and `cmp` says same file.
+
+### The plan in the section above was wrong, and this is how
+
+frankB attributed AppendChar's **callers** instead of converting sites by
+density. 70 samples: 18 have `AppendChar` on the stack and **seventeen of the
+eighteen come from ONE site** — `GetTokenStr` at `ast_syminfer.inc:183`. Not
+`cpreproc`'s 72, not `pyparser`'s 53.
+
+**The density ordering was a census of the SOURCE and would have delivered zero
+for a long while**: `cpreproc.inc` is the C preprocessor and does not execute at
+all during a Pascal self-compile. That is constraint 1 of this ticket —
+*measure, do not count* — firing on the brief that carried it. The brief stated
+the rule and then supplied a count-based work order in the next paragraph.
+**Recorded rather than quietly corrected, because the failure is more
+instructive than the fix.**
+
+### The fix was already written, on the twin
+
+`lexer.inc:641 GetTokenStrFromRaw` is the same function done right — one
+`SetLength`, one fill out of `TokChars` — carrying a comment saying it was
+changed *because* char-at-a-time was O(n^2) per token. `ast_syminfer.inc:183
+GetTokenStr` is its twin and was missed. The arm that got fixed was the cheap
+one; the expensive one is what every parser goes through.
+
+Textbook `devdocs/dev/normalise-dont-special-case.md`: **fix one arm of a double
+case, grep for the sibling before closing.** That grep was not done, and the
+sibling stayed broken for however long — which is precisely the doc's stated
+prediction about second paths.
+
+**Not a Pascal-only win:** `GetTokenStr` is how token text is read at 570+ sites
+across all frontends, `pyparser` alone calling it 314 times.
+
+Gate: fixedpoint converged 1 round (`49361be30484`), `gate.sh quick` green, plus
+one-line canaries for NilPy, C, Rust, Zig and Pascal — correctly, since the
+fixedpoint is blind to four of the five and this function serves all of them.
+
+### A method note that is this repo's own failure family
+
+frankB's first aggregation script reported `AppendChar` **nowhere** and
+confidently blamed `ParseProgram`. The regex required `funcname ()` and every
+`AppendChar` frame carries arguments — so **the instrument structurally could
+not see the one symbol it was aimed at, and printed a clean, plausible
+ranking.** Same shape as the dotted-`random\.seed` grep that produced a wrong
+census earlier the same day: *the instrument was correct about something else.*
+Caught only because "AppendChar absent from an AppendChar profile" was too
+convenient to believe.
+
+### Corrections to the file list above
+
+- `asmenc.inc` has **42** AppendChar sites — more than `elfwriter.inc`'s 38 —
+  and was missing from the density ordering entirely (verified: 42). Hotness
+  untested.
+- Next candidates from the same 70 samples: `ExpandPasMacros` /
+  `ExpandIncludes` / `IncEmitLineMarker` in `elfwriter.inc` (5/70), genuine
+  per-char loops that already know their span, so `AppendRange` applies cleanly.
+- **Do not start anyone on the cpreproc/pyparser conversion.** It is not
+  supported by any measurement and the one measurement taken points elsewhere.
+
+### Carried forward from the same finding — two cheap habits
+
+1. **Before converting any candidate, grep for a done-right twin.** The 13.8%
+   win was not new work: `GetTokenStrFromRaw` already existed, already carried
+   the O(n^2) comment, and its sibling had simply been missed. So before taking
+   `ExpandPasMacros` / `ExpandIncludes` / `IncEmitLineMarker`, check whether any
+   of them has a correct twin elsewhere. The pattern has now paid twice and
+   costs one grep.
+2. **A sampling aggregator needs a positive control.** frankB's first script
+   could not see `AppendChar` at all (its regex required `funcname ()`; every
+   such frame carries arguments) and printed a plausible ranking anyway. Assert
+   that a known-present symbol appears in the aggregation *before* trusting the
+   ranking — the same rule CLAUDE.md already states for guards, applied to
+   instruments. Worth a line in `devdocs/dev/debugging-playbook.md`.
+
+Also still open: the **46% `??` frames** remain unattributed. frankB's 70-sample
+run may already answer it if those frames sat under `GetTokenStr` — worth
+checking against the OLD binary, since the win makes them harder to reproduce.
+And if the re-profile shows the time moved somewhere unrelated, that is the
+signal to stop converting sites and go back to attribution.
+
+---
+
+## RESOLUTION 2026-08-31 (frankB)
+
+Binary `0540b390d6be`, quiet box (load ~3), tree clean.
+
+### The headline number was load, not the compiler
+
+| | lines | time | rate |
+| --- | ---: | ---: | ---: |
+| this ticket, as filed | 235,854 | 19.7s | ~12,000 /s |
+| **same self-compile, quiet box** | 237,025 | **12.61s** | **~18,700 /s** |
+
+Min of 4, spread 12.61–12.74s, so this is not a lucky sample. **The ticket's
+subject line was measuring the box.** That is worth keeping as the finding it
+is: "12,000 lines/sec" was quoted three times as a property of the compiler,
+and 56% of the gap to 18,700 was the machine.
+
+### The profile in the old summary is retracted
+
+It said ~47% managed strings, `PXXStrFromLit` 17%. Both false — measured on a
+`-O0` binary, because `make pxx-debug` forces `-O0`
+(`compiler.pas:1736`). The real `-O2` profile, 30,520 samples through the
+compiler's own `.map`, `<outside .text>` at 0.00%:
+
+| | share |
+| --- | ---: |
+| string RELEASE thunk | 7.72% |
+| `PXXAlloc` | 4.07% |
+| str-slot assign thunk | 2.93% |
+| `PXXFree` | 2.48% |
+| `PXXStrFromLit` | **0.18%** (claimed 17.1%) |
+| **managed-string + heap total** | **18.2%** (claimed ~47%) |
+
+Full retraction, including the two independent tells and the ruled-out rival
+explanation, is in
+`done/perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass`.
+
+### Why this closes
+
+The ticket set its own de-escalation criterion — *"if we are within 2x of FPC
+this ticket is much smaller than it looks"* — and the oracle came back at
+**1.28x fpc 3.2.2** (`7ef9c2204`). Combined with the real rate being ~18,700
+lines/s rather than 12,000, the premise that prompted the ticket does not hold.
+
+What it produced along the way is kept and is real: `GetTokenStr` built every
+token string a character at a time, worth **13.8%** of a self-compile
+(`4b3d34f74`); and the two refcount-blob fixes that came out of correcting its
+profile (`d782926ce`, `ea7e16939`).
+
+### Residual, deliberately not chased
+
+July's 3.406s against today's 12.61s is 3.7x, and source growth accounts for
+2.15x of it (110,369 lines at `57b730b9e` vs 237,025 today). Normalised that
+leaves **~1.7x slower per line** since July, which is either a real accumulated
+regression or an artifact of an unverifiable historical measurement — and given
+that box load alone moves this number by 56%, an unattributed 3.406s from a
+rejected ticket is not a foundation to build on. **Not filed as a ticket**,
+because the honest version of it is "someone would have to reproduce the July
+measurement first", and that is the work, not a follow-up to it.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
