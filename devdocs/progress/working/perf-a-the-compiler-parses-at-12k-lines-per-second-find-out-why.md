@@ -433,3 +433,41 @@ record load or it is comparing machines rather than compilers.
   baseline was taken at load ~6.5 with ten agents on the box.
 - `asmenc.inc` has **42** `AppendChar` sites — more than `elfwriter.inc`'s 38 —
   and was missing from the density ordering. Never measured; may be cold.
+
+---
+
+## STATE AT 2026-08-31 REBOOT (frankB) — established vs hypothesis, and the next step
+
+Nothing in flight; tree clean at `7ef9c2204`, everything below is on origin.
+
+**ESTABLISHED (measured, numbers and binary shas in the sections above):**
+
+- `GetTokenStr` was 17 of 18 `AppendChar` samples. Fixed, `4b3d34f74`, **13.8%**
+  off a self-compile, output byte-identical.
+- The managed-string + heap runtime is **~47%** of a self-compile;
+  `PXXStrFromLit` + its thunk is **17.1%**. Resolved through the compiler's own
+  `.map`, with the `_start` gap disassembled rather than reported.
+- **1.28x fpc 3.2.2** on the same file — inside this ticket's own 2x
+  de-escalation band.
+- The remaining `AppendChar` campaign is **not worth running**: 6/70 samples
+  over six sites at one each. This is a measured negative, not an untried idea.
+- `cpreproc.inc` already has `CPAppendRange` and uses it in its hot paths, and
+  it does not execute in a Pascal self-compile at all. Its 72-site census was
+  misleading twice over.
+
+**HYPOTHESIS, explicitly not established:**
+
+- *Why* 11,329 literal sites miss `EmitStaticLitHandle`. The guard reads
+  `IRKind[node] = IR_CONST_STR`, so a literal arriving in another IR shape
+  would miss — **read off one guard, never measured.** Attribute the call sites
+  first; each carries its length and pool pointer in two `movabs` immediates.
+- The July **3.406s** vs today's figures. Untouched. The one new datum is that
+  the same binary and source move ~40% with load on this box (12,889 vs 18,303
+  lines/s measured hours apart), so load plausibly explains much of it. Not a
+  regression claim either way.
+
+**NEXT STEP:** `perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass`
+(backlog, p65, unowned). It is the top item and it is self-contained.
+
+**DO NOT** re-run the census-ordered call-site conversion; see the measured
+negative above.
