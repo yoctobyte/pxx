@@ -75,7 +75,10 @@ several at once.) And whenever the fork is *what to build/decide* rather than
 
 Full protocol, including the stable-binary boundary, the lib-test/demos
 discovery→ticket loop, and shared-checkout coordination, is in
-**`devdocs/dev/parallel-tracks.md`**. Read it before starting your track. The
+**`devdocs/dev/parallel-tracks.md`** — **67KB (~17k tokens), 14 sections: read
+the section for YOUR lane, not the file.** The table above and the per-lane
+facts below already carry the working rules; that file is the full charter, for
+when you need the reasoning behind one. The
 *why* behind the whole track split — Track A / the IR is the one gate and the one
 multiplier, so push generality down into the core and keep frontends thin — is
 the north-star note **`devdocs/dev/ir-as-substrate.md`**.
@@ -640,9 +643,11 @@ free: **a `quick`-tier run can never qualify by definition.**
 
 ## Debugging — measure, do not reason
 
-**Read `devdocs/dev/debugging-playbook.md` before hand-patching a probe or
-print-bisecting anything.** The tools exist; the failure mode is not reaching
-for them.
+**`devdocs/dev/debugging-playbook.md` has the tool for your case — LOOK UP THE
+SECTION, do not read the file.** It is **279KB (~70k tokens) across 72
+sections**; `grep '^## ' devdocs/dev/debugging-playbook.md` lists them and costs
+nothing. The failure mode is not reaching for the tools — not failing to read
+the book.
 
 The rule they are built on: **the expensive bugs here do not crash, they produce
 a plausible wrong value far from the cause.** A crash has a location and is the
