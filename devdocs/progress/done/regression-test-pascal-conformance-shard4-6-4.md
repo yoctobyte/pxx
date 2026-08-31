@@ -43,3 +43,6 @@ test-pascal-conformance: FAILURES: tgenconstraint14.pp(accepted-invalid) tgencon
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-31 — auto-closed by the seven watcher: `test-pascal-conformance#shard4/6` passes at 904244e001b2 (tier full); it was red at f6303d410d78. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
