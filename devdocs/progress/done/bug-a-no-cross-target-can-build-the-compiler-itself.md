@@ -1190,4 +1190,4 @@ at ~14 distinct sites explicitly — so the defect has no sibling there. **All
 backends with the shape now have the guard.**
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit ff2894912.
