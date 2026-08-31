@@ -194,4 +194,4 @@ None run beyond the build: **no code changed.** The self-host fixedpoint above
 is the build itself.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 848f51734.
