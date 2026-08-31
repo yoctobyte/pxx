@@ -709,3 +709,64 @@ Sweep a range inside one shell; never carry a single pad between them.
 The residual from the earlier note stands unchanged: every reading is still
 `qemu-arm`, and the WRITE AFTER FREE detection does not separate a real UAF from
 an emulator artifact — it says what the guest's own bookkeeping saw.
+
+#### Every arm32 report is a DECREMENT, and one attractive lead is dead (frankA, 2026-08-31)
+
+Instrument: 252bfe4a3, arm32 image `901a553a85610e1d`, 15 pads swept inside one
+shell, scored on the `pxx-heap:` notice.
+
+**26 reports, and the value field is unanimous.** Every one is `val=0x...dc` —
+a single poison byte decremented by one, `0xDD -> 0xDC`. Not one contains data.
+So on this build nothing SCRIBBLES; something DECREMENTS. `PXXHdrRC(p)` is
+`base + 8`, and `off=0x08` is the single commonest row, so this is a refcount
+release landing on a block that is already free.
+
+**The offsets are not a displaced base.** Cross-tab against size class:
+
+| block size | offsets seen |
+| --- | --- |
+| 0x20 (32 B) | 0, 8, 0x10, 0x18 — *all four* 8-aligned slots |
+| 0x28 (40 B) | 0, 8, 0x10, 0x20 |
+| 0x30 (48 B) | 0, 8, 0x10, 0x18, 0x20, 0x28 — *all six* |
+
+Uniform across each block, bounded only by that block's own size, with no
+correlation to size class. A displaced-base story predicts a cluster; this is
+the dangling-handle picture — a stale handle released later, its rc slot landing
+wherever it points, 8-aligned because rc slots are. So this is a refcount
+LIFETIME bug (an over-release or a missing retain), not header arithmetic.
+
+**Target matrix, same instrument, same workload:**
+
+| target | how it runs | reports |
+| --- | --- | --- |
+| x86-64 | native | 0 |
+| i386 | **native, 32-bit, no emulator** | 0 |
+| aarch64 | emulated, 64-bit | 0 |
+| riscv32 | **emulated, 32-bit** | 0 |
+| arm32 | emulated | **26** |
+
+riscv32 is the load-bearing row: it shares BOTH properties arm32 has and is
+silent, so neither 32-bitness nor emulation is sufficient. That retires the
+`PXX_HDR_SIZE`-against-4-byte-`PWord` hypothesis (mine, and i386 kills it) and
+narrows the emulator residual from "emulation" to "qemu-arm specifically",
+which is a much smaller thing to still be carrying.
+
+**The lead that died, recorded because it was the best one and lasted four
+minutes.** x86-64 releases a string through a HAND-EMITTED BLOB
+(`AnsiStrReleaseAddr`, `test rax,rax / dec qword [rax-16]`) and never calls
+`PXXStrDecRef`; the cross backends call the Pascal routine. "arm32 releases
+differently" is therefore false: aarch64 and riscv32 route exactly as arm32 does
+and both are clean. Two implementations of one concept is still a real smell —
+they already disagree, since the routine carries the `PXX_STATIC_RC_FLOOR` guard
+and the blob's fast path does not — but it is not this bug's cause.
+
+**Two bounds on the numbers above, frankS's, and they change how a zero reads.**
+The detector can only fire while the victim is still POISONED: a dangling release
+on a RECYCLED block reads a live refcount, silently decrements a stranger's
+string, and is invisible here by construction. So 26 is a LOWER BOUND, never a
+rate, and a zero means "none landed inside the quarantine window". That is also
+a live candidate for the stock build's `Char` — a release landing on a recycled
+block holding live token text corrupts data exactly that way. And the debug build
+QUARANTINES rather than recycling, so it is a different lifetime universe from
+the stock cores; the victim named here is not known to be the block those cores
+died on.
