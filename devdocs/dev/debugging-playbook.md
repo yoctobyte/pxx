@@ -1286,6 +1286,9 @@ name.
 **You are reading a ticket, or writing one**
 - ``## A ticket's prescription is a hypothesis, and it can rule out the answer``
   -- when a fix does not take, re-read what the ticket EXCLUDED
+- ``### The `## The fix` section is trusted MORE than the summary``
+  -- a summary reads as a claim and invites doubt; a fix section reads as a
+  conclusion, and was never tested. Test it against the oracle before implementing
 - `## A comment is an unverified claim, and tickets inherit it`
 - `### The polarity asymmetry: a guard stuck on PASS gets caught. One stuck on
   FAIL may not.` -- the conservative failure produces MORE testing, which reads
@@ -2232,6 +2235,56 @@ the same `(sha, tier)` is retried, and a push-driven ladder almost never retries
 one.** That is a ceiling, not a defect. It does pay for the one phase that does
 retry a single sha -- pin verify, where the log shows 56 jobs already decided
 against that exact binary.
+
+### The `## The fix` section is trusted MORE than the summary, and it is the softer claim
+
+frank-coordinator's framing, and it explains why the section above keeps
+recurring rather than being learned once: **a summary announces itself as a claim
+about the world, and therefore invites doubt. A fix section announces itself as a
+conclusion** -- it reads as the product of thinking rather than of measuring, so
+it arrives with the authority of something already settled. The two sit in the
+same file, written by the same author in the same sitting, on the same evidence.
+The one that reads as more finished is the one that was never tested.
+
+So the trust is **inverted exactly where it costs most**: the fix section is
+believed hardest by the reader least able to check it -- the agent who has just
+claimed the ticket and wants a plan. Writing a plan and testing a plan feel like
+the same activity while you are doing the first.
+
+**frankwasm's case, `tgenconstraint39`** (Track P, prio 70). The ticket's
+`## The fix` said to check the generic constraint at the end of the type section.
+fpc 3.2.2 checks at the **specialization point**. The test itself corroborates
+the distinction without needing to trust either party --
+`library_candidates/fpc-testsuite/tests/test/tgenconstraint39.pp` is marked
+`{ %FAIL }`, and its `specialize TGeneric<TTest>` sits between `TTest = class;`
+and `TTest = class(TSomeClass)`:
+
+```pascal
+  generic TGeneric<T: TSomeClass> = class end;
+  TTest = class;                          { forward -- not yet a TSomeClass }
+  TGenericTTest = specialize TGeneric<TTest>;   { <-- FPC checks HERE: fails }
+  TTest = class(TSomeClass) end;          { by end-of-section: would pass }
+```
+
+Implementing the prescribed fix would have **accepted an invalid program** --
+trading one wrong answer for another, in a lane whose whole job is rejecting what
+should be rejected.
+
+- **And the partial green would have sold it.** `tgenconstraint38` flips green
+  under the prescribed fix, so the change would have arrived with a test moving
+  in the right direction, which is the most persuasive possible cover for a wrong
+  check site. Same family as *a guard that cannot fail prints PASS*: the signal
+  fires, it just is not about what you think.
+- **The dispatch form, and it is one line:** *the summary is a claim to verify;
+  the fix section is a hypothesis to test against the oracle before implementing.*
+- **Never relay a prescription as "the ticket says to do X."** Relaying strips
+  the one cue a reader had -- that a person wrote it in advance -- and reissues it
+  as an instruction from the system. Say "the ticket proposes X, untested."
+
+**The cheap discharge, when an oracle exists:** the prescribed site is usually a
+one-line question to put to FPC or gcc directly (`devdocs/dev/differential-probes.md`).
+Ask it before you edit, not after your change fails to take -- the section above
+is what "after" costs.
 
 ## A correct fix on an opportunistic path is inert, and nothing reports it
 
