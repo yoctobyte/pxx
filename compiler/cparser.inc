@@ -11327,8 +11327,10 @@ begin
 
   { PASCAL MODE, cdecl: spill by the rule the CALLER marshals by.
     In Pascal mode a C function's callers take the true SysV/AAPCS marshalling
-    path (the seven `ProcCdecl[procIdx] and (not CProgramMode)` guards in the
-    backends), so its prologue has to read the arguments from where that
+    path (the backends' `CProcUsesCAbi(procIdx)` guards -- formerly seven
+    separate copies of `ProcCdecl[procIdx] and (not CProgramMode)`, folded
+    into the one predicate in symtab.inc so callers and callee cannot
+    disagree), so its prologue has to read the arguments from where that
     convention puts them -- EmitParamSpillsForTarget, the same arm x86-64 has
     always fallen through to.
 
