@@ -5,6 +5,8 @@ type: perf
 blocked-by: []
 created: 2026-08-31
 summary: "The compiler processes its own 235,854 lines in 19.7s and pylib+pyeval's 25,551 lines in 2.2s — ~12,000 lines/sec in both cases, so this is a uniform throughput figure and not a per-frontend problem. Find out where that time goes. Broad payoff (every frontend, every compile, every agent's mandatory 12s loop, and the 719 NilPy jobs per full tier) with no new mechanism and no new failure class — which is why this REPLACES the rejected unit-image cache."
+status: working
+owner: frankB
 ---
 
 # The compiler runs at ~12,000 lines/sec — find out why

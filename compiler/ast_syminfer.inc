@@ -171,14 +171,19 @@ begin
   end;
 end;
 
+{ The token's text out of the contiguous TokChars pool, in ONE SetLength and
+  one fill — which is exactly what lexer.inc's GetTokenStrFromRaw already did.
+  This function was the char-at-a-time twin that the fix for that one missed:
+  same pool, same span, same result string, built with an AppendChar per
+  character. MEASURED before the change, 70-sample gdb profile of a -g -O2
+  self-compile (binary 436c178ddcb9): AppendChar was 18/70 samples on stack and
+  SEVENTEEN OF THE EIGHTEEN were called from right here. Not from cpreproc's 72
+  call sites or pyparser's 53 — from this one loop.
+  perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why }
 function GetTokenStr(idx: Integer): AnsiString;
-var s: AnsiString; i: Integer;
 begin
-  s := '';
-  if (idx >= 0) and (idx < TokCount) then
-  begin
-    for i := Tokens[idx].SOffset to Tokens[idx].SOffset + Tokens[idx].SLen - 1 do
-      AppendChar(s, TokChars[i]);
-  end;
-  Result := s;
+  if (idx >= 0) and (idx < TokCount) and (Tokens[idx].SLen > 0) then
+    Result := GetTokenStrFromRaw(Tokens[idx].SOffset, Tokens[idx].SLen)
+  else
+    Result := '';
 end;
