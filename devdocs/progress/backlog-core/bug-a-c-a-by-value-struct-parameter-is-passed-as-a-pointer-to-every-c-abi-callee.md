@@ -42,7 +42,13 @@ self-consistent by construction either way. `test-c-abi-glibc-oracle` does
 cross a real boundary, but only with scalars and a variadic tail through
 glibc's `dprintf`; no glibc entry point in it takes a struct by value.
 **The gap is the same one this ticket's family keeps rediscovering: a
-self-consistent pair cannot judge a convention.**
+self-consistent pair cannot judge a convention.** frankA's sharper form, from
+the probe that could not fail: **a differential oracle only covers the
+population where the two implementations can actually disagree, and a calling
+convention is agreed by construction inside one implementation — so
+self-consistency is not evidence about an interface.** The corollary is the
+gate this ticket needs: the new subject must be a MIXED LINK, and no amount of
+strengthening a pxx-vs-pxx subject substitutes for it.
 
 ## Scope — bigger than the one line
 
@@ -56,6 +62,14 @@ a pointer. The callee spill (`EmitParamSpillsForTarget`) needs the mirror.
 Returns are NOT in scope and appear to be right: `RetViaHiddenDest` implements
 the hidden-destination convention and `cee_pairsum` matches gcc on four
 targets.
+
+**A consequence for whoever takes this, recorded here rather than in an audit
+note because it is a property of the FIX and not of today's code** (frankA):
+`ABIA64CdeclArgSlot` advancing NSAA by exactly 8 per stack argument is correct
+*only while every slot is a pointer*. It is right today for that reason, and it
+becomes wrong on the first commit that classifies aggregates properly. The
+direct arm, the indirect arm and `EmitParamSpillsForTarget` all read that one
+oracle, so the advance and the three readers move together or not at all.
 
 ## Found by
 
