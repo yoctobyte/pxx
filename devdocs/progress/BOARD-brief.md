@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:6 unfinished:28 blocked:10 backlog:396 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2923 rejected:68`
+`working:5 unfinished:28 blocked:10 backlog:396 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2924 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-no-cross-target-can-build-the-compiler-itself` [A] — owner: frankS
-- `bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit` [A] — owner: frankS
 - `feature-c-corpus-busybox-applet` [C] — owner: frankC
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-threadsafe-heap-optimize` [A] — owner: frankA

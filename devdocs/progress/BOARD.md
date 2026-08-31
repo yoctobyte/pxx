@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-no-cross-target-can-build-the-compiler-itself | A | 60 | bug | PARTLY FIXED 2026-08-30. i386, aarch64 and arm32 now BUILD the compiler, and the i386 and aarch64 binaries RUN under qemu and compile a working program -- their shared blocker was `LoadFile` with an array-element destination (cpreproc.inc), fixed by normalising in the frontend rather than teaching five backends a slot-address shape. TWO TARGETS REMAIN, with DIFFERENT causes, neither related to the first: riscv32 `jal displacement 2197196 is outside the encodable range` (reach) and xtensa `stack frame too large (> 32 KB) for a single ADDMI` (frame size) -- the latter is a THIRD defect this ticket originally missed. And the title claim was too strong: wasm32 built the compiler all along and was never measured. arm32 builds but its cross-built compiler SEGFAULTS, which is a fourth, separate defect. | — |
-| bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit | A | 50 | bug | `@V[0]` where V is an `array of Double` or `array of Single` fails to COMPILE on i386, arm32 and riscv32 -- `unsupported float operator` -- in a program containing no float operation. The element type routes an ADDRESS computation into the softfloat binop lowering. `@V` (whole array) is fine, `@V[0]` on an `array of Int64` is fine, and real float work (`V[0] := 1.5`) is fine, so it is the indexed-address path specifically. | — |
 | feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64. | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -740,9 +739,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2923)
+## done (2924)
 
-2923 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2924 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
