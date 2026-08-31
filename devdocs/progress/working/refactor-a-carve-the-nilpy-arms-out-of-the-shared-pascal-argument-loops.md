@@ -6,7 +6,7 @@ type: refactor
 status: working
 owner: frankA
 blocked-by: []
-summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 266 now, after two steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) and the first REGION carve, which closed six references with a six-line hook. Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead."
+summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 232 now, after three steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), and ParseFactor's NilPy head (34 sites, two hooks). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead."
 ---
 
 # Carve the NilPy arms out of the shared Pascal *argument* loops
@@ -242,3 +242,57 @@ tells you to move to a shared `astbuild.inc` — same names, same shape as
 Rust's really is `AllocNode(AN_IDENT)`; NilPy's is not, and both sites sit inside
 one NilPy parameter-default region anyway. Read the body — the name is shared
 with a function that has a different answer.
+
+## Step 2 DONE 2026-08-31 — `ParseFactor`'s head, the prize named in the triage
+
+**266 → 232. Thirty-four sites, two hooks.** `ParseFactor` (`pasparser_expr.inc`)
+opened with the NilPy factor forms and never got the treatment `ParseFactorCore`
+had at line 521. Both halves moved to `pyparser.inc`:
+
+- `PyParseFactorPrefix: Boolean` — `type(x).__name__`, `super().m()` as a value,
+  `lambda`. Each is complete on its own, so **True means the caller Exits**,
+  which is exactly what every `Exit` in that text already meant.
+- `PyParseFactorForm(var stop): Boolean` — from_bytes, the stdlib shims, unbound
+  str methods, variadic min/max, range, enumerate, zip, the set/paren/tuple
+  comprehension forms, `sys.stderr`. **False means the caller runs
+  `ParseFactorCore`**, which is what the chain's `else` did.
+
+What is left in the shared file is nine lines of dispatch naming nothing
+frontend-specific.
+
+### The one non-verbatim edit, and the control that did NOT clear it
+
+Two zip arms — `zip(*xs)` and the five-or-more-way form — ended in a bare `Exit`
+**from ParseFactor**, so they skip the Python suffix cluster, while `zip(a, b)`
+falls through into it. That asymmetry is why the hook returns two answers rather
+than one; `stop := True; Exit;` reproduces it.
+
+**Then the control came back byte-identical, and that is the honest result.**
+Dropping `stop` at both sites and rebuilding produced, for
+`test_nilpy_zip_star_and_n_way.npy` — which uses `zip(*…)` nine times — the
+**same emitted binary**. The arms are reached; the difference is not observable,
+because every use there is wrapped in `list(...)` so no suffix follows the `)`.
+Nor could a distinguishing case be built: `zip(*xs)[0]` and `zip(a, b)[0]` are
+BOTH refused, identically, by both builds — so the asymmetry does not surface as
+a difference between the two zip spellings either.
+
+So `stop` is **precautionary, not demonstrated**, and this ticket says so rather
+than claiming the carve preserved something it cannot show. It is kept because
+the carve's whole guarantee is *changed nothing*, and dropping it would rest that
+guarantee on a search that failed rather than on the text. If someone builds a
+program where a suffix follows a zip form, `stop` is what makes it behave as
+before; nothing so far can.
+
+### Verified
+
+Emitted-binary equivalence, before-build vs after-build, over **20 programs**:
+20 identical, 0 differing. Twelve are `.npy` tests chosen for the specific arms
+that moved — zip-star, two-argument super, range-as-a-value, enumerate-with-start,
+lambda-star-args, the comprehension and tuple forms — and each also matches
+CPython. `compiler/compiler.pas` itself is in the set.
+
+**And a near-miss worth the line:** the first control run asserted `count == 2`,
+failed, edited nothing, and the probe then printed *"CONTROL DID NOT FIRE"* over
+an **unrebuilt binary**. It was caught by printing the sha beside the result and
+seeing it unchanged. An instrument that never spoke reads exactly like a negative
+result.

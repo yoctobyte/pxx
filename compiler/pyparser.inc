@@ -8434,6 +8434,324 @@ begin
   PyCoerceCallableArgsIn(mpi, argsHead);
 end;
 
+{ The NilPy FORMS at the head of ParseFactor: `type(x).__name__`, `super().m()`
+  as a value, and `lambda`. Each one is complete on its own — it builds the node
+  and ParseFactor is done — so this answers True and the caller Exits.
+
+  Carved out of pasparser_expr.inc:8351-8445 on 2026-08-31, verbatim apart from
+  the two Result lines: every `Exit` in here already meant "ParseFactor is
+  finished", which is exactly what True means to the caller.
+  refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops }
+function PyParseFactorPrefix: Boolean;
+var tpObjNode, tpBlobNode, tpCallNode: Integer;
+    sdName: AnsiString;
+    tpTk: TTypeKind;
+begin
+  Result := True;
+  { `type(x).__name__` -- the ONLY shape of Python's `type()` builtin this
+    frontend accepts (not a general type-object value: no bare `type(x)`,
+    no equality/printing of it). Lowered straight onto the existing FPC
+    class-reference machinery a NilPy class instance already has: the same
+    __pxxRttiOf + __pxxClassName pair `obj.ClassName` uses.
+    feature-nilpy-aggregate-builtins }
+  if PyExprMode and isNilPy and PyIsIdent('type') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) and (FindSym('type') < 0) and
+     (not PyUserShadowsProc('type')) then
+  begin
+    Next; Expect(tkLParen, '(');
+    ParseExpr;
+    tpObjNode := CurASTNode;
+    Expect(tkRParen, ')');
+    if (CurTok.Kind <> tkDot) or (TokPos >= TokCount) or
+       (Tokens[TokPos].Kind <> tkIdent) or
+       (not CaseEqual(GetTokenStr(TokPos), '__name__')) then
+    begin
+      { Any OTHER shape — `type(x) == int`, `print(type(x))`, `type(x) is str`
+        — is the type OBJECT, which exists now that builtin types are values:
+        pytype_of_v answers a VT_BTYPE for a builtin value and the instance's
+        VT_CLASSREF for a user object, so `type(a) == A` and `isinstance(a, A)`
+        agree by construction. This used to be refused outright
+        ("type(x) is only supported as type(x).__name__") because there was no
+        representation for the answer.
+
+        The `.__name__` form above keeps its own lowering rather than becoming
+        `pytype_of_v(x).__name__`: it is a direct pylib call with no variant to
+        box, it is the overwhelmingly common shape, and it is already pinned by
+        tests. bug-n-a-type-name-is-not-a-first-class-value }
+      tpCallNode := AllocNode(AN_ARG);
+      ASTLeft[tpCallNode] := PyForceVariant(tpObjNode);
+      tpBlobNode := AllocNode(AN_CALL);
+      ASTIVal[tpBlobNode] := FindProc('pytype_of_v');
+      if ASTIVal[tpBlobNode] < 0 then
+        Error('Nil Python: pylib (pytype_of_v) not loaded');
+      ASTTk[tpBlobNode] := Ord(tyVariant);
+      ASTLeft[tpBlobNode] := tpCallNode;
+      CurASTNode := tpBlobNode;
+      LastExprTk := tyVariant;
+      Exit;
+    end;
+    Next; Next;                { '.', '__name__' }
+    { Answered by pylib at RUN time, not from the RTTI ClassName here. Reading
+      ClassName reported the Pascal class backing a pylib container — `TPyList`
+      for a list, `TPyDict` for a dict — a silently wrong string; and `tuple`
+      and `list` share ONE class, so the honest answer needs FIsTuple and cannot
+      come from a class name at all. Going through a variant also means scalars
+      work (`type(1).__name__` is `int`), which the RTTI route had to refuse.
+      bug-nilpy-type-name-reports-the-internal-pascal-class }
+    tpCallNode := FindProc('pytype_name_v');
+    if tpCallNode < 0 then
+      Error('Nil Python: pylib (pytype_name_v) not loaded');
+    tpBlobNode := AllocNode(AN_ARG);
+    ASTLeft[tpBlobNode] := tpObjNode;
+    ASTRight[tpBlobNode] := -1;
+    tpTk := tyAnsiString;
+    CurASTNode := AllocNode(AN_CALL);
+    ASTIVal[CurASTNode] := tpCallNode;
+    ASTLeft[CurASTNode] := tpBlobNode;
+    ASTTk[CurASTNode] := Ord(tpTk);
+    ASTRight[CurASTNode] := -1;
+    LastExprTk := tpTk;
+    Exit;
+  end;
+  { A `lambda` expression. Consumed and reduced to a placeholder None value:
+    full lambda support is function-value synthesis (like nested defs), and the
+    body would only run through exec()/native dispatch, which is stubbed
+    (feature-lib-pyexec). So a lambda parses and yields None, keeping the file
+    compiling; its body does not execute yet (feature-nilpy-lambda). }
+  { `super().m(args)` as a VALUE — `return "B" + super().who()`. super() was
+    recognised in STATEMENT position only, so an overridden method reached from
+    inside an expression failed with "undefined variable (super)". The node is
+    the same inherited call the statement path builds; only the position is new
+    (bug-nilpy-super-and-unbound-parent-method-calls). }
+  if PyExprMode and PyIsIdent('super') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    Next; PySuperConsumeArgs;
+    Expect(tkDot, '.');
+    if CurTok.Kind <> tkIdent then Error('Nil Python: expected method after super().');
+    sdName := CurTok.SVal;
+    Next;
+    Expect(tkLParen, '(');
+    CurASTNode := PyMakeSuperCall(sdName);
+    if CurASTNode < 0 then
+      Error('Nil Python: super().' + sdName + ' — no such method on the parent class');
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+    Exit;
+  end;
+  if PyExprMode and PyIsIdent('lambda') then
+  begin
+    PyParseLambdaStub;
+    Exit;
+  end;
+  Result := False;
+end;
+
+{ The NilPy FACTOR forms: int.from_bytes, the stdlib shims, unbound str methods,
+  variadic min/max, range, enumerate, zip, the comprehension and tuple-paren
+  forms, sys.stderr. False means no arm matched and the caller runs
+  ParseFactorCore, which is exactly what the `else` at the bottom of the original
+  chain did.
+
+  `stop` is the one thing that is NOT verbatim, and it exists to preserve an
+  ASYMMETRY rather than to introduce one. Two arms of the zip form — `zip(*xs)`
+  and the five-or-more-way form — ended in a bare `Exit` from ParseFactor, so
+  they skip the Python suffix cluster below, while `zip(a, b)` falls through into
+  it and accepts a suffix. Nothing says that difference is deliberate and it
+  looks like a latent bug, but a carve is not where a behaviour question gets
+  answered, so it is reproduced exactly and written down instead.
+
+  Carved out of pasparser_expr.inc:8449-8622 on 2026-08-31.
+  refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops }
+function PyParseFactorForm(var stop: Boolean): Boolean;
+var smNameTok, smBase, sdTok: Integer;
+    sdName: AnsiString;
+    enStart, enArg0, enArg1: Integer;
+    zipB, zipC, zipD: Integer;
+begin
+  Result := True;
+  stop := False;
+  { `int.from_bytes(...)` is an INTRINSIC, not a call on a value: `int` is a
+    type name, so the ordinary factor path would try to resolve it as a
+    variable and fail. Recognised before the core for that reason. }
+  if PyExprMode and PyIsFromBytesAhead then
+  begin
+    Next; Next; Next;           { 'int', '.', 'from_bytes'; CurTok = '(' }
+    CurASTNode := PyParseFromBytes;
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end
+  else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
+    { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
+    CurASTNode := PyParseStdlibCall(sdName, sdTok)
+  else if PyExprMode and (CurTok.Kind = tkIdent) and (CurTok.SVal = 'str') and
+          (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+          (Tokens[TokPos + 1].Kind = tkIdent) and (FindSym('str') < 0) and
+          not ((TokPos + 2 < TokCount) and (Tokens[TokPos + 2].Kind = tkLParen)) then
+  begin
+    { `str.lower` with no call after it — an UNBOUND METHOD as a value, which
+      is what `sorted(xs, key=str.lower)` and `map(str.strip, xs)` are made of.
+      The CALLED form (`str.maketrans(...)`) is the arm above; this one exists
+      only for the value form, which the ordinary factor path cannot reach
+      because `str` is a type name and not a variable. }
+    CurASTNode := PyUnboundStrMethodValue;
+    if CurASTNode < 0 then
+      Error('Nil Python: str.' + GetTokenStr(TokPos + 1) + ' cannot be taken '
+            + 'as a value — only the str methods that take no arguments can');
+    LastExprTk := tyVariant;
+  end
+  else if PyExprMode and (PyIsIdent('min') or PyIsIdent('max')) and
+          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+          (FindSym(CurTok.SVal) < 0) and (CountCallArgsAhead >= 3) and
+          (not PyAnyProcWithArity(CurTok.SVal, CountCallArgsAhead)) then
+    { 3+ positional arguments that NO routine of that arity can serve: fold
+      through the 2-arg overload. 1 and 2 args keep the ordinary call path,
+      whose overload set (iterable, AnsiString, the scalar pairs) is what the
+      fold itself relies on — as do pylib's hand-written 3/4-arg overloads and
+      any `def min(x, y, z)` the program declares over the builtin. }
+    CurASTNode := PyParseVariadicMinMax(CurTok.SVal)
+  else if PyExprMode and PyIsIdent('range') and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLParen) and (FindSym('range') < 0) and
+          (not PyUserShadowsProc('range')) then
+    { `range(...)` as a VALUE — a TPyRange, lazy and re-iterable, in EVERY
+      position. No gate: the old arm only fired inside a whitelist of callees
+      that promised to merely iterate their argument, because there was no
+      range value to produce and materialising elsewhere would have turned a
+      loud compile error into a quiet `[0, 1, 2]` where CPython prints
+      `range(0, 3)`. feature-nilpy-range-as-a-value
+
+      The `for i in range(...)` HEADER is recognised earlier (PyParseFor) and
+      keeps its counted-loop lowering — a range there is a loop bound, not a
+      value, and lowering it as one would put an object where an induction
+      variable belongs. }
+    CurASTNode := PyParseRangeList
+  else if PyExprMode and PyIsIdent('enumerate') and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLParen) and (FindSym('enumerate') < 0) and
+          (not PyUserShadowsProc('enumerate')) then
+  begin
+    { `enumerate(xs)` / `enumerate(xs, N)` / `enumerate(xs, start=N)` as a
+      VALUE — `for i, s in reversed(list(enumerate(t)))`. The for-HEADER form
+      is recognised earlier and walks by index; here the pairs have to exist
+      as a list, exactly as for zip. }
+    Next; Expect(tkLParen, '(');
+    ParseArgExpr;
+    smBase := CurASTNode;
+    enStart := -1;
+    if Eat(tkComma) then
+    begin
+      if PyIsIdent('start') and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkAssign) then
+      begin
+        Next; Next;   { 'start', '=' }
+      end;
+      ParseArgExpr;
+      enStart := CurASTNode;
+    end;
+    Expect(tkRParen, ')');
+    { LAZY, like map/filter: `enumerate(xs)` is a CURSOR. The str case needs no
+      charlist explosion any more — PyMakeIterOf builds a str cursor directly,
+      which is what closes the old "an AnsiString handle dereferenced as an
+      object" hole (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle)
+      without a second representation of the same idea. }
+    smBase := PyMakeIterOf(smBase);
+    smNameTok := FindProc('pyiter_enum_i');
+    if smNameTok < 0 then Error('Nil Python: pylib (pyiter_enum_i) not loaded');
+    if enStart < 0 then
+    begin
+      enStart := AllocNode(AN_INT_LIT);
+      ASTIVal[enStart] := 0;
+      ASTTk[enStart] := Ord(tyInt64);
+    end;
+    enArg0 := AllocNode(AN_ARG); ASTLeft[enArg0] := smBase;
+    enArg1 := AllocNode(AN_ARG); ASTLeft[enArg1] := enStart; ASTRight[enArg1] := -1;
+    ASTRight[enArg0] := enArg1;
+    CurASTNode := AllocNode(AN_CALL);
+    ASTIVal[CurASTNode] := smNameTok;
+    ASTLeft[CurASTNode] := enArg0;
+    ASTTk[CurASTNode] := Ord(tyClass);
+    ASTRight[CurASTNode] := ProcRetRecId[smNameTok];
+    LastExprTk := tyClass;
+  end
+  else if PyExprMode and PyIsIdent('zip') and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLParen) and
+          (not PyUserShadowsProc('zip')) then
+  begin
+    { `zip(a, b)` as a VALUE — `list(zip(chords, chords[1:]))`. The for-header
+      form is recognised earlier (PyParseForZip) and walks both containers by
+      index; here the pairs have to exist as a list. }
+    Next; Expect(tkLParen, '(');
+    { `zip(*rows)` — the TRANSPOSE idiom, and the one zip whose stream count is
+      a RUN-TIME fact. It cannot ride the fixed argument chain below, which is
+      why it did not parse at all; the operand IS the list of iterables. }
+    if isNilPy and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) then
+    begin
+      Next;                                { the '*' }
+      ParseArgExpr;
+      CurASTNode := PyMakeZipN(PyZipStarOperand(CurASTNode));
+      Expect(tkRParen, ')');
+      LastExprTk := tyClass;
+      stop := True; Exit;   { and NOT the suffix cluster — see the note above }
+    end;
+    ParseArgExpr;
+    smBase := CurASTNode;
+    Expect(tkComma, ',');
+    ParseArgExpr;
+    zipB := CurASTNode;
+    { …and the THREE- and four-way forms, which used to fail at the second
+      comma with `unexpected token`. Four is where it stops: past that the
+      shape is a list of lists, and a fixed argument chain has to end
+      somewhere — the diagnostic says so rather than silently dropping a
+      stream. }
+    zipC := -1; zipD := -1;
+    if CurTok.Kind = tkComma then
+    begin
+      Next; ParseArgExpr; zipC := CurASTNode;
+      if CurTok.Kind = tkComma then
+      begin
+        Next; ParseArgExpr; zipD := CurASTNode;
+        { …and past four, where the fixed chain used to stop with "not
+          supported yet — zip the first four and zip the result". The N-way
+          entry takes a LIST, so the remaining streams are collected into one
+          and the ceiling is gone rather than raised. }
+        if CurTok.Kind = tkComma then
+        begin
+          CurASTNode := PyMakeZipN(PyZipTailList(smBase, zipB, zipC, zipD));
+          Expect(tkRParen, ')');
+          LastExprTk := tyClass;
+          stop := True; Exit;   { and NOT the suffix cluster — see the note above }
+        end;
+      end;
+    end;
+    CurASTNode := PyMakeZip(smBase, zipB, zipC, zipD);
+    Expect(tkRParen, ')');
+    LastExprTk := tyClass;
+  end
+  else if PyExprMode and PyIsSetCompAhead then
+    { A set comprehension, checked before the dict-literal path: a brace group
+      with a `for` and no colon in it is not a dict. }
+    CurASTNode := PyParseSetComp
+  else if PyExprMode and PyIsParenCompAhead then
+    { `(x for x in xs)` — a generator expression in its own parentheses. Checked
+      before the tuple form, which would otherwise take the '(' and then fail on
+      the `for`. }
+    CurASTNode := PyParseParenComp
+  else if PyExprMode and PyTupleParenAhead then
+    { A parenthesised TUPLE as a value — `return (pfx, rest)`, `x = (a, b)`.
+      Built as the same TPyList a `[...]` literal produces, which is what makes
+      the existing tuple-unpack assignment consume it. A plain `(expr)` has no
+      top-level comma and still parses as grouping. }
+    PyParseListLiteralT(tkLParen, tkRParen, False)
+  else if PyExprMode and PyIsSysStreamAhead then
+  begin
+    { `sys.stderr` is a VALUE (its fd), not a member access on a variable —
+      `sys` is a deferred import and never becomes a symbol. }
+    CurASTNode := PyParseSysStream;
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end
+
+  else
+    Result := False;
+end;
+
 { `f()[i]` and `f()[a:b]` on a str-returning CALL. Carved out of
   ApplyCallResultPtrSuffix (pasparser_lval.inc) on 2026-08-31, where it sat as a
   PyExprMode arm inside the Pascal call-suffix walk and was six of that file's

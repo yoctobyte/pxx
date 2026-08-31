@@ -149,6 +149,8 @@ function PyWiden(a, b: TTypeKind): TTypeKind; forward;   { Nil Python numeric-ki
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
+function PyParseFactorPrefix: Boolean; forward; { Nil Python: type()/super()/lambda at the head of ParseFactor (pyparser.inc) }
+function PyParseFactorForm(var stop: Boolean): Boolean; forward; { Nil Python: the FACTOR forms ParseFactorCore is the else of (pyparser.inc) }
 procedure PyStrCallResultSuffix(var node: Integer; var tk: TTypeKind); forward; { Nil Python `f()[i]` / `f()[a:b]` on a str-returning CALL (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyNotSubscriptableNode(ci: Integer): Integer; forward; { Nil Python: run-time TypeError for a class with no __getitem__ (pyparser.inc) }
@@ -313,6 +315,25 @@ end;
   hook PER SYMBOL would be the 176-stub answer wearing a different hat, and a
   hook per REGION is not.
   refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops }
+function FrontendFactorPrefix: Boolean;
+begin
+{$ifdef PXX_NO_NILPY}
+  FrontendFactorPrefix := False;
+{$else}
+  FrontendFactorPrefix := PyParseFactorPrefix;
+{$endif}
+end;
+
+function FrontendFactorForm(var stop: Boolean): Boolean;
+begin
+  stop := False;
+{$ifdef PXX_NO_NILPY}
+  FrontendFactorForm := False;
+{$else}
+  FrontendFactorForm := PyParseFactorForm(stop);
+{$endif}
+end;
+
 procedure FrontendStrCallResultSuffix(var node: Integer; var tk: TTypeKind);
 begin
 {$ifdef PXX_NO_NILPY}
