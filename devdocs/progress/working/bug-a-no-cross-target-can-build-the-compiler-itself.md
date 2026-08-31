@@ -1021,3 +1021,31 @@ step is a different instrument, not more of this one.
 Stated plainly because the temptation was to stop at the green: **"my repro
 passed" is a different claim from "the compiler works", and here the two
 diverge.**
+
+### The heap debugger is SILENT on the self-build — this is no longer a heap bug
+
+Full `compiler.pas` build, arm32-hosted under `qemu-arm`, `-dPXX_HEAP_DEBUG`:
+
+```
+rc=139
+  total pxx-heap : 0      WRITE AFTER FREE 0    DOUBLE FREE 0
+  FREED string   : 0      FREED object     0    FREED dynarray 0
+```
+
+**Zero of every kind, and the zero is not vacuous.** The same instrument fires
+on the plant controls for all three families on this target, and it reported six
+write-after-frees on this same workload shape before the width fix. It can
+speak; it has nothing to say.
+
+So the remaining fault is **not** a managed-lifetime bug, and continuing to
+instrument the allocator is the wrong move. The residual question — "then what
+kills it?" — is owned here and the next instrument is the faulting PC, taken
+from the guest core `qemu-arm` writes under `ulimit -c` (no debugger: the system
+gdb has no arm target and installing one needs sudo).
+
+One caveat worth stating rather than discovering later: a *write-after-free*
+report is raised at quarantine eviction, which needs enough frees to cycle the
+ring, so a process that dies early could in principle carry an unreported one.
+The three *stale-handle* checks have no such delay — they report at the
+retain/release itself — and they are silent too, which is what makes this a
+real negative rather than a timing artefact.
