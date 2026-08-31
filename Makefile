@@ -14551,8 +14551,9 @@ test-riscv32: $(COMPILER)
 # flag, and the two tickets that motivated the oracle (div-by-zero-check,
 # int64-to-float) are arithmetic and remain exactly what it cannot answer.
 #
-# THIS IS THE CALL0 ABI ONLY. Windowed (the ESP-IDF ABI) still faults on frozen
-# strings, Copy and dynarray SetLength —
+# THIS LIST IS THE CALL0 ABI ONLY. Windowed (the ESP-IDF ABI) is exercised by
+# the six canary rows further down, not here. All three constructs that used to
+# fault under windowed — frozen strings, Copy and dynarray SetLength — are fixed:
 # bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength.
 #
 # The list is what was MEASURED to match, not what ought to. 64 of the 142
@@ -15192,6 +15193,37 @@ test-xtensa: $(COMPILER)
 	tools/run_target.sh xtensa $(TESTTMP)/xtw_variant > $(TESTTMP)/xtw_variant.out; tools/expect_same.sh xtensa-windowed/test_cross_variant-rc "$$?" "0"
 	$(TESTTMP)/xtw_variant_x64 > $(TESTTMP)/xtw_variant_x64.out
 	tools/expect_same.sh xtensa-windowed/test_cross_variant "$$(cat $(TESTTMP)/xtw_variant.out)" "$$(cat $(TESTTMP)/xtw_variant_x64.out)"
+	# managed strings — concat, compare and Copy, every operand shape, with a
+	# LOCAL read after each helper call. The sixth canary, and the one that is
+	# not about data-section alignment: under windowed the marshalling quad was
+	# a4-a7 because the Xtensa ABI says a2-a7 survive a call8 — true of the ABI
+	# and false of this compiler, which keeps the windowed FRAME POINTER in a7
+	# (EmitFrameAddrXtensa). Every concat and compare overwrote it and the next
+	# frame-relative local read faulted, arbitrarily far from the cause.
+	# bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength
+	#
+	# PROVEN ABLE TO GO RED, and both slots fire: against the pre-fix compiler
+	# (1860af97a4aa) this dies on signal 7 mid-`Copy` — the rc slot reports 135
+	# and the value slot reports truncated output. The helper's own RESULT was
+	# never wrong, so a row that checked only the returned string would have
+	# passed on the broken compiler; the guard reads after each call are the
+	# assertion.
+	#
+	# THE CALL0 ROW BELOW IS THE CONTROL, not extra coverage: a7 is not the frame
+	# pointer there (a15 is), the fix returns a7 on that arm, and Call0 codegen
+	# is byte-identical across it — verified by compiling this file with both
+	# compilers. It is gated so that a later edit which "simplifies" the ABI
+	# split has to break something visible.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_managed_strings.pas $(TESTTMP)/xtw_mstr
+	./$(COMPILER) test/test_cross_managed_strings.pas $(TESTTMP)/xtw_mstr_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_mstr > $(TESTTMP)/xtw_mstr.out; tools/expect_same.sh xtensa-windowed/test_cross_managed_strings-rc "$$?" "0"
+	$(TESTTMP)/xtw_mstr_x64 > $(TESTTMP)/xtw_mstr_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_managed_strings "$$(cat $(TESTTMP)/xtw_mstr.out)" "$$(cat $(TESTTMP)/xtw_mstr_x64.out)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=call0 test/test_cross_managed_strings.pas $(TESTTMP)/xtc_mstr
+	tools/run_target.sh xtensa $(TESTTMP)/xtc_mstr > $(TESTTMP)/xtc_mstr.out; tools/expect_same.sh xtensa-call0/test_cross_managed_strings-rc "$$?" "0"
+	tools/expect_same.sh xtensa-call0/test_cross_managed_strings "$$(cat $(TESTTMP)/xtc_mstr.out)" "$$(cat $(TESTTMP)/xtw_mstr_x64.out)"
 	# A BACKWARD JUMP PAST J'S +-128 KiB, both ABIs. J is an 18-bit BYTE offset,
 	# four times tighter than riscv32's JAL, and one body is enough to cross it:
 	# the pre-fix compiler refuses this file with `j displacement -395214 is

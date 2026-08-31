@@ -2,7 +2,7 @@
 track: A+S
 type: bug
 prio: 50
-status: unfinished
+status: working
 found: 2026-08-30
 found-by: frankS
 owner: frankS

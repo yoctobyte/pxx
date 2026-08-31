@@ -50,6 +50,47 @@ begin
   xtensa_l32r(rd, $FFFF);
 end;
 
+function XtRegName(r: Integer): AnsiString;
+{ 'a<n>' for the text assembler, so a register CHOSEN by ABI can still be
+  spelled into an EmitAsmXtensa block. }
+begin
+  XtRegName := 'a' + AIntToStr(r);
+end;
+
+function XtensaMarshalReg4: Integer;
+{ The FOURTH register of the string-helper marshalling quad (lenA, srcA, then
+  two more that differ per helper).
+
+  a7 ON CALL0, a3 UNDER WINDOWED, AND THE DIFFERENCE IS A BUG THAT TOOK FIVE
+  ROUNDS TO FIND. The quad was chosen as a4-a7 because the Xtensa windowed ABI
+  says a2-a7 survive a call8 -- which is TRUE OF THE ABI and false of this
+  compiler, because EmitFrameAddrXtensa below puts the WINDOWED FRAME POINTER
+  in a7. So every managed-string concat and compare overwrote the frame pointer
+  and every subsequent local reference (`addi aN, a7, -off`) read from garbage.
+
+  Measured 2026-08-31 on `r := Copy(s,2,3)` under qemu-xtensa: A07=00000001 --
+  literally the `movi a7, 1` this arm emits for a Char operand's length -- and
+  the fault is the very next frame-relative load, `addi a2, a7, -32; l32i a2,
+  a2, 0` at 0xFFFFFFE1. SIGBUS.
+
+  The fault is FAR from the cause and looks nothing like it: rounds 1-5 of the
+  ticket killed misaligned word copy, `sp`-movement volume, call depth, the
+  prologue's plain-addi ABI violation, and frame size -- all shape properties,
+  all matched by a program that passes. This is a CONTENT property (which
+  register holds what), which is the class the ticket had concluded it needed.
+  bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength
+
+  a3 is free here on both ABIs: the operands have already been pushed to
+  expression slots, IREmitNodeXtensa leaves its value in a2, and the quad is
+  consumed into a10-a13 (windowed) or a2-a5 (Call0) before anything else runs.
+  Returning a7 on Call0 keeps that arm byte-identical. }
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    XtensaMarshalReg4 := reg_xtensa_a3
+  else
+    XtensaMarshalReg4 := reg_xtensa_a7;
+end;
+
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer);
 var fp: Integer;
 begin
@@ -1408,6 +1449,9 @@ var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
   itemNode, hi: Integer;   { `x in [consts]` — SPECIAL_IN's item walk }
   isOrd: Boolean;   { managed-string compare: ordered (PXXStrCmp3) vs equality }
+  r4: Integer;      { the string-marshalling quad's FOURTH register -- a7 on
+                      Call0, a3 under windowed, because a7 is the windowed
+                      frame pointer. See XtensaMarshalReg4. }
   argFree: Integer;   { Call0: bytes of argument block to pop AFTER the call
                         (0 = the block was already freed before it) }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
@@ -1973,6 +2017,7 @@ begin
         begin
           { Managed-string concat -> PXXStrConcat(lenA, srcA, srcB, lenB). Operand
             len/src into a4=lenA,a5=srcA,a6=srcB,a7=lenB (a2-a7 survive call8). }
+          r4 := XtensaMarshalReg4;
           argBase := XtSpillDepth;
           IREmitNodeXtensa(left);  XtensaPushA2;       { lhs @ argBase }
           IREmitNodeXtensa(right); XtensaPushA2;       { rhs @ argBase+4 }
@@ -1981,18 +2026,19 @@ begin
           if IntToTypeKind(IRTk[right]) = tyAnsiString then
           begin
             xtensa_mov(reg_xtensa_a6, reg_xtensa_a8);
-            EmitAsmXtensa(['movi a7, 0', 'movi a9, 0', 'beq a8, a9, .cb',
-                           'addi a9, a8, -8', 'l32i a7, a9, 0', '.cb:']);
+            EmitAsmXtensa(['movi ' + XtRegName(r4) + ', 0', 'movi a9, 0',
+                           'beq a8, a9, .cb', 'addi a9, a8, -8',
+                           'l32i ' + XtRegName(r4) + ', a9, 0', '.cb:']);
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[right])) then
           begin
-            xtensa_l32i(reg_xtensa_a7, reg_xtensa_a8, 0);
+            xtensa_l32i(r4, reg_xtensa_a8, 0);
             xtensa_addi(reg_xtensa_a6, reg_xtensa_a8, 8);
           end
           else
           begin
             xtensa_addi(reg_xtensa_a6, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
-            EmitLoadConstXtensa(reg_xtensa_a7, 1);
+            EmitLoadConstXtensa(r4, 1);
           end;
           { lhs -> srcA(a5)/lenA(a4) }
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
@@ -2019,7 +2065,7 @@ begin
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a4);
             xtensa_mov(reg_xtensa_a11, reg_xtensa_a5);
             xtensa_mov(reg_xtensa_a12, reg_xtensa_a6);
-            xtensa_mov(reg_xtensa_a13, reg_xtensa_a7);
+            xtensa_mov(reg_xtensa_a13, r4);
             EmitCallProc(procIdx);
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
           end
@@ -2028,7 +2074,7 @@ begin
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);   { a2=lenA }
             xtensa_mov(reg_xtensa_a3, reg_xtensa_a5);   { a3=srcA }
             xtensa_mov(reg_xtensa_a4, reg_xtensa_a6);   { a4=srcB }
-            xtensa_mov(reg_xtensa_a5, reg_xtensa_a7);   { a5=lenB }
+            xtensa_mov(reg_xtensa_a5, r4);              { a5=lenB }
             EmitCallProc(procIdx);                           { result a2 }
           end;
           { release fresh tyAnsiString BINOP operand temporaries }
@@ -2100,6 +2146,7 @@ begin
             default ABI. }
           isOrd := (op = Ord(tkLt)) or (op = Ord(tkLe)) or
                    (op = Ord(tkGt)) or (op = Ord(tkGe));
+          r4 := XtensaMarshalReg4;
           argBase := XtSpillDepth;
           IREmitNodeXtensa(left);  XtensaPushA2;       { slot 0 = lhs }
           IREmitNodeXtensa(right); XtensaPushA2;       { slot 1 = rhs }
@@ -2107,18 +2154,18 @@ begin
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
           if IntToTypeKind(IRTk[right]) = tyAnsiString then
           begin
-            xtensa_mov(reg_xtensa_a7, reg_xtensa_a8);
+            xtensa_mov(r4, reg_xtensa_a8);
             EmitAsmXtensa(['movi a6, 0', 'movi a9, 0', 'beq a8, a9, .cb',
                            'addi a9, a8, -8', 'l32i a6, a9, 0', '.cb:']);
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[right])) then
           begin
             xtensa_l32i(reg_xtensa_a6, reg_xtensa_a8, 0);
-            xtensa_addi(reg_xtensa_a7, reg_xtensa_a8, 8);
+            xtensa_addi(r4, reg_xtensa_a8, 8);
           end
           else
           begin
-            xtensa_addi(reg_xtensa_a7, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
+            xtensa_addi(r4, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
             EmitLoadConstXtensa(reg_xtensa_a6, 1);
           end;
           { lhs -> lenA(a4)/srcA(a5) }
@@ -2151,7 +2198,7 @@ begin
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a4);
             xtensa_mov(reg_xtensa_a11, reg_xtensa_a5);
             xtensa_mov(reg_xtensa_a12, reg_xtensa_a6);
-            xtensa_mov(reg_xtensa_a13, reg_xtensa_a7);
+            xtensa_mov(reg_xtensa_a13, r4);
             EmitCallProc(procIdx);
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
           end
@@ -2160,7 +2207,7 @@ begin
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);   { a2=lenA }
             xtensa_mov(reg_xtensa_a3, reg_xtensa_a5);   { a3=srcA }
             xtensa_mov(reg_xtensa_a4, reg_xtensa_a6);   { a4=lenB }
-            xtensa_mov(reg_xtensa_a5, reg_xtensa_a7);   { a5=srcB }
+            xtensa_mov(reg_xtensa_a5, r4);              { a5=srcB }
             EmitCallProc(procIdx);                           { result a2 }
           end;
           { release fresh tyAnsiString BINOP operand temporaries }
