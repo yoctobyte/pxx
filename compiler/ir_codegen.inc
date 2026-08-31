@@ -5449,9 +5449,90 @@ begin
 end;
 
 
+{ ===== alloca and the rsp-relative value model (x86-64) =====
+
+  IR_ALLOCA lowers rsp by a run-time amount, and everything the value model
+  parks on the stack sits ABOVE rsp at an offset that knows nothing about it: a
+  BINOP left operand between its `push` and its `pop`, an outgoing stack
+  argument, and a call sequence's saved-rsp slot. So an alloca reached with
+  anything already pushed hands the pop somebody else's bytes. This is NOT
+  confined to argument lists, which is what the C frontend's CHoistAllocaArgs
+  covers -- `a + (long)(alloca(32) != 0)` is enough, and it returned the
+  alloca'd hole rather than `a`.
+
+  The arrangement, and it removes the frontend's obligation rather than adding
+  a second hoist to it: a body containing an IR_ALLOCA reserves one frame
+  qword, the ALLOCA BASE, holding the address where its expression stack starts
+  -- rsp at every point where nothing is pushed. It is written at body entry
+  and lowered by each alloca.
+
+  An alloca then carves its hole at the BOTTOM OF THE FIXED FRAME rather than
+  at rsp. It lowers rsp by the 16-rounded size, RELOCATES the live expression
+  stack -- everything between rsp and the base -- down by that same amount, and
+  returns the gap that opens up just beneath the base. The region moves as a
+  unit, so every rsp-relative offset into it is preserved and no push, pop or
+  fixed-offset argument slot has to know an alloca happened. Successive allocas
+  stack downward under the frame; `leave` unwinds all of them at once.
+
+  Relocation cannot fix a saved ABSOLUTE rsp, whose bytes move while its value
+  does not, and an expression contains exactly one: the caller's rsp that a
+  call sequence parks below its outgoing argument area. So in an alloca-bearing
+  body those sites save `rsp - base` and restore `base + delta` instead. The
+  base moves by exactly what the relocation moved, so the delta is invariant.
+  EmitSaveCallerRspX64 / EmitLoadSavedRspX64 / EmitRestoreCallerRspX64 are that
+  pair, and they are why an alloca inside an argument list is now correct
+  WITHOUT the hoist.
+
+  What is deliberately NOT covered: a fixed scratch area a STATEMENT opens with
+  its own `sub rsp, imm` and then addresses through a saved absolute pointer --
+  IR_EXC_ENTER's exception frame (whose head is published to BSS_EXC_TOP) and
+  the shortstring concat buffer. Relocation moves those bytes and leaves the
+  pointer behind. Neither is reachable with an alloca today: both are Pascal
+  constructs and IR_ALLOCA is produced only by the C frontend, which has no
+  try/except and no shortstrings. A frontend that gains both must revisit this.
+
+  Bodies with no IR_ALLOCA keep X64AllocaBaseOff = 0 and emit byte-identical
+  code to before -- which is every Pascal body, so the self-host fixedpoint
+  cannot see this change and is not evidence about it. The C repros are.
+  bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer }
+
+procedure EmitSaveCallerRspX64;
+{ Park the caller's rsp below the outgoing argument area, then align. }
+begin
+  EmitB($49); EmitB($89); EmitB($E3);                    { mov r11, rsp }
+  if X64AllocaBaseOff <> 0 then
+  begin
+    EmitB($4C); EmitB($2B); EmitB($9D); EmitI32(X64AllocaBaseOff); { sub r11, [rbp+base] }
+  end;
+  EmitB($48); EmitB($83); EmitB($E4); EmitB($F0);        { and rsp, -16 }
+  EmitB($41); EmitB($53);                                { push r11 }
+end;
+
+procedure EmitLoadSavedRspX64(off: Integer);
+{ r11 = the caller's rsp, read back from the slot `off` bytes above rsp. }
+begin
+  EmitB($4C); EmitB($8B); EmitB($9C); EmitB($24); EmitI32(off);      { mov r11, [rsp+off] }
+  if X64AllocaBaseOff <> 0 then
+  begin
+    EmitB($4C); EmitB($03); EmitB($9D); EmitI32(X64AllocaBaseOff);   { add r11, [rbp+base] }
+  end;
+end;
+
+procedure EmitRestoreCallerRspX64(off: Integer);
+begin
+  if X64AllocaBaseOff = 0 then
+  begin
+    EmitB($48); EmitB($8B); EmitB($A4); EmitB($24); EmitI32(off);    { mov rsp, [rsp+off] }
+    Exit;
+  end;
+  EmitLoadSavedRspX64(off);
+  EmitB($4C); EmitB($89); EmitB($DC);                                { mov rsp, r11 }
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
+    allocaLoop, allocaDone: Integer;  { IR_ALLOCA's relocation loop: back edge, and the forward rel8 out of it }
     op: TTokenKind;
     cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg, skipAllArgs: Boolean;
     sVal: AnsiString;
@@ -5861,9 +5942,7 @@ begin
             the arg area: after `push r11` rsp = aligned-8, so the saved-P slot
             plus mStack 8-byte args needs 8 more pad when mStack is even for the
             call-site 16-alignment. }
-          EmitB($49); EmitB($89); EmitB($E3);       { mov r11, rsp  (r11 = P) }
-          EmitB($48); EmitB($83); EmitB($E4); EmitB($F0); { and rsp, -16 }
-          EmitB($41); EmitB($53);                   { push r11  ([rsp]=P) }
+          EmitSaveCallerRspX64;                     { r11 = P ; and rsp, -16 ; push r11 }
           if (mStack and 1) = 0 then
           begin
             padBytes := 8;
@@ -5924,14 +6003,14 @@ begin
           end;
           EmitB($B8); EmitI32(sseIdx);              { mov eax, #vector-regs (vararg ABI) }
           { Callee: the saved-P slot sits above the pad + stack args. }
-          EmitB($4C); EmitB($8B); EmitB($9C); EmitB($24); EmitI32(mStack * 8 + padBytes); { mov r11, [rsp+off] = P }
+          EmitLoadSavedRspX64(mStack * 8 + padBytes);   { r11 = P }
           EmitB($4D); EmitB($8B); EmitB($1B);       { mov r11, [r11] = callee }
           { pxx internal ABI: cdecl target runs under SysV (all XMM volatile) —
             save the callee-saved xmm8..13 pool around the call. }
           FloatPoolSave;
           EmitB($41); EmitB($FF); EmitB($D3);       { call r11 }
           FloatPoolRestore;
-          EmitB($48); EmitB($8B); EmitB($A4); EmitB($24); EmitI32(mStack * 8 + padBytes); { mov rsp, [rsp+off] = P }
+          EmitRestoreCallerRspX64(mStack * 8 + padBytes);
           EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8  (pop callee) }
           if TypeIsFloat(Procs[cpi].RetType) then
           begin
@@ -7973,29 +8052,56 @@ begin
       
     IR_ALLOCA:
       begin
-        { rax = size -> 16-align -> grow the dynamic stack area -> rax = hole.
-          The epilogue's `leave` restores rsp from rbp, so nothing to unwind.
+        { rax = size -> 16-align -> carve the hole under the FIXED FRAME,
+          relocating the live expression stack down to make room -> rax = hole.
 
-          Call sequences are NOT unaffected -- this comment used to claim they
-          were, and the claim is what made the bug below look impossible. The
-          IR_CALL path saves the caller's rsp with `push r11` BELOW the
-          outgoing argument area and restores it with `mov rsp, [rsp + pad +
-          mStack*8]`, a FIXED offset. `sub rsp, rax` here moves rsp by a
-          run-time amount that offset knows nothing about, so an alloca
-          evaluated while a call's arguments are being pushed shifts the saved
-          slot out from under the restore and rsp comes back holding the
-          alloca'd bytes. Measured on busybox getopt32.c:373.
+          Nothing here addresses anything at a fixed offset from an rsp this op
+          moves, which is the whole point: the region between rsp and the
+          alloca base moves as a unit, so the offsets into it are preserved.
+          Full model, and the one case it does not cover, in the block comment
+          above EmitSaveCallerRspX64.
 
-          INVARIANT, upheld by the FRONTEND: an IR_ALLOCA must not be reachable
-          from inside a call's argument evaluation. cparser.inc's
-          CHoistAllocaArgs lifts them out. Anything that starts emitting
-          IR_ALLOCA must do the same, or fix the call sequence --
-          bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer }
+          The rounding is not decoration -- `and rsp, -16` in a call sequence
+          assumes rsp's 16-alignment is invariant across argument evaluation,
+          and an odd alloca(1) would break that for the CALL rather than here. }
         IREmitNode(IRA[node]);
         EmitB($48); EmitB($83); EmitB($C0); EmitB($0F);  { add rax, 15 }
         EmitB($48); EmitB($83); EmitB($E0); EmitB($F0);  { and rax, -16 }
+        if X64AllocaBaseOff = 0 then
+          Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
+              + 'IREmitMachineCode''s body-entry scan did not see this node');
         EmitB($48); EmitB($29); EmitB($C4);              { sub rsp, rax }
-        EmitB($48); EmitB($89); EmitB($E0);              { mov rax, rsp }
+        { rdx/r10/r11 park in the red zone BELOW the new rsp for the duration.
+          The copy only ever writes above rsp and no call can intervene, so 24
+          of the 128 red-zone bytes are free scratch -- and borrowing them is
+          what lets this run without knowing which registers the value model
+          has live, which a static push-depth counter would have required. }
+        EmitB($48); EmitB($89); EmitB($54); EmitB($24); EmitB($F8);  { mov [rsp-8], rdx }
+        EmitB($4C); EmitB($89); EmitB($54); EmitB($24); EmitB($F0);  { mov [rsp-16], r10 }
+        EmitB($4C); EmitB($89); EmitB($5C); EmitB($24); EmitB($E8);  { mov [rsp-24], r11 }
+        EmitB($4C); EmitB($8B); EmitB($9D); EmitI32(X64AllocaBaseOff); { mov r11, [rbp+base] }
+        EmitB($48); EmitB($89); EmitB($E2);              { mov rdx, rsp  (dst cursor) }
+        EmitB($49); EmitB($89); EmitB($E2);              { mov r10, rsp }
+        EmitB($49); EmitB($01); EmitB($C2);              { add r10, rax  (src cursor = the old rsp) }
+        EmitB($49); EmitB($29); EmitB($C3);              { sub r11, rax  (base -= size) }
+        EmitB($4C); EmitB($89); EmitB($9D); EmitI32(X64AllocaBaseOff); { mov [rbp+base], r11 }
+        { Copy the live region down by `size`, low address first -- dst is
+          always below src, so ascending is the safe direction. Length is
+          base - rsp, which is ZERO for an alloca at statement level; the loop
+          exists for the ones that are not, which is the bug. }
+        allocaLoop := CodeLen;
+        EmitB($4C); EmitB($39); EmitB($DA);              { cmp rdx, r11 }
+        EmitB($73); allocaDone := CodeLen; EmitB(0);     { jae done }
+        EmitB($49); EmitB($8B); EmitB($02);              { mov rax, [r10] }
+        EmitB($48); EmitB($89); EmitB($02);              { mov [rdx], rax }
+        EmitB($48); EmitB($83); EmitB($C2); EmitB($08);  { add rdx, 8 }
+        EmitB($49); EmitB($83); EmitB($C2); EmitB($08);  { add r10, 8 }
+        EmitB($EB); EmitRel8(allocaLoop);                { jmp loop }
+        PatchRel8(allocaDone);
+        EmitB($4C); EmitB($89); EmitB($D8);              { mov rax, r11  (the hole = the new base) }
+        EmitB($4C); EmitB($8B); EmitB($5C); EmitB($24); EmitB($E8);  { mov r11, [rsp-24] }
+        EmitB($4C); EmitB($8B); EmitB($54); EmitB($24); EmitB($F0);  { mov r10, [rsp-16] }
+        EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($F8);  { mov rdx, [rsp-8] }
       end;
 
     IR_FPU_MASK:
@@ -8296,9 +8402,7 @@ begin
               leaves rsp = aligned-8. At the call rsp must be 16-aligned, so
               with the saved-rsp slot plus mStack 8-byte args we pad by 8 when
               mStack is even. }
-            EmitB($49); EmitB($89); EmitB($E3);             { mov r11, rsp }
-            EmitB($48); EmitB($83); EmitB($E4); EmitB($F0); { and rsp, -16 }
-            EmitB($41); EmitB($53);                         { push r11 }
+            EmitSaveCallerRspX64;
             if (mStack and 1) = 0 then
             begin
               padBytes := 8;
@@ -8418,7 +8522,7 @@ begin
             { Restore the caller's rsp from the saved slot, which sits
               padBytes + mStack*8 above the current (post-call) rsp. }
             restoreOff := padBytes + mStack * 8;
-            EmitB($48); EmitB($8B); EmitB($A4); EmitB($24); EmitI32(restoreOff); { mov rsp, [rsp+off] }
+            EmitRestoreCallerRspX64(restoreOff);
             if TypeIsFloat(Procs[procIdx].RetType) then
             begin
               { float/double returned in xmm0; the value model carries doubles,
@@ -10591,6 +10695,26 @@ begin
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
   ScratchDepth := 0;   { -O3 W1 scratch registers all free at body start (balanced Inc/Dec, but never trust a prior body's aborted state) }
+
+  { The ALLOCA BASE slot, reserved only for a body that contains an IR_ALLOCA
+    and written HERE because here is the one place rsp is provably the bottom
+    of the fixed frame: the parser's prologue has run, nothing is pushed, and
+    no alloca has fired yet. The frame grows by one qword and PatchProcPrologue
+    -- which runs after this whole body is emitted -- reserves it.
+
+    A body with no alloca keeps X64AllocaBaseOff = 0 and emits nothing at all,
+    so its code is byte-identical to before the slot existed. That is every
+    Pascal body, which is exactly why the self-host fixedpoint says nothing
+    about this change either way. Model: the block comment above
+    EmitSaveCallerRspX64. }
+  X64AllocaBaseOff := 0;
+  for i := 0 to IRCount - 1 do
+    if (IRKind[i] = IR_ALLOCA) and (X64AllocaBaseOff = 0) then
+    begin
+      FrameSize := AlignTo(FrameSize + 8, 8);
+      X64AllocaBaseOff := -FrameSize;
+      EmitB($48); EmitB($89); EmitB($A5); EmitI32(X64AllocaBaseOff);  { mov [rbp+base], rsp }
+    end;
 
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments. They are created during this body's IR lowering, after the
