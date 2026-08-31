@@ -265,3 +265,37 @@ character.
 **Still gated on the same measurement.** This is the shape of the fix IF the 46%
 unresolved frames turn out to be under `AppendChar`. Attribute them first — this
 paragraph is a plan, not a finding.
+
+### OWNER DIRECTIVE 2026-08-31 — reduce the USE of AppendChar; do not wait on the frame attribution
+
+*"let's just try to minimize the use of appendchar() in the first place."*
+
+This supersedes "attribute the `??` frames first" as the **starting** task. The
+attribution is still worth having — it says whether the ceiling is a quarter of
+compile time or most of it — but it no longer blocks the work, because both
+runtime-level fixes are already in and the call sites are where the remaining
+cost lives regardless.
+
+Order of attack, by call density: `pyparser.inc` (53), `cpreproc.inc` (72),
+`elfwriter.inc` (38), `lexer.inc` (28), `pasparser_lval.inc` (25),
+`clexer.inc` (21), `pylexer.inc` (21), then the six asm-text emitters.
+
+Five constraints, and the first is the one that will bite:
+
+1. **Measure, do not count.** "~400 call sites" is a **census**, not a
+   measurement — the O-charter is explicit that promise means *delivered value
+   measured*, after a campaign advertised ~37% from an instruction census and
+   delivered 5-7%. Baseline first, convert a batch, re-measure. Min-of-N
+   interleaved A/B/A/B, never means, sha256 of the binary beside every number.
+2. **Land incrementally.** Not 400 sites in one commit. Per-fix loop each time.
+3. **`lexer.inc` has TWO definitions** of `AppendChar`/`AppendString`/
+   `AppendRange`: `{$ifdef FPC}` (`dst := dst + c`, the seed path) and `{$else}`
+   (`SetLength` per char, what a pxx-built compiler runs). Converting CALL SITES
+   is arm-neutral. Touching the definitions means both arms must stay correct.
+4. **The fixedpoint does not cover what is being edited.** `compiler.pas` is not
+   written in C, NilPy, Rust or Zig, so editing those lexers is invisible to it.
+   Carry a one-line repro per frontend touched.
+5. **Behaviour must not change.** This is purely how a string is accumulated. A
+   conversion that is not obviously equivalent gets skipped and noted, not
+   guessed — a subtly different token string is a wrong VALUE surfacing far from
+   its cause.
