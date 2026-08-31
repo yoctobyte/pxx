@@ -1717,6 +1717,30 @@ begin
   EmitI32($EB00001F or (rm shl 16) or (lreg shl 5));
 end;
 
+{ `s := s + x` appended into s's own block rather than built fresh from both
+  halves. Shared recogniser (IRIsSelfStrAppend, forwarded in compiler.pas); the
+  right operand's unpacking is in the runtime, so this is an ordinary 2-argument
+  call: x0 = address of s's slot, x1 = the handle or character code. }
+procedure EmitAnsiStrAppendToSymA64(symIdx, rhs: Integer);
+var procIdx: Integer;
+begin
+  IREmitNodeAarch64(rhs);                   { x0 = handle, or char code }
+  EmitI32($AA0003E1);                       { mov x1, x0 (arg1) }
+  if Syms[symIdx].Kind = skGlobal then
+    EmitLoadGlobAddrA64(0, Syms[symIdx].Offset)
+  else
+  begin
+    EmitLoadImmA64(9, Syms[symIdx].Offset);
+    EmitI32($8B0903A0);                     { add x0, x29, x9 (arg0 = &slot) }
+  end;
+  if IntToTypeKind(IRTk[rhs]) = tyChar then
+    procIdx := FindProc('PXXStrAppendChar')
+  else
+    procIdx := FindProc('PXXStrAppendStr');
+  if procIdx < 0 then Error('compiler error: PXXStrAppendStr/Char not found in builtin unit');
+  EmitCallProc(procIdx);
+end;
+
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
@@ -1806,6 +1830,16 @@ begin
         if Syms[si].TypeKind = tyAnsiString then
         begin
           valNode := IRB[node];
+          { `s := s + x`: append in place; the helper does the whole slot update,
+            so none of the retain/release below runs. tyString is recognised too
+            but stays on the concat path -- it has no runtime wrapper yet. }
+          if IRIsSelfStrAppend(si, valNode) and
+             ((IntToTypeKind(IRTk[IRB[valNode]]) = tyAnsiString) or
+              (IntToTypeKind(IRTk[IRB[valNode]]) = tyChar)) then
+          begin
+            EmitAnsiStrAppendToSymA64(si, IRB[valNode]);
+            Exit;
+          end;
           if (IRKind[valNode] = IR_CALL) and (IRA[valNode] = -Ord(tkArgStr)) then
           begin
             argNode := IRB[valNode];

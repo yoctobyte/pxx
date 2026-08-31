@@ -8,7 +8,7 @@ found: 2026-08-31
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "PARTLY FIXED 2026-08-31. TWO defects of one shape -- an optimisation living only in the x86-64 emitter with every other backend routed to a correct-but-quadratic shared path -- and the one this title names was NOT the one that mattered. (a) FIXED, runtime, all targets: PXXStrSetLen always reallocated and copied, so `SetLength(s, Length(s)+1)` copied the whole string per call; AppendChar in lexer.inc does exactly that per character, making the compiler's OWN string building O(n^2) everywhere but x86-64, which has an inline resize. It now grows in place when sole-owner and APPENDABLE with capacity, and over-allocates 2x only when an existing string grows. (b) PARTLY FIXED: `s := s + x` had IRIsSelfStrAppend and its emitter in ir_codegen.inc and nowhere else; the recogniser is now forwarded in compiler.pas and i386 and arm32 call it through new runtime wrappers PXXStrAppendStr/Char -- aarch64, riscv32 and xtensa STILL take the concat path and are still O(n^2) for that idiom. ACCEPTANCE: the i386-hosted compiler now builds compiler.pas natively (rc=0) and reaches a byte-identical self-host fixedpoint, which it has never done; arenas 13-then-SIGSEGV -> 4, matching x86-64 exactly. NOT a 32-bit bug: aarch64 is 64-bit and was equally quadratic. On ESP it is functional rather than performance (frankS)."
+summary: "MOSTLY FIXED 2026-08-31; ONE BACKEND LEFT (xtensa). Two defects of one shape -- an optimisation living only in the x86-64 emitter with every other backend routed to a correct-but-quadratic shared path -- and the one this title names was NOT the one that mattered. (a) FIXED in the runtime, so ALL SIX targets get it: PXXStrSetLen always reallocated and copied, so `SetLength(s, Length(s)+1)` copied the whole string per call; AppendChar in lexer.inc does exactly that per character, which made the COMPILER'S OWN string building O(n^2) everywhere but x86-64. It now grows in place when sole-owner and APPENDABLE with capacity, and over-allocates 2x only when an existing string grows. (b) FIXED on i386, arm32, aarch64 and riscv32: IRIsSelfStrAppend is forwarded in compiler.pas and each backend emits a 2-argument call to the new runtime wrappers PXXStrAppendStr/Char. XTENSA STILL TAKES THE CONCAT PATH -- an arm was written, crashed on a local as well as a global, and was REMOVED rather than shipped; xtensa wants it most because there the quadratic path is functional rather than slow. ACCEPTANCE: the i386-hosted compiler now builds compiler.pas natively (rc=0) and reaches a byte-identical self-host fixedpoint, which it has never done; arenas 13-then-SIGSEGV -> 4, matching x86-64. NOT a 32-bit bug -- aarch64 is 64-bit and was equally quadratic."
 ---
 
 # The in-place string append is x86-64 only, so every other backend is quadratic
@@ -116,18 +116,39 @@ string grows -- a first `SetLength` or a shrink still allocates exactly.
 | idiom, 20000 iterations | x86_64 | i386 | arm32 | aarch64 | riscv32 |
 | --- | --- | --- | --- | --- | --- |
 | `SetLength(s, n+1)` | 16 | 12 | 12 | 10 | 12 |
-| `s := s + 'x'` | 10 | 10 | 16 | **19780** | **19780** |
+| `s := s + 'x'` | 16 | 16 | 16 | 16 | 16 |
+
+(Final, after all four backend arms landed. xtensa is not in the table because
+its integer-printing bug makes the census unreadable there; measured instead by
+comparing lengths and characters, and both loops are correct on it.)
 
 Semantics checked as well as cost: grow, shrink, regrow-with-zero-fill, and
 shrink of a static literal, all correct on both hosts.
 
-### Still open
+### Still open — xtensa only, and it was attempted
 
-`s := s + x` on **aarch64, riscv32 and xtensa**. Each needs the ~20-line arm
-i386 and arm32 now have: call `IRIsSelfStrAppend`, then emit a 2-argument call
-to `PXXStrAppendStr`/`PXXStrAppendChar` with the slot address. No new runtime
-work -- the wrappers exist and are target-independent. **xtensa is the one that
-matters most** (frankS, above): there this idiom is functional, not merely slow.
+aarch64 and riscv32 landed the same ~20-line arm as i386 and arm32.
+
+**xtensa was written and then removed rather than shipped.** The arm compiled
+and died with an illegal instruction on `s := s + 'b'` for a LOCAL as well as a
+global, where the concat path is correct. What was tried, for whoever picks it
+up: CALL0 puts arg0 in a2 and arg1 in a3, so the emitter did
+`IREmitNodeXtensa(rhs)` (a2 = value), `mov a3, a2`,
+`EmitSlotAddrXtensa(a2, sym)`, then `EmitCallProc` -- with the extra
+`mov a10,a2 / mov a11,a3` under the WINDOWED ABI. Both address helpers
+(`EmitFrameAddrXtensa`, `EmitLoadGlobAddrXtensa`) write only their `rd`, so a3
+surviving them was checked and is not the hole. The neighbouring concat path
+uses `XtensaPushA2` to spill rather than holding a value in a3 across a
+sequence, which is the first thing to try.
+
+**Debugging xtensa is unusually expensive right now** and that is worth knowing
+before starting: `WriteLn` of an Integer dies with SIGILL there, which
+confounded three of my probes before I noticed, so any xtensa test must report
+through string literals only. See
+`bug-a-an-int64-multiply-dies-with-an-illegal-instruction-on-xtensa`.
+
+xtensa DOES get fix (a), the one that mattered for memory: its `SetLength` loop
+is now geometric like everyone else's.
 
 ## Fix direction for what remains
 

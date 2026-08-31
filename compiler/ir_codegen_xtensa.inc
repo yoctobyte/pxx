@@ -1600,6 +1600,18 @@ begin
         end;
         if Syms[si].TypeKind = tyAnsiString then
         begin
+          { NO in-place `s := s + x` arm here yet, deliberately, and this comment
+            is the record of an attempt that did not work rather than of an
+            oversight. i386, arm32, aarch64 and riscv32 all call
+            IRIsSelfStrAppend here and emit a 2-argument call to
+            PXXStrAppendStr/Char; the xtensa version of that (a2 = &slot,
+            a3 = value, CALL0) compiled but died with an illegal instruction on
+            `s := s + 'b'` for a LOCAL as well as a global, where the concat
+            path below is correct. Not shipped in that state.
+            bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
+            carries what was tried. This target wants it MOST -- on ESP the
+            quadratic path is functional, not merely slow -- so it is worth
+            someone who can debug xtensa codegen picking it up. }
           { Managed-string assignment: build the new handle in a2, then publish
             into the slot (DecRef old). Mirrors i386/riscv32. }
           EmitStrHandleForStoreXtensa(IRB[node]);

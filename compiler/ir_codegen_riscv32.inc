@@ -1345,6 +1345,25 @@ begin
   EmitI32($00000073);                                { ecall }
 end;
 
+{ `s := s + x` appended into s's own block rather than built fresh from both
+  halves. Shared recogniser (IRIsSelfStrAppend, forwarded in compiler.pas); the
+  right operand's unpacking is in the runtime, so this is an ordinary 2-argument
+  call: a0 = address of s's slot, a1 = the handle or character code. The value
+  moves to a1 FIRST -- EmitSlotAddrRISCV32 writes a0 and would clobber it. }
+procedure EmitAnsiStrAppendToSymRISCV32(symIdx, rhs: Integer);
+var procIdx: Integer;
+begin
+  IREmitNodeRISCV32(rhs);                   { a0 = handle, or char code }
+  rv32_addi(reg_a1, reg_a0, 0);             { a1 = arg1 }
+  EmitSlotAddrRISCV32(reg_a0, symIdx);      { a0 = arg0 = &slot }
+  if IntToTypeKind(IRTk[rhs]) = tyChar then
+    procIdx := FindProc('PXXStrAppendChar')
+  else
+    procIdx := FindProc('PXXStrAppendStr');
+  if procIdx < 0 then Error('compiler error: PXXStrAppendStr/Char not found in builtin unit');
+  EmitCallProc(procIdx);
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
@@ -1510,6 +1529,16 @@ begin
           { Managed-string assignment: build the new handle in a0, then publish
             into the slot (DecRef old). Mirrors i386. }
           valNode := IRB[node];
+          { `s := s + x`: append in place; the helper does the whole slot update,
+            so none of the retain/release below runs. tyString is recognised too
+            but stays on the concat path -- it has no runtime wrapper yet. }
+          if IRIsSelfStrAppend(si, valNode) and
+             ((IntToTypeKind(IRTk[IRB[valNode]]) = tyAnsiString) or
+              (IntToTypeKind(IRTk[IRB[valNode]]) = tyChar)) then
+          begin
+            EmitAnsiStrAppendToSymRISCV32(si, IRB[valNode]);
+            Exit;
+          end;
           if IRKind[valNode] = IR_CONST_STR then
           begin
             sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);

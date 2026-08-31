@@ -4222,9 +4222,10 @@ end;
 procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
 var
   oldData, newBase, newData: Pointer;
-  oldLen, copyLen, i: Int64;
+  oldLen, copyLen, i, want: Int64;
 begin
   if strSlot = nil then Exit;
+  oldLen := 0;   { read below only when oldData <> nil; do not rely on short-circuit }
   oldData := Pointer(PWord(strSlot)^);
 
 {$ifdef PXX_NILPY_STR}
@@ -4279,10 +4280,19 @@ begin
     -- the append-loop signature. A first SetLength (oldData = nil) and a shrink
     allocate exactly, so a one-shot `SetLength(buf, FileSize)` does not quietly
     ask for twice the file. }
-  if (oldData <> nil) and (newLen > PWord(Int64(oldData) - 8)^) then
-    newBase := PXXAlloc((newLen + PXX_HDR_SIZE + 1) * 2, 8)
-  else
-    newBase := PXXAlloc(newLen + PXX_HDR_SIZE + 1, 8);
+  { Doubling by ADDITION, not `* 2`, and that is not a style choice: an Int64
+    `a * 2` dies with an illegal instruction on xtensa, while add and subtract
+    are correct, and it does so on the PINNED compiler too and on no other
+    target -- so it is not something this change introduced, it is something
+    this change was the first code here to step on.
+    bug-a-an-int64-multiply-dies-with-an-illegal-instruction-on-xtensa has the
+    five-line repro, and deliberately does NOT yet claim whether the defect is
+    in our codegen or in the emulated core. Restore the multiply if it turns out
+    there is nothing to fix; the two forms are exactly equal, so waiting to find
+    out costs nothing. }
+  want := newLen + PXX_HDR_SIZE + 1;
+  if (oldData <> nil) and (newLen > oldLen) then want := want + want;
+  newBase := PXXAlloc(want, 8);
   PXXHdrInit(Int64(newBase));
   PWord(Int64(newBase) + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
   PWord(Int64(newBase) + PXX_HDR_RC)^ := 1;        { refcount }
@@ -4292,7 +4302,6 @@ begin
   copyLen := 0;
   if oldData <> nil then
   begin
-    oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
     { SetLength(s, n) on a string, on every target — the site this ticket's
