@@ -148,13 +148,27 @@ Six of the 14 have now been checked — this ticket's original two
 **all six were patch-id false positives from rebasing.** The residual is an
 artifact of `git cherry` matching by patch-id, exactly as this ticket predicted.
 
-## What survives, and why it stays
+## Deleted 2026-08-31, on the owner's instruction
 
-`8937ef1f7` now exists **only** in frank-rust's local `rust` branch, pointing at
-a deleted upstream. **Leave it.** It costs nothing, and deleting it is a one-way
-door on the last copy of something that six probes suggest is empty — and "six
-probes suggest" is not a basis for an irreversible act. If someone actively wants
-it gone, that is the owner's call, not a cleanup.
+`8937ef1f7` existed only in frank-rust's local `rust` branch, pointing at a
+deleted upstream. Asked, and the owner's call was to delete it. Done:
+
+- `git branch -D rust` in `~/frank-rust` (was `8937ef1f7`, tip dated
+  2026-08-29 23:01). frank-rust was on `master`, so the branch was not checked
+  out. **Recoverable from that checkout's reflog for ~90 days** if the audit
+  above ever turns out to have missed something.
+- `git remote prune origin` in the **nine** checkouts still holding a stale
+  `refs/remotes/origin/rust`: frankA, frankB, frankC, frank-coordinator, frankD,
+  frank-optimize, frank-rust, frankS, frankwasm.
+
+Verified after: no `origin/rust` and no local `rust` branch anywhere under
+`~/frank*`.
+
+**The nine is the point.** The stale ref was not one checkout's untidiness — it
+was fleet-wide, so *any* agent asking `git branch -vv` or
+`rev-list --count origin/rust..` would have been told the branch was healthy, for
+two days after it was deleted. That is why the ref itself had to be pruned and
+not merely ignored.
 
 ## An instrument that lied, in this ticket's own house
 
