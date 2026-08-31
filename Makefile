@@ -4007,6 +4007,13 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_tslock_on26 "$$($(TESTTMP)/test_tslock_on26)" "$$(printf 'hardlock\nno-softlock')"
 	./$(COMPILER) --threadsafe test/test_thread_clone.pas $(TESTTMP)/test_thread_clone26
 	tools/expect_same.sh test_thread_clone26 "$$($(TESTTMP)/test_thread_clone26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nTHREADS OK')"
+	# Signal delivery under --threadsafe (feature-signal-siginfo-ucontext item 2):
+	# disposition is process-wide, the mask is per-thread and inherited across
+	# clone, and __pxxSigNum is correct from a NON-MAIN thread. The pending check
+	# is a rt_sigpending call and not a counter, because the counter version was a
+	# cross-thread read that raced and passed under its own control.
+	./$(COMPILER) --threadsafe test/test_signal_threads.pas $(TESTTMP)/test_signal_threads26
+	tools/expect_same.sh test_signal_threads26 "$$($(TESTTMP)/test_signal_threads26)" "$$(printf 'inherited-block=TRUE\npending-while-blocked=TRUE\nhits-before-unblock=0\nran-on-worker=TRUE\nran-on-main=FALSE\nsignum-from-worker=10\ntotal-hits=1')"
 	./$(COMPILER) --threadsafe test/test_palthread.pas $(TESTTMP)/test_palthread26
 	tools/expect_same.sh test_palthread26 "$$($(TESTTMP)/test_palthread26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_atomic_counter.pas $(TESTTMP)/test_atomic_counter26

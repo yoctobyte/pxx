@@ -9,7 +9,7 @@ owner: frankA
 # Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** working (frankA). Items 1 (SA_SIGINFO/ucontext) and 3 (sigaltstack) DONE. Item 4's COMPILER half DONE on all five hosted targets as of 2026-08-31 — `__pxxSigNum` parks on x86-64/i386/aarch64/arm32/riscv32 and the x86-64-only refusal is gone; its RTL half is Track B's [[feature-b-fpc-signal-compat-unit]]. **Items 2 (`--threadsafe` masks) and 5 (SIGPIPE policy) are all that is left here.** (`progress.sh claim` overwrote this line with the bare word `working` on 2026-08-31; restored, because this ticket has no frontmatter `summary` and this line is what a reader routes on.)
+- **Status:** working (frankA). Items 1 (SA_SIGINFO/ucontext) and 3 (sigaltstack) DONE. Item 4's COMPILER half DONE on all five hosted targets as of 2026-08-31 — `__pxxSigNum` parks on x86-64/i386/aarch64/arm32/riscv32 and the x86-64-only refusal is gone; its RTL half is Track B's [[feature-b-fpc-signal-compat-unit]]. Item 2 (`--threadsafe`) is **defined and tested** as of 2026-08-31, and the definition turned up a defect filed separately ([[bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads]]). **Item 5 (SIGPIPE policy) is all that is left here, and it is deliberately parked until the net library.** (`progress.sh claim` overwrote this line with the bare word `working` on 2026-08-31; restored, because this ticket has no frontmatter `summary` and this line is what a reader routes on.)
 - **Opened:** 2026-07-16, split out of [[feature-signal-handlers]] once the base
   slice (libc-free `rt_sigaction` handler install + `SetSignalHandler`) shipped
   and pinned on all five hosted targets (x86-64 b336, aarch64 b370,
@@ -638,3 +638,58 @@ failure mode is indistinguishable from its subject's is not a test.
 Items **2** (`--threadsafe` masks: which thread runs the handler, mask
 inheritance under `clone(2)`) and **5** (SIGPIPE policy, parked until the net
 library). Nothing else.
+
+## Progress — 2026-08-31: item 2 DEFINED and TESTED (`--threadsafe`)
+
+Three properties, each measured before being written down, and each **watched
+failing** under a source-level control:
+
+1. **The disposition is process-wide.** `SetSignalHandler` called on main covers
+   every thread — it is one `rt_sigaction` against a process-wide table, and pxx
+   does nothing per-thread because it does not need to. A signal directed at a
+   worker runs the handler **on that worker**.
+2. **The mask is per-thread and inherited across `clone(2)`.** A worker cloned
+   from a main blocking SIGUSR1 starts blocking it; the signal stays *pending on
+   that thread*; unblocking it in the worker delivers it there, and main's own
+   mask is untouched.
+3. **`__pxxSigNum` is correct from a non-main thread** — it reads the
+   process-wide slot the dispatch stub wrote, on whichever thread the kernel
+   picked.
+
+Nothing needed changing for any of the three. `test/test_signal_threads.pas`
+pins them, wired beside the other `--threadsafe` tests in `make test`. It is
+x86-64-only because **no** thread test in this repo runs cross-target
+(test_thread_clone, test_palthread, test_mutex, test_tthread) — 1 and 2 are the
+kernel's behaviour and identical on every Linux port, and the cross suites cover
+property 3's ground with `test_signal_num` and `test_signal_bss_alias`.
+
+### The control found a racing assertion before it shipped
+
+The first version had main read the hit counter immediately after the `tkill` to
+show the signal had not been delivered. Under the control that should have
+broken it — a worker that unblocks *before* the tkill — it **still printed the
+passing value**, because that read is cross-thread and simply happened before
+the worker ran its handler. Replaced with an `rt_sigpending` call made **on the
+worker itself**: a direct question to the kernel, ordered against that thread's
+own handler, and it fails correctly under the control.
+
+### And the part of the "definition" that is a defect
+
+The parked slots are **one process-wide copy each**, so two threads taking
+signals concurrently clobber each other:
+
+```
+two threads, 200000 self-directed signals each:  mismatch=91104  (~23%)
+one thread,  200000 signals, same binary:        mismatch=0
+```
+
+`__pxxSigNum` reads a number belonging to the *other* thread's signal, roughly
+one time in four. This silently breaks item 4's whole purpose — an
+FPC-compatible `Signal(sig, handler)` dispatching on that number. Filed with the
+measurement and the design fork (always-TLS vs TLS-under-`--threadsafe`) as
+[[bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads]],
+which also flags that the single shared alt stack has the same shape and was not
+measured.
+
+It is filed rather than fixed here because the fix is a TLS-layout decision, not
+a signal one.
