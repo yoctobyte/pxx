@@ -789,6 +789,40 @@ control was informative *precisely by moving when it could not have been
 affected*. Same corollary too: **run it in the same command as the treatment**,
 or the temptation is to skip it exactly when the treatment already looks clean.
 
+### The polarity asymmetry: a guard stuck on PASS gets caught. One stuck on FAIL may not.
+
+frankwasm's, 2026-08-31, and it changes which control you must remember to write.
+
+Both halves were measured the same night, on the same fleet:
+
+| | | |
+| --- | --- | --- |
+| the saturation check | could only print **PASS** | found in hours, because someone went looking |
+| `trackt.py health` off the watcher host | could only print **DOWN** | survived **two days** |
+
+> A guard that cannot fail gets caught eventually, because it lets bad things
+> through. A guard that cannot **pass** may never get caught, because **its
+> damage looks like diligence.**
+
+A check stuck on the conservative answer produces no visible fault. It produces
+**more testing** — which reads as prudence, so nobody ever has a complaint to
+file. `health` reporting DOWN licensed every dev agent on the box to run a
+ten-minute full gate under CLAUDE.md's own exception, and the cost landed as
+slow minutes that everyone attributed to a busy machine. There was no symptom to
+report, because the symptom *was* the recommended behaviour.
+
+**The consequence for the positive-control rule is concrete, and it is the whole
+value of the observation: the control you naturally write is one the guard must
+REJECT**, because rejection is the direction you are afraid of. The
+stuck-conservative failure needs a control in the **other** direction — a case
+the guard **must accept** — and that is the one nobody thinks to write.
+
+So: **every guard needs both arms asserted.** One case it must reject, one it
+must accept. `tools/trackt_remote_health_devtest.py` carries the accept-side one
+(*"a FRESH archive and no local daemon is REMOTE, not DOWN"*), and it is stated
+here as doctrine rather than left as an artefact of somebody having been careful
+on the night.
+
 **The consequence for anything with a per-change value bar** — the O charter's
 promise gate is the live example, and this is a note for whoever owns it, not a
 ruling: if the floor on this hardware is ~6% and a rule also forbids batching
@@ -973,6 +1007,9 @@ name.
 - ``## A ticket's prescription is a hypothesis, and it can rule out the answer``
   -- when a fix does not take, re-read what the ticket EXCLUDED
 - `## A comment is an unverified claim, and tickets inherit it`
+- `### The polarity asymmetry: a guard stuck on PASS gets caught. One stuck on
+  FAIL may not.` -- the conservative failure produces MORE testing, which reads
+  as diligence, so nobody files it; assert the ACCEPT arm too
 - `## A CENSUS is a predicate, not a number` -- six counts of the same thing,
   13 to 45, all correct about what they measured; relay the predicate and the
   command, never the number

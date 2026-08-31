@@ -59,7 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
-- `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A] — blocked-by: bug-t-the-sqlite-thread-runner-is-the-one-qemu-runner-with-no-load-factor
+- `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
 ## Ready — top 30 of 433, ranked
 
