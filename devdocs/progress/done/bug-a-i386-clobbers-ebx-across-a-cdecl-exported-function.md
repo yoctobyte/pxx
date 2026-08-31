@@ -175,4 +175,4 @@ original "ESI and EDI ARE preserved". Keep 4c's body rich.
   TARGET_I386` arm.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 7a30658e7.
