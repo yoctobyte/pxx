@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:11 backlog:398 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:129 done:2940 rejected:68`
+`working:4 unfinished:28 blocked:11 backlog:398 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:130 done:2940 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -61,7 +61,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 430, ranked
 
+- `[p 80] [A]` feature-a-a-general-x86-64-relocatable-object-writer
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
+- `[p 80] [A]` meta-a-pxx-produces-linkable-code
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [C]` feature-c-corpus-busybox-multi-applet
@@ -80,7 +82,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
-- `[p 65] [U]` decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
 - `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -90,6 +91,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies (unblocks 1)
-- `[p 60] [A]` bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer
 
 _400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
