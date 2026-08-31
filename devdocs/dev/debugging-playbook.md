@@ -457,6 +457,32 @@ states its own blind spot cannot be mistaken for one that has none.**
    question that has no direction to get wrong.** `git show <sha>:<file>` and
    read whether the code is in it. Ancestry infers; the artifact states.
 
+   **And the sub-case that gets reported wrong, MEASURED — the tool is not the
+   problem, the idiom is.** The coordinator hit `--is-ancestor` against a sha
+   lifted from a commit subject that does not resolve, got a non-zero exit, and
+   read it as "not an ancestor". The natural conclusion is that `--is-ancestor`
+   cannot tell a missing object from a real non-ancestor. **It can:**
+
+   | | exit | stderr |
+   | --- | --- | --- |
+   | real commit, not an ancestor | **1** | silent |
+   | not an object at all | **128** | `fatal: Not a valid object name` |
+   | `git show <sha>:<file>`, bogus sha | **128** | `fatal: invalid object name` |
+   | `git show <sha>:<file>`, real sha | **0** | — |
+
+   The distinction is there and both idioms anyone actually writes destroy it:
+   `if ! git merge-base ...` and `git merge-base ... && x || y` **both put 1 and
+   128 down the same branch**, and the `2>/dev/null` or the pipe that usually
+   accompanies them eats the one part that was talking. So do not test an
+   ancestry query with `!` or `||`; **capture `$?` and branch on 1 versus 128.**
+
+   Same trap one step further out, and it happened *while measuring this table*:
+   `git show <sha>:<file> 2>&1 | head -2; echo $?` printed **0** for a bogus
+   sha, because `$?` was `head`'s. A pipe replaces the exit code you are asking
+   about with the last stage's. The artifact check is still the better
+   instrument — its failure is `invalid object name`, a different KIND of answer
+   rather than a plausible one — but it is only better if you let it speak.
+
 ### The habit that defeats all five
 
 **Say out loud what question the instrument actually answers, then check it is
