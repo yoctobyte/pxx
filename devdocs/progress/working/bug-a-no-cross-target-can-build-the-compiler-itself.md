@@ -1141,3 +1141,50 @@ out rather than extending this ticket further.
 with the `-strace` counts, the guest-core registers, and the two separable
 defects it contains (the arena appetite, and `PXXAlloc` not checking the `mmap`
 return). Nothing further about it should be appended here.
+
+## Addendum (frankS, 2026-08-31): the stale i386 sub-question is the SAME defect — and it settles the arena ticket's target scope
+
+Re-measured the one claim this ticket still carried unverified, now that
+`5454ef402` has landed. It reproduces, and then it turns out not to be this
+ticket's at all.
+
+**The i386-hosted compiler still faults building `compiler.pas` — 35.9s, natively,
+no emulator.** That matches the 2026-08-30 reading ("~30s") closely enough to be
+the same fault, so the stale claim was true; it just had no diagnosis.
+
+`strace -e trace=mmap2` gives it in one run:
+
+```
+15 x mmap2(NULL, 268435456, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS)
+   14 succeed: 0x1634b000, 0x2634b000, ... 0xe634b000  (exactly 0x10000000 apart)
+    1 fails:   -1 ENOMEM
+```
+
+**Fourteen arenas succeed and the fifteenth returns ENOMEM — the same count, the
+same size, the same unchecked-return death as frankA measured on arm32.** So this
+is [[bug-a-the-arm32-hosted-compiler-wants-4x-the-arenas-and-dies-unchecked-at-enomem]],
+not a separate i386 defect, and this ticket's last open sub-question closes by
+being reassigned rather than by being answered.
+
+**Three consequences, and the second is the one that matters for that ticket's
+title.**
+
+1. **It is not arm32.** i386 is the second 32-bit host to show it, so the appetite
+   is 32-bit-wide. That ticket is named for arm32 and should not be.
+2. **There is no emulator anywhere in this measurement.** i386 ELF executes
+   natively on this box, so qemu cannot be a factor in the arena exhaustion at
+   all — settled by execution rather than by argument, and without the arm32
+   guest-core reasoning needing to carry it.
+3. **The address space is genuinely full of arenas.** The fourteen are contiguous
+   at exactly 256 MiB spacing from `0x1634b000` to `0xf634b000` — ~3.6 GB of a
+   32-bit space. So on the map-versus-appetite question, the map is dense: this
+   is not fragmentation leaving usable holes. Whether the arenas are full of
+   *live* data is frankA's `bump` column, which this does not answer.
+
+**Sibling check before closing, per CLAUDE.md.** `5454ef402` fixed arm32, riscv32
+and xtensa. aarch64 already carried the guard on **both** directions
+(`EmitLoadVarA64Dest` as well as `EmitStoreVarA64`; the load-side one is spelled
+across several lines and a one-line grep misses it). x86-64 and i386 share an
+emitter with no `EmitLoadVar`/`TypeSize` shape at all — they handle dynarray slots
+at ~14 distinct sites explicitly — so the defect has no sibling there. **All
+backends with the shape now have the guard.**
