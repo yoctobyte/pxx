@@ -1,6 +1,6 @@
 # `devdocs/dev/` — three kinds of file in one directory
 
-52 files, three categories, and **the directory does not encode which is which**.
+58 files, three categories, and **the directory does not encode which is which**.
 That matters because they have opposite editing rules, and getting it wrong in
 one direction falsifies history.
 
@@ -19,7 +19,7 @@ CLAUDE.md is the authority over all of them: *"If a live reference doc
 not the loop."* And CLAUDE.md itself is the owner's — flag a contradiction,
 never edit it.
 
-## 2. SESSION RECORDS — never edit, however wrong
+## 2. SESSION RECORDS AND ARCHIVES — never edit, however wrong
 
 A record of what one session actually ran, on the day it ran. **Several contain
 figures and gate lines that are false today, and that is correct behaviour for a
@@ -36,7 +36,39 @@ handover-2026-07-18-evening-o3-arc.md      next-session-nilpy-bughunt-prompt.md
 next-session-pal-prompt.md                 next-session-promo-surface-prompt.md
 ```
 
-Enumerate them with: `ls devdocs/dev/ | grep -E '^(handover-|next-session-)'`
+Enumerate **those** with: `ls devdocs/dev/ | grep -E '^(handover-|next-session-)'` —
+and note that the pattern does not cover the block below, which is the whole
+reason both blocks are written out here rather than derived.
+
+**2b. ARCHIVES — same rule, different reason.**
+
+Not a record of a session. These are **verbatim copies of a live doc as it stood
+before it was cut down**, kept so nothing was lost when the handbooks were
+compressed on 2026-08-31. They are excluded from the audit for the same reason
+records are — correcting one destroys the thing it exists to preserve — but the
+justification is different: a record is history, an archive is a *deleted
+previous version*. The live successor is the file to fix.
+
+```
+handbook-rationale.md
+session-roster-history.md
+```
+
+`handbook-rationale.md` (74KB) holds the evidence, incidents and worked
+reasoning that CLAUDE.md carried until 2026-08-31; its live successor is
+CLAUDE.md itself, now rules only. `session-roster-history.md` (1.5MB) holds the
+coordinator's 322 dated log sections — do not read it, `grep '^## '` it; its
+live successor is `session-roster.md`.
+
+**Those two successor names are deliberately in prose and not in the block
+above.** The block is machine-read: every filename inside it is excluded from
+the audit, so naming a live file there would silently drop it — which is the
+exact defect `tools/docaudit.py` documents at the top of its own source, and
+which a positive control caught here on the first attempt.
+
+**Neither is reachable by a filename pattern**, which is the point section 3
+makes about `*-prompt.md` arriving one category early: the exclusion list is a
+list because no rule generates it.
 
 ## 3. CARRIED PROMPTS — a third category, and the reason a filename pattern is not enough
 
@@ -55,8 +87,12 @@ reference** — CLAUDE.md:567 cites it in the Platonic-code rule — while four
 carried prompt. A reader inferring the rule from the suffix gets it wrong in
 both directions.
 
-`session-roster.md` is also live, and is the one file here that is *supposed* to
-be rewritten continuously: it is the coordinator's durable state.
+`session-roster.md` is also live, and is the coordinator's durable state. It
+used to be an append-only log and grew to 1.5MB — ~384k tokens, read at the
+start of every coordinator session. On 2026-08-31 the log moved to
+`session-roster-history.md` and the live file was cut to the current role plus
+the operational facts that outlived their day. **Keep it that way: it is
+rewritten, not appended to.**
 
 ## 4. Obligations parked in prose — where this directory rots
 
