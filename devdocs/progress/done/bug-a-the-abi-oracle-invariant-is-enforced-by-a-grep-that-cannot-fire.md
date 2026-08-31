@@ -233,4 +233,4 @@ the funnel above is the argument for building it around the question rather than
 the identifier.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit bd909ff64.
