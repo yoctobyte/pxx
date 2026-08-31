@@ -3,8 +3,8 @@ track: U
 prio: 50
 type: decide
 blocked-by: []
-summary: "`uses gtk` maps to stem gtk-x11-2.0 (GTK 2) while everything else in the tree targets GTK 3 — lib/pcl/gtk3.pas, gtk3widgets.pas and gtk3gl.pas all bind libgtk-3.so.0, and `uses gtk3_c` maps to stem gtk-3. The four test_c_gtk*.pas tests use the legacy alias, so a box must install GTK 2 to make them green. Fork: retarget the alias, rename the tests, or keep GTK 2 deliberately."
-status: backlog
+summary: "RULED 2026-08-31 with its sibling decide-which-gtk-a-bare-gtk-gtk-h-means: the `uses gtk` alias moves to GTK 3. The owner named the deeper defect -- `gtk` and `gtk3` are not parallel names: `uses gtk` and `uses gtk3_c` are C header imports resolved through the alias map, while lib/pcl/gtk3.pas is a PASCAL UNIT, so `uses gtk3` finds a source file and not an alias. Renaming without fixing that just moves the confusion. Three files flip from GTK 2 to GTK 3: test/test_c_gtk.pas, test_c_gtk_call.pas, test_c_gtk_types.pas -- nothing else uses the alias."
+status: decided
 owner: ""
 ---
 
@@ -108,3 +108,69 @@ write `uses gtk` expecting GTK 2, given `lib/pcl/gtk3*.pas` binds
 `libgtk-3.so.0` and the project has targeted GTK 3 throughout?
 
 -- recorded by frank-coordinator from Track T's disclosure
+
+---
+
+# RULED 2026-08-31 — GTK 3 is the default
+
+Owner: *"i think gtk3 is a sane default in 2026."* Everything in the tree already
+targets it — `lib/pcl/gtk3.pas`, `gtk3widgets.pas`, `gtk3gl.pas` all bind
+`libgtk-3.so.0`. GTK 2 is the anomaly, not the baseline.
+
+## The change is four literals, not a system
+
+- `compiler/cpreproc.inc:2219` and `:2220` — the two default C include roots,
+  hardcoded to `/usr/include/gtk-2.0/` and the arch-specific
+  `gtk-2.0/include/`.
+- `compiler/pasparser_proc.inc:3105` — header paths built from
+  `/usr/include/gtk-2.0/gtk/`.
+- `compiler/pasparser_proc.inc:2834-2836` — the alias map: `gtk3_c` -> stem
+  `gtk-3` -> `libgtk-3.so.0`; `gtk` -> stem `gtk-x11-2.0` ->
+  `libgtk-x11-2.0.so.0`.
+
+## THE NAMING IS THE REAL DEFECT — owner, and it is sharper than "rename it"
+
+*"you said 'uses gtk'.. but, logically, that ought to be 'uses gtk3'."*
+
+**`gtk` and `gtk3` are not parallel names — they live in different namespaces**,
+which is why this reads wrong and keeps reading wrong:
+
+- `uses gtk3_c` is a **C header import**, resolved through the alias map.
+- `uses gtk` is *also* a C header import, resolved through the same map — to
+  **GTK 2**.
+- `lib/pcl/gtk3.pas` is a **Pascal unit** — a real file holding `SignalConnect`.
+  `uses gtk3` finds that file, not an alias.
+
+So the two spellings a reader would take as "version 2 vs version 3 of the same
+thing" are actually "a C library alias" and "a Pascal source file". Renaming
+without fixing that just moves the confusion.
+
+**Blast radius, and it is small and visible:** three files use `uses gtk` and
+flip from GTK 2 to GTK 3 — `test/test_c_gtk.pas`, `test_c_gtk_call.pas`,
+`test_c_gtk_types.pas`. Nothing else in the tree does.
+
+## NilPy's tk is NOT affected — checked, not assumed
+
+`lib/pcl/tk.pas` is a thin **Tcl/Tk 8.6** embed: it links the system Tcl/Tk
+sonames directly via `external`, *"needs no -dev headers and no change to the
+compiler's C-import registry"*, and the whole GUI is command strings through
+`TkEval`. It never touches GTK at any version. The tkinter mimicry question is
+orthogonal to this ticket.
+
+## What is installed here, for whoever implements it
+
+plexus has headers for `gtk-2.0` and `gtk-3.0`, and runtime libs for **2, 3 and
+4**. There is **no `/usr/include/gtk-4.0`** — GTK 4's library is present, its
+headers are not, so GTK 4 is unreachable until `libgtk-4-dev` is installed.
+
+## Version selection is a SEPARATE, SCOPED feature
+
+The owner asked for 2/3/4 selectable, defaulting to 3. The resolver half is
+cheap — one variable driving the four literals above. **The widgetset half is
+not**, and must not be promised with it: `gtk3widgets.pas` and friends bind GTK 3
+specifically, and GTK 4 reshaped the container, event and drawing models. So
+selecting a version buys the right headers and the right soname; it does **not**
+make the PCL widget layer work on 2 or 4. Filed as
+[[feature-a-gtk-version-selection-at-the-header-and-soname-layer]].
+
+*Ruled 2026-08-31 by the owner; mechanism and tk backend verified by frank-user.*
