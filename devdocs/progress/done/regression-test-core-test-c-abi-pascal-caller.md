@@ -44,3 +44,6 @@ expect_same: MISMATCH [test_c_abi_pascal_caller26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-31 — auto-closed by the seven watcher: `test-core#src:test/test_c_abi_pascal_caller.pas` passes at 1c963c732e1b (tier native); it was red at 0fd9454b879d. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
