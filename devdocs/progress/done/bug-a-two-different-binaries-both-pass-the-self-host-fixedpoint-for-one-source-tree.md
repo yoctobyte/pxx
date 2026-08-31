@@ -168,4 +168,4 @@ a real baseline now (determinism 3/3 at a fixed commit, seed-independent), which
 is a much sharper starting point than the original observation.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 9d867ee4d.
