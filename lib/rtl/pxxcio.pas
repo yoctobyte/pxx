@@ -140,6 +140,11 @@ function __pxx_utimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
 { fills two Int64 out-slots the C gettimeofday veneer narrows into struct timeval }
 function __pxx_realtime(secOut, usecOut: Pointer): Integer;
 function __pxx_clock_gettime(clkId: Integer; secOut, nsecOut: Pointer): Integer;
+{ getdents64: fills the caller's buffer with kernel linux_dirent64 records and
+  returns the byte count, 0 at end of directory, or -errno. crtl's opendir /
+  readdir sit directly on this — the record layout it returns IS what
+  <dirent.h> declares, so nothing translates. }
+function __pxx_getdents64(fd: Integer; buf: Pointer; len: Integer): Int64;
 
 implementation
 
@@ -642,6 +647,15 @@ end;
 function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 begin
   Result := PalReadlink(path, buf, bufsz);
+end;
+
+{ The PAL has had PalGetDents64 all along; crtl was about to ship an ENOSYS
+  opendir on the assumption that it did not. Same trap PalIoctl's note records
+  a few hundred lines below: measure the PAL before believing a scoping line
+  that says an entry is missing. }
+function __pxx_getdents64(fd: Integer; buf: Pointer; len: Integer): Int64;
+begin
+  Result := PalGetDents64(fd, buf, len);
 end;
 
 function __pxx_mkdir(path: PChar; mode: Integer): Integer;

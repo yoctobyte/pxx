@@ -181,3 +181,56 @@ this ticket was filed to do: compile the TU set, not fight the preprocessor.
 unexpected would be more interesting, not less."* It was the preprocessor twice
 over — once as the reported symptom and once as the real cause, which was a
 different mechanism in the same file.
+
+## 2026-08-31 — the 20-TU closure is down to TWO undefined, both busybox's own
+
+`app.c` (coreutils/cat.c + 19 libbb TUs + a `main` calling `cat_main`) now
+compiles with:
+
+```
+warning: crtl does not define string_array_len, bb_show_usage
+```
+
+`string_array_len` is `libbb/compare_string_array.c`, a TU the real build links
+and this closure has simply not added yet. `bb_show_usage` is in
+`libbb/appletlib.c`, which the closure excludes on purpose — it carries the
+applet table, and that table names `ash_main`.
+
+Everything else on that list closed this session. **The libc side is now empty.**
+
+### What actually closed it, and neither was a missing libc function
+
+`opendir/readdir/closedir/rewinddir/fdopendir/dirfd` are real over the PAL's
+`PalGetDents64` (`lib/crtl/src/dirent.c`, `__pxx_getdents64` bridged in
+`lib/rtl/pxxcio.pas`), byte-identical to a glibc-built binary of the same probe
+on x86-64 **and** aarch64. The row that earned its own test: without an eager
+first `getdents64`, `opendir()` on a **regular file** succeeded here and failed
+with `ENOTDIR` under glibc — a wrong answer a directory walker reads as an
+empty directory.
+
+The other five — `xatoll`, `xatoull`, `xstrtoll`, `xstrtoull`, `xatou` — were
+never a crtl gap at all. They are busybox's own, defined by
+`libbb/xatonum_template.c`, and **two preprocessor bugs were eating exactly the
+definitions spelled with an empty macro argument**:
+
+1. **C99 6.10.3p4.** `m()` on a macro that *has* parameters supplies **one**
+   argument whose token sequence is empty — not zero arguments. Both argument
+   splitters in `cpreproc.inc` (the expander and the `#if` evaluator) counted
+   zero, leaving the sole parameter **unbound**, so `#define xatou(rest)
+   xatoull##rest` expanded `xatou()` to the literal identifier `xatoullrest`.
+   No diagnostic: a plausible name, a definition that silently went missing,
+   and a call that would have gone to the system libc at run time.
+
+2. **C99 6.10.3.4p2.** Fixing (1) exposed the second. The `int` instantiation
+   spells `#define xstrtou(rest) xstrtou##rest` — a macro expanding to **its own
+   name** — and the rescan-across-the-boundary rule then spliced the parameter
+   list that followed it, turning `unsigned int xstrtou()(const char *n, int b)`
+   into `unsigned int xstrtouconst char *n`. 6.10.3.4p2 says the name of the
+   macro being replaced is not replaced, so the splice must be skipped when the
+   tail name IS this macro. `CAT(A,B)(x)` is unaffected and is a control row:
+   that name came from *pasting*, not from `CAT` itself.
+
+Both were found by *reading the undefined list as evidence rather than as a
+shopping list*. The five names were exactly the five `xxx()` empty-argument
+forms across the instantiations the config reaches, and nothing else — a
+one-to-one match that named the mechanism before any code was read.

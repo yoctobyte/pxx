@@ -11745,6 +11745,33 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_termios_no_tty.c $(TESTTMP)/c_termios26
 	tools/expect_same.sh c_termios26 "$$($(TESTTMP)/c_termios26 < /dev/null)" "$$(printf 'raw iflag: 0\nraw oflag: 4\nraw lflag: 272\nraw cs8: 1 parenb: 0 cread kept: 1 clocal kept: 1\nraw vmin: 1 vtime: 0\nsetospeed: 0\ngetospeed==B9600: 1\nispeed follows ospeed: 1\ncs8 survived: 1\nsetispeed: 0\ngetospeed==B115200: 1\ntcgetattr(pipe): -1 ENOTTY: 1\nVMIN=6 VTIME=5 VINTR=0 VEOF=4')"
+	# Two preprocessor rules with NO diagnostic when wrong, both of which
+	# busybox's xatonum_template.c is written entirely in. (1) 6.10.3p4: `m()`
+	# on a macro that HAS parameters supplies ONE argument that is EMPTY, not
+	# zero arguments -- read as zero, the sole parameter stayed unbound and
+	# `#define pfx(r) base##r` expanded `pfx()` to the literal `baser`, so the
+	# DEFINITION went missing and the call silently went to the system libc.
+	# (2) 6.10.3.4p2: a macro expanding to its OWN name is not re-expanded, so
+	# it must not swallow the following parameter list -- `unsigned f()(const
+	# char *n)` was spliced into `unsigned fconst char *n`. Rows `splice:` are
+	# the CONTROL: a name that came from PASTING must still swallow it.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_cpp_empty_arg_and_self_name.c $(TESTTMP)/c_cpp_emptyarg26
+	tools/expect_same.sh c_cpp_emptyarg26 "$$($(TESTTMP)/c_cpp_emptyarg26)" "$$(printf '1 2 3 4 5\nselfn: 115 15\nsplice: 12 8\nnul: 42\nif nul: yes\nif empty arg: undefined identifier -> 0')"
+	# crtl's <dirent.h> over the PAL's getdents64 -- REAL, not stubs, and every
+	# row a differential against a glibc-built binary of the same file. The row
+	# that earned the file is `notdir`: without an eager first getdents64,
+	# opendir() on a REGULAR FILE succeeded here and failed with ENOTDIR under
+	# glibc -- a wrong answer a directory walker reads as an empty directory. We
+	# do not spell O_DIRECTORY (0200000 on x86, 040000 on the asm-generic
+	# targets) to move that error earlier; the syscall that had to happen anyway
+	# reports it. Byte-identical to the oracle on x86-64 AND aarch64.
+	# d_type is asserted by MEMBERSHIP, not value: a filesystem without it
+	# reports DT_UNKNOWN and both libcs pass that through, while reading the
+	# field at the wrong offset still falls outside the set.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_dirent_walk.c $(TESTTMP)/c_dirent26
+	tools/expect_same.sh c_dirent26 "$$($(TESTTMP)/c_dirent26 $(TESTTMP))" "$$(printf 'opendir: 1\ndirfd>=0: 1\nend errno: 0\ncount: 5\ntypes plausible: 1\ninodes nonzero: 1\n[.][..][alpha][bb][ccc]\nrewind same: 1\nclosedir: 0\nfdopendir: 1\nfdopendir same: 1\nmissing: 1 ENOENT: 1\nnotdir: 1 ENOTDIR: 1\nrmdir: 0')"
 	# crtl's GNU string/stdio extensions, against a glibc-built binary of the
 	# same file. strverscmp is the row set worth reading: a digit run with
 	# LEADING ZEROS is a FRACTIONAL part in glibc and sorts BEFORE one without,

@@ -869,7 +869,16 @@ begin
           argc := 0;
           depth := 0;
           argBase := 16;
-          if (q <= CPExprEnd) and (CPExprText[q] <> ')') then
+          { C99 6.10.3p4: `m()` on a macro that HAS parameters supplies ONE
+            argument whose token sequence is EMPTY -- not zero arguments. Read
+            as zero, the sole parameter stayed UNBOUND, so `#define pfx(r)
+            base##r` expanded `pfx()` to the literal `baser`: a plausible
+            identifier, no diagnostic, and the definition simply went missing.
+            busybox's xatonum_template.c is written entirely in this idiom
+            (`xatou()` -> `xatoull`), which is how five of its symbols were
+            reported as "crtl does not define". }
+          if ((q <= CPExprEnd) and (CPExprText[q] <> ')')) or
+             (CPMParamCount[mi] > 0) then
           begin
             CPArgStart[argBase] := q;
             argc := 1;
@@ -1627,7 +1636,15 @@ begin
           argc := 0;
           depth := 0;
           argBase := (level + 1) * 16;
-          if (q <= last) and (src[q] <> ')') then
+          { C99 6.10.3p4: `m()` on a macro that HAS parameters supplies ONE
+            argument whose token sequence is EMPTY -- not zero arguments. Read
+            as zero, the sole parameter stayed UNBOUND, so `#define pfx(r)
+            base##r` expanded `pfx()` to the literal `baser`: a plausible
+            identifier, no diagnostic, and the definition simply went missing.
+            busybox's xatonum_template.c is written entirely in this idiom
+            (`xatou()` -> `xatoull`), which is how five of its symbols were
+            reported as "crtl does not define". }
+          if ((q <= last) and (src[q] <> ')')) or (CPMParamCount[mi] > 0) then
           begin
             CPArgStart[argBase] := q;
             argc := 1;
@@ -1691,13 +1708,25 @@ begin
               source token is '(', the trailing '(...)' belongs to that macro —
               splice and re-expand (CAT(A,B)(x) -> AB(x) -> 42; tcc's ELFW).
               mi is popped above so the trailing rescan is not blue-painted by
-              the macro that produced the name. }
+              the macro that produced the name.
+
+              tailMi <> mi is 6.10.3.4p2 pulling the other way: "if the name of
+              the macro being replaced is found during this scan, it is not
+              replaced". A macro whose expansion is its OWN name -- busybox's
+              `#define xstrtou(rest) xstrtou##rest`, invoked as `xstrtou()` --
+              must therefore NOT swallow the parameter list that follows it.
+              Without this, `unsigned int xstrtou()(const char *n, int b)`
+              spliced into `xstrtou(const char *n, int b)`, re-expanded, and
+              came out as `unsigned int xstrtouconst char *n` -- the
+              declaration silently destroyed. CAT(A,B)(x) is unaffected: the
+              name AB came from PASTING, not from CAT itself. }
             q2 := q;
             if (q2 <= last) and (src[q2] = ')') then Inc(q2);
             while (q2 <= last) and (src[q2] in [' ', #9]) do Inc(q2);
             grpEnd := 0;
             if (q2 <= last) and (src[q2] = '(') and
                CPStrTailFuncMacro(expanded, tailMi) and
+               (tailMi <> mi) and
                (not CPMacroIsActive(tailMi)) then
               grpEnd := CPBalancedGroupEnd(src, q2, last);
             if grpEnd > 0 then
