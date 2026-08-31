@@ -174,4 +174,4 @@ unconditional `MSG_NOSIGNAL` must be OR-ed in, not replaced, or this bug returns
 for every caller passing 0.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit f79fb6578.
