@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 55
+prio: 35
 type: bug
 status: open
 found: 2026-08-31
