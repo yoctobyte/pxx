@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `53e3f251c64e` | 2026-08-31T17:56:45Z | RED (native) | 104.4s | `45dde855b34d` RED |
+| seven | `53e3f251c64e` | 2026-08-31T18:05:28Z | RED (full) | 505.1s | `53e3f251c64e` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `45dde855b34d` on seven, 2026-08-31T17:49:07Z (7m ago).**
+**Newest full tier in the fleet: `53e3f251c64e` on seven, 2026-08-31T18:05:28Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `45dde855b34d` | RED | 7m | — (newest) |
+| seven | `53e3f251c64e` | RED | 0m | — (newest) |
 | plexus | `27424c927b65` | RED | 1d7h | 1d7h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -53,5 +53,4 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `tools-devtest#00`
   </details>
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `aac20e75ed1f`, last good `17fd5566a65e`, 1 commit(s) in range
-- **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +37 (seven): bad `351c10608aae`, last good `d28b77ce5d88`, 2 commit(s) in range
 - **test-core#src:test/test_rust_module_items.rs** — test/test_rust_module_items.rs tools/expect_same.sh +1 (seven): bad `99af5f3270cf`, last good `2bdb3c4ef3f6`, 2 commit(s) in range
