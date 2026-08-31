@@ -375,6 +375,9 @@ RUN_RETRY_SIG_TAIL = 8192   # bytes of the log tail to scan for a signature
 # stays single-shot.
 PEER_POLL_PERIOD = 15.0     # seconds between /proc scans for co-tenant runs
 PEER_TIME_FACTOR = 2.0      # two runs sizing to the whole box ~halve our share
+# A PXXFLAGS build is a different, slower program than the one CLASSES was
+# calibrated against; see effective_timeout for the measurement.
+INSTRUMENTED_TIME_FACTOR = 3.0
 CONTENTION_SIGNALS = (signal.SIGTERM, signal.SIGKILL, signal.SIGHUP)
 
 # The DURATION discriminator, for a kill we never saw. `timeout N` written
@@ -3377,7 +3380,24 @@ class Manager:
     def effective_timeout(self, job):
         # Stretch rather than retry where we can: a 111s job re-run three times
         # under contention costs more than giving it the room it needs once.
-        return job.timeout * (PEER_TIME_FACTOR if self.contended(job) else 1.0)
+        #
+        # INSTRUMENTATION IS A SECOND, INDEPENDENT STRETCH. A build carrying
+        # PXXFLAGS is a slower program by construction and the CLASSES budgets
+        # describe the default one. Measured on seven 2026-08-31, plain vs
+        # -dPXX_HEAP_DEBUG at one sha, compiling the compiler's own source:
+        # 14.62s -> 34.30s wall, 610,944kB -> 905,088kB peak RSS. Without this,
+        # test-core#00 is killed on budget and takes its 1685 dependents down
+        # as "not run", so an instrumented sweep loses most of the tier to the
+        # cost of its own instrument -- and reports that as a red rather than
+        # as a budget.
+        #
+        # 3.0 rather than the measured 2.35 because the factor has to cover the
+        # worst job, not the average one: being killed costs the whole cascade,
+        # being generous costs wall-clock on a diagnostic run nothing gates on.
+        f = PEER_TIME_FACTOR if self.contended(job) else 1.0
+        if os.environ.get("PXXFLAGS", "").strip():
+            f *= INSTRUMENTED_TIME_FACTOR
+        return job.timeout * f
 
     def _retriable_contention(self, job, why):
         """A kill/timeout while a co-tenant run was live is a statement about
@@ -5639,6 +5659,35 @@ def main():
     # ...and the same for instructions the host does not implement. Only jobs
     # still standing: a corpus-absent job is already skipped for a reason that
     # names the one command that fixes it, and this one never can be.
+    # AN INSTRUMENTED BUILD VOIDS THE FIXEDPOINT'S PREMISE, so the job is
+    # skipped with a reason rather than allowed to fail. selfhost-fixedpoint
+    # asserts that the fixedpoint reached from `pinned` is byte-identical to the
+    # binary under test; with PXXFLAGS set the binary under test is deliberately
+    # a different program, so the assertion cannot hold and its failure says
+    # nothing about the tree. Measured on seven 2026-08-31: under
+    # -dPXX_HEAP_DEBUG it failed exactly as designed, contributing a false RED
+    # to a run whose entire subject was heap poisoning.
+    #
+    # It did NOT cause that run's 211 unrun jobs -- NOTHING depends on it. Those
+    # came from test-core#00 (1685 dependents) being killed on budget, which is
+    # what INSTRUMENTED_TIME_FACTOR addresses. Two independent defects with one
+    # symptom, and blaming the cascade on the job that visibly failed would have
+    # been a plausible wrong story with a red next to it.
+    #
+    # This is the corpus/HOST_CAPS argument once more: a prerequisite that
+    # cannot be satisfied should announce itself, not be reported as a defect
+    # in the code. The guard itself is correct and is NOT weakened — it is
+    # inapplicable, which is a different thing, and the reason says which.
+    instrumented = os.environ.get("PXXFLAGS", "").strip()
+    if instrumented:
+        for j in jobs:
+            if j.target == "selfhost-fixedpoint" and j.status != "skip":
+                j.status = "skip"
+                j.skip_reason = (
+                    "instrumented build: PXXFLAGS=%s — a byte-identity "
+                    "fixedpoint against the uninstrumented `pinned` seed "
+                    "cannot hold by construction, so this job's premise is "
+                    "void rather than violated" % instrumented)
     hostflags = host_cpu_flags()
     for j in jobs:
         if j.status == "skip":
