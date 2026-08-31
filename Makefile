@@ -16468,7 +16468,7 @@ test-c-abi-cross: $(COMPILER)
 	    echo "test-c-abi-cross: SKIP $$t (qemu absent)"; continue; \
 	  fi; \
 	  if ! ./$(COMPILER) --target=$$t -Futest test/test_c_abi_pascal_caller.pas $(TESTTMP)/test_c_abi_$$t >$(TESTTMP)/test_c_abi_$$t.err 2>&1; then \
-	    echo "test-c-abi-cross: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/test_c_abi_$$t.err; overall=1; continue; \
+	    echo "test-c-abi-cross: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/test_c_abi_$$t.err; overall=1; ran=$$((ran+1)); continue; \
 	  fi; \
 	  got="$$(tools/run_target.sh $$t $(TESTTMP)/test_c_abi_$$t 2>&1)"; \
 	  if [ "$$got" = "$$exp" ]; then echo "test-c-abi-cross: PASS $$t"; \
@@ -16490,9 +16490,9 @@ test-c-abi-cross: $(COMPILER)
 	  ran=$$((ran+1)); \
 	done; \
 	echo "test-c-abi-cross: $$ran of $$want targets measured"; \
+	test "$$overall" = "0" || { echo "test-c-abi-cross: RED"; exit 1; }; \
 	test "$$ran" = "$$want" || [ -n "$$PXX_ALLOW_SKIPPED_TARGETS" ] || \
-	  { echo "test-c-abi-cross: RED -- $$want targets were asked for and only $$ran ran, so this run did not measure what its name says. Install the missing qemu, or set PXX_ALLOW_SKIPPED_TARGETS=1 to accept a partial run deliberately."; exit 1; }; \
-	test "$$overall" = "0" || { echo "test-c-abi-cross: RED"; exit 1; }
+	  { echo "test-c-abi-cross: RED -- $$want targets were asked for and only $$ran ran, so this run did not measure what its name says. Install the missing qemu, or set PXX_ALLOW_SKIPPED_TARGETS=1 to accept a partial run deliberately."; exit 1; }
 
 # THE ONE ROW WITH AN OUTSIDE OPINION. Every other subject in this family is
 # pxx on both sides of the call, so it can only prove pxx agrees with itself --
@@ -16540,7 +16540,7 @@ test-c-abi-glibc-oracle: $(COMPILER)
 	    echo "test-c-abi-glibc-oracle: SKIP $$t (qemu absent)"; continue; \
 	  fi; \
 	  if ! ./$(COMPILER) --target=$$t --system-libs=c test/c_abi_glibc_oracle.c $(TESTTMP)/c_abi_oracle_$$t >$(TESTTMP)/c_abi_oracle_$$t.err 2>&1; then \
-	    echo "test-c-abi-glibc-oracle: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/c_abi_oracle_$$t.err; overall=1; continue; \
+	    echo "test-c-abi-glibc-oracle: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/c_abi_oracle_$$t.err; overall=1; ran=$$((ran+1)); continue; \
 	  fi; \
 	  got="$$(tools/run_target.sh $$t $(TESTTMP)/c_abi_oracle_$$t 2>&1)"; \
 	  if [ "$$got" = "$$exp" ]; then echo "test-c-abi-glibc-oracle: PASS $$t"; \
@@ -16548,9 +16548,9 @@ test-c-abi-glibc-oracle: $(COMPILER)
 	  ran=$$((ran+1)); \
 	done; \
 	echo "test-c-abi-glibc-oracle: $$ran of $$want targets measured"; \
+	test "$$overall" = "0" || { echo "test-c-abi-glibc-oracle: RED"; exit 1; }; \
 	test "$$ran" = "$$want" || [ -n "$$PXX_ALLOW_SKIPPED_TARGETS" ] || \
-	  { echo "test-c-abi-glibc-oracle: RED -- $$want targets were asked for and only $$ran ran, so this run did not measure what its name says. Install the missing qemu, or set PXX_ALLOW_SKIPPED_TARGETS=1 to accept a partial run deliberately."; exit 1; }; \
-	test "$$overall" = "0" || { echo "test-c-abi-glibc-oracle: RED"; exit 1; }
+	  { echo "test-c-abi-glibc-oracle: RED -- $$want targets were asked for and only $$ran ran, so this run did not measure what its name says. Install the missing qemu, or set PXX_ALLOW_SKIPPED_TARGETS=1 to accept a partial run deliberately."; exit 1; }
 
 test-c-conformance-aarch64: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target aarch64
