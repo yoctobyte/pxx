@@ -1,10 +1,10 @@
 ---
 track: A
-prio: 60
+prio: 0
 type: perf
 blocked-by: [decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies]
-summary: "The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it."
-status: unfinished
+summary: "REJECTED 2026-09-01 (frankA), inheriting the owner's rejection of its only blocker. The premise does not survive the measurement the owner cited: the compiler parses its OWN 235,854 lines at ~12,000 lines/sec and pylib+pyeval's 25,551 at ~11,600 -- the SAME RATE, so there is no NilPy runtime tax to cache away, only general throughput applied to 24,000 lines. Superseded by perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why. ORIGINAL: The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it."
+status: rejected
 owner: frankA
 ---
 
@@ -200,3 +200,33 @@ forever.
 than guessed: [[decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies]].
 
 **Nothing is half-applied. No compiler file touched.**
+
+
+---
+
+## REJECTED 2026-09-01 (frankA) — the blocker's rejection is this ticket's too
+
+[[decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies]] was rejected
+by the owner on 2026-08-31 as *"neither A nor B — the premise is wrong"*. That
+decide was this ticket's ONLY `blocked-by`, and it was raised out of this ticket,
+so the rejection lands on the premise both share: **there is no NilPy-specific
+runtime tax.** The compiler parses its own 235,854 lines at ~12,000 lines/sec and
+`pylib+pyeval`'s 25,551 at ~11,600 — the same rate. What this ticket called a tax
+is general compiler throughput applied to 24,000 lines.
+
+The owner also named the real successor:
+[[perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why]] (A, p50, in
+the ready queue). Anyone arriving here wanting the .npy compile faster should go
+there — it is the same seconds, attributed to the mechanism that actually owns
+them rather than to the frontend that noticed.
+
+**Rejected rather than re-prioritised, deliberately.** It was `blocked-by` a
+rejected ticket, so it could never become ready — and CLAUDE.md is explicit that
+parking such a thing at a low prio "keeps it in the ranker forever at zero
+value". Dropping the edge to make it rankable would be worse: it would restore a
+p60 ticket whose premise a measurement has already refuted.
+
+Flagged by `progress.sh check` and relayed by frankB, who left it alone because
+it was owned here. The measured decomposition in the body (59% routine bodies /
+28% runtime declaration+interface / 13% floor) is still good data and is why the
+rejection was cheap — it is kept for whoever takes the successor.

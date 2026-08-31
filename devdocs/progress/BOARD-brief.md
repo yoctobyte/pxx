@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:28 blocked:9 backlog:3 backlog-umbrella:5 backlog-core:137 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:24 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:24 done-followup:3 decided:140 done:2968 rejected:71`
+`working:3 unfinished:27 blocked:9 backlog:3 backlog-umbrella:5 backlog-core:137 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:24 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:24 done-followup:3 decided:140 done:2968 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,7 +13,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 
-## unfinished (28) — parked mid-flight; re-claim, do not duplicate
+## unfinished (27) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -40,7 +40,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `feature-threadsafe-heap-optimize` [A]
-- `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A] — blocked-by: decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
