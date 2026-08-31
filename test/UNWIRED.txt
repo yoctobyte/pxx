@@ -101,3 +101,13 @@ test/strhelperprobe.pas  Pascal unit imported by test/test_nilpy_str_method_vs_p
 # A path ending in `/` covers everything beneath it: 37 rows saying one thing is
 # how a real census becomes unreadable and a gate becomes permanently red.
 test/wasm/  parked:feature-target-wasm the wasm backend and its slice tests are developed in a standalone checkout on branch `wasm`, which is what that ticket records; nothing on master references this tree except a generator inside it, and nothing here should wire it until that work lands
+
+# --- positive controls for the -dPXX_HEAP_DEBUG instrumentation ---
+# Not tests: they assert no output and pass trivially without their -dPLANT*
+# define, so wiring them would add two green rows that can never fail. They are
+# run by hand, twice each, when the heap instrumentation is changed -- a
+# modified instrument is a new instrument and its silence must be re-earned.
+# Committed because the commit messages for kinds 8/9/10/11 cite them, and a
+# control nobody can find is a control nobody can re-run.
+test/test_heapdbg_control_stale_string.pas  positive control for PXXStrDecRef's stale-handle check (kind 8); needs -dPXX_HEAP_DEBUG -dPLANTDEC and a non-x86-64 target, so nothing runs it directly
+test/test_heapdbg_control_stale_dynarray.pas  positive control for the dynarray stale-handle checks (kinds 10/11) and the implausible-size branch; needs -dPXX_HEAP_DEBUG -dPLANTDYN or -dPLANTDYN2, so nothing runs it directly
