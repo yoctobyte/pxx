@@ -4022,6 +4022,16 @@ test-threads: $(COMPILER)
 	# ~1.4s.
 	./$(COMPILER) --threadsafe test/test_signal_num_threads_race.pas $(TESTTMP)/test_signal_num_threads_race26
 	tools/expect_same.sh test_signal_num_threads_race26 "$$($(TESTTMP)/test_signal_num_threads_race26)" "$$(printf 'single-thread-mismatch=0\nsingle-thread-hits=TRUE\nboth-threads-took-signals=TRUE\ntwo-thread-mismatch=0')"
+	# Exceptions on two threads: the shadow-chain head was process-wide, so a
+	# raise longjmped into the other thread's frame and the process CRASHED.
+	# Measured on the pinned (pre-fix) compiler with this exact source: 18 of 20
+	# runs failed, and 0 of 20 after. THREE RUNS, not one -- it is a race, and
+	# N=100/N=10000 both passed on the broken build while N=1000 failed, so a
+	# single green run is a sampling artifact. ~0.01s each.
+	./$(COMPILER) --threadsafe test/test_exception_threads_race.pas $(TESTTMP)/test_exception_threads_race26
+	tools/expect_same.sh test_exception_threads_race26 "$$($(TESTTMP)/test_exception_threads_race26)" "$$(printf 'single hits=200000 wrong=0\ntwo hitsA=200000 hitsB=200000 wrongA=0 wrongB=0')"
+	tools/expect_same.sh test_exception_threads_race26.2 "$$($(TESTTMP)/test_exception_threads_race26)" "$$(printf 'single hits=200000 wrong=0\ntwo hitsA=200000 hitsB=200000 wrongA=0 wrongB=0')"
+	tools/expect_same.sh test_exception_threads_race26.3 "$$($(TESTTMP)/test_exception_threads_race26)" "$$(printf 'single hits=200000 wrong=0\ntwo hitsA=200000 hitsB=200000 wrongA=0 wrongB=0')"
 	./$(COMPILER) --threadsafe test/test_palthread.pas $(TESTTMP)/test_palthread26
 	tools/expect_same.sh test_palthread26 "$$($(TESTTMP)/test_palthread26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_atomic_counter.pas $(TESTTMP)/test_atomic_counter26

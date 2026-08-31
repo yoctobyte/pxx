@@ -502,65 +502,37 @@ begin
   EmitAsmX64(['pop rdx', 'add rdx, %', targetOff - CodeLen]);
 end;
 
-function SigFieldsInTls: Boolean;
-{ Do the dispatch stub's four parked fields live in the CALLING THREAD's TLS
-  block rather than in one process-wide BSS group?
-
-  They must, whenever there is a block to put them in: the handler runs on
-  whichever thread the kernel picked, and two threads in the stub at once
-  overwrite each other's parked values -- 75875 wrong answers in 400000
-  deliveries, against ZERO on the same binary with the second thread never
-  started (bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads).
-
-  The condition is by TARGET and by TlsMainInstalled, NOT by --threadsafe.
-  EmitTlsMainInstall is x86-64-only and cloned threads get their block from the
-  x86-64 clone stub, so on the other hosted targets there is nothing to read;
-  and with --emit-obj/--shared nothing installed a base, where `mov rax, gs:[0]`
-  does not return 0, it FAULTS. Both are decided at emission, so no runtime
-  branch exists anywhere downstream.
-
-  THE LIMIT, stated because it is invisible from the code: a thread that
-  INHERITED its block -- glibc pthread_create, a callback from a C library --
-  shares it with its creator and still races. Strictly better than process-wide,
-  never worse, and not complete. Threads pxx created have their own. }
-begin
-  SigFieldsInTls := TlsMainInstalled and (TargetArch = TARGET_X86_64);
-end;
-
-function IsParkedSigField(bssSlot: Integer): Boolean;
-{ Is this one of the four fields the signal dispatch stub parks? Asked by the
-  IR_EXC_STORE reader, which serves those four AND the two exception slots --
-  and the exception slots stay process-wide (they are a separate defect if they
-  are one at all, not this ticket's). Guarded on SigBssAllocated because before
-  that call all four are 0, and so is BSS_EXC_OBJ. }
-begin
-  IsParkedSigField := SigBssAllocated and
-    ((bssSlot = BSS_SIG_CODE) or (bssSlot = BSS_SIG_ADDR) or
-     (bssSlot = BSS_SIG_CTX) or (bssSlot = BSS_SIG_NUM));
-end;
-
 procedure EmitSigGroupBaseX64(useR8: Boolean);
 { rax (or r8) := the address of the four parked signal fields for THIS thread.
 
-  The one decision site. Every writer and reader downstream addresses the fields
-  as base + (BSS_SIG_x - BSS_SIG_CODE), which is why EnsureSignalBss allocates
-  them contiguously in the same order as the TLS slots and asserts it: one
-  offset expression, correct in both modes, so the mode is invisible to the
-  three sites that use it. Clobbers only the destination.
+  A SPECIALIZATION OF EmitStatusSlotX64, NOT A SECOND MECHANISM -- it asks the
+  same StatusSlotTlsIndex the single-slot accessor does, so there is exactly one
+  place that decides per-thread vs process-wide. It exists for the two sites
+  that need the base to SURVIVE a load: the dispatch stub writes four fields in
+  a row, and the --fpc-mem-errors decoder reads one, BRANCHES, then reads
+  another from inside the same label-bearing block. Everywhere else -- one slot,
+  no surviving base -- uses EmitStatusSlotX64 and is one instruction.
 
-  rax and r8 are the only destinations, and that is not laziness -- r8 is for
-  the sites that need the base to SURVIVE a load (the dispatch stub writes four
-  fields, the --fpc-mem-errors stub reads one, branches, then reads another),
-  rax for the single-load site where clobbering anything else would be a bug. }
+  Every site downstream addresses a field as base + (BSS_SIG_x - BSS_SIG_CODE),
+  which is why EnsureSignalBss allocates the four contiguously in the SAME ORDER
+  as TLS_SLOT_SIG_CODE.._NUM and asserts it: one offset expression, correct in
+  both modes, so the mode is invisible. Clobbers only the destination.
+
+  rax and r8 are the only destinations, and their modrm byte is the same ($04)
+  because r8 and 7 = 0. }
+var t: Integer;
 begin
-  if SigFieldsInTls then
+  t := StatusSlotTlsIndex(BSS_SIG_CODE);
+  if t >= 0 then
   begin
-    { mov <dst>, gs:[0] -- the self-pointer convention IR_TLSBASE reads. }
+    { mov <dst>, gs:[0] -- the block's own address, the self-pointer convention
+      IR_TLSBASE reads. The BASE is needed here, not a slot, so this is the one
+      place that still pays the extra load. }
     EmitB($65);
     if useR8 then EmitB($4C) else EmitB($48);
-    EmitB($8B); EmitB($04); EmitB($25); EmitI32(0);   { modrm reg = dst and 7 = 0 for both }
-    if useR8 then EmitAsmX64(['add r8, %', 8 * TLS_SLOT_SIG_CODE])
-    else EmitAsmX64(['add rax, %', 8 * TLS_SLOT_SIG_CODE]);
+    EmitB($8B); EmitB($04); EmitB($25); EmitI32(0);
+    if useR8 then EmitAsmX64(['add r8, %', 8 * t])
+    else EmitAsmX64(['add rax, %', 8 * t]);
   end
   else
   begin
@@ -3914,11 +3886,11 @@ procedure IREmitLeaveExceptionFrames(count: Integer);
 var i: Integer;
 begin
   for i := 1 to count do
-    EmitAsmX64([
-      'mov rax, [rsp]',
-      'mov [@glob], rax', BSS_EXC_TOP,
-      'add rsp, %', EXC_FRAME_SIZE
-    ]);
+  begin
+    EmitAsmX64(['mov rax, [rsp]']);
+    EmitStatusSlotX64(0, BSS_EXC_TOP, True);
+    EmitAsmX64(['add rsp, %', EXC_FRAME_SIZE]);
+  end;
 end;
 
 procedure EmitOvfCheckX64(uns: Boolean);
@@ -10094,37 +10066,29 @@ begin
         if IRA[node] <> -1 then
         begin
           IREmitNode(IRA[node]);
-          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
+          EmitStatusSlotX64(0, BSS_EXC_OBJ, True);
           raiseClass := Integer(IRIVal[node]);
           MovRaxImm(raiseClass);
-          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+          EmitStatusSlotX64(0, BSS_EXC_CLS, True);
         end;
         IREmitCodeCall(ExcRaiseAddr);
       end;
 
     IR_EXC_STORE:
       begin
-        { The four signal fields are per-thread when there is a block to hold
-          them; the two exception slots are not, and stay a plain absolute load.
-          Both arms leave the value in rax and clobber nothing else. }
-        if SigFieldsInTls and IsParkedSigField(IRExcStoreSlot(node)) then
-        begin
-          EmitSigGroupBaseX64(False);
-          EmitAsmX64(['mov rax, [rax+%]', IRExcStoreSlot(node) - BSS_SIG_CODE]);
-        end
-        else
-        begin
-          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(IRExcStoreSlot(node));
-        end;
+        { One accessor, both families: the signal fields AND the exception
+          object/raise-site this op also serves are per-thread when there is a
+          block, absolute when there is not, and the site cannot tell which. }
+        EmitStatusSlotX64(0, IRExcStoreSlot(node), False);
         EmitStoreVar(IRA[node]);
       end;
 
     IR_EXC_CLEAR:
       begin
         MovRaxImm(0);
-        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
-        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
-        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_ADDR);
+        EmitStatusSlotX64(0, BSS_EXC_OBJ, True);
+        EmitStatusSlotX64(0, BSS_EXC_CLS, True);
+        EmitStatusSlotX64(0, BSS_EXC_ADDR, True);
       end;
 
     IR_TERMINATE:
@@ -10825,14 +10789,11 @@ begin
             up-stack expects back) so the landing pad can restore it. The GPR
             residents need no snapshot: r12-r15 are in the setjmp buf. }
           FloatPoolSave;
-          EmitAsmX64([
-            'sub rsp, %', EXC_FRAME_SIZE,
-            'mov rax, [@glob]', BSS_EXC_TOP,
-            'mov [rsp], rax',
-            'mov rax, rsp',
-            'mov [@glob], rax', BSS_EXC_TOP,
-            'lea rdi, [rsp+%]', EXC_JMP_OFFSET
-          ]);
+          EmitAsmX64(['sub rsp, %', EXC_FRAME_SIZE]);
+          EmitStatusSlotX64(0, BSS_EXC_TOP, False);
+          EmitAsmX64(['mov [rsp], rax', 'mov rax, rsp']);
+          EmitStatusSlotX64(0, BSS_EXC_TOP, True);
+          EmitAsmX64(['lea rdi, [rsp+%]', EXC_JMP_OFFSET]);
           IREmitCodeCall(ExcSetJmpAddr);
           EmitAsmX64(['test eax, eax']);
           if (RcResidentCount > 0) or FxSaveOn then
@@ -10911,7 +10872,8 @@ begin
       IR_EXC_MATCH:
         begin
           lblId := IRA[i];
-          EmitAsmX64(['mov rax, [@glob]', BSS_EXC_CLS, 'cmp rax, %', Integer(IRIVal[i])]);
+          EmitStatusSlotX64(0, BSS_EXC_CLS, False);
+          EmitAsmX64(['cmp rax, %', Integer(IRIVal[i])]);
           if LabelPositions[lblId] <> -1 then
           begin
             EmitB($0F); EmitB($85);
@@ -10931,7 +10893,8 @@ begin
       IR_EXC_MATCH_HIT:
         begin
           lblId := IRA[i];
-          EmitAsmX64(['mov rax, [@glob]', BSS_EXC_CLS, 'cmp rax, %', Integer(IRIVal[i])]);
+          EmitStatusSlotX64(0, BSS_EXC_CLS, False);
+          EmitAsmX64(['cmp rax, %', Integer(IRIVal[i])]);
           if LabelPositions[lblId] <> -1 then
           begin
             EmitB($0F); EmitB($84);
@@ -12540,10 +12503,10 @@ begin
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($48); EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE);   { sub rsp, 80 }
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitStatusSlotX64(0, BSS_EXC_TOP, False);
     EmitB($48); EmitB($89); EmitB($04); EmitB($24);              { mov [rsp], rax }
     EmitB($48); EmitB($89); EmitB($E0);                          { mov rax, rsp }
-    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitStatusSlotX64(0, BSS_EXC_TOP, True);
     EmitB($48); EmitB($8D); EmitB($7C); EmitB($24); EmitB(EXC_JMP_OFFSET);
     IREmitCodeCall(ExcSetJmpAddr);
     EmitB($85); EmitB($C0);                                      { test eax, eax }

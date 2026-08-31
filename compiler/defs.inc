@@ -632,7 +632,7 @@ const
   TLS_BLOCK_SIZE   = 128;
   { THE slot map. Every runtime user of the block takes its index from here --
     an ad-hoc offset is how two consumers end up sharing a slot, which is a
-    silent wrong VALUE, not a crash. Slots 8..15 are unclaimed. }
+    silent wrong VALUE, not a crash. Slots 12..15 are unclaimed. }
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
   { The I/O lock's cached owner tid, plus the STACK BOUNDS that say whether this
     block is REALLY the reading thread's. Both halves are needed and neither is
@@ -684,7 +684,32 @@ const
   TLS_SLOT_SIG_ADDR = 5;
   TLS_SLOT_SIG_CTX  = 6;
   TLS_SLOT_SIG_NUM  = 7;
-  TLS_SLOT_FIRST_FREE = 8;
+  { The EXCEPTION state of the current execution context. TLS_SLOT_EXC_TOP is
+    the head of the setjmp shadow chain the unwinder walks; the other three are
+    the object, its class index and the raise site.
+
+    This one CRASHES rather than answering wrong, which is why it outranks the
+    signal fields above. Every `try` pushes a frame onto the head and every exit
+    pops it, so on a process-wide head thread A's `try` links onto thread B's
+    frame and a raise longjmps into a frame that may already be dead: MEASURED
+    at 7 of 8 two-threaded runs failing (SIGSEGV, or exit 217 with an exception
+    that escaped its own `try`) against a clean single-threaded control in the
+    same binary, seconds earlier.
+
+    A fresh thread gets a ZEROED block from the clone stub, i.e. an empty chain,
+    which is exactly right and is the other half of the fix: today a new thread
+    inherits a head pointing at its parent's frames.
+
+    COROUTINES NEED NOTHING HERE, and this was checked rather than assumed: a
+    coroutine switches stacks WITHIN one thread, and `CoSwitch` already saves the
+    head onto the outgoing stack and restores the incoming one's. It now saves
+    and restores this slot instead of the global, with identical semantics.
+    bug-a-the-exception-shadow-chain-is-process-wide-so-two-threads-crash }
+  TLS_SLOT_EXC_TOP  = 8;
+  TLS_SLOT_EXC_OBJ  = 9;
+  TLS_SLOT_EXC_CLS  = 10;
+  TLS_SLOT_EXC_ADDR = 11;
+  TLS_SLOT_FIRST_FREE = 12;
 
   AN_GUIDCONST     = 100; { an INTERFACE type name used as a VALUE -- which in Pascal means
                            exactly one thing, its GUID: `g := IHello`, `Supports(o, IHello, f)`.

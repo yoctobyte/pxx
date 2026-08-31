@@ -1,6 +1,73 @@
 { SPDX-License-Identifier: MPL-2.0 }
 { ===== Exception runtime emission ===== }
 
+function StatusSlotTlsIndex(bssSlot: Integer): Integer;
+{ THE map from a compiler-owned status slot to its per-thread TLS slot, or -1
+  for "keep the process-wide one".
+
+  Eight slots in two families, both moved for the same reason: the handler or
+  the unwinder runs on whichever thread got there, and a process-wide slot is
+  read by a thread that did not write it. The signal four produce a wrong VALUE
+  (75875 in 400000 deliveries); the exception four CRASH, because the chain head
+  is a pointer the unwinder longjmps to.
+
+  -1 whenever the answer is "there is no block": not x86-64 (EmitTlsMainInstall
+  is x86-64-only and cloned threads get their block from the x86-64 clone stub,
+  so the other hosted targets have nothing to read -- and they also have no
+  threads, since palthread compile-errors at the __pxxclone call site off
+  x86-64); or --emit-obj/--shared, where nothing installed a base and `gs:`
+  does not return 0, it FAULTS. Also -1 before the corresponding BSS group has
+  been allocated, because until then every one of these globals is 0 and so are
+  the others -- an identity test on 0 would match the wrong family.
+
+  Decided entirely at EMISSION. No runtime branch exists anywhere downstream. }
+begin
+  StatusSlotTlsIndex := -1;
+  if not TlsMainInstalled then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  if SigBssAllocated then
+  begin
+    if bssSlot = BSS_SIG_CODE then begin StatusSlotTlsIndex := TLS_SLOT_SIG_CODE; Exit; end;
+    if bssSlot = BSS_SIG_ADDR then begin StatusSlotTlsIndex := TLS_SLOT_SIG_ADDR; Exit; end;
+    if bssSlot = BSS_SIG_CTX  then begin StatusSlotTlsIndex := TLS_SLOT_SIG_CTX;  Exit; end;
+    if bssSlot = BSS_SIG_NUM  then begin StatusSlotTlsIndex := TLS_SLOT_SIG_NUM;  Exit; end;
+  end;
+  if ExceptionUsed then
+  begin
+    if bssSlot = BSS_EXC_TOP  then begin StatusSlotTlsIndex := TLS_SLOT_EXC_TOP;  Exit; end;
+    if bssSlot = BSS_EXC_OBJ  then begin StatusSlotTlsIndex := TLS_SLOT_EXC_OBJ;  Exit; end;
+    if bssSlot = BSS_EXC_CLS  then begin StatusSlotTlsIndex := TLS_SLOT_EXC_CLS;  Exit; end;
+    if bssSlot = BSS_EXC_ADDR then begin StatusSlotTlsIndex := TLS_SLOT_EXC_ADDR; Exit; end;
+  end;
+end;
+
+procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean);
+{ `mov <reg>, [slot]` / `mov [slot], <reg>` for a compiler-owned status slot,
+  addressed per-thread when there is a block and absolutely when there is not.
+
+  THE PER-THREAD FORM COSTS ONE BYTE AND NO EXTRA ACCESS. x86-64 cannot read a
+  segment BASE into a register, which is why the block carries its own address
+  at slot 0 -- but it can ADDRESS memory relative to gs directly, so
+  `mov rax, gs:[8*k]` is the same instruction as `mov rax, [abs]` with a 0x65
+  prefix in front. That matters here and did not matter for the signal fields:
+  BSS_EXC_TOP is touched on every `try` entry and every `try` exit, which is a
+  genuinely hot path, and a `mov rax, gs:[0]` load in front of each access would
+  have been a real cost rather than a rounding error.
+
+  The two encodings are otherwise identical -- same REX, same opcode, same
+  modrm/SIB -- which is why this is one function with two tails instead of two
+  functions. }
+var t: Integer;
+begin
+  t := StatusSlotTlsIndex(bssSlot);
+  if t >= 0 then EmitB($65);                    { gs: }
+  if reg >= 8 then EmitB($4C) else EmitB($48);  { REX.W, +R for r8..r15 }
+  if store then EmitB($89) else EmitB($8B);
+  EmitB($04 + ((reg and 7) shl 3));             { mod=00 reg=<reg> rm=100 (SIB) }
+  EmitB($25);                                   { SIB: no base, no index -> disp32 }
+  if t >= 0 then EmitI32(8 * t) else EmitGlobRef(bssSlot);
+end;
+
 procedure EmitExceptionRuntime;
 var unhandledJmp, si, cbzOffset, pos, bOffset: Integer;
     siColon, jo1, jo2, jc1, jc2, jc3, jc4, jm1, jm2, jm3, jm4: Integer;
@@ -38,8 +105,8 @@ begin
       [rsp] IS the instruction after the `raise`. Record it for ExceptAddr before
       anything else runs. rax is reloaded right below, so clobbering it is free. }
     EmitB($48); EmitB($8B); EmitB($04); EmitB($24);             { mov rax, [rsp] }
-    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_ADDR);
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitStatusSlotX64(0, BSS_EXC_ADDR, True);                   { mov [EXC_ADDR], rax }
+    EmitStatusSlotX64(0, BSS_EXC_TOP, False);                   { mov rax, [EXC_TOP] }
     EmitB($48); EmitB($85); EmitB($C0);                         { test rax, rax }
     EmitB($0F); EmitB($84); unhandledJmp := CodeLen; EmitI32(0); { jz unhandled }
     EmitB($48); EmitB($8D); EmitB($78); EmitB(EXC_JMP_OFFSET);  { lea rdi, [rax+8] }
@@ -62,7 +129,7 @@ begin
         Exception's `msg` is its first field (obj+8) and holds a managed
         AnsiString pointer whose length sits at ptr-8. }
       siColon := InternStr(': ');
-      EmitB($4C); EmitB($8B); EmitB($2C); EmitB($25); EmitGlobRef(BSS_EXC_OBJ); { mov r13, [BSS_EXC_OBJ] }
+      EmitStatusSlotX64(13, BSS_EXC_OBJ, False);                 { mov r13, [BSS_EXC_OBJ] }
       EmitB($4D); EmitB($31); EmitB($E4);                         { xor r12, r12 }
       EmitB($49); EmitB($81); EmitB($FD); EmitI32(65536);         { cmp r13, 65536 }
       EmitB($0F); EmitB($82); jo1 := CodeLen; EmitI32(0);         { jb  objbad }
