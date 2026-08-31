@@ -196,3 +196,74 @@ begin
                              (ProcRetFixedArrBytes[procIdx] > 0);
 end;
 
+
+{ AAPCS64 argument placement for the C ABI: is argument `argIdx` of `procIdx` in
+  a register, and if so which bank and index -- or on the stack, and at what byte
+  offset in the stack argument area?
+
+  ONE function, because the CALLER (ir_codegen_aarch64.inc's ProcExternal-or-
+  CProcUsesCAbi arm) and the CALLEE (EmitParamSpillsForTarget's ProcCdecl arm)
+  have to agree argument for argument, and a disagreement here is not a wrong
+  number in one slot -- it desynchronises every argument after it. The two used
+  to carry the register half twice, each counting its own `lo`/`hi`, and both
+  simply REFUSED past eight of either bank rather than growing a stack area.
+
+  AAPCS64 stage C, restricted to the scalar types a C signature can express
+  here: an integral or pointer argument takes x[NGRN] while NGRN < 8, a
+  floating-point one takes v[NSRN] while NSRN < 8, and the two counters are
+  INDEPENDENT -- f(i1,d1,i2,d2) puts i1,i2 in x0,x1 and d1,d2 in d0,d1. When a
+  bank is full its argument goes to the stack at NSAA and THAT BANK is set to 8;
+  the other bank keeps allocating. Every scalar slot is 8 bytes, which is
+  AAPCS64's own rounding for a type of 8 bytes or less, so the stack area is a
+  plain array of doublewords and needs no per-argument alignment.
+
+  A by-REF or open-array parameter is a POINTER and belongs to the INT bank
+  whatever its declared type. Getting that one wrong was a segfault rather than
+  a wrong number on x86-64
+  (bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse), and it
+  is the reason this asks ABIParamSlotIsPointer rather than TypeIsFloat alone.
+
+  bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
+procedure ABIA64CdeclArgSlot(procIdx, argIdx: Integer; var isFp: Boolean;
+                             var regIdx, stackOff: Integer);
+var i, ngrn, nsrn, nsaa: Integer;
+    fp: Boolean;
+begin
+  ngrn := 0; nsrn := 0; nsaa := 0;
+  isFp := False; regIdx := -1; stackOff := -1;
+  for i := 0 to argIdx do
+  begin
+    fp := TypeIsFloat(Procs[procIdx].Params[i].TypeKind) and
+          (not ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
+                                     Procs[procIdx].Params[i].IsRef,
+                                     Procs[procIdx].Params[i].IsArray));
+    isFp := fp; regIdx := -1; stackOff := -1;
+    if fp then
+    begin
+      if nsrn < 8 then begin regIdx := nsrn; Inc(nsrn); end
+      else begin nsrn := 8; stackOff := nsaa; Inc(nsaa, 8); end;
+    end
+    else
+    begin
+      if ngrn < 8 then begin regIdx := ngrn; Inc(ngrn); end
+      else begin ngrn := 8; stackOff := nsaa; Inc(nsaa, 8); end;
+    end;
+  end;
+end;
+
+{ The 16-byte-aligned size of the AAPCS64 stack argument area for `procIdx`'s
+  first `nparams` parameters -- 0 when everything fits in the banks. 16 and not
+  8 because sp must stay 16-byte aligned at a public interface. }
+function ABIA64CdeclStackBytes(procIdx, nparams: Integer): Integer;
+var i, regIdx, stackOff, hiOff: Integer;
+    isFp: Boolean;
+begin
+  hiOff := -1;
+  for i := 0 to nparams - 1 do
+  begin
+    ABIA64CdeclArgSlot(procIdx, i, isFp, regIdx, stackOff);
+    if stackOff > hiOff then hiOff := stackOff;
+  end;
+  if hiOff < 0 then ABIA64CdeclStackBytes := 0
+  else ABIA64CdeclStackBytes := ((hiOff + 8 + 15) div 16) * 16;
+end;

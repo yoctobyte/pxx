@@ -1240,6 +1240,7 @@ procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
   Procs[procIdx].Params[] fields, which the driver mirrors them into. }
 var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     intIdx, sseIdx, stackOff: Integer;   { SysV arg classification, cdecl arm }
+    a64Fp: Boolean;                      { AAPCS64 cdecl arm: this param is FP-bank }
     isEight: Boolean;                    { AAPCS soft-float 8-byte by-value param }
     wlo, whiEnd: Integer;                { i386 arg-offset walk bounds }
 begin
@@ -1412,41 +1413,46 @@ begin
         with `str d[n]` -- the positional arm below stores from x[i] instead,
         because there a double arrives as bits in a GPR.
 
-        >8 of either bank is REFUSED, matching the caller, which errors on the
-        same condition rather than spilling to the stack. An honest refusal on
-        both sides beats a prologue that reads stack slots the caller never
-        wrote. }
-      intIdx := 0; sseIdx := 0;
-      for i := 0 to nparams-1 do
-      begin
-        idx := Procs[procIdx].Params[i].SymIdx;
-        if TypeIsFloat(Syms[idx].TypeKind) and
-           (not ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef,
-                                      Syms[idx].IsArray)) then
-          Inc(sseIdx)
-        else
-          Inc(intIdx);
-      end;
-      if (intIdx > 8) or (sseIdx > 8) then
-        Error('target aarch64: a cdecl routine with more than 8 integer or 8 '
-            + 'floating-point parameters is not supported yet (the AAPCS stack '
-            + 'argument area is not implemented on either side of the call)');
-      intIdx := 0; sseIdx := 0;
+        PAST EIGHT OF A BANK the argument arrives on the STACK, and the offset
+        comes from ABIA64CdeclArgSlot -- the same oracle the caller asks, so the
+        two cannot disagree. This used to be an outright refusal on both sides,
+        which was honest but wrong the moment a C function always used the C ABI:
+        a nine-int C function is ordinary code (lua's lcode.c has one) and it
+        stopped compiling.
+        The incoming stack block sits at [x29 + 16 + off] after the prologue's
+        `stp x29,x30,[sp,#-16]!`, exactly where the positional arm below reads
+        its own stack words -- same anchor, different offsets, because the two
+        conventions place arguments differently.
+        bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
       for i := 0 to nparams-1 do
       begin
         idx := Procs[procIdx].Params[i].SymIdx;
         sz := ParamSize(idx);
+        ABIA64CdeclArgSlot(procIdx, i, a64Fp, intIdx, stackOff);
         EmitLoadImmA64(9, Syms[idx].Offset);
         EmitI32($8B0903A8);                       { add x8, x29, x9 (slot addr) }
-        if TypeIsFloat(Syms[idx].TypeKind) and
-           (not ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef,
-                                      Syms[idx].IsArray)) then
+        if stackOff >= 0 then
+        begin
+          { Stack-passed: read the incoming doubleword into x9, then store it at
+            this param's own width. A float on the stack is bits in memory, so
+            there is no bank distinction to make here -- only the store width. }
+          EmitLoadImmA64(10, 16 + stackOff);
+          EmitI32($8B0A03AA);                     { add x10, x29, x10 }
+          EmitI32($F9400149);                     { ldr x9, [x10] }
+          if (Syms[idx].TypeKind = tySingle) and (not Syms[idx].IsRef) and
+             (not Syms[idx].IsArray) then
+            EmitI32($B9000109)                    { str w9, [x8] (raw single) }
+          else if sz = 1 then EmitI32($39000109)  { strb w9, [x8] }
+          else if sz = 2 then EmitI32($79000109)  { strh w9, [x8] }
+          else if sz = 4 then EmitI32($B9000109)  { str  w9, [x8] }
+          else EmitI32($F9000109);                { str  x9, [x8] }
+        end
+        else if a64Fp then
         begin
           if Syms[idx].TypeKind = tySingle then
-            EmitI32($BD000100 + sseIdx)           { str s[n], [x8] }
+            EmitI32($BD000100 + intIdx)           { str s[n], [x8] }
           else
-            EmitI32($FD000100 + sseIdx);          { str d[n], [x8] }
-          Inc(sseIdx);
+            EmitI32($FD000100 + intIdx);          { str d[n], [x8] }
         end
         else
         begin
@@ -1454,7 +1460,6 @@ begin
           else if sz = 2 then EmitI32($79000100 + intIdx)   { strh w[n], [x8] }
           else if sz = 4 then EmitI32($B9000100 + intIdx)   { str w[n], [x8] }
           else EmitI32($F9000100 + intIdx);                 { str x[n], [x8] }
-          Inc(intIdx);
         end;
       end;
     end
@@ -1539,10 +1544,25 @@ begin
         was wrong on x86-64 and aarch64
         (bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse).
 
-        >4 words is REFUSED, matching ir_codegen_arm32.inc's caller, which
-        refuses a block over 16 bytes. Stack arguments are unimplemented on BOTH
-        sides; an honest refusal on both beats a prologue reading words the
-        caller never wrote. }
+        WORDS 4.. ARRIVE ON THE STACK, ASCENDING: word k sits at
+        [fp + 8 + (k-4)*4]. fp+8 is the caller's sp at the call -- the same
+        anchor the positional arm below uses -- but the DIRECTION is the
+        opposite one. The positional convention pushes words in index order, so
+        its lowest-index stack word ends up at the HIGHEST address and it reads
+        [fp + 8 + (pnWords-1-k)*4]. AAPCS32 counts UP from the first stack word.
+        Copying the positional formula here would agree with pxx's own caller
+        and disagree with every real C toolchain -- which is exactly
+        bug-a-riscv32-passes-stack-arguments-in-reverse-psabi-order, and it was
+        invisible there for the same reason: pxx->pxx is self-consistent under
+        either order.
+        There is no arm32 gcc on this box, so the oracle used instead is
+        GLIBC ITSELF -- an external variadic call into the armel sysroot's
+        snprintf with more than four words of arguments, which no pxx-side
+        convention can flatter. bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area
+
+        An 8-byte by-value param never straddles r3 and the stack: the even-word
+        alignment bump moves it to word 4, so a stack 8-byte always starts at an
+        even word index and therefore at an 8-byte-aligned offset from fp+8. }
       pnWords := 0;
       for i := 0 to nparams-1 do
       begin
@@ -1561,10 +1581,6 @@ begin
         else
           Inc(pnWords, 1);
       end;
-      if pnWords > 4 then
-        Error('target arm32: a cdecl routine whose argument block exceeds 4 core '
-            + 'registers is not supported yet (stack arguments are unimplemented '
-            + 'on both sides of the call)');
       pw := 0;
       for i := 0 to nparams-1 do
       begin
@@ -1579,15 +1595,30 @@ begin
         EmitI32($E08B9009);                              { add r9, fp, r9 }
         if isEight then
         begin
-          EmitI32($E5890000 or (pw shl 12));             { str r[pw],   [r9]     }
-          EmitI32($E5890004 or ((pw + 1) shl 12));       { str r[pw+1], [r9, #4] }
+          { r0 is free as scratch for the stack half: words 0..3 have already
+            been spilled by the time pw reaches 4, and the loop only grows pw. }
+          if pw < 4 then EmitI32($E5890000 or (pw shl 12))       { str r[pw], [r9] }
+          else begin EmitI32($E59B0000 or (8 + (pw - 4) * 4)); EmitI32($E5890000); end;
+          whi := pw + 1;
+          if whi < 4 then EmitI32($E5890004 or (whi shl 12))     { str r[pw+1], [r9,#4] }
+          else begin EmitI32($E59B0000 or (8 + (whi - 4) * 4)); EmitI32($E5890004); end;
           Inc(pw, 2);
         end
         else
         begin
-          if sz = 1 then EmitI32($E5C90000 or (pw shl 12))       { strb r[pw], [r9] }
-          else if sz = 2 then EmitI32($E1C900B0 or (pw shl 12))  { strh r[pw], [r9] }
-          else EmitI32($E5890000 or (pw shl 12));                { str  r[pw], [r9] }
+          if pw < 4 then
+          begin
+            if sz = 1 then EmitI32($E5C90000 or (pw shl 12))       { strb r[pw], [r9] }
+            else if sz = 2 then EmitI32($E1C900B0 or (pw shl 12))  { strh r[pw], [r9] }
+            else EmitI32($E5890000 or (pw shl 12));                { str  r[pw], [r9] }
+          end
+          else
+          begin
+            EmitI32($E59B0000 or (8 + (pw - 4) * 4));              { ldr r0, [fp, #off] }
+            if sz = 1 then EmitI32($E5C90000)                      { strb r0, [r9] }
+            else if sz = 2 then EmitI32($E1C900B0)                 { strh r0, [r9] }
+            else EmitI32($E5890000);                               { str  r0, [r9] }
+          end;
           Inc(pw, 1);
         end;
       end;

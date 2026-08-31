@@ -1320,12 +1320,46 @@ begin
   EmitCallProc(procIdx);
 end;
 
+{ The slot class of cdecl argument `argIdx` of `procIdx`, for the AAPCS32
+  block layout. ONE function because pass 1 (sizing) and pass 2 (storing) walk
+  the same argument list and any disagreement between them silently shifts every
+  later argument -- the failure mode the by-ref-float predicate produced on three
+  other targets.
+
+  A NAMED param answers from its declaration, with a by-ref or open-array param
+  classified as a POINTER (one word, no 8-byte alignment demand) whatever its
+  declared type: sizing `var d: Double` as an 8-byte double desynchronised every
+  later param and SEGFAULTED --
+  bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse.
+
+  A VARIADIC TAIL argument has no declaration to ask, so it answers from the
+  actual argument under C's default argument promotions: a float widens to
+  double, anything narrower than int arrives as int. }
+function Arm32CdeclArgKind(procIdx, argIdx, argNode: Integer): TTypeKind;
+begin
+  if (procIdx >= 0) and (argIdx < Procs[procIdx].ParamCount) then
+  begin
+    Result := Procs[procIdx].Params[argIdx].TypeKind;
+    if ABIParamSlotIsPointer(Procs[procIdx].Params[argIdx].TypeKind,
+                             Procs[procIdx].Params[argIdx].IsRef,
+                             Procs[procIdx].Params[argIdx].IsArray) then
+      Result := tyInteger;
+  end
+  else
+  begin
+    Result := IntToTypeKind(IRTk[IRA[argNode]]);
+    if TypeIsFloat(Result) then Result := tyDouble
+    else if not ((Result = tyInt64) or (Result = tyUInt64)) then Result := tyInteger;
+  end;
+end;
+
 procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   argCls: Integer;   { Arg32Class of the argument being marshalled (A32_*) }
   classIdx, elemSize, lo, nBlock: Integer;
+  blk: Integer;      { AAPCS32 cdecl argument-block size, 8-byte aligned }
   vaRevM, vaRevP, vaRevO1, vaRevO2: Integer;
   itemNode, hi, p1, p2: Integer;
   lhsTk, rhsTk: TTypeKind;
@@ -2757,24 +2791,26 @@ begin
             Int64/UInt64 — then load words 0..3 into r0..r3. The value model keeps
             floats as doubles in d0, so a single arg is fcvt'd to s0 and a double
             stored from d0; results come back in r0 (int/single) or r0:r1
-            (double/Int64) and are bridged back to the value model. Stack
-            arguments (block > 16 bytes) are not supported yet — the validated
-            C-import / libm surface fits in the four core registers. The call goes
-            through the external's GOT slot via EmitExternalCallArm32. }
-          { Pass 1: compute the AAPCS block size. }
+            (double/Int64) and are bridged back to the value model. The call goes
+            through the external's GOT slot via EmitExternalCallArm32.
+
+            PAST 16 BYTES the block spills to the STACK, ascending: the whole
+            block is built in a stack temp of `blk` bytes, r0..r3 are loaded from
+            its first four words, and then sp is raised by exactly 16 so that
+            block offset 16 -- the first stack argument -- IS the sp the callee
+            sees. The callee reads it back at [fp + 8 + (k-4)*4]
+            (EmitParamSpillsForTarget's ProcCdecl arm); ascending on both sides,
+            which is the AAPCS32 order and the OPPOSITE of the positional path
+            below. bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area }
+          { Pass 1: compute the AAPCS block size. Walks the ACTUAL arguments, not
+            the declared params, so a variadic tail is sized too -- pass 2 walks
+            the same list and the two must agree offset for offset. }
           sz := 0;   { running block offset }
-          for i := 0 to Procs[procIdx].ParamCount - 1 do
+          argNode := IRB[node];
+          i := 0;
+          while argNode <> -1 do
           begin
-            tk := Procs[procIdx].Params[i].TypeKind;
-            { A by-REF or open-array param is a POINTER: one word, no 8-byte
-              alignment demand, whatever its declared type. Sizing `var d:
-              Double` as an 8-byte double desynchronised every later param and
-              SEGFAULTED. Fourth target, one predicate, four symptoms --
-              bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse }
-            if ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
-                                     Procs[procIdx].Params[i].IsRef,
-                                     Procs[procIdx].Params[i].IsArray) then
-              tk := tyInteger;
+            tk := Arm32CdeclArgKind(procIdx, i, argNode);
             if (tk = tyDouble) or (tk = tyExtended) or (tk = tyInt64) or (tk = tyUInt64) then
             begin
               if (sz and 4) <> 0 then Inc(sz, 4);   { 8-byte align }
@@ -2782,21 +2818,24 @@ begin
             end
             else
               Inc(sz, 4);
+            Inc(i);
+            argNode := IRB[argNode];
           end;
-          if sz > 16 then
-            Error('target arm32: external call argument block exceeds 4 core registers (stack args not supported yet)');
-          EmitI32($E24DD010);                       { sub sp, sp, #16 }
+          { blk keeps sp 8-byte aligned at the call, as AAPCS32 requires at a
+            public interface, and is never smaller than the 16-byte register
+            window the store loop below writes into unconditionally. }
+          blk := ((sz + 7) div 8) * 8;
+          if blk < 16 then blk := 16;
+          if blk > 255 then
+            Error('target arm32: cdecl argument block over 255 bytes is not supported yet');
+          EmitI32($E24DD000 or blk);                { sub sp, sp, #blk }
           { Pass 2: evaluate each arg and store its word(s) at the block offset. }
           argNode := IRB[node];
           nArgs := 0;
           j := 0;   { running block offset }
           while argNode <> -1 do
           begin
-            tk := Procs[procIdx].Params[nArgs].TypeKind;
-            if ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
-                                     Procs[procIdx].Params[nArgs].IsRef,
-                                     Procs[procIdx].Params[nArgs].IsArray) then
-              tk := tyInteger;              { pointer slot = one word }
+            tk := Arm32CdeclArgKind(procIdx, nArgs, argNode);
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
               if (j and 4) <> 0 then Inc(j, 4);
@@ -2828,20 +2867,43 @@ begin
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
-          if nArgs <> Procs[procIdx].ParamCount then
+          { A variadic callee legitimately gets more arguments than it declares;
+            under AAPCS32 base (armel soft-float) the tail is placed by exactly
+            the same rules as a named argument, so nothing else changes. }
+          if (nArgs < Procs[procIdx].ParamCount) or
+             ((nArgs > Procs[procIdx].ParamCount) and not ProcVariadic[procIdx]) then
             Error('target arm32: external call argument count mismatch');
-          { Load r0..r3 from the block (one word each; padding words are harmless). }
+          { Load r0..r3 from the block (one word each; padding words are
+            harmless). BOUNDED AT FOUR: without the bound an over-16-byte block
+            walked on into r4, a callee-SAVED register, and the old `sz > 16`
+            refusal was the only thing keeping i under 4. }
           i := 0;
-          while (i * 4) < sz do
+          while ((i * 4) < sz) and (i < 4) do
           begin
             EmitI32($E59D0000 or (i shl 12) or (i * 4)); { ldr r[i], [sp, #i*4] }
             Inc(i);
+          end;
+          { Raise sp by exactly the register window, so the stack arguments the
+            block already holds at offsets 16.. become [sp+0].. at the call. }
+          { AGGREGATE RESULT: the callee prologue takes the hidden destination
+            from r12 (ip) whatever the convention, and this arm never set it --
+            see the i386 twin. r12 is free: the argument words are already in
+            r0..r3 and nothing else in this sequence uses ip.
+            bug-c-a-c-function-s-calling-convention-depends-on-the-target }
+          if ABIRetViaHiddenDestProc(procIdx) then
+          begin
+            EmitI32($E92D000F);                     { push {r0-r3} (args) }
+            IREmitNodeArm32(IRC[node]);             { r0 = hidden destination }
+            EmitI32($E1A0C000);                     { mov r12, r0 }
+            EmitI32($E8BD000F);                     { pop {r0-r3} }
           end;
           EmitI32($E28DD010);                       { add sp, sp, #16 }
           if ProcExternal[procIdx] then
             EmitExternalCallArm32(RegisterExternal(procIdx))
           else
             EmitCallProc(procIdx);   { bodied cdecl proc: no GOT slot }
+          if blk > 16 then
+            EmitI32($E28DD000 or (blk - 16));       { add sp, sp, #blk-16 }
           if Procs[procIdx].RetType = tySingle then
           begin
             EmitI32($EE000A10);                     { vmov s0, r0 }
@@ -3071,26 +3133,43 @@ begin
             (feature-cdecl-indirect-cross-targets; x86-64 shape c461fce.) }
           if Integer(IRC[node]) > 0 then
             Error('target arm32: cdecl method pointer not supported');
+          { Pass 1: size the AAPCS block, exactly as the direct arm does and
+            through the SAME classifier -- this arm used to carry its own copy of
+            the tail rules, which differed (a variadic Int64 was one word here and
+            two there). One function, both arms.
+            The callee address rides in an 8-byte slot ABOVE the block rather than
+            in a `push`/`pop` pair, because sp has to be the stack-argument
+            pointer at the `blx` and still be 8-byte aligned; a bare pushed word
+            is 4 and breaks both. bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area }
+          sz := 0;
+          argNode := IRB[node];
+          i := 0;
+          while argNode <> -1 do
+          begin
+            tk := Arm32CdeclArgKind(procIdx, i, argNode);
+            if (tk = tyDouble) or (tk = tyExtended) or (tk = tyInt64) or (tk = tyUInt64) then
+            begin
+              if (sz and 4) <> 0 then Inc(sz, 4);
+              Inc(sz, 8);
+            end
+            else
+              Inc(sz, 4);
+            Inc(i);
+            argNode := IRB[argNode];
+          end;
+          blk := ((sz + 7) div 8) * 8;
+          if blk < 16 then blk := 16;
+          if blk > 247 then
+            Error('target arm32: cdecl indirect argument block over 247 bytes is not supported yet');
           IREmitNodeArm32(IRA[node]);               { r0 = callee address }
-          EmitI32($E92D0001);                       { push {r0} (callee) }
-          EmitI32($E24DD010);                       { sub sp, sp, #16 }
+          EmitI32($E24DD000 or (blk + 8));          { sub sp, sp, #blk+8 }
+          EmitI32($E58D0000 or blk);                { str r0, [sp, #blk] (callee) }
           argNode := IRB[node];
           nArgs := 0;
           j := 0;   { running block offset }
           while argNode <> -1 do
           begin
-            if nArgs < Procs[procIdx].ParamCount then
-            begin
-              tk := Procs[procIdx].Params[nArgs].TypeKind;
-              if ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
-                                       Procs[procIdx].Params[nArgs].IsRef,
-                                       Procs[procIdx].Params[nArgs].IsArray) then
-                tk := tyInteger;            { pointer slot = one word }
-            end
-            else if TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
-              tk := tyDouble                        { variadic float -> double }
-            else
-              tk := tyInteger;
+            tk := Arm32CdeclArgKind(procIdx, nArgs, argNode);
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
               if (j and 4) <> 0 then Inc(j, 4);
@@ -3122,17 +3201,19 @@ begin
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
-          if j > 16 then
-            Error('target arm32: cdecl indirect call argument block exceeds 4 core registers (stack args not supported yet)');
+          { Bounded at four: past r3 the next `ldr r[i]` would write r4, which is
+            callee-SAVED, and the old block-size refusal was the only thing that
+            kept i under 4. }
           i := 0;
-          while (i * 4) < j do
+          while ((i * 4) < j) and (i < 4) do
           begin
             EmitI32($E59D0000 or (i shl 12) or (i * 4)); { ldr r[i], [sp, #i*4] }
             Inc(i);
           end;
-          EmitI32($E28DD010);                       { add sp, sp, #16 }
-          EmitI32($E8BD1000);                       { pop {r12} (callee) }
+          EmitI32($E59DC000 or blk);                { ldr r12, [sp, #blk] (callee) }
+          EmitI32($E28DD010);                       { add sp, sp, #16 -> stack args }
           EmitI32($E12FFF3C);                       { blx r12 }
+          EmitI32($E28DD000 or (blk + 8 - 16));     { add sp, sp, #blk-8 (drop block) }
           if Procs[procIdx].RetType = tySingle then
           begin
             EmitI32($EE000A10);                     { vmov s0, r0 }

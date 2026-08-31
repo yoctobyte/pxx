@@ -1692,8 +1692,21 @@ begin
           if vaRecId <> REC_NONE then ASTIVal[a3] := TARGET_PTR_SIZE
           else ASTIVal[a3] := TypeSize(vt);
           ASTTk[a3] := Ord(tyInteger);
+          { Slot ALIGNMENT, which the three 32-bit targets sharing this walk do
+            not agree on. AAPCS32 aligns an 8-byte scalar to 8 -- register pair
+            and stack slot both -- and the arm32 caller now marshals that way, so
+            the walk has to skip the same padding word or every double after a
+            single named param reads half padding. The RISC-V psABI does not
+            require an aligned register pair and i386 cdecl aligns nothing, so
+            both stay on the packed walk.
+            bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area }
+          a4 := AllocNode(AN_INT_LIT);
+          if (TargetArch = TARGET_ARM32) and (vaRecId = REC_NONE) and
+             (TypeSize(vt) > 4) then ASTIVal[a4] := 8 else ASTIVal[a4] := 4;
+          ASTTk[a4] := Ord(tyInteger);
           argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
-          a2 := AllocNode(AN_ARG); ASTLeft[a2] := a3; ASTRight[a2] := -1; ASTRight[argNode] := a2;
+          a2 := AllocNode(AN_ARG); ASTLeft[a2] := a3; ASTRight[argNode] := a2;
+          a5 := AllocNode(AN_ARG); ASTLeft[a5] := a4; ASTRight[a5] := -1; ASTRight[a2] := a5;
           callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
           ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
           if vaRecId <> REC_NONE then

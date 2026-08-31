@@ -3317,11 +3317,34 @@ begin
                 Inc(argBytes, 8)
               else
                 Inc(argBytes, 4);
+            end
+            else
+            begin
+              { VARIADIC TAIL. There is no declared param to ask, so the width
+                comes from the ACTUAL argument under C's default argument
+                promotions: a float widens to double (8), a 64-bit ordinal is 8,
+                everything else is one 4-byte slot. Counting it is not optional
+                -- argBytes is both the frame reservation and the saved-esp slot
+                offset, so an uncounted tail arg overwrites the saved esp. }
+              tk := IntToTypeKind(IRTk[IRA[argNode]]);
+              if TypeIsFloat(tk) or Is64Bit386(tk) then
+                Inc(argBytes, 8)
+              else
+                Inc(argBytes, 4);
             end;
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
-          if nArgs <> Procs[procIdx].ParamCount then
+          { A VARIADIC callee legitimately receives more arguments than it
+            declares. i386 cdecl needs nothing else for it: the block is already
+            laid out arg0-lowest and ascending, which is exactly where va_arg
+            walks from, and the caller already cleans argBytes. Only the strict
+            equality blocked it -- and it blocked crtl's own bodied `printf`,
+            which is how a standalone C program on i386 stopped compiling the
+            moment CProcUsesCAbi stopped excluding C programs.
+            bug-c-a-c-function-s-calling-convention-depends-on-the-target }
+          if (nArgs < Procs[procIdx].ParamCount) or
+             ((nArgs > Procs[procIdx].ParamCount) and not ProcVariadic[procIdx]) then
             Error('target i386: external call argument count mismatch');
           { Reserve a 16-rounded frame: arg block + 4-byte saved-esp slot. }
           base := ((argBytes + 4 + 15) div 16) * 16;
@@ -3334,15 +3357,27 @@ begin
           sz := 0;                                       { running arg offset }
           while argNode <> -1 do
           begin
-            tk := Procs[procIdx].Params[i].TypeKind;
-            { `var d: Double` on a cdecl external is a `double*`: the address is
-              already in eax and goes in one 4-byte slot, exactly as the
-              argBytes accounting above now counts it. Same for an open array,
-              which is a handle — one oracle, both questions, both loops. }
-            if ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
-                                     Procs[procIdx].Params[i].IsRef,
-                                     Procs[procIdx].Params[i].IsArray) then
-              tk := tyPointer;
+            if i < Procs[procIdx].ParamCount then
+            begin
+              tk := Procs[procIdx].Params[i].TypeKind;
+              { `var d: Double` on a cdecl external is a `double*`: the address is
+                already in eax and goes in one 4-byte slot, exactly as the
+                argBytes accounting above now counts it. Same for an open array,
+                which is a handle — one oracle, both questions, both loops. }
+              if ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
+                                       Procs[procIdx].Params[i].IsRef,
+                                       Procs[procIdx].Params[i].IsArray) then
+                tk := tyPointer;
+            end
+            else
+            begin
+              { Variadic tail — the same promotion the counting loop applied, and
+                it MUST be the same or the widths disagree and every argument
+                after the first float lands at the wrong offset. }
+              tk := IntToTypeKind(IRTk[IRA[argNode]]);
+              if TypeIsFloat(tk) then tk := tyDouble
+              else if not Is64Bit386(tk) then tk := tyInteger;
+            end;
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
               IREmitNode386(IRA[argNode]);               { float -> xmm0 (double) }
@@ -3380,6 +3415,21 @@ begin
             end;
             Inc(i);
             argNode := IRB[argNode];
+          end;
+          { AGGREGATE RESULT. The callee prologue takes the hidden destination
+            from ecx whatever the convention (symtab.inc, "i386 carries the
+            hidden destination pointer in ecx"), so a cdecl call has to set it
+            exactly as the internal arm does -- and it never did, because until
+            the C-ABI gate flipped nothing that returns a struct came down this
+            path. crtl's own `sin` is the first thing that does: its kernels
+            return a two-double `crtl_dd` by value, so `sin(2)` SEGFAULTED while
+            `sqrt(4.0)` was fine. ecx is free here -- it carried the saved esp
+            into [esp+argBytes] and is dead after that store.
+            bug-c-a-c-function-s-calling-convention-depends-on-the-target }
+          if ABIRetViaHiddenDestProc(procIdx) then
+          begin
+            IREmitNode386(IRC[node]);                { eax = hidden destination }
+            EmitB($89); EmitB($C1);                  { mov ecx, eax }
           end;
           if ProcExternal[procIdx] then
             EmitExternalIndirectCall(RegisterExternal(procIdx)) { call dword [GOT slot] }

@@ -87,10 +87,26 @@ void __pxx_va_start_impl32(struct __pxx_va_elem *ap, void *save,
   ap->reg_save_area = save;
   ap->overflow_arg_area = overflow;
 }
-void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size) {
+void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size,
+                           unsigned int align) {
   unsigned int step;
   void *addr;
   step = (size <= 4) ? 4 : 8;
+  /* ALIGNMENT IS PER-TARGET AND THE FRONTEND ANSWERS IT, because the three
+     targets sharing this walk genuinely disagree. AAPCS32 gives an 8-byte
+     scalar 8-byte alignment, in registers and on the stack, for a variadic
+     argument exactly as for a named one -- so `printf("%f", x)` on armel puts
+     the double in r2:r3 and SKIPS r1. The RISC-V psABI explicitly does NOT
+     require an aligned register pair, and i386 cdecl has no alignment at all;
+     both pass align=4 and reach the packed walk this function has always done.
+     Getting this wrong is silent: with the reg area walked 4 bytes early the
+     double reads half padding and prints 0.00.
+     bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area */
+  if (align > 4) {
+    ap->gp_offset = (ap->gp_offset + 7u) & ~7u;
+    ap->overflow_arg_area =
+        (void *)((((unsigned int)ap->overflow_arg_area) + 7u) & ~7u);
+  }
   if (ap->gp_offset + step <= ap->fp_offset) {
     /* Fully inside the register-save area. */
     addr = (char *)ap->reg_save_area + ap->gp_offset;

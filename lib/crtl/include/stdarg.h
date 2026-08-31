@@ -39,7 +39,8 @@ void *__pxx_va_arg_cross(struct __pxx_va_elem *ap);
 void __pxx_va_start_impl32(struct __pxx_va_elem *ap, void *save,
                            unsigned int gpbytes, void *overflow,
                            unsigned int regsize);
-void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size);
+void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size,
+                           unsigned int align);
 
 /* va_start/va_arg/va_end are handled by the frontend (it knows the save-area
    local and the named-GP count); these macros stay for source compatibility. */
