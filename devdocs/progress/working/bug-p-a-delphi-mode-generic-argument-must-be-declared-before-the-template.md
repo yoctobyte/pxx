@@ -3,10 +3,10 @@ slug: bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template
 track: P
 prio: 55
 type: bug
-status: backlog
+status: working
 blocked-by: []
 summary: "In mode Delphi, `TE = TBox<TOuter>;` fails with `unknown type: TOuter` when TOuter is declared AFTER TBox in the same type section — reorder the two declarations and the identical program compiles and runs. FPC accepts both orders. DelphiRewriteGenericUses splices its minted alias declarations immediately behind the TEMPLATE, so they can only name types already declared at that point. objfpc is unaffected (its aliases are emitted at the use). 20-line repro, both orders."
-owner: unassigned
+owner: frankwasm
 ---
 
 
