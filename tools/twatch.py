@@ -7479,6 +7479,20 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                      fmt_age(pv_age) if pv_age is not None else "?",
                      ", %d red" % len(pv_red) if pv_red else "",
                      vs if pv_red else ""))
+            # A RECORDED annotation, printed before the computed ones. The
+            # corroboration below is recomputed on every render against the
+            # newest full tier, which is right while the fleet is moving and
+            # decays the moment a job is renamed or retired -- a shard count
+            # lives in the job name, so `#shard5/6` stops matching the day the
+            # suite resplits, and the caveat then silently degrades to "still a
+            # single run". This field is the version that cannot decay, because
+            # it was written by someone who checked. Printed even when the
+            # computed lines agree with it: if the two ever DISAGREE, that
+            # disagreement is the finding, and suppressing the stored one to
+            # avoid repeating a line is how it would be hidden.
+            if pv.get("note"):
+                print("tstate:            ...NOTE (recorded, not recomputed): %s"
+                      % pv["note"])
             # The caveat that makes the reds readable. A pin is usually days
             # behind HEAD, so "job X is red in pin verify" and "job X is fixed
             # at HEAD" are both true and not in conflict -- they are statements

@@ -11704,6 +11704,7 @@
  },
  "pin_verify": {
   "date": "2026-08-30T17:50:58Z",
+  "note": "NOT CORROBORATED \u2014 annotated 2026-08-31 by frankT (Track T), by hand. The 4 red(s) here that are NEW versus the v397 baseline (test-core#src:test/test_warn_ignored_directives.pas, test-pascal-conformance#shard4/6, test-pascal-conformance#shard5/6, test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint) ALL report 'pass' in the newest full tier at 9a503db7c72e, 2026-08-31T16:08:41Z, roughly 22h after this verify. That is a load-shaped flake, not a regression: do NOT revert, hold a pin, or open a regression on this count alone. Note also that every red in this record is a statement about the PINNED tree c8e132a02b92, not about origin/master \u2014 a job fixed after the pin is still red here and that is not a contradiction. This note is scoped to the v398 verify and is replaced wholesale when the next pin verify runs.",
   "red": [
    "test-core#src:test/test_warn_ignored_directives.pas",
    "test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint",
