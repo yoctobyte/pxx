@@ -363,7 +363,7 @@ reader checks whether the instrument worked, and it did.
 | was my commit in the tree Track T tested? | is the TESTED sha an ancestor of MY FIX? (the question backwards — `merge-base --is-ancestor A B` is not symmetric) | **NO** — it was there; I "corrected" a peer's correct attribution |
 | which commits are in this range? | which commits are reachable from `origin/master` **OR** from the range? (a stray ref beside a range is a **union**, not a restriction) | **40 commits, 5 touching code** — the range holds **4**, and **1**. Produced while auditing someone else's ancestry arithmetic |
 | is the pinned sha a ghost? | is `992065f21f33` a **git object**? (it is the first 12 of the pinned binary's **sha256** — `pin.log` puts the 64-hex binary hash in the middle and the 40-hex GIT sha last) | *"Not a valid object name"* — read as a pre-rebase ghost in the pin ledger. **Third instance of this exact confusion**; nothing was lost |
-| does the pin predate my fix? | `--is-ancestor A B` where B is not an object at all — it cannot distinguish **"not an ancestor"** from **"not a commit"**, and returns a bare exit code for both | the RIGHT answer, reached by accident |
+| does the pin predate my fix? | `--is-ancestor A B` where B is not an object at all — **the tool answers correctly (128, with text); the SHELL IDIOM threw it away** | the RIGHT answer, reached by accident. See the correction below |
 | is this `new_red: []` vacuous? | here is `new_red: []`. (`parent_tested` lives in the REPORT front-matter and is **absent from the ndjson row** — not empty, *not present*) | correct about the field, silent about its scope, and **no sign that the question cannot be answered from here** |
 | did my edit land? | did `git commit` succeed? (the script before it printed a traceback and exited nonzero; a shell newline is `;`, not `&&`) | **a commit whose SUBJECT announces a playbook row, whose DIFF touches only the logbook** |
 | is this NilPy class leaking its fields? | is the field walker correct? (it was — `PXXObjFinalizeHook` was **nil**, so the walker was never reached; the hook's nine install sites are all pylib CONTAINER constructors) | three probes in a row "confirmed" a bug in the FINALIZER. The tell was that adding an unrelated `dummy = [1]` made the same program flat |
@@ -409,6 +409,54 @@ line**, which is hand-written and puts the binary hash where a reader expects a
 commit. Verify with `sha256sum stable_linux_amd64/default/pinned` before
 concluding anything, and note that `--is-ancestor` will not tell you: a
 malformed argument and a false answer leave through the same exit code.
+
+#### Correction: `--is-ancestor` DOES distinguish them. My row blamed the tool for what the idiom did.
+
+Published in `35351e33f`, retracted within the hour after frank-rust measured it
+and the reporter retracted his own claim. **I verified both arms myself before
+changing it back**, which is the only reason this correction is worth more than
+the row it replaces:
+
+```
+git merge-base --is-ancestor HEAD <real commit, not an ancestor>   -> exit 1,   silent
+git merge-base --is-ancestor HEAD 992065f21f33                     -> exit 128, "fatal: Not a valid object name"
+```
+
+**The tool draws the distinction cleanly and says so out loud. What collapses it
+is the shell around it:** `if ! git merge-base …`, or
+`git merge-base … && x || y`, sends 1 and 128 down the same branch — and the
+`2>/dev/null` that habitually rides along eats the only part that was talking.
+Reproduced in one line.
+
+**Why the wording matters more than the fact** (frank-rust's point, and it is the
+real content): *"the tool cannot distinguish"* is unfalsifiable advice that leads
+nowhere, while *"your `!` collapsed 1 and 128"* names a line you can go and fix.
+A rule that blames an instrument invites you to distrust it; a rule that blames
+your idiom invites you to change it.
+
+**So: branch on `$?` being 1 versus 128. Never test an ancestry query with `!` or
+`||`. Do not redirect its stderr.**
+
+**And the free half, which lands on this table's own advice:** the row above
+recommends *"prefer an instrument with no orientation — `git show <sha>:file`"*.
+Measured on the same bogus sha:
+
+```
+git show <bad sha>:tools/trackt.py 2>&1 | head -2 ; echo $?    ->  0
+git show <bad sha>:tools/trackt.py >/dev/null 2>&1 ; echo $?    ->  128
+```
+
+**A pipe replaces the exit code you are asking about — `$?` is `head`'s.** So
+*"prefer the artifact"* needs *"and let it speak"*: `git show` does fail loudly,
+just not through a pipeline.
+
+**My own exposure, stated rather than left implicit.** I used the
+`&& … || …` form several times tonight, including to establish that `b4904151c`
+was PRE-rewrite — the load-bearing step in a set-difference argument that
+released a pin blocker. That conclusion stands (`b4904151c` resolves; I have
+since checked), but the evidence was weaker than I presented it, in exactly the
+way I was writing up someone else for. **The idiom is the defect, and it is in
+everybody's fingers.**
 
 **And the last row is the one to carry into any archive question: two artifacts
 of the same run disagreed about what could be known from them.** The report's
