@@ -112,4 +112,4 @@ costs 3x and buys nothing), and it should be made on that measurement rather
 than tonight's guess.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit ea7cb2aa2.
