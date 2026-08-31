@@ -210,3 +210,35 @@ the restored build is byte-identical to the pre-control one (`be40b3454349`).
 That test's own header, written by whoever fixed the original bug, says
 *"`f()[0]` was 'correct', which is exactly how it survived — any probe must use
 a NON-ZERO index"*. The control was designed against that sentence.
+
+## Triage of the remaining 266, and one trap in it
+
+Clustered by line proximity (a gap of 40 lines starts a new cluster), the 266 are
+**about 50 regions**, not 266 scattered calls — averaging ~5 sites each, which
+matches the 6:1 the first carve measured:
+
+| file | sites | regions | the big ones |
+| --- | --- | --- | --- |
+| `pasparser_expr.inc` | 185 | 29 | 8426-8620 (29), 7737-7947 (19), 2159-2223 (12), 3024-3172 (12) |
+| `pasparser_lval.inc` | 62 | 16 | 1899-1995 (17), 1294-1363 (9), 2656-2712 (8) |
+| `pasparser_stmt.inc` | 13 | 2 | 6119-6200 (7), 320-387 (5) |
+| `pasparser_call.inc` | 5 | 5 | singletons, all inside ONE NilPy parameter-default region |
+| `pasparser_name.inc` | 1 | 1 | `PyIsClassTypeExact` — the species-2 example |
+
+**`ParseFactor` (`pasparser_expr.inc:8341`) is the prize and the hazard.** Its
+whole prologue — roughly 8351 to 8645 — is a run of `if PyExprMode ... then
+begin ... Exit; end` blocks: NilPy factor forms (`super()`, `lambda`,
+`int.from_bytes`, …). It is the same job `ParseFactorCore` already had done for
+it at line 521 and never got. Carving it closes ~35 sites at once. **Check every
+block ends in `Exit` before moving them as one** — a block that falls through
+into the Pascal code below is not part of the region, and that is the one way
+this move goes silently wrong.
+
+**The trap:** `PyMakeIdent` and `PyMakeNone` (`pasparser_call.inc:645,698`) look
+exactly like the generic AST constructors `refactor-a-seven-frontends-borrow-rust-parser-helpers`
+tells you to move to a shared `astbuild.inc` — same names, same shape as
+`RMakeIdent`. **They are not.** `PyMakeIdent` knows about NilPy cell promotion
+(`SymCellPtr`, `nonlocal` captures) and `PyMakeNone` calls pylib's `pynone`.
+Rust's really is `AllocNode(AN_IDENT)`; NilPy's is not, and both sites sit inside
+one NilPy parameter-default region anyway. Read the body — the name is shared
+with a function that has a different answer.
