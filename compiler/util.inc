@@ -84,6 +84,30 @@ begin
     RealTypeKind := tyDouble;
 end;
 
+function BareStringKind: TTypeKind;
+{ What the type name `string` MEANS in this build: the managed tyAnsiString by
+  default, the legacy frozen tyString under `-uPXX_MANAGED_STRING`.
+
+  Same routine, same reason, same bug as RealTypeKind directly above -- one type
+  over. It lived in pasparser_decl.inc serving TWO callers whose header comment
+  already said they MUST agree, while BuiltinTypeNameTk (the table SizeOf
+  consults) hard-wired tyString beside a neighbouring arm that consults the
+  define. So `SizeOf(string)` answered 8 on i386, arm32 and riscv32 for a
+  variable, record field and array element that every one of them occupied 4 --
+  pxx disagreeing with ITSELF inside one program, `SizeOf(string) <> SizeOf(v)`,
+  and a wrong size reaching GetMem and Move on exactly the targets where it is
+  least likely to be noticed.
+
+  Moved HERE rather than forward-declared because this is where the sibling
+  one-answer helper already lives and every caller is downstream of util.inc:
+  the declaration path, SizeOf's table, the resourcestring path and the operator
+  -overloading table can now all ask the same question.
+  bug-p-sizeof-string-disagrees-with-the-storage-string-actually-gets }
+begin
+  if PasDefineExists('PXX_MANAGED_STRING') then BareStringKind := tyAnsiString
+  else BareStringKind := tyString;
+end;
+
 function TargetIsEspClass: Boolean;
 { True for the ESP-class bare-metal targets — the ones that have no hosted OS
   under them and therefore no full RTL: EITHER ESP ISA under `--esp-profile=bare`,

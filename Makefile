@@ -10013,6 +10013,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_numeric_goto26 "$$($(TESTTMP)/test_numeric_goto26)" "$$(printf 'a 1\nb case-one\nc 10\nd 5\ne done\nOK')"
 	./$(COMPILER) test/test_sizeof_real_matches_storage.pas $(TESTTMP)/test_sizeof_real26
 	tools/expect_same.sh test_sizeof_real26 "$$($(TESTTMP)/test_sizeof_real26)" "$$(printf 'a 8|8\nb 8|8\nc 4|4\nd TRUE\ne TRUE\nf TRUE|TRUE\nOK')"
+	# Same identity, same defect one type over: SizeOf(string) vs a string variable.
+	# Cannot fail on x86-64 (hardcoded 8 == pointer width there, which is how it
+	# survived); it is the portable half, and pinned/riscv32 prints "a 8|4 b FALSE".
+	./$(COMPILER) test/test_sizeof_string_matches_storage.pas $(TESTTMP)/test_sizeof_string26
+	tools/expect_same.sh test_sizeof_string26 "$$($(TESTTMP)/test_sizeof_string26)" "$$(printf 'a 8|8\nb TRUE\nc TRUE\nd TRUE\ne TRUE\nf TRUE\nOK')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26

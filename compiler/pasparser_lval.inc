@@ -6484,7 +6484,13 @@ begin
   else if CaseEqual(nm, 'extended') then Result := tyExtended
   else if CaseEqual(nm, 'variant') then Result := tyVariant
   else if CaseEqual(nm, 'pointer') or CaseEqual(nm, 'codepointer') then Result := tyPointer
-  else if CaseEqual(nm, 'string') then Result := tyString
+  { BareStringKind, not tyString: this table is what SizeOf consults, and the
+    declaration path consults BareStringKind, so hard-wiring it here made
+    `SizeOf(string)` answer 8 on i386/arm32/riscv32 for a variable that occupied
+    4 -- the identical shape as the `Real` arm above, and the arm immediately
+    below already consulted the define.
+    bug-p-sizeof-string-disagrees-with-the-storage-string-actually-gets }
+  else if CaseEqual(nm, 'string') then Result := BareStringKind
   { the Ansi/Unicode/Wide string names are one model here -- bytes; which KIND
     that is depends on the managed-string build, exactly as SizeOf's own table
     had it }

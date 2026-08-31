@@ -109,18 +109,14 @@ begin
   EnumTypeValCount[etid] := EnumValCount - EnumTypeValBase[etid];
 end;
 
-{ What a bare scalar `string` IS, in one place. Managed (tyAnsiString) is the
-  default string model; `-uPXX_MANAGED_STRING` undefines the flag and keeps the
-  legacy frozen tyString. Two callers ask this -- ParseTypeKind for a written
-  `string`, and the `resourcestring` path, which is handed no type to parse --
-  and they MUST agree: hardcoding tyString in the second gave a frozen 8.4 MB
-  buffer behind a `^string` that means ^AnsiString, which read as an empty
-  string and then segfaulted on the deref. }
-function BareStringKind: TTypeKind;
-begin
-  if PasDefineExists('PXX_MANAGED_STRING') then BareStringKind := tyAnsiString
-  else BareStringKind := tyString;
-end;
+{ BareStringKind -- what a bare scalar `string` IS -- moved to util.inc beside
+  RealTypeKind, its sibling one-answer helper, so that SizeOf's table can reach
+  it too. It had TWO callers here (ParseTypeKind for a written `string`, and the
+  `resourcestring` path, which is handed no type to parse) whose comment already
+  said they MUST agree -- hardcoding tyString in the second gave a frozen 8.4 MB
+  buffer behind a `^string` that means ^AnsiString, which read as an empty string
+  and then segfaulted on the deref. BuiltinTypeNameTk was a THIRD caller that
+  never asked, which is bug-p-sizeof-string-disagrees-with-the-storage-string-actually-gets. }
 
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
