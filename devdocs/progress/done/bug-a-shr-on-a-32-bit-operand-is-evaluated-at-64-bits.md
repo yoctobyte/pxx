@@ -6,7 +6,7 @@ prio: 40
 resolved: 2026-08-31
 type: bug
 blocked-by: []
-status: resolved
+status: done
 owner: ""
 created: 2026-08-28
 summary: "MOSTLY NOT A BUG — measured 2026-08-31. Rows A and C are decide-shift-operator-promotion-width working as the user ruled on 2026-08-10 (shifts happen at NATIVE width; --strict-fpc reproduces FPC on all eight rows and does, verified), and row C is row A narrowed by the STORE, which the ruling documents. What WAS a bug is the half this ticket found by accident: an UNTYPED LITERAL shift ran at the target width, so `1 shl 40` was 256 on i386/riscv32/wasm32 and 0 on arm32 while `const K = 1 shl 40` was 2^40 in the same program. Fixed in 243ff4a29. The residual is a Track U re-confirmation the ruling asked for and never got, carried to decide-shift-native-width-was-never-re-confirmed-on-the-full-table."
@@ -144,3 +144,6 @@ Carried to `decide-shift-native-width-was-never-re-confirmed-on-the-full-table`
 so it has a slug the ranker can see, instead of a paragraph inside a file in
 `decided/` that by construction nobody re-opens. **Resolving this ticket closes
 the bug, not the question.**
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
