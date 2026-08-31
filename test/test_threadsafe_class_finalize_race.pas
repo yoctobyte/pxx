@@ -1,27 +1,33 @@
 program test_threadsafe_class_finalize_race;
-{ The POSITIVE CONTROL for the {$ifndef PXX_TS_HARDLOCK} around
-  PXXClassFinalize's managed-field pass (builtinheap.pas), which exists so that
-  x86-64 --threadsafe does NOT release string/dynarray class fields from Pascal
-  with the codegen heap lock unheld.
+{ The POSITIVE CONTROL for the heap lock around PXXClassFinalizeManaged's
+  field walk (emitted at the call site in ir_codegen.inc, because on x86-64
+  --threadsafe the lock is the codegen BSS spinlock and Pascal cannot take it).
 
-  That guard costs a real leak — bug-a-threadsafe-on-x86-64-leaks-every-managed
-  -class-field-and-it-is-not-benign measures 392 kB -> 398336 kB on 200k
-  instances — so the reflex on reading it is "just delete the ifdef". This
-  program is what says no. Measured 2026-08-31, three runs each:
+  Written 2026-08-31 to defend the guard it was about to replace, and it earned
+  itself twice. Five configurations, three runs each, in the order they were
+  measured:
 
-    guard ON,  NT=4   errors=0 RACE OK   (3/3)
-    guard OFF, NT=4   SIGSEGV            (3/3)
-    guard OFF, NT=1   errors=0 RACE OK   (3/3)
+    {$ifndef PXX_TS_HARDLOCK} guard ON,  NT=4   errors=0 RACE OK   (3/3)
+    guard deleted,                       NT=4   SIGSEGV            (3/3)
+    guard deleted,                       NT=1   errors=0 RACE OK   (3/3)
+    the fix (walk under the emitted lock), NT=4  errors=0 RACE OK  (3/3)
+    the fix with the acquire removed,      NT=4  SIGSEGV           (3/3)
 
-  The NT=1 row is what makes it a RACE rather than a plain double-free, and it
-  is why this test needs threads to have any value at all: at NT=1 the
-  unguarded code is correct.
+  Rows 2 and 3 killed the one-line "just delete the ifdef" fix and showed the
+  hazard is a genuine allocator RACE, not a double free — at NT=1 the unguarded
+  code is correct. Row 5 is the one that matters now: it is this program run
+  against the SHIPPED fix with only the lock taken back out, so it proves the
+  test can still fail for the reason it claims to test. Without row 5 a green
+  here would mean nothing, since the code path it guards changed underneath it.
 
-  So this passes today for a reason that is itself a bug — the pass it guards
-  never runs. It is here for the FIX: whichever way that lands (a Pascal-visible
-  acquire on the codegen lock, or moving the wrap into codegen with the
-  interface pass kept outside it), the fix must keep this green, and a fix that
-  simply removes the guard will not.
+  What the guard cost, and why deleting it was tempting: 392 kB -> 398336 kB on
+  200k one-string holders (bug-a-threadsafe-on-x86-64-leaks-every-managed-class
+  -field-and-it-is-not-benign). The leak and the safety are separate claims and
+  were measured separately — with the acquire removed the leak is still fixed,
+  which is exactly why a leak probe alone could never have caught row 5.
+
+  Its sibling test_threadsafe_class_finalize_kinds covers the other four managed
+  kinds, whose failure mode is a hang rather than a crash.
 
   Libc-free, --threadsafe. }
 uses palthread, palthreadobj;

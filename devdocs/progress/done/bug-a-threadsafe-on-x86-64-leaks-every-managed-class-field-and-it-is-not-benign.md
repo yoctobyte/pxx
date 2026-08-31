@@ -3,8 +3,8 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-summary: "`--threadsafe` on x86-64 gates PXXClassFinalize's string/dynarray pass off (PXX_TS_HARDLOCK), so EVERY managed field of EVERY destroyed class instance leaks: 392 kB -> 398336 kB on 200k instances, in plain Pascal. MEASURED 2026-08-31: the guard is LOAD-BEARING — deleting it segfaults 3/3 at NT=4 and runs clean 3/3 at NT=1, so it is a real allocator race, not a double free. test_threadsafe_class_finalize_race.pas is the positive control, green today. Parked with the fix shape and the kind-6 recursion constraint that kills the one-line version."
-status: working
+summary: "FIXED 2026-08-31. `--threadsafe` on x86-64 gated PXXClassFinalize's string/dynarray/record/variant pass off (PXX_TS_HARDLOCK), leaking EVERY managed field of EVERY destroyed class instance: 392 kB -> 398336 kB on 200k instances in plain Pascal, 371840 kB -> 392 kB across all four kinds. The pass is now PXXClassFinalizeManaged, called from the Free desugar with the codegen heap lock acquired AT THE CALL SITE, which is the only place Pascal can reach it; kind 4 (COM interface) stays outside the lock. Positive control re-earned: the shipped fix with only the acquire removed segfaults 3/3 at NT=4. NilPy is NOT covered and cannot ride on this - bug-a-nilpy-under-threadsafe-still-leaks-every-class-field-and-it-cannot-ride-on-the-pascal-fix."
+status: done
 owner: frankS
 ---
 
@@ -142,3 +142,81 @@ same lock. Whoever measures one should measure the other.
 The `{$ifndef}` is one line and deleting it is a data race, not a fix. The
 work is establishing which of the two directions is sound, and that is
 measurement plus a lock-discipline judgement — not a microfix.
+
+## RESOLVED 2026-08-31 (frankS) — the walk moved to where the lock is
+
+The ticket parked with the fix "blocked on the kind-6 recursion, which
+self-deadlocks a non-reentrant lock". **That blocker was wrong**, and finding out
+why is what unblocked it: the recursion is a plain Pascal call
+(`PXXObjRelease` -> hook -> `PyObjFinalize` -> `PXXClassFinalize`) which never
+re-acquires anything, because nothing in Pascal can acquire this lock in the
+first place. The acquire happens once, at the emitted call site, and the whole
+subtree runs under it.
+
+### What landed
+
+- **`PXXClassFinalizeManaged`** (builtinheap.pas) — the kinds 1/2/3/5/6 half,
+  split out and re-deriving the descriptor from `[inst]` so the emitted call
+  site needs only the instance pointer. `PXXClassFinalize` keeps the kind-4
+  pass, unlocked, and still calls the new proc itself on every non-hardlock
+  target.
+- **`ir.inc`** — under `ThreadSafeMode and (TargetArch = TARGET_X86_64)` the
+  Free desugar emits a SECOND call, to `PXXClassFinalizeManaged`, and sets
+  `HeapLockedCallProcIdx1`.
+- **`ir_codegen.inc`** — the `IR_CALL` arm recognises that one proc index and
+  emits it by hand: **argument first, then the acquire**, then the call, then
+  the release. The general path would have put arg evaluation inside the lock,
+  and an argument that allocates would deadlock against the blob it calls.
+- **`defs.inc`** — `HeapLockedCallProcIdx1` is the proc index PLUS ONE, so BSS
+  zero-init means "none" on every entry path. A `-1` sentinel would have needed
+  an initialiser in `ParseProgram`, which a NilPy or C compilation never runs,
+  leaving 0 — a VALID proc index that would have wrapped an arbitrary call.
+
+### Measured
+
+| probe | before | after |
+| --- | --- | --- |
+| one AnsiString field, 200k instances | 398336 kB | **392 kB** |
+| string + dynarray + record + variant, 200k | 371840 kB | **392 kB** |
+
+392 kB is what the same program reports with no `--threadsafe` at all, and both
+print the same answer they did before.
+
+### The safety claim, and why it needed its own control
+
+**The leak fix and the lock are independent, and only one test can tell them
+apart.** With the acquire removed from the shipped fix, the leak is STILL fixed
+(392 kB) and `test_threadsafe_class_finalize_race` segfaults 3/3 at NT=4. So a
+leak probe would have passed an unsafe build. Both controls were run against the
+shipped code, not against the code they were written for:
+
+| configuration | NT | result |
+| --- | --- | --- |
+| the fix | 4 | `errors=0 RACE OK` 3/3 |
+| the fix, acquire removed | 4 | **SIGSEGV** 3/3 |
+
+**`test_threadsafe_class_finalize_kinds.pas` is new** and covers the four kinds
+the string test cannot: its failure mode is a HANG, not a crash, because an
+AnsiString local anywhere in `PXXDynArrayRelease` / `PXXRecordRelease` /
+`PXXVarClear` would re-take the same non-reentrant lock through its own
+scope-exit epilogue. Kind 1 is the single arm with no room for that mistake,
+which is exactly why the existing test could not find it.
+
+Whole `test-threads` block run by hand, 28 jobs, all green — including the
+`--threadsafe -dPXX_HEAP_DEBUG` combo, which is the one that previously
+self-deadlocked on this lock. `gate.sh quick` GREEN, self-host converged.
+
+### Answered: "what else already frees from Pascal under --threadsafe?"
+
+The ticket named this as the first question to measure, and predicted that if
+the answer were "quite a lot" the guard would be over-broad. **It is not.** Every
+managed free on this target is entered from a codegen blob that already holds
+the lock: `AnsiStrReleaseAddr`, `EmitDynArrayReleaseForSym/ForNode`,
+`EmitDynArrayUnique`, the `PXXStrFromLit`/`Concat`/`Append`/`LoadFile` shims,
+and `IR_DEFAULT_MEM`'s record release. There was exactly ONE unlocked Pascal
+free path — the object retain/release blobs (`EmitObjBlobBody`), which take no
+lock — and that is the NilPy path, now its own ticket. So direction 1's premise
+is refuted and direction 2 is what landed.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

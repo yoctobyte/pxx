@@ -4029,15 +4029,26 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_tshd_both26 "$$($(TESTTMP)/test_tshd_both26)" "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
 	./$(COMPILER) --threadsafe test/test_thread_heap.pas $(TESTTMP)/test_thread_heap26
 	tools/expect_same.sh test_thread_heap26 "$$($(TESTTMP)/test_thread_heap26)" "$$(printf 'errors=0\nHEAP OK')"
-	# The POSITIVE CONTROL for the {$ifndef PXX_TS_HARDLOCK} guard around
-	# PXXClassFinalize's managed-field pass. That guard costs a measured 392 kB
-	# -> 398336 kB leak on 200k instances, so the reflex is to delete it; this
-	# says no. Measured 2026-08-31: guard ON NT=4 clean 3/3, guard OFF NT=4
-	# SIGSEGV 3/3, guard OFF NT=1 clean 3/3 -- the last row is what makes it a
-	# race rather than a double free. Whatever fixes the leak must keep this green.
+	# The POSITIVE CONTROL for the heap lock around PXXClassFinalizeManaged's
+	# field walk. It first defended the {$ifndef PXX_TS_HARDLOCK} guard that
+	# preceded that walk (guard OFF at NT=4 segfaults 3/3, at NT=1 is clean 3/3 --
+	# a race, not a double free), and it now defends the fix that replaced it:
+	# the shipped code with only the acquire removed segfaults 3/3, so a green
+	# here is still a measurement. The leak the guard cost -- 392 kB -> 398336 kB
+	# on 200k instances -- is fixed either way, which is why only this test, and
+	# not a leak probe, can tell the two apart.
 	# bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign
 	./$(COMPILER) --threadsafe test/test_threadsafe_class_finalize_race.pas $(TESTTMP)/test_tscfr26
 	tools/expect_same.sh test_tscfr26 "$$($(TESTTMP)/test_tscfr26)" "$$(printf 'errors=0\nRACE OK')"
+	# ...and the same churn over the OTHER four managed kinds (dynarray, record,
+	# nested string, variant). Separate program because its failure mode is a
+	# HANG, not a crash: the fix runs the field walk with the heap lock held, so
+	# an AnsiString local anywhere in PXXDynArrayRelease / PXXRecordRelease /
+	# PXXVarClear would re-take the same non-reentrant spinlock through its own
+	# scope-exit epilogue. Kind 1 is the one arm with no room for that mistake,
+	# which is exactly why the string test above cannot find it.
+	./$(COMPILER) --threadsafe test/test_threadsafe_class_finalize_kinds.pas $(TESTTMP)/test_tscfk26
+	tools/expect_same.sh test_tscfk26 "$$($(TESTTMP)/test_tscfk26)" "$$(printf 'errors=0\nKINDS OK')"
 	# heap contract: every allocation family safe under concurrent churn (strings, dynarrays, classes, raw+realloc)
 	./$(COMPILER) --threadsafe test/test_thread_heap_mixed.pas $(TESTTMP)/test_thread_heap_mixed26
 	tools/expect_same.sh test_thread_heap_mixed26 "$$($(TESTTMP)/test_thread_heap_mixed26)" "$$(printf 'errors=0\nHEAP MIXED OK')"

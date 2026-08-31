@@ -3566,6 +3566,38 @@ procedure __pxxTObjectDestroy(Inst: Pointer);
 begin
 end;
 
+procedure PXXClassFinalizeManaged(inst: Pointer);
+{ The kinds-1/2/3/5/6 half of PXXClassFinalize — string, dynarray, record,
+  variant and NilPy-object fields — split out because it is the half whose LOCK
+  DISCIPLINE differs from the kind-4 (COM interface) half above it, and the two
+  therefore cannot share a caller on every target.
+
+  Nothing here runs user code: the whole subtree is PXXStrDecRef,
+  PXXDynArrayRelease, PXXRecordRelease, PXXVarClear and PXXObjRelease, all
+  runtime, none of them taking a lock of its own on x86-64. That is what makes
+  it safe to call with the heap lock ALREADY HELD, which is how the x86-64
+  --threadsafe path reaches it: the lock there is the codegen BSS spinlock,
+  unreachable from Pascal, so the acquire is emitted at the CALL SITE
+  (ir_codegen.inc, HeapLockedCallProcIdx) rather than taken here.
+
+  The kind-4 half must NOT be under the lock — it runs the referenced object's
+  destructor chain and a self-locking FreeMem — which is the whole reason for
+  the split. It stays in PXXClassFinalize, unlocked, exactly as before.
+
+  It re-derives the descriptor from [inst] rather than taking it as a parameter
+  because the emitted call site has only the instance pointer. Two loads.
+  bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign }
+var
+  vmt, desc: Pointer;
+begin
+  if inst = nil then Exit;
+  vmt := Pointer(PWord(inst)^);
+  if vmt = nil then Exit;
+  desc := Pointer(PWord(Pointer(Int64(vmt) - 16))^);
+  if desc = nil then Exit;
+  PXXRecordRelease(inst, desc);
+end;
+
 procedure PXXClassFinalize(inst: Pointer);
 { Release a CLASS instance's managed fields on destruction, by its RUNTIME
   class: [inst] = VMT, [VMT-16] = the layout descriptor EmitLayoutRTTI emitted
@@ -3578,11 +3610,12 @@ procedure PXXClassFinalize(inst: Pointer);
     runs the referenced object's destructor chain and self-locking FreeMem, so
     doing it under a lock would deadlock (the reverted cb2ed843 hit exactly
     that on the record path).
-  - kinds 1-3 (string/dynarray/record): PXXRecordRelease, whose inner frees are
-    self-locking on softlock targets and lock-free single-threaded. On x86-64
-    --threadsafe the heap lock is the codegen BSS spinlock, unreachable from
-    Pascal — skip the pass there (pre-existing benign leak) rather than race
-    the allocator. PXXRecordRelease has no kind-4 case, so interfaces are not
+  - kinds 1-3 (string/dynarray/record): PXXClassFinalizeManaged, whose inner
+    frees are self-locking on softlock targets and lock-free single-threaded. On
+    x86-64 --threadsafe the heap lock is the codegen BSS spinlock, unreachable
+    from Pascal, so it is NOT reached from here — the Free desugar emits it as
+    a SECOND call, under the emitted lock, instead (ir.inc; and see that proc's
+    own comment). PXXRecordRelease has no kind-4 case, so interfaces are not
     double-released. }
 var
   vmt, desc: Pointer;
@@ -3613,7 +3646,7 @@ begin
   end;
 
 {$ifndef PXX_TS_HARDLOCK}
-  PXXRecordRelease(inst, desc);
+  PXXClassFinalizeManaged(inst);
 {$endif}
 end;
 

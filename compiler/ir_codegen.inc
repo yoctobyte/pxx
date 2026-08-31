@@ -8023,7 +8023,23 @@ begin
         procIdx := IRA[node];
         if procIdx >= 0 then
         begin
-          if ProcExternal[procIdx] or ProcCdecl[procIdx] then
+          if procIdx + 1 = HeapLockedCallProcIdx1 then
+          begin
+            { The one call that must run under the heap lock (defs.inc,
+              HeapLockedCallProcIdx1): PXXClassFinalizeManaged under x86-64
+              --threadsafe. Emitted here rather than through the general path
+              below because the ARGUMENT MUST BE EVALUATED OUTSIDE THE LOCK —
+              the general path would put arg emission inside the acquire, and an
+              argument that allocates would then deadlock against the blob it
+              calls. Both lock helpers preserve rax, so the instance pointer
+              survives the acquire. }
+            IREmitNode(IRA[IRB[node]]);              { rax = instance }
+            EmitAcquireHeapLock;
+            EmitAsmX64(['mov rdi, rax']);
+            EmitCallProc(procIdx);
+            EmitReleaseHeapLock;
+          end
+          else if ProcExternal[procIdx] or ProcCdecl[procIdx] then
           begin
             { C call — SysV AMD64 ABI. Integer/pointer args fill
               rdi,rsi,rdx,rcx,r8,r9; floating args fill xmm0..xmm7 (the two

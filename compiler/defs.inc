@@ -3977,6 +3977,24 @@ var
   BSS_HEAP_END    : Integer;
   BSS_FREE_LIST   : Integer;  { head of GetMem/FreeMem free list; 0 = empty (BSS zero-init) }
   BSS_HEAP_LOCK   : Integer;  { spinlock for heap allocations }
+  HeapLockedCallProcIdx1 : Integer;
+    { Proc index PLUS ONE of the one runtime helper whose emitted call must be
+      wrapped in the heap lock; 0 = none. Set by ir.inc's Free desugar to
+      PXXClassFinalizeManaged under x86-64 --threadsafe, where the lock is the
+      BSS spinlock above and Pascal cannot take it; read by ir_codegen.inc's
+      IR_CALL arm.
+
+      The +1 bias is the whole reason this needs no initialiser: BSS zero-init
+      means "none" on EVERY entry path, and a -1 sentinel would have needed a
+      write in ParseProgram, which a NilPy or C compilation never runs — leaving
+      0, which is a VALID proc index and would have wrapped an arbitrary call.
+
+      A single index rather than a per-node flag because there is exactly one
+      such callee, and a per-node array would cost every IR node in every
+      compilation to serve it. Set it for a callee whose ARGUMENT can allocate
+      and you deadlock: the arm evaluates the arg before the acquire precisely
+      so that this one cannot.
+      bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign }
   BSS_EXC_TOP     : Integer;
   BSS_EXC_OBJ     : Integer;
   BSS_EXC_CLS     : Integer;

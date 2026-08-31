@@ -11210,6 +11210,35 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             cfCall := IRAppendCall(cfPi, cfArg, -1, Ord(tyNativeInt));
             IRIVal[cfCall] := 1;   { statement: emit for effect }
           end;
+          { x86-64 --threadsafe (PXX_TS_HARDLOCK) only: PXXClassFinalize's own
+            body skips its managed-field half there, because the heap lock is
+            the codegen BSS spinlock and Pascal cannot take it. Skipping it
+            leaked EVERY managed field of EVERY destroyed instance — 392 kB ->
+            398336 kB on 200k one-string holders, measured, in plain Pascal.
+            So emit that half as a SECOND call, and mark it for the lock wrap
+            the call site can do and the callee cannot.
+
+            The kind-4 (COM interface) pass stays in the call above, unlocked:
+            it runs a destructor chain and a self-locking FreeMem, and putting
+            THAT under the lock is the deadlock the reverted cb2ed843 hit. The
+            two halves have opposite lock requirements, which is why they are
+            two procs.
+
+            Not a wider gate than the ifdef it replaces: on every other target
+            the managed half still runs inside PXXClassFinalize, unlocked,
+            because those frees are self-locking in Pascal (PXX_TS_SOFTLOCK).
+            bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign }
+          if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+          begin
+            cfPi := FindProc('PXXClassFinalizeManaged');
+            if cfPi >= 0 then
+            begin
+              HeapLockedCallProcIdx1 := cfPi + 1;
+              cfArg := IRAppend(IR_ARG, IRLowerAST(ASTLeft[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer));
+              cfCall := IRAppendCall(cfPi, cfArg, -1, Ord(tyNativeInt));
+              IRIVal[cfCall] := 1;   { statement: emit for effect }
+            end;
+          end;
         end;
         { NilPy compilation: instances are constructed through PXXObjAlloc and
           live at base+16 of their block (feature-nilpy-object-reclamation), so

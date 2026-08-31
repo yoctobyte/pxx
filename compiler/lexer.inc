@@ -1161,10 +1161,14 @@ begin
     PasDefine(name);
   end;
   { --threadsafe on x86-64: the heap lock is the codegen-emitted BSS spinlock,
-    which Pascal-level runtime code cannot take. Paths that would need it from
-    Pascal (PXXClassFinalize's string/dynarray pass) gate on this define and
-    keep the pre-existing benign leak instead of racing the allocator
-    (bug-a-class-managed-fields-not-finalized-on-destroy, heap-lock hazard). }
+    which Pascal-level runtime code cannot take. A path that needs it from
+    Pascal must therefore have the acquire emitted at its CALL SITE instead —
+    which is what PXXClassFinalize's managed-field half does: the define keeps
+    it out of PXXClassFinalize's own body and ir.inc emits it as a separate,
+    lock-wrapped call to PXXClassFinalizeManaged. It used to gate the pass off
+    entirely, which leaked every managed field of every destroyed instance
+    (bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign;
+    originally bug-a-class-managed-fields-not-finalized-on-destroy). }
   if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
   begin
     name := 'PXX_TS_HARDLOCK';
