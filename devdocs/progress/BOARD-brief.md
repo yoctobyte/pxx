@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:10 backlog:2 backlog-umbrella:5 backlog-core:143 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:21 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2956 rejected:71`
+`working:4 unfinished:28 blocked:9 backlog:2 backlog-umbrella:5 backlog-core:142 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:21 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2958 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
@@ -45,10 +45,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (10) — has an unmet blocker; do not claim
+## blocked (9) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
-- `bug-c-a-c-function-s-calling-convention-depends-on-the-target` [A+C] — blocked-by: bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
@@ -58,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 434, ranked
+## Ready — top 30 of 433, ranked
 
 - `[p 90] [C]` feature-c-corpus-busybox-multi-applet (unblocks 1)
 - `[p 85] [U]` decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
@@ -91,4 +90,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 
-_404 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_403 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
