@@ -6,7 +6,7 @@ type: bug
 status: working
 owner: frankS
 blocked-by: []
-summary: "PARTLY FIXED; re-measured 2026-08-31 by frankA at fixedpoint 7dd26baa7a80 and it was STALE: both causes it named as remaining are fixed. ALL SEVEN targets now BUILD the compiler -- i386, aarch64, arm32, riscv32, wasm32, native x86_64, and xtensa with `--platform=posix --xtensa-long-calls`. The two blockers this ticket was left waiting on are both in `done/` (riscv32 `jal` reach, xtensa >32 KB frame), so neither of the two remaining causes it named is a cause any more. ONE defect remains and it is the FOURTH one, the one this ticket found last: the arm32 cross-built compiler builds and then corrupts its own heap. DIAGNOSED 2026-08-31 (frankS + franka-d5) down to a named mechanism: the debug heap reports `pxx-heap: WRITE AFTER FREE`, distinguished by the allocator's own bookkeeping from double-free and from retain/release of a freed object. A block is written while it sits on the free list, so its next-link becomes payload -- one sampled bin head decodes to the ASCII bytes `Char`, a Pascal identifier out of the compiler's own token stream. The corruption then kills whichever consumer reaches it first: `PXXAlloc+0x290` (the bin pop) from `PXXStrFromLit`/`PXXStrSetLen`, and `PXXAlloc+0x578` (the large-block first-fit walk) from `PXXDynSetLen`. The writer is upstream of both and is NOT yet identified. The layout knobs -- output path length, source text, environment size -- only SELECT which face you see (SIGSEGV, or four bogus `undefined variable (PXX_KIND_LEGACY)` errors blaming correct source); they are not the cause, they are non-monotonic, and a native control is clean at every setting. TWO METHOD WARNINGS, both paid for: a pad number is NOT portable between shell invocations -- sweep a range inside one shell -- and every reading so far is `qemu-arm`, so `write after free` is what the guest's bookkeeping saw and does not by itself exclude an emulator artifact. Since the repro needs no compiler build, five theories are already dead by measurement: argv handling, 32-bit address-space exhaustion, stack size, large-frame codegen, and a stale META write. Meanwhile the i386, aarch64 and riscv32 cross-built compilers each run and emit a binary FOR THEIR OWN ARCHITECTURE that runs and prints -- but only when told `--target=<self>`, because the compiled-in default target is x86_64 whatever the host arch is. Two open sub-questions, NEITHER MEASURED AND ONE OF THEM STALE -- do not build a theory on either: the i386 cross-built compiler was seen to fault ~30s into rebuilding the COMPILER (small programs fine), but that reading is from 2026-08-30, BEFORE three targets were fixed and much moved underneath it, and it has not been re-run since; franka-d5 separately withdrew a fresh i386 claim on 2026-08-31 after finding it was box load rather than layout, so treat any i386 fault report as unverified until someone re-measures it in one shell on an idle box. The second: the xtensa binary cannot be exercised on this host -- qemu-xtensa carries no ESP32 core and SIGILLs on every model it does have, which is a HOST limit and not a measured defect. Under the default platform xtensa refuses `compiler.pas` at ParamStr by design (an ESP image has no argv), which is a target contract, not this bug. The title is false as written and was false when filed: wasm32 built all along."
+summary: "PARTLY FIXED; re-measured 2026-08-31 by frankA at fixedpoint 7dd26baa7a80 and it was STALE: both causes it named as remaining are fixed. ALL SEVEN targets now BUILD the compiler -- i386, aarch64, arm32, riscv32, wasm32, native x86_64, and xtensa with `--platform=posix --xtensa-long-calls`. The two blockers this ticket was left waiting on are both in `done/` (riscv32 `jal` reach, xtensa >32 KB frame), so neither of the two remaining causes it named is a cause any more. ONE defect remains and it is the FOURTH one, the one this ticket found last: the arm32 cross-built compiler builds and then corrupts its own heap. DIAGNOSED 2026-08-31 (frankS + franka-d5) down to a named mechanism: the debug heap reports `pxx-heap: WRITE AFTER FREE`, distinguished by the allocator's own bookkeeping from double-free and from retain/release of a freed object. A block is written while it sits on the free list, so its next-link becomes payload -- one sampled bin head decodes to the ASCII bytes `Char`, a Pascal identifier out of the compiler's own token stream. The corruption then kills whichever consumer reaches it first: `PXXAlloc+0x290` (the bin pop) from `PXXStrFromLit`/`PXXStrSetLen`, and `PXXAlloc+0x578` (the large-block first-fit walk) from `PXXDynSetLen`. **THE WRITER IS NOW IDENTIFIED (frankA, 2026-08-31): `PXXDynArrayReleaseDepth` decrementing the refcount of an ALREADY-FREED dynamic array.** Shown causally, not by correlation: adding a poison check to that routine which DROPS the write made all six `WRITE AFTER FREE` reports disappear and replaced them with two reports naming the routine. The string pair (`PXXStrDecRef`/`IncRef`) and the object pair (`PXXObjRetain`/`Release`) are instrumented too and are silent, each with an end-to-end plant control proving it can fire. An earlier reading of "0 stale-string decrefs" is WITHDRAWN -- that instrument was dead (it fetched a size through `PXXHdrBase`, which `Halt(204)`s on exactly a poisoned kind byte, so it died one statement before printing). What is still open is WHICH CALL SITE passes the stale handle: an IR differential over eight dynamic-array lifetime shapes finds arm32 and aarch64 emitting identical retain/release counts, so it is not a missing or extra emitted call in any shape tested so far. The layout knobs -- output path length, source text, environment size -- only SELECT which face you see (SIGSEGV, or four bogus `undefined variable (PXX_KIND_LEGACY)` errors blaming correct source); they are not the cause, they are non-monotonic, and a native control is clean at every setting. TWO METHOD WARNINGS, both paid for: a pad number is NOT portable between shell invocations -- sweep a range inside one shell -- and every reading so far is `qemu-arm`, so `write after free` is what the guest's bookkeeping saw and does not by itself exclude an emulator artifact. Since the repro needs no compiler build, five theories are already dead by measurement: argv handling, 32-bit address-space exhaustion, stack size, large-frame codegen, and a stale META write. Meanwhile the i386, aarch64 and riscv32 cross-built compilers each run and emit a binary FOR THEIR OWN ARCHITECTURE that runs and prints -- but only when told `--target=<self>`, because the compiled-in default target is x86_64 whatever the host arch is. Two open sub-questions, NEITHER MEASURED AND ONE OF THEM STALE -- do not build a theory on either: the i386 cross-built compiler was seen to fault ~30s into rebuilding the COMPILER (small programs fine), but that reading is from 2026-08-30, BEFORE three targets were fixed and much moved underneath it, and it has not been re-run since; franka-d5 separately withdrew a fresh i386 claim on 2026-08-31 after finding it was box load rather than layout, so treat any i386 fault report as unverified until someone re-measures it in one shell on an idle box. The second: the xtensa binary cannot be exercised on this host -- qemu-xtensa carries no ESP32 core and SIGILLs on every model it does have, which is a HOST limit and not a measured defect. Under the default platform xtensa refuses `compiler.pas` at ParamStr by design (an ESP image has no argv), which is a target contract, not this bug. The title is false as written and was false when filed: wasm32 built all along."
 ---
 
 # No cross target can build the compiler itself
@@ -845,3 +845,83 @@ that can still speak is the one committed today: on arm32 — unlike x86-64 —
 `PXXStrDecRef` **is** the release path, so the new poison check inside it
 reports the stale release *at the moment it happens*, with the block address and
 size class, rather than at quarantine eviction long afterwards.
+
+## 2026-08-31 (frankA) — the writer, named
+
+`PXXDynArrayReleaseDepth`, decrementing the refcount of an already-freed
+dynamic array.
+
+### How, and why it is causal rather than correlational
+
+Every writer of a managed refcount was instrumented with the same poison check,
+each reporting a distinct kind, and each check **drops the write** instead of
+performing it:
+
+| pair | kinds | arm32 compiler run |
+| --- | --- | --- |
+| `PXXStrDecRef` / `PXXStrIncRef` | 8 / 9 | 0 |
+| `PXXObjRelease` / `PXXObjRetain` | 4 / 3 | 0 |
+| **`PXXDynArrayReleaseDepth` / `PXXDynArrayIncRef`** | **10 / 11** | **2 / 0** |
+
+With the dynarray check in place the run reports **zero `WRITE AFTER FREE`**,
+where the same binary shape previously reported six. The write-after-frees were
+that decrement: suppress it and they stop existing. Nothing else changed.
+
+```
+pxx-heap: RELEASE of a FREED dynarray 0x41f03a00  size=0x44d95128
+pxx-heap: RELEASE of a FREED dynarray 0x41f01400  size=0xdddddddd
+```
+
+**Do not read the `size=` field on a kind-10/11 row.** It is the allocator's
+size word below the block, and for a stale handle that word is itself poison or
+already reused — the second row reads `0xdddddddd` and says so plainly. The
+field is meaningful on the write-after-free rows, which are reported from the
+quarantine and know the real block; it is noise here, and it should probably be
+dropped from these two kinds.
+
+`rc=139` (SIGSEGV) with the check active: dropping the write forks the
+trajectory, so per frankS's bound only the FIRST report ties to stock behaviour.
+
+### What made this readable at all: two dead instruments, back to back
+
+1. **The stale-string check appeared to say "not the string path".** It fetched
+   the block size through `PXXHdrBase`, which under `PXX_HEAP_DEBUG` `Halt(204)`s
+   when the kind byte exceeds `PXX_KIND_MAX` — and `$DD` poison always does. So
+   the check fired and the process died one statement before `PXXDbgFlush`.
+   Output empty, on every target that calls the routine at all. The tell was the
+   exit code: **204 is a deliberate diagnosis, not a crash**, which proved the
+   check had fired and located the silence to a single statement.
+   My "positive control" for it had been *the message string is present in the
+   image* — a control on a neighbouring property, which proves the code was
+   compiled in and nothing about whether it can speak. Every check here now has
+   an **end-to-end plant control** (`uafdec.pas -dPLANTDEC`,
+   `uafdyn.pas -dPLANTDYN`): plant a stale handle, see the line, and see the
+   clean arm stay silent. Both pass on arm32 and aarch64.
+2. **The call differential silently reported nothing for dynarrays**, because
+   the decoder filtered call targets against a name whitelist built for the
+   string path. Every row came back "same", vacuously. Rewritten without the
+   whitelist — and its aarch64 half then reported nothing at all, which was a
+   second dead instrument (ELF64 program-header fields read at the wrong
+   offsets) and not a finding either.
+
+### What the differential says once it works
+
+Eight dynamic-array lifetime shapes — share by assignment, `SetLength` growth,
+by-value and `const` parameters, a field of a record, managed elements, a
+loop-carried temp, explicit `nil` — **arm32 and aarch64 emit identical
+`PXXDynArrayIncRef` / `PXXDynArrayRelease` / `PXXDynSetLen` counts on all
+eight.** So the stale handle is not produced by a missing or extra emitted call
+in any shape tested so far.
+
+### Next
+
+The routine is known; the **call site** is not. Two threads, in order of cost:
+
+1. **Re-run the other targets.** aarch64, riscv32 and i386 measured "0 reports"
+   *before this check existed*, so that zero could not have seen a stale
+   dynarray release. If they report kind 10 as well, the defect is shared and
+   arm32's heap layout merely converts it into a fault — which would move this
+   ticket's whole framing. Running now.
+2. **Name the caller.** `PXXDbgFlush` is called exactly twice in this run, so a
+   breakpoint on it under `qemu-arm -g` costs nothing and the unwind names the
+   call site directly.
