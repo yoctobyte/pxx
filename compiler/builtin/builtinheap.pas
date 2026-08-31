@@ -767,6 +767,24 @@ var
     holding the spinlock would deadlock the PXX_TS_SOFTLOCK build. }
   HeapDbgPend   : Integer;                 { 0 none, 1 double free, 2 write-after-free }
   HeapDbgAddr   : Int64;
+  { Provenance for a WRITE AFTER FREE, all of it already known at detection and
+    formerly discarded. The OFFSET is the useful one: it is relative to the
+    payload address, which for a managed block IS the block base, so it reads
+    straight off the header map -- 0 is PXX_HDR_META (and the free-list next
+    link, which share that word), 8 is PXX_HDR_RC, 16 is PXX_HDR_LEN, and
+    >= PXX_HDR_SIZE is the string/array payload. "Someone wrote here" and
+    "someone wrote the LENGTH of a freed string" are different bugs. }
+  HeapDbgSize   : Int64;                   { the victim's block size }
+  HeapDbgOff    : Int64;                   { first byte that was not poison }
+  HeapDbgVal    : Int64;                   { the machine word written there }
+  { A window of the victim's bytes from the first broken one. The single most
+    identifying field measured on this bug so far was a corrupt bin head that
+    decoded to `Char` -- the WRITER'S DATA, naming the compiler's own token
+    stream in one step. A freer PC says who let go; the payload says who
+    scribbled, and the scribbler is the one being hunted. Static storage: this
+    path may allocate nothing. }
+  HeapDbgBytes  : array[0..15] of Byte;
+  HeapDbgNBytes : Integer;
 {$endif}
   { A single shared, read-only NUL byte. PChar of an empty managed string (a nil
     handle) returns its address so the C boundary sees a valid empty C string, as
@@ -1247,6 +1265,12 @@ const
   DBG_M2 = 'pxx-heap: WRITE AFTER FREE in 0x';
   DBG_M3 = 'pxx-heap: RETAIN of a FREED object 0x';
   DBG_M4 = 'pxx-heap: RELEASE of a FREED object 0x';
+  { Suffix labels for the write-after-free report. Separate constants rather
+    than one formatted line for the same reason the four above are: this path
+    may allocate NOTHING, so there is no string to build. }
+  DBG_M5 = '  size=0x';
+  DBG_M6 = ' off=0x';
+  DBG_M7 = ' val=0x';
 
 procedure PXXDbgPutConst(kind: Integer);
 { One byte at a time out of a string CONSTANT — no managed temp anywhere. }
@@ -1261,28 +1285,75 @@ begin
   else if kind = 3 then
     for i := 1 to Length(DBG_M3) do
     begin b := Byte(DBG_M3[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 5 then
+    for i := 1 to Length(DBG_M5) do
+    begin b := Byte(DBG_M5[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 6 then
+    for i := 1 to Length(DBG_M6) do
+    begin b := Byte(DBG_M6[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 7 then
+    for i := 1 to Length(DBG_M7) do
+    begin b := Byte(DBG_M7[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else
     for i := 1 to Length(DBG_M4) do
     begin b := Byte(DBG_M4[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
 end;
 
+{ Hex, high nibble first, no leading-zero suppression so the width is constant
+  and greppable. `digits` is how many nibbles to emit. Factored out of
+  PXXDbgFlush, which had this loop inline and now needs it four times -- one
+  spelling, not five. }
+procedure PXXDbgPutHex(v: Int64; digits: Integer);
+var i: NativeInt; b: Byte; r: Int64; d: Integer;
+begin
+  i := (digits - 1) * 4;
+  while i >= 0 do
+  begin
+    d := Integer((v shr i) and 15);
+    if d < 10 then b := Byte(48 + d) else b := Byte(87 + d);
+    r := PXXSysWrite(2, Int64(@b), 1);
+    i := i - 4;
+  end;
+end;
+
 procedure PXXDbgFlush;
-var i: NativeInt; b: Byte; r: Int64; v: Int64; d: Integer; kind: Integer;
+var i: NativeInt; b: Byte; r: Int64; kind: Integer;
 begin
   if HeapDbgPend = 0 then Exit;
   kind := Integer(HeapDbgPend);
   HeapDbgPend := 0;
   PXXDbgPutConst(kind);
-  { address in hex, high nibble first, no leading-zero suppression so the width
-    is constant and greppable }
-  i := (SizeOf(Pointer) * 8) - 4;
-  while i >= 0 do
+  PXXDbgPutHex(HeapDbgAddr, SizeOf(Pointer) * 2);
+  { A WRITE AFTER FREE carries its provenance; the other three kinds have none
+    to carry, and printing empty fields for them would make a grep for `off=`
+    match reports that never measured one. }
+  if kind = 2 then
   begin
-    v := HeapDbgAddr;
-    d := Integer((v shr i) and 15);
-    if d < 10 then b := Byte(48 + d) else b := Byte(87 + d);
-    r := PXXSysWrite(2, Int64(@b), 1);
-    i := i - 4;
+    PXXDbgPutConst(5); PXXDbgPutHex(HeapDbgSize, 8);
+    PXXDbgPutConst(6); PXXDbgPutHex(HeapDbgOff, 8);
+    PXXDbgPutConst(7); PXXDbgPutHex(HeapDbgVal, SizeOf(Pointer) * 2);
+    { The bytes, hex then ASCII. This is the field that names the WRITER rather
+      than the victim: printable text here is the scribbler's own data. }
+    if HeapDbgNBytes > 0 then
+    begin
+      b := 32; r := PXXSysWrite(2, Int64(@b), 1);
+      b := 91; r := PXXSysWrite(2, Int64(@b), 1);          { '[' }
+      for i := 0 to HeapDbgNBytes - 1 do
+      begin
+        if i > 0 then begin b := 32; r := PXXSysWrite(2, Int64(@b), 1); end;
+        PXXDbgPutHex(Int64(HeapDbgBytes[i]), 2);
+      end;
+      b := 93; r := PXXSysWrite(2, Int64(@b), 1);          { ']' }
+      b := 32; r := PXXSysWrite(2, Int64(@b), 1);
+      b := 34; r := PXXSysWrite(2, Int64(@b), 1);          { '"' }
+      for i := 0 to HeapDbgNBytes - 1 do
+      begin
+        b := HeapDbgBytes[i];
+        if (b < 32) or (b > 126) then b := 46;             { '.' }
+        r := PXXSysWrite(2, Int64(@b), 1);
+      end;
+      b := 34; r := PXXSysWrite(2, Int64(@b), 1);
+    end;
   end;
   b := 10;
   r := PXXSysWrite(2, Int64(@b), 1);
@@ -1300,8 +1371,12 @@ begin
   PXXDbgIsPoisonWord := ok;
 end;
 
-{ TRUE when the whole payload still reads as poison. }
-function PXXDbgPoisonIntact(addr, sz: Int64): Boolean;
+{ The offset of the first byte that is no longer poison, or -1 when the whole
+  payload is intact. The offset is the diagnostic: relative to the payload
+  address, which for a managed block is the block base, it names the FIELD that
+  was written (0 = META and the free-list link, 8 = refcount, 16 = length,
+  >= PXX_HDR_SIZE = the data). }
+function PXXDbgPoisonFirstBad(addr, sz: Int64): Int64;
 var i: Int64;
 begin
   i := 0;
@@ -1309,19 +1384,26 @@ begin
   begin
     if PByte(addr + i)^ <> HEAP_POISON then
     begin
-      PXXDbgPoisonIntact := False;
+      PXXDbgPoisonFirstBad := i;
       Exit;
     end;
     i := i + 1;
   end;
-  PXXDbgPoisonIntact := True;
+  PXXDbgPoisonFirstBad := -1;
+end;
+
+{ TRUE when the whole payload still reads as poison. One scan, not two
+  spellings of it. }
+function PXXDbgPoisonIntact(addr, sz: Int64): Boolean;
+begin
+  PXXDbgPoisonIntact := PXXDbgPoisonFirstBad(addr, sz) < 0;
 end;
 
 { Poison `addr` and put it in quarantine. Returns the block EVICTED by that
   push (which the caller must really free), or 0 while the ring is filling.
   The caller holds the allocator lock. }
 function PXXDbgQuarantine(addr: Int64): Int64;
-var sz, vic, vsz, i: Int64; slot: Integer;
+var sz, vic, vsz, i, bad: Int64; slot: Integer;
 begin
   sz := PWord(addr - 8)^;
   { A header we cannot trust (never allocated here, or already corrupted):
@@ -1347,10 +1429,23 @@ begin
       wrote through a dangling pointer. }
     vsz := PWord(vic - 8)^;
     if (vsz < 8) or (vsz > (HeapHigh - HeapLow)) then vsz := 8;
-    if not PXXDbgPoisonIntact(vic, vsz) then
+    bad := PXXDbgPoisonFirstBad(vic, vsz);
+    if bad >= 0 then
     begin
       HeapDbgPend := 2;
       HeapDbgAddr := vic;
+      { Everything below was already known here and was being discarded. }
+      HeapDbgSize := vsz;
+      HeapDbgOff  := bad;
+      HeapDbgVal  := PWord(vic + bad)^;
+      HeapDbgNBytes := 0;
+      i := bad;
+      while (i < vsz) and (HeapDbgNBytes < 16) do
+      begin
+        HeapDbgBytes[HeapDbgNBytes] := PByte(vic + i)^;
+        HeapDbgNBytes := HeapDbgNBytes + 1;
+        i := i + 1;
+      end;
     end;
     HeapQuar[HeapQuarHead] := addr;
     HeapQuarHead := HeapQuarHead + 1;
