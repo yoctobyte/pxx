@@ -184,4 +184,4 @@ which both targets define.
 `gate.sh quick` GREEN at `5a256db106c5`.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 596287d6d.
