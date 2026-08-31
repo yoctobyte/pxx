@@ -83,10 +83,16 @@ import types
 # nothing about what will EXECUTE, so this file compiles what it measures from
 # text and writes no cache of its own.
 sys.dont_write_bytecode = True
-sys.path.insert(0, "/home/neo/pxx/tools")
+# Derived from THIS FILE's location, never hardcoded. It used to say
+# "/home/neo/pxx", which is one machine's checkout: on seven this devtest
+# died with FileNotFoundError before asserting anything, so a guard that
+# reads as present in the suite could not execute at all off that box --
+# the same "reports but cannot measure" shape this repo keeps finding one
+# level up, here in the guard set itself.
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "tools"))
 import twatch  # noqa: E402
 
-REPO = "/home/neo/pxx"
 WORK = tempfile.mkdtemp(prefix="twatch-stepgate-")
 BARE = os.path.join(WORK, "origin.git")
 CLONE = os.path.join(WORK, "clone")
