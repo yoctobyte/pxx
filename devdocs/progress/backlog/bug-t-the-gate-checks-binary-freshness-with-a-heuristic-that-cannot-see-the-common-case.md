@@ -4,7 +4,7 @@ prio: 55
 type: bug
 status: backlog
 blocked-by: []
-summary: "gate.sh's stale_binary_hint compares compiler/pascal26's MTIME against the newest commit touching compiler/, so it only catches the sibling-landed-a-commit case. It is silent for a binary you built yourself and then reverted under (git stash, git checkout --), whose mtime is newer than every commit -- which is the commonest way an agent violates the precondition. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one of them."
+summary: "gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one."
 owner: frank-user-a
 ---
 
@@ -23,28 +23,51 @@ stale_binary_hint() {
 }
 ```
 
-**mtime cannot distinguish "built from these sources" from "built recently."**
-The check fires only when the binary is OLDER than the newest commit touching
-`compiler/`. A binary you built yourself five minutes ago from sources you have
-since reverted is NEWER than every commit, so the condition is false and the
-hint stays silent — while the binary is stale in the only sense the comparison
-cares about.
+**The hint's inputs are GIT HISTORY; its question is about the WORKING TREE.**
+(frankT's framing, and it is sharper than the two-cases one this ticket was
+filed with.) It can therefore only ever see divergence that has been
+**committed**. Everything uncommitted is invisible to it, in one direction, by
+construction — not as a gap to be narrowed by a better timestamp rule.
 
-That is CLAUDE.md's case 2 (*a reverted experiment*), and it is the likelier of
-the two for an agent mid-fix, because reverting is something you do to yourself
-on purpose. The hint catches case 3 (*a sibling landed a commit*) and nothing
-else.
+**Positive control, constructed 2026-08-31** — frankT identified the property
+from the two commands and explicitly did not build the case, so here it is
+built. Clean tree, freshly built binary, then one uncommitted comment line
+appended to `compiler/ir_codegen.inc` and nothing rebuilt:
+
+```
+clean tree, fresh binary:   newest=1788194998  binmt=1788195276  -> silent
++ uncommitted edit,
+  never rebuilt:            newest=1788194998  binmt=1788195276  -> silent
+                            (git status: M compiler/ir_codegen.inc)
+```
+
+**Both inputs are byte-identical across the two runs.** The guard's output is
+not merely wrong here, it is *provably independent* of the condition it exists
+to detect: `git log -1 --format=%ct -- compiler/` cannot observe an uncommitted
+change, and the binary's mtime is unaffected by editing a source. So it cannot
+fire for ANY uncommitted edit, whatever the values happen to be — which is the
+*a guard that cannot fail is not a guard, and it prints PASS* family.
+
+The population this blinds it to is not exotic. It is **every agent between
+`make compiler/pascal26` and `git commit`** — the normal working state, not an
+error. Build-then-revert (`git stash`, `git checkout --`, CLAUDE.md's case 2) is
+one instance of it; frankB's was another. The one case it does catch is case 3,
+a sibling landing a commit, where the divergence is by definition committed.
 
 ## Measured, 2026-08-31
 
 Three sessions hit a RED on the same step within about twenty minutes, with the
 identical signature (`byte 98, line 1`), by three different routes:
 
-| lane | route | NOTE fired? |
-| --- | --- | --- |
-| frank-user-a | pulled a sibling's `compiler/**`, did not rebuild (case 3) | no — ran the script directly, bypassing gate.sh |
-| coordinator | pulled mid-run (case 3) | **yes**, correctly |
-| frankB | `git stash` — sources reverted, binary still built WITH the diff (case 2) | no, and it **could not have** |
+| lane | route | divergence committed? | NOTE fired? |
+| --- | --- | --- | --- |
+| frank-user-a | pulled a sibling's `compiler/**`, did not rebuild | yes | no — ran the script directly, bypassing gate.sh |
+| coordinator | pulled mid-run | yes | **yes**, correctly |
+| frankT | same sibling route, on plexus | yes | **yes** — `newest=1788191922` (17:58:42) vs `binmt=1788144713` (04:51) |
+| frankB | `git stash` — sources reverted, binary still built WITH the diff | **no** | no, and it **could not have** |
+
+The "committed?" column is the whole finding: the hint fired in every row where
+the divergence had landed in git, and in none where it had not.
 
 It was read as a master miscompile and escalated as one: *"nobody can pass the
 pin gate today"*, with a pin held. There was no miscompile. Same tree, same
@@ -85,6 +108,12 @@ Establish provenance instead:
 Whichever it is, keep the property the current comment is protecting: **gate.sh
 must NOT silently rebuild before comparing**, or it loses the anti-Thompson
 check, which is the entire point.
+
+The history-vs-working-tree framing is what *argues* for provenance rather than
+merely preferring it: naming the sources that produced the binary answers a
+working-tree question with a working-tree fact. Any mtime-vs-commit rule is
+answering a question about history, however it is refined, and the thing being
+asked about lives in the tree.
 
 **And it ships with a POSITIVE CONTROL** — a deliberately stale binary that the
 check MUST classify as stale, asserted. The hint has been in `gate.sh` since

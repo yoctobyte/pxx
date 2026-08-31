@@ -69,7 +69,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint compares compiler/pascal26's MTIME against the newest commit touching compiler/, so it only catches the sibling-landed-a-commit case. It is silent for a binary you built yourself and then reverted under (git stash, git checkout --), whose mtime is newer than every commit -- which is the commonest way an agent violates the precondition. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one of them. | — |
+| bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one. | — |
 
 ## backlog_new (0)
 
