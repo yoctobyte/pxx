@@ -297,4 +297,4 @@ Two reasons it is still worth closing, and neither is the one I nearly recorded:
     *reason* changes reads as unchanged. `riscv32 test_scheduler_exc.pas` is
     exactly that row. Byte-identity of a corpus that mostly fails to compile is
     a weak instrument; it needed the separate live repro above to mean anything.
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit c6067c5b8.
