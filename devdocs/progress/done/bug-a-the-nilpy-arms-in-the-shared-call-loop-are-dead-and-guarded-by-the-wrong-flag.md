@@ -3,10 +3,10 @@ slug: bug-a-the-nilpy-arms-in-the-shared-call-loop-are-dead-and-guarded-by-the-w
 track: A
 prio: 40
 type: bug
-status: new
+status: done
 owner: ""
 blocked-by: []
-summary: "MEASURED, not reasoned. The NilPy star/kwargs arms inside the SHARED call-argument loop (pasparser_expr.inc ~7730-7955) never fire for NilPy source, because NilPy source goes through PyParseFactorCore's own copy of that loop. They are guarded by `isNilPy` (true for the whole compilation) where the question is `PyExprMode` (is THIS unit Python) -- and with PyExprMode true the code is unreachable anyway, ParseFactorCore having Exited to PyParseFactorCore 7000 lines earlier. So they are evaluated ~3000 times per NilPy compile while parsing PASCAL library units, where a `*` token and a `name=` keyword cannot occur. Four star arms never fired in six programs; the keyword-overload retarget ran ~3000 times and changed procIdx ZERO times, including on the exact call its own bug ticket cites. DELETED 2026-08-31 in pasparser_expr.inc: nine arms gone, all 18 test programs (compiler.pas included) emit BYTE-IDENTICAL binaries, carve metric 232 -> 214. REMAINING: pasparser_stmt.inc:~6100-6200 carries the same twin and has NOT been touched."
+summary: "MEASURED, not reasoned. The NilPy star/kwargs arms inside the SHARED call-argument loop (pasparser_expr.inc ~7730-7955) never fire for NilPy source, because NilPy source goes through PyParseFactorCore's own copy of that loop. They are guarded by `isNilPy` (true for the whole compilation) where the question is `PyExprMode` (is THIS unit Python) -- and with PyExprMode true the code is unreachable anyway, ParseFactorCore having Exited to PyParseFactorCore 7000 lines earlier. So they are evaluated ~3000 times per NilPy compile while parsing PASCAL library units, where a `*` token and a `name=` keyword cannot occur. Four star arms never fired in six programs; the keyword-overload retarget ran ~3000 times and changed procIdx ZERO times, including on the exact call its own bug ticket cites. DELETED 2026-08-31 in pasparser_expr.inc: nine arms gone, all 18 test programs (compiler.pas included) emit BYTE-IDENTICAL binaries, carve metric 232 -> 214. The pasparser_stmt.inc twin (four arms) followed the same day on the same evidence: metric 214 -> 209, 15/15 Pascal programs and 5 NilPy programs byte-identical. BOTH LOOPS ARE NOW CLEAR."
 ---
 
 # The NilPy arms in the shared call-argument loop are dead, and guarded by the wrong flag
@@ -104,20 +104,60 @@ gone, while the literal form still compiles and answers 18. A literal-only check
 watches nothing. The canary now carries both shapes deliberately, with that
 recorded inline.
 
+## The twin: done, 2026-08-31
+
+`pasparser_stmt.inc`'s four arms (`:6119` keyword-overload retarget, `:6160`
+`PyFixCallableTypeArgs`, `:6189`/`:6199` `PyFixIterableArgs`) are deleted.
+
+**The structural argument had to be rebuilt, not reused** — this ticket warned it
+would, and it was right. `ParseStatementAST` has no `PyExprMode` early exit, so
+the `ParseFactorCore` argument does not transfer. What replaced it:
+
+- `pyparser.inc` has its own statement parser (`PyParseStatement`, `:26778`) and
+  **never calls `ParseStatementAST`** — its three mentions of the name are all
+  comments.
+- Measured rather than read: a probe on `ParseStatementAST` entry printed
+  **20603 entries on the quick canary, every one with `PyExprMode = False`, and
+  not one True.** The positive control is the count itself — an instrument
+  printing 20603 lines is not a silent one.
+- Each arm probed individually: all four run ~1000 times per NilPy compile
+  (against the Pascal library units), and the retarget's `procIdx` **changed
+  zero times**. `PyFixCallableTypeArgs` and `PyFixIterableArgs` both open with
+  `if not PyExprMode then Exit;`.
+- The retarget has no such guard, so it got a language-level argument instead:
+  it fires on `tkIdent` followed by `tkAssign` at paren depth 1, and in the
+  Pascal lexer `tkAssign` is `:=` only (`=` lexes as `tkEq`, `lexer.inc:2879`).
+  `:=` is not an expression operator, so the shape cannot occur in a Pascal
+  argument list.
+- Byte-identity: 15 Pascal programs identical, 3 more producing identical
+  diagnostics, and 5 NilPy programs identical — including a purpose-built
+  **statement-position** probe (`kwtake(1, b=2)` and
+  `html.escape(s, quote=False)` as bare call statements, not as arguments to
+  `print`, which is what the expression loop would have caught instead).
+
+**The statement probe was watched failing**, by disabling the surviving
+`PyPromoteProcOverloadByKwAt` in `pyparser.inc`: it then rejects the `quote=False`
+row with the overload-set diagnostic from that arm's own bug ticket. So the probe
+reaches the mechanism.
+
+**The other control returned a null, and that null is a separate ticket.**
+Disabling `PyFixIterableArgs` entirely changed nothing anywhere — not in this
+probe, not in the corpus, and not in `test/test_nilpy_user_iterable_in_builtins.npy`,
+which emits a byte-identical binary with the function switched off. That is not
+evidence about this deletion (these arms were already inert by their own first
+line); it is evidence the *surviving* mechanism is uncovered or superseded:
+[[bug-n-pyfixiterableargs-is-inert-its-own-test-passes-with-it-disabled]].
+
 ## Still open
 
-`pasparser_stmt.inc`'s twin has the same arms and has NOT been touched. Its
-`PyPackStarArgs`/`PyBindKwArgs` pair is at `:6155-6156`. It needs the same
-treatment and the same evidence -- and note that the structural argument in
-step 1 above is about `ParseFactorCore` specifically, so it does **not** transfer
-to the statement loop for free. Establish the equivalent entry condition there
-before assuming the twin is dead.
-
-If they are dead, the guard that should have been there is `PyExprMode`, and the
-reason nobody noticed is that `isNilPy` reads as *"this is Python"* when it means
-*"this compilation started from a .npy file"*. [[the-name-is-not-the-thing]].
-
+Nothing in this ticket. The remaining NilPy references in the shared Pascal
+parser are the carve's other regions —
+[[refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops]],
+metric at 209.
 ## Related
 
 - [[refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops]] — 19 of its sites are these
 - `bug-nilpy-keyword-arg-vs-overload-set` — the ticket whose example does not reach this code
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

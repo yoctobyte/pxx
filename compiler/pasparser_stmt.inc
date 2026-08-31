@@ -6114,9 +6114,6 @@ begin
         if (procIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
         begin
           Next;
-          { keyword-name-aware overload re-target, statement-position twin of
-            the expression-position fix above (bug-nilpy-keyword-arg-vs-overload-set) }
-          if isNilPy then procIdx := PyPromoteProcOverloadByKwAt(procIdx, 0, PyKwNamesTokPos);
           Expect(tkLParen, '(');
           argsHead := -1;
           lastArg := -1;
@@ -6155,9 +6152,6 @@ begin
           PyPackStarArgs(procIdx, argsHead, lastArg, nArgs, 0);
           PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
-          { see the twin site: a builtin TYPE in a callback slot, before the
-            types that pick the overload are read }
-          if isNilPy then PyFixCallableTypeArgs(name, argsHead, nArgs);
           currArg := argsHead;
           for i := 0 to nArgs - 1 do
           begin
@@ -6183,21 +6177,17 @@ begin
           end;
 
           procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
-          { see the twin expression site: a user iterable meeting a pylib
-            container parameter (bug-nilpy-builtins-over-a-user-iterable-
-            answer-empty) }
-          if isNilPy and (procIdx < 0) and PyFixIterableArgs(-1, argsHead, nArgs) then
-          begin
-            currArg := argsHead;
-            for i := 0 to nArgs - 1 do
-            begin
-              argTypes[i] := IntToTypeKind(ASTTk[ASTLeft[currArg]]);
-              currArg := ASTRight[currArg];
-            end;
-            procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
-          end
-          else if isNilPy and (procIdx >= 0) then
-            PyFixIterableArgs(procIdx, argsHead, nArgs);
+          { NOTHING NILPY BELONGS BELOW THIS LINE. ParseStatementAST is reached
+            only with PyExprMode = False: pyparser.inc has its own statement
+            parser (PyParseStatement) and never calls this one -- measured, 20603
+            entries on the quick canary and not one of them with PyExprMode True.
+            The four arms that used to sit here were guarded by `isNilPy` ("this
+            compilation started from a .npy file"), which stays True while a
+            NilPy program's PASCAL library units are parsed, so they ran ~1000
+            times per compile against Pascal source and acted zero times.
+            Deleted 2026-08-31, twin of the expression-loop deletion in
+            pasparser_expr.inc; see
+            bug-a-the-nilpy-arms-in-the-shared-call-loop-are-dead-and-guarded-by-the-wrong-flag. }
           if procIdx < 0 then
             procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
           if procIdx < 0 then
