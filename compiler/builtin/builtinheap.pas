@@ -676,6 +676,7 @@ const
     the RARE big blocks only. 64 bins x one word = 512 bytes of BSS, which the
     ESP static-arena build can afford too. }
   HEAP_BIN_MAX   = 512;                     { largest size with its own bin }
+  CEN_BIG_MIN    = 65536;                   { -dPXX_ALLOC_BIG traces at or above this }
   { Span at which `rep stosb` starts beating the word loop in PXXMemZero. Swept
     on x86-64 (see the note there); a wrong value costs throughput, never
     correctness -- both arms zero the same bytes. }
@@ -1088,6 +1089,9 @@ end;
 { Defined after PXXSysWrite, which is what it writes through. Forward here
   because the trigger is inside PXXAlloc and the printer cannot be. }
 procedure PXXCensusReport; forward;
+{$ifdef PXX_ALLOC_BIG}
+procedure PXXCensusBig(size: NativeInt); forward;
+{$endif}
 {$endif}
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
@@ -1109,6 +1113,15 @@ begin
   CensusBytes := CensusBytes + size;
   if size <= HEAP_BIN_MAX then
     CensusBins[Integer(size shr 3) - 1] := CensusBins[Integer(size shr 3) - 1] + 1;
+{$ifdef PXX_ALLOC_BIG}
+  { The census's bins stop at HEAP_BIN_MAX, so the allocations that actually
+    consume the arenas are the ones it cannot see: on a 32-bit host building
+    compiler.pas, 5931 of 19780 allocations are above the top bin and carry
+    essentially all of the 4.4 GB. This prints those individually, which turns
+    a total into a SEQUENCE -- a doubling series, a repeated constant and a
+    slow ramp are three different bugs and the total cannot tell them apart. }
+  if size >= CEN_BIG_MIN then PXXCensusBig(size);
+{$endif}
 {$endif}
 
   { Free-list nodes are payload addresses; the size header is at [cur-8] and the
@@ -1905,6 +1918,7 @@ begin
     PXXStrAppendAsciiBits := oldMeta and (PXX_FLAG_ASCII_KNOWN or PXX_FLAG_ASCII);
 end;
 
+
 procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
 var
   h, oldLen, newLen, rc, cap, need, want, base, d, s2, i: Int64;
@@ -2146,6 +2160,8 @@ const
   CEN_BUMP  = ' bump=';
   CEN_AREN  = ' arenas=';
   CEN_SIZES = 'pxx-census: sizes';
+  CEN_BIG   = 'pxx-big: ';
+  CEN_BIGAT = ' at alloc ';
 
 procedure PXXCensusPut(kind: Integer);
 { One byte at a time out of a string CONSTANT — no managed temp anywhere. }
@@ -2167,6 +2183,10 @@ begin
     for i := 1 to Length(CEN_BUMP) do begin b := Byte(CEN_BUMP[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else if kind = 8 then
     for i := 1 to Length(CEN_AREN) do begin b := Byte(CEN_AREN[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 10 then
+    for i := 1 to Length(CEN_BIG) do begin b := Byte(CEN_BIG[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 11 then
+    for i := 1 to Length(CEN_BIGAT) do begin b := Byte(CEN_BIGAT[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else
     for i := 1 to Length(CEN_SIZES) do begin b := Byte(CEN_SIZES[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
 end;
@@ -2199,6 +2219,18 @@ begin
     i := i - 1;
   end;
 end;
+
+{$ifdef PXX_ALLOC_BIG}
+procedure PXXCensusBig(size: NativeInt);
+{ One line per allocation at or above CEN_BIG_MIN. Allocates nothing, for the
+  same reason PXXCensusReport does not -- it runs from inside PXXAlloc. }
+var b: Byte; r: Int64;
+begin
+  PXXCensusPut(10); PXXCensusNum(size);
+  PXXCensusPut(11); PXXCensusNum(CensusAllocs);
+  b := 10; r := PXXSysWrite(2, Int64(@b), 1);
+end;
+{$endif}
 
 procedure PXXCensusReport;
 var i: Integer; b: Byte; r: Int64;
