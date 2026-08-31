@@ -359,6 +359,7 @@ reader checks whether the instrument worked, and it did.
 | where is this parse error? | what text sits at a token index past the unit's end? (`Tokens[]` is shared; it lands in a *neighbouring unit*) | a plausible Pascal declaration in an **innocent file** |
 | did this test pass? | did `diff` exit 0 against a **missing** `.expected`? | **FAIL** — output was identical to pinned |
 | is `sizeof(*p)` right? | is it right for struct, union and scalar pointees? (`csizeof_deref_ptr_b79.c` has no array pointee) | **green test sitting on top of an open gap** |
+| is Track T down? | is the watcher daemon in **this box's** process table? (T runs on `seven`; no other host can match) | **DOWN, with total confidence** — the only answer it could reach |
 | was my commit in the tree Track T tested? | is the TESTED sha an ancestor of MY FIX? (the question backwards — `merge-base --is-ancestor A B` is not symmetric) | **NO** — it was there; I "corrected" a peer's correct attribution |
 | which commits are in this range? | which commits are reachable from `origin/master` **OR** from the range? (a stray ref beside a range is a **union**, not a restriction) | **40 commits, 5 touching code** — the range holds **4**, and **1**. Produced while auditing someone else's ancestry arithmetic |
 | is this `new_red: []` vacuous? | here is `new_red: []`. (`parent_tested` lives in the REPORT front-matter and is **absent from the ndjson row** — not empty, *not present*) | correct about the field, silent about its scope, and **no sign that the question cannot be answered from here** |
@@ -403,6 +404,33 @@ order. "Was my change in that tree?" is answerable directly —
 `git show <sha>:compiler/symtab.inc | awk '/^function IsNodeArray/,/^end;/'` —
 and reading the code out of the tested tree **cannot be asked backwards**. Prefer
 an instrument with no orientation to remembering which way round to point one.
+
+### The worst version: a wrong answer that AUTHORISES something
+
+The Track T row is the one to remember, because it did not merely mislead — **it
+licensed an action.** `tools/trackt.py health` asked the *local* process table for
+a daemon that runs on `seven`, so on every other box `DOWN` was the only reachable
+answer. CLAUDE.md names a DOWN from that command as proof T is down, and the
+documented consequence is *run your lane's FULL gate*. So a check with exactly one
+possible answer was authorising the ten-minute widening the `no-full-suite` hook
+exists to prevent — **through the documented path, not around it.** Fixed at
+`78bbe63b8a49`.
+
+Two things generalise:
+
+- **A predicate that cannot return both answers is not a check.** Before trusting
+  one, ask what it would take to see the *other* answer. If nothing on this box
+  could produce it, the instrument is a constant wearing a question's clothes.
+- **A stale tool is confidently wrong with no error, and it sits in every checkout
+  that has not pulled.** The fix landing does not fix the copies. When a tool's
+  answer would widen your gate or change a verdict, `git pull --rebase` **first** —
+  the same discipline as proving your tree is current before reporting a not-fixed.
+
+The repaired command is a model for how these should read: it names what it
+**cannot** see ("this box cannot see a remote process table"), says plainly that
+absence "is NOT proof it is down", and points at the second instrument
+(`twatch.py --status`, which needs a `git fetch` first). **An instrument that
+states its own blind spot cannot be mistaken for one that has none.**
 
 ### The five shapes
 
