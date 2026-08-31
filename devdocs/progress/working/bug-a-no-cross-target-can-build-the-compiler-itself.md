@@ -6,7 +6,7 @@ type: bug
 status: working
 owner: frankS
 blocked-by: []
-summary: "PARTLY FIXED; re-measured 2026-08-31 by frankA at fixedpoint 7dd26baa7a80 and it was STALE: both causes it named as remaining are fixed. ALL SEVEN targets now BUILD the compiler -- i386, aarch64, arm32, riscv32, wasm32, native x86_64, and xtensa with `--platform=posix --xtensa-long-calls`. The two blockers this ticket was left waiting on are both in `done/` (riscv32 `jal` reach, xtensa >32 KB frame), so neither of the two remaining causes it named is a cause any more. ONE defect remains and it is the FOURTH one, the one this ticket found last: the arm32 cross-built compiler builds and then corrupts its own heap. DIAGNOSED 2026-08-31 (frankS + franka-d5) down to a named mechanism: the debug heap reports `pxx-heap: WRITE AFTER FREE`, distinguished by the allocator's own bookkeeping from double-free and from retain/release of a freed object. A block is written while it sits on the free list, so its next-link becomes payload -- one sampled bin head decodes to the ASCII bytes `Char`, a Pascal identifier out of the compiler's own token stream. The corruption then kills whichever consumer reaches it first: `PXXAlloc+0x290` (the bin pop) from `PXXStrFromLit`/`PXXStrSetLen`, and `PXXAlloc+0x578` (the large-block first-fit walk) from `PXXDynSetLen`. **THE WRITER IS NOW IDENTIFIED (frankA, 2026-08-31): `PXXDynArrayReleaseDepth` decrementing the refcount of an ALREADY-FREED dynamic array.** Shown causally, not by correlation: adding a poison check to that routine which DROPS the write made all six `WRITE AFTER FREE` reports disappear and replaced them with two reports naming the routine. The string pair (`PXXStrDecRef`/`IncRef`) and the object pair (`PXXObjRetain`/`Release`) are instrumented too and are silent, each with an end-to-end plant control proving it can fire. An earlier reading of "0 stale-string decrefs" is WITHDRAWN -- that instrument was dead (it fetched a size through `PXXHdrBase`, which `Halt(204)`s on exactly a poisoned kind byte, so it died one statement before printing). What is still open is WHICH CALL SITE passes the stale handle: an IR differential over eight dynamic-array lifetime shapes finds arm32 and aarch64 emitting identical retain/release counts, so it is not a missing or extra emitted call in any shape tested so far. The layout knobs -- output path length, source text, environment size -- only SELECT which face you see (SIGSEGV, or four bogus `undefined variable (PXX_KIND_LEGACY)` errors blaming correct source); they are not the cause, they are non-monotonic, and a native control is clean at every setting. TWO METHOD WARNINGS, both paid for: a pad number is NOT portable between shell invocations -- sweep a range inside one shell -- and every reading so far is `qemu-arm`, so `write after free` is what the guest's bookkeeping saw and does not by itself exclude an emulator artifact. Since the repro needs no compiler build, five theories are already dead by measurement: argv handling, 32-bit address-space exhaustion, stack size, large-frame codegen, and a stale META write. Meanwhile the i386, aarch64 and riscv32 cross-built compilers each run and emit a binary FOR THEIR OWN ARCHITECTURE that runs and prints -- but only when told `--target=<self>`, because the compiled-in default target is x86_64 whatever the host arch is. Two open sub-questions, NEITHER MEASURED AND ONE OF THEM STALE -- do not build a theory on either: the i386 cross-built compiler was seen to fault ~30s into rebuilding the COMPILER (small programs fine), but that reading is from 2026-08-30, BEFORE three targets were fixed and much moved underneath it, and it has not been re-run since; franka-d5 separately withdrew a fresh i386 claim on 2026-08-31 after finding it was box load rather than layout, so treat any i386 fault report as unverified until someone re-measures it in one shell on an idle box. The second: the xtensa binary cannot be exercised on this host -- qemu-xtensa carries no ESP32 core and SIGILLs on every model it does have, which is a HOST limit and not a measured defect. Under the default platform xtensa refuses `compiler.pas` at ParamStr by design (an ESP image has no argv), which is a target contract, not this bug. The title is false as written and was false when filed: wasm32 built all along."
+summary: "FIXED 2026-08-31 (frankA), root cause found and it is one instruction width. All seven targets BUILD the compiler; the title was false when filed (wasm32 built all along) and the two blockers this ticket waited on are in `done/`. The last defect -- the arm32 cross-built compiler corrupting its own heap -- was `EmitLoadVar`/`EmitStoreVar` on arm32, riscv32 and xtensa sizing a variable access with `TypeSize(Syms[idx].TypeKind)`, which is the ELEMENT type. A dynamic array's slot holds a pointer-sized handle, so a byte-sized element gave a ONE-BYTE access to a pointer slot: the prologue zero-init emitted `strb` and cleared only the low byte, leaving three stale ones. The early-`Exit` cleanup in `EmitLateNestedSpecDecls` then released a handle made of stack garbage and `PXXDynArrayReleaseDepth` decremented a refcount inside an already-freed block, which is the `pxx-heap: WRITE AFTER FREE` this ticket chased. aarch64 has carried the guard for this since the same defect was found there; it was never applied to the three siblings -- six sites, three backends, both directions. THE PROOF: all 34 stale handles reported across the pad sweep end in `0x00`, which a byte-store must produce and nothing else does; plus the disassembly (`+0x0044` `e5c90000` STRB before, `e5890000` STR after, same function, same address). VERIFIED: the arm32 cross compiler over pads 0..80 in one shell went from reporting at EVERY pad (rc 0/139/204/1) to 9-of-9 clean, rc=0, with real output. SCOPE, measured and narrower than it looks: the obvious user-level repro (`array of Byte`, `b := a`) passes on the PRE-FIX compiler too, so a declared dynarray variable does not take this path -- do not claim ordinary user code is affected without a repro that fails before the fix. riscv32 and xtensa carried the identical defect and measured clean on this workload; their zero was luck, not health, which is why the fix went to all three. Instrumentation added along the way (PXX_HEAP_DEBUG kinds 8/9/10/11 plus a raw stack capture) is committed and each check has an end-to-end plant control."
 ---
 
 # No cross target can build the compiler itself
@@ -925,3 +925,83 @@ The routine is known; the **call site** is not. Two threads, in order of cost:
 2. **Name the caller.** `PXXDbgFlush` is called exactly twice in this run, so a
    breakpoint on it under `qemu-arm -g` costs nothing and the unwind names the
    call site directly.
+
+## 2026-08-31 (frankA) — ROOT CAUSE, and it is one instruction
+
+**A dynamic array's variable slot holds a pointer-sized handle. `EmitLoadVar` /
+`EmitStoreVar` on arm32, riscv32 and xtensa sized the access from the ELEMENT
+type.** For a byte-sized element `TypeSize` is 1, so a pointer slot got a
+one-byte access:
+
+```
+prologue zero-init:   strb r0, [r9]     clears the low byte, leaves 3 stale
+handle load:          ldrb r0, [r9]     reads a truncated handle
+```
+
+aarch64 has carried the guard since the same defect was found there —
+`EmitStoreVarA64`: *"TypeSize(elementType) would truncate the 64-bit handle"*.
+It was never applied to the siblings. **Six sites, three backends, both
+directions.**
+
+### The signature that settles it, and it was in data already collected
+
+`EmitLateNestedSpecDecls` is the call site. Its declared locals are three
+Integers; the released thing is a compiler-synthesised dynarray temp at
+`[fp-48]`, and the release sits on the function's **early-`Exit`** path — which
+a trivial program takes every time. The prologue zeroes the neighbouring string
+temp at `[fp-44]` with `e5890000` (`STR`, 4 bytes) and the dynarray temp with
+`e5c90000` — bit 22 set, so **`STRB`, one byte.** Three stale bytes survive, the
+early exit releases a handle made of stack garbage, and
+`PXXDynArrayReleaseDepth` decrements a refcount inside an already-freed block.
+
+**Every one of the 34 stale handles reported across the pad sweep ends in
+`0x00`** — 34 of 34. A byte-store cannot produce anything else, and nothing else
+produces that. That is the proof; the disassembly is the mechanism.
+
+Worth recording how it was found, because it was cheap and I nearly did not do
+it: the reports had been read one at a time as addresses. Sorting them and
+asking what was INVARIANT took one command.
+
+### Verification
+
+Instruction level, same function, same address:
+
+| | `+0x002c` (string temp) | `+0x0044` (dynarray temp) |
+| --- | --- | --- |
+| before | `STR` | **`STRB`** |
+| after | `STR` | `STR` |
+
+Behaviour, arm32 cross-built compiler compiling `program e; begin end.` under
+`qemu-arm`, same pad range in one shell:
+
+| | pads | rc | heap diagnostics | output |
+| --- | --- | --- | --- | --- |
+| before | 0…80 | 0 / 139 / 204 / 1 | reports at **every** pad | — |
+| after | 0…80 | **0 on all 9** | **0 on all 9** | produced |
+
+### How far the exposure reaches — MEASURED, and narrower than it looks
+
+The obvious user-level repro **does not reproduce it.** `array of Byte`,
+`SetLength`, element writes, `b := a`, sum and print: `len=4 sum=46 OK` on
+arm32, riscv32 and aarch64, **on the pre-fix compiler as well as the fixed one.**
+A repro that passes on both arms is a coincidence, not a verification, so it is
+recorded here as a negative and is NOT being added as a regression test.
+
+So a declared dynamic-array variable does not take this path. What demonstrably
+does is the **compiler-synthesised temp** — the slot at `[fp-48]` above, zeroed
+by the prologue pass through `EmitStoreVarArm32`. A user-level shape that
+reaches the same emitter has not been found yet; shapes still being tried are a
+by-value dynarray parameter, a function result passed straight into a call, two
+temps in one call, and an early `Exit` before the local is assigned.
+
+**Until such a shape is found, the honest statement of scope is: the defect is
+in a width decision that is wrong for every dynamic-array slot, and the path
+proven to reach it is the synthesised-temp prologue.** Do not upgrade that to
+"ordinary user code is affected" without a repro that fails on the pre-fix
+compiler.
+
+riscv32 and xtensa carried the identical defect and measured CLEAN on the
+compiler workload — the corruption only becomes visible when the surviving
+stale bytes happen to form a plausible heap address. **Their zero was luck, not
+health**, which is why the fix went to all three rather than only to the one
+that crashed.
