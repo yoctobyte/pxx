@@ -97,10 +97,14 @@ of the test for that reason.
 Multi-dimensional arrays still refuse, now with
 `capture of multi-dimensional array 'm' not yet supported (1-D fixed arrays are)`.
 They need the per-dim lo/span vectors carried as well, which is wider than the
-use case this was filed from. **Array *parameters* of an enclosing routine were
+use case this was filed from. ~~**Array *parameters* of an enclosing routine were
 in the acceptance text and are not separately tested** — the capture arm keys off
 `Syms[].IsArray` for `skLocal` and `skParam` alike, so it should follow, but
-"should" is not a measurement and this row is honestly open.
+"should" is not a measurement and this row is honestly open.~~
+**CLOSED by frankS's `416cbc997`** — see the addendum below; `ParamCapture` is
+now a row, so the reasoning above stands and is no longer a gap. Struck rather
+than deleted because the addendum is what answers it, and a reader who lands
+here first should be sent there rather than left believing the row is open.
 
 ### Controls
 
@@ -142,6 +146,21 @@ Measured rather than argued: a compiler with `29704fd69` reverted rejects
 `test/test_nested_fixed_array_capture.pas` at `TwoArrays` for `--target=i386`
 and compiles it fine for x86-64. **The native-only Makefile row could not have
 seen it**, which is why there is now an i386 row.
+
+*Independently confirmed (frankA), and it sharpens the boundary: the
+discriminator is **statement vs expression**, not nesting.* Against `pinned`, on
+`--target=i386`, with no nested routine anywhere in the source:
+
+```
+if F(a) then writeln(...)   ->  ok: ... compiles
+F(a);                       ->  pascal26:8: error: target i386: a compiler-minted
+                                temporary reached codegen with an UNRESOLVED type
+                                (tyUnknown)
+```
+
+So an open-array `var` param whose call is a *statement* was already broken on
+i386; the capture feature only supplied the first program in the tree that took
+that shape. The current compiler compiles and runs both.
 
 Not this feature's bug — the two-line repro in that commit has no nested
 routine in it and `pinned` refuses it today:
