@@ -1697,8 +1697,22 @@ class Job:
                 continue                      # recipe comment: shell no-op
             if stepf:
                 parts.append("echo %d > %s" % (i, shlex.quote(stepf)))
+            # ...and NEVER the repo's own path. The privatizing rewrite keys on
+            # a literal TESTTMP prefix, so when the CHECKOUT itself lives under
+            # /tmp -- a scratch worktree, a CI clone, the pinned-sha worktree a
+            # diagnostic sweep should be run from -- a recipe line embedding an
+            # absolute repo path is rewritten into the scratch dir and the job
+            # dies with `cannot read input file:
+            # /tmp/testmgr-scratch-NNN/<the rest of the repo path>`. Measured on
+            # seven 2026-08-31: test-smoke#24 failed exactly that way in two
+            # instrumented sweeps, and it reads as a compiler defect, not as the
+            # harness eating its own repo path.
+            #
+            # REPO is never a temp file by definition, so excluding it can never
+            # reintroduce the cross-run collision this rewrite exists to stop.
             body = TMP_RE.sub(
-                lambda m: m.group(0) if m.group(0) in pinned
+                lambda m: m.group(0) if (m.group(0) in pinned
+                                         or m.group(0).startswith(REPO))
                 else RUN_TMP + m.group(0)[len(TESTTMP):], ln)
             # point every invocation at the run's snapshot (see RUN_COMPILER)
             if os.path.exists(RUN_COMPILER):
