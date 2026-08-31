@@ -1460,6 +1460,54 @@ begin
         EmitB($89); EmitB($E8);   { mov eax, ebp }
       end;
 
+    IR_ALLOCA:
+      begin
+        { Dynamic stack allocation -- the LAST of the five backends, and the only
+          one needing the saved-esp delta as well as the relocation. Model in
+          full above EmitSaveCallerRspX64 in ir_codegen.inc.
+
+          TWO i386-specific costs, both real rather than stylistic:
+
+          NO RED ZONE. x86-64 parks its three copy registers at [rsp-8..-24],
+          which is architecturally safe there and is NOT here -- anything below
+          esp on i386 can be overwritten by a signal frame. So the copy
+          registers spill to three frame words carved beside the base slot,
+          which are above the relocated region and cannot move.
+
+          THE DELTA IS MANDATORY. The cdecl call arm parks an ABSOLUTE esp in
+          the outgoing frame and restores from it, with the argument
+          sub-expressions emitted in between -- so an alloca inside an argument
+          list relocates the parked slot's BYTES while its VALUE goes stale.
+          `and esp,-16` means the restore cannot be rewritten as a relative add,
+          because the amount subtracted is not a compile-time constant. Hence
+          the base-relative conversion at the park and the restore.
+          feature-a-port-alloca-to-i386-arm32-and-riscv32 }
+        IREmitNode386(IRA[node]);
+        EmitB($83); EmitB($C0); EmitB($0F);            { add eax, 15 }
+        EmitB($83); EmitB($E0); EmitB($F0);            { and eax, -16 }
+        if X386AllocaBaseOff = 0 then
+          Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
+              + 'IREmitMachineCode386''s body-entry scan did not see this node');
+        EmitB($29); EmitB($C4);                        { sub esp, eax }
+        EmitB($89); EmitB($8D); EmitI32(X386AllocaBaseOff + 4);   { mov [ebp+s0], ecx }
+        EmitB($89); EmitB($B5); EmitI32(X386AllocaBaseOff + 8);   { mov [ebp+s1], esi }
+        EmitB($89); EmitB($BD); EmitI32(X386AllocaBaseOff + 12);  { mov [ebp+s2], edi }
+        EmitB($8B); EmitB($8D); EmitI32(X386AllocaBaseOff);       { mov ecx, [ebp+base] }
+        EmitB($29); EmitB($C1);                        { sub ecx, eax  (base -= size) }
+        EmitB($89); EmitB($8D); EmitI32(X386AllocaBaseOff);       { mov [ebp+base], ecx }
+        EmitB($89); EmitB($E7);                        { mov edi, esp  (dst) }
+        EmitB($89); EmitB($E6);                        { mov esi, esp }
+        EmitB($01); EmitB($C6);                        { add esi, eax  (src = the old esp) }
+        EmitB($29); EmitB($F9);                        { sub ecx, edi  (byte count) }
+        EmitB($C1); EmitB($E9); EmitB($02);            { shr ecx, 2    (dword count) }
+        EmitB($FC);                                    { cld }
+        EmitB($F3); EmitB($A5);                        { rep movsd }
+        EmitB($8B); EmitB($85); EmitI32(X386AllocaBaseOff);       { mov eax, [ebp+base]  (the hole) }
+        EmitB($8B); EmitB($BD); EmitI32(X386AllocaBaseOff + 12);  { mov edi, [ebp+s2] }
+        EmitB($8B); EmitB($B5); EmitI32(X386AllocaBaseOff + 8);   { mov esi, [ebp+s1] }
+        EmitB($8B); EmitB($8D); EmitI32(X386AllocaBaseOff + 4);   { mov ecx, [ebp+s0] }
+      end;
+
     IR_LOAD_SYM:
       begin
         IREmit386CheckScalarSym(IRA[node], 'load');
@@ -3349,6 +3397,16 @@ begin
           { Reserve a 16-rounded frame: arg block + 4-byte saved-esp slot. }
           base := ((argBytes + 4 + 15) div 16) * 16;
           EmitB($89); EmitB($E1);                        { mov ecx, esp }
+          { Park esp as a DELTA from this body's alloca base, not as an absolute.
+            The argument sub-expressions below can contain an alloca, which
+            relocates this slot's bytes and leaves an absolute value pointing at
+            where the expression stack USED to be. `and esp,-16` is why the
+            restore cannot instead be a relative add. Bodies with no alloca emit
+            exactly the bytes they did before. }
+          if X386AllocaBaseOff <> 0 then
+          begin
+            EmitB($2B); EmitB($8D); EmitI32(X386AllocaBaseOff);  { sub ecx, [ebp+base] }
+          end;
           EmitB($83); EmitB($E4); EmitB($F0);            { and esp, -16 }
           EmitB($81); EmitB($EC); EmitI32(base);         { sub esp, base }
           EmitB($89); EmitB($8C); EmitB($24); EmitI32(argBytes); { mov [esp+argBytes], ecx }
@@ -3435,7 +3493,19 @@ begin
             EmitExternalIndirectCall(RegisterExternal(procIdx)) { call dword [GOT slot] }
           else
             EmitCallProc(procIdx);   { bodied cdecl proc: no GOT slot }
-          EmitB($8B); EmitB($A4); EmitB($24); EmitI32(argBytes); { mov esp, [esp+argBytes] }
+          if X386AllocaBaseOff = 0 then
+          begin
+            EmitB($8B); EmitB($A4); EmitB($24); EmitI32(argBytes); { mov esp, [esp+argBytes] }
+          end
+          else
+          begin
+            { The parked value is a delta; add the (possibly moved) base back.
+              ecx is caller-saved in cdecl and is not a return register, so it is
+              free here whatever the callee returned. }
+            EmitB($8B); EmitB($8C); EmitB($24); EmitI32(argBytes); { mov ecx, [esp+argBytes] }
+            EmitB($03); EmitB($8D); EmitI32(X386AllocaBaseOff);    { add ecx, [ebp+base] }
+            EmitB($89); EmitB($CC);                                { mov esp, ecx }
+          end;
           if Procs[procIdx].RetType = tySingle then
           begin
             EmitB($83); EmitB($EC); EmitB($04);          { sub esp, 4 }
@@ -5123,6 +5193,19 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+
+  { Carve this body's alloca base slot plus three scratch words, and record
+    where the expression stack starts. Only when the body actually contains an
+    IR_ALLOCA, so a body without one is byte-identical to before -- which is
+    also what keeps the delta conversions above inert for every existing call. }
+  X386AllocaBaseOff := 0;
+  for i := 0 to IRCount - 1 do
+    if (IRKind[i] = IR_ALLOCA) and (X386AllocaBaseOff = 0) then
+    begin
+      FrameSize := AlignTo(FrameSize + 16, 4);
+      X386AllocaBaseOff := -FrameSize;
+      EmitB($89); EmitB($A5); EmitI32(X386AllocaBaseOff);   { mov [ebp+base], esp }
+    end;
 
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments. They are created during this body's IR lowering, after the
