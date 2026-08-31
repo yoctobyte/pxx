@@ -1268,6 +1268,21 @@ const
   { Suffix labels for the write-after-free report. Separate constants rather
     than one formatted line for the same reason the four above are: this path
     may allocate NOTHING, so there is no string to build. }
+  { A DECREF whose target refcount still reads as poison: the block was freed
+    and something is still releasing a handle into it. Caught AT THE WRITE,
+    where the HANDLE is known -- the eviction check can only report the victim
+    long afterwards, by which time the handle that did it is gone. The object
+    path has had this since DBG_M3/M4; strings never did, which is why 26 of
+    these were reported as anonymous write-after-frees. }
+  DBG_M8 = 'pxx-heap: DECREF of a FREED string 0x';
+  { The other direction. No RETAIN of a freed string has been OBSERVED -- every
+    one of the 26 arm32 reports was a decrement -- but the two guards in
+    PXXStrIncRef/PXXStrDecRef already carry a comment saying they must move
+    together, and guarding one arm while leaving the other to prose is how a
+    sibling stays broken. It also makes an absence meaningful: with both armed,
+    "only decrefs were reported" is a measurement rather than the shape of the
+    instrument. }
+  DBG_M9 = 'pxx-heap: RETAIN of a FREED string 0x';
   DBG_M5 = '  size=0x';
   DBG_M6 = ' off=0x';
   DBG_M7 = ' val=0x';
@@ -1294,6 +1309,12 @@ begin
   else if kind = 7 then
     for i := 1 to Length(DBG_M7) do
     begin b := Byte(DBG_M7[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 8 then
+    for i := 1 to Length(DBG_M8) do
+    begin b := Byte(DBG_M8[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 9 then
+    for i := 1 to Length(DBG_M9) do
+    begin b := Byte(DBG_M9[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else
     for i := 1 to Length(DBG_M4) do
     begin b := Byte(DBG_M4[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
@@ -1327,6 +1348,14 @@ begin
   { A WRITE AFTER FREE carries its provenance; the other three kinds have none
     to carry, and printing empty fields for them would make a grep for `off=`
     match reports that never measured one. }
+  { The stale-handle reports carry the victim's SIZE CLASS and nothing else:
+    it is the field that JOINS them to the write-after-free rows above, which
+    is the tie that was missing between a report naming a handle and a report
+    naming a victim. Free to obtain -- the caller is already at the block. }
+  if (kind = 8) or (kind = 9) then
+  begin
+    PXXDbgPutConst(5); PXXDbgPutHex(HeapDbgSize, 8);
+  end;
   if kind = 2 then
   begin
     PXXDbgPutConst(5); PXXDbgPutHex(HeapDbgSize, 8);
@@ -2583,6 +2612,21 @@ var rcAddr: Int64;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
+{$ifdef PXX_HEAP_DEBUG}
+  { Mirror of the check in PXXStrDecRef -- see DBG_M9 for why this arm exists
+    with nothing yet observed on it. }
+  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  begin
+    HeapDbgPend := 9;
+    HeapDbgAddr := Int64(p);
+    { The allocator's size word sits immediately below the block it handed out,
+      and a managed block's base IS that payload -- so this is the same size
+      class the write-after-free rows report. }
+    HeapDbgSize := PWord(PXXHdrBase(p) - 8)^;
+    PXXDbgFlush;
+    Exit;
+  end;
+{$endif}
   { A static literal block must never be WRITTEN, not merely never freed: it
     lives in the data section, so a store to it dirties a page shared with code
     (1600x under qemu — see the parent ticket) and defeats ever placing these
@@ -2605,6 +2649,25 @@ var rcAddr, rc: Int64;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
+{$ifdef PXX_HEAP_DEBUG}
+  { The refcount still reads as poison, so this block is in quarantine and this
+    handle is stale. Report and DROP the write: decrementing would corrupt the
+    poison and turn a precise finding into an anonymous write-after-free found
+    much later, which is exactly how these first showed up.
+    Note the static guard below cannot catch this: poison is $DDDD..., which is
+    NEGATIVE as a signed machine word and so never >= PXX_STATIC_RC_FLOOR. }
+  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  begin
+    HeapDbgPend := 8;
+    HeapDbgAddr := Int64(p);
+    { The allocator's size word sits immediately below the block it handed out,
+      and a managed block's base IS that payload -- so this is the same size
+      class the write-after-free rows report. }
+    HeapDbgSize := PWord(PXXHdrBase(p) - 8)^;
+    PXXDbgFlush;
+    Exit;
+  end;
+{$endif}
   { Saturated: no write, and no free to consider. Same guard as PXXStrIncRef —
     they must move together, because suppressing one direction only is what
     would let a static block's count drift. }
