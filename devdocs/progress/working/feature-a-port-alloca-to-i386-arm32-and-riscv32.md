@@ -4,7 +4,7 @@ prio: 45
 type: feature
 status: working
 blocked-by: []
-summary: "IR_ALLOCA now exists on x86-64 and aarch64. i386, arm32 and riscv32 still refuse it at codegen ('target <arch>: IR op not yet supported: alloca'), which means C alloca() AND every VLA is unbuildable for those three targets -- test/c_vla.c does not compile for any of them."
+summary: "IR_ALLOCA now exists on x86-64, aarch64 and RISCV32 (ported 2026-08-31, binary a376d28d9ed1 -- relocation only, no saved-sp delta, verified byte-identical to gcc on c_vla / c_alloca_in_call_argument / c_alloca_expression_stack). i386 and arm32 still refuse it, so C alloca() and VLAs remain unbuildable for those two. The audit is COMPLETE for all five: arm32 needs the relocation only; i386 is the sole backend needing the saved-esp delta, by construction."
 owner: frankA
 ---
 
@@ -155,3 +155,44 @@ treatment.** arm32, aarch64 and riscv32 all need the relocation alone.
 binary of the same file under `tools/run_target.sh`. Both are byte-identical on
 x86-64 and aarch64 today, so a passing cross run is a real differential rather
 than a self-comparison.
+
+---
+
+## riscv32: DONE, 2026-08-31 (frankA)
+
+Binary `a376d28d9ed1`, self-host fixedpoint converged. Landed with the rows
+wired behind a `qemu-riscv32` probe, matching the aarch64 arm.
+
+**Relocation only — no saved-sp delta**, which the audit above predicted and the
+implementation confirms: the backend never aligns sp, so every restore is
+already a relative `addi`.
+
+**Verified against gcc, byte-identical on all three subjects** rather than on the
+repro alone: `c_alloca_expression_stack` (all 17 rows), `c_alloca_in_call_argument`,
+`c_vla`. x86-64 and aarch64 re-run afterwards and still byte-identical — worth
+doing because the change touches shared `FrameSize` accounting, not just riscv32
+code. A body containing no `IR_ALLOCA` carves no slot and is byte-identical to
+before.
+
+Two riscv32-specific notes, both at the site:
+
+- The copy loop terminates on **`beq`**, not an unsigned compare. The region is
+  a whole number of 4-byte words (every temp push is `addi sp,sp,-4`), so the
+  dst cursor lands *exactly* on the new base. This backend has no unsigned
+  branch helper and needs none.
+- `t0..t3` are the transient scratch class, never live across a subexpression,
+  so the copy borrows them without saving.
+
+## What remains
+
+| backend | needs | status |
+| --- | --- | --- |
+| **arm32** | relocation only — its AAPCS32 block is all relative (`sub sp,#blk` / `add sp,#blk-16`), confirmed by frankC | **not started** |
+| **i386** | relocation **+ the saved-esp delta**, by construction — `and esp,-16` makes the subtracted amount unknowable at compile time, so the restore cannot become a relative `add` | **not started** |
+
+arm32 is the easier of the two and is the same shape as the riscv32 arm just
+landed; the one extra cost is that this backend emits raw `EmitI32($...)`
+encodings rather than named helpers, so the copy loop has to be hand-encoded.
+i386 is the only one that needs new *model*, and the x86-64 arm
+(`EmitSaveCallerRspX64` / `EmitLoadSavedRspX64` / `EmitRestoreCallerRspX64` in
+`ir_codegen.inc`) is its template.

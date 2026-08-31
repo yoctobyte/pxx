@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-a-port-alloca-to-i386-arm32-and-riscv32 | A | 45→80 | feature | IR_ALLOCA now exists on x86-64, aarch64 and RISCV32 (ported 2026-08-31, binary a376d28d9ed1 -- relocation only, no saved-sp delta, verified byte-identical to gcc on c_vla / c_alloca_in_call_argument / c_alloca_expression_stack). i386 and arm32 still refuse it, so C alloca() and VLAs remain unbuildable for those two. The audit is COMPLETE for all five: arm32 needs the relocation only; i386 is the sole backend needing the saved-esp delta, by construction. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why | A | 60→50 | perf | ANSWERED and partly fixed. Profiled: the managed-string + heap runtime is ~47% of a self-compile (PXXStrFromLit 17%, PXXAlloc 10%, PXXFree 8.6%, refcount thunks 8.6%) — resolved through the compiler's own .map file, not DWARF. GetTokenStr built every token string a char at a time and was 17 of the 18 AppendChar samples; fixed in 4b3d34f74 for 13.8% off a self-compile. Top remaining item split out as perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass. FPC oracle now measured: we are 1.28x fpc 3.2.2 on the same file, i.e. inside the 2x band the ticket set as its own de-escalation criterion. Still open: the July-3.4s vs today-21.7s discrepancy. | — |
@@ -85,7 +86,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 85 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 70 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (142)
+## backlog-core (141)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -171,7 +172,6 @@ _none_
 | feature-a-merge-the-wasm-branch-the-shared-file-arms | A | 20 | feature | Branch `wasm` modifies four existing files: compiler.pas (5 edits), exception_emit.inc (1 arm), ir_codegen.inc (1 arm), and lib/rtl/platform.pas (1 additive constant). The last is Track B and carries B's gate, so the merge review spans two lanes, not one. Nothing on the branch is pre-approved. This ticket is the ledger; the branch's own CHARTER table is not visible from master and was stale. | — |
 | feature-a-object-output-for-arm32-and-aarch64 | A | 45 | feature | arm32 and aarch64 still have no object writer; i386 landed separately and x86-64 before it. Both are DIVERGENT targets on the C-ABI question, so each one is a second and third oracle for a ruling the i386 measurement has already made once -- worth having, not urgent. aarch64 is gated on an ABI question first: cparser.inc's aarch64 param spill is POSITIONAL while pxx's external-call path is AAPCS, and the two coincide for every all-integer/pointer signature, which is why libc callbacks work today and prove nothing. Make that spill AAPCS, or establish by measurement that it already is, BEFORE landing the writer -- the writer is what makes the falsifying test (a genuinely external caller, mixed int/float) constructible for the first time. Expect the shape to follow i386's, not the ESP writer's: check how each backend reaches an external before assuming. | — |
 | feature-a-one-argv-to-frozen-filler-instead-of-x86-64s-inline-copy | A | 30 | feature | argv -> frozen string is implemented TWICE: five backends call the RTL's PXXCStrToFrozen, and x86-64's EmitArgvToString open-codes the same contract as emitted bytes (its own strlen, its own cmp against FROZEN_CSTR_CAP, its own rep movsb). They agree on 255 today, and the agreement is maintained by hand. Normalising means deleting the inline copy and making x86-64 call what the other five already call -- no observable behaviour change. Filed rather than bundled into the crash fix that measured it. | — |
-| feature-a-port-alloca-to-i386-arm32-and-riscv32 | A | 45→80 | feature | IR_ALLOCA now exists on x86-64 and aarch64. i386, arm32 and riscv32 still refuse it at codegen ('target <arch>: IR op not yet supported: alloca'), which means C alloca() AND every VLA is unbuildable for those three targets -- test/c_vla.c does not compile for any of them. | — |
 | feature-a-promoint-variant-esp-targets | A+S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 45→75 | feature | Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix. | — |
 | feature-a-report-fixed-cap-headroom | A | 40 | feature | Three fixed caps in defs.inc have now been raised AFTER a user hit them — MAX_CODE 8->16 MB, MAX_STRS 8192->65536, MAX_CODE 16->32 MB — and each was found by a program failing, never by anyone looking. Nothing reports how close a compile came to any cap, so the only headroom signal the project has is an overflow. Proposal: a PXXDBG=a.caps topic printing per-cap utilisation at end of compile, so `the next one` is a number someone can read instead of an incident. Small, additive, no behaviour change. | — |
@@ -910,7 +910,6 @@ _none_
 
 - [p 90] [C] feature-c-corpus-busybox-multi-applet (unblocks 1)
 - [p 85] [U] decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
-- [p 80] [A] feature-a-port-alloca-to-i386-arm32-and-riscv32 (unblocks 1)
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] meta-a-pxx-produces-linkable-code
 - [p 75] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa (unblocks 1)
