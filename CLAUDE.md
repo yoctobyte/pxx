@@ -292,14 +292,50 @@ ranking or memory**. Work needing none of the three does not belong in it.
 Measurements and incidents behind all three:
 `devdocs/dev/coordination-overhead-2026-08-30.md`.
 
-**1. Just fix it.** If it cannot change behaviour and you can verify it by
-reading, **fix it — do not file it.** You are authorized; filing is the
-deviation. Qualifies: stale/wrong/misleading comments, typos, dead
-cross-references, stale prose enumerations, obvious `devdocs/**` rot. Does not,
-however few characters: code, a directive, a `.expected`, an identifier rename,
-deleting code you *believe* is dead. **The test is "can this change behaviour?",
-not "is it small?"** — a one-character code edit is a ticket; a forty-line
-comment rewrite is not.
+**1. FIX IT, THEN NOTE IT — this is the default, and it is not limited to
+comments** (owner, 2026-08-31, widening it himself). *"If you find a small issue
+(or even a bigger) that you can fix on the fly, fix it right away instead of
+leaving a ticket. Fix other issues you found along the way, and just leave a
+note that you did so."*
+
+**This RETIRES "document our bugs, as a goal in itself."** That directive was
+his and he has withdrawn it: *"this request has sortof got out of hand"* — it
+is where 426 open tickets in eight days came from. **The artifact is the FIX
+plus a note that you made it, not a report of a defect for somebody else to
+process.**
+
+**The test is no longer "can this change behaviour?" — it is "can I fix AND
+verify this right now?"** If yes, do it, whatever its size. Code counts. A
+`.expected` counts. An identifier rename counts. Behaviour-changing work is not
+excluded any more; it is exactly what "land green" already covers — `make
+compiler/pascal26` plus your repro, which you owe regardless.
+
+**What still earns a ticket** is unchanged and is now the ONLY reason to file:
+work needing **coordination, ranking or memory** — most often because you
+*cannot finish it now*. Diagnosed something real but deeper than this session?
+**Bank the diagnosis and park it** (that is memory, and it is the one case
+`root-cause-over-microfix` insists on). Need someone else to act, or it must
+compete for a slot under an umbrella? File it. Otherwise: fix, note, move on.
+
+**Four guards survive, and they are about VERIFYING, never about permission:**
+- **Land green.** Fixing on the fly does not suspend your gate.
+- **Verified, not believed.** "Deleting code you *believe* is dead" is still
+  wrong — not because it needs filing, but because belief is not verification.
+  Prove it, then delete it.
+- **The comment-vs-code trap.** A comment disagreeing with the code means one of
+  them is wrong and you do not yet know which. Decide first.
+- **No compiler-appeasement workarounds.** Hitting a compiler bug is the one
+  case where you do NOT "just fix it" locally — leave the platonic code, file
+  the bug with a repro. Reshaping code to make something pass today hides the
+  defect, which is the opposite of progress.
+
+**The clearest cases, unchanged:** stale/wrong/misleading comments, typos, dead
+cross-references, stale prose enumerations, obvious `devdocs/**` rot — verifiable
+by reading, so fix them on sight. What CHANGED is everything above that line: the
+old rule said *"a one-character code edit is a ticket; a forty-line comment
+rewrite is not."* **The first half of that is now wrong** — a one-character code
+edit you can verify is a fix, not a ticket. Size was never the test, and now
+neither is behaviour; the test is whether you can *verify* it.
 
 - **The trap:** a comment that disagrees with the code means **one of them is
   wrong and you do not yet know which.** Matching the comment to broken code
