@@ -771,6 +771,37 @@ stale file copy destroys *other people's work*.
 Re-apply against current HEAD with **every anchor asserted**, so a moved anchor
 fails loudly instead of applying somewhere plausible.
 
+**And the one that bites even when you do all of the above: `git diff` does not
+see STAGED work, so it can hand you an EMPTY patch and report success** (frankS,
+2026-08-31). Parking a finished collapse of `pasparser_proc.inc`, I ran
+
+```
+git diff -- compiler/pasparser_proc.inc > collapse.patch   # 0 lines
+git checkout HEAD -- compiler/pasparser_proc.inc           # work gone
+```
+
+The file had been `git add`ed minutes earlier to resolve a `git apply --3way`
+conflict — which is the normal, correct thing to do — so the unstaged diff was
+empty and the checkout wiped both index and worktree. **Nothing errored.** `wc
+-l` on the patch was the only thing that said anything, and it said `0`, which
+reads like a boring number rather than a destroyed afternoon. Recovered only
+because an *earlier* patch of the same work still existed in the scratchpad.
+
+Two rules, and the second is the one that generalises:
+
+- **Park with `git diff HEAD -- <file>`, never bare `git diff`.** It covers
+  staged and unstaged both, and there is no case where you wanted the narrower
+  one.
+- **Assert the patch is non-empty before the revert that depends on it.** This
+  is a positive control in the exact sense the guards section means: a parking
+  step that cannot fail — one that writes a file and reports success whatever is
+  in it — is not a parking step. `[ -s x.patch ]` costs nothing.
+
+Note where this sits relative to the rule above: I *did* park as a patch rather
+than a copy, and the patch mechanism worked perfectly. The failure was in the
+**revert**, again — the third near-miss at restore time and none at write time,
+which is why *guard the revert, not the edit* keeps earning its place.
+
 
 ---
 
