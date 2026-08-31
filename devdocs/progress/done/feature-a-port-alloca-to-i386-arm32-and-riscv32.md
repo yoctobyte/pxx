@@ -271,4 +271,4 @@ They disagree, loudly, on the one input that exercises the change. The control
 can fail, so the 137 identical objects mean something.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 33c69e122.

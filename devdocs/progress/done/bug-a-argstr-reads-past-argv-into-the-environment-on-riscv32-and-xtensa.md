@@ -117,4 +117,4 @@ longer triggers `{$Q+}`, so it compiles clean on arm32 and riscv32 and looks
 green. A real overflow still fails to compile there. Verified 2026-08-31.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 9c68b9f0a.
