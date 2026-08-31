@@ -7,7 +7,7 @@ type: decide
 status: open
 created: 2026-08-30
 found-by: frank-coordinator
-summary: "The UTF-16 model was decided as a distinct tyWideString kind. Measurement after the fact says that costs a 636-site audit with no chokepoint and silent failures, which contradicts the owner's stated 'almost free'. Option B -- one managed-string kind carrying an element width -- costs nothing at those sites. One AST measurement decides whether B is actually cheaper."
+summary: "RULED 2026-08-31 (owner): option B, one managed-string kind carrying an element width. Ruled BY CONSTRUCTION — the measurement that was in flight came back YES (ASTStrElemTk exists at defs.inc:4495 with 27 readers, plus ProcRetStrElemTk/UFldPtrElemStrTk follow-ons), tyWideString has zero references left, and pasparser_decl.inc:464 already broke the alias the B way. The 636-site audit never has to happen. Carried forward: the runtime header ALREADY reserves an encoding enum (PXX_ENC_BYTES/UTF8/UCS2/UCS4 at builtinheap.pas:289) that nothing stamps or reads — see feature-a-stamp-and-read-the-managed-string-encoding-field."
 ---
 
 # The fork
@@ -131,3 +131,93 @@ it was found by accident, which is the point.
 Under B that same test still passes and returns the byte count, so the halving
 is a frontend shift and no backend changes at all.
 — frankwasm, 2026-08-30
+
+---
+
+## RULED 2026-08-31 (owner) — option B, and it was already built
+
+### The measurement that was "IN FLIGHT" came back YES
+
+This ticket's own decision table said:
+
+> - **slot exists** → B strictly cheaper, no fork, proceed
+
+The slot exists. `compiler/defs.inc:4495` declares `ASTStrElemTk` — the element
+TypeKind of a managed-string-typed *expression* — allocated in `ast_arena.inc`,
+copied by the AST deep-copy, read through `ASTStrElemTkOf()`, **27 references
+across the compiler**. Three follow-ons landed on top of it: `ProcRetStrElemTk`
+(a managed-string result keeps its width), `UFldPtrElemStrTk` (a record field's
+pointee), and pointer-to-managed-string width.
+
+Its own comment names the property that dissolves the 636-site problem:
+
+> `0` means NARROW, which is correct for every string expression that exists
+> today and for every frontend that cannot produce a wide string at all. Sites
+> do not need to be found…
+
+**Option A is not merely unchosen, it is gone.** `grep -c tyWideString
+compiler/*.inc` returns **zero** — the distinct kind landed additive at
+`ce693b1d5120` has been fully backed out — and `pasparser_decl.inc:464` reads
+*"THE ALIAS BREAK. WideString/UnicodeString keep the same KIND as…"*, which is
+B's shape. The 636-site audit never has to happen, and A's worst measured
+consequence (`Length` on a wide string returning garbage, because every
+backend's Length path tests `IRTk = tyAnsiString`) is moot for the same reason
+that test still passes.
+
+**So this ticket sat at prio 60 in `backlog/` advertising a live fork to every
+idle Track U reader while the code had already answered it.** Third instance
+this week of the same shape (see the `-O0` pruning and Track R branch
+rulings): *the fork dissolved before anyone had to rule on it.* Worth noticing
+as a pattern — a `decide-*` whose resolution depends on a measurement should
+carry the measurement's owner and be re-checked before it is offered, because a
+stale fork costs a reader a full read plus a wrong model.
+
+### What the owner added, and it is the more interesting half
+
+Raised while ruling: the runtime header has spare bits, so record the element
+width there and cover UCS-2 *and* UCS-4 without escaping to a variable-width
+encoding, letting any library function read the tag instead of being written per
+type.
+
+**Checked, and the field is already reserved — by the same person, earlier.**
+`compiler/builtin/builtinheap.pas:289`:
+
+```pascal
+{ KindData0, bits 16-23: text encoding. A small enum, NOT a codepage —
+  CP_UTF8 (65001) would not fit, and this is the field pxx actually wants. }
+PXX_ENC_BYTES = 0;  PXX_ENC_UTF8 = 1;  PXX_ENC_UCS2 = 2;  PXX_ENC_UCS4 = 3;
+PXX_ENC_SHIFT = 16;
+```
+
+The header is `[meta:8][rc:8][len:8][data][nul]`, handle = base + 24. The meta
+slot is 8 bytes; the highest bit in use is 12 (`MSTR_FLAG_ASCII_KNOWN`). The
+encoding enum sits at 16-23 with four values defined and 252 free, the accessors
+exist (`PXXHdrMeta`, `PXXHdrSetMeta`), and a test already pins the meta word
+(`test_managed_block_meta`). **UCS-4 was anticipated in the original design.**
+The codepage question was also already ruled, against, with the reason recorded
+in that comment — a small enum rather than a codepage, because `CP_UTF8`
+(65001) does not fit in a byte and an encoding is the field pxx actually wants.
+
+**An ENCODING field is a better shape than a width field**, and that is the
+design's, not this ruling's: `BYTES` and `UTF8` are both one byte per character
+and differ in *meaning*; width (1/1/2/4) falls out of the encoding rather than
+being the primary fact. A pure width field could not tell those two apart.
+
+**This does not reopen the fork — it settles it harder.** The static model
+(`ASTStrElemTk`) tells the COMPILER what to emit: no branch, no load. The
+runtime tag tells a CALLEE THAT NEVER SAW THE DECLARATION — a library routine
+taking a bare handle, `Write`, RTTI, variants, a debugger, and an assertion in a
+checked build. They are complementary, and a runtime tag removes option A's
+entire reason for existing, which was making the distinction visible.
+
+### The gap, and it is narrow
+
+Nothing stamps the field and nothing reads it: every managed string in the
+system, of any width, is `KIND_LEGACY` with enc bits 0 = `BYTES`. Split out as
+**`feature-a-stamp-and-read-the-managed-string-encoding-field`** (Track A).
+
+### Carried from the original ticket, still binding
+
+The acceptance test must **name the arm it ran under and run both**
+`PXX_MANAGED_STRING` arms. A one-arm green lets a change land in one
+configuration and silently miss the other.
