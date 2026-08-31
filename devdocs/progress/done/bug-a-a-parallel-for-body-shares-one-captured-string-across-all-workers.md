@@ -141,4 +141,4 @@ make the original shape expressible. Additive, consistent with the documented
 model, and NOT required to close this — filed low.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit f3ef2ef1d.

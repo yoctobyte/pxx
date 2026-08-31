@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frankA
 owner: frankA
 blocked-by: []
-resolved-commit: PENDING-COMMIT
+resolved-commit: f3ef2ef1d
 summary: "FIXED. `p^[i]` where p points at a named DYNAMIC array used a 4-BYTE STRIDE whatever the element type: a Double slot read back 0.00 (the store wrote the low half), two Int64 writes packed into one slot as (20 shl 32) or 10 = 85899345930, a pointer-to-dyn-array PARAMETER SEGFAULTED, and an AnsiString element was refused as \"cannot assign ShortString to Char\". SILENT for the numeric cases -- compiles clean, exits 0, wrong values -- and confirmed against FPC 3.2.2 on byte-identical source. ROOT CAUSE: this is the DYNAMIC sibling of bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds; BOTH arms that fix landed in guarded on `not ArrTypeIsDyn`, and two more helpers had the same split. Biggest blast radius was `parallel for`: EVERY captured dynamic array goes through this, so a captured `array of Double` written in a parallel body silently produced all zeros. Fix is two files, four one-shape-per-site changes, all removing a fixed-vs-dynamic distinction rather than adding a case."
 ---
 
