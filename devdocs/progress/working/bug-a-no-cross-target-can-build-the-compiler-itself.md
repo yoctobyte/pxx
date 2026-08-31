@@ -1049,3 +1049,49 @@ ring, so a process that dies early could in principle carry an unreported one.
 The three *stale-handle* checks have no such delay — they report at the
 retain/release itself — and they are silent too, which is what makes this a
 real negative rather than a timing artefact.
+
+## Addendum (frankS, 2026-08-31): frankA's root cause INDEPENDENTLY CONFIRMED from the original symptom, not the reduced repro
+
+Verified rather than accepted, and deliberately against the axes this ticket
+opened with — a fix that closes a reduced repro is a weaker claim than one that
+closes the symptom that started the hunt.
+
+Rebuilt at HEAD (self-host fixedpoint `36bb71e851a3`, which includes
+`5454ef402`), rebuilt the arm32 cross compiler from it, and re-ran **both** of my
+original sweeps:
+
+| axis | before | after |
+| --- | --- | --- |
+| environment pad (0…1000, 8 points) | faults at 50/80/120/200/1000, non-monotonic | **8 of 8 clean, rc=0, real output** |
+| output path length (97…287, 7 points) | 4× bogus `undefined variable (PXX_KIND_LEGACY)` at 96, SIGSEGV at 247+ | **7 of 7 clean, zero errors** |
+
+The path-length axis is the one that matters most here, because it is where the
+**wrong-answer face** lived — the compiler exiting 1 and blaming correct source.
+That face is gone at exactly the lengths that produced it.
+
+**The diff matches the story.** `if Syms[idx].IsArray and (Syms[idx].ArrLen = -1)
+then sz := TARGET_PTR_SIZE;` in `EmitLoadVar`/`EmitStoreVar`, three backends, and
+the guard it copies is real: `EmitStoreVarA64` has carried it since it was found
+on aarch64. **That is why aarch64 was the silent control** — not luck, and not
+the axis anyone was proposing. It also retires the last emulator residual without
+another run: a one-byte store where a word store belongs is a code-generation
+defect that qemu reproduced faithfully.
+
+**One observation of mine is still unexplained and I am not filing it as closed.**
+frankA's signature is that all 34 stale handles end in `0x00`, which a byte-store
+must produce. Three of my four sampled bin heads fit
+(`0x17534800`, `0x187df800`, `0x7c54c000`) — but `0x72616843`, the ASCII `"Char"`,
+does not. Those are different populations (a stale *handle* versus a corrupted
+free-list *link*), so it is consistent as a downstream effect: a bogus handle
+released → refcount decremented inside a freed block → that block later written
+with live token text. Consistent is not demonstrated. It costs nothing to leave
+stated.
+
+**The ticket stays OPEN**, per frankA: the arm32-hosted build of `compiler.pas`
+still faults, and their `-dPXX_HEAP_DEBUG` self-build reports zero of every family
+on a non-vacuous instrument — so **the residual is not a heap bug** and is a
+different defect wearing this ticket's name. Whoever takes it should read it as
+such rather than as "the fix did not work".
+
+Gate: `make compiler/pascal26` converged (`36bb71e851a3`); both sweeps above; no
+code changed in this addendum.
