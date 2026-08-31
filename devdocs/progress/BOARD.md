@@ -463,7 +463,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## backlog_new (24)
+## backlog_new (23)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -488,7 +488,6 @@ _none_
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 | feature-t-check-flags-a-lane-blocker-that-has-no-in-edges | T | 40 | feature | prio propagates down dependency edges, so a ticket with in-degree zero inherits nothing — and a ticket that blocks a LANE rather than a ticket never gets an edge, because blocked-by: would be a false claim. Such a ticket under-ranks itself permanently and no checker sees it: from the ranker's side an in-degree of zero is indistinguishable from a leaf. Proposal: `progress.sh check` flags a ticket whose body names a track as its beneficiary and has no in-edges. Threshold MUST be calibrated against the live board before landing. | — |
 | refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering | A | 40 | refactor | ir.inc:10426 reads `(CProgramMode or IsNodePChar(dest))` -- one rule expressed two ways at two different strictnesses, with the dialect flag standing in for the property it implies. Normalising it DELETES an entry from the C carve-out inventory rather than moving one, so it makes that refactor smaller. | — |
-| refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
 | refactor-a-the-owned-string-release-predicate-is-hand-copied-across-five-backends | A | 45 | refactor | IRNodeOwnsManagedStr — 'does this node hand over a +1 reference the consumer must release' — is asked at ~25 hand-written call sites across five backend files. The repo has now been wrong at BOTH ends of that matrix: the predicate was missing from four cross backends (concat) and separately missing from x86-64 (comparison). Each half was found by a heap measurement, months apart, and neither by a test. x86-64 now routes its five comparison sites through one shared helper; the four cross backends still hand-write it 6-7 times each. | — |
 | refactor-p-the-char-array-is-not-a-string-rule-is-spelled-five-times | P | 40 | refactor | The `bug-p-a-char-array-is-not-a-string-in-any-direction` rule is implemented at FIVE separate sites in ir.inc, each carrying a comment pointing at the others. root-cause-over-microfix calls three copies a design flaw; this is five. Found during the cir.inc inventory, in Pascal's ground, not C's. | — |
 
@@ -735,9 +734,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2931)
+## done (2932)
 
-2931 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2932 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -920,7 +919,6 @@ _none_
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-port-openbsd-libc
 - [p 50] [A] feature-release-checksums-repro
-- [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol

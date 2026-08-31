@@ -5,10 +5,10 @@ track: A
 prio: 50
 type: refactor
 blocked-by: []
-status: backlog_new
-owner: ""
+status: done
+owner: frank-rust
 created: 2026-08-27
-summary: "Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong."
+summary: "AUDIT DONE 2026-08-31 (frank-rust). 27 target-dispatch constructs enumerated (22 if/else-if chains + 5 `case TargetArch of`); exactly TWO failed open and both are fixed: coroutine_emit.inc (riscv32/xtensa) and ir_codegen.inc EmitSignalRuntimeForTarget (wasm32). All three sites this ticket originally named are stale — lexer.inc was fixed by the wasm32 skeleton, exception_emit.inc:8 is not a chain at all (the real one at :75 has an else), only coroutine_emit.inc was real. Two remaining no-else chains are subset-by-intent and correct, verified by reading, and deliberately left alone."
 ---
 
 # What this ticket is NOT
@@ -196,3 +196,105 @@ independently is the only bad option.
   and check the corpus actually reaches the chains being changed. Mine did not
   on the first pass: it contained no `try` at all, so it never exercised the one
   chain where a bare `else` had been added.
+
+---
+
+# AUDIT RESULT — 2026-08-31, frank-rust, on `4b3f5bfbb3e5`
+
+**Two chains failed open out of 27. Both fixed. The ticket's own three named
+sites were all stale**, which is the finding worth carrying forward more than
+the fix is.
+
+## The site list rotted in four days
+
+Verified at `8787cfe42` (2026-08-27), read again 2026-08-31:
+
+| site as named | what is actually there now |
+| --- | --- |
+| `lexer.inc:936` — "the worked example" | **already fixed.** The chain moved to `lexer.inc:1215`, and `feature-a-wasm32-target-registration-skeleton` gave it a `TARGET_WASM32` arm *and* a final `else Error(...)`. Line 936 is now `PxxLibApply`. |
+| `exception_emit.inc:8` — "6 arms, no else" | **not a chain.** The file's only `TargetArch` mention near there is an early-exit guard at :27. The real 6-arm chain is at **:75 and it HAS an `else`** (line 533). |
+| `coroutine_emit.inc:25` — "4 arms, no else" | **real** (5 arms by now). Fixed here. Its own comment already named this ticket as the owner. |
+
+I lost about twenty minutes treating the ticket's coordinates as an inventory
+and my scanner as broken when it disagreed with them. It was not broken; the
+ticket was four days old. **The ticket already warned that the scan "must not be
+mistaken for an inventory" — it did not warn that the SITES were equally
+perishable.** They are more perishable: a scan can be re-run, a line number
+cannot be re-checked without re-reading.
+
+## The inventory
+
+`if/else-if TargetArch = TARGET_*` chains with >=2 arms, plus every
+`case TargetArch of`. **27 constructs. 4 with no bare final `else`:**
+
+| site | arms | verdict |
+| --- | --- | --- |
+| `coroutine_emit.inc:25` | 5 | **FAIL-OPEN — fixed.** riscv32/xtensa fell through. |
+| `ir_codegen.inc:949` `EmitSignalRuntimeForTarget` | 6 | **FAIL-OPEN — fixed.** wasm32 fell through; found by this audit, not named anywhere. |
+| `ir_codegen.inc:2469` I/O-lock stubs | 4 | **correct as-is.** Subset-by-intent and fail-*closed* by symmetry: `ir.inc:13262` gates `IR_IO_LOCK` emission on the *same positive four-target list*, so a 7th target emits no lock and needs no stub. An `else Error` here would be actively wrong. |
+| `compiler.pas:1678` SoC defaulting | 2 | **correct as-is.** Only ESP targets have a SoC; `SOC_NONE` on x86-64 is the right answer. |
+
+All five `case TargetArch of` (all in `cparser.inc`) already have an `else`. No
+cross-lane edit was needed.
+
+## The distinction that no scanner can make
+
+**Exhaustive-by-intent vs subset-by-intent.** A missing `else` is a bug in the
+first and correct in the second, and the two are *syntactically identical*. That
+is why this ticket's real content was always the audit, and why the fix is four
+sites read rather than 27 sites patched. Half of my scanner's hits were correct
+code.
+
+## Applying the ABSENCE rule to my own two fixes
+
+A chain with no final `else` and a chain whose `else` is correct look identical
+from any probe that only compiles targets 1-6. So each fix got a control that
+**must** fire:
+
+- **coroutine:** fires live today —
+  `pascal26: error: coroutines are not implemented for target riscv32`.
+- **signal runtime:** its `else` can only be reached by a target #8 that does not
+  exist, so it was proved by temporarily disabling the wasm32 arm and rebuilding:
+  `error: compiler error: no signal-runtime decision for target wasm32`. Reverted;
+  the restored tree rebuilds to `4b3f5bfbb3e5` exactly, which is what proves the
+  control was fully backed out.
+
+Without that second control I would have shipped a guard that cannot fail, which
+is the thing CLAUDE.md warns prints PASS.
+
+## A correction to my own first comment, and it is the useful part
+
+I first wrote that the coroutine fall-through left `CoSwitchAddr` at 0 and made
+every `CoSwitch` a call to address zero. **Measured, that is false today.** On
+the baseline compiler (`25178873db17`) a riscv32 program touching
+`__pxxcoswitch` already errors — `unsupported node in IR codegen: coswitch` —
+because both backends refuse `IR_COSWITCH`. The fall-through is real but
+**masked downstream**.
+
+Two reasons it is still worth closing, and neither is the one I nearly recorded:
+
+1. **The diagnostic.** "coroutines are not implemented for target riscv32" is
+   the true statement; the codegen message names an internal node for something
+   the user did not do wrong.
+2. **The masking is the fragile half.** It holds only while the backends have no
+   coswitch lowering. Give riscv32 one without adding a stub arm here and the
+   downstream guard vanishes, leaving exactly the call-to-address-zero that does
+   not exist yet. That is the "second path that stays broken" shape from
+   `normalise-dont-special-case.md`.
+
+## Verification
+
+- `make compiler/pascal26` — `converged after 1 round(s)`, `4b3f5bfbb3e5`.
+- **Acceptance criterion 3, byte-identical corpus:** 4 named programs x 6
+  targets = 24 compiles, on the baseline (`25178873db17`, built from a stash of
+  these two files) and on the fix. **19 binaries and 5 refusals, all identical.**
+  `diff` reports no differences.
+  - The 5 refusals are pre-existing and unrelated (xtensa cannot build
+    `sysutils.pas`: "only ordinal/float/pointer/string function results
+    supported yet").
+  - **A trap in my own harness, recorded because it nearly cost the result:** it
+    collapses every refusal to one token `COMPILE-REFUSED`, so a row whose
+    *reason* changes reads as unchanged. `riscv32 test_scheduler_exc.pas` is
+    exactly that row. Byte-identity of a corpus that mostly fails to compile is
+    a weak instrument; it needed the separate live repro above to mean anything.
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

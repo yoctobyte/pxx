@@ -129,11 +129,23 @@ begin
   end
   else if TargetArch = TARGET_WASM32 then
     Error('wasm32: coroutine context switch not implemented (a wasm module has '
-          + 'no addressable stack pointer to swap)');
-  { Other targets land in later phases (riscv32/xtensa) — they fall through
-    silently ON PURPOSE and are left alone here; making THEM loud belongs to
-    refactor-a-target-dispatch-chains-fail-open, not to a registration ticket
-    that must leave every existing target byte-identical. }
+          + 'no addressable stack pointer to swap)')
+  else
+    { riscv32/xtensa land in a later phase. Falling through leaves CoSwitchAddr
+      at 0 while the caller (EnableCoroutineRuntime) has already set
+      CoroutineUsed — but MEASURED 2026-08-31, that is not a live miscompile
+      today: it is masked downstream, because both backends refuse IR_COSWITCH
+      ('unsupported node in IR codegen: coswitch'), so any program that gets a
+      stub emitted also gets a node they reject. Two reasons to close it here
+      anyway. The diagnostic: 'coroutines are not implemented for target
+      riscv32' is the true statement; the codegen one names an internal node for
+      something the user did not do wrong. And the masking is the fragile half —
+      it holds only while the backends have NO coswitch lowering. Give riscv32
+      one without adding a stub arm here and the downstream guard disappears,
+      leaving exactly the call-to-address-zero this else now prevents.
+      refactor-a-target-dispatch-chains-fail-open }
+    Error('coroutines are not implemented for target '
+          + TargetArchName(TargetArch));
 end;
 { EnableCoroutineRuntime lives in pasparser_name.inc (it must call EnableExceptionRuntime,
   defined there) — see near EnableExceptionRuntime. }

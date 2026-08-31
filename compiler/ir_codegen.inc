@@ -963,7 +963,20 @@ begin
   else if TargetArch = TARGET_XTENSA then
   begin
     if TargetHasSignalRuntime then EmitSignalRuntimeXtensa;
-  end;
+  end
+  else if TargetArch = TARGET_WASM32 then
+  begin
+    { No signal runtime: a wasm module has no OS to deliver a signal. Written as
+      a PRESENT arm with an empty body rather than left to fall through, because
+      that is already how this chain spells "this target has no signals" — the
+      two ESP arms above are present-but-conditionally-empty via
+      TargetHasSignalRuntime. An absent arm and a deliberately empty one are
+      indistinguishable from any probe that only compiles the targets that do
+      have one. refactor-a-target-dispatch-chains-fail-open }
+  end
+  else
+    Error('compiler error: no signal-runtime decision for target '
+          + TargetArchName(TargetArch));
 end;
 
 procedure EmitDefaultSignalInstallForTarget;
