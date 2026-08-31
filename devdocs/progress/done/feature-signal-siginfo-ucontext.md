@@ -742,4 +742,4 @@ bug above. Two defects found on the way out, both filed with measurements:
 the SIGPIPE one.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit f762cfa38.
