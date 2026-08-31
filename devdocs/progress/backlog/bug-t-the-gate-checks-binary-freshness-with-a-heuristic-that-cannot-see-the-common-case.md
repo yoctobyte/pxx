@@ -206,3 +206,34 @@ caveats in the section above: **1** means your seed was already the fixedpoint,
 the REDs above printed 2. Worth putting in the failure message itself, since the
 message currently offers "local seed contamination, or a self-perpetuating
 miscompile" as the two explanations and the actual cause was neither.
+
+---
+
+## 2026-08-31 (frankB) — sibling ticket, and two facts this one can use
+
+Filed `bug-a-the-mandatory-fixedpoint-step-reports-success-from-a-stale-stamp`:
+a layer below `stale_binary_hint`, `make compiler/pascal26` itself accepts a
+**consistent binary+stamp pair from older sources** carrying a newer mtime, and
+prints `self-host fixedpoint: verified — N round(s), <sha>` without rebuilding.
+Reproduced deliberately, twice independently.
+
+Two facts from that investigation that bear directly on this ticket's tells:
+
+1. **`verified` with no `converged` above it means nothing was rebuilt.** A
+   genuine build prints `converged after N round(s)` *and then* `verified — N`;
+   a replay prints only the second. This is exact, costs nothing, and is
+   strictly better than the round-count tell — because
+2. **the round count cannot separate a replay from a build.** `rounds N` is a
+   stored field in `compiler/.pascal26.fixedpoint` and `verified — N round(s)`
+   reads it back. "Two rounds means the sources moved under the binary" has a
+   clean counterexample: forcing a rebuild from a deliberately WRONG seed prints
+   `converged after 2 round(s)` and lands on the correct sha. Two rounds means
+   the seed was not the answer; *why* is a separate question the count cannot
+   address.
+
+**And a negative for the two-fixedpoints question, since it was reached by
+construction rather than by observation:** forced from a deliberately wrong seed
+(`f92c42a69850`), a clean tree at `c2545bd6a` converged to `3d5308a75742` — the
+same sha four independent trees reached. For these sources on this box the
+fixedpoint is seed-independent, which rules out "which binary seeded the round"
+as the mechanism there.
