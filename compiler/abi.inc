@@ -37,8 +37,25 @@
   ## The invariant this file exists to enforce
 
   **Backends consult the oracle and never re-derive the convention from
-  `Syms[]`.** That clause is greppable in review: a `Syms[...].IsRef or` chain
-  inside `ir_codegen*.inc` means someone grew a ninth copy.
+  `Syms[]`.** Enforced by `tools/abi_oracle_lint.py`, which fails the moment a
+  backend condition combines an ABI-carrying `Syms[]` field with a type-kind
+  test for a PARAMETER. Run it; do not review by eye.
+
+  This clause used to say the invariant was "greppable in review: a
+  `Syms[...].IsRef or` chain inside `ir_codegen*.inc`". **That grep was
+  calibrated to a SPELLING, not to a shape, and it never fired** -- the
+  re-derivation that did happen was spelled `and ... and not`, and wrapped
+  across lines where a line-oriented grep could not see it either. By
+  2026-08-31 the grep matched exactly one line in the tree: a COMMENT quoting
+  this rule. A reviewer running it got a hit, opened it, found prose, and
+  concluded the tree was clean -- which is worse than the zero it returned
+  before, because a hit reads as evidence the check works.
+  `bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire`.
+
+  The linter carries its own positive controls (`--selftest`): shapes it MUST
+  flag, including one proving a routine-scoped exemption cannot leak past the
+  next routine header. A check that cannot fail and a check that is passing are
+  the same observation, and only one of them is worth anything.
 
   ## Success metric (from the ticket)
 

@@ -1201,6 +1201,15 @@ begin
 end;
 
 procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
+{ abi-oracle-reviewed: this routine asks the SLOT WIDTH / register-class
+  question ("is this param one 4-byte stack slot, an 8-byte one, an SSE
+  register?"), which abi.inc's oracle does not answer -- its question is the
+  different one of whether a param's slot holds the ADDRESS of the value. Where
+  THAT question comes up here it is delegated correctly (ABIParamSlotIsPointer,
+  three call sites below). Reviewed 2026-08-31 under
+  bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire; the
+  17 type-kind tests in here are deliberate and are not a ninth copy of the
+  convention. }
 { Spill the incoming parameters of `procIdx` into their frame slots, in
   whatever convention THIS target's IR_CALL arg placement uses. Purely target
   machinery: it reads only the registered param table (Procs[].Params) and the
@@ -6329,6 +6338,12 @@ begin
               if not InLValueWrite then
                 begin EmitB($48); EmitB($8B); EmitB($00); end;                  { mov rax,[rax] = data ptr }
             end
+            { abi-divergence: NOT a re-derivation -- this whole block is
+              already inside `if ... ABIParamSlotHoldsValueAddr(symIdx) then`.
+              The oracle has answered "the slot holds an address"; these arms
+              only refine HOW MANY dereferences follow, which is a question it
+              does not model. Reviewed 2026-08-31,
+              bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire. }
             else if InLValueWrite and (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef and
                (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
               { by-ref (var/out) managed string write: the param slot holds the

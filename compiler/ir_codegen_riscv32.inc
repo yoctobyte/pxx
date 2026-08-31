@@ -1671,6 +1671,12 @@ begin
         { Scalar managed string: read position needs the heap handle; write
           position keeps the slot address so the store can publish a new handle.
           A by-ref param's slot already holds the forwarded caller slot addr. }
+        { abi-divergence: this arm depends on InLValueWrite, and
+          ABIParamSlotHoldsValueAddr takes only a symIdx -- the oracle cannot
+          see lvalue-write context, so this question is genuinely outside the
+          table rather than a ninth copy of it. The oracle IS consulted, as the
+          final arm of this same chain. Reviewed 2026-08-31,
+          bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire. }
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
                 not InLValueWrite and
                 not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
@@ -1682,6 +1688,12 @@ begin
           the caller (feature-riscv32-var-param-forwarding). The load/store paths
           and the 64-bit slot-addr emitter already deref; this brings IR_LEA's
           32-bit scalar path in line. Arrays/strings keep their handling above. }
+        { abi-divergence: this arm depends on InLValueWrite, and
+          ABIParamSlotHoldsValueAddr takes only a symIdx -- the oracle cannot
+          see lvalue-write context, so this question is genuinely outside the
+          table rather than a ninth copy of it. The oracle IS consulted, as the
+          final arm of this same chain. Reviewed 2026-08-31,
+          bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire. }
         else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
                 not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
           rv32_lw(reg_a0, reg_a0, 0)

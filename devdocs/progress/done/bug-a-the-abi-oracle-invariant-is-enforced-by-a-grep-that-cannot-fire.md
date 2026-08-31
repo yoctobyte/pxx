@@ -4,9 +4,11 @@ title: The ABI oracle's invariant is enforced by a review grep that matches noth
 track: A
 type: bug
 prio: 45
-status: backlog
+status: done
 found: 2026-08-28
 found-by: frankwasm (hit it in the wasm backend), generalised and verified by frank-coordinator
+owner: frank-rust
+summary: "DONE 2026-08-31. The invariant is now enforced by `tools/abi_oracle_lint.py`, which detects the SHAPE (an ABI-carrying Syms[] field combined with a type-kind test, for a parameter, across line breaks) rather than the spelling `IsRef or`, and which carries 8 asserted self-controls including one proving its routine-scoped exemption cannot leak past the next routine header. abi.inc's dead clause is replaced and now points at the tool. NOTE the grep had got WORSE than the ticket recorded: by 2026-08-31 it matched 1 line, a COMMENT quoting the rule — a reviewer gets a hit, opens it, finds prose, concludes clean. Audit: 78 raw hits -> 22 (parameter questions only) -> 6 (after exempting EmitParamSpillsForTarget, which asks slot WIDTH, a question the oracle does not answer) -> 1. Five sites are real, stated divergence, marked `abi-divergence:` — four depend on InLValueWrite, which the oracle's symIdx-only signature cannot see, and one sits INSIDE the oracle's own then-branch. The remaining 1 is a genuine disagreement, escalated as bug-a-aarch64-setlength-on-a-frozen-string-param-diverges-from-the-abi-oracle. The linter deliberately still exits 1, so it is NOT wired into a gate: a green baseline here would be the false zero this ticket exists to complain about."
 ---
 
 ## The fact
@@ -134,3 +136,101 @@ of the same fifteen-cell matrix stayed broken and nothing noticed for months.
 of: a completeness check over the matrix, or a shape where the obligation cannot be omitted
 (the predicate asked once at the shared layer, backends receiving the answer). Six more copies
 and no note about the sixteenth is the failure this pair documents.
+
+---
+
+# RESOLVED 2026-08-31 — frank-rust
+
+## The grep had rotted further than the ticket recorded
+
+The ticket measured `grep -rn "IsRef or" compiler/ir_codegen*.inc | wc -l` as
+**0**. On 2026-08-31 it is **1**, and the one hit is
+`ir_codegen_wasm32.inc:1736` — **a comment quoting this very rule.**
+
+That is strictly worse than zero, and it is worth stating because it inverts the
+ticket's own framing. A reviewer who runs the prescribed grep now gets a
+non-empty result, opens it, finds prose describing the shape to avoid, and
+concludes the check ran and the tree is clean. **The dead check acquired a
+false positive that reads as evidence it works.**
+
+## What replaced it
+
+`tools/abi_oracle_lint.py`. It asks the shape's question: does one boolean
+condition in `ir_codegen*.inc` combine an ABI-carrying `Syms[]` field
+(`IsRef`/`IsArray`) with a type-kind test, **for a parameter**? Conditions are
+followed across line breaks to their `then`/`do`, because the real chains wrap —
+which is the other half of why a line-oriented grep could not see them.
+
+**Eight self-controls, all asserted (`--selftest`).** The ones that earned their
+keep:
+
+- the shape in the spelling the old grep *could* see (`IsRef or`), and in the
+  spelling that defeated it (`and ... and not`, wrapped over two lines);
+- the real wasm32 comment above — must NOT be reported, which is what proves the
+  comment stripper works on the exact line that fooled the old check;
+- a routine-scoped exemption must silence the routine it heads **and must not
+  leak into the next one**. That control is the one I would have skipped and it
+  is the one guarding the mechanism most able to hide a real hit.
+
+## The audit, and why the funnel matters more than the endpoint
+
+| stage | hits | what was removed |
+| --- | --- | --- |
+| raw shape | 78 | — |
+| parameter questions only | 22 | IR_STORE type dispatch; `skLocal` finalisation |
+| after one routine exemption | 6 | `EmitParamSpillsForTarget` (17 sites) |
+| after stating real divergence | **1** | five sites marked `abi-divergence:` |
+
+**The first number was a trap I nearly shipped.** 78 is a satisfying baseline
+and most of it could never have been an oracle call — local finalisation and
+store-lowering type dispatch. A linter whose hits are mostly noise gets muted,
+which reaches the same end state as one that cannot fire, just more slowly. The
+narrowing came from reading `abi.inc`'s own words — *"does a PARAMETER's stack
+slot hold the ADDRESS OF THE VALUE"* — rather than from tuning until the number
+looked right.
+
+`EmitParamSpillsForTarget` is exempted with a stated reason, not silenced: it
+asks the **slot width / register class** question, which the oracle does not
+answer, and it already delegates correctly (`ABIParamSlotIsPointer`, three call
+sites) where the oracle's question does come up. That is 17 of the 22 and the
+ticket predicted it — *"expect the highest false-positive rate there"*.
+
+## The five marked sites are divergence with a reason, not rubber stamps
+
+Four (riscv32 `:1674 :1685`, xtensa the same two) turn on **`InLValueWrite`**,
+and `ABIParamSlotHoldsValueAddr(symIdx)` **takes only a symIdx** — the oracle
+cannot see lvalue-write context, so the question is genuinely outside the table.
+Both chains call the oracle as their final arm. The fifth
+(`ir_codegen.inc:6341`) is nested **inside** `if ... ABIParamSlotHoldsValueAddr
+then`: the oracle has already answered, and the arms only refine how many
+dereferences follow.
+
+If the oracle ever grows a write-context parameter, those four collapse into it.
+That is the real follow-up and it is not free, which is why it is named here
+rather than done quietly.
+
+## The one that is left, and why it stays red
+
+`ir_codegen_aarch64.inc:2869` re-derives the question with `... and not
+IsArray`, where the oracle returns True when `IsArray` is set. Filed as
+[[bug-a-aarch64-setlength-on-a-frozen-string-param-diverges-from-the-abi-oracle]]
+with the truth table. I did **not** build a repro and do not claim it is
+reachable — the fix is one line either way, and which line depends on that.
+
+**The linter is deliberately NOT wired into `gate.sh`.** Wiring it today would
+mean either a red gate or marking that site to make it green, and marking a site
+I have not resolved to obtain a green baseline is precisely the false zero this
+ticket exists to complain about. It is one line in `gate.sh` the day that ticket
+closes.
+
+## Scope note
+
+This closes the `abi.inc` half of the pair. The `IRNodeOwnsManagedStr` half
+recorded at the foot of this ticket is a **different oracle with the same
+disease** and is untouched: the completeness check built here does not detect a
+*missing* call, which is that half's signature. It needs its own instrument, and
+the funnel above is the argument for building it around the question rather than
+the identifier.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
