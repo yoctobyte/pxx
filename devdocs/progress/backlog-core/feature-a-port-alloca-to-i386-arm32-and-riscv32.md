@@ -123,7 +123,30 @@ it.
 
 frankC's arm32 AAPCS32 block is all relative on purpose (`sub sp,#blk` /
 `add sp,#16` / `add sp,#blk-16`, no saved pointer), so it is safe as written —
-the aarch64 situation. riscv32 is the one still unaudited.
+the aarch64 situation.
+
+**riscv32 audited (frankA, 2026-08-31, binary f996aace9d75 / commit 97e96fc1b):
+SAFE AS WRITTEN — it needs the relocation only, no delta.** Two properties, both
+read from the source:
+
+- **No sp alignment anywhere in the backend.** `sp` only ever moves by
+  compile-time-known amounts, so a restore can always be a relative `addi` —
+  which is exactly the property i386 lacks, since its `and esp,-16` makes the
+  subtracted amount unknowable at compile time. There is also no
+  `CProcUsesCAbi` arm here at all.
+- **`sp` is materialised into a register at 5 sites** (`addi aN, sp, 0`, taking
+  the address of a just-pushed `&char`/`&double`, plus the exception jmpbuf at
+  `:4099`) — but at every one the sub-expression is emitted BEFORE the
+  materialisation, and the pointer is consumed immediately. Nothing parks an sp
+  value across an emitted sub-expression, which is the actual safety criterion;
+  "does it touch sp" is not.
+
+Its expression temps use the `addi sp,sp,-4` / `sw` / `lw` / `addi sp,sp,4`
+push-pop shape, which the relocation loop moves together with the pops by
+construction — the same reason the 17 x86-64 push/pop sites are safe.
+
+**So the audit is complete and i386 is the only backend needing the delta
+treatment.** arm32, aarch64 and riscv32 all need the relocation alone.
 
 ## Verification
 
