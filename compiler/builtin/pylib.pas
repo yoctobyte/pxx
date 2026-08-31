@@ -7359,11 +7359,23 @@ begin
   Result := r;
 end;
 
-{ SplitMix64 — see the block comment on the declarations. The state starts at a
-  fixed value rather than a clock reading: a program that never calls seed()
-  then reproduces exactly, which is what makes a failure reportable. CPython
-  seeds from entropy instead, and a program that DEPENDS on the difference is
-  depending on the stream, which neither implementation promises. }
+{ SplitMix64 — see the block comment on the declarations. The state is seeded
+  from PXXEntropy64 in this unit's initialization section, so an unseeded
+  program gets a DIFFERENT sequence each run, as it does on CPython; the
+  literal below is only what the state holds before that runs.
+
+  This file used to argue the other way — a fixed start so a failing run
+  reproduces from the source alone — and that argument was overruled, because
+  it answers a question nobody asked. The objection it defeats is "the exact
+  sequence differs from CPython's", which is true, unfixable and harmless: no
+  program may depend on a particular stream. The objection that MATTERS is
+  that a program depends on not getting the SAME answer twice — a shuffled
+  deck, a sampled subset, a random port, retry jitter — and CPython guarantees
+  that at `import random` while we denied it. That is squarely the
+  upward-compatibility rule, and the reproducibility it cost is still
+  available, spelled the way a CPython program already spells it: seed().
+  decide-does-nilpy-random-seed-itself-at-import,
+  bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound }
 var
   PyRandState: Int64 = Int64($9E3779B97F4A7C15);
 
@@ -19705,5 +19717,13 @@ initialization
     initialization does not run.
     feature-nilpy-object-reclamation }
   PXXObjFinalizeHook := @PyObjFinalize;
+
+  { Seed `random` from entropy, the way CPython seeds it at `import random`.
+    Unconditional rather than lazy-on-first-draw: CPython does not make it
+    conditional either, one clock read at startup is not worth a
+    have-I-been-seeded flag on every draw, and the flag is the part that
+    would have to get the interaction with seed() right. random.seed(n)
+    still pins the stream — it runs later and simply overwrites this. }
+  PyRandState := PXXEntropy64;
 
 end.

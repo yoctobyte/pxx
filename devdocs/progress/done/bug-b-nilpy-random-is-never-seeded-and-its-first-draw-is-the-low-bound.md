@@ -2,10 +2,9 @@
 track: N
 prio: 60
 type: bug
-owner: frank1-AN
-blocked-by: [decide-does-nilpy-random-seed-itself-at-import]
-summary: "`import random` then `random.randint(1,100)` produces the SAME sequence on every run — CPython seeds from OS entropy at import and NilPy never does. PARKED: the fixed seed is DELIBERATE and argued in pylib.pas, so it needs decide-does-nilpy-random-seed-itself-at-import first."
-status: backlog
+owner: frankB
+summary: "FIXED — `import random` then `randint(1,100)` gave the SAME sequence every run because PyRandState started at a fixed literal. Now seeded from PXXEntropy64 (extracted from builtin.pas's Randomize) in pylib's initialization; random.seed(n) still pins the stream."
+status: done
 ---
 
 # NilPy's `random` is never seeded, and its first draw is the low bound
@@ -116,3 +115,71 @@ bare-target fallback, so the fix is to EXTRACT that into a shared
 second copy of the syscall table. `test_nilpy_math_surface_and_random` calls
 `random.seed(42)` first and asserts the contract rather than values, so it is
 unaffected either way.
+
+
+---
+
+## 2026-08-31 — FIXED (frankB), per the owner's ruling
+
+Ruling: `decided/decide-does-nilpy-random-seed-itself-at-import`, option 1 —
+seed from entropy at import, keep `random.seed(n)` for determinism. This
+**overruled this ticket's own recommendation** of an opt-in env var
+(`PXX_RANDOM_SEED`); that knob was NOT built, and CPython ships no equivalent
+for `random`, so option 1 is also the closer match to the thing we are
+upward-compatible with.
+
+### What landed
+
+- **`compiler/builtin/builtin.pas`** — the per-arch `clock_gettime` block was
+  EXTRACTED out of `Randomize` into `function PXXEntropy64: Int64`, declared in
+  the interface. `Randomize` is now `RandSeed := Cardinal(PXXEntropy64)`. No
+  second copy of the syscall table, which is what would have rotted.
+- **`compiler/builtin/pylib.pas`** — `PyRandState := PXXEntropy64` in the unit's
+  initialization section. Unconditional, not lazy-on-first-draw: CPython is not
+  conditional either, and a have-I-been-seeded flag is the part that would have
+  to get the interaction with `seed()` right.
+- The comment above `PyRandState` that argued FOR the fixed seed is replaced in
+  the same commit — it defended against "the exact sequence differs from
+  CPython's" (true, unfixable, harmless) rather than the objection that
+  mattered, which is that a program depends on not getting the same answer
+  twice.
+- The riscv32 comment inside the extracted function said "Randomize is the only
+  caller, so a program that never randomizes never issues it". That is no longer
+  true — pylib's init issues it at startup for any program pulling pylib — so it
+  is corrected in the same commit. (It still cannot reach a bare ESP boot:
+  pylib `uses builtin`, which does not compile there.)
+
+### Gate — all three criteria met, on compiler 9a425370eca2
+
+| criterion | result |
+| --- | --- |
+| two runs differ | four runs: `87 70 51 …` / `78 54 63 …` / `8 9 83 …` / `63 30 69 …` |
+| first draw not systematically `1` | 87, 78, 8, 63 |
+| `seed(k)` twice still reproduces | `True` + identical list `[204, 292, 859, 765, 251]` across three separate runs |
+
+Plus, because this touches `builtin.pas` (every frontend) and pylib (which
+`--tier quick` does not sweep):
+
+- **Pascal canary** — `Randomize` still varies per run; `RandSeed := 7` still
+  reproduces `23 9 80 39 54` every time.
+- `test_nilpy_math_surface_and_random` and
+  `test_nilpy_by_name_list_params_take_a_str` — the only two NilPy tests that
+  DRAW a value — both match their `.expected`.
+- `test_nilpy_import_spellings` and
+  `test_nilpy_from_import_binds_provided_names` — exit 0, output stable across
+  two runs. (`from_import` does draw, via `seed(1); randint(5, 5)` — a
+  degenerate range.)
+- `test_nilpy_bare_import_is_python` fails to compile, identically under
+  `pinned`: it is a negative test asserting a diagnostic. Pre-existing, unrelated.
+- `tools/gate.sh quick` GREEN; `make compiler/pascal26` converged after 2 rounds.
+
+### The one open item from the handoff, now closed
+
+Whether `tools/pydiff.py` or the fuzz harness generate random-using programs:
+they do not. `pydiff.py:199` states the rule for its own corpus in the comment —
+*"Keep it deterministic (no time, no randomness, and SORT anything
+set-derived)"* — and `fuzz.sh` mutates Pascal sources, whose
+`Randomize`/`RandSeed` surface is behaviourally unchanged by this commit.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
