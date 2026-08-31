@@ -17549,6 +17549,33 @@ pin:
 	@# that is the half -u did catch. `make revert` already stages itself this
 	@# way; pin was the odd one out.
 	@# bug-a-a-pin-that-adds-a-builtin-unit-cannot-commit-it-with-git-add-u
+	@#
+	@# The suggested subject NAMES the sha it carries -- "binary sha256 <12>",
+	@# not a bare "-- <12>". It used to carry no sha at all, so every pinner
+	@# appended one freehand and the convention drifted (v392 "(60b060bb54a8)",
+	@# v394 sixteen hex chars, v398 "-- 992065f21f33"). All of them are the
+	@# PINNED BINARY's sha256 prefix, and none of them says so -- which makes
+	@# them indistinguishable by shape from an abbreviated commit id, in the
+	@# one commit that records which tree is blessed.
+	@# Measured 2026-08-30: a reader took v398's as a commit, ran
+	@# `git merge-base --is-ancestor 992065f21f33 <sha>`, got a bare non-zero
+	@# exit -- the SAME answer git gives for a real non-ancestor -- and wrote
+	@# down "a pre-rebase ghost sits in the pin ledger". Nothing was wrong; the
+	@# string had never been an object name. The conclusion drawn from it was
+	@# right by accident, and was already being relayed onward as a durability
+	@# bug in the pin record when it was caught.
+	@# The failure only ever produces a NEGATIVE -- a binary sha never
+	@# resolves, so it reads as "missing" or "not an ancestor" and can never
+	@# fake a confirmation. That is exactly why it survives careful people:
+	@# there is nothing to catch, only a certainty about a question that was
+	@# never asked. Six characters of label are the whole fix.
+	@# The fallback is `{ sha256sum ... || echo unknown; } | cut`, NOT
+	@# `sha256sum ... | cut ... || echo unknown`. The second form was written
+	@# first and is a guard that cannot fire: `||` reads the PIPELINE's status,
+	@# which is cut's, and cut succeeds on empty input -- so a missing binary
+	@# printed "binary sha256 " with nothing after it, a labelled blank that
+	@# looks like a truncation rather than an absence. Caught by asserting the
+	@# absent-binary arm, not by reading the line.
 	@if git rev-parse --git-dir >/dev/null 2>&1; then \
 	   git add -A -- $(STABLE_ROOT) || \
 	     { echo "PIN STAGING FAILED -- stage it by hand: git add -A -- $(STABLE_ROOT)"; exit 1; }; \
@@ -17556,7 +17583,7 @@ pin:
 	   echo "staged $$N file(s) under $(STABLE_ROOT)/ (additions and deletions included):"; \
 	   git diff --cached --name-status -- $(STABLE_ROOT) | sed 's/^/  /'; \
 	   echo "STAGED, not committed. Commit with:"; \
-	   echo "  git commit -m 'chore(stable): pin v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo N)' -- $(STABLE_ROOT)"; \
+	   echo "  git commit -m 'chore(stable): pin v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo N) -- binary sha256 $$({ sha256sum $(STABLE_DEFAULT_DIR)/pinned 2>/dev/null || echo unknown; } | cut -c1-12)' -- $(STABLE_ROOT)"; \
 	 else \
 	   echo "not a git repo -- nothing staged."; \
 	 fi
