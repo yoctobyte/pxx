@@ -11841,7 +11841,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nested_dynarray_alias.pas $(TESTTMP)/test_nested_dynarray_alias26
 	tools/expect_same.sh test_nested_dynarray_alias26 "$$($(TESTTMP)/test_nested_dynarray_alias26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_nested_fixed_array_capture.pas $(TESTTMP)/test_nested_fixed_array_capture26
-	tools/expect_same.sh test_nested_fixed_array_capture26 "$$($(TESTTMP)/test_nested_fixed_array_capture26)" "$$(printf '1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_nested_fixed_array_capture26 "$$($(TESTTMP)/test_nested_fixed_array_capture26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_managed_field_reassign.pas $(TESTTMP)/test_dynarray_managed_field_reassign26
 	tools/expect_same.sh test_dynarray_managed_field_reassign26 "$$($(TESTTMP)/test_dynarray_managed_field_reassign26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_fixed_array_of_dynarray.pas $(TESTTMP)/test_fixed_array_of_dynarray26
@@ -13033,6 +13033,13 @@ test-i386: $(COMPILER)
 	# at all -- elsewhere the temp is dead and the default was harmless.
 	./$(COMPILER) --target=i386 test/test_discarded_result_var_open_array.pas $(TESTTMP)/test_i386_discoa
 	tools/expect_same.sh i386/test_i386_discoa "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_discoa)" "$$(cat test/test_discarded_result_var_open_array.expected)"
+	# and the shape that walked into it: a nested routine capturing a fixed array
+	# calls a nested FUNCTION as a STATEMENT, so the discarded result is spilled
+	# across the capture's copy-OUT. Measured: with 137f87025 reverted this file
+	# is REFUSED for i386 and compiles for x86-64, which is why the capture
+	# feature needs a cross row and not only its native one.
+	./$(COMPILER) --target=i386 test/test_nested_fixed_array_capture.pas $(TESTTMP)/test_i386_nfacap
+	tools/expect_same.sh i386/test_i386_nfacap "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_nfacap)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=i386 test/test_variant_class_cross.pas $(TESTTMP)/test_i386_varcls

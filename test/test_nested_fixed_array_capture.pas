@@ -14,7 +14,20 @@
   Row 1 is the one that fails LOUDEST if the low bound is dropped: without it
   IR_INDEX subtracts 0 and `g[1]` of an `array[1..3]` writes the next element,
   which is silent. Rows 3-5 are the acceptance list: whole-array pass-through,
-  for-loop iteration, and read-modify-write of the same captured array. }
+  for-loop iteration, and read-modify-write of the same captured array.
+
+  Rows 7-10 are the rest of the acceptance list, added after the fact: the
+  ELEMENT TYPE is not always Integer (a record, a Double, a Char and an
+  AnsiString each move a different number of bytes, and the AnsiString rides
+  the copy-in/copy-out as raw handles), an enclosing array PARAMETER is
+  capturable as well as an enclosing local, and depth 2 is not depth 3.
+
+  Row 6 (TwoArrays) is also the only row that calls a nested FUNCTION as a
+  STATEMENT. That discards the result, and a discarded result spilled across
+  the capture's copy-OUT is what i386 refused until 137f87025 — measured: a
+  compiler with that one commit reverted rejects this file for --target=i386
+  at TwoArrays and compiles it for x86-64. Which is why the cross rows in the
+  Makefile are not decoration. }
 program test_nested_fixed_array_capture;
 
 type TA = array[0..3] of Integer;
@@ -96,6 +109,63 @@ begin
                and (leftN = 2) and (rightN = 1);
 end;
 
+type
+  TPt = record X, Y: Integer; end;
+
+function ElemKinds: Boolean;           { element types other than Integer }
+var
+  r: array[0..1] of TPt;
+  d: array[0..1] of Double;
+  c: array[0..2] of Char;
+  s: array[0..1] of AnsiString;
+
+  procedure Fill;
+  begin
+    r[0].X := 1; r[0].Y := 2; r[1].X := 3; r[1].Y := 4;
+    d[0] := 1.5; d[1] := 2.25;
+    c[0] := 'a'; c[1] := 'b'; c[2] := 'c';
+    s[0] := 'hello'; s[1] := ' world';
+  end;
+
+begin
+  Fill;
+  ElemKinds := (r[0].X = 1) and (r[1].Y = 4)
+           and (d[0] = 1.5) and (d[1] = 2.25)
+           and (c[0] = 'a') and (c[2] = 'c')
+           and (s[0] + s[1] = 'hello world');
+end;
+
+function Depth3: Integer;              { captured from THREE levels up }
+var g: array[0..2] of Integer;
+  procedure L1;
+    procedure L2;
+      procedure L3;
+      begin g[2] := 42; end;
+    begin L3; end;
+  begin L2; end;
+begin
+  g[2] := 0; L1; Depth3 := g[2];
+end;
+
+function TakesArray(var g: TA): Integer;   { capture an enclosing PARAMETER }
+  procedure Bump;
+  var i: Integer;
+  begin for i := 0 to 3 do g[i] := g[i] + 1; end;
+begin
+  Bump; Bump;
+  TakesArray := g[0] + g[1] + g[2] + g[3];
+end;
+
+function ParamCapture: Boolean;
+var a: TA;
+    got: Integer;
+begin
+  a[0] := 100; a[1] := 101; a[2] := 102; a[3] := 103;
+  got := TakesArray(a);
+  { the writes must be visible in the CALLER's array, not just in the copy }
+  ParamCapture := (got = 414) and (a[0] = 102) and (a[3] = 105);
+end;
+
 procedure Chk(c: Boolean);
 begin
   if c then writeln('1') else writeln('0');
@@ -108,4 +178,7 @@ begin
   Chk(IterateIt = 100);
   Chk(ReadWrite = 714);
   Chk(TwoArrays);
+  Chk(ElemKinds);
+  Chk(Depth3 = 42);
+  Chk(ParamCapture);
 end.
