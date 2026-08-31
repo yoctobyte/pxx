@@ -330,4 +330,4 @@ produced `fail=2` followed by `OK`. The OK line is now conditional.
 `gate.sh quick` GREEN, including "this push wires the tests it adds".
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 274a9da6c.
