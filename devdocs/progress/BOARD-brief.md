@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:28 blocked:10 backlog:399 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:139 done:2947 rejected:71`
+`working:3 unfinished:28 blocked:10 backlog:399 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:139 done:2949 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
@@ -75,7 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [A]` bug-a-a-parallel-for-body-shares-one-captured-string-across-all-workers
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
@@ -89,5 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [A]` bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer
 - `[p 60] [A]` bug-a-shr-reaches-the-ir-spelled-as-tkident
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
+- `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 
 _402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

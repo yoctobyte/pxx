@@ -2790,6 +2790,16 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_pointer_to_array_indexing.pas $(TESTTMP)/test_ptrarr26
 	@$(TESTTMP)/test_ptrarr26 | diff -u test/test_pointer_to_array_indexing.expected - \
 	  || { echo 'test_pointer_to_array_indexing: FAIL - p^[i] element kind or stride'; exit 1; }
+	@# ...and the DYNAMIC sibling of exactly that. Both arms of the fix above
+	@# guarded on `not ArrTypeIsDyn`, so a pointer to a named DYN array kept the
+	@# tyInteger pointee and a 4-BYTE STRIDE: Double slots read back 0.00, two
+	@# Int64 writes packed into one slot as (20 shl 32) or 10, a pointer-to-dyn
+	@# PARAMETER segfaulted, and an AnsiString element was refused. On the
+	@# pre-fix compiler this file yields 11 FAIL rows and then exits 139.
+	@# bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride
+	@./$(COMPILER) test/test_pointer_to_dynamic_array_indexing.pas $(TESTTMP)/test_ptrdynarr26
+	@$(TESTTMP)/test_ptrdynarr26 | diff -u test/test_pointer_to_dynamic_array_indexing.expected - \
+	  || { echo 'test_pointer_to_dynamic_array_indexing: FAIL - p^[i] stride/element kind over a DYN array'; exit 1; }
 	@# PWideChar(w) — the cast, sharing the PChar arm. The PChar rows are the
 	@# control for that sharing. Needs PXX_WIDE_PAYLOAD (the file defines it):
 	@# without it the cast is deliberately REFUSED, because on the UTF-8 payload
@@ -12007,7 +12017,7 @@ test-core: $(COMPILER)
 	@# string BY POINTER, so every SetLength in one was refused while `s := s + 'x'`
 	@# in the same body compiled. Needs --threadsafe.
 	./$(COMPILER) --threadsafe test/test_setlen_in_parallel_for_body.pas $(TESTTMP)/test_setlen_parfor26
-	tools/expect_same.sh test_setlen_parfor26 "$$($(TESTTMP)/test_setlen_parfor26)" "PARALLEL SETLEN OK total=8000"
+	tools/expect_same.sh test_setlen_parfor26 "$$($(TESTTMP)/test_setlen_parfor26)" "PARALLEL SETLEN OK total=8000 slots=8000"
 	# How many captures a lifted nested routine may carry: the guard was a
 	# literal 16 while the staging arrays and TProc.Params are both
 	# MAX_PROC_PARAMS = 32 wide. 20 scalar captures and 20 fixed-array captures;

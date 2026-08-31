@@ -4231,7 +4231,20 @@ procedure SetPtrElemArrayInfo(si: Integer);
 var ptrArrDimI: Integer;
 begin
   if LastTypePointerElemArrAi < 0 then Exit;
-  if ArrTypeIsDyn[LastTypePointerElemArrAi] then Exit;
+  if ArrTypeIsDyn[LastTypePointerElemArrAi] then
+  begin
+    { A DYNAMIC pointee has no compile-time extent to record -- ArrTypeLo/Hi are
+      never written for one -- but `p^` is still a dyn-array VALUE and everything
+      downstream needs to know that. This arm used to live in AllocVar alone, so
+      a pointer-to-dyn-array PARAMETER recorded nothing and `p^[i]` SEGFAULTED
+      while the identical local merely returned wrong values. It belongs here
+      with its fixed-array sibling, in the one procedure all four allocators
+      call, for exactly the reason the header above gives.
+      bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride }
+    SymPtrElemDynDepth[si] := ArrTypeDynDepth[LastTypePointerElemArrAi];
+    if SymPtrElemDynDepth[si] < 1 then SymPtrElemDynDepth[si] := 1;
+    Exit;
+  end;
   SymPtrElemArrLen[si] := ArrTypeHi[LastTypePointerElemArrAi] -
                           ArrTypeLo[LastTypePointerElemArrAi] + 1;
   SymPtrElemNDims[si] := ArrTypeNDims[LastTypePointerElemArrAi];
@@ -4338,14 +4351,6 @@ begin
       `High(pdy^)` = 0 came from: not a missing case, a CONFIDENT wrong answer
       derived from two fields that were never set.
       bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
-    if (LastTypePointerElemArrAi >= 0) and
-       ArrTypeIsDyn[LastTypePointerElemArrAi] then
-    begin
-      { A dyn pointee has no extent to record, but `p^` is still a dyn-array
-        VALUE and everything downstream needs to know that. One slot says so. }
-      SymPtrElemDynDepth[SymCount] := ArrTypeDynDepth[LastTypePointerElemArrAi];
-      if SymPtrElemDynDepth[SymCount] < 1 then SymPtrElemDynDepth[SymCount] := 1;
-    end;
     SetPtrElemArrayInfo(SymCount);
   end;
 
@@ -13732,6 +13737,21 @@ begin
   begin
     if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
       Result := SymDynDepth[ASTIVal[node]];
+  end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    { `p^` where p: ^TDyn. The pointee's nesting lives on the POINTER symbol
+      (SymPtrElemDynDepth) because a dyn pointee has no extent to put in the
+      fixed-array slot. IR's NodeDynDepth has had this arm; this parser-side
+      twin did not -- the same split the AN_INDEX arm below records, one node
+      kind over. Without it IsNodeArray answered FALSE for `p^` over an
+      `array of AnsiString`, so the selector chain took the managed-STRING arm
+      and `p^[0] := 'x'` was refused as "cannot assign ShortString to Char" --
+      the exact face the fixed-array sibling was fixed for.
+      bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride }
+    if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) and
+       (ASTIVal[ASTLeft[node]] >= 0) and (ASTIVal[ASTLeft[node]] < SymCount) then
+      Result := SymPtrElemDynDepth[ASTIVal[ASTLeft[node]]];
   end
   else if ASTKind[node] = AN_INDEX then
   begin

@@ -242,7 +242,7 @@ begin
     tkCaret:
     begin
       Next;
-      { `^TFixed` where TFixed is a named FIXED-ARRAY type. An array alias is not
+      { `^TArr` where TArr is a named array type, FIXED or DYNAMIC. An array alias is not
         in the scalar alias table, so ParseTypeKind falls through its
         unknown-name default and answers tyInteger — the pointee then had a
         4-byte stride whatever its real element was, so `p^[i]` over
@@ -254,7 +254,7 @@ begin
         entry does not exist yet — and falls back to the old default.) }
       ptrArrAi := -1;
       if CurTok.Kind = tkIdent then ptrArrAi := FindArrayType(CurTok.SVal);
-      if (ptrArrAi >= 0) and (not ArrTypeIsDyn[ptrArrAi]) then
+      if ptrArrAi >= 0 then
       begin
         elemTk := IntToTypeKind(ArrTypeElemTk[ptrArrAi]);
         LastTypeRecId := ArrTypeElemRec[ptrArrAi];
@@ -5973,13 +5973,13 @@ begin
         Next;
         targetNOff := Tokens[TokPos-1].SOffset;
         targetNLen := Tokens[TokPos-1].SLen;
-        { `PFixed = ^TFixed`, TFixed a named FIXED-ARRAY type — the alias form of
+        { `PArr = ^TArr`, TArr a named array type (fixed or dynamic) — the alias form of
           the same shape ParseTypeKind's `^` arm handles. Without it the alias
           recorded a tyInteger pointee and every variable of it inherited a
           4-byte stride. }
         aPtrArrAi := -1;
         if CurTok.Kind = tkIdent then aPtrArrAi := FindArrayType(CurTok.SVal);
-        if (aPtrArrAi >= 0) and (not ArrTypeIsDyn[aPtrArrAi]) then
+        if aPtrArrAi >= 0 then
         begin
           fTk := IntToTypeKind(ArrTypeElemTk[aPtrArrAi]);
           LastTypeRecId := ArrTypeElemRec[aPtrArrAi];

@@ -3,9 +3,9 @@ track: A
 prio: 65
 type: bug
 blocked-by: []
-summary: "`parallel for` lifts a captured variable BY POINTER without privatising it, so every worker writes the same AnsiString. test/test_setlen_in_parallel_for_body.pas asserts total=8000 and measured 16/20 correct uninstrumented on seven — a race with lost updates, in the DEFAULT build. There is no `private(...)` clause, so the test cannot express what it means. aada606bc made this shape compile; it did not make it correct."
-status: open
-owner: unassigned
+summary: "RESOLVED AS NOT-A-COMPILER-DEFECT, and the docs already said so. `parallel for` captures enclosing locals BY REFERENCE -- docs/library/concurrency.md: 'captured by reference through the frame', 'accumulating into one shared variable is a data race unless you guard it' -- so the test, which ran `s := ''` against another worker's `SetLength(s, 8)` on ONE captured AnsiString, was a documented data race. The three-way fork this ticket raised for Track U needs no ruling: option 1 (auto-privatise) would CONTRADICT the documented contract, so option 3 stands and the test is fixed. test_setlen_in_parallel_for_body.pas now pins the captured-scalar loop to one worker (`parallel(pdChunked, n 1)`), keeping the LOWERING under test -- the point of the file -- with no race, and adds a second loop writing DISJOINT slots of a captured dyn array for real concurrency. Was 16/20 correct, 3/15 on 4 cores; now 42/42 across 1/2/4-core pinnings. Filing this was still right: building the race-free replacement is what surfaced bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride, a silent miscompile of EVERY captured dynamic array in every parallel loop."
+status: done
+owner: frankA
 ---
 
 # A `parallel for` body shares ONE captured string across every worker
@@ -93,3 +93,52 @@ standing tax on Track T and on everyone reading tstate.
 
 *Found by the Track T agent on `seven` under the provenance rule: my box's sweep
 produced it, so the reduction is mine and the fix is the lane's.*
+
+## Resolution (frankA, 2026-08-31)
+
+**The fork did not need Track U — `docs/library/concurrency.md` already answers
+it**, and it should have been read before this ticket proposed three options:
+
+> The body may reference the loop variable, globals, and enclosing locals —
+> scalars, strings, records, classes, and arrays alike — **captured by reference
+> through the frame**. […] Iterations must be independent […] Writing disjoint
+> slots is safe; **accumulating into one shared variable is a data race unless
+> you guard it.**
+
+That is the contract, it matches OpenMP's default for variables declared outside
+the region, and the compiler implements it exactly. So option 1 (auto-privatise)
+is not "most likely what a reader expects" — it would silently diverge from the
+documented model, and in the other direction: a variable a body deliberately
+shares would quietly become private. **Option 3 stands: the program was wrong.**
+
+### What the test does now
+
+`RunCaptured` keeps the exact motivating shape — a captured `AnsiString`,
+`SetLength` through the lifted pointer — and pins it with `parallel(pdChunked,
+n 1)`. The lowering under test is identical at any worker count; only the race
+goes away. `RunDisjoint` restores real concurrency the documented-safe way,
+writing disjoint slots of a captured `array of AnsiString`.
+
+The header says **why** `n 1` is there and that widening it brings the flake
+back, because the next reader's instinct will be to delete it.
+
+**Measured:** 12/12 unpinned, 15/15 on 4 cores, 15/15 on 2 cores. The 4-core
+figure is the one to compare — this ticket measured 3/15 there.
+
+### What this cost, and what it bought
+
+`RunDisjoint` would not compile: `SetLength(arr[i], 8)` on a captured dyn array
+was refused. That was not a `parallel for` bug but
+[[bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride]] — a 4-byte
+stride for every captured dynamic array, which had a captured `array of Double`
+in a parallel body writing **all zeros**, silently, in the default build. This
+ticket's real value was leading there.
+
+### Not chosen, filed separately
+
+A `private(...)` clause ([[feature-a-a-private-clause-for-parallel-for]]) would
+make the original shape expressible. Additive, consistent with the documented
+model, and NOT required to close this — filed low.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
