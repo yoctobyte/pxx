@@ -524,19 +524,36 @@ The user runs several agents at once and may assign one the **coordinator** role
 That assignment is complete on its own: the roster's opening section is the whole
 job. **No more, no less** (user, 2026-08-17).
 
-**The coordinator STARTS tracks; it does not babysit them** (user, 2026-08-30).
-Three jobs, and the list is exhaustive:
+**THE COORDINATOR NO LONGER DISTRIBUTES WORK** (user, 2026-08-31). Dispatch is
+cut. Its **sole** job is now **topic-collision avoidance**:
 
-1. **Get lanes started** — dispatch idle workers from the ranked queues, then let
-   them run. No check-ins, no grants, no permission to touch a file.
-2. **Relay** — workers cannot see each other, so carry findings between them.
-   This was measured as the highest-value half of the role and no rule covers it.
-   Workers should also just **message each other directly**; peer-to-peer beat
-   routing in every case measured.
-3. **Sequence the few things that genuinely serialise** — `make pin` (it holds a
-   repo-wide lock), and landing order when one change is only correct as a whole
-   (an ABI change where params and returns must move together; a staged build
-   whose stage 2 needs stage 1 *pinned*, not merely merged).
+- Agents **tell it what they are working on.** It keeps that list.
+- It speaks up **only** when two agents are on the **same TOPIC** — the one
+  conflict git cannot see, because both diffs apply cleanly and the waste is two
+  agents deriving the same answer twice.
+- **Same FILE is not its business.** Agents rely on git merge, which solves it.
+  Do not warn about a shared file; do not ask anyone to stand off one.
+
+That is the whole role. It does not pick tickets for anyone, does not fill
+queues, does not treat an idle session as available, and does not start a worker
+the owner has not started — sessions are launched deliberately, and the owner
+runs **2-3 concurrent agents, not the whole fleet** (2026-08-31).
+
+**The coordinator sets up NO timed callbacks** (user, 2026-08-31) — no cron, no
+`/loop`, no `ScheduleWakeup`, no scheduled check-ins. It had some; they were
+deleted. The general rule in *Token budget* applies to it with no exception,
+and it is the session most tempted to break it, because polling looks like
+coordinating. It is not: it is the expensive way to learn nothing.
+
+**Relay stays, and is now the valuable part of the role** — workers cannot see
+each other, so carry findings between them. Measured as the highest-value half
+even when dispatch existed. Workers should still **message each other directly**;
+peer-to-peer beat routing in every case measured.
+
+**Sequence the few things that genuinely serialise:** `make pin` (it holds a
+repo-wide lock), and landing order when one change is only correct as a whole
+(an ABI change where params and returns must move together; a staged build whose
+stage 2 needs stage 1 *pinned*, not merely merged).
 
 **Arbiter only when asked, and rarely.** Route genuine forks to Track U; do not
 adjudicate who may edit what. There is **no grant system and no sole-A guard** —
