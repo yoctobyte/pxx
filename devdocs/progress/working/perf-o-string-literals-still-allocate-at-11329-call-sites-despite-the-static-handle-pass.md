@@ -4,9 +4,9 @@ prio: 65
 type: perf
 blocked-by: []
 created: 2026-08-31
-owner: ""
+owner: frankB
 summary: "EmitStaticLitHandle turns a string literal into an address instead of a PXXStrFromLit call, and it IS active at -O2 — yet the -O2 compiler binary still contains 11,329 `movabs len / movabs ptr / call PXXStrFromLit` sites, and that call plus its thunk is 17% of a self-compile profile (12/70 samples). Find which literal contexts never reach the pass and route them through it."
-status: new
+status: working
 ---
 
 # String literals still allocate at 11,329 sites despite the static-handle pass
