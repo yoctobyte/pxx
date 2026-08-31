@@ -388,3 +388,74 @@ arm32 hardware, so "the arm32 backend miscompiles the big binary" and "qemu-arm
 mishandles it" are not yet separated. The negative controls narrow it — a small
 arm32 program is correct at every pad — but a control that never faults cannot
 tell those two apart either.
+
+## Addendum (frankS, 2026-08-31): the strace localizes it, and two more theories die
+
+franka-d5's stack-SIZE control (identical sweep under `-s 268435456`) reproduces
+the conclusion here from the other side, and the differential strace narrows the
+fault to one phase. Method: same binary, same argv, `qemu-arm -d strace,page`,
+one passing pad and one failing pad, diffed.
+
+**The two runs are byte-identical in syscalls until the end.** The only
+difference before the fault is one read length, and it is the environment
+itself:
+
+```
+open("/proc/self/environ",O_RDONLY) = 4
+read(4,0x407fba88,16384) = 4576     <- pass (pad 0)
+read(4,0x407fba28,16384) = 4676     <- fail (pad 100), exactly +100 bytes
+```
+
+The failing run then **dies immediately after reading
+`compiler/builtin/builtinheap.pas` (222294 bytes) and probing for
+`pxxlib.cfg`** — the passing run continues into `open("o1")` and writes the
+output. `builtinheap.pas` is the same file the *other* face of this bug names in
+its four bogus `undefined variable (PXX_KIND_LEGACY)` errors. **Both faces fault
+in the same phase**, which is the first evidence they are one defect rather than
+two.
+
+### The knob, at the source level
+
+`PxxEnvLoad` (`compiler/defs.inc:5382`) reads `/proc/self/environ` into
+`buf: array[0..16383] of Byte` — a **16 KB local**, so a 16 KB stack frame,
+entered before anything else. In the guest map its last byte sits **72 bytes
+below `argv_start`**. Env size shifts that frame, which is exactly the knob
+franka-d5 and I were each turning by accident. The routine itself looks correct
+on its face: the read is bounded by `SizeOf(buf)` and the bytes are copied into a
+managed `AnsiString`, leaving no pointer into the frame.
+
+### The guest map, because it is the part a native run cannot show you
+
+```
+08048000-09611000  r-x   code
+09611000-0f51a000  rw-   data + ~99 MB BSS/brk
+40001000-40801000  rw-   8 MB stack   (start_stack 0x407ffad0)
+40801000-40802000  r-x   sigpage
+40802000-50802000  rw-   256 MB arena, mmap'd IMMEDIATELY above the stack
+```
+
+One page separates the top of the stack from the base of the 256 MB arena.
+
+### Dead theories, now four
+
+Each was measured, not argued: **argv handling** (an arm32 `ParamStr` program is
+correct at every pad), **32-bit address-space exhaustion** (an arm32 program with
+a ~100 MB BSS, both ends touched, is correct at every pad), **stack size**
+(franka-d5's 32x sweep, identical pad for pad), and now **large-frame codegen** —
+an arm32 program with a 16 KB local, filled, surviving 200 levels of recursion
+and checked afterwards, reports zero mismatches and an intact caller guard.
+`env -i` still faults, so it is layout, not environment *content*.
+
+### On the emulator-vs-backend residual
+
+The strace weakens the emulator hypothesis without settling it: the guest opens
+exactly the right files in exactly the right order for hundreds of syscalls and
+diverges only at the end, which reads like correct code operating on corrupt
+data rather than an emulator losing its footing. That is an argument, not a
+measurement — franka-d5's point stands that only a guest PC or real arm32
+hardware separates the two.
+
+**Next step is unchanged and nobody is on it:** a guest PC at a faulting pad.
+Note the host `gdb` here is 17.1 with **no `arm` architecture** and there is no
+`gdb-multiarch`, so `qemu-arm -g` has nothing to talk to — installing one needs
+the owner. Failing that, bisect the arm32 backend against the one-line repro.
