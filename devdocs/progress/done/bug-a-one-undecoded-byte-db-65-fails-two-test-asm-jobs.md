@@ -180,4 +180,4 @@ what shipped.
 The silent assertion that hid this for days is fixed separately (T, `6b5b37c0a`).
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 2d3e7096f.
