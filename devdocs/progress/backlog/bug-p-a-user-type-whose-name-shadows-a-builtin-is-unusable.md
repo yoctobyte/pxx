@@ -8,10 +8,40 @@ found: 2026-08-31
 found-by: frank-rust
 owner: unassigned
 blocked-by: []
-summary: "`type Currency = record a, b, c: Integer; end;` then `var v: Currency; v.a := 1;` fails with `a value of this type has no members` — the DECLARATION path resolved `Currency` to the builtin (tyDouble) instead of the user's record, so the variable is an 8-byte float slot and has no fields. FPC 3.2.2 compiles it and prints 12 / 1 2 3. This is the declaration-side twin of the SizeOf precedence bug fixed in bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts: ParseTypeKind consults the builtin type name before the user's own type tables, same as SizeOf did. LOUD (compile error), not silent, which is why it ranks below its twin."
+summary: "SELF-INCONSISTENT, no oracle needed: with `type Currency = record a,b,c: Integer end`, `SizeOf(Currency)` answers 12 in an expression and 8 inside an array bound in the SAME program (`12 8 8`; fpc `12 12 12`) — ParseTypeKind still consults the builtin type name before the user's own type tables, so such a type is also unusable as a variable's type (`v.a := 1` gives 'a value of this type has no members'). Declaration-side twin of the SizeOf precedence bug fixed in 582e4de09; that fix covered SizeOf only. Because it is self-inconsistency rather than an FPC disagreement, it cannot be ranked as a compat item."
 ---
 
 # A user type whose name shadows a builtin is unusable as a variable's type
+
+## The sharpest repro is self-inconsistency, not a disagreement with FPC
+
+Found by frankwasm, re-measured by frank-rust on a fresh HEAD build
+`a673fa2206c4` (HEAD `26b5a5d066ed`, 2026-08-31):
+
+```pascal
+program SelfInc;
+type Currency = record a, b, c: Integer; end;
+     TA = array[0..SizeOf(Currency) - 1] of Byte;
+var x: TA;
+begin
+  Writeln(SizeOf(Currency), ' ', SizeOf(x), ' ', Length(x));
+end.
+```
+
+```
+pxx : 12 8 8        fpc 3.2.2 : 12 12 12
+```
+
+**The same expression text answers 12 and 8 in the same program, ten lines
+apart** — 12 through the SizeOf path fixed in `582e4de09`, 8 through
+`ParseTypeKind` in the array bound, which still consults the builtin name first.
+
+Prefer this over the pxx-vs-FPC form as the ticket's headline repro, for two
+reasons. It needs **no oracle** to be obviously wrong, so nobody has to agree
+about what our `Currency` ought to be first. And self-inconsistency is the one
+form that **cannot be ranked as a compat item** under the compat ceiling — it is
+not "FPC accepts a form we reject", it is us giving two answers to one question.
+
 
 ## Repro
 
