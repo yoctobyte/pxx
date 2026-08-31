@@ -139,3 +139,74 @@ the unstated part is what rots.** So: the numbers in this section are as of
 binary `272e95c5ec9c` / `061099b514c0`, and the 3.5x / 3.3x figures at the top of
 this ticket are **as of 2026-07-20 and unverified since** — rebuild their
 baseline before quoting them, including in the acceptance criteria.
+
+---
+
+## 2026-08-31 (frankA) — claim 2's headline is closed: 2.18x -> 1.25x at 256 bytes, and the cause was NOT the lock
+
+Landed `878542b89`, binary `cc9b600f1208`, `gate.sh quick` green.
+
+**Baseline re-measured first, as this ticket instructs.** At compiler
+`393ba3c6006a` the 2026-08-29 claim was still live: `b := nil; SetLength(b, 64)`
+x 3M ran 0.68 s against FPC 3.2.2's 0.25 s — **2.7x**, inside the recorded
+2.4-3.1x. It had not decayed.
+
+**The ticket's own stated cause could not have produced it.** `PXXHeapSpin` is
+behind `{$ifdef PXX_TS_SOFTLOCK}` and is absent from a single-threaded build, so
+**direction 1 (per-thread free-list cache) addresses claim 1 only** — as the
+2026-08-29 section suspected, now confirmed structurally rather than by
+inference.
+
+**The real cause, found by scaling the block rather than profiling.** The
+pxx/FPC ratio grew with size — 8B 1.22x, 32B 1.48x, 128B 1.71x, 256B 2.18x,
+2048B 4.62x — which is a per-BYTE cost. Both of `PXXAlloc`'s reuse paths
+hand-rolled a word-at-a-time zero loop, so neither ever reached the `rep stosb`
+that `PXXMemZero` (declared in the same unit, 2700 lines below) has always
+provided. ~2.1 GB/s against FPC's ~13.7.
+
+**Two thresholds, both swept, because the naive fix regressed.** Calling
+`PXXMemZero` unconditionally measured **0.91x at 8 bytes and 0.92x at 32** (old
+faster in 9 of 9 interleaved rounds): `rep stosb`'s microcode startup, and
+separately a call costing more than the job for one or two words. So
+`MEMZERO_REP_MIN` (64) picks loop-vs-`rep` *inside* `PXXMemZero`, benefiting
+every caller, and `ALLOC_INLINE_ZERO_MAX` (64) is a call boundary in `PXXAlloc`
+— not a rival algorithm.
+
+| bytes | old | new | vs FPC before | after |
+| --- | --- | --- | --- | --- |
+| 8 | 0.28 | 0.28 | 1.22x | 1.22x |
+| 32 | 0.30 | 0.30 | 1.48x | 1.43x |
+| 128 | 0.41 | 0.34 | 1.71x | 1.42x |
+| 256 | 0.61 | 0.35 | 2.18x | **1.25x** |
+| 2048 | 3.14 | 0.66 | 4.62x | **0.97x** |
+
+Interleaved A/B against a clean-tree build, min of 3, box load 5-7. No
+regression at any size — the acceptance criterion's second bullet.
+
+### Banked, NOT fixed: the dynamic-array path zeroes every block twice
+
+`SetLength` calls `PXXMemZero(newArrData, newLen * elSize)` on a block `PXXAlloc`
+has *already* zeroed. Two full passes over the same bytes on the commonest
+allocation shape in the language.
+
+**This is not a guess — it is why my first regression test could not fail.** The
+obvious dynamic-array spelling of the zero-on-reuse contract passes with
+`PXXAlloc`'s zeroing **deleted entirely**, measured, all three arms removed,
+because `SetLength` re-zeroes underneath it. `test/test_heap_zero_on_reuse.pas`
+uses class instances for that reason and carries the warning in its header.
+
+Removing the second pass is not a deletion: `SetLength` must still zero the
+grown tail on a realloc, and the copy path needs the old span intact. So the
+shape is probably "zero only `[copyLen, newLen)`", and it wants its own
+measurement — plausibly another ~1.2-1.4x on this same benchmark, since the
+remaining 1.25x at 256 bytes is now mostly that second pass.
+
+### What is still open on this ticket
+
+- **Claim 1 (the title) is untouched.** 8-worker sha256 at 0.30x serial. The
+  spinlock, `PXX_TS_SOFTLOCK`, per-thread bins — all still to do, and the
+  2026-07-20 numbers there remain **unverified since**; rebuild that baseline
+  before quoting the 3.5x / 3.3x, including in the acceptance criteria.
+- **The double zeroing above.**
+- Claim 2's residual: 1.22x at 8 bytes, which is per-call overhead, not per-byte,
+  and is a different investigation again.
