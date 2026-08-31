@@ -301,3 +301,4 @@
 2026-08-31T06:04:00Z	seven	0ba60c5f90a205fb90e5364977f7407745665616	would NOT pin 0ba60c5f90a2 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-pascal-conformance#shard0/6
 2026-08-31T06:24:13Z	seven	d28b77ce5d8887b6c143aaeafa9e77666b643d8b	would NOT pin d28b77ce5d88 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-pascal-conformance#shard0/6
 2026-08-31T06:43:57Z	seven	351c10608aae0a8a86845f08e5d30388b992d8f0	would NOT pin 351c10608aae — 3 red(s) the current pin does not have, 1 inherited from the current pin: lib-test#src:tools/crtl_reachability.py, test-core#src:test/test_setlen_in_parallel_for_body.pas, test-pascal-conformance#shard0/6
+2026-08-31T06:58:53Z	seven	d7aad6cd14a3e1030429fda13ba147f180316879	would NOT pin d7aad6cd14a3 — 2 red(s) the current pin does not have, 1 inherited from the current pin: lib-test#src:tools/crtl_reachability.py, test-pascal-conformance#shard0/6
