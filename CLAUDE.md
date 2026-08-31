@@ -345,6 +345,71 @@ genuinely changed a design decision — not for a bug. If the body is longer tha
 the diff it describes, ask whether you are filing because it needs filing or
 because filing is the habit.
 
+## Token budget, and work in GROUPS not tickets (all tracks)
+
+Owner, 2026-08-31, setting the shape of every session from here. Parallel tracks
+stay. What changes: **tokens are a first-class constraint**, and **the unit of
+work is a topic group or a target, not a ticket.**
+
+### No timed callbacks, no loops, no polling — every track
+
+No `/loop`, no `ScheduleWakeup`, no cron, no "I'll check back in five minutes",
+no `sleep N; tail log`. **A timed wake-up re-reads your whole context in order to
+learn nothing.** It is the most expensive way in this system to do nothing, it is
+charged per firing per session, and there are eleven sessions.
+
+The cheaper replacements already exist and are already the rule elsewhere —
+this only makes them universal:
+
+- Background a long job; **its completion notification IS the wait.**
+- Track T's findings arrive as tstate reports and tickets. You do not poll for them.
+- To know when a peer finishes: `notify_when_idle` on ONE message, never a loop.
+
+**Peer-to-peer messages stay allowed and stay preferred** — measured as the
+highest-value channel in the system. A message is bounded and carries a fact; a
+loop is unbounded and carries nothing. **Clear any cron or loop you are running
+now**: `CronList` shows only your OWN session's, so nobody can do this for you.
+
+### The unit of work is a TOPIC GROUP or a TARGET
+
+**No more blind automated bug fixing.** The `next → fix → resolve → next` loop
+hands you an unrelated ticket every iteration, so you pay full setup cost — read
+the ticket, build the repro, load the subsystem — and amortise it over exactly
+one fix. Worse, it is structurally blind to the thing this file already says
+matters most: **you cannot notice that eight tickets share one cause if you only
+ever hold one of them.**
+
+So **claim a group, read all of it, then fix**:
+
+- a **target** — xtensa, riscv32, arm32, i386, wasm32: one backend, all its open tickets;
+- a **topic** — the SHR family, managed strings, records with managed fields, variants, threads.
+
+The groups are already there and they are large. Measured 2026-08-31 over 401
+backlog tickets: strings 19, records 14, threads 13, xtensa 11, riscv 8,
+variants 7.
+
+**The precedent is frankC's SHR work, and it is the template this rule is named
+after.** Held as one family it landed five commits — a dropped narrowing store
+in the `-O2` inliner, an untyped literal shift that was 64-bit on every target, a
+`shr` constant expression that did not fold, a `tkShrLogical` rename off
+`tkIdent` — and closed more tickets than it opened. Held one at a time, every one
+of those reads as an unrelated one-off, and the inliner bug (which returned
+`2147483648` for `MaxInt` from any Integer function with a single arithmetic
+body) stays hidden behind its own narrow repro.
+
+**This does not replace the ranker; it changes what you do with its answer.**
+`tools/progress.sh next --track X` still names the highest-value ENTRY POINT.
+Take it, then grep the backlog for its subsystem and pull the neighbours in
+before you start. **Rank to choose the group; do not re-rank inside it.**
+
+A genuinely isolated ticket is still fine to fix alone — the rule is against
+*not looking* for the neighbours, not against the count being one.
+
+**Say which group you hold when you claim, and report by group when you land.**
+"Closed the xtensa cluster — 6 of 11, three shared one cause, two were already
+fixed" is the useful shape, and it is the measure this file already asks for:
+**tickets-closed-per-change, not lines touched.**
+
 ## The name is not the thing (all tracks)
 
 Six incidents on 2026-08-30, five agents, one shape — named by frankS:
@@ -837,6 +902,9 @@ fix the doc, not the loop.
   1. `git pull --rebase` (origin is truth).
   2. `tools/progress.sh next` — the single highest-effective-prio ready ticket,
      any track. (If the user *did* name a track, use `next --track <X>` instead.)
+     **That is your ENTRY POINT, not your job.** Per *Token budget, and work in
+     GROUPS not tickets*: grep the backlog for its target or subsystem and pull
+     the neighbours in, then hold the group.
   3. **Just take it.** There is no sole-A guard and no grant to request — cut
      2026-08-30. Shared core files are fine to edit concurrently; git detects
      the rare real conflict and a rebase fixes it. If you know another agent is
@@ -844,9 +912,12 @@ fix the doc, not the loop.
      anyone for permission.
   4. `claim <slug> <agent-id>` → do it → land green (your lane's gate) →
      `resolve <slug>` (no sha — see above) → `board-md` → commit the move, then
-     `tools/sync.sh` to push and record the landed sha.
-  5. Loop: `pull --rebase`, `next`, repeat. Stop when the queue is dry for your
-     lane or the user says so.
+     `tools/sync.sh` to push and record the landed sha. Claim each ticket in the
+     group you actually work, and **name the group** when you report.
+  5. Then take the next GROUP — `pull --rebase`, `next`, widen again. Stop when
+     the queue is dry for your lane or the user says so. **Do not re-enter this
+     at step 2 for every ticket**; that is the blind loop the group rule
+     replaced.
 - Tickets live in
   `devdocs/progress/{urgent,working,unfinished,backlog,blocked,done,rejected}/`;
   regenerate `BOARD.md` after moving them. `working/` is a **status hint, not a
