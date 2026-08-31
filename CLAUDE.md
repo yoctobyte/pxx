@@ -313,6 +313,36 @@ comment rewrite is not.
   `date | agent | file | what and WHY`. Not a ticket: no frontmatter, no slug, no
   `board-md`, nothing to resolve, never linked as a dependency. Batch freely.
 
+**YOU HAVE THE AUTHORITY. FILING INSTEAD OF FIXING IS THE ERROR** (owner,
+2026-08-31). Nobody's permission is needed to correct a wrong comment, a stale
+doc line, a dead cross-reference, or misleading prose. Fix it, log the line,
+move on — **do not bother the rest of the world with it.**
+
+Measured the day this was written: `bug-a-defs-inc-vt-promo-comment-describes-
+the-slot-not-the-variant` was **85 lines** about a two-line comment, and
+`bug-a-threadsafe-is-x86-64-only...` was **254 lines** about five stale ones.
+Both reports were fair and entirely accurate. Both were then *fixed in minutes*
+by editing the comments — which is what should have happened instead of the
+filing.
+
+**The cost is not the writing, it is everything downstream.** A filed ticket has
+to be read, ranked, claimed, resolved and boarded by someone else, and its line
+numbers rot while it waits — the threadsafe ticket's own citations had drifted
+before anyone acted, and four of its six sites were quietly fixed by others in
+the interim, which nothing recorded. A 30-second edit became a multi-agent
+artifact that outlived the thing it described.
+
+**That is the black hole: a system whose output is its own paperwork.** The
+owner's comparison is the judicial one — self-referential, recursive, absorbed
+in its own procedure, and producing no progress. Guard against it by *acting*,
+not by writing a better rule about acting.
+
+**The test is unchanged and it is not "is this small?" — it is "can this change
+behaviour?"** A forty-line comment rewrite is yours. A one-character code edit,
+an identifier rename, a `.expected`, or deleting code you merely *believe* is
+dead is a ticket. And the trap above still binds: if a comment disagrees with
+the code, decide **which one is wrong** before you touch either.
+
 **2. The frontmatter `summary` MUST be true.** It is the only part everyone
 reads, and a stale one actively misroutes the agent who reads it — that happened three times in
 one day while the correction sat eighty lines down the body. If your work

@@ -4,7 +4,7 @@ track: A
 type: bug
 blocked-by: []
 summary: "compiler/defs.inc:1150-1151 annotates the VT_PROMO_INT32/INT64 VARIANT tags with `payload = inline Int64, or a bignum ref` — which is the SLOT storage discriminator's semantics, the very thing the paragraph four lines above says the variant tags are distinct from. In a variant the payload is a managed STRING holding the exact decimal, per pylib.pas, which defs.inc itself names as the authority. No compiled behaviour is wrong; the cost is that a reader trusting the comment concludes a correct tool is broken. Measured: it sent the Track T agent to suspect pxx-gdb.py:109 of silently decoding a number as an address. tools/pxx-gdb.py is CORRECT and must not be 'fixed'."
-status: new
+status: done
 owner: ""
 ---
 
@@ -83,3 +83,6 @@ a variant payload is worth stating rather than leaving implied.
 
 The comment on each `VT_PROMO_*` line describes what a *variant* payload holds,
 and disagrees with no site in `pylib.pas`.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

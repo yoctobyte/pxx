@@ -13311,8 +13311,11 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
     begin
       { --threadsafe: one write/writeln statement = one atomic emission.
         Bracket the whole statement with the reentrant I/O lock (also guards
-        the shared INTBUF/LINE_BUF scratch). x86-64 only — --threadsafe
-        atomics are x86-64-only today. }
+        the shared INTBUF/LINE_BUF scratch). Emitted on every --threadsafe
+        target — x86-64, i386, aarch64 and arm32 — which is exactly the
+        condition on the next line; read that, not this comment. Said "x86-64
+        only" from before 07fee0844 (2026-07-06) widened it to four, one line
+        above the four-target test it contradicted. }
       if ThreadSafeMode and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or (TargetArch = TARGET_AARCH64) or (TargetArch = TARGET_ARM32)) then
         IRAppend(IR_IO_LOCK, -1, -1, -1, 0, 0);
       first := -1;

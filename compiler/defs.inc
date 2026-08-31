@@ -1250,8 +1250,15 @@ const
   PROMO_TAG_OFFSET = 0;   { byte offset of the tag word within the slot }
 
   VT_PROMO_BASE     = 8192;
-  VT_PROMO_INT32    = 8192;  { payload = inline Int32, or a bignum ref when the spill bit is set }
-  VT_PROMO_INT64    = 8193;  { payload = inline Int64, or a bignum ref }
+  { Payload of a BOXED promo int is a managed STRING holding the exact decimal
+    — pylib.pas is the authority and says so at its VT_PROMO_INT64 sites. These
+    tags describe the VARIANT, and the inline-machine-int / heap-bignum-pointer
+    split belongs to the SLOT discriminator (PROMO_TAG_INLINE/HEAP just above),
+    which is the very distinction the paragraph above draws. Both lines below
+    used to state the SLOT semantics here, which sent a reader to suspect
+    tools/pxx-gdb.py of decoding a number as an address; that tool is CORRECT. }
+  VT_PROMO_INT32    = 8192;  { payload = managed string, the exact decimal }
+  VT_PROMO_INT64    = 8193;  { payload = managed string, the exact decimal }
   VT_PROMO_RESERVED = 8194;  { 8194..8199 reserved: tagged classes (promoint31/63) and wider inline }
   VT_PROMO_LAST     = 8199;
 

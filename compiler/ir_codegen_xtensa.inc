@@ -430,7 +430,10 @@ end;
 
 procedure EmitHeapAllocLockedXtensa;
 { a2 = requested payload bytes -> a2 = payload pointer. Delegates to the Pascal
-  PXXAlloc(size, align=8). No threadsafe lock (x86-64-only). }
+  PXXAlloc(size, align=8). No threadsafe lock: xtensa is not one of the four
+  --threadsafe targets (x86-64, i386, aarch64, arm32) — the gate in
+  compiler.pas is the authority. Said "x86-64-only", which stopped being true
+  at 07fee0844 (2026-07-06). }
 var procIdx: Integer;
 begin
   procIdx := FindProc('PXXAlloc');

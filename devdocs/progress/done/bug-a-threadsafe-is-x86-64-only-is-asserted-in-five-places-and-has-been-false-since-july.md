@@ -2,7 +2,7 @@
 track: A
 prio: 25
 type: bug
-status: open
+status: done
 found: 2026-08-29
 found-by: frankD
 summary: "--threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep."
@@ -252,3 +252,6 @@ file can take it in seconds.
 
 **Running total: seven false sites, six fixed, two open** (`ir.inc` — frankC;
 `lexer.inc` — A/P shared), plus the xtensa near-miss which is correct in effect.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
