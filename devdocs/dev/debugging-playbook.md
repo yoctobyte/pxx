@@ -625,6 +625,47 @@ rule, and the hazard is in the *revert*), and **print `sha256sum
 compiler/pascal26` before and after**: unchanged is the assertion that the
 experiment stayed where you put it.
 
+#### And for a pure MOVE, byte-identity is the WRONG bar — the right one is stronger
+
+frankA, 2026-08-31, carving NilPy arms out of shared parser files, having written
+*"byte-identical is the bar — the default build must not move"* into the ticket
+at filing and then found it wrong.
+
+**Relocating a function between `.inc` files changes procedure emission order, so
+the compiler binary differs while nothing about its behaviour does.** A bar that
+a correct change cannot meet is not a strict bar, it is a broken one: it will be
+missed, and the natural next move is to weaken it to something vague rather than
+to something better. `make compiler/pascal26` never promised byte-identity across
+a source change either — it says the compiler reproduces ITSELF.
+
+The bar that is right for a move is **equivalence of what the two compilers
+EMIT**, and it is stronger than the one it replaces:
+
+1. build a compiler from the before-sources and one from the after-sources;
+2. compile a batch of programs with both — `compiler.pas` itself included;
+3. diff the emitted binaries. His run: **11 identical, 0 differing.**
+
+**The sharpest form falls out of that for free, and it is worth asking for by
+name: the BEFORE compiler over the AFTER sources produces exactly the after
+compiler, while the two compilers differ in bytes.** Those two facts together say
+the difference is emission order and nothing else. Neither says it alone.
+
+**Then he did not believe it.** 11/11 green is also what a batch that never
+reaches the carved code looks like, so he injected a defect into the moved arm
+(`PyMakeStrIndex(node, GenZeroLit)` — always index 0), rebuilt, and
+`test_nilpy_subscript_of_a_call_result` diverged from CPython on its first line.
+Note what made the control land: **that test's own header says `f()[0]` was
+"correct", which is exactly how the bug survived, so any probe must use a
+NON-ZERO index** — the control was designed against a recorded near-miss rather
+than chosen freely. Reverted; restored build byte-identical, which is the right
+bar for a revert because a revert really should not move anything.
+
+**The general shape:** when a change is expected to be behaviour-preserving, ask
+what artifact the preservation is a property OF. For a bug fix it is the emitted
+program. For a move it is the emitted program too — not the compiler that emits
+it. Reaching for the compiler's own bytes is reaching for the artifact that is
+easiest to compare, not the one the claim is about.
+
 ## Where is the time going — profiling on these boxes
 
 **`perf` is dead here** (`perf_event_paranoid=4`) and that is NOT the same as
