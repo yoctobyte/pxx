@@ -4,7 +4,7 @@ track: A
 prio: 92
 type: bug
 status: done
-resolved: PENDING-COMMIT
+resolved: af07a59ff
 found: 2026-08-31
 found-by: frankA
 owner: ""
