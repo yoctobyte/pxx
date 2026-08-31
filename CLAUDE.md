@@ -317,7 +317,21 @@ which compiler is on disk. Three routes to a stale one: a seeded tree (`cp`
 stamps a newer mtime, so `make` no-ops and exits 0), a reverted experiment, and a
 sync that pulled someone else's `compiler/**`. **Rebuild after any sync touching
 `compiler/**` before you measure, and print `sha256sum compiler/pascal26` beside
-every number you report.** A **nonzero** exit deserves the same suspicion: grep
+every number you report.**
+
+**`make` has TWO success verbs and only one of them recomputed anything.**
+`converged after N round(s)` (Makefile:284) is the recompute. `self-host
+fixedpoint: verified — N round(s), <sha12>` (Makefile:317) is the STAMP path: it
+asserts only that the binary on disk is still the one some past stamp was written
+for, and its recipe never touches the binary. Seeing `verified` where you
+expected `converged` means **no fixedpoint ran this time** — treat the binary as
+unproven for your change, `rm` the stamp and re-run. Measured live 2026-08-31
+(frankB): a pull brought someone's `compiler/**`, `make` printed `verified — 1
+round(s)`, and `gate.sh quick` went RED against the stale binary; removing the
+stamp and rebuilding was GREEN. **The verb is the tell** — both lines are green,
+both name a round count, and `tools/selfhost_stamp_devtest.sh` asserts each.
+
+A **nonzero** exit deserves the same suspicion: grep
 the tree for the error string — if the source lacks it, the compiler that printed
 it is not the one you think you are running. When seeding from outside, `touch`
 the sources after the copy.
