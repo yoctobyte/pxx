@@ -82,9 +82,15 @@ what the object has to carry.** That is now what `compiler.pas` asks.
   pxx object and calls into it; clang and tcc agree on the same object.
 - [[bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64]] — the
   refusal message names a set excluding a working target. p25, cheap.
-- [[feature-a-object-output-for-i386-arm32-and-aarch64]] — p70, and **i386 is
-  the one that matters**: it is the target that can settle the C-ABI decision
-  below, which x86-64 structurally cannot.
+- [[feature-a-object-output-for-i386-arm32-and-aarch64]] — **i386 DONE**, same
+  day. It was priced p70 because it is the target that can settle the C-ABI
+  decision below, and **it did, within minutes of linking**: see that decision's
+  TRIGGER FIRED section. It also turned up
+  [[bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function]], invisible until
+  something outside pxx could call in.
+- [[feature-a-object-output-for-arm32-and-aarch64]] — p45, the remainder. Second
+  and third oracles for a question now answered once; aarch64 is gated on its
+  own ABI question first.
 - [[feature-a-x86-64-object-output-is-position-dependent]] — p50. `-no-pie` is
   the current contract; lifting it is backend work.
 - [[feature-a-shared-library-output-for-compiled-sources]] — p50, blocked on the
@@ -105,12 +111,19 @@ the `.so` turned out to be blocked on the backend rather than on a writer, and
 [[decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it]]
 — deferred *on this*, with the trigger named there.
 
-**Still deferred after the x86-64 writer landed, and this is not a
-disappointment — it is the third bullet above, arriving on schedule.** x86-64
-never diverged, so an x86-64 object writer proves the machinery and settles
-nothing about the fork. The trigger is an **i386** object linked against a
-gcc-built i386 caller: [[feature-a-object-output-for-i386-arm32-and-aarch64]],
-priced p70 for exactly that reason.
+**TRIGGER FIRED 2026-08-31 — the measurement is in and says OPTION A.** The
+x86-64 writer settled nothing, exactly as the third bullet above predicts: that
+target never diverged. The i386 writer, landed hours later, settled it in one
+run. With `CProcUsesCAbi` FALSE — a standalone C unit, the landed option B —
+two integer arguments arrive **reversed** (`i_ii(1,2)` returns 21) and every
+`double` argument and return is **-nan**, under a `gcc -m32 -no-pie` caller.
+With it TRUE (Pascal `cdecl`, same signatures, same object writer, same
+caller): all correct. Table, controls and the three limits of the claim are in
+the decision file. **Awaiting the owner's ruling** — it is evidence, not a
+re-ruling, and the change is one clause.
+
+This is what the umbrella was priced for, and it is worth stating plainly: the
+object writer did not answer the question, it built the instrument that could.
 
 ## The gate this must not break
 

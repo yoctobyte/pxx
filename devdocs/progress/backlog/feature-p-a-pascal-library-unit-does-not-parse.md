@@ -43,7 +43,7 @@ nothing diagnoses it.
 Three answers are available and they are genuinely different features: reject
 it; accept it and make `exports` imply `cdecl`; or accept it and export it under
 the pxx convention for pxx-to-pxx linking. Pick one **before** writing the
-parser — this is a [[Track U]]-shaped fork sitting inside a Track P ticket, and
+parser — this is a Track U-shaped fork sitting inside a Track P ticket, and
 the compat ceiling applies (we do not chase FPC parity; we care that correct
 Pascal compiles correctly).
 

@@ -5,7 +5,7 @@ type: decision
 status: decided
 blocked-by: []
 owner: ""
-summary: "RULED 2026-08-31 by the owner: NEITHER YET -- keep the landed gate (option B, b4ff9adea) and DEFER the A/B choice on a named trigger, because nothing in the system can currently observe the answer. Three findings changed the question. (1) B is already BUILT and green; the ticket's 'frankA is currently implementing B' is stale -- that ticket was the spill-arm PREREQUISITE and is done. The choice is now ONE CLAUSE in CProcUsesCAbi (symtab.inc:11599), not two bodies of work. (2) x86-64 NEVER DIVERGED -- it has always used EmitParamSpillsForTarget, so only i386/arm32/aarch64 are in scope. (3) The owner's framing: ABI matters only at BOUNDARIES, and internally we may do as we see fit -- a third reading the ticket never listed. We do cross boundaries today (DT_NEEDED imports; GTK calls our callbacks via gtk3.pas:47) but ONLY on x86-64, the target with no divergence, so that evidence proves the machinery and settles nothing. TRIGGER: feature-a-object-output-for-i386-arm32-and-aarch64 (p70) -- CORRECTED 2026-08-31, see below. The x86-64 writer LANDED same day (41045d7b4) and does NOT settle this: x86-64 never diverged, so an x86-64 object proves the machinery on the one target with nothing to prove. The trigger is an i386 object against a gcc-built i386 caller. Decide it then, in one clause."
+summary: "TRIGGER FIRED 2026-08-31 -- the measurement is IN and it says OPTION A; awaiting the owner's ruling, which is one clause. Ruled that morning as NEITHER YET, deferred on a named trigger (a gcc-built caller linking a pxx object on i386), because nothing could observe the answer. The i386 object writer landed and the trigger fired the same day. Measured, same compiler / writer / target / gcc -m32 -no-pie caller, differing only in CProcUsesCAbi: where it is FALSE (a standalone C unit -- option B's behaviour) two integer args arrive REVERSED (i_ii(1,2) = 21 = 2*10+1) and every double arg and return is -nan; where it is TRUE (Pascal cdecl, same signatures) all four are correct. x86-64 is correct throughout, as expected -- it never diverged. THREE LIMITS: this measures boundary BEHAVIOUR and not the COST of flipping (the seven `ProcCdecl and (not CProgramMode)` call-site guards are a different expression from CProcUsesCAbi and must move with the callee, unverified here); arm32 and aarch64 are still unmeasurable, having no object writer; and it is NOT confounded by bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function, which sits on the option-A side."
 ---
 
 # Does a C function always use the C ABI, or only when a Pascal program uses it?
@@ -179,7 +179,8 @@ which is exactly what this ruling said about the GTK callbacks two sections up.
 The same mistake, made twice in one document, about two different instruments.
 
 **The real trigger is [[feature-a-object-output-for-i386-arm32-and-aarch64]]**
-(A, p70) — an i386 object linked by a gcc-built i386 caller. One thing does not
+(A, p70) — an i386 object linked by a gcc-built i386 caller. **It landed hours
+later and fired; the measurement is the next section.** One thing does not
 transfer from the x86-64 writer, per frankC: on i386 an external call also goes
 through a `.data` GOT slot and needs the two-relocation treatment, whereas
 `writeELF32Rel` relocates a `.text` literal directly against the extern. Porting
@@ -190,3 +191,85 @@ The escaping-function-pointer hazard this ruling parked is now **live**: the
 x86-64 export surface is `ProcCdecl`-only, so a direct export is cdecl by
 construction, but `@proc` through an exported cdecl routine reaches it. frankC
 flagged rather than silently owned it; it is in that ticket's trip-wire.
+---
+
+# TRIGGER FIRED 2026-08-31 — the measurement, frankC
+
+The corrected trigger above — an i386 object linked by a gcc-built i386 caller
+— landed the same day and fired immediately. Here is what it says. **This section is EVIDENCE, not a ruling** — the ruling is
+the owner's, and the numbers below are what it should be made on.
+
+## The experiment
+
+Two objects, same compiler (`cc0ef3dc2b44`), same writer, same target, same
+`gcc -m32 -no-pie` caller. They differ in exactly one thing: whether
+`CProcUsesCAbi` is True for the routine being called.
+
+- **`CProcUsesCAbi` FALSE** — a C translation unit compiled standalone, so
+  `CProgramMode` is True and `CUnitOfPascalProgram` is False. This is the
+  landed option B's behaviour.
+- **`CProcUsesCAbi` TRUE** — Pascal `cdecl` routines, same signatures.
+
+An x86-64 build of both is the control, since x86-64 never diverged.
+
+## Result: option B is observably wrong at the boundary
+
+`CProcUsesCAbi` **FALSE** (C unit), called from `gcc -m32`:
+
+| call | expected | i386 | x86-64 control |
+| --- | --- | --- | --- |
+| `i_none()` | 7 | 7 | 7 |
+| `i_ii(1,2)` | 12 | **21** | 12 |
+| `i_d(2.5)` | 5 | 5 | 5 |
+| `i_id(2,3.5)` | 5 | **1074528256** | 5 |
+| `d_none()` | 1.5 | **-nan** | 1.5 |
+| `d_d(2.5)` | 3.5 | **-nan** | 3.5 |
+| `d_ii(3,4)` | 7 | **-nan** | 7 |
+
+`21` is `2*10+1`: **the two integer arguments arrive reversed.** Every `double`
+— argument or return — is wrong.
+
+`CProcUsesCAbi` **TRUE** (Pascal `cdecl`), same target, same writer, same
+caller:
+
+| call | expected | i386 |
+| --- | --- | --- |
+| `p_ii(1,2)` | 12 | 12 |
+| `p_d_none()` | 1.5 | 1.5 |
+| `p_d_d(2.5)` | 3.5 | 3.5 |
+| `p_i_id(2,3.5)` | 5 | 5 |
+
+**All four right.** So the population that an external C caller gets wrong is
+exactly the population where `CProcUsesCAbi` is False, and the boundary
+behaviour option A would produce is exactly the one that works. On the evidence,
+**A**.
+
+## Three things this does NOT say, stated because each could be read into it
+
+1. **It does not price the change.** This measures BEHAVIOUR AT A BOUNDARY, not
+   the cost of flipping the clause. The ruling above says option A is "deleting
+   the third line", one definition and nine read sites; **I did not re-verify
+   that**, and the seven `ProcCdecl[procIdx] and (not CProgramMode)` call-site
+   guards this document calls load-bearing are a *different* expression from
+   `CProcUsesCAbi`. Whoever implements A must confirm the call sites move with
+   the callee, or C→C calls inside a C unit break — which is the exact failure
+   this document already warned about.
+2. **It does not cover arm32 or aarch64.** Neither has an object writer, so
+   neither is measurable yet. i386 is one of the three divergent targets, not
+   all of them, and the aarch64 AAPCS trip-wire is a separate open question with
+   its own repro requirement.
+3. **It is not confounded by the EBX bug found alongside it.**
+   [[bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function]] makes a
+   `printf`-using caller crash *after* a correct return, so the values above
+   were read through exit codes where the crash intervened. The values and the
+   crash are independent, and the crash is on the `CProcUsesCAbi` TRUE side —
+   i.e. it does not flatter option A.
+
+## Why this took one command and eight months of not knowing
+
+Nothing here is subtle. `i_ii(1,2) = 21` is visible at a glance. It was
+unobservable only because no caller existed outside pxx's own convention, and
+the whole corpus is self-consistent under either answer — which is the property
+this document identified as the reason to defer. **The object writer did not
+answer the question; it built the instrument that could.** That is what the
+umbrella was priced for.

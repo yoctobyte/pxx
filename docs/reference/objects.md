@@ -14,9 +14,11 @@ pascal26 --emit-obj mylib.pas mylib.o
 gcc -no-pie main.c mylib.o -o prog
 ```
 
-Targets: **x86-64**, **riscv32** and **xtensa**. `i386`, `arm32` and `aarch64`
-have no object writer. This page describes the x86-64 object; the two 32-bit
-targets exist for ESP-IDF, export `app_main`, and are covered under
+Targets: **x86-64**, **i386**, **riscv32** and **xtensa**. `arm32` and
+`aarch64` have no object writer. This page describes the x86-64 and i386
+objects, which behave identically — same export surface, same `-no-pie`
+contract, and `gcc -m32 -no-pie` for i386. The two ESP targets are a different
+kind of object: they export `app_main` for an IDF image and are covered under
 [Targets](../targets/).
 
 ## What the object exports
@@ -47,9 +49,9 @@ later at your link step.
 
 ## Two things to know before you link
 
-**`-no-pie` is required.** The x86-64 backend reaches globals through absolute
-address operands, so the object carries `R_X86_64_64` and `R_X86_64_32S`
-relocations. A linker can satisfy those only in a non-PIE link, and today's
+**`-no-pie` is required.** The backend reaches globals through absolute address
+operands, so the object carries `R_X86_64_64`/`R_X86_64_32S` relocations (or
+`R_386_32` on i386). A linker can satisfy those only in a non-PIE link, and today's
 toolchains default to PIE, so a plain `gcc main.c mylib.o` fails with
 *relocation R_X86_64_32S against `.bss` can not be used when making a PIE
 object*. Add `-no-pie`.
@@ -69,4 +71,9 @@ work through the pxx heap, and pxx calling back out to a shared library
 (`sqrt` from `libm`) resolved by the system linker.
 
 Not yet: `--shared` for compiled sources (it serves the `.asm` frontend only), a
-Pascal `library` unit, and object output for i386, arm32 and aarch64.
+Pascal `library` unit, and object output for arm32 and aarch64.
+
+One known defect, worth knowing before you link an i386 object: a pxx routine
+clobbers `EBX` on i386 and does not restore it, so a C caller keeping a live
+value there can crash *after* your function has returned the right answer.
+x86-64 is unaffected.

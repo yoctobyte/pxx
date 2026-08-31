@@ -2304,6 +2304,12 @@ begin
       else
         writeELFRelX64General(outFile);
     end
+    else if TargetArch = TARGET_I386 then
+      { i386 is a HOSTED object like x86-64's, not an ESP firmware image: it
+        exports the C-convention surface and reaches externals through a GOT
+        slot in .data. writeELF32Rel does neither.
+        feature-a-object-output-for-i386-arm32-and-aarch64 }
+      writeELFRel386General(outFile)
     else
       writeELF32Rel(outFile);
   end

@@ -16857,6 +16857,39 @@ test-emit-obj: $(COMPILER)
 	    echo "test-emit-obj: a PIE link SUCCEEDED -- the relocation model changed; update the -no-pie contract in docs and elfwriter.inc"; exit 1; \
 	  else echo "test-emit-obj: PIE link correctly refused (absolute relocation model, -no-pie contract)"; fi; \
 	else echo "gcc not installed; x86-64 .o link check skipped"; fi
+	# 4b. THE SAME OBJECT, ON i386 -- and this is the row the whole umbrella was
+	#    priced for. x86-64 NEVER diverged on the C-ABI convention, so an
+	#    x86-64 object proves the machinery and settles nothing; i386 did
+	#    diverge, so a gcc -m32 caller linking a pxx i386 object is the first
+	#    external oracle that exists for it.
+	#    feature-a-object-output-for-i386-arm32-and-aarch64
+	#
+	#    SHT_REL, not SHT_RELA: the i386 psABI has no addend field, so the
+	#    addends live in the section bytes. Asserted, because emitting .rela
+	#    here would produce a file readelf still prints happily.
+	rm -f $(TESTTMP)/test_emit_obj_386.o
+	./$(COMPILER) -Fulib/rtl --target=i386 --emit-obj test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_386.o
+	readelf -h $(TESTTMP)/test_emit_obj_386.o | grep -q 'REL (Relocatable file)'
+	readelf -h $(TESTTMP)/test_emit_obj_386.o | grep -q 'Intel 80386'
+	readelf -SW $(TESTTMP)/test_emit_obj_386.o | grep -qE '\.rel\.text +REL'
+	readelf -SW $(TESTTMP)/test_emit_obj_386.o | grep -qE '\.rel\.data +REL'
+	! readelf -SW $(TESTTMP)/test_emit_obj_386.o | grep -qE '\.rela\.'
+	test $$(size -A $(TESTTMP)/test_emit_obj_386.o | awk '$$1==".data"{print $$2}') -gt 0
+	test $$(size -A $(TESTTMP)/test_emit_obj_386.o | awk '$$1==".bss"{print $$2}') -gt 0
+	# Same export policy as x86-64, asserted on BOTH targets rather than
+	# assumed from a shared helper: if the two ever disagreed about what an
+	# object exports, this row would be measuring the writer and not the ABI.
+	readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'FUNC    GLOBAL DEFAULT    1 emit_obj_addup'
+	readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'FUNC    LOCAL  DEFAULT    1 AddUp'
+	! readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'GLOBAL DEFAULT    1 AddUp'
+	readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'UND ext_aliased_link'
+	! readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'ext_alias_decl'
+	# The SAME caller and the SAME expected output as the x86-64 row above.
+	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
+	  gcc -m32 -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_386.o -o $(TESTTMP)/test_emit_obj_386_exe || { echo "test-emit-obj: i386 .o FAILED to link with gcc -m32 -no-pie"; exit 1; }; \
+	  tools/expect_same.sh test_emit_obj_386_exe "$$($(TESTTMP)/test_emit_obj_386_exe)" "45 pxx-emit-obj"; \
+	  echo "test-emit-obj: i386 .o links+runs under a gcc -m32 main ok"; \
+	else echo "gcc -m32 (multilib) not installed; i386 .o link check skipped"; fi
 	# 5. POSITIVE CONTROL for the "defines nothing linkable" refusal. A guard
 	#    that cannot fail is not a guard and it prints PASS, so the refusal
 	#    gets a case it MUST reject: a program with data, bss and an external

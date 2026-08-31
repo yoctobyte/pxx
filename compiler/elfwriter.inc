@@ -477,6 +477,16 @@ procedure writeRela32(var f: File; offset, symIdx, rtype, addend: Integer);
 begin
   writeU32(f, offset); writeU32(f, (symIdx shl 8) or rtype); writeU32(f, addend);
 end;
+{ Elf32_Rel (8 bytes) -- no addend field: the addend lives IN the section bytes
+  being relocated. That is not a style choice, it is the i386 psABI: gcc, clang
+  and tcc all emit `.rel.text` for -m32, and the SHT_RELA form xtensa and
+  riscv32 use is not what an i386 linker expects. So writeELFRel386General
+  patches each addend into Code[]/Data[] before writing them.
+  feature-a-object-output-for-i386-arm32-and-aarch64 }
+procedure writeRel32(var f: File; offset, symIdx, rtype: Integer);
+begin
+  writeU32(f, offset); writeU32(f, (symIdx shl 8) or rtype);
+end;
 { One Elf32_Shdr = writeShdrA (name..size) + writeShdrB (link..entsize).
   Split in two: calls with more than ~6 parameters are miscompiled by the
   self-hosted backend (see bug-many-param-call-corruption). }
@@ -638,6 +648,11 @@ end;
 procedure writeRela32(f: Integer; offset, symIdx, rtype, addend: Integer);
 begin
   writeU32(f, offset); writeU32(f, (symIdx shl 8) or rtype); writeU32(f, addend);
+end;
+{ Elf32_Rel (8 bytes) -- addend in the section bytes; see the FPC twin above. }
+procedure writeRel32(f: Integer; offset, symIdx, rtype: Integer);
+begin
+  writeU32(f, offset); writeU32(f, (symIdx shl 8) or rtype);
 end;
 { One Elf32_Shdr = writeShdrA (name..size) + writeShdrB (link..entsize).
   Split in two: calls with more than ~6 parameters are miscompiled by the
@@ -2872,34 +2887,18 @@ begin
     Result := 0;
 end;
 
-procedure writeELFRelX64General(const outPath: AnsiString);
-var
-  i: Integer;
-  numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
-  textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
-  shstrOff, shOff, strSize: Integer;
-  relaTextCount, relaDataCount: Integer;
-{$ifdef FPC}
-  f: File;
-{$else}
-  f: Integer;
-{$endif}
+procedure ObjPlanHostedSymbols(var strSize, numLocalProcs, numExportProcs: Integer);
+{ The EXPORT POLICY of a hosted relocatable object, in one place because it is
+  the half that must never drift between targets: if x86-64 and i386 disagreed
+  about what an object exports, the i386 link that exists to MEASURE the C-ABI
+  convention would be measuring the writer instead.
+
+  Assigns every .strtab name offset in the order the symbol table emits them --
+  local procs, exported procs, externals -- and counts each group. The caller
+  writes the symbols; it does not decide who is in them. }
+var i: Integer;
 begin
-  if TargetArch <> TARGET_X86_64 then
-    Error('--emit-obj: the general ELF64 object writer is x86-64 only; '
-        + 'xtensa and riscv32 use the ELF32 one, and i386, arm32 and aarch64 '
-        + 'have no object writer yet');
-
-  { @proc on a bodiless routine: same diagnosis as the ET_EXEC writer's, at the
-    same point. Here it would otherwise become a relocation with addend -1. }
-  for i := 0 to ProcAddrFixCount-1 do
-    if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
-      Error('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
-            ': the address of a routine with no body was taken');
-
-  { .strtab: 0 empty, then LOCAL proc names, exported proc names, external
-    names -- assigned in the symbol order below so one pass order serves both. }
-  strSize := 1;
+  strSize := 1;                { index 0 is the empty name }
   numLocalProcs := 0;
   numExportProcs := 0;
   for i := 0 to ProcCount-1 do
@@ -2923,13 +2922,46 @@ begin
     ObjExtStrOff[i] := strSize;
     strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
-
   if numExportProcs = 0 then
     Error('--emit-obj: this object would define no linkable symbol, so nothing '
         + 'could ever link against it. A pxx object exports the routines '
         + 'declared with the C convention -- Pascal `cdecl`, or any function of '
         + 'a .c translation unit. Mark what the object is for, or build an '
         + 'executable instead');
+end;
+
+procedure ObjCheckProcAddrBodies;
+{ @proc on a bodiless routine, refused at the same point the ET_EXEC writers
+  refuse it. In an object it would otherwise become a relocation with addend
+  -1: a valid-looking entry pointing one byte below .text. }
+var i: Integer;
+begin
+  for i := 0 to ProcAddrFixCount-1 do
+    if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
+      Error('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
+            ': the address of a routine with no body was taken');
+end;
+
+procedure writeELFRelX64General(const outPath: AnsiString);
+var
+  i: Integer;
+  numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
+  textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
+  shstrOff, shOff, strSize: Integer;
+  relaTextCount, relaDataCount: Integer;
+{$ifdef FPC}
+  f: File;
+{$else}
+  f: Integer;
+{$endif}
+begin
+  if TargetArch <> TARGET_X86_64 then
+    Error('--emit-obj: the general ELF64 object writer is x86-64 only; '
+        + 'xtensa and riscv32 use the ELF32 one, and i386, arm32 and aarch64 '
+        + 'have no object writer yet');
+
+  ObjCheckProcAddrBodies;
+  ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs);
 
   firstGlobal := 4 + numLocalProcs;   { null + 3 section syms + local procs }
   extSym0 := firstGlobal + numExportProcs;
@@ -3078,6 +3110,231 @@ begin
 {$endif}
 end;
 
+
+{ ===== General i386 relocatable object writer =====
+  feature-a-object-output-for-i386-arm32-and-aarch64, under
+  meta-a-pxx-produces-linkable-code.
+
+  The ELF32/i386 twin of writeELFRelX64General, and it exists for a reason
+  beyond symmetry: **i386 is the target that can settle the C-ABI convention.**
+  x86-64 never diverged, so an x86-64 object proves the machinery and answers
+  nothing; i386, arm32 and aarch64 did. A gcc -m32 caller linking one of these
+  turns decide-does-a-c-function-always-use-the-c-abi from an argument into a
+  measurement.
+
+  IT SHARES THE POLICY AND NOT THE FORMAT. ObjPlanHostedSymbols decides the
+  export surface for both, so the two cannot drift -- if they disagreed about
+  what an object exports, the i386 link would be measuring the writer instead of
+  the ABI. Everything below it is format, and the format genuinely differs.
+
+  WHY THIS IS NOT writeELF32Rel WITH `machine := 3`. That writer serves
+  freestanding ESP firmware, and two of its choices are wrong here:
+
+    - it exports `app_main` and makes every proc LOCAL, which is the right
+      surface for an IDF image and defines nothing a linker can use;
+    - it relocates each external DIRECTLY at a .text literal slot, because both
+      ESP backends reach an external through a literal holding its address.
+      i386 does not: it emits `call dword [abs32]` through a GOT slot the
+      compiler allocates in its OWN .data (RegisterExternal), exactly like
+      x86-64. That needs TWO relocations -- the operand against .data with the
+      slot offset as addend, and the slot itself against the extern -- and a
+      writer that emits only the first produces an object that links cleanly and
+      jumps to zero.
+
+  RELOCATION FORM: SHT_REL, not SHT_RELA, and every type is R_386_32 (1). The
+  i386 psABI has no addend field; gcc, clang and tcc all emit `.rel.text` for
+  -m32. So each addend is patched into Code[]/Data[] BEFORE the sections are
+  written -- the backend left zeros at every one of these sites, so patching
+  them is a fill, not an overwrite.
+
+  Absolute, therefore `-no-pie`, for the same reason as x86-64 and one more
+  besides: on i386 even a PIE build of ordinary C uses a GOT, and none of our
+  operands are PC-relative.
+
+  File layout (written sequentially; the self-hosted writer cannot seek):
+  ehdr, .text, .data, .symtab, .strtab, .rel.text, .rel.data, .shstrtab,
+  section headers. Sections (9): 0 null, 1 .text, 2 .rel.text, 3 .data,
+  4 .rel.data, 5 .bss, 6 .symtab, 7 .strtab, 8 .shstrtab. }
+
+procedure writeELFRel386General(const outPath: AnsiString);
+var
+  i: Integer;
+  numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
+  textOff, dataOff, symOff, strOff, relTextOff, relDataOff: Integer;
+  shstrOff, shOff, strSize: Integer;
+  relTextCount, relDataCount: Integer;
+{$ifdef FPC}
+  f: File;
+{$else}
+  f: Integer;
+{$endif}
+begin
+  if TargetArch <> TARGET_I386 then
+    Error('--emit-obj: the general ELF32/i386 object writer is i386 only');
+
+  ObjCheckProcAddrBodies;
+  ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs);
+
+  firstGlobal := 4 + numLocalProcs;   { null + 3 section syms + local procs }
+  extSym0 := firstGlobal + numExportProcs;
+  numSyms := extSym0 + ExternalCount;
+
+  relTextCount := FixCount + GlobFixCount + DynCallCount + ProcAddrFixCount;
+  relDataCount := DataPtrFixCount + MethodFixCount + ExternalCount;
+
+  { SHT_REL addends, written into the bytes the relocation covers. Every site
+    below holds zero from the backend, so this fills rather than overwrites --
+    and the values are the SAME ones the ELF64 writer passes as explicit
+    r_addend, which is the property to preserve if either side is ever
+    changed. }
+  for i := 0 to FixCount-1 do
+    Patch32(Fixups[i].CodePos, Fixups[i].DataOff);
+  for i := 0 to GlobFixCount-1 do
+    if SymOffIsData(GlobFix[i].BSSoff) then
+      Patch32(GlobFix[i].CodePos, SymOffDataPart(GlobFix[i].BSSoff))
+    else
+      Patch32(GlobFix[i].CodePos, GlobFix[i].BSSoff);
+  for i := 0 to DynCallCount-1 do
+    Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]]);
+  for i := 0 to ProcAddrFixCount-1 do
+    Patch32(ProcAddrFix[i].CodePos, Procs[ProcAddrFix[i].ProcIdx].BodyAddr);
+  { The .data slots are 8 bytes wide (the layout is shared with the 64-bit
+    targets); R_386_32 covers the low dword and the high dword stays zero,
+    which is what a 32-bit pointer read of the slot sees. }
+  for i := 0 to DataPtrFixCount-1 do
+    PatchDataU64(DataPtrFix[i].DataPos, DataPtrFix[i].TargetOff);
+  for i := 0 to MethodFixCount-1 do
+    PatchDataU64(MethodFixups[i].DataPos, Procs[MethodFixups[i].ProcIdx].BodyAddr);
+  for i := 0 to ExternalCount-1 do
+    PatchDataU64(ExternalGotOff[i], 0);
+
+  textOff := ELF32_HEADER_SIZE;                  { 52, already 4-aligned }
+  dataOff := AlignTo(textOff + CodeLen, 8);
+  symOff  := AlignTo(dataOff + DataLen, 4);
+  strOff  := symOff + numSyms * 16;
+  relTextOff := AlignTo(strOff + strSize, 4);
+  relDataOff := relTextOff + relTextCount * 8;
+  shstrOff := relDataOff + relDataCount * 8;
+  shOff := AlignTo(shstrOff + 64, 4);            { 64 = .shstrtab blob size }
+
+{$ifdef FPC}
+  Assign(f, outPath); Rewrite(f, 1);
+{$else}
+  AssignPath := outPath;
+  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+{$endif}
+
+  { ELF32 ehdr (52 bytes), ET_REL, EM_386 }
+  writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
+  writeU8(f,1);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 32, LE, v1 }
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU16(f,1);writeU16(f,3);writeU32(f,1);            { ET_REL, EM_386 }
+  writeU32(f,0);writeU32(f,0);writeU32(f,shOff);        { entry, phoff, shoff }
+  writeU32(f,0);                                        { e_flags }
+  writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
+  writeU16(f,40);writeU16(f,9);writeU16(f,8);   { shentsize, shnum, shstrndx }
+
+{$ifdef FPC}
+  if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
+  writePad(f, dataOff - (textOff + CodeLen));
+  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+{$else}
+  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  writePad(f, dataOff - (textOff + CodeLen));
+  if DataLen > 0 then syswrite(f,Data,DataLen);
+{$endif}
+  writePad(f, symOff - (dataOff + DataLen));
+
+  { .symtab; sh_info below = firstGlobal (locals first, per the ELF spec) }
+  writeSym32(f, 0, 0, 0, 0, 0);
+  writeSym32(f, 0, 0, 0, 3, 1);   { STT_SECTION .text }
+  writeSym32(f, 0, 0, 0, 3, 3);   { STT_SECTION .data }
+  writeSym32(f, 0, 0, 0, 3, 5);   { STT_SECTION .bss }
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then
+      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), $02, 1);
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and ObjProcIsExported(i) then
+      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), $12, 1);
+  for i := 0 to ExternalCount-1 do
+    writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0);  { GLOBAL NOTYPE UNDEF }
+
+  { .strtab, in the same order }
+  writeU8(f, 0);
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then writeStrZ(f, Procs[i].Name);
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and ObjProcIsExported(i) then writeStrZ(f, Procs[i].Name);
+  for i := 0 to ExternalCount-1 do writeStrZ(f, ExternalLinkName(i));
+  writePad(f, relTextOff - (strOff + strSize));
+
+  { .rel.text. Section syms: 1 = .text, 2 = .data, 3 = .bss. R_386_32 = 1
+    throughout -- on i386 every operand these sites hold is a 32-bit absolute
+    address, so there is only one relocation type in the whole object. }
+  for i := 0 to FixCount-1 do
+    writeRel32(f, Fixups[i].CodePos, 2, 1);
+  for i := 0 to GlobFixCount-1 do
+    if SymOffIsData(GlobFix[i].BSSoff) then
+      writeRel32(f, GlobFix[i].CodePos, 2, 1)
+    else
+      writeRel32(f, GlobFix[i].CodePos, 3, 1);
+  { `call dword [abs32]`: the operand names OUR GOT slot in .data, not the
+    callee. The slot's own relocation is in .rel.data below. }
+  for i := 0 to DynCallCount-1 do
+    writeRel32(f, DynCallCodePos[i], 2, 1);
+  for i := 0 to ProcAddrFixCount-1 do
+    writeRel32(f, ProcAddrFix[i].CodePos, 1, 1);
+
+  { .rel.data: data->data pointers, data->code method slots, and one entry per
+    external GOT slot against that extern's UND symbol. }
+  for i := 0 to DataPtrFixCount-1 do
+    writeRel32(f, DataPtrFix[i].DataPos, 2, 1);
+  for i := 0 to MethodFixCount-1 do
+    writeRel32(f, MethodFixups[i].DataPos, 1, 1);
+  for i := 0 to ExternalCount-1 do
+    writeRel32(f, ExternalGotOff[i], extSym0 + i, 1);
+
+  { .shstrtab: fixed 64-byte blob; name offsets hardcoded in the shdrs below }
+  writeU8(f, 0);
+  writeStrZ(f, '.text');        { 1 }
+  writeStrZ(f, '.rel.text');    { 7 }
+  writeStrZ(f, '.data');        { 17 }
+  writeStrZ(f, '.rel.data');    { 23 }
+  writeStrZ(f, '.bss');         { 33 }
+  writeStrZ(f, '.symtab');      { 38 }
+  writeStrZ(f, '.strtab');      { 46 }
+  writeStrZ(f, '.shstrtab');    { 54 }
+  writePad(f, shOff - (shstrOff + 64));
+
+  { shdrs. SHT_REL = 9, entsize 8. $40 = SHF_INFO_LINK; 6 = ALLOC|EXEC,
+    3 = ALLOC|WRITE, 8 = SHT_NOBITS for .bss. }
+  writeShdrA(f, 0, 0, 0, 0, 0);
+  writeShdrB(f, 0, 0, 0, 0);
+  writeShdrA(f, 1, 1, 6, textOff, CodeLen);
+  writeShdrB(f, 0, 0, 16, 0);
+  writeShdrA(f, 7, 9, $40, relTextOff, relTextCount*8);
+  writeShdrB(f, 6, 1, 4, 8);
+  writeShdrA(f, 17, 1, 3, dataOff, DataLen);
+  writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 23, 9, $40, relDataOff, relDataCount*8);
+  writeShdrB(f, 6, 3, 4, 8);
+  writeShdrA(f, 33, 8, 3, dataOff + DataLen, BSSSize);
+  writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 38, 2, 0, symOff, numSyms*16);
+  writeShdrB(f, 7, firstGlobal, 4, 16);
+  writeShdrA(f, 46, 3, 0, strOff, strSize);
+  writeShdrB(f, 0, 0, 1, 0);
+  writeShdrA(f, 54, 3, 0, shstrOff, 64);
+  writeShdrB(f, 0, 0, 1, 0);
+
+{$ifdef FPC}
+  Close(f);
+{$else}
+  sysfchmod(f, 420); { chmod 644 -- a .o is not executable }
+  sysclose(f);
+{$endif}
+end;
 
 { Relocatable ELF64 object writer for the .asm frontend's `-c`/--emit-obj
   mode (feature-asm-source-frontend task #5), x86-64 only. Everything the
