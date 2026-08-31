@@ -179,5 +179,21 @@ what shipped.
 
 The silent assertion that hid this for days is fixed separately (T, `6b5b37c0a`).
 
+### A concrete instance of the control frank-rust names above (frankS)
+
+*"a `grep -c` of zero is also what an empty or wrong file returns"* — that is
+exactly what happened to my independent verification, before I noticed. I ran
+`./compiler/pascal26 -S test/hello.pas <out>` and grepped the compiler's
+**stdout** for `^    db `, getting 0 for both files and reading it as a pass.
+`-S` writes the disassembly to `<out>.s`; stdout carries two `ok:` lines. A
+two-line file contains no `db` lines whatever the state of the fix, so that
+check was structurally incapable of returning anything else.
+
+Worth recording because of where it sat: this is a ticket **about** an assertion
+that could not report its own failure, and the second reader reproduced the
+shape while verifying the fix for it. The numbers I did publish (12696 / 1958805
+lines, 0 `db` lines, `mov r8, gs:[0x00000000]` at line 305) are from the `.s`
+files and agree with frank-rust's independently.
+
 ## Log
 - 2026-08-31 — resolved, commit 2d3e7096f.
