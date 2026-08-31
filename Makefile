@@ -16803,18 +16803,73 @@ test-emit-obj: $(COMPILER)
 	# .rela.text -- nothing could link it and nothing said so.
 	# bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations
 	#
-	# 1. It must REFUSE, and the refusal must REPLACE the success line, not
-	#    accompany it. Both halves asserted: non-zero status AND no `ok:`.
+	# Those rows asserted a REFUSAL. The refusal is gone for a program that has
+	# something to export: writeELFRelX64General now writes the general object.
+	# feature-a-a-general-x86-64-relocatable-object-writer
+	#
+	# 1. The object is a real ET_REL with all four content sections. A .data
+	#    and a .bss of nonzero size are asserted BY SIZE, because the defect
+	#    this rule exists for produced an object that had the section names
+	#    and nothing in them.
+	rm -f $(TESTTMP)/test_emit_obj_x64.o
+	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64.o
+	readelf -h $(TESTTMP)/test_emit_obj_x64.o | grep -q 'REL (Relocatable file)'
+	readelf -h $(TESTTMP)/test_emit_obj_x64.o | grep -q 'X86-64'
+	readelf -SW $(TESTTMP)/test_emit_obj_x64.o | grep -qE '\.text +PROGBITS'
+	readelf -SW $(TESTTMP)/test_emit_obj_x64.o | grep -qE '\.bss +NOBITS'
+	# `size -A` and not readelf's hex column: strtonum() is a gawk extension and
+	# this box runs mawk, where the check evaluated to the empty string and the
+	# row would have failed for a reason unrelated to the object.
+	test $$(size -A $(TESTTMP)/test_emit_obj_x64.o | awk '$$1==".data"{print $$2}') -gt 0
+	test $$(size -A $(TESTTMP)/test_emit_obj_x64.o | awk '$$1==".bss"{print $$2}') -gt 0
+	# 2. The export surface is the C-convention set and nothing else. The
+	#    negative is the load-bearing half: an object that exported its RTL
+	#    under Pascal names would link and then collide with its host.
+	readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'FUNC    GLOBAL DEFAULT    1 emit_obj_addup'
+	readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'FUNC    GLOBAL DEFAULT    1 emit_obj_tag'
+	! readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'GLOBAL DEFAULT    1 AddUp'
+	readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'FUNC    LOCAL  DEFAULT    1 AddUp'
+	# 3. Externals: the UND symbol is the LINK name, never the Pascal
+	#    identifier (bug-a-emit-obj-ignores-external-name), and the GOT slot
+	#    the x86-64 call goes through is itself relocated against it -- that
+	#    .rela.data entry is what makes an external call work with no PLT and
+	#    no backend change, so it is asserted rather than inferred.
+	readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'UND ext_notify'
+	readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'UND ext_aliased_link'
+	! readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'ext_alias_decl'
+	readelf -rW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'R_X86_64_64 .* ext_notify + 0'
+	readelf -rW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'R_X86_64_32S'
+	readelf -rW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'R_X86_64_64'
+	# 4. IT LINKS AND RUNS UNDER A gcc-BUILT main. Everything above is byte
+	#    inspection, which is what let the old object pass as plausible; only
+	#    this row answers "can somebody else use it". -no-pie is the contract:
+	#    the backend reaches globals through absolute operands, so a PIE link
+	#    is refused BY ld, and that refusal is asserted too -- otherwise the
+	#    day the model changes, nothing notices.
+	#    emit_obj_addup(9) is 45 and NOT 54: linking this object into a foreign
+	#    program runs no Pascal initialisation, so `g` is still 0.
+	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nvoid ext_aliased_link(int v) { (void)v; }\nextern int emit_obj_addup(int);\nextern const char *emit_obj_tag(void);\n#include <stdio.h>\nint main(void){ printf("%%d %%s\\n", emit_obj_addup(9), emit_obj_tag()); return 0; }\n' > $(TESTTMP)/test_emit_obj_x64_caller.c
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_exe || { echo "test-emit-obj: x86-64 .o FAILED to link with gcc -no-pie"; exit 1; }; \
+	  tools/expect_same.sh test_emit_obj_x64_exe "$$($(TESTTMP)/test_emit_obj_x64_exe)" "45 pxx-emit-obj"; \
+	  echo "test-emit-obj: x86-64 .o links+runs under a gcc-built main ok"; \
+	  if gcc -pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_pie 2>/dev/null; then \
+	    echo "test-emit-obj: a PIE link SUCCEEDED -- the relocation model changed; update the -no-pie contract in docs and elfwriter.inc"; exit 1; \
+	  else echo "test-emit-obj: PIE link correctly refused (absolute relocation model, -no-pie contract)"; fi; \
+	else echo "gcc not installed; x86-64 .o link check skipped"; fi
+	# 5. POSITIVE CONTROL for the "defines nothing linkable" refusal. A guard
+	#    that cannot fail is not a guard and it prints PASS, so the refusal
+	#    gets a case it MUST reject: a program with data, bss and an external
+	#    but no C-convention definition. Both halves asserted -- non-zero
+	#    status AND no `ok:` line -- and no half-written object left behind.
 	#    No `|| true` before the capture: that is the face-229 defect itself,
 	#    `$$?` would be TRUE's status and the row would pass on a success.
-	#    `;` is enough -- make sees echo's 0 and the line does not abort.
-	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64.o > $(TESTTMP)/test_emit_obj_x64.log 2>&1; echo "rc=$$?" > $(TESTTMP)/test_emit_obj_x64.rc
-	! grep -q '^rc=0$$' $(TESTTMP)/test_emit_obj_x64.rc
-	grep -q 'emit-obj' $(TESTTMP)/test_emit_obj_x64.log
-	! grep -q '^ok: ' $(TESTTMP)/test_emit_obj_x64.log
-	# 2. ...and it must not leave a half-written object behind for a build
-	#    system to pick up and link.
-	! test -f $(TESTTMP)/test_emit_obj_x64.o
+	rm -f $(TESTTMP)/test_emit_obj_noexp.o
+	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj_noexport.pas $(TESTTMP)/test_emit_obj_noexp.o > $(TESTTMP)/test_emit_obj_noexp.log 2>&1; echo "rc=$$?" > $(TESTTMP)/test_emit_obj_noexp.rc
+	! grep -q '^rc=0$$' $(TESTTMP)/test_emit_obj_noexp.rc
+	grep -q 'no linkable symbol' $(TESTTMP)/test_emit_obj_noexp.log
+	! grep -q '^ok: ' $(TESTTMP)/test_emit_obj_noexp.log
+	! test -f $(TESTTMP)/test_emit_obj_noexp.o
 	# 3. The .asm frontend, which is whose writer that is, keeps working: a
 	#    source needing only text, global labels and extern calls is exactly
 	#    what it can express, so the guard must not fire on it.

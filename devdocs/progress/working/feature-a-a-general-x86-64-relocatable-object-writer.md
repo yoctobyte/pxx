@@ -2,10 +2,11 @@
 track: A
 prio: 80
 type: feature
-status: backlog
+status: working
 found: 2026-08-30
 found-by: frank-optimize-b4
 summary: "RE-PRICED 30 -> 80 by the owner 2026-08-31: top priority, above further bug fixing. There is no general relocatable object writer for x86-64/i386/arm32/aarch64 -- --emit-obj writes general objects for xtensa|riscv32 only, on x86-64 it takes .asm sources alone, and --shared is .asm-frontend only (compiler.pas:1238). The diagnosis is neither of the two readings the bug ticket offered: there are TWO object writers and the dispatch picks between them by ARCHITECTURE when the discriminator should be what the object has to carry. The ABI machinery it needs already exists -- DT_NEEDED/dynsym/GOT-indirect in elfwriter.inc, working foreign callbacks via gtk3.pas:47, per-function call type in ProcCdecl -- so this is the ET_REL writer alone. Beyond the capability, it is what makes the C-ABI convention on the three divergent targets externally checkable at all. Umbrella: meta-a-pxx-produces-linkable-code. Do not break xtensa/riscv32 emit-obj: it is the only evidence any of this works."
+owner: frankC
 ---
 
 # There is no general x86-64 relocatable object writer, and that is the gap

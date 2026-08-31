@@ -2288,8 +2288,22 @@ begin
     writeELFSharedX64(outFile)
   else if EmitObjMode then
   begin
+    { Dispatch on what the object has to CARRY, not on the architecture.
+      writeELFRelX64 is the .asm FRONTEND's writer -- one combined Code[] blob,
+      symbols from `global` labels, relocations only for `call <extern>` -- and
+      AsmGlobalSymCount is nonzero only when ParseAsmProgram populated it, so it
+      is that shape's own signature. Everything a compiler BACKEND produces
+      (procs, .data, .bss, backend relocations) goes to the general writer.
+      Picking by TargetArch is what sent every Pascal/C/NilPy program on the
+      DEFAULT target into a writer that could describe none of it.
+      feature-a-a-general-x86-64-relocatable-object-writer }
     if TargetArch = TARGET_X86_64 then
-      writeELFRelX64(outFile)
+    begin
+      if AsmGlobalSymCount > 0 then
+        writeELFRelX64(outFile)
+      else
+        writeELFRelX64General(outFile);
+    end
     else
       writeELF32Rel(outFile);
   end

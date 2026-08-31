@@ -12,6 +12,7 @@ Reference pages collect exact command-line and operational details.
 - [Compatibility status](./status.md)
 - [Command line](./cli.md)
 - [Compiler modes and strictness](./modes.md)
+- [Linking a pxx object into another program](./objects.md)
 - [Compiler directives](./directives.md)
 - [Compiler architecture](./architecture.md)
 - [Current limits](./limits.md)

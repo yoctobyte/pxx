@@ -28,6 +28,29 @@ begin
   Result := acc;
 end;
 
+{ The x86-64 general object writer's export surface is the C-convention set
+  (ProcCdecl), so these two are what make the x86-64 rows of test-emit-obj
+  assert an object a linker can consume rather than only a refusal. Between
+  them they carry all three x86-64 relocation kinds an exported routine can
+  reach: a .bss global (R_X86_64_32S vs .bss), a string literal (R_X86_64_64
+  vs .data) and an intra-object call.
+
+  `g` is DELIBERATELY read here. A foreign program that links this object does
+  NOT run the Pascal main body, so g is 0 at every call from C and
+  emit_obj_addup(9) is 45, not 45+9. That is the property being pinned: the
+  test would still pass if initialisation silently started running, but the
+  VALUE says which world we are in.
+  feature-a-a-general-x86-64-relocatable-object-writer }
+function emit_obj_addup(n: Integer): Integer; cdecl;
+begin
+  Result := AddUp(n) + g;
+end;
+
+function emit_obj_tag: PChar; cdecl;
+begin
+  Result := PChar('pxx-emit-obj');
+end;
+
 begin
   g := 0;
   for i := 1 to 9 do
