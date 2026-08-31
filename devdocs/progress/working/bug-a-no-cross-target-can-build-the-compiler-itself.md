@@ -6,7 +6,7 @@ type: bug
 status: working
 owner: frankS
 blocked-by: []
-summary: "PARTLY FIXED; re-measured 2026-08-31 by frankA at fixedpoint 7dd26baa7a80 and it was STALE: both causes it named as remaining are fixed. ALL SEVEN targets now BUILD the compiler -- i386, aarch64, arm32, riscv32, wasm32, native x86_64, and xtensa with `--platform=posix --xtensa-long-calls`. The two blockers this ticket was left waiting on are both in `done/` (riscv32 `jal` reach, xtensa >32 KB frame), so neither of the two remaining causes it named is a cause any more. ONE defect remains and it is the FOURTH one, the one this ticket found last: the arm32 cross-built compiler builds and then SEGFAULTS under qemu-arm on `hello.pas`, while the i386, aarch64 and riscv32 cross-built compilers each run and emit a binary that runs and prints correctly. Two open sub-questions, neither measured: the i386 cross-built compiler faults ~30s into rebuilding the COMPILER (small programs are fine), and the xtensa binary cannot be exercised on this host -- qemu-xtensa carries no ESP32 core and SIGILLs on every model it does have, which is a HOST limit and not a measured defect. Under the default platform xtensa refuses `compiler.pas` at ParamStr by design (an ESP image has no argv), which is a target contract, not this bug. The title is false as written and was false when filed: wasm32 built all along."
+summary: "PARTLY FIXED; re-measured 2026-08-31 by frankA at fixedpoint 7dd26baa7a80 and it was STALE: both causes it named as remaining are fixed. ALL SEVEN targets now BUILD the compiler -- i386, aarch64, arm32, riscv32, wasm32, native x86_64, and xtensa with `--platform=posix --xtensa-long-calls`. The two blockers this ticket was left waiting on are both in `done/` (riscv32 `jal` reach, xtensa >32 KB frame), so neither of the two remaining causes it named is a cause any more. ONE defect remains and it is the FOURTH one, the one this ticket found last: the arm32 cross-built compiler builds and is then MEMORY-CORRUPT, keyed on the length of the OUTPUT PATH (frankS, 2026-08-31): clean at <=95 characters, four bogus `undefined variable (PXX_KIND_LEGACY)` errors against correct source at 96, clean again at 207, SIGSEGV at 247+, non-monotonic in the target axis too, with a native control clean at every length. `Segfaults on hello.pas` understates it -- the wrong-answer face blames the user's code and the repro needs no compiler build, only a long enough output path. Meanwhile the i386, aarch64 and riscv32 cross-built compilers each run and emit a binary FOR THEIR OWN ARCHITECTURE that runs and prints -- but only when told `--target=<self>`, because the compiled-in default target is x86_64 whatever the host arch is. Two open sub-questions, neither measured: the i386 cross-built compiler faults ~30s into rebuilding the COMPILER (small programs are fine), and the xtensa binary cannot be exercised on this host -- qemu-xtensa carries no ESP32 core and SIGILLs on every model it does have, which is a HOST limit and not a measured defect. Under the default platform xtensa refuses `compiler.pas` at ParamStr by design (an ESP image has no argv), which is a target contract, not this bug. The title is false as written and was false when filed: wasm32 built all along."
 ---
 
 # No cross target can build the compiler itself
@@ -207,3 +207,67 @@ reads as a negative*.
 **So the whole of what is left under this ticket is the arm32 runtime fault** —
 the fourth defect, the one the original filing could not see because the build
 failed first. Everything the title and the first table were about is closed.
+
+## Addendum (frankS, 2026-08-31): the arm32 fault is keyed on the OUTPUT PATH LENGTH, and its worst face is not the segfault
+
+Measured at self-host fixedpoint `eff141f03d41`, arm32 compiler md5 `0893a523…`,
+under `tools/run_target.sh arm32`. Independently reproduces franka-d5's
+re-measure above rather than restating it: all seven targets build here too
+(riscv32 20.7 MB, xtensa 24.8 MB with `--platform=posix --xtensa-long-calls`;
+bare `--target=xtensa` stops at the ParamStr refusal, `ir_codegen_xtensa.inc:2772`,
+which is gated on `TargetPlatform = PLATFORM_ESP` and so is keyed on the right
+axis — a target contract, not a defect).
+
+**One correction to the "they RUN" section above, because it is the kind of
+false green this ticket's own method note warns about:** the compiled-in default
+target is `x86_64` *regardless of the host arch*, so a cross-built compiler run
+with no `--target` emits an x86-64 ELF. Judged by running that output under the
+host's qemu you get `Invalid ELF image for this architecture` — the harness
+answering a question you did not ask. Told `--target=<self>`, i386, aarch64 and
+riscv32 each compile `test/hello.pas` to their own architecture and it runs and
+prints. Three cross-CPU compilers, not two.
+
+### The arm32 defect, with the boundary found
+
+Everything fixed except the length of the OUTPUT path:
+
+| output path length | result |
+| --- | --- |
+| ≤ 95 | clean, correct binary |
+| 96 … ~103 | rc=1, **4× `undefined variable (PXX_KIND_LEGACY)` in `compiler/builtin/builtinheap.pas`** |
+| 207 | clean again |
+| 247, 287 | SIGSEGV |
+
+Native control at the same five lengths: clean at every one.
+
+It interacts with target selection too — short path (20 chars) vs long (103):
+
+| target | len 20 | len 103 |
+| --- | --- | --- |
+| default (x86_64) | clean | 4 errors |
+| `--target=arm32` | SIGSEGV | clean |
+| `--target=aarch64` | clean | SIGSEGV |
+| `--target=riscv32` | SIGSEGV | clean |
+
+**Non-monotonic on both axes.** That is the signature of an overrun whose damage
+depends on what happens to sit after it — not of a missing feature, and not of
+anything specific to `hello.pas`, which is merely what was being compiled.
+
+### Two consequences for whoever takes this
+
+1. **The repro is deterministic and costs one command** — no compiler build, just
+   an output path of the right length. A bisect over the arm32 backend is
+   affordable, which it was not while the symptom read as "segfaults sometimes".
+2. **"Segfaults on `hello.pas`" understates it.** The dangerous face is the
+   96-character one: the compiler exits 1 and reports four *undefined variable*
+   errors against a source file that is correct. A plausible wrong answer aimed
+   at the user's code, which is the expensive shape this repo's playbook is
+   built around; the SIGSEGV is the cheap face.
+
+The symbol is a plain `PXX_KIND_LEGACY = 0;` at `builtinheap.pas:207`, and every
+other const in that same block resolves, so it is not "zero-valued const" — a
+standalone `const K_ZERO = 0;` compiles clean on the arm32 host. The symbol is
+the victim, not the cause.
+
+Gate: `make compiler/pascal26` converged (`eff141f03d41`); no code changed here,
+ticket text only.
