@@ -146,4 +146,4 @@ so it has a slug the ranker can see, instead of a paragraph inside a file in
 the bug, not the question.**
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 6288a82d7.
