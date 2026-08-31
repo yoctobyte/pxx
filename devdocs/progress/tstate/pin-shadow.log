@@ -288,3 +288,4 @@
 2026-08-31T02:21:23Z	seven	44ec3235839407258c94d51cc8940936fe7b2863	would NOT pin 44ec32358394 — 2 red(s) the current pin does not have, 4 inherited from the current pin: test-asm#src:compiler/compiler.pas, test-asm#src:test/hello.pas
 2026-08-31T02:34:03Z	seven	bebac33366f5a2e4196bf7970769d208d9ae8b6a	would NOT pin bebac33366f5 — 2 red(s) the current pin does not have, 4 inherited from the current pin: test-asm#src:compiler/compiler.pas, test-asm#src:test/hello.pas
 2026-08-31T02:55:29Z	seven	b649cbcbf54bb1a30036b2a491ea3118ea118637	would NOT pin b649cbcbf54b — 2 red(s) the current pin does not have, 3 inherited from the current pin: test-asm#src:compiler/compiler.pas, test-asm#src:test/hello.pas
+2026-08-31T03:16:49Z	seven	440ca32689dba3a217e77d3c2940690576fba1c2	would-pin PENDING 440ca32689db — qualifies, streak 1/2
