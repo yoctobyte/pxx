@@ -3885,12 +3885,11 @@ end;
 procedure IREmitLeaveExceptionFrames(count: Integer);
 var i: Integer;
 begin
+  { symtab.inc's EmitLeaveExceptionFrameX64 IS this, once. It was duplicated
+    here until 2026-08-31, and the duplicate is what broke NilPy when the chain
+    head went per-thread: this copy was converted and that one was not. }
   for i := 1 to count do
-  begin
-    EmitAsmX64(['mov rax, [rsp]']);
-    EmitStatusSlotX64(0, BSS_EXC_TOP, True);
-    EmitAsmX64(['add rsp, %', EXC_FRAME_SIZE]);
-  end;
+    EmitLeaveExceptionFrameX64;
 end;
 
 procedure EmitOvfCheckX64(uns: Boolean);

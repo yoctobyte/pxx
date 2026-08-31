@@ -11109,9 +11109,19 @@ begin
 end;
 
 procedure EmitLeaveExceptionFrameX64;
+{ Pop ONE exception frame: restore the chain head from [rsp], drop the frame.
+  THE single copy -- ir_codegen.inc's IREmitLeaveExceptionFrames calls this in a
+  loop rather than spelling the same three instructions again. It used to spell
+  them, and that duplicate is what survived the move of the chain head into
+  per-thread storage: the ir_codegen copy was converted, this one was not, so
+  reads came from `gs:` and this store went to process-wide BSS. Pascal's
+  try/except passed anyway (its own path was converted); every NilPy `try`
+  segfaulted. Caught by gate.sh quick's NilPy canary, at check 19.
+  The lesson is devdocs/dev/normalise-dont-special-case.md's, exactly: the
+  second path is the one that stays broken. }
 begin
-  x64_mov_reg_mem(8, rRAX, rRSP, 0, False); { mov rax, [rsp] }
-  x64_mov_glob_reg(8, BSS_EXC_TOP, rRAX);   { mov [BSS_EXC_TOP], rax }
+  x64_mov_reg_mem(8, rRAX, rRSP, 0, False);  { mov rax, [rsp] }
+  EmitStatusSlotX64(0, BSS_EXC_TOP, True);   { mov [EXC_TOP], rax -- per-thread }
   x64_add_reg_imm(8, rRSP, EXC_FRAME_SIZE);  { add rsp, EXC_FRAME_SIZE }
 end;
 

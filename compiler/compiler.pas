@@ -115,6 +115,14 @@ procedure EmitAsmX64(const items: array of const); overload; forward;
   is order-agnostic, so being late is invisible until the FPC-seeded bootstrap.
   bug-a-no-dyn-array-scope-exit-release-on-four-backends }
 function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
+{ symtab.inc's EmitLeaveExceptionFrameX64 WRITES the exception chain head, and
+  the head is per-thread now, so it must use the same addressing as every other
+  site. Forwarded rather than moved because the body belongs beside the runtime
+  it serves (exception_emit.inc, two includes down). Missing this one arm was a
+  measured bug, not a hypothetical: reads went to gs: and this store went to
+  BSS, and every NilPy `try` segfaulted while the Pascal ones passed.
+  bug-a-the-exception-shadow-chain-is-process-wide-so-two-threads-crash }
+procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean); forward;
 {$include symtab.inc}
 {$include abi.inc}      { the ABI oracle — after symtab.inc: it uses TypeIsFrozenString }
 {$include exception_emit.inc}
