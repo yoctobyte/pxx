@@ -260,4 +260,4 @@ both halves of every affected name and is a positive control: `pinned` REJECTS
 it, so it can fail.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit ce4d9004c.
