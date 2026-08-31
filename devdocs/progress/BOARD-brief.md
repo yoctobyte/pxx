@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:10 backlog:394 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2929 rejected:68`
+`working:5 unfinished:27 blocked:10 backlog:395 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2929 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,7 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 426, ranked
+## Ready — top 30 of 427, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -91,4 +91,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-async-def-and-await-are-not-implemented
 - `[p 60] [N]` bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value
 
-_396 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

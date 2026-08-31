@@ -11424,8 +11424,20 @@ test-core: $(COMPILER)
 	# ...and the dialect stays LAX by default: the same program with no flag builds.
 	./$(COMPILER) -Futest test/test_strict_dialect_reject.pas $(TESTTMP)/test_strict_dialect_lax26
 	tools/expect_same.sh test_strict_dialect_lax26 "$$($(TESTTMP)/test_strict_dialect_lax26)" "8"
+	# A USER declaration must beat a builtin type NAME. Every name in this file is
+	# one the builtin table KNOWS — a shadowing test using names it has never
+	# heard of cannot fail. Byte-identical to FPC 3.2.2.
+	# bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts
+	./$(COMPILER) test/test_sizeof_user_name_shadows_builtin.pas $(TESTTMP)/test_sizeof_shadow26
+	tools/expect_same.sh test_sizeof_shadow26 "$$($(TESTTMP)/test_sizeof_shadow26)" "$$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\ng 4 8 2\nh 4 8 8\ni TRUE x 5')"
 	./$(COMPILER) test/test_sizeof.pas $(TESTTMP)/test_sizeof26
-	tools/expect_same.sh test_sizeof26 "$$($(TESTTMP)/test_sizeof26)" "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1\n4\n8\n8\n10\n16\n2\n4\n1\n8\n8')"
+	# Row 21 is SizeOf(Extended) and it is 8, not 10, since ce4d9004c made SizeOf
+	# and declarations share one builtin type table. That is the intended fix of
+	# bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets: a variable
+	# declared Extended has always occupied 8 (Extended aliases Double on every
+	# target, feature-extended-alias-or-reject), and only the SizeOf table said 10.
+	# This expectation was the last place the old answer survived.
+	tools/expect_same.sh test_sizeof26 "$$($(TESTTMP)/test_sizeof26)" "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1\n4\n8\n8\n8\n16\n2\n4\n1\n8\n8')"
 	! ./$(COMPILER) test/test_sizeof_error.pas $(TESTTMP)/test_sizeof_error26 > $(TESTTMP)/test_sizeof_error.log 2>&1
 	grep -q "SizeOf: unknown type" $(TESTTMP)/test_sizeof_error.log
 	./$(COMPILER) test/test_record_alignment.pas $(TESTTMP)/test_record_alignment26

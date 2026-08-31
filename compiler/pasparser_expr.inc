@@ -494,7 +494,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     hlIsFrozen, hlIsAnsi, hlIsArrOp: Boolean;
     dpaCount, dpaLo, dpaFlat: Integer;   { `p^` over a pointer-to-fixed-array: first-dim span, low bound, and total element count }
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
- szElemTk: TTypeKind; szBTk: TTypeKind;
+ szElemTk: TTypeKind; szBTk: TTypeKind; szBTkAny: TTypeKind;
     seEtid, seOrd: Integer;
     dfSym, dfRec, dfAi: Integer; dfTk: TTypeKind; dfSaveStatic: Boolean;  { Default(T) over an aggregate }
     dfNestCi, dfHops, dfI: Integer; dfNestName: AnsiString;   { Default(TOuter.TInner) — the SCOPED nested row }
@@ -3814,7 +3814,33 @@ begin
           SizeOf(Integer) worked: the token-kind arms and the name arms were two
           tables, and only the second one ever got extended. }
         if name = '' then name := GetTokenStr(TokPos - 1);
-        szBTk := BuiltinTypeNameTk(name);
+        szBTkAny := BuiltinTypeNameTk(name);
+        szBTk := szBTkAny;
+        { A USER DECLARATION WINS OVER A BUILTIN NAME, and this table cannot be
+          consulted before checking that. Its own header says so -- "callers must
+          consult a user type alias FIRST where that matters: this answers what
+          the name means as a BUILTIN, not what the current scope binds it to" --
+          and SizeOf is a caller for which it matters, because the builtin arm
+          below is tried first and the record/alias/array/enum/variable tables
+          are only reached in its `else`.
+
+          That was harmless for as long as the table was a strict subset that
+          happened to exclude the shadowable names. It stopped being harmless
+          when the table was merged with the declaration path's: `type Currency =
+          record a, b, c: Integer; end` then measured 8 instead of 12, a Boolean
+          named `longbool` measured 4 instead of 1, and a ten-byte array named
+          `tdatetime` measured 8 instead of 10 -- three silent wrong sizes,
+          feeding GetMem and Move, all three confirmed against FPC 3.2.2.
+
+          Only for a name spelled as a plain IDENTIFIER: a builtin that lexed as
+          a keyword token cannot have been redeclared, which is the same
+          condition the user-lookup branch below already tests.
+          bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts }
+        if (szBTk <> tyUnknown) and (CurTok.Kind = tkIdent) and
+           ((IsRecordType(name) <> REC_NONE) or (FindUClass(name) >= 0) or
+            (FindArrayType(name) >= 0) or (FindTypeAlias(name) >= 0) or
+            (FindEnumType(name) >= 0) or (FindVarSym(name) >= 0)) then
+          szBTk := tyUnknown;
         if szBTk <> tyUnknown then
           prevTok := TypeSize(szBTk)
         else if CurTok.Kind = tkIdent then
@@ -4049,8 +4075,21 @@ begin
                     the sweep keeps finding: a diagnostic whose caller already
                     knows what to carry on with.
                     feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
-                  ErrorRecover('SizeOf: unknown type or variable');
-                  prevTok := 0;
+                  { The demotion above is a PREFERENCE, not a verdict. Some
+                    builtin names ALSO match an internal registration that this
+                    branch cannot size -- `ShortString` matches one and then
+                    falls through every arm -- so a name demoted here and not
+                    resolved must come back to the builtin answer rather than
+                    become a rejection. Without this, restoring user-declaration
+                    precedence silently un-fixed SizeOf(ShortString).
+                    bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts }
+                  if szBTkAny <> tyUnknown then
+                    prevTok := TypeSize(szBTkAny)
+                  else
+                  begin
+                    ErrorRecover('SizeOf: unknown type or variable');
+                    prevTok := 0;
+                  end;
                 end;
               end;
             end;
