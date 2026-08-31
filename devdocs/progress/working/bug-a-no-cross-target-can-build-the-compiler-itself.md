@@ -271,3 +271,37 @@ the victim, not the cause.
 
 Gate: `make compiler/pascal26` converged (`eff141f03d41`); no code changed here,
 ticket text only.
+
+### 2026-08-31 (frankA) — the minimal input already faults, so the reduction is finished before the bisect starts
+
+Confirms 9d3cf746f's reading (an overrun whose damage depends on what sits after
+it) and sharpens the repro. Binary `pc-arm32` cross-built at fixedpoint
+`7dd26baa7a80`, run under `qemu-arm` from the repo root, argv held
+**byte-identical** across every row (`h.pas` in, `o1` out — two characters, far
+under the 95 the path-length axis needs), varying one thing at a time.
+
+| source in `h.pas` | x86_64 | i386 | aarch64 | arm32 | riscv32 |
+| --- | --- | --- | --- | --- | --- |
+| `hello.pas` (one `WriteLn`) | SEGV | **OK** | **OK** | SEGV | SEGV |
+| `program e; begin end.` | SEGV | SEGV | SEGV | SEGV | SEGV |
+
+**Two things fall out, and the second is the useful one.**
+
+The apparent target-keyed split in row 1 is **not a target property.** Holding
+argv fixed and changing only the *source text* flips i386 and aarch64 from clean
+to faulting. So "which targets work" is a function of the source, the argv and
+the output path together — three axes that all move it — which is what an
+overrun looks like and what no single-axis table can say. I had the row-1 split
+and was one measurement from reporting it as a per-backend split; the empty
+program is the control that refutes it.
+
+**An empty program faults on all seven targets.** That is the minimal input the
+language has, so the reduction is already at the floor: a bisect over the arm32
+backend needs no hello, no RTL string path, no path-length search, and each
+iteration costs one `qemu-arm` invocation. It also retires the
+"compiles a working program" row as evidence — `--target=i386` succeeding on
+`hello.pas` is a lucky layout, not a working configuration.
+
+Controls, same argv, same empty program: the **native** compiler builds all five
+targets clean, and the **i386**-hosted cross compiler builds x86_64/i386/aarch64
+clean. The fault is specific to the arm32-hosted binary.
