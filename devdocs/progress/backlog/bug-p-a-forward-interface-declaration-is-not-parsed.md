@@ -80,3 +80,25 @@ Found while resolving
 [[bug-p-generic-type-constraints-are-parsed-and-discarded]]; checked against
 `pinned` before shipping precisely so it would not be mistaken for fallout of
 that work.
+
+## A second consumer, and a landmine inside it (frankwasm, 2026-08-31)
+
+This gap is what holds `tgenconstraint37` at rejected-valid — the only remaining
+disagreement in the 40-file `tgenconstraint*.pp` corpus, now 39/40 after
+[[bug-p-generic-constraints-are-checked-before-the-type-section-closes]]. So
+closing this ticket is worth one corpus row beyond its own repro.
+
+**Do not expect it to be free.** 37 declares `ITestInterface = interface;` and
+then specializes `TGenericIInterface<ITestInterface>` — an interface forward stub
+against `T: IInterface` — and fpc accepts it (`%NORUN`). As of 2026-08-31 the
+constraint checker JUDGES forward stubs rather than skipping them: a class stub
+is treated as a class whose ancestry is TObject and which implements nothing yet,
+which is what fpc does. The interface mirror of that rule — an interface stub
+descends from `IInterface` — is **not written**, because nothing can currently
+reach it. `GCIntfDescends` walks a parent chain the stub does not have yet, so
+the moment the parse succeeds that line will likely be refused.
+
+The fix, if it is needed, is the same shape as the class one already in
+`CheckTemplateConstraint`: `T: TObject` is answered as `isClass` rather than by
+walking parents, because every class descends from TObject. Every interface
+descends from IInterface the same way.

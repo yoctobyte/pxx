@@ -1757,7 +1757,29 @@ begin
             ', but ' + specArg + ' is ' + what);
     Exit;
   end;
-  if UClsForward[argCi] then Exit;
+  { A FORWARD stub is not unknown -- it is a class whose ancestry is TObject and
+    which implements nothing YET, and fpc 3.2.2 judges it on exactly that, at the
+    specialization point, without waiting for the real declaration below. So this
+    is not a case to skip and not a case to defer: it is a case to answer, and
+    the checks below already answer it correctly once they are allowed to run.
+
+    Measured against fpc 3.2.2 on one shape (`TTest = class;` forward, the
+    specialization, then `TTest = class(TSomeClass)`), one row per constraint:
+
+      | constraint      | fpc      | why                                     |
+      | (none)          | ACCEPT   | nothing to check                        |
+      | `class`         | ACCEPT   | a stub IS a class                       |
+      | `TObject`       | ACCEPT   | every class descends from TObject       |
+      | `record`        | REJECT   | "Record type expected"                  |
+      | `TSomeClass`    | REJECT   | the stub carries no parent yet          |
+      | `IInterface`    | REJECT   | the stub implements nothing yet         |
+
+    isClass is True for a stub, its parent chain is empty and its interface list
+    is empty, so every row above falls out of the existing checks. The rule is
+    NOT "a forward stub is an error in its own right", which is what this
+    ticket's fix section proposed before the measurement -- `T: class` against a
+    stub is legal and common. Fixes tgenconstraint38 and 39.
+    bug-p-generic-constraints-are-checked-before-the-type-section-closes }
 
   { argCi >= 0 past the guard above, so these three are the whole space:
     `object` and `record` both arrive as UClsIsRecord and read as a value type. }

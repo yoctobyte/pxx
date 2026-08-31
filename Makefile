@@ -7997,13 +7997,21 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/test_generic_constraint_named_fail.pas $(TESTTMP)/test_gconnamed26 2>&1 \
 	  | grep -q 'is constrained to TSomeClass, but LongInt is a value type' \
 	  || { echo 'test_generic_constraint_named_fail: FAIL - expected a named-constraint error'; exit 1; }
+	# fpc-testsuite tgenconstraint39, marked %FAIL. A FORWARD stub is judged AT the
+	# specialization point as what it is -- a class whose ancestry is TObject and
+	# which implements nothing yet -- so a constraint naming a deeper class fails
+	# even though the real declaration below it descends from that class. The
+	# checker used to exit unconditionally on any stub, so nothing was checked.
+	@./$(COMPILER) test/test_generic_constraint_forward_stub_fail.pas $(TESTTMP)/test_gconfwd26 2>&1 \
+	  | grep -q 'is constrained to `TSomeClass`, but TTest is not TSomeClass or a descendant of it' \
+	  || { echo 'test_generic_constraint_forward_stub_fail: FAIL - expected a forward-stub constraint error'; exit 1; }
 	# ACCEPT half, and it is the half that matters: over-rejection is the failure
 	# mode that breaks working code silently, and only this arm can catch it. An
 	# unconstrained template with a builtin argument, a forward-declared class, and
 	# a class declared earlier in the section (the shape the not-declared-yet exit
 	# exists to protect) must ALL still compile. fpc 3.2.2 agrees line for line.
 	./$(COMPILER) test/test_generic_constraint_accept_control.pas $(TESTTMP)/test_gconacc26
-	tools/expect_same.sh test_gconacc26 "$$($(TESTTMP)/test_gconacc26)" "accepted 4"
+	tools/expect_same.sh test_gconacc26 "$$($(TESTTMP)/test_gconacc26)" "accepted 5"
 	# SizeOf(<type name>) vs SizeOf(<variable of that type>) -- the same answer
 	# came from TWO tables and they drifted three times (Real, bare string,
 	# Extended). The audit with the third found EIGHT more names the declaration

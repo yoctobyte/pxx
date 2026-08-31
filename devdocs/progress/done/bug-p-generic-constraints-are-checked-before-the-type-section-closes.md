@@ -4,9 +4,9 @@ track: P
 prio: 70
 type: bug
 blocked-by: []
-status: unfinished
+status: done
 created: 2026-08-30
-summary: "HALF DONE. Constraint checking ran inside ParseSpecialization, where 'not a class' and 'not declared yet' are the same observation. FIXED: a builtin scalar name and the metaclass TClass are refused by a class/constructor/named-type constraint -- tgenconstraint4 and 5 flip to correctly-rejected, corpus 35/40 -> 37/40. That first landed WITHOUT the deferral and shipped a FALSE REJECTION (a user `LongInt = class` declared below the template was refused, fpc accepts); the check is now DEFERRED to type-section close (RecordPendingConstraint / DrainPendingConstraints, unconditional call), which fixes it and changes nothing else -- 37/40 before and after. STILL OPEN: a FORWARD-declared class as argument (tgenconstraint38, 39). Note the fix section BELOW the frontmatter is WRONG for those and is marked so: fpc checks a forward stub AT the specialization point, so a general defer-everything would ACCEPT 39. That is a design question, not a placement one."
+summary: "DONE, 35/40 -> 39/40 on fpc-testsuite tgenconstraint*.pp. Constraint checking ran inside ParseSpecialization, where 'not a class' and 'not declared yet' are the same observation. First half: a builtin scalar and the metaclass TClass are now refused by a class/constructor/named-type constraint (4 and 5), DEFERRED to type-section close so a user type shadowing a builtin name is not falsely rejected. Second half: a FORWARD stub (38, 39) is NOT 'an error in its own right' -- that was this ticket's proposed rule and six fpc oracle rows refute it. A stub is a class whose ancestry is TObject and which implements nothing yet, judged AT the specialization point: (none), `class` and `TObject` are ACCEPTED, `record`, a deeper named class and any interface are REFUSED. The fix is a DELETION -- the `if UClsForward[argCi] then Exit;` guard -- because the checks behind it were already correct and simply never ran. Only 37 remains, rejected-valid and pre-existing."
 owner: frankwasm
 ---
 
@@ -304,3 +304,89 @@ buys the shadowing fix and changes nothing else.
 
 `tgenconstraint38`/`39`: a forward stub as a specialization argument. Still a
 design question — is that an error in its own right? — not a placement one.
+
+## DONE — the forward-stub half, and the proposed rule was wrong (frankwasm, 2026-08-31)
+
+**37/40 -> 39/40.** `tgenconstraint38` and `39` now agree with their `%FAIL`
+markers; `37` stays rejected-valid, pre-existing and untouched. Binary
+`8cb1778e7539`, baseline `a36c42bc4487` re-measured in the same session with the
+same script.
+
+The section above proposed *"a specialization argument that is a forward stub is
+an ERROR in its own right"* and flagged it as unconfirmed. **It is wrong, and
+one afternoon of oracle rows says why.** Six constraints against one shape
+(`TTest = class;` forward, the specialization, then `TTest = class(TSomeClass)`),
+fpc 3.2.2:
+
+| constraint | fpc | why |
+| --- | --- | --- |
+| (none) | ACCEPT | nothing to check |
+| `class` | ACCEPT | a stub IS a class |
+| `TObject` | ACCEPT | every class descends from TObject |
+| `record` | REJECT | `Record type expected` |
+| `TSomeClass` | REJECT | the stub carries no parent yet |
+| `IInterface` | REJECT | the stub implements nothing yet |
+
+So a stub is neither an error nor unknowable: it is **a class whose ancestry is
+TObject and which implements nothing YET**, judged at the specialization point.
+`T: class` against a forward stub is legal and common — the accept control in
+`test_generic_constraint_accept_control.pas` has been guarding exactly that shape
+since this ticket's first half, which is what would have made the proposed rule
+fail loudly rather than quietly.
+
+### The fix is a DELETION
+
+`if UClsForward[argCi] then Exit;` — one line, gone. `isClass` is already True
+for a stub, its parent chain is already empty and its interface list is already
+empty, so every row of that table falls out of checks that were already written
+and were simply never reached. Nothing was added.
+
+That is also why the *"design question, not a placement one"* framing above was
+right about the diagnosis and wrong about the cost: it reads as though the
+remaining half needed a new rule with a new diagnostic. The measurement replaced
+a design question with six oracle rows, and the code was already correct behind
+a guard. **Cheaper to ask FPC six times than to reason once** — which is the
+`root-cause-over-microfix` "vary the shape to find the boundary" step, and it is
+what the first half of this ticket skipped on its way to shipping a false
+rejection.
+
+### Evidence
+
+* `test/test_generic_constraint_forward_stub_fail.pas` (new, `test-core`) —
+  tgenconstraint39, must be refused, message must name the constraint.
+* `test/test_generic_constraint_accept_control.pas` — extended with
+  `TNeedsTObject<TFwd>`, the arm the change actually moved, `accepted 4` ->
+  `accepted 5`. The deeper-named and interface arms are what must fail; this is
+  the one that must not.
+* All six variants above measured pxx-vs-fpc side by side: identical, six for six.
+
+### What 37 actually is, and the trap it sets for the next change
+
+`tgenconstraint37` is the last disagreement and **it is not a constraint bug at
+all.** It is `%NORUN` (must compile) and we reject it at line 18:
+
+```
+pascal26:18: error: expected 'end' before ';'
+  near: = class ; ITestInterface = interface >>> ; TGenericTObjectTTestObject =
+```
+
+`ITestInterface = interface;` — a **forward INTERFACE declaration**, which we do
+not parse. That is [[bug-p-a-forward-interface-declaration-is-not-parsed]] (p45),
+already filed and in the ready queue. Nothing in this ticket can move 37, and
+counting it against the constraint checker misreads it.
+
+**The trap, for whoever takes that p45 ticket:** 37's third specialization is
+`TGenericIInterface<ITestInterface>` — an interface FORWARD STUB against an
+interface constraint — and fpc accepts it. This ticket's change makes the checker
+judge stubs instead of skipping them, so the moment the parse gap closes, that
+line reaches `GCIntfDescends(argCi, conCi)` with a stub that has no parent yet
+and will very likely be **refused**. The class case has an explicit answer for
+this (`T: TObject` means `isClass`, because every class descends from TObject);
+the interface case needs the mirror — an interface stub descends from
+`IInterface` — and nothing asserts it today because nothing can reach it.
+
+So closing p45 should take this corpus to 40/40 **or** surface exactly that one
+line. Either is fine; being surprised by it is not.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

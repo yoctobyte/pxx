@@ -50,6 +50,16 @@ type
   end;
   TNeedsClass<T: class> = class
   end;
+  { `T: TObject` against the SAME forward stub, and it is the arm that moved:
+    the checker used to skip a forward stub entirely, so both this and a
+    DEEPER named constraint passed. It now judges the stub as what it is -- a
+    class whose ancestry is TObject and which implements nothing yet -- so the
+    deeper ones correctly fail (tgenconstraint38/39, and
+    test_generic_constraint_forward_stub_fail.pas) and this one must NOT.
+    fpc 3.2.2 accepts it. Over-rejection is the failure mode this file exists
+    for, and this is the edge the change actually touched. }
+  TNeedsTObject<T: TObject> = class
+  end;
 
   TPlain = class
   end;
@@ -64,6 +74,7 @@ type
   TOkPlain                = TNeedsClass<TPlain>;
   TOkForward              = TNeedsClass<TFwd>;
   TOkShadowedBuiltin      = TNeedsClass<LongInt>;
+  TOkForwardTObject       = TNeedsTObject<TFwd>;
 
   TFwd = class
   end;
@@ -73,11 +84,13 @@ var
   b: TOkPlain;
   c: TOkForward;
   d: TOkShadowedBuiltin;
+  e: TOkForwardTObject;
 begin
   a := TOkBuiltinUnconstrained.Create;
   b := TOkPlain.Create;
   c := TOkForward.Create;
   d := TOkShadowedBuiltin.Create;
-  Writeln('accepted 4');
-  a.Free; b.Free; c.Free; d.Free;
+  e := TOkForwardTObject.Create;
+  Writeln('accepted 5');
+  a.Free; b.Free; c.Free; d.Free; e.Free;
 end.
