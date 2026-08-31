@@ -50,3 +50,32 @@ the same measuring stick, and right now nothing in the file says so.
 
 Track T's own tooling gate, green, and the field present in a freshly published
 report.
+
+## Second consumer, 2026-08-31: the rdrand skip hole (16 days after filing)
+
+This ticket was filed 2026-08-15 for an **ISA** question — may pxx emit FMA —
+and its summary still describes only that. A second, unrelated consumer arrived
+sixteen days later by a different route and is worth recording, because neither
+looks like the other held alone:
+
+**seven's full-tier runs carry a permanently unrunnable rdrand job**
+(`skip_holes` 1 in 120 of 121 full runs, 2 in the other; never 0). The harness
+asserts that job is structurally unrunnable on that box, and **that assertion
+cannot be verified from the repo** — `seven.json` carries no hardware fields at
+all, and every session on this machine is on **plexus**, which *does* have
+rdrand. So nobody here can check the claim about seven either way, which is
+exactly the gap this ticket describes.
+
+The consequence is filed separately as
+`decide-the-proof-grade-gate-is-unsatisfiable-on-the-host-that-does-the-sweeping`:
+the `-O3` promotion gate requires `skip_holes == 0`, which seven can never
+produce, and the enumerated-allowlist option recommended there **needs this
+ticket's field to exist** — an allowlist entry has to name the hardware reason,
+and today there is nowhere to read it from.
+
+**Two consumers, one missing field.** Worth a prio look — 20 was set when this
+had one ISA-shaped consumer. Left unchanged here: it is frankT's ticket and the
+ranking call is the owner's.
+
+Recorded by the Track U session from a frankT finding relayed by
+frank-coordinator, both of which deliberately did not edit it.
