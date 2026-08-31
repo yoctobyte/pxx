@@ -665,3 +665,47 @@ double-free versus write-after-free; `-dPXX_OBJTRACE` plus `grep <addr>` answers
 which.
 
 Gate: no code changed in this addendum; cores deleted (376 MB each).
+
+#### The allocator's own detector names it: WRITE AFTER FREE (frankA, 2026-08-31)
+
+a11f98f86's fork — double-free versus write-after-free — is settled by the debug
+heap, which distinguishes them by design (`DBG_M1..M4`: DOUBLE FREE, WRITE AFTER
+FREE, RETAIN of a FREED object, RELEASE of a FREED object). Built at
+`4f6b70995c3a`, `--target=arm32 -dPXX_HEAP_DEBUG`, minimal source, pad 20:
+
+```
+pxx-heap: WRITE AFTER FREE in 0x448f5ff0
+```
+
+So it is **not** a double free and **not** a retain/release of a freed object;
+something writes into a block that is already on the free list. That is the
+mechanism a11f98f86 inferred from the `"Char"` bytes, now stated by the allocator
+rather than by us.
+
+**A second site, same routine, different caller.** Four stock cores at
+`4f6b70995c3a`, one per pad:
+
+| pad | pc | lr | r0 |
+| --- | --- | --- | --- |
+| 20 | `PXXAlloc+0x290` | `PXXStrFromLit+0x114` | `0x7990c800` |
+| 50 | `PXXAlloc+0x290` | `PXXStrFromLit+0x114` | `0x13e27000` |
+| 80 | `PXXAlloc+0x290` | `PXXStrFromLit+0x114` | `0x148b8000` |
+| 200 | **`PXXAlloc+0x578`** | **`PXXDynSetLen+0x560`** | **`0xfffffff9`** (= -7) |
+
+`+0x578` is the LARGE-block first-fit walk, not the bin pop, and `-7` is a length
+or size rather than an address. Same corruption, two different consumers of it.
+
+**One claim of mine WITHDRAWN, and the reason matters more than the claim.** I
+measured the i386 cross compiler failing on the minimal program at 5 of 15
+environment pads and was about to report that the defect is 32-bit-wide rather
+than arm32-only. **It does not reproduce**: 18 pads clean in one sweep, and pad
+1000 clean in five consecutive runs. The failing measurement was taken while the
+background arm32 sweep was still running on the same box, so it is load, not
+layout. **A pad number is not portable across shell invocations either** — the
+pad shifts an absolute layout that already depends on the whole environment, so
+"pad 1000 faults" is a statement about one process, not a reproducible coordinate.
+Sweep a range inside one shell; never carry a single pad between them.
+
+The residual from the earlier note stands unchanged: every reading is still
+`qemu-arm`, and the WRITE AFTER FREE detection does not separate a real UAF from
+an emulator artifact — it says what the guest's own bookkeeping saw.
