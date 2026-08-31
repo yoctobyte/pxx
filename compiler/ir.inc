@@ -4498,15 +4498,26 @@ function UContextPCOffset: Integer;
     i386      76 = uc_mcontext(20)  + gregs[REG_EIP=14]*4
     riscv32  160 = uc_mcontext(160) + sc_regs.pc, which is its first field
 
-  xtensa never reaches here — the parser refuses every __pxxSig* on it, because
-  FreeRTOS has no signal runtime at all. }
+  xtensa has NO ROW and falls through to -1, which is a real reachable state,
+  not an impossible one. The comment here used to say "xtensa never reaches
+  here — the parser refuses every __pxxSig* on it, because FreeRTOS has no
+  signal runtime at all." That stopped being true when the signal exclusion was
+  re-keyed off the arch (ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-
+  and-the-premise-expired): hosted xtensa now has a signal runtime, and
+  test_signal_pc_rewrite and test_signal_sp_rewrite reach this function and
+  stop at the -1 guard with the intended error. MEASURED in a 140-source
+  differential sweep, 2026-08-31 — those two are the only sources that hit it.
+  Supplying the two rows is feature-a-xtensa-ucontext-pc-sp-offsets; measure
+  them the same two-fault way, do not read them off a header. }
 begin
   if TargetArch = TARGET_X86_64 then Result := 168
   else if TargetArch = TARGET_AARCH64 then Result := 440
   else if TargetArch = TARGET_ARM32 then Result := 92
   else if TargetArch = TARGET_I386 then Result := 76
   else if TargetArch = TARGET_RISCV32 then Result := 160
-  else Result := -1;   { unreachable: the parser refused this target already }
+  else Result := -1;   { xtensa: no row yet. REACHABLE -- the caller raises
+                         "needs the saved-PC/SP offset inside this target's
+                         ucontext_t" rather than emitting a wrong offset. }
 end;
 
 function UContextSPOffset: Integer;
@@ -4546,7 +4557,9 @@ begin
   else if TargetArch = TARGET_ARM32 then Result := 84
   else if TargetArch = TARGET_I386 then Result := 48
   else if TargetArch = TARGET_RISCV32 then Result := 168
-  else Result := -1;   { unreachable: the parser refused this target already }
+  else Result := -1;   { xtensa: no row yet. REACHABLE -- the caller raises
+                         "needs the saved-PC/SP offset inside this target's
+                         ucontext_t" rather than emitting a wrong offset. }
 end;
 
 { OPEN-WORLD is-a, at RUNTIME: given a symbol already holding an instance pointer,
