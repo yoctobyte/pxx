@@ -170,4 +170,4 @@ fpc 3.2.2 on all nine rows. Positive control: the pre-fix compiler gets the
 first six wrong at -O2 and the last three right.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 5c6459e18.
