@@ -2679,25 +2679,27 @@ begin
           end;
           if (procIdx = -203) or (procIdx = -204) then
           begin
-            { Trunc (-203, toward zero) / Round (-204, nearest-even) -> Int64, via
-              the soft-float d2i[_rne]/s2i[_rne] kernels (32-bit result, sign-
-              extended to the a2:a3 pair). }
+            { Trunc (-203, toward zero) / Round (-204, nearest-even) -> Int64.
+              Promote the argument to double and use the 64-bit kernel. The
+              32-bit __pxx_d2i/__pxx_s2i SATURATE at 2^31, so every Int64 result
+              past that came back 2147483647: Trunc(1.0e15) gave 2147483647
+              against the oracle's 999999986991104. There is no __pxx_s2i64, and
+              promoting is what arm32 already does, so single and double collapse
+              onto one arm rather than needing a new kernel. riscv32 had the same
+              defect on its SINGLE arm and is fixed in the same commit. }
             argNode := IRB[node];
             tk := IntToTypeKind(IRTk[IRA[argNode]]);
-            if tk = tyDouble then
+            if TypeIsFloat(tk) then
             begin
-              EmitNode64Xtensa(IRA[argNode]);     { a2:a3 = double bits }
-              if procIdx = -204 then EmitFloatUnaryCallXtensa('__pxx_d2i_rne', True, False)
-              else EmitFloatUnaryCallXtensa('__pxx_d2i', True, False);
-            end
-            else if tk = tySingle then
-            begin
-              IREmitNodeXtensa(IRA[argNode]);     { a2 = single bits }
-              if procIdx = -204 then EmitFloatUnaryCallXtensa('__pxx_s2i_rne', False, False)
-              else EmitFloatUnaryCallXtensa('__pxx_s2i', False, False);
-            end
-            else
-              IREmitNodeXtensa(IRA[argNode]);      { Trunc/Round of an integer is identity }
+              EmitFloatOperandXtensa(IRA[argNode], tyDouble);   { a2:a3 = double }
+              { dstDouble=True means "the result occupies the a2:a3 PAIR", not
+                "the result is a float" -- it is what moves a11 -> a3 under the
+                windowed ABI. False here would drop the Int64's high word. }
+              if procIdx = -204 then EmitFloatUnaryCallXtensa('__pxx_d2i64_rne', True, True)
+              else EmitFloatUnaryCallXtensa('__pxx_d2i64', True, True);
+              Exit;
+            end;
+            IREmitNodeXtensa(IRA[argNode]);        { Trunc/Round of an integer is identity }
             { sign-extend a2 -> a3 for the Int64 result pair }
             EmitAsmXtensa(['movi a3, 0', 'bge a2, a3, .p', 'movi a3, -1', '.p:']);
             Exit;

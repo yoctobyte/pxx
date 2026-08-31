@@ -2,9 +2,10 @@
 track: A+S
 type: bug
 prio: 40
-status: open
+status: working
 found: 2026-08-30
 found-by: frankS
+owner: frankA
 ---
 
 # Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs

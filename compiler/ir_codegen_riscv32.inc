@@ -2647,37 +2647,29 @@ begin
           end;
           if (procIdx = -203) or (procIdx = -204) then
           begin
-            { Trunc (-203, toward zero) / Round (-204, nearest-even) -> Int64, via
-              the soft-float d2i[_rne]/s2i[_rne] kernels (32-bit result, sign-
-              extended to the a0:a1 pair). }
+            { Trunc (-203, toward zero) / Round (-204, nearest-even) -> Int64.
+              Promote to double and use the 64-bit kernel for BOTH float widths.
+              The 32-bit d2i/s2i saturate at 2^31 (breaks a double->u64 cast,
+              e.g. sqlite %f); d2i64 returns the Int64 in a0:a1 directly, so no
+              sign-extend follows. The double arm was already routed this way --
+              the SINGLE arm was not, and Trunc(Single 1.0e15) returned
+              2147483647 against the oracle's 999999986991104. There is no
+              __pxx_s2i64, so promoting is the fix, as arm32 already does; that
+              also collapses the two float arms into one. Found by varying the
+              operand width while fixing the same defect on xtensa, which had it
+              on both arms. }
             argNode := IRB[node];
             tk := IntToTypeKind(IRTk[IRA[argNode]]);
-            if tk = tyDouble then
+            if TypeIsFloat(tk) then
             begin
-              { full 64-bit convert: the 32-bit d2i saturates at 2^31 (breaks a
-                double->u64 cast, e.g. sqlite %f). d2i64 returns the Int64 in
-                a0:a1 directly, so no sign-extend follows. }
-              EmitNode64RISCV32(IRA[argNode]);    { a0:a1 = double bits }
+              EmitFloatOperandRISCV32(IRA[argNode], tyDouble);   { a0:a1 = double }
               if procIdx = -204 then sVal := '__pxx_d2i64_rne' else sVal := '__pxx_d2i64';
               procIdx := FindProc(sVal);
               if procIdx < 0 then Error(SoftFloatMissing(sVal));
               EmitCallProc(procIdx);              { a0:a1 = full Int64 result }
               Exit;
-            end
-            else if tk = tySingle then
-            begin
-              IREmitNodeRISCV32(IRA[argNode]);    { a0 = single bits }
-              if procIdx = -204 then sVal := '__pxx_s2i_rne' else sVal := '__pxx_s2i';
-            end
-            else
-            begin
-              IREmitNodeRISCV32(IRA[argNode]);     { Trunc/Round of an integer is identity }
-              rv32_srai(reg_a1, reg_a0, 31);
-              Exit;
             end;
-            procIdx := FindProc(sVal);
-            if procIdx < 0 then Error(SoftFloatMissing(sVal));
-            EmitCallProc(procIdx);
+            IREmitNodeRISCV32(IRA[argNode]);       { Trunc/Round of an integer is identity }
             rv32_srai(reg_a1, reg_a0, 31);         { sign-extend to Int64 a0:a1 }
             Exit;
           end;
