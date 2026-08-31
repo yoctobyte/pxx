@@ -26,6 +26,14 @@ gate that lane must keep green**. It is NOT an ontology of the codebase.
   shared core files when your ticket needs them; git detects the rare real
   conflict and a rebase fixes it. If you know someone is mid-edit in the same
   *function*, message them — do not ask anyone for permission.
+  **The separator is the TOPIC, not the file** (owner, 2026-08-31, evaluating a
+  month of concurrent work): *"multiple agents can work on the same track, even
+  touch the same files, file locking is not needed, since git merge solves most
+  just fine. as long agents work on different topics."* Two agents in one file
+  is fine. Two agents on one QUESTION is not — they duplicate work, reach
+  different conclusions, and produce a conflict git cannot see, because both
+  diffs apply cleanly. So check "is anyone already on this topic", never "is
+  anyone in this file".
 - **Don't invent new letters.** The set is deliberately small; resist splitting
   it finer.
 - **Two axes.** **File-lanes** (where code lives): **A** core, **B** libs/demos,

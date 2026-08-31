@@ -2246,6 +2246,38 @@ between — it outlives any one context, so read it before the check log.
 > no longer an experiment running: a mandate with a review date was the right
 > shape for an open question, and the question is answered.
 >
+> ## THE CONCLUSION THAT OUTLASTS THE MANDATE (owner, 2026-08-31)
+>
+> Added to the evaluation, and it is the most reusable thing to come out of it:
+>
+> > *"i dont think we need a coordinator per se. agents can also talk peer to
+> > peer. however, when running 10 concurrent agents, it was useful and relieved
+> > the human of trivial decisions. also, the most important conclusion: multiple
+> > agents can work on the same track, even touch the same files, file locking is
+> > not needed, since git merge solves most just fine. as long agents work on
+> > different topics."*
+>
+> **The coordinator is a SCALING convenience, not a requirement.** Peer-to-peer is
+> the default and works; the role earned its keep at ~10 concurrent agents, and
+> what it bought was *the human's attention*, not correctness — it absorbed
+> trivial decisions that would otherwise each have cost an interrupt. That is a
+> real benefit and it scales with agent count, so the honest form is: run a
+> coordinator when the fleet is large enough that trivial decisions are reaching
+> the owner, and not otherwise.
+>
+> **No file locking. Same track, same files, concurrently — fine.** This is the
+> load-bearing conclusion and it is now settled by a month of practice, not by
+> argument. `symtab.inc` took commits from seven lanes in one day with zero
+> collisions. Git detects the rare real conflict; a rebase fixes it.
+>
+> **The separator is the TOPIC, not the file, not the lane, not the track.** This
+> is the qualifier that makes the rest safe, and it is sharper than what the
+> lane model says. Two agents in one file are fine. Two agents on one *question*
+> are not — they duplicate work, reach different conclusions, and produce a
+> conflict git cannot see because both diffs apply cleanly. So the thing to check
+> before starting is not "is anyone in this file" but **"is anyone already on this
+> topic"** — and that is what a ticket claim, and a message to a peer, are for.
+>
 > **The process lesson, since it cost six days of nobody knowing:** a date in a
 > document has no owner. Nothing fires on it, nothing scans for it, and the
 > people it binds are the least able to act on it. It surfaced only because an
