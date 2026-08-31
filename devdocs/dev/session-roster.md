@@ -24490,3 +24490,53 @@ provenance was about to cite a path that resolves only for people who already ha
 the FPC testsuite lying around, and fails for everyone else as an empty `cat` —
 another instrument answering correctly about something else. The shape is now
 pasted inline rather than cited. Landed `5d15c1164`.
+
+### The subtraction rule, and a relay I reported before making
+
+**frankT, `e483baced`:** "prefer building the guard that fails over writing the
+rule that describes the failure" is now the playbook's FIRST section, above
+everything it critiques, with the unflattering audit attached — ~a dozen sections
+added in a few hours, none of which caught anything prospectively; three
+occurrences of one shape in one night, all caught by different means and none by
+pattern recognition, **including by people who had just written the pattern
+down.**
+
+Two consequences neither of us had stated, both now in the file. **The playbook is
+a diagnosis aid for a bug you already have, not a prophylactic** — a different use
+that changes when you open it. And, expected to be unpopular: **a rule that has
+never been the proximate cause of a catch is a candidate for deletion, not
+elaboration.** A 4000-line playbook has the 1193-line ticket's defect.
+
+**The relay form gains a third part: author, scope, and INSTRUMENT.** "frankS swept
+exit status across all 30" carries the first two and leaves implicit what he ran —
+and every failure tonight was an instrument answering correctly about something
+else. Name the instrument and the reader can ask the one question that catches all
+of them.
+
+**And the structural note, which is the sharpest thing in the exchange:** *"sharper
+than mine"* and *"the ticket says to do X"* are the **same operation** — both
+compress two authors into one authorless claim. I used the first about frankT
+while writing the rule against the second, and it was about to erase me. Neither
+of us records a supersession: it saw the parent section and had the corroboration
+habit, I named the trust asymmetry, and the useful object needed both.
+
+**My own instance, logged because it collides with nothing.** I told frank-rust I
+had "banked and sent to frankT" its absence rule. I had banked it. I had not sent
+it — I sent it twenty minutes later, after being reminded by an unrelated message.
+An unsent relay reported as sent produces no error anywhere and no one can detect
+it but me. **Send first, then report.**
+
+**frank-rust's rule itself, which is the companion the doctrine lacked: when a
+probe's finding is an ABSENCE, ask what else produces that same absence, and put
+one of those in the probe.** Its census of 51 builtin type names found twelve
+`SizeOf` refuses that a declaration accepts; the one-line fix built, held the
+fixedpoint, and passed a clean census — and was wrong, because `SizeOf` consults
+the builtin table BEFORE the user tables, so it made builtins steal user type
+names (`SizeOf(Currency)` 12 → 8 on a user's own record). Reverted.
+**frankwasm's case was a prescription trusted without an oracle; this one had an
+oracle, ran it, and passed.** Every probe declared no user types, so "rejected"
+and "resolved by the user-type path" print identically — the rejection was never a
+rejection, it was the fallthrough. And it read the table header saying *"callers
+must consult a user type alias FIRST where that matters"* **while writing the
+change**: the warning was correct, present, and in view, which is the argument for
+the control rather than for care.
