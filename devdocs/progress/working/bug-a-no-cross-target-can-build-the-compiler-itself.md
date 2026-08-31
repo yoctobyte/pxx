@@ -770,3 +770,78 @@ block holding live token text corrupts data exactly that way. And the debug buil
 QUARANTINES rather than recycling, so it is a different lifetime universe from
 the stock cores; the victim named here is not known to be the block those cores
 died on.
+
+## 2026-08-31 (frankA) — the IR differential: one divergence found, and it is NOT the cause
+
+frankS proposed the right method and warned off the wrong one: do not diff
+`ir_codegen_arm32.inc` against `ir_codegen_aarch64.inc` ("the same spelling trap
+one level up"). Instead compile one tiny program, dump the **shared** IR, and
+compare where each backend emits retains and releases **against that same IR** —
+any divergence in placement is then purely backend. It also changes what you are
+looking for from a *missing* call, which the counts have twice said is not
+there, to a **misplaced** one.
+
+### Method
+
+`PXXDBG=a.ir:<proc>` for the IR, then a small disassembler-driver that resolves
+call targets **inside one procedure** through the `--map` file (arm32
+`cond|1011|imm24`, pc+8; aarch64 `100101|imm26`, pc). So the comparison is
+per-call-site, not per-file-grep.
+
+### Result 1 — placement is identical, on seven shapes
+
+Nested call results as arguments, a record field, a dynamic array element, a
+for-loop temp reassigned each round, a `const` parameter passed onward, a
+two-path conditional assignment, and a build-by-append function. **Retain and
+release counts and their order match arm32 vs aarch64 on all seven.** No
+misplaced release was found at this granularity.
+
+### Result 2 — one real divergence: the static-literal path is 2-of-7
+
+`EmitStaticLitHandle` (x86-64) and `EmitStaticLitHandleA64` exist; **i386,
+arm32, riscv32, wasm32 and xtensa have no equivalent.** For an `IR_CONST_STR`
+node the two privileged backends hand back the pooled literal's address as a
+ready-made saturated handle; the other five call `PXXStrFromLit` — a call, a
+`PXXAlloc`, a copy, and a `PXXFree` per literal evaluation. For `a := 'hello'`,
+arm32 emits that call and aarch64 emits none, retain/release counts otherwise
+identical (5 `PXXStrDecRef` + 1 `PXXStrIncRef` on both).
+
+That is a genuine backend divergence against a shared IR node, and it puts the
+suspect population — heap-resident string literals — on arm32 and not on the
+clean 64-bit target.
+
+### Result 3 — and the control KILLS it as the cause
+
+Single variable: force `EmitStaticLitHandleA64` to return `False`, rebuild the
+host, build the aarch64 cross compiler with `-dPXX_HEAP_DEBUG`, and run it under
+`qemu-aarch64` — aarch64 now heap-allocates every literal exactly as arm32 does.
+
+**Positive control, asserted rather than assumed** (the manipulation had to be
+shown to have worked): the patched host emits `PXXStrFromLit` in the probe
+procedure and the stock host emits none.
+
+| arm | literals | pads run | heap diagnostics |
+| --- | --- | --- | --- |
+| B — static path DISABLED | on the heap, as arm32 | 5 | **0** |
+| A — stock | static blocks | 5 | **0** |
+
+`rc=0` on every pad, both arms. `ir_codegen_aarch64.inc` restored via
+`git checkout` (it carried no other uncommitted work).
+
+**So heap-resident literals are not sufficient to produce the symptom** — which
+i386 and riscv32 already implied, since both lack the static path and both are
+clean. The divergence is real and is recorded on
+[[bug-a-string-release-has-two-implementations-that-already-disagree]] (it
+sharpens that ticket: release must now be correct under *two* ownership
+conventions, an owned `rc=1` block on five targets and a saturated static block
+on two). It is not this bug.
+
+### What this leaves
+
+The IR differential has now said "placement matches" at the granularity a
+per-call-site comparison can see. Either the misplacement is in a shape not
+covered by those seven, or the mechanism is not placement at all. The instrument
+that can still speak is the one committed today: on arm32 — unlike x86-64 —
+`PXXStrDecRef` **is** the release path, so the new poison check inside it
+reports the stale release *at the moment it happens*, with the block address and
+size class, rather than at quarantine eviction long afterwards.
