@@ -29,11 +29,19 @@ type
     function Sq: Integer;
     procedure Inc2;
   end;
+  TCH = type helper for Char
+    function Up: Char;
+  end;
+  T64 = type helper for Int64
+    function Dbl: Int64;
+  end;
 procedure TSH.Bang; begin Self := Self + '!'; end;
 function TSH.Twice: string; begin Result := Self + Self; end;
 function TSH.IsEmpty: Boolean; begin Result := System.Length(Self) = 0; end;
 function TIH.Sq: Integer; begin Result := Self * Self; end;
 procedure TIH.Inc2; begin Self := Self + 2; end;
+function TCH.Up: Char; begin Result := Chr(Ord(Self) - 32); end;
+function T64.Dbl: Int64; begin Result := Self + Self; end;
 
 var s: string; a: AnsiString; i, n: Integer;
 function F: string; begin Inc(n); Result := 'q'; end;
@@ -67,6 +75,17 @@ begin
   Writeln(F.Twice.Twice);
   Writeln(Copy(s, 1, 1).Twice);
   Writeln(G.Sq);
+  { The three rows that exist because someone probed this file's own subject
+    and concluded it did not work. A ONE-CHARACTER literal is a CHAR, in both
+    compilers, so `'b'.Twice` against a string helper is CORRECTLY refused and
+    FPC refuses it identically — the shape is fine, the type was not. With a
+    Char helper in scope it binds. And integer arithmetic promotes to Int64, so
+    a grouped `(i + 1)` does NOT match a `helper for Integer`; FPC rejects that
+    too ("Illegal qualifier"), and both compilers bind it to an Int64 helper.
+    feature-pascal-type-helpers, 2026-08-31 }
+  Writeln('b'.Up);
+  Writeln(F().Twice);
+  Writeln((i + 1).Dbl);
   { …and F ran once per occurrence, not once per mention of Self }
   Writeln(n);
 end.

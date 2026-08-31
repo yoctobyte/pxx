@@ -3,15 +3,15 @@ track: A
 prio: 55
 type: feature
 blocked-by: []
-summary: "record/type/class helpers. v1-v3 landed and pinned: decl + impl-side Self fork + dispatch, statics/consts, `type helper for` spelling, TARGET-type-name receivers (UInt32.GetSignMask), class helpers, typed class consts. ARRAY-ELEMENT receivers landed 2026-08-31 as part of bug-p-a-member-on-an-array-element-silently-reads-the-elements-own-bytes. REMAINING: exactly one item - a STRING-LITERAL receiver ('abc'.ToLower), which fails in the LEXER/factor path (`expected ')' before '.'`), not in the helper machinery. Every other rvalue shape probed already works."
-status: unfinished
+summary: "DONE 2026-08-31. record/type/class helpers, all slices: decl + impl-side Self fork + dispatch, statics/consts, `type helper for` spelling, TARGET-type-name receivers, class helpers, typed class consts, and rvalue receivers - which turned out to have worked all along. The last open item was a PROBE ARTIFACT: `'b'.Twice` is refused because a one-character literal is a Char, not a string, and FPC refuses it identically; `'bc'.Twice` has always worked. `(n+1)` against a `helper for Integer` is likewise parity - int arithmetic promotes to Int64 and FPC rejects it too. Three rows folded into test_type_helper_on_a_value.pas, .expected regenerated from FPC; pxx matches all 22 lines."
+status: done
 owner: frankS
 ---
 
 # `record helper for T` / `type helper for T` — type helpers
 
 - **Type:** feature (Pascal frontend — Track P; dispatch plumbing may touch shared parser = A gate)
-- **Status:** working
+- **Status:** done
 - **Owner:** frankS
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.helpers.pas is in
   Generics.Collections' uses chain), and broadly sysutils.TStringHelper-style
@@ -150,36 +150,55 @@ So v3 now has exactly two items left:
 
 ---
 
-## 2026-08-31 — the remaining item is ONE shape, and it is not where the ticket said
+## 2026-08-31 — DONE. The last open item was a probe artifact, not a gap
 
-The ticket's last line has read *"rvalue receivers — `'abc'.ToLower`,
-`F().ToLower` — need a materialized temp. Still refused."* since v3. **Probed
-rather than believed, and most of it is already done:**
+The ticket's final line read *"rvalue receivers — `'abc'.ToLower`, `F().ToLower`.
+Still refused"* for six weeks. **Every shape on it already worked**, and the
+file that proved it, `test/test_type_helper_on_a_value.pas`, has been in
+`test-core` since `feature-p-delphi-string-helpers` landed — covering string
+literals, call results, grouped expressions and chaining, against an FPC oracle.
+The ticket was never re-read against the code.
 
-| receiver | result |
-| --- | --- |
-| `F.Twice` | works |
-| `F().Twice` | works |
-| `(s + 'x').Twice` | works |
-| `a[0].Twice` (array element) | **was a WRONG ANSWER**, fixed today |
-| `5.Dbl` (integer literal) | works |
-| `(n + 1).Dbl` (parenthesised int expr) | refused |
-| `'b'.Twice` (string literal) | refused |
+### The probe that said otherwise, including mine
 
-`TypeHelperOnValue` (the materialise-into-a-temp path) already exists and serves
-the call-result and grouped-expression cases; the ticket was written before it
-landed and never re-read against the code.
+`'b'.Twice` is refused, and it is refused **correctly**: a ONE-CHARACTER literal
+is a `Char`, in pxx and in FPC, so a helper declared for `AnsiString` does not
+match it. `'bc'.Twice` compiles and prints `bcbc` in both. FPC's message is the
+same class as ours (*"Syntax error, ')' expected but identifier TWICE found"*
+vs *"expected ')' before '.'"*), which is what a differing diagnostic is: a
+deferred item, not a defect.
 
-So the remaining work is **two refusals, not a category**, and the string-literal
-one does not fail in the helper machinery at all: `'b'.Twice` dies with
-`expected ')' before '.'`, i.e. the factor parser finishes a string literal and
-never offers the `.` to anything. That is a different fix from `(n + 1).Dbl`,
-which reaches the member path and is told *"this value has no members"*.
+With a `helper for Char` in scope, `'b'.Up` compiles and answers `B` — same as
+FPC. The shape was never the problem; the type was.
 
-**The array-element case turned out to be a separate BUG, not this feature**, and
-a silent wrong-answer one:
-[[bug-p-a-member-on-an-array-element-silently-reads-the-elements-own-bytes]]
-(fixed, with the FPC oracle). Fixing it made `a[0].Twice` work as a side effect,
-because the same guard had to choose between the valid reading and the invalid
-one. An lvalue receiver was never on this ticket's list, which is why nobody had
-looked.
+**The same mistake twice, mine second.** The remaining-item line was written
+from a probe of that shape; I re-probed it today, got the same refusal, and
+wrote it into this ticket AND a commit message as "fails in the factor parser"
+before asking the oracle. Varying the shape is the rule; I varied the shape and
+not the LITERAL'S LENGTH, which is where the type lives.
+
+### And the other supposed gap
+
+`(n + 1).Dbl` against a `helper for Integer` is refused, and that is parity too:
+integer arithmetic promotes to `Int64` (the AST node carries `tk=13`, confirmed
+with `PXXDBG=a.ast`), so an `Integer` helper genuinely does not match. FPC
+rejects it as well (*"Illegal qualifier"*). Both compilers accept it against an
+`Int64` helper and answer `8`.
+
+### What landed with this close
+
+Three rows folded into `test_type_helper_on_a_value.pas` rather than a second
+near-duplicate file — the Char-literal distinction, `F()` with explicit
+parentheses, and the Int64 promotion. `.expected` regenerated from FPC 3.2.2;
+pxx matches all 22 lines. They exist so the next person who probes this file's
+own subject and concludes it does not work finds the answer in the file.
+
+### Also closed here
+
+ARRAY-ELEMENT receivers (`a[0].Twice`), which were never on this ticket's list
+because an array element is an lvalue. They were a silent WRONG ANSWER and are
+fixed under
+[[bug-p-a-member-on-an-array-element-silently-reads-the-elements-own-bytes]].
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

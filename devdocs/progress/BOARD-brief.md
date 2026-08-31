@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:31 blocked:9 backlog:393 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2907 rejected:68`
+`working:5 unfinished:30 blocked:9 backlog:393 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2908 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -15,7 +15,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 
-## unfinished (31) — parked mid-flight; re-claim, do not duplicate
+## unfinished (30) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S]
@@ -41,7 +41,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pal-esp-posix-fd-semantics` [S] — blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P]
-- `feature-pascal-type-helpers` [A]
 - `feature-rust-option-type` [R]
 - `feature-signal-siginfo-ucontext` [A]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
@@ -61,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 
-## Ready — top 30 of 430, ranked
+## Ready — top 30 of 429, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -94,4 +93,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 
-_400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
