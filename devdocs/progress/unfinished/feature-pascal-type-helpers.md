@@ -1,12 +1,18 @@
 ---
+track: A
 prio: 55
+type: feature
+blocked-by: []
+summary: "record/type/class helpers. v1-v3 landed and pinned: decl + impl-side Self fork + dispatch, statics/consts, `type helper for` spelling, TARGET-type-name receivers (UInt32.GetSignMask), class helpers, typed class consts. ARRAY-ELEMENT receivers landed 2026-08-31 as part of bug-p-a-member-on-an-array-element-silently-reads-the-elements-own-bytes. REMAINING: exactly one item - a STRING-LITERAL receiver ('abc'.ToLower), which fails in the LEXER/factor path (`expected ')' before '.'`), not in the helper machinery. Every other rvalue shape probed already works."
+status: unfinished
+owner: frankS
 ---
 
 # `record helper for T` / `type helper for T` — type helpers
 
 - **Type:** feature (Pascal frontend — Track P; dispatch plumbing may touch shared parser = A gate)
-- **Status:** unfinished — v1+v2 landed and pinned; v3 partly landed (type-name spelling, target-type-name receivers, class helpers). Remaining: rvalue receivers.
-- **Owner:** claude-acp
+- **Status:** working
+- **Owner:** frankS
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.helpers.pas is in
   Generics.Collections' uses chain), and broadly sysutils.TStringHelper-style
   code across the FPC/Delphi ecosystem.
@@ -140,3 +146,40 @@ So v3 now has exactly two items left:
   typed-const path of its own — fixing that bug made all three spellings
   (helper name, target-type name, in-body) work at once.
   `test/test_type_helper_const_array.pas`.
+
+
+---
+
+## 2026-08-31 — the remaining item is ONE shape, and it is not where the ticket said
+
+The ticket's last line has read *"rvalue receivers — `'abc'.ToLower`,
+`F().ToLower` — need a materialized temp. Still refused."* since v3. **Probed
+rather than believed, and most of it is already done:**
+
+| receiver | result |
+| --- | --- |
+| `F.Twice` | works |
+| `F().Twice` | works |
+| `(s + 'x').Twice` | works |
+| `a[0].Twice` (array element) | **was a WRONG ANSWER**, fixed today |
+| `5.Dbl` (integer literal) | works |
+| `(n + 1).Dbl` (parenthesised int expr) | refused |
+| `'b'.Twice` (string literal) | refused |
+
+`TypeHelperOnValue` (the materialise-into-a-temp path) already exists and serves
+the call-result and grouped-expression cases; the ticket was written before it
+landed and never re-read against the code.
+
+So the remaining work is **two refusals, not a category**, and the string-literal
+one does not fail in the helper machinery at all: `'b'.Twice` dies with
+`expected ')' before '.'`, i.e. the factor parser finishes a string literal and
+never offers the `.` to anything. That is a different fix from `(n + 1).Dbl`,
+which reaches the member path and is told *"this value has no members"*.
+
+**The array-element case turned out to be a separate BUG, not this feature**, and
+a silent wrong-answer one:
+[[bug-p-a-member-on-an-array-element-silently-reads-the-elements-own-bytes]]
+(fixed, with the FPC oracle). Fixing it made `a[0].Twice` work as a side effect,
+because the same guard had to choose between the valid reading and the invalid
+one. An lvalue receiver was never on this ticket's list, which is why nobody had
+looked.

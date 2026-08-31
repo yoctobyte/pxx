@@ -9168,6 +9168,25 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPROGDEF -Futest/libmanifest/inner -Futest/libmanifest_sibling test/test_libmanifest.pas $(TESTTMP)/test_libmanifest26 >$(TESTTMP)/test_libmanifest.warn 2>&1
 	grep -q "unknown directive .notadirective" $(TESTTMP)/test_libmanifest.warn
 	tools/expect_same.sh test_libmanifest26 "$$($(TESTTMP)/test_libmanifest26)" "$$(printf 'lib: manifest no-progdef delphi-ok\nsib: NO-manifest progdef\nprog: NO-manifest progdef')"
+	# `.member` on an ARRAY ELEMENT whose type is not a record. The fall-through
+	# built a field access at offset 0 and read the element's own bytes:
+	# a[0].NoSuchMember COMPILED and printed a pointer as an integer, and
+	# ai[0].NoSuch printed the element itself with the whole selector tail
+	# silently dropped. Two guards for that exact hole already existed one
+	# routine away, both keyed on the receiver being a plain declared variable,
+	# which an AN_INDEX node is not.
+	# The ACCEPT row is the half that keeps the fix honest -- the shape has a
+	# VALID reading (a type helper on the element) and FPC compiles it, so a fix
+	# that merely refused everything would pass a refusal-only test. Both
+	# outputs verified against FPC 3.2.2 in delphi mode; FPC rejects both refusal
+	# fixtures too ("Illegal qualifier"), so this is parity, not our own rule.
+	# bug-p-a-member-on-an-array-element-silently-reads-the-elements-own-bytes
+	./$(COMPILER) test/test_member_on_array_element.pas $(TESTTMP)/test_member_on_array_element26
+	tools/expect_same.sh test_member_on_array_element26 "$$($(TESTTMP)/test_member_on_array_element26)" "$$(printf 'zz\nyy\n14\n1\nkk\nzzzz')"
+	! ./$(COMPILER) test/refuse/member_on_array_element_string.pas $(TESTTMP)/mae_refuse_s26 > $(TESTTMP)/mae_refuse_s.log 2>&1
+	grep -q "no members" $(TESTTMP)/mae_refuse_s.log
+	! ./$(COMPILER) test/refuse/member_on_array_element_int.pas $(TESTTMP)/mae_refuse_i26 > $(TESTTMP)/mae_refuse_i.log 2>&1
+	grep -q "no members" $(TESTTMP)/mae_refuse_i.log
 	# A `uses` binds a Pascal UNIT, whatever a C include root contains. `-I<dir>`
 	# adds a root for BOTH `#include` and `uses`, and the search took a `.h`
 	# from a root before ever reaching the RTL dir -- so `-Ilib/crtl/include`

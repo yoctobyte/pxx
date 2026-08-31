@@ -232,6 +232,7 @@ var
   cvIdx: Integer;
   guidRec: Integer;   { REC id of the built-in TGuid, for an interface name used as a GUID value }
   helperTk: TTypeKind; helperAi: Integer;   { TARGET-type-name receiver for a type helper — `UInt32.GetSignMask` }
+  idxHelperNode: Integer;   { a type-helper call on an INDEXED receiver — `a[i].ToUpper` }
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
   withResolved: Boolean;
@@ -1805,6 +1806,62 @@ begin
       begin
         if Syms[ASTIVal[node]].TypeKind in
              [tyString, tyAnsiString, tyShortString, tyFixedString] then
+          Error('a string has no members here: pxx does not implement Delphi''s ' +
+                'string helpers (s.Length, s.ToUpper, s.Trim, s.Substring) — ' +
+                'use the intrinsics Length(s), UpperCase(s), Trim(s), Copy(s, i, n)')
+        else
+          Error('a value of this type has no members (only records, classes, ' +
+                'interfaces and variants do)');
+      end;
+
+      { The THIRD arm of the same hole, and the one the array note above
+        ASSERTED was already covered: "Element access `arr[i].field` takes the
+        bracket branch above". It does not. `arr[i]` arrives here as an AN_INDEX
+        node with recName = REC_NONE, so neither guard above it fires, and the
+        fall-through built a field access at offset 0 and read the ELEMENT's own
+        bytes. Measured 2026-08-31: with `a: array[0..1] of AnsiString`,
+        `a[0].NoSuchMember` COMPILED and printed a pointer as an integer, and so
+        did `a[0].NoSuch.AndAnother`; `ai[0].NoSuch` over an array of Integer
+        printed the element itself, the selector silently dropped. FPC rejects
+        all of them.
+
+        Two fixes in one guard, because the shape has two right answers and the
+        wrong one was serving both: a type helper on the element is VALID and
+        FPC compiles it (`a[0].Twice` = 'zz' under a `record helper for
+        AnsiString`), so ask TypeHelperOnValue first — it materialises the
+        element into a temp exactly as it does for a call result. Only when
+        there is no helper method of that name is the member genuinely
+        impossible, and then it must ERROR rather than answer.
+
+        Keyed on AN_INDEX specifically, NOT on tk. The note on the scalar guard
+        above records why: a cast-then-deref receiver (`PPyVarRec(@v)^.Payload`)
+        also arrives as a scalar with REC_NONE and is CORRECT, so a tk-keyed
+        refusal refused three working programs. A deref is AN_DEREF; this arm
+        cannot see it. Same reason `arr[i]^.Field` over an array of pointer-to-
+        record is untouched (test_arr_of_ptr_elemrec_b354).
+
+        Third time this exact hole has been closed in a different routine —
+        bug-p-a-member-on-a-scalar-silently-reads-the-values-own-bytes (the
+        AN_IDENT arm, here) and
+        bug-p-a-member-on-a-computed-value-silently-reads-the-values-own-bytes
+        (ParseClassRecordSelectors, via RequireValueHasMembers). Each fix's own
+        comment explained why the sibling was fine. Neither was.
+        bug-p-a-member-on-an-array-element-silently-reads-the-elements-own-bytes }
+      if (not isNilPy) and (recName = REC_NONE) and (ASTKind[node] = AN_INDEX) and
+         (tk in [tyInteger, tyBoolean, tyChar, tyString, tyInt8, tyUInt8,
+                 tyInt16, tyUInt16, tyInt32, tyUInt32, tyInt64, tyUInt64,
+                 tyNativeInt, tyNativeUInt, tySingle, tyDouble, tyExtended,
+                 tySet, tyAnsiString, tyShortString, tyFixedString]) then
+      begin
+        idxHelperNode := TypeHelperOnValue(node, tk);
+        if idxHelperNode >= 0 then
+        begin
+          node := idxHelperNode;
+          recName := REC_NONE;
+          LastExprTk := tk;
+          Continue;
+        end;
+        if tk in [tyString, tyAnsiString, tyShortString, tyFixedString] then
           Error('a string has no members here: pxx does not implement Delphi''s ' +
                 'string helpers (s.Length, s.ToUpper, s.Trim, s.Substring) — ' +
                 'use the intrinsics Length(s), UpperCase(s), Trim(s), Copy(s, i, n)')
