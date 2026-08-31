@@ -581,5 +581,50 @@ windowed faults on frozen strings, `Copy` and `SetLength`. All three pass.
   alignment side effect** described above, not on an asserted invariant. That is
   the other ticket's job and is unchanged by this.
 
+## Addendum — frank-rust's three independent findings (2026-08-31)
+
+frank-rust reached the same root cause independently, from the Rust frontend
+side, and dropped their duplicate patch after confirming 23 programs pass on
+this compiler. Three findings of theirs are worth keeping, and the third is the
+one that would have saved a round.
+
+**1. The title is misleading and the repro has nothing to do with `Copy`.**
+This is enough:
+
+```pascal
+procedure P(const a: AnsiString);
+var r: AnsiString;
+begin r := a + 'x'; ... end;
+```
+
+`Copy`, frozen strings and `SetLength` were the three shapes that happened to
+be in the canary. The mechanism is any managed-string marshalling arm, because
+they all clobber a7. The summary is now accurate; the SLUG is not, and it is
+left alone — renaming a resolved ticket breaks the `resolve` citations.
+
+**2. It is a two-factor CONJUNCTION, with a passing control on each factor.**
+A concat result *and* a frame-relative destination. Their controls:
+
+| shape | result |
+| --- | --- |
+| concat consumed directly (no store) | passes |
+| concat into a GLOBAL | passes |
+| assignment without a concat | passes |
+| concat into a `var` parameter | **faults** |
+
+That is a cleaner statement of the mechanism than the one in the body above:
+clobbering a7 is invisible until something reads through it, so the fault needs
+a frame-relative *destination*, not merely a frame-relative anything.
+
+**3. A dead end worth not re-running.** Rounds 3 and 4 surveyed "executed
+`addi a1, a1`" instructions. The prologue does not lower sp with `addi` — it
+uses `l32r a8` then **`sub a1, a1, a8`**. So that survey was measuring an
+incomplete instrument. Its conclusion happened to survive; its instrument did
+not. Anyone re-opening the sp/`movsp` question should not start from that
+survey.
+
 ## Log
 - 2026-08-31 — resolved, commit 410d3eb03.
+- 2026-08-31 — addendum: frank-rust's three findings (title is wrong, the
+  two-factor conjunction with per-factor controls, and the `addi` survey's
+  incomplete instrument).
