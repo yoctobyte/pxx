@@ -370,6 +370,14 @@ highest-value channel in the system. A message is bounded and carries a fact; a
 loop is unbounded and carries nothing. **Clear any cron or loop you are running
 now**: `CronList` shows only your OWN session's, so nobody can do this for you.
 
+**The line is a MODEL re-reading its context, not a timer on a box — so Track
+T's watcher daemon is untouched.** It is a separate process in its own clone
+with its own cadence; it costs no session context per firing, and the median-8
+sampling it produces is what makes every other lane's deliberately narrow gate
+safe. Do not stop it, slow it, or make it on-demand. Same for any background
+process that does not wake a model: what this rule cuts is a SESSION scheduling
+its own return.
+
 ### The unit of work is a TOPIC GROUP or a TARGET
 
 **No more blind automated bug fixing.** The `next → fix → resolve → next` loop
