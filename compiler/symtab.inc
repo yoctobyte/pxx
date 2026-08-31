@@ -7345,6 +7345,7 @@ procedure ResetDeclScopeSentinels;
 begin
   ParsingClassConstCi := -1;
   ParsingClassBodyCi  := -1;
+  MethImplOwnerCi     := -1;
 end;
 
 procedure ProcHashReset;

@@ -7556,6 +7556,14 @@ test-core: $(COMPILER)
 	# FPC-compat: a type declared in a class body is scoped to that class (tclass13b/tgeneric72)
 	./$(COMPILER) test/test_nested_class_type_scoping.pas $(TESTTMP)/test_nested_cls_type26
 	tools/expect_same.sh test_nested_cls_type26 "$$($(TESTTMP)/test_nested_cls_type26 | tail -1)" "total ok 9 / 9"
+	# FPC-compat: a bare nested-type name means the SAME class in the declaration
+	# and in the out-of-line method bodies. Two halves of one bug: the method body
+	# had no class scope at all (wrong method, silently), and decl/impl named the
+	# proc after two different spellings (unresolved forward, in every generic).
+	# bug-p-a-nested-class-method-called-from-inside-its-generic-outer-is-unresolved
+	./$(COMPILER) test/test_nested_class_method_from_owner_body.pas $(TESTTMP)/test_nested_cls_meth26
+	$(TESTTMP)/test_nested_cls_meth26 | diff -u test/test_nested_class_method_from_owner_body.expected - \
+	  || { echo 'test_nested_class_method_from_owner_body: FAIL'; exit 1; }
 	# FPC-compat: High/Low of the 64-bit machine-word aliases (NativeInt/PtrInt/SizeInt)
 	./$(COMPILER) test/test_high_low_word_aliases.pas $(TESTTMP)/test_high_low_aliases26
 	tools/expect_same.sh test_high_low_aliases26 "$$($(TESTTMP)/test_high_low_aliases26 | tail -1)" "total ok 12 / 12"

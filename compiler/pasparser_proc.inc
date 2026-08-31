@@ -594,6 +594,7 @@ var
   startIdx, idx: Integer;
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
+  savedMIO: Integer;   { MethImplOwnerCi across this decl -- see defs.inc }
   inlineBodyNode: Integer;   { retained body root for inline expansion }
   pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
   xtVReg, xtVReg2, xtInBias: Integer;  { xtensa: incoming param word -> register,
@@ -644,6 +645,7 @@ begin
   name := CurTok.SVal; Next;
 
   { Check for ClassName.MethodName pattern }
+  savedMIO := MethImplOwnerCi;
   methOwnerCi := -1;
   methOwnerRec := REC_NONE;
   methSNOff := 0; methSNLen := 0;
@@ -745,9 +747,20 @@ begin
         begin
           methOwnerCi := FindNestedType(methOwnerCi, methName);
           methOwnerRec := REC_UCLASS_BASE + methOwnerCi;
-          AppendChar(name, '.');
-          i := 1;
-          while i <= Length(methName) do begin AppendChar(name, methName[i]); Inc(i); end;
+          { The proc name is the ROW's registered name, not the source path we
+            just walked. AddClassLikeType registers a nested type bare or
+            qualified depending on whether the bare name was already taken, and
+            the DECLARATION inside the class body names its methods after the
+            row -- so composing `TOuter.TInner.GetIt` here from the tokens
+            disagreed with the declared `TInner.GetIt` exactly when the row came
+            out bare, and the two halves became two procs: one with a body and
+            no callers, one with callers and no body. That is the whole of
+            bug-p-a-nested-class-method-called-from-inside-its-generic-outer-is-unresolved
+            -- a generic's nested type is re-materialised per specialization and
+            registers bare against the template's own row, so it hit every time.
+            Reading the row makes the two spellings agree by construction
+            instead of by coincidence. }
+          name := GetTokenStrFromRaw(UClsNOff[methOwnerCi], UClsNLen[methOwnerCi]);
           Next; { consume dot }
           if not IsMethodNameTok then Error('expected method name');
           methName := GetTokenStr(TokPos - 1);
@@ -758,6 +771,10 @@ begin
         AppendChar(name, '.');
         i := 1;
         while i <= Length(methName) do begin AppendChar(name, methName[i]); Inc(i); end;
+        { From here the header's own types (params, return) and then the body
+          are the owner's scope: `function TOuter.Make: TInner` names the
+          NESTED TInner, not whatever else in the unit got the bare name first. }
+        MethImplOwnerCi := methOwnerCi;
       end;
   end;
 
@@ -1474,6 +1491,7 @@ begin
     if declFlexColumn then ProcFlexColumn[procIdx] := True;
     ProcLibrary[procIdx] := InternStr(extLib);
     if extSym <> '' then ProcExtName[procIdx] := InternStr(extSym);
+    MethImplOwnerCi := savedMIO;
     Exit;
   end;
 
@@ -1711,6 +1729,7 @@ begin
       end;
       Eat(tkSemicolon);
     end;
+    MethImplOwnerCi := savedMIO;
     Exit;
   end;
 
@@ -1844,6 +1863,7 @@ begin
       if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
     end;
     if preScanBody then PreScanSkipRoutineBody;
+    MethImplOwnerCi := savedMIO;
     Exit;
   end;
 
@@ -2704,6 +2724,7 @@ begin
   CurBodyHdrTok := savedVisVarSeq;   { restore decl-order horizon (see all outside a body) }
   CurSelfClass := REC_NONE;
   CurMethClass := REC_NONE;
+  MethImplOwnerCi := savedMIO;
   CurProcIsAsync := savedProcIsAsync;
   CurProcIsGenerator := savedGenIsGen;
   CurProcIsStackless := savedGenStackless;

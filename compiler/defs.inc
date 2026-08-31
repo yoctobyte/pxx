@@ -5079,6 +5079,13 @@ var
   { Set >= 0 (to the class ci) only while a class BODY is being parsed, so a type
     declared there registers against it. -1 everywhere else. }
   ParsingClassBodyCi : Integer;
+  { The other half of the same scope. A class's own body is TWO ranges of
+    source: the declaration, and the out-of-line method implementations. This
+    one is the class ci while a `TOuter.Meth` header and body are being parsed
+    (ParsingClassBodyCi is -1 there), so a bare nested-type name resolves
+    through the owner in both. Saved/restored across ParseProcDecl, including
+    its three early exits. }
+  MethImplOwnerCi : Integer;
 
   { Scratch filled by NodeArrNDInfo for the multidim array a node references. }
   NDInfoNDims : Integer;

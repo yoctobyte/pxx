@@ -618,10 +618,30 @@ begin
           `TPair`, are the same collision — a specialization re-materialises the
           nested type per instantiation, so the second one's `array of TPair`
           silently took the first's layout. Whichever was specialized SECOND
-          broke, which is what pinned the cause. }
+          broke, which is what pinned the cause.
+          The class body is only HALF the owner's own body: the out-of-line
+          method implementations are the other half, and there
+          ParsingClassBodyCi is -1 -- it is set only while a class DECLARATION
+          is being parsed. So `var x: TInner` inside `TOuter.Probe`'s body fell
+          through to the flat table too, and so did the impl HEADER's own types
+          -- `function TOuter.Make: TInner` is already outside the class body.
+          MethImplOwnerCi carries the owner across that boundary; the two are
+          one concept in two ranges of source, which is why the lookup needs
+          both arms.
+
+          Measured cost of the missing arm: FPC prints 9 and we printed 1 for a
+          plain non-generic `TOuter.Probe` calling `TInner.GetIt` with a decoy
+          `TInner` declared first in the unit -- a WRONG METHOD, silently. In a
+          generic it is loud instead: the template's own nested row is the
+          decoy, it is registered when the template is declared and never gets a
+          body, so the call lands on a bodiless proc and comes out as
+          `unresolved forward: TInner.GetIt` at link time.
+          bug-p-a-nested-class-method-called-from-inside-its-generic-outer-is-unresolved }
         nestCi := -1;
         if (tkQUnit < 0) and (ParsingClassBodyCi >= 0) then
           nestCi := FindNestedType(ParsingClassBodyCi, lo);
+        if (nestCi < 0) and (tkQUnit < 0) and (MethImplOwnerCi >= 0) then
+          nestCi := FindNestedType(MethImplOwnerCi, lo);
         if nestCi >= 0 then
         begin
           LastTypeRecId := REC_UCLASS_BASE + nestCi;
@@ -4711,7 +4731,16 @@ begin
           begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
           mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
-          mFullName := tname; AppendChar(mFullName, '.');
+          { The ROW's name, for the reason the class and record arms give: a
+            NESTED interface is registered qualified when the bare name is
+            taken, and naming its procs from `tname` splits the type in two.
+            Third of three arms -- the record one already read the row, which is
+            how the class one was found to be the odd one out. }
+          if ci >= 0 then
+            mFullName := GetTokenStrFromRaw(UClsNOff[ci], UClsNLen[ci])
+          else
+            mFullName := tname;
+          AppendChar(mFullName, '.');
           for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
           mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);
           Procs[mpi].BodyAddr := -1;
@@ -5360,7 +5389,18 @@ begin
               mNParams := mNParams + 1;
             end;
 
-            mFullName := tname;
+            { The ROW's registered name, not `tname` as written. AddClassLikeType
+              gives a NESTED type a qualified name (`TOuter.TInner`) whenever the
+              bare one is already taken, so `tname` and the row disagree exactly
+              in the nested case -- and the out-of-line implementation names its
+              proc after the row. Two spellings, two procs: the declaration's had
+              the callers and no body. Same reason the impl side reads the row;
+              one source of truth, so they cannot drift.
+              bug-p-a-nested-class-method-called-from-inside-its-generic-outer-is-unresolved }
+            if ci >= 0 then
+              mFullName := GetTokenStrFromRaw(UClsNOff[ci], UClsNLen[ci])
+            else
+              mFullName := tname;
             AppendChar(mFullName, '.');
             for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
 
