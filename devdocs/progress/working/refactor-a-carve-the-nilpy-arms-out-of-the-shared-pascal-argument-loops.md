@@ -6,7 +6,7 @@ type: refactor
 status: working
 owner: frankA
 blocked-by: []
-summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 232 now, after three steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), and ParseFactor's NilPy head (34 sites, two hooks). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead."
+summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead."
 ---
 
 # Carve the NilPy arms out of the shared Pascal *argument* loops
@@ -296,3 +296,30 @@ failed, edited nothing, and the probe then printed *"CONTROL DID NOT FIRE"* over
 an **unrebuilt binary**. It was caught by printing the sha beside the result and
 seeing it unchanged. An instrument that never spoke reads exactly like a negative
 result.
+
+## Steps 4 and 5 — the two dead-arm deletions, 2026-08-31
+
+**232 → 214 → 209. Thirteen arms, ZERO hooks.** The best sites-per-hook ratio in
+the campaign, because these were not carved: they were **deleted**. Nine in
+`pasparser_expr.inc`'s call-argument loop (`7314fab2b`), four in
+`pasparser_stmt.inc`'s twin (`23c4552af`).
+
+They were guarded by `isNilPy` — *"this compilation started from a .npy file"* —
+where the question was `PyExprMode` — *"is THIS unit Python"*. Those differ for
+exactly one population, and it is the one that runs: the **Pascal library units**
+a NilPy program pulls in, where `isNilPy` stays True and `PyExprMode` is False.
+So the arms ran ~1000-3000 times per NilPy compile against Pascal source and
+acted zero times. Write-up and evidence:
+[[bug-a-the-nilpy-arms-in-the-shared-call-loop-are-dead-and-guarded-by-the-wrong-flag]].
+
+**The lesson for the remaining ~45 regions, and it is a cheap check to run
+first:** before designing a hook for a region, ask whether the region can run at
+all. A site guarded by `isNilPy` below `ParseFactorCore:523` — or anywhere inside
+`ParseStatementAST` — is unreachable for Python source by construction, and
+carving it produces a hook nobody calls. **Deleting beats carving whenever the
+question is answerable**, and it is answerable by a probe on the enclosing
+function's entry: print `PyExprMode` and count. A count with no `True` in it is
+the whole argument.
+
+That check is what turned two of the campaign's biggest regions into deletions
+instead of hooks. It costs one build.
