@@ -275,3 +275,4 @@
 2026-08-30T23:26:37Z	seven	7f3ab419b48678208f50577257fa55b43e19ed9e	would-pin PENDING 7f3ab419b486 — qualifies, streak 1/2
 2026-08-30T23:39:31Z	seven	61f5939d89def15cae27a58c0afc260f347d1b7f	WOULD PIN 61f5939d89de — 4 red(s), none new, 4 inherited from the current pin, self-host clean, streak 2/2
 2026-08-30T23:54:58Z	seven	f419f8052369b5b1b6051d8c1d763f2f642a6505	WOULD PIN f419f8052369 — 4 red(s), none new, 4 inherited from the current pin, self-host clean, streak 3/2
+2026-08-31T00:11:29Z	seven	ef59aaf72b5d0236501a2a666ac9d142a7c25bfc	would NOT pin ef59aaf72b5d — 1 red(s) the current pin does not have, 4 inherited from the current pin: test-core#src:test/test_nilpy_html_tempfile.npy
