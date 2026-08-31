@@ -274,4 +274,4 @@ pair the sibling bug named. The compiler's own ELF32 refusal message said the
 same thing and is fixed with it.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit ed5a62e4d.
