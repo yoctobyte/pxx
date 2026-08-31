@@ -145,4 +145,4 @@ wall, not that one. Whether `TStack<T>.GetEnumerator` now compiles is a
 re-measurement that ticket owns — and it is still gated on its own `make pin`.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 2b99d6c19.
