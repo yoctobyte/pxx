@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 55
+prio: 25
 type: feature
 blocked-by: []
 created: 2026-08-31
@@ -73,3 +73,21 @@ has never been shown able to fail is the same animal as a guard that cannot
 fail, and this one is unusually exposed — the omissions are `{$ifdef}`s, so a
 misspelled define name silently omits nothing and the build passes for the wrong
 reason, looking exactly like success.
+
+## AMENDMENT 2026-08-31 — Pascal cannot be omitted, and "C only" is a CLI decision
+
+Repriced 55 -> 25 (owner: *"compiler reduction is low prio and more a feature
+for low-memory targets"*).
+
+The Pascal frontend is **intrinsic**, not merely un-omitted: `lib/rtl/pxxcio.pas`
+(Pascal) implements `__pxx_write` that `lib/crtl/src/stdio.c` calls,
+`compiler/builtin/builtinheap.pas` is a Pascal unit linked into every binary,
+and the PAL is `lib/rtl/pal*.pas`. **A C program compiled by pxx links Pascal
+source that must be compiled**, so omitting Pascal yields a compiler that cannot
+emit a working program in any language.
+
+So a "C only" or "NilPy only" product — which the owner says should be
+grantable — is a **CLI-surface restriction**: refuse `.pas` as user input, keep
+the frontend internally for the runtime. That is a separate, cheap piece of work
+and it removes no code. **It is NOT this ticket**, and it must not be
+implemented as an omission define.

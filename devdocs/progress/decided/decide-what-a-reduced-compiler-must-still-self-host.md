@@ -173,3 +173,49 @@ umbrella plus the Pascal-reduced seed build; every other configuration is swept
 asynchronously by Track T against the pushed sha. But note the ticket's own
 warning, which is still true: **T sweeps zero reduced configurations today**, so
 "T sweeps it" is work to file, not a status quo to lean on.
+
+### AMENDMENT, same day (owner) — Pascal is INTRINSIC, and that is why the define cannot exist
+
+> *"a compiler that's reduced to 'C only' should do that. BUT. our PAL layer is
+> written in pascal. hence, pascal compilation is intrinsic. yet. if user wants
+> a C only compiler, such should be granted."*
+
+The ruling above says `PXX_NO_PASCAL` does not exist. **This says why it cannot**,
+which is the stronger and more durable statement — verified at HEAD:
+
+- `lib/rtl/pxxcio.pas` is **Pascal** and implements `__pxx_write`, the function
+  `lib/crtl/src/stdio.c` declares `extern` and every C program calls;
+- `compiler/builtin/builtinheap.pas` is a **Pascal unit** and is the runtime
+  linked into every binary;
+- the PAL is `lib/rtl/pal*.pas` — Pascal.
+
+**A C program compiled by pxx links Pascal source that must be compiled.** So
+the C frontend cannot function without the Pascal frontend. Omitting Pascal does
+not produce a smaller compiler; it produces one that cannot emit a working
+program in any language.
+
+### What "C only" therefore means, and it IS grantable
+
+Not "the Pascal frontend is gone". It means **Pascal is not a user-facing input
+language**: `.pas` on the command line is refused, while the frontend remains
+internally to compile the runtime the user's C program links. That is a product
+decision about the CLI surface, not a code-omission define, and it is cheap
+precisely because it removes no code.
+
+This closes the residual left open above — *"if a NilPy-only product is genuinely
+wanted, adding `PXX_NO_PASCAL` re-opens this fork for real"*. It does not,
+because the define cannot be added while the runtime is Pascal. **A NilPy-only or
+C-only product is a CLI-surface restriction over a compiler that still contains
+the Pascal frontend.** Anyone wanting the define back must first propose a
+non-Pascal runtime, which is a different and much larger question.
+
+### Priority (owner, same message)
+
+> *"either way, compiler reduction is low prio and more a feature for low-memory
+> targets."*
+
+`feature-a-the-pascal-reduced-build-must-be-able-to-seed-the-full-compiler` and
+the parent `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets`
+repriced to **25**. The seed property remains correct and worth having; it is
+simply not near-term work, and its value is bounded by how much anyone wants a
+low-memory-target build.
