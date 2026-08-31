@@ -4276,11 +4276,30 @@ def build_compiler():
     """
     unseed_pinned()
     priv = "/tmp/pascal26-build-%s" % REPO_TAG
-    r = subprocess.run(["make", "--no-print-directory", COMPILER,
-                        "BUILD_COMPILER=%s-build" % priv,
-                        "VERIFY_COMPILER=%s-verify" % priv,
-                        "BUILD_COMPILER_MANAGED=%s-mbuild" % priv,
-                        "VERIFY_COMPILER_MANAGED=%s-mverify" % priv], cwd=REPO)
+    # PXXFLAGS ON THE COMMAND LINE, NOT INHERITED. The Makefile declares
+    # `PXXFLAGS :=`, and a make variable assigned in the makefile BEATS the
+    # environment -- so exporting it does nothing and does so silently, which is
+    # the worst available failure for an instrumentation switch.
+    #
+    # This is what lets a diagnostic sweep run THROUGH testmgr instead of
+    # through bare `make`: an instrumented `make test-core` on seven dies at
+    # test_hw_random_intrinsics with SIGILL (no RDRAND on a 2010 Westmere) after
+    # 915 of 1735 compiles, because bare make has no idea a job can be
+    # impossible on a host. testmgr does -- HOST_CAPS skips exactly that job --
+    # so routing the sweep here is the difference between 52.7% coverage and
+    # all of it. Empty/unset changes nothing.
+    build_argv = ["make", "--no-print-directory", COMPILER,
+                  "BUILD_COMPILER=%s-build" % priv,
+                  "VERIFY_COMPILER=%s-verify" % priv,
+                  "BUILD_COMPILER_MANAGED=%s-mbuild" % priv,
+                  "VERIFY_COMPILER_MANAGED=%s-mverify" % priv]
+    pxxflags = os.environ.get("PXXFLAGS", "").strip()
+    if pxxflags:
+        build_argv.append("PXXFLAGS=%s" % pxxflags)
+        print("testmgr: building the compiler with PXXFLAGS=%s — this run's "
+              "verdicts describe an INSTRUMENTED binary, not the default one"
+              % pxxflags, flush=True)
+    r = subprocess.run(build_argv, cwd=REPO)
     if r.returncode == 0:
         return True
     # The make rule demands a ONE-PASS fixedpoint: seed compiles the sources to
