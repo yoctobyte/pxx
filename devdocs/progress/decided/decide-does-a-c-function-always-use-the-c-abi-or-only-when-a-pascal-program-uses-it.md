@@ -5,7 +5,7 @@ type: decision
 status: decided
 blocked-by: []
 owner: ""
-summary: "RULED 2026-08-31 by the owner: NEITHER YET -- keep the landed gate (option B, b4ff9adea) and DEFER the A/B choice on a named trigger, because nothing in the system can currently observe the answer. Three findings changed the question. (1) B is already BUILT and green; the ticket's 'frankA is currently implementing B' is stale -- that ticket was the spill-arm PREREQUISITE and is done. The choice is now ONE CLAUSE in CProcUsesCAbi (symtab.inc:11599), not two bodies of work. (2) x86-64 NEVER DIVERGED -- it has always used EmitParamSpillsForTarget, so only i386/arm32/aarch64 are in scope. (3) The owner's framing: ABI matters only at BOUNDARIES, and internally we may do as we see fit -- a third reading the ticket never listed. We do cross boundaries today (DT_NEEDED imports; GTK calls our callbacks via gtk3.pas:47) but ONLY on x86-64, the target with no divergence, so that evidence proves the machinery and settles nothing. TRIGGER: meta-a-pxx-produces-linkable-code / feature-a-a-general-x86-64-relocatable-object-writer (re-priced to 80). When a gcc-built caller can link a pxx object on i386, this becomes a measurement; decide it then, in one clause."
+summary: "RULED 2026-08-31 by the owner: NEITHER YET -- keep the landed gate (option B, b4ff9adea) and DEFER the A/B choice on a named trigger, because nothing in the system can currently observe the answer. Three findings changed the question. (1) B is already BUILT and green; the ticket's 'frankA is currently implementing B' is stale -- that ticket was the spill-arm PREREQUISITE and is done. The choice is now ONE CLAUSE in CProcUsesCAbi (symtab.inc:11599), not two bodies of work. (2) x86-64 NEVER DIVERGED -- it has always used EmitParamSpillsForTarget, so only i386/arm32/aarch64 are in scope. (3) The owner's framing: ABI matters only at BOUNDARIES, and internally we may do as we see fit -- a third reading the ticket never listed. We do cross boundaries today (DT_NEEDED imports; GTK calls our callbacks via gtk3.pas:47) but ONLY on x86-64, the target with no divergence, so that evidence proves the machinery and settles nothing. TRIGGER: feature-a-object-output-for-i386-arm32-and-aarch64 (p70) -- CORRECTED 2026-08-31, see below. The x86-64 writer LANDED same day (41045d7b4) and does NOT settle this: x86-64 never diverged, so an x86-64 object proves the machinery on the one target with nothing to prove. The trigger is an i386 object against a gcc-built i386 caller. Decide it then, in one clause."
 ---
 
 # Does a C function always use the C ABI, or only when a Pascal program uses it?
@@ -162,3 +162,31 @@ work, not here.
 
 *Findings measured 2026-08-31 by frank-user; ruled by the owner in the same
 session.*
+
+## TRIGGER CORRECTED 2026-08-31 — the x86-64 writer cannot settle this
+
+`feature-a-a-general-x86-64-relocatable-object-writer` **landed the same day**
+(`41045d7b4`, resolve `ed5a62e4d`). A pxx object now links under gcc, clang and
+tcc — verified independently here: `pxx_add` exports as a global `T` symbol and
+all three linkers produce a binary printing `42`; the `-pie` control fails as
+designed.
+
+**It does not trigger this decision, and naming it was my error.** frankC caught
+it: this ruling's own finding (2) says **x86-64 never diverged** — it has always
+used `EmitParamSpillsForTarget`. So an x86-64 object exercises the ABI on the one
+target where both options agree. It proves the machinery and settles nothing,
+which is exactly what this ruling said about the GTK callbacks two sections up.
+The same mistake, made twice in one document, about two different instruments.
+
+**The real trigger is [[feature-a-object-output-for-i386-arm32-and-aarch64]]**
+(A, p70) — an i386 object linked by a gcc-built i386 caller. One thing does not
+transfer from the x86-64 writer, per frankC: on i386 an external call also goes
+through a `.data` GOT slot and needs the two-relocation treatment, whereas
+`writeELF32Rel` relocates a `.text` literal directly against the extern. Porting
+the ESP writer by adding `machine := 3` would produce an object that links and
+jumps to zero.
+
+The escaping-function-pointer hazard this ruling parked is now **live**: the
+x86-64 export surface is `ProcCdecl`-only, so a direct export is cdecl by
+construction, but `@proc` through an exported cdecl routine reaches it. frankC
+flagged rather than silently owned it; it is in that ticket's trip-wire.

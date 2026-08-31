@@ -4,11 +4,11 @@ title: "Does a withdrawn pin leave a trace in the ledger, and is its version num
 track: U
 prio: 60
 type: decide
-status: backlog
+status: decided
 owner: ""
 created: 2026-08-30
 found-by: frankD (auditing the launch draft's fact sheet), verified by frank-coordinator
-summary: "make revert DELETES the row from history.log and pin.log, and the next pin REUSES the counter -- so v394 names two different binaries and the withdrawn one appears nowhere in the ledger. Two forks: erase vs annotate, and reuse vs burn. It touches a public claim: the launch fact sheet says pins are in git with their sha256 and landing commit 'so the trajectory is reconstructible', which is true of git and false of the ledger a reader would actually check."
+summary: "RULED 2026-08-31 by the owner on the REUSE fork: DO NOT REUSE a withdrawn version number -- burn it. 'skipping is safe, there is nothing to gain with reusing apart confusion.' So no number ever names two binaries and "measured at v394" is always resolvable. The TRACE fork (erase vs annotate) was NOT separately ruled, and burning the counter forces it: a gap in the sequence is itself a question. Recommendation, explicitly not the owner's word: keep erasing from pin.log (what is in force), append a one-line withdrawn row to history.log (what was ever blessed) -- the two files already split those two questions. This also repairs a public claim: the launch fact sheet says pins are reconstructible, true of git and false of the ledger a reader would check."
 ---
 
 # What happened, measured
@@ -116,3 +116,48 @@ alone" is worth stating as a rule, because it degrades gracefully under either o
 says the pin was blessed *"at ~06:40"*. It was 05:27:09; 06:13:00 is when the *replacement* was
 pinned. It sits in `done/`, and this repo's rule is that a session record is not rewritten — but
 it is evidence of how fast an unanchored time propagates, and Track D should not cite it.
+
+---
+
+# RULED 2026-08-31 - burn the counter
+
+Owner, on the reuse fork, in full: *"about the pin numbering - i would recommend
+against re-using. skipping is safe, there is nothing to gain with reusing apart
+confusion."*
+
+**So a withdrawn version number is never issued again.** `make revert` may take a
+pin out of force, but the counter does not roll back. No number ever names two
+different binaries, and a worker citing "measured at v394" has written something
+resolvable.
+
+That is the fork that mattered. The hazard was never that a withdrawn pin is
+forgotten - it is that **a version number naming two binaries is a claim which
+reads as checked and is not**, the same family as the registers this fleet worked
+through on 2026-08-29/30.
+
+## The trace fork - NOT ruled by the owner, recommendation only
+
+Burning the counter does not settle erase-vs-annotate; it **forces** the
+question, because a gap is itself something a reader will ask about. Someone
+hitting v393 -> v395 with nothing between learns only that something is missing.
+
+Recommended, and marked as mine rather than his: keep erasing from `pin.log`
+(which answers *what is in force*) and append a one-line `withdrawn` row to
+`history.log` (which answers *what was ever blessed*). The two files already
+split those two questions. One line of explanation once, against a re-derivation
+every time someone hits the gap.
+
+**Do not implement the trace half on this ticket's authority.** Implement the
+counter half, which is ruled. If the annotation turns out to be more than a
+one-line append, put it in front of the owner first.
+
+## The public claim this repairs
+
+The launch fact sheet says pins are in git with their sha256 and landing commit
+*"so the trajectory is reconstructible"*. True of git; false of the ledger a
+reader would actually check, since `history.log` and `pin.log` had the row
+deleted. Burning the counter makes the ledger non-contradictory; the `withdrawn`
+row would make it complete. Until then that sentence is accurate about git and
+should not be widened.
+
+*Ruled 2026-08-31 by the owner; trace half left open, deliberately.*
