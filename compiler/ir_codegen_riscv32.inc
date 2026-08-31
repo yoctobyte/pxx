@@ -1419,6 +1419,58 @@ begin
         not +0/+4 -- see FramePrevFpOffset / FrameRetAddrOffset in ir.inc. }
       rv32_addi(reg_a0, reg_s0, 0);   { mv a0, s0 }
 
+    IR_ALLOCA:
+      begin
+        { Dynamic stack allocation. Same model as x86-64 and aarch64, and the
+          full statement of it is the block comment above EmitSaveCallerRspX64
+          in ir_codegen.inc: one frame word holds where the expression stack
+          STARTS, an alloca lowers sp by the 16-rounded size, relocates
+          everything between sp and that base down by the same amount, and
+          returns the gap that opens under the base.
+
+          The relocation is what makes this correct in the middle of an
+          expression. riscv32's temps are `addi sp,sp,-4` / `lw` / `addi sp,sp,4`
+          pairs, so a value pushed BEFORE an alloca and popped after would
+          otherwise read the alloca'd hole.
+
+          riscv32 needs NO saved-sp delta, unlike x86-64 and i386. It never
+          aligns sp (no `and sp,-16` anywhere in this backend), so the amount sp
+          moves is always a compile-time constant and every restore is already a
+          relative addi -- there is no absolute sp parked anywhere for an alloca
+          to invalidate. That is the aarch64 situation, and it is why only i386
+          needs the delta treatment.
+          feature-a-port-alloca-to-i386-arm32-and-riscv32 }
+        IREmitNodeRISCV32(IRA[node]);
+        rv32_addi(reg_a0, reg_a0, 15);
+        rv32_andi(reg_a0, reg_a0, -16);       { size rounded up to 16 }
+        if RV32AllocaBaseOff = 0 then
+          Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
+              + 'IREmitMachineCodeRISCV32''s body-entry scan did not see this node');
+        rv32_sub(reg_sp, reg_sp, reg_a0);     { sp -= size }
+        EmitLoadImmRISCV32(reg_t0, RV32AllocaBaseOff);
+        rv32_add(reg_t0, reg_s0, reg_t0);     { t0 = &base }
+        rv32_lw(reg_t1, reg_t0, 0);           { t1 = old base }
+        rv32_sub(reg_t1, reg_t1, reg_a0);     { t1 = new base }
+        rv32_sw(reg_t1, reg_t0, 0);
+        rv32_addi(reg_t2, reg_sp, 0);         { t2 = dst cursor = new sp }
+        rv32_add(reg_t3, reg_sp, reg_a0);     { t3 = src cursor = the old sp }
+        { t0 is free again from here and becomes the copy temp -- t0..t3 are
+          this backend's transient scratch, never live across a subexpression.
+          The region is a whole number of 4-byte words (every temp push is
+          addi sp,sp,-4), so the dst cursor lands EXACTLY on the new base and a
+          `beq` terminator is sufficient; there is no unsigned branch helper
+          here and none is needed. Testing at the top also makes a zero-length
+          region copy nothing. Fixed-size loop, so both displacements are
+          constants: beq skips 6 instructions forward, jal goes 5 back. }
+        rv32_beq(reg_t2, reg_t1, 24);         { .L1: if dst = base, done }
+        rv32_lw(reg_t0, reg_t3, 0);
+        rv32_sw(reg_t0, reg_t2, 0);
+        rv32_addi(reg_t2, reg_t2, 4);
+        rv32_addi(reg_t3, reg_t3, 4);
+        rv32_jal(reg_zero, -20);              { back to .L1 }
+        rv32_addi(reg_a0, reg_t1, 0);         { .L2: a0 = the hole = new base }
+      end;
+
     IR_ASM:
       begin
         { Inline asm block: replay the parse-time-captured text lines
@@ -4053,6 +4105,23 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+
+  { Carve this body's alloca base slot and record where the expression stack
+    starts. One word, only when the body actually contains an IR_ALLOCA, so a
+    body without one is byte-identical to before. FrameSize is still mutable
+    here and the prologue reads it afterwards -- the same hook the aarch64 arm
+    uses. Locals are at NEGATIVE offsets from s0 on this target too
+    (ast_syminfer sets Offset := -FrameSize for every backend). }
+  RV32AllocaBaseOff := 0;
+  for i := 0 to IRCount - 1 do
+    if (IRKind[i] = IR_ALLOCA) and (RV32AllocaBaseOff = 0) then
+    begin
+      FrameSize := AlignTo(FrameSize + 4, 4);
+      RV32AllocaBaseOff := -FrameSize;
+      EmitLoadImmRISCV32(reg_t0, RV32AllocaBaseOff);
+      rv32_add(reg_t0, reg_s0, reg_t0);
+      rv32_sw(reg_sp, reg_t0, 0);
+    end;
 
   for i := 0 to IRCount - 1 do
   begin

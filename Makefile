@@ -11810,6 +11810,19 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
+	# riscv32 got IR_ALLOCA at the same time as this row. It needs the
+	# RELOCATION only and no saved-sp delta, because the backend never aligns
+	# sp -- so every restore is already a relative addi and there is no absolute
+	# sp for an alloca to invalidate. Same reason aarch64 needs none; i386 is
+	# the one that does. feature-a-port-alloca-to-i386-arm32-and-riscv32
+	@if command -v qemu-riscv32 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=riscv32 test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr_rv >/dev/null || { echo "c_alloca_expression_stack riscv32 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh riscv32/c_alloca_expr_rv "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_alloca_expr_rv)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')" || exit 1; \
+	  ./$(COMPILER) --target=riscv32 test/c_vla.c $(TESTTMP)/c_vla_rv >/dev/null || { echo "c_vla riscv32 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh riscv32/c_vla_rv "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_vla_rv)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')" || exit 1; \
+	else \
+	  echo "=== c_alloca_expression_stack: qemu-riscv32 absent, riscv32 arm NOT verified ==="; \
+	fi
 	# `extern T name[];` in a header + `T name[] = {...};` in the .c -- the
 	# ordinary way C shares a table. The declarator is an INCOMPLETE array type,
 	# so the declaration reserved ONE element and fixed the symbol's offset

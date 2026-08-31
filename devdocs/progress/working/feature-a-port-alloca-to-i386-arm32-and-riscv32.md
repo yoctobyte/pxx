@@ -2,9 +2,10 @@
 track: A
 prio: 45
 type: feature
-status: backlog
+status: working
 blocked-by: []
 summary: "IR_ALLOCA now exists on x86-64 and aarch64. i386, arm32 and riscv32 still refuse it at codegen ('target <arch>: IR op not yet supported: alloca'), which means C alloca() AND every VLA is unbuildable for those three targets -- test/c_vla.c does not compile for any of them."
+owner: frankA
 ---
 
 # Port IR_ALLOCA to i386, arm32 and riscv32
