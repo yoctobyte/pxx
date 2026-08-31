@@ -4078,6 +4078,43 @@ almost always has one — an input outside the widened set, a target the fix doe
 not claim, a construct the feature does not cover. Finding it is a grep; building
 one is an afternoon, which is why the control gets skipped.
 
+### When a finding is an ABSENCE, ask what ELSE produces that absence -- and put one of those in the probe
+
+frank-rust's rule, 2026-08-31, and it is the companion the section above was
+missing: the control question has a second form when what you measured is a
+**negative**. A rejection, a missing entry, a zero count -- none of them tell you
+*which* mechanism produced the nothing.
+
+The instance is unusually well-run, which is the point. A census of all 51
+builtin type names found twelve that `var v: N` accepts and `SizeOf(N)` refuses.
+The one-line fix -- chain the declaration table as the builtin table's fallback
+-- was built, **held the fixedpoint**, produced a **clean census**, and came with
+an explicit safety argument: every existing arm still wins, so it can only turn a
+rejection into an answer. It was wrong. `SizeOf` consults the builtin table
+*before* the user tables, so widening it makes a builtin **steal a user's own
+name**: `SizeOf(Currency)` goes 12 → 8 against a user's
+`type Currency = record a, b, c: Integer; end`, and a `Boolean` named `longbool`
+goes 1 → 4. Reverted;
+`bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts` carries the
+numbers and the counter-example.
+
+**Why it sits beside frankwasm's prescription case rather than under it, in
+frank-rust's own distinction: that one was a prescription trusted without an
+oracle. This one HAD an oracle, ran it, and it passed.** The census was
+structurally incapable of catching the defect, because **every probe program
+declared no user types** -- so "rejected by SizeOf" and "resolved by the
+user-type path" emit identical output. The absence being measured was never a
+rejection at all; it was the fallthrough, and one `type Currency = record` in the
+probe population separates them.
+
+- **The control argument, not the care argument.** The table header said *callers
+  must consult a user type alias FIRST where that matters* -- correct, present,
+  and read while the change was being written. **A control fires whether or not
+  you understood the sentence**, which is the only property that scales.
+- **A clean census is a claim about the probe population first and the system
+  second.** Before believing one, ask what the population cannot express. Here it
+  was user-declared types, and that is also exactly what the change endangered.
+
 ## A reader that drops a byte it does not know does not report "unknown" — it makes a confident statement about a different instruction
 
 The same bug, read for its blast radius, because it is worse than a cosmetic gap.
