@@ -3,7 +3,7 @@ track: T
 prio: 40
 type: bug
 blocked-by: []
-summary: "CLAUDE.md gates the widen-your-gate exception on `twatch.py --status` exit 1 OR `trackt.py health` DOWN, as if they were two ways to ask one question. They are not: --status reads PUBLISHED tstate (was work swept recently) and health checks for a RUNNING PROCESS (is anything sweeping now). Joined by `or`, the disagreement resolves silently to `down`. NO LONGER TRANSIENT: since Track T moved to `seven` (2026-08-29, recorded at the bottom of this ticket), `health` on plexus is STRUCTURALLY INCAPABLE of returning UP -- `daemon_pid` scans the LOCAL /proc and `is_daemon` requires a local argv of `<python> .../twatch.py --clone <clone>`, which a watcher on another host can never satisfy. Re-measured 2026-08-31 with T demonstrably sweeping (report 7.5 min old): `--status` exit 0, `health` DOWN. So the documented exception is now PERMANENTLY ARMED for every dev agent, not open during handovers. Priority 40 reflects the transient reading."
+summary: "CLAUDE.md gates the widen-your-gate exception on `twatch.py --status` exit 1 OR `trackt.py health` DOWN, as if they were two ways to ask one question. They are not: --status reads PUBLISHED tstate (was work swept recently) and health checks for a RUNNING PROCESS (is anything sweeping now). Joined by `or`, the disagreement resolves silently to `down`. NO LONGER TRANSIENT: since Track T moved to `seven` (2026-08-29, recorded at the bottom of this ticket), `health` on plexus is STRUCTURALLY INCAPABLE of returning UP -- `daemon_pid` scans the LOCAL /proc and `is_daemon` requires a local argv of `<python> .../twatch.py --clone <clone>`, which a watcher on another host can never satisfy. Re-measured 2026-08-31 with T demonstrably sweeping (report 7.5 min old): `--status` exit 0, `health` DOWN. So the documented exception was PERMANENTLY ARMED for every dev agent, not open during handovers. HALF FIXED 2026-08-31 by frankT (see the addendum): `trackt.py health` now answers REMOTE / exit 0 on a box with no local daemon whose PUBLISHED archive is fresh, and still DOWN / exit 2 when it is stale or absent -- so the command can no longer arm the exception structurally, and a DOWN from it means something again. WHAT REMAINS IS THE DOC HALF AND IT IS NOT MINE TO TAKE: CLAUDE.md still joins the two instruments with `or`, which is the actual subject of this ticket. They answer different questions and the `or` still resolves a disagreement silently to `down`. That edit is the owner's."
 ---
 
 # The two watcher-health instruments answer different questions, and the rule `or`s them
@@ -184,3 +184,58 @@ that it is not a tidy-up.
 
 *Track T's tool — `tools/trackt.py` NOT edited. Measurement added only.*
 
+---
+
+## HALF FIXED 2026-08-31 by frankT — the TOOL, not the doc
+
+frankA measured the structural impossibility (14ecbb933) and correctly did not
+touch `trackt.py`. I own it, so I did: **`tools/trackt.py` `health` now has a
+third verdict.**
+
+`health_check` opened with `if not pid: return "DOWN"` where `pid` comes from
+`daemon_pid`, which falls back to scanning the **local** `/proc`. A watcher on
+another host has no entry there, so on any non-watcher box that branch was the
+only reachable one. It now calls `no_local_daemon()`, which asks the question
+the caller actually has — *is Track T sweeping?* — of the instrument that can
+answer it from here, the published archive:
+
+| local daemon | newest published row | verdict | exit |
+| --- | --- | --- | ---: |
+| running | — | OK / DEGRADED / DOWN as before | 0 / 0 / 2 |
+| none | ≤ 1h old | **REMOTE**, naming the host, tier, sha and age | **0** |
+| none | > 1h old | DOWN, naming the age | 2 |
+| none | no rows at all | DOWN | 2 |
+
+**The threshold is measured, not chosen.** Over the 259 rows published in the
+preceding 24h the gap between consecutive tstate rows had median 205s, p90 664s,
+p99 1151s and a **maximum of 1641s (27min)**. One hour is 2.2x the observed
+maximum and would have produced **zero** false DOWNs across that window. The
+asymmetry is deliberate and is the whole point: a false DOWN costs every agent
+on the box ten minutes of full gate; a true DOWN noticed an hour late costs
+nothing, because the sampler was already not running.
+
+**`tools/trackt_remote_health_devtest.py` leads with the case it must REJECT**,
+because a check that has only swapped which single answer it gives is not
+better than the one it replaced: a stale archive with no local daemon must still
+come back DOWN with exit 2, and an empty archive likewise — absence of evidence
+is not a green. Only then does it assert the accept side, plus that a **RED**
+newest row still yields REMOTE (the question is whether T is *sweeping*, not
+whether it is *green*), that the newest row across hosts wins, and both sides of
+the threshold. Auto-enrolled: `tools-devtest` globs `tools/*devtest*.py`.
+
+Live on plexus, with seven sweeping:
+
+```
+trackt health: REMOTE
+  - no watcher daemon on plexus -- Track T runs elsewhere, which is not a fault
+    and is NOT proof it is down
+  - newest published verdict: host=seven tier=native RED at bebac33366f5, 11min ago
+exit=0
+```
+
+**This does not close the ticket.** The subject is the `or` in CLAUDE.md joining
+two instruments that answer different questions, and that text is unchanged. What
+the fix does is remove the *structural* failure underneath it: `health` DOWN is
+now evidence again rather than a constant. The two commands still answer
+different questions and should not be `or`ed, and **the doc edit is the owner's
+call, not a peer's and not mine.**

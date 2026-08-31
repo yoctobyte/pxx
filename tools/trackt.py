@@ -42,6 +42,7 @@ checkout you call it from.
 """
 
 import argparse
+import calendar
 import json
 import os
 import platform
@@ -1100,6 +1101,103 @@ PUB_DROPS_DEGRADED = 3       # consecutive dropped publishes before we care
 GATE_PHASES = ("testing", "pin-verify")
 
 
+# Measured 2026-08-31 over the 259 rows published in the preceding 24h: the gap
+# between consecutive tstate rows had median 205s, p90 664s, p99 1151s and a
+# MAXIMUM of 1641s (27min). One hour is 2.2x that observed maximum and would
+# have produced zero false DOWNs across the window. Deliberately generous, and
+# the asymmetry is the reason: this path exists so a DEV box stops reading "no
+# daemon here" as "Track T is down", and CLAUDE.md licenses a ~10-minute
+# full-gate widening on exactly that verdict. A false DOWN costs every agent on
+# the box ten minutes; a true DOWN noticed an hour late costs nothing, because
+# the sampler was already not running.
+REMOTE_STALE_SECS = 3600
+
+
+def newest_published(repo):
+    """(age_secs, host, tier, verdict, sha12) of the newest tstate row, or None.
+
+    Reads the PUBLISHED archive rather than the clone. A watcher on another
+    host leaves no trace in this box's process table, so the artefact it
+    publishes is the only instrument a non-watcher box has -- the same move as
+    pointing a corpus check at a tree it does not own.
+    """
+    best = None
+    tdir = os.path.join(repo, twatch.TSTATE_REL)
+    try:
+        names = os.listdir(tdir)
+    except OSError:
+        return None
+    for fn in names:
+        if not (fn.startswith("runs-") and fn.endswith(".ndjson")):
+            continue
+        host = fn[len("runs-"):-len(".ndjson")]
+        try:
+            with open(os.path.join(tdir, fn), encoding="utf-8") as f:
+                for ln in f:
+                    ln = ln.strip()
+                    if not ln:
+                        continue
+                    try:
+                        r = json.loads(ln)
+                    except ValueError:
+                        continue
+                    d = r.get("date")
+                    if d and (best is None or d > best[0]):
+                        best = (d, host, r.get("tier"), r.get("verdict"),
+                                (r.get("sha") or "")[:12])
+        except OSError:
+            continue
+    if best is None:
+        return None
+    try:
+        t = calendar.timegm(time.strptime(best[0], "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:
+        return None
+    return (time.time() - t,) + best[1:]
+
+
+def no_local_daemon(repo=None):
+    """No watcher on THIS box -- which is NOT the same as Track T being down.
+
+    Before 2026-08-31 `health` answered DOWN here and was structurally
+    incapable of answering anything else: `daemon_pid` falls back to scanning
+    /proc, and a process on another host has no entry in this box's process
+    table, so the match cannot occur. Since the watcher moved to seven on
+    2026-08-29 that made DOWN the permanent verdict on every dev box -- and
+    CLAUDE.md names this command's DOWN as PROOF Track T is down, whose stated
+    consequence is to run your lane's FULL gate. A check that can only return
+    one answer was licensing the exact widening the no-full-suite hook exists
+    to prevent, through the documented command rather than around it.
+    (frankA measured it; the analysis was already in
+    bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable.)
+
+    So ask the question the caller actually has -- "is Track T sweeping?" --
+    of the instrument that can answer it from here.
+    """
+    here = os.uname().nodename
+    newest = newest_published(repo or repo_root())
+    if newest is None:
+        return "DOWN", 2, ["no watcher daemon on %s, and no published tstate "
+                           "rows to check a remote one against" % here]
+    age, host, tier, verdict, sha = newest
+    if age <= REMOTE_STALE_SECS:
+        return "REMOTE", 0, [
+            "no watcher daemon on %s -- Track T runs elsewhere, which is not "
+            "a fault and is NOT proof it is down" % here,
+            "newest published verdict: host=%s tier=%s %s at %s, %s ago"
+            % (host, tier, verdict, sha, fmt_age(time.time() - age)),
+            "this box cannot see a remote process table; the published "
+            "archive is the instrument. `twatch.py --status` is the other, "
+            "and it needs a `git fetch` first.",
+        ]
+    return "DOWN", 2, [
+        "no watcher daemon on %s" % here,
+        "AND the newest published verdict is %s old (over %dm): host=%s "
+        "tier=%s %s -- nothing is sweeping anywhere this box can see"
+        % (fmt_age(time.time() - age), REMOTE_STALE_SECS // 60, host, tier, sha),
+    ]
+
+
 def health_check(clone):
     """Is this watcher trustworthy right now? Returns (verdict, exit, reasons).
 
@@ -1118,7 +1216,7 @@ def health_check(clone):
     pid, _ = daemon_pid(clone)
 
     if not pid:
-        return "DOWN", 2, ["no watcher daemon is running"]
+        return no_local_daemon()
 
     phase = watch.get("phase") or "?"
     # Paused on a dirty clone is a STANDING stop, not a slow cycle: the daemon
@@ -1169,7 +1267,8 @@ def cmd_health(clone, json_out=False):
         print(json.dumps({"verdict": verdict, "exit": rc, "reasons": reasons,
                           "host": os.uname().nodename, "clone": clone}))
         return rc
-    colour = {"OK": GRN, "DEGRADED": YEL, "DOWN": RED}.get(verdict, "")
+    colour = {"OK": GRN, "REMOTE": GRN, "DEGRADED": YEL,
+              "DOWN": RED}.get(verdict, "")
     print("trackt health: %s%s%s" % (colour, verdict, OFF))
     for r in reasons:
         print("  - %s" % r)
