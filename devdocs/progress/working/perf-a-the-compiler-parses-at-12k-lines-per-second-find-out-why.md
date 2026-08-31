@@ -4,7 +4,7 @@ prio: 60
 type: perf
 blocked-by: []
 created: 2026-08-31
-summary: "ANSWERED and partly fixed. Profiled: the managed-string + heap runtime is ~47% of a self-compile (PXXStrFromLit 17%, PXXAlloc 10%, PXXFree 8.6%, refcount thunks 8.6%) — resolved through the compiler's own .map file, not DWARF. GetTokenStr built every token string a char at a time and was 17 of the 18 AppendChar samples; fixed in 4b3d34f74 for 13.8% off a self-compile. Top remaining item split out as perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass. Still open: the FPC oracle comparison, and the July-3.4s vs today-21.7s discrepancy."
+summary: "ANSWERED and partly fixed. Profiled: the managed-string + heap runtime is ~47% of a self-compile (PXXStrFromLit 17%, PXXAlloc 10%, PXXFree 8.6%, refcount thunks 8.6%) — resolved through the compiler's own .map file, not DWARF. GetTokenStr built every token string a char at a time and was 17 of the 18 AppendChar samples; fixed in 4b3d34f74 for 13.8% off a self-compile. Top remaining item split out as perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass. FPC oracle now measured: we are 1.28x fpc 3.2.2 on the same file, i.e. inside the 2x band the ticket set as its own de-escalation criterion. Still open: the July-3.4s vs today-21.7s discrepancy."
 status: working
 owner: frankB
 ---
@@ -403,9 +403,31 @@ elfwriter expander loops are still a legitimate small batch — genuine
 per-character loops that already know their span — but they are worth about
 6-7% collectively, not individually.
 
-### Still open, unchanged, and NOT claimed
+### The FPC oracle — MEASURED, and it shrinks this ticket
 
-- **The FPC oracle.** "Is ~12k lines/s bad" is still unmeasured.
+The ticket says compiling comparable Pascal with fpc 3.2.2 and dividing is the
+first thing to do, "because if we are within 2x of FPC this ticket is much
+smaller than it looks". Done, on the same file both compilers actually build
+(`compiler/compiler.pas`, 235,854 lines), interleaved FPC/PXX/FPC/PXX,
+min-of-3, pxx binary `b11f52fb4316`:
+
+| | runs (s) | min | lines/s |
+| --- | --- | ---: | ---: |
+| fpc 3.2.2 `-O2 -Tlinux -Px86_64` | 12.04 12.01 10.07 | **10.07** | 23,424 |
+| pxx (default `-O2`) | 14.40 13.09 12.89 | **12.89** | 18,303 |
+
+**1.28x.** So we are well inside the 2x band, and by the ticket's own criterion
+it is much smaller than it looked. ~12k lines/s is not a defect; it is roughly
+what a mature Pascal compiler does on this box.
+
+Two honesty notes. FPC's later runs trend faster (12.04 → 10.07), so some of
+its min is page-cache warmth and our real disadvantage is if anything smaller
+than 1.28x. And **the headline "12,000 lines/s" is itself load-dependent**: the
+same operation measured 18,303 lines/s here on a quieter box. That does not
+overturn the ticket, but any future comparison against that number has to
+record load or it is comparing machines rather than compilers.
+
+### Still open, unchanged, and NOT claimed
 - **The 3.406s (July) vs ~21.7s (today) discrepancy.** Not re-measured here,
   so not reported as a regression and not dismissed. Note only that today's
   baseline was taken at load ~6.5 with ten agents on the box.
