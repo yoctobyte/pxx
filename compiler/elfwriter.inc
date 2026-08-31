@@ -407,7 +407,10 @@ begin
   end;
 end;
 
-procedure WriteMapFile(const outPath: AnsiString; codeOffset: Int64);
+procedure WriteMapFile(const outPath: AnsiString; loadBase, codeOffset: Int64);
+{ loadBase is a PARAMETER rather than LOAD_ADDR, because writeELF32 loads at
+  LOAD_ADDR32 / ESP_LOAD_ADDR32 / the dynamic base, and a map keyed on the
+  64-bit constant would be wrong at every line while looking right. }
 var
   mapPath: AnsiString;
   f, i, len: Integer;
@@ -417,18 +420,18 @@ begin
   len := 0;
   MapAppendLine('# Frankonpiler Map File' + #10, len);
   MapAppendLine('# Executable: ' + outPath + #10, len);
-  MapAppendLine('# Base Address: 0x' + IntToHexStr(LOAD_ADDR, 8) + #10, len);
+  MapAppendLine('# Base Address: 0x' + IntToHexStr(loadBase, 8) + #10, len);
   MapAppendLine('# Code Offset: 0x' + IntToHexStr(codeOffset, 8) + #10 + #10, len);
 
   { Entry / _start }
-  addr := LOAD_ADDR + codeOffset;
+  addr := loadBase + codeOffset;
   MapAppendLine('0x' + IntToHexStr(addr, 16) + ' _start' + #10, len);
 
   for i := 0 to ProcCount - 1 do
   begin
     if Procs[i].BodyAddr >= 0 then
     begin
-      addr := LOAD_ADDR + codeOffset + Procs[i].BodyAddr;
+      addr := loadBase + codeOffset + Procs[i].BodyAddr;
       MapAppendLine('0x' + IntToHexStr(addr, 16) + ' ' + Procs[i].Name + #10, len);
     end;
   end;
@@ -1876,7 +1879,7 @@ begin
   end;
   Close(f);
   FpChmod(outPath,&755);
-  if EmitMapFile then WriteMapFile(outPath, codeOffset);
+  if EmitMapFile then WriteMapFile(outPath, LOAD_ADDR, codeOffset);
 end;
 {$else}
 procedure writeELF(const outPath: AnsiString);
@@ -2048,7 +2051,7 @@ begin
   end;
   sysfchmod(f, 493); { chmod 755 }
   sysclose(f);
-  if EmitMapFile then WriteMapFile(outPath, codeOffset);
+  if EmitMapFile then WriteMapFile(outPath, LOAD_ADDR, codeOffset);
 end;
 {$endif}
 
@@ -2326,6 +2329,12 @@ begin
   sysfchmod(f, 493); { chmod 755 }
   sysclose(f);
 {$endif}
+  { The 32-bit writer emitted no map at all, so `--map` was silently a no-op for
+    i386, arm32, riscv32 and xtensa -- the four targets with NO other route to a
+    symbol, since --emit-obj refuses on three of them. A guest core's PC was
+    therefore unresolvable by construction
+    (bug-a-no-cross-target-can-build-the-compiler-itself). }
+  if EmitMapFile then WriteMapFile(outPath, loadBase, codeOffset);
 end;
 
 function CodePosToIramOff(cp: Integer): Integer;

@@ -510,3 +510,65 @@ printf 'program e;\nbegin\nend.\n' > h.pas
 # then read NT_PRSTATUS out of qemu_*.core: pr_reg is at offset 72,
 # 18 words, r15/pc is word 15.
 ```
+
+## Addendum (frankS, 2026-08-31): the faulting site is NAMED — `PXXAlloc + 0x290`, called from `PXXStrFromLit + 0x114`
+
+franka-d5's core-dump instrument works and needs no debugger. The missing half
+was the symbol map, and the reason it was missing is a defect in its own right,
+fixed in this commit.
+
+### `writeELF32` never emitted a map, so `--map` was silently a no-op
+
+`WriteMapFile` was called from both arms of `writeELF` (64-bit) and from
+**neither** path of `writeELF32`. So i386, arm32, riscv32 and xtensa — the four
+targets with **no other route to a symbol**, since `--emit-obj` refuses on three
+of them — produced no map however you asked. `EmitMapFile` defaults to True and
+`--map` forces it, and both were true and both did nothing. A guest core's PC was
+unresolvable **by construction**, which is exactly the wall franka-d5 hit.
+
+Fixed by calling it from `writeELF32`, and by making the load base a
+**parameter** rather than the hard-coded `LOAD_ADDR`: the 32-bit writer loads at
+`LOAD_ADDR32` / `ESP_LOAD_ADDR32` / the dynamic base, so a map keyed on the
+64-bit constant would have been wrong at every line while looking right — the
+failure mode this repo already has a name for. Verified per target: i386, arm32
+and riscv32 now emit maps based at `0x08048000`, x86_64 and aarch64 unchanged at
+`0x00400000`, and `--no-map` still suppresses (positive control, asserted).
+
+### The named site
+
+Core from `p26d.arm32` at pad 20, `NT_PRSTATUS` unpacked by hand, resolved
+against that binary's own fresh 3864-symbol map:
+
+```
+pc = 0x08056ea0  ->  PXXAlloc      + 0x290
+lr = 0x08058360  ->  PXXStrFromLit + 0x114
+r0 = 0x17534800      (unmapped: above the BSS end 0x0f51a000, below the stack)
+```
+
+**`pc = 0x08056ea0` is now the same on three independently built binaries** —
+franka-d5's `pc-arm32` and `-g` builds and mine. A layout accident does not land
+on one address three times. Combined with franka-d5's disassembly there — a
+pointer local at `fp-24` loaded, then dereferenced to read an Int32 and
+sign-extend it — the shape is: **`PXXAlloc` dereferences a garbage pointer out
+of one of its own locals**, on a call arriving from `PXXStrFromLit`.
+
+That also explains why the two faces of this bug are the same defect. A corrupt
+allocator returns a bad block, and a bad block is *either* a wild pointer (the
+SIGSEGV) *or* a plausible-looking wrong string (the four
+`undefined variable (PXX_KIND_LEGACY)` errors, which is a symbol name that did
+not survive its allocation).
+
+### What is now cheap that was not
+
+The whole chain is a debugger-free loop: `ulimit -c unlimited`, reproduce,
+`readelf`-free struct unpacking of `NT_PRSTATUS` (`pr_reg` at offset 72, 18
+words, pc is word 15), resolve against `<image>.map`. It applies to **every**
+32-bit cross image from now on, not just this bug.
+
+Next: why `PXXAlloc`'s local is garbage on that call. It is reached thousands of
+times before it faults, so the question is what is different about this one —
+and the RTL prelude is shared, so suspect the arm32 lowering of that local's
+load, not the allocator's logic.
+
+Gate: `make compiler/pascal26` converged (`4f6b70995c3a`); `tools/gate.sh quick`
+GREEN; map emission verified on five targets with the `--no-map` control.
