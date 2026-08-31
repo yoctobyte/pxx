@@ -948,8 +948,21 @@ fix the doc, not the loop.
      at step 2 for every ticket**; that is the blind loop the group rule
      replaced.
 - Tickets live in
-  `devdocs/progress/{urgent,working,unfinished,backlog,blocked,done,rejected}/`;
-  regenerate `BOARD.md` after moving them. `working/` is a **status hint, not a
+  `devdocs/progress/{urgent,working,unfinished,blocked,done,rejected}/` and, for
+  open unclaimed work, in **PER-LANE backlogs**: `backlog-core` (A),
+  `backlog-nilpy` (N), `backlog-tools` (T), `backlog-pascal` (P),
+  `backlog-decide` (U), `backlog-libs` (B/E), `backlog-cfront` (C),
+  `backlog-web` (W), `backlog-windows` (M), `backlog-docs` (D), `backlog-esp`
+  (S). Split 2026-08-31 because 426 open tickets had accumulated in **eight
+  days** and no human can hold that. They are **ranked exactly like the old
+  `backlog/`** — nothing changed about what competes with what; the win is that
+  `ready --track N` reads one 96-ticket folder instead of filtering 426. File
+  into the lane's folder, not into `backlog/` (which survives only for
+  stragglers, as does the superseded `backlog_new/`).
+  **Bugs vs features stay on the `bug-`/`feature-` slug prefix**, not on
+  subdirectories — the loader globs one level deep, so physical subdirs would
+  need surgery on the paths `claim`/`resolve` walk.
+  Regenerate `BOARD.md` after moving them. `working/` is a **status hint, not a
   lock** (2026-08-30): it says someone is probably on this, which is worth a
   message before you start the same thing — it does not reserve a file and it
   does not stop you. When work halts with the ticket incomplete, move it to
