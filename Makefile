@@ -11823,6 +11823,17 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_crtl_gnu_string.c $(TESTTMP)/c_crtl_gnustr26
 	tools/expect_same.sh c_crtl_gnustr26 "$$($(TESTTMP)/c_crtl_gnustr26)" "$$(printf 'mempcpy: [abc] off=3\nstpncpy fit: off=2 pad=000\nstpncpy trunc: off=4 c3=d\nstrchrnul hit: 2\nstrchrnul miss: 5\nstrchrnul nul: 5\nrawmemchr: 2\nmemmem hit: 2\nmemmem miss: 1\nmemmem empty: 0\nmemmem toolong: 1\nvs 9v10: -1\nvs 10v9: 1\nvs eq: 0\nvs .01v.1: -1\nvs 1v01: 1\nvs plain: -1\nvs pfx: -1\nvs a1bv a1a: 1\nvs 001v01: -1\nasprintf 1: n=16 len=16 [abc--42-03.50-ff]\nasprintf 2: n=0 len=0\nasprintf 3: n=1199 len=1199 tailok=1\nvasprintf 4: n=14 [1 two 3 four 5]')"
+	# crtl's <libgen.h>, row for row against a glibc-built binary of the same
+	# file. The rows that earned it: dirname("//") is "//" -- POSIX makes a
+	# prefix of EXACTLY two slashes implementation-defined and glibc keeps it --
+	# while "///" and "////" are plain "/". A `path that is all slashes -> /`
+	# rule passes every other row and fails that one. Trailing slashes are
+	# stripped BEFORE the last component is found, which is what a strrchr
+	# one-liner gets wrong ("/usr/" is "usr", not ""). NULL is the "." row both
+	# sides return rather than crashing.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_libgen_basename_dirname.c $(TESTTMP)/c_libgen26
+	tools/expect_same.sh c_libgen26 "$$($(TESTTMP)/c_libgen26)" "$$(printf '[/usr/lib] base=[lib] dir=[/usr]\n[/usr/] base=[usr] dir=[/]\n[usr] base=[usr] dir=[.]\n[/] base=[/] dir=[/]\n[.] base=[.] dir=[.]\n[..] base=[..] dir=[.]\n[] base=[.] dir=[.]\n[//] base=[/] dir=[//]\n[///] base=[/] dir=[/]\n[////] base=[/] dir=[/]\n[a//b//] base=[b] dir=[a]\n[/a] base=[a] dir=[/]\n[a/] base=[a] dir=[.]\n[///a///b///] base=[b] dir=[///a]\n[foo.txt] base=[foo.txt] dir=[.]\n[./x] base=[x] dir=[.]\nnull base=[.] dir=[.]')"
 	# the same unit included twice, once spelled with a './': one file, allowed
 	./$(COMPILER) test/c_pasunit_twice.c $(TESTTMP)/c_pasunit_twice26
 	tools/expect_same.sh c_pasunit_twice26 "$$($(TESTTMP)/c_pasunit_twice26)" "42"
