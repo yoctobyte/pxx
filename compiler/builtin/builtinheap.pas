@@ -1295,6 +1295,7 @@ const
     resolving happens offline against the --map file. A word landing inside the
     code segment is a return address; the rest is noise and is meant to be. }
   DBG_M12 = ' stack=';
+  DBG_M13 = '????????';   { the size word is not a plausible block size -- see PXXDbgFlush }
   DBG_M10 = 'pxx-heap: RELEASE of a FREED dynarray 0x';
   DBG_M11 = 'pxx-heap: RETAIN of a FREED dynarray 0x';
   DBG_M5 = '  size=0x';
@@ -1338,6 +1339,9 @@ begin
   else if kind = 12 then
     for i := 1 to Length(DBG_M12) do
     begin b := Byte(DBG_M12[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 13 then
+    for i := 1 to Length(DBG_M13) do
+    begin b := Byte(DBG_M13[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else
     for i := 1 to Length(DBG_M4) do
     begin b := Byte(DBG_M4[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
@@ -1388,7 +1392,22 @@ begin
     naming a victim. Free to obtain -- the caller is already at the block. }
   if (kind = 8) or (kind = 9) or (kind = 10) or (kind = 11) then
   begin
-    PXXDbgPutConst(5); PXXDbgPutHex(HeapDbgSize, 8);
+    { The size word only MEANS anything if the thing we were handed is a real
+      block. It is, for a genuinely stale handle whose block is still poisoned
+      in quarantine -- that is the case this field exists for, because it JOINS
+      these rows to the write-after-free rows by size class. It is NOT, for a
+      FABRICATED pointer, and that turned out to be the arm32 case: the reported
+      size read 0xdddddddd (the poison itself) and 0x44d95128. Printing those as
+      a size class invites exactly the reading they cannot support, so an
+      implausible word is reported as unknown instead of as a number.
+      Plausible = nonzero, 8-aligned, and not larger than any block this
+      allocator hands out in one piece. }
+    PXXDbgPutConst(5);
+    if (HeapDbgSize > 0) and (HeapDbgSize < $10000000) and
+       ((HeapDbgSize and 7) = 0) and (not PXXDbgIsPoisonWord(HeapDbgSize)) then
+      PXXDbgPutHex(HeapDbgSize, 8)
+    else
+      PXXDbgPutConst(13);
   end;
   if ((kind = 10) or (kind = 11)) and (HeapDbgNStack > 0) then
   begin
