@@ -1251,9 +1251,19 @@ begin
         the same way (pointer to the 16-byte value). By-value set params are
         copied as their full 32-byte value. Reject remaining true aggregate
         payloads such as records. }
+      { TypeIsFrozenString, not the bare `tyString` in the set below: a frozen
+        string PARAMETER's slot holds a pointer P to the buffer whatever the
+        frozen kind, so the 4-byte copy is right for all three. The set listed
+        only the legacy overloaded tyString, so a by-value `string[20]`
+        (tyFixedString) or ShortString param was REFUSED on i386 while the
+        identical `string` one was accepted -- the same un-widened predicate
+        that made SetLength on such a parameter corrupt its own slot on x86-64
+        (the four symtab.inc string helpers) and double-deref on aarch64. Three
+        sites, one narrow test; TypeIsFrozenString exists to be the one answer. }
       if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
          not (TypeIsOrdinal(Syms[idx].TypeKind) or
               TypeIsFloat(Syms[idx].TypeKind) or
+              TypeIsFrozenString(Syms[idx].TypeKind) or
               (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant, tySet])) then
         Error('target i386: only ordinal/pointer parameters supported yet');
       { THE WHOLE i386 cdecl DIFFERENCE IS THE DIRECTION OF THIS WALK.

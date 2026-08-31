@@ -8,4 +8,3 @@
 # Keyed on <file> TAB <condition text> TAB <ticket>, not on a line number:
 # line numbers rot (three site coordinates in the originating ticket were
 # stale within four days, while the reasoning held).
-ir_codegen_aarch64.inc	(Syms[si].Kind = skParam) and TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray	bug-a-aarch64-setlength-on-a-frozen-string-param-diverges-from-the-abi-oracle

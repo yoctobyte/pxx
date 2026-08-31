@@ -2865,10 +2865,26 @@ begin
           if IRKind[left] <> IR_LEA then
             Error('target aarch64: SetLength expects a string variable');
           si := IRA[left];
-          EmitLoadVarAddrA64(si);              { x0 = buffer addr (or &slot for a string param) }
+          EmitLoadVarAddrA64(si);              { x0 = buffer addr, or &slot for a BY-VALUE frozen-string param }
+          { `not IsRef`, not `not IsArray`. EmitLoadVarAddrA64 ALREADY derefs a
+            by-ref param (`ldr x0, [x9]`), so the extra load below is needed only
+            when it did not — i.e. for a by-VALUE frozen-string param, whose slot
+            holds the pointer P. With `not IsArray` the arm also fired for
+            `var s: string[20]`, double-dereferencing: SIGSEGV, and it is the
+            aarch64-only half of the same bug the four symtab.inc string helpers
+            had. The condition is about what the HELPER just did, which is why
+            phrasing it in terms of the symbol's shape was wrong twice over.
+
+            abi-divergence: and that is also why it cannot call the oracle.
+            ABIParamSlotHoldsValueAddr answers "does this param's slot hold the
+            value's address?" — True for EVERY frozen-string param — but the
+            helper one line up has already consumed that fact for the by-ref
+            half. The oracle takes a symIdx and cannot see which emitter ran.
+            Fixed and reviewed 2026-08-31,
+            bug-a-aarch64-setlength-on-a-frozen-string-param-diverges-from-the-abi-oracle. }
           if (Syms[si].Kind = skParam) and TypeIsFrozenString(Syms[si].TypeKind) and
-             not Syms[si].IsArray then
-            EmitI32($F9400000);                { ldr x0, [x0] = P (param slot holds the pointer) }
+             not Syms[si].IsRef then
+            EmitI32($F9400000);                { ldr x0, [x0] = P (by-value param slot holds the pointer) }
           EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! (push buffer addr) }
           IREmitNodeAarch64(IRA[valNode]);     { x0 = new length }
           EmitI32($F84107E1);                  { ldr x1, [sp], #16 (buffer addr) }

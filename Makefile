@@ -8152,6 +8152,15 @@ test-core: $(COMPILER)
 	# routines; a fixed-array capture is merely how it was found.
 	./$(COMPILER) test/test_discarded_result_var_open_array.pas $(TESTTMP)/test_discarded_oa26
 	$(TESTTMP)/test_discarded_oa26 | diff -u test/test_discarded_result_var_open_array.expected -
+	# SetLength/Length on a frozen inline string PARAMETER (`string[N]`,
+	# ShortString), whose slot holds a POINTER to the buffer. Three sites asked
+	# "is this a frozen-string param?" as `TypeKind = tyString`, the legacy kind
+	# only: x86-64 wrote the length OVER the parameter slot (SIGSEGV on the next
+	# Length), aarch64 double-dereferenced a var one, and i386 refused the
+	# by-value form as unsupported. Both directions in one file — they break on
+	# different targets. Byte-identical to FPC.
+	./$(COMPILER) test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_frozen_param_setlen26
+	$(TESTTMP)/test_frozen_param_setlen26 | diff -u test/test_frozen_string_param_setlength.expected -
 	# Real-valued CONSTANT EXPRESSIONS — folded at compile time, so a wrong fold
 	# is a silently wrong literal rather than a diagnostic.
 	./$(COMPILER) test/test_const_real_expressions.pas $(TESTTMP)/test_const_real_expr26
@@ -13039,6 +13048,11 @@ progress-check:
 # i386 cross-target slice (feature-target-i386). Grows with the backend;
 # joins 'make test' when the op coverage is broad enough to matter.
 test-i386: $(COMPILER)
+	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
+	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
+	# correct throughout and is the control that the fix changed nothing there.
+	./$(COMPILER) --target=i386 test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_i386_frozenparam
+	tools/expect_same.sh i386/frozenparam "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
 	./$(COMPILER) --target=i386 test/hello.pas $(TESTTMP)/test_i386_hello
 	tools/expect_same.sh i386/test_i386_hello "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" "Hello, World!"
 	# The open-array parameter slot is a HANDLE, not its element -- the bug was
@@ -13552,6 +13566,11 @@ test-i386: $(COMPILER)
 	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + frozen-strlen-deref + rec-arr-store + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin + paramstr-bounds ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
+	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
+	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
+	# correct throughout and is the control that the fix changed nothing there.
+	./$(COMPILER) --target=aarch64 test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_a64_frozenparam
+	tools/expect_same.sh aarch64/frozenparam "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
 	./$(COMPILER) --target=aarch64 test/hello.pas $(TESTTMP)/test_aarch64_hello
 	tools/expect_same.sh aarch64/test_aarch64_hello "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_hello)" "Hello, World!"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
@@ -15417,6 +15436,11 @@ test-xtensa: $(COMPILER)
 	@echo "hosted xtensa: 112 programs Call0 + 8 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
+	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
+	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
+	# correct throughout and is the control that the fix changed nothing there.
+	./$(COMPILER) --target=arm32 test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_a32_frozenparam
+	tools/expect_same.sh arm32/frozenparam "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
 	tools/expect_same.sh arm32/test_arm32_hello "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" "Hello, World!"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves

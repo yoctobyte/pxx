@@ -6403,9 +6403,28 @@ end;
 
 { ===== String helpers ===== }
 
+{ All four of these ask the SAME question -- "is this a frozen-string PARAMETER,
+  whose slot therefore holds a pointer P to the buffer rather than the buffer?"
+  -- and all four asked it as `TypeKind = tyString`, the legacy overloaded kind.
+
+  `TypeIsFrozenString` exists precisely to replace that test (its own comment
+  says so: "widen existing `= tyString` codegen checks to this predicate so the
+  new kinds route through the frozen-string path"), and these four were missed.
+  So a `string[N]` or `ShortString` PARAMETER -- tyFixedString / tyShortString,
+  not tyString -- fell into the else branch and was treated as if its slot held
+  the buffer INLINE. `SetLength(s, 3)` then wrote the length 3 over the
+  parameter slot itself, destroying the pointer, and the next `Length(s)`
+  dereferenced 3:
+
+    type TS = string[20];
+    procedure P(s: TS); begin SetLength(s, 3); WriteLn(Length(s)); end;
+
+  SIGSEGV on x86-64 (and aarch64), correct on i386 and arm32, which had already
+  been widened to the predicate. A LOCAL `string[20]` is correct everywhere --
+  only the parameter arm was narrow, which is why nothing caught it. }
 procedure EmitStoreStrLen(idx: Integer);
 begin
-  if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
+  if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
     { param slot holds pointer P; store rax (length) into [P] }
     EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); { mov rcx, [rbp+off] = P }
@@ -6425,7 +6444,7 @@ end;
 procedure EmitLoadStrLen(idx: Integer);
 { Load length of string variable into rcx }
 begin
-  if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
+  if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
     EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
     EmitB($48); EmitB($8B); EmitB($08);                              { mov rcx, [rax] }
@@ -6443,7 +6462,7 @@ end;
 
 procedure EmitLeaStrDataRdi(idx: Integer);
 begin
-  if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
+  if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
     { param slot holds pointer P; data at P+8 }
     EmitB($48); EmitB($8B); EmitB($BD); EmitI32(Syms[idx].Offset); { mov rdi, [rbp+off] = P }
@@ -6462,7 +6481,7 @@ end;
 
 procedure EmitLeaStrDataRsi(idx: Integer);
 begin
-  if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
+  if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
     { param slot holds pointer P; data at P+8 }
     EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset); { mov rsi, [rbp+off] = P }

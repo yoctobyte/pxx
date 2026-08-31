@@ -1,0 +1,7 @@
+local  len=3 [abc]
+byval  len=3 [abc]
+caller after byval: [abcdef]
+byref  len=3 [abc]
+caller after byref: [abc]
+short  len=3 [abc]
+const  len=4 [wxyz] first=w
