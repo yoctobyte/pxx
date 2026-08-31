@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -108,3 +109,33 @@ line in the divergences doc; Track P's call, not filed as a bug.
 
 *Triaged by the Track T agent on `seven` under the provenance rule — my box's
 watcher auto-filed the stub, so the triage is mine; the fix is the lane's.*
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
+
+## Resolved — frank-rust, 2026-08-31
+
+**Not a bug: a stale expectation.** Row 21 is `SizeOf(Extended)`, and the change
+from 10 to 8 is the *intended* resolution of
+[[bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets]] (now `done/`):
+a variable declared `Extended` has always occupied 8, because `Extended` aliases
+`Double` on every target (`feature-extended-alias-or-reject`), and only the
+SizeOf table said 10. The inline `expect_same.sh` expectation in the Makefile was
+the last place the old answer survived.
+
+Fixed in `582e4de09` along with a real regression from the same commit — see
+below, because the two travelled together and only one of them was signalled.
+
+**The part worth keeping.** `ce4d9004c` made SizeOf and the declaration path
+share one builtin type table. That produced **two** changes in behaviour:
+
+1. `SizeOf(Extended)` 10 → 8 — intended, and it tripped this red.
+2. A builtin name began **shadowing the user's own** types and variables —
+   `SizeOf(Currency)` on a user record 12 → 8, a `Boolean` named `longbool`
+   1 → 4, a ten-byte array named `tdatetime` 10 → 8, all against FPC 3.2.2.
+
+**Only the first had a test.** The second is the wrong-answer one — wrong sizes
+reaching `GetMem` and `Move` with no diagnostic — and nothing in the suite
+declared a user type whose name collides with a builtin, so nothing could see
+it. This red was the *intended* half of the change announcing itself while the
+unintended half travelled silently beside it.
+
+Guarded now by `test/test_sizeof_user_name_shadows_builtin.pas`.

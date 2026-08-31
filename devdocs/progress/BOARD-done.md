@@ -2769,6 +2769,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-setlength-grow-capacity | P | 70 | regression | regression: test-core#src:test/test_setlength_grow_capacity.pas red at 10dada0b7689 (auto-filed by twatch) | — |
+| regression-test-core-test-sizeof | P | 70 | regression | regression: test-core#src:test/test_sizeof.pas red at 35dbb5a998e7 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
 | regression-test-core-test-stackless-gen | P | 70 | regression | regression: test-core#src:test/test_stackless_gen.pas red at dfac1da00b04 (auto-filed by twatch) | — |

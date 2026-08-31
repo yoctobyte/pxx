@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:10 backlog:395 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2929 rejected:68`
+`working:5 unfinished:27 blocked:10 backlog:394 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2930 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,14 +58,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 427, ranked
+## Ready — top 30 of 426, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [P]` bug-p-generic-constraints-are-checked-before-the-type-section-closes
 - `[p 70] [T]` regression-cascade-fc01c8094434
-- `[p 70] [P]` regression-test-core-test-sizeof
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
@@ -90,5 +89,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-async-def-and-await-are-not-implemented
 - `[p 60] [N]` bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value
+- `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 
-_397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_396 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
