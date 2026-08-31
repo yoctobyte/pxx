@@ -262,9 +262,9 @@ SECTION.** 279KB, ~70k tokens, 72 sections; `grep '^## '` lists them free.
 
 ## "You are the coordinator"
 
-**Read ONLY `## IF YOU WERE JUST MADE COORDINATOR, THIS IS THE WHOLE JOB` in
-`devdocs/dev/session-roster.md` — the first ~6.8KB. Do NOT read the file**
-(1.53MB, ~384k tokens, 99.6% dated history).
+**Read `devdocs/dev/session-roster.md` — it is ~8KB and it is the whole job.**
+(It was 1.53MB / ~384k tokens until 2026-08-31; the 322 dated log sections moved
+to `session-roster-history.md`, which you `grep`, never read.)
 
 **The coordinator does NOT distribute work** (owner, 2026-08-31). Dispatch is
 cut. Its **sole** job is **topic-collision avoidance**: agents tell it what they
@@ -321,6 +321,13 @@ every number you report.** A **nonzero** exit deserves the same suspicion: grep
 the tree for the error string — if the source lacks it, the compiler that printed
 it is not the one you think you are running. When seeding from outside, `touch`
 the sources after the copy.
+
+**GATE BEFORE YOU COMMIT, NOT AFTER.** `gate.sh quick`'s FPC seed canary only
+runs while `compiler/**` has **UNCOMMITTED** changes; on a clean tree it prints
+`SKIP` and you get no FPC coverage at all. PXX prescans headers and FPC is
+single-pass, so a whole defect class — declaration order, a duplicate forward
+across two `.inc` files — passes `make compiler/pascal26` AND `--tier quick`, and
+the canary is the only thing that catches it (live case `a057789bc`).
 
 **`tools/gate.sh quick` (~30s) is OPTIONAL per fix, REQUIRED before a pin.**
 Background it and **grep the log for the verdict** — a backgrounded gate's
