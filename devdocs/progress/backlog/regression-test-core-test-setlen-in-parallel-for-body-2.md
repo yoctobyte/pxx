@@ -40,3 +40,6 @@ expect_same: MISMATCH [test_setlen_parfor26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-31 — the seven watcher saw `test-core#src:test/test_setlen_in_parallel_for_body.pas` GREEN at d7aad6cd14a3 (tier full) and did NOT close this: this is a repeat stub (`regression-test-core-test-setlen-in-parallel-for-body-2`, not `regression-test-core-test-setlen-in-parallel-for-body`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
