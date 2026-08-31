@@ -3,7 +3,7 @@ track: U
 prio: 55
 type: decide
 blocked-by: []
-summary: "A reduced build (frontends/targets omitted at compile time) may not be able to compile compiler.pas at all — a NilPy-only compiler has no Pascal frontend. So what does a shipped configuration owe the self-host gate: must it self-host, must it merely be REPRODUCIBLE under the umbrella compiler, or neither? And which of 2^13 configurations does a pin gate? Filed as the second half of an escalation that feature-a-build-a-reduced-compiler asserted had happened and had not."
+summary: "RULED 2026-08-31 (owner): a Pascal-reduced compiler must be able to compile the FULL compiler — a bootstrap/seed property, stronger than the self-host the options debated. The first fork was VOID: it turns on a PXX_NO_PASCAL define that DOES NOT EXIST anywhere in the repo outside this ticket. The 14 real defines omit frontends (ada algol basic cfront erlang fortran lolcode nilpy rust whitespace zig) and three targets (aarch64 arm32 i386) — never Pascal and never the x86-64 host — so every buildable configuration CAN self-host and the structural-incapability case cannot arise. Second fork (what a pin gates) narrowed and still open."
 status: backlog
 ---
 
@@ -106,3 +106,70 @@ The parent ships configurations today under an unstated bar. Every one landed
 before this is answered is a configuration whose acceptance criteria were chosen
 by whoever landed it, which is the exact condition Track U exists to prevent —
 and it will not look unanswered, because thirteen defines already work.
+
+---
+
+## RULED 2026-08-31 (owner)
+
+> *"a compiler reduced to **pascal** should be able to compile the full
+> compiler. dot. not sure why this is even a ticket."*
+
+### The rule
+
+**A Pascal-reduced compiler must be able to compile the FULL compiler.**
+
+Note this is *stronger* than every option debated above, and stronger in a
+useful direction. The options argued about whether a configuration must
+**self-host** — reproduce *its own* binary. The rule requires the Pascal-reduced
+build to produce the **umbrella** binary: it must be a valid **seed**. That is
+the property that matters for a project trying to get out from under its FPC
+bootstrap, and self-hosting falls out of it as a special case.
+
+### The first fork was VOID, and this is why the ticket felt wrong
+
+`PXX_NO_PASCAL` **does not exist**. Checked at HEAD: it appears nowhere in
+`compiler/`, nowhere in any `.pas`/`.inc`/`.sh`/`Makefile`, and only in two
+places in the tree — **this ticket**, and `BOARD.html`, which is generated from
+it. The fourteen defines that do ship are:
+
+```
+frontends  PXX_NO_ADA ALGOL BASIC CFRONT ERLANG FORTRAN LOLCODE NILPY RUST WHITESPACE ZIG
+targets    PXX_NO_AARCH64 ARM32 I386
+```
+
+Pascal cannot be omitted. Neither can the x86-64 host backend. **Therefore every
+configuration that can be built retains both, and every one of them can be asked
+to compile `compiler.pas`.** The fork's premise — *"a `PXX_NO_PASCAL` build
+cannot compile its own source at all — not 'fails the gate', cannot be asked the
+question"* — describes a state unreachable with the defines that exist.
+
+This is *The name is not the thing* with the whole ticket resting on it: an
+identifier that reads exactly like the other thirteen, in a list where the other
+thirteen are real. Nothing looked wrong from any direction, and the ticket
+correctly refused to guess — it just escalated a question that the code had
+already answered by never providing the switch. **The residual question for
+whoever revives the idea: if a NilPy-only product is genuinely wanted, adding
+`PXX_NO_PASCAL` re-opens this fork for real. Do not add that define without
+returning here.**
+
+### What is now required, and it is not currently tested
+
+The rule creates a real acceptance criterion that nothing checks today: there is
+**no `PXX_NO_*` wiring in `Makefile` or `tools/gate.sh` at all**, so no reduced
+configuration is built or gated by anything. Filed as
+`feature-a-the-pascal-reduced-build-must-be-able-to-seed-the-full-compiler`.
+
+### Second fork — NARROWED, still open, NOT ruled here
+
+"What does a pin gate across 2^14 configurations" was not addressed by the
+ruling and remains the owner's. It is much smaller now: since every
+configuration retains Pascal and the host, none of them is *incapable* of
+proving anything, so the honest bar is the ticket's own option 3 (reproducible
+under the umbrella, plus its own frontends' suites) with the seed property as
+the one named extra a pin should check.
+
+**Recommendation, marked as the agent's and not the owner's:** pin gates the
+umbrella plus the Pascal-reduced seed build; every other configuration is swept
+asynchronously by Track T against the pushed sha. But note the ticket's own
+warning, which is still true: **T sweeps zero reduced configurations today**, so
+"T sweeps it" is work to file, not a status quo to lean on.
