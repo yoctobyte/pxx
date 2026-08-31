@@ -2,7 +2,7 @@
 track: A
 type: bug
 prio: 50
-status: working
+status: done
 found: 2026-08-30
 found-by: frankS
 owner: frank-rust
@@ -107,3 +107,6 @@ reported `IR_WRITELN` missing too. It is present as the trailing label of
 `IR_WRITE, IR_WRITELN:` — the grep anchored at line start and answered correctly
 about a different question. riscv32 obviously writes lines; that implausibility
 is the only reason it got checked.)*
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
