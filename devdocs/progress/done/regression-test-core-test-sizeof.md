@@ -109,7 +109,7 @@ line in the divergences doc; Track P's call, not filed as a bug.
 
 *Triaged by the Track T agent on `seven` under the provenance rule — my box's
 watcher auto-filed the stub, so the triage is mine; the fix is the lane's.*
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 95ddb9fda.
 
 ## Resolved — frank-rust, 2026-08-31
 
