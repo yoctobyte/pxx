@@ -475,20 +475,32 @@ begin
           pasparser_expr.inc:3638 and :3670 ask `<> tyUnknown` merely to test
           whether a token names a type -- and a lookup that set a parser-wide
           channel would poison the window for whatever type is parsed next.
-          GATED, and the gate is the finding. Breaking the alias makes the
-          COMPILER believe UTF-16 while the RUNTIME still stores UTF-8: the four
-          wide functions in builtin/builtinwide.pas are called from NOWHERE --
+          GATED. WHY THE GATE WAS ADDED, and it is no longer why it stays:
+          breaking the alias made the COMPILER believe UTF-16 while the RUNTIME
+          still stored UTF-8, because the four wide functions in
+          builtin/builtinwide.pas were then called from NOWHERE --
           pasparser_prog.inc only decides whether to `uses` the unit -- so
-          nothing converts a literal on assignment, concatenates in wide, or
-          converts back for Write. Measured ungated: `w := 'abcd'` gave
+          nothing converted a literal on assignment, concatenated in wide, or
+          converted back for Write. Measured then: `w := 'abcd'` gave
           Length(w) = 2 and w[2] = 'c', because Length halved a byte count that
-          was never doubled and indexing stepped two bytes through UTF-8. That
-          is worse than the alias, not better.
-          So the type change waits behind PXX_WIDE_PAYLOAD, alongside the
-          PXX_MANAGED_STRING gate this same arm already consults, until the
-          lowering exists. Default builds are byte-for-byte unaffected: without
-          the define `widestring` stays exactly the alias it has always been.
-          feature-unicodestring-model step 7b }
+          was never doubled and indexing stepped two bytes through UTF-8.
+
+          THAT SENTENCE IS NOW STALE and the lowering it waited for EXISTS.
+          Step 7c landed: ir.inc's IRStrWidthConv calls PXXWideFromStr /
+          PXXStrFromWide, IRWideWriteValue transcodes for Write, and the concat
+          arm calls PXXWideCat. Measured at 1b252b0eb05e with -dPXX_WIDE_PAYLOAD,
+          which is what corrected this note: `w := 'AB'` stores 65 0 66 0 (four
+          payload bytes, genuine UTF-16LE) with Length(w) = 2;
+          `w := WideChar(256) + WideChar(65)` stores 0 1 65 0 with w[1] = 256
+          and w[2] = 65; and Write(w) emits the two characters as UTF-8. All
+          four of the behaviours this paragraph says are missing are present.
+
+          So the gate remains but its REASON is now an open question, not this
+          arm's to answer: whether to make the payload the default is a separate
+          call that wants a sweep behind it, and nothing here should be read as
+          having made it. Default builds are still byte-for-byte unaffected:
+          without the define `widestring` stays exactly the alias it has always
+          been. feature-unicodestring-model step 7b }
         if (Result = tyAnsiString) and
            PasDefineExists('PXX_WIDE_PAYLOAD') and
            (CaseEqual(lo, 'widestring') or CaseEqual(lo, 'unicodestring')) then
