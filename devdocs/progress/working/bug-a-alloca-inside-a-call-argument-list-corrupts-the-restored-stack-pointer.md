@@ -2,9 +2,10 @@
 track: A
 prio: 60
 type: bug
-status: backlog
+status: working
 blocked-by: []
 summary: "alloca() moves rsp, and so does everything else in the x86-64 value model -- the call sequence's saved-rsp slot AND the push/pop expression stack are both addressed at fixed offsets from it. So an alloca evaluated mid-expression reads back somebody else's bytes. The C frontend hoists allocas out of ARGUMENT LISTS (d7df19543), which is what busybox needed; a binop arm is still wrong and measured. Eight realistic alloca shapes all pass, so nothing reachable is broken today."
+owner: frank-user-a
 ---
 
 # alloca inside a call sequence corrupts the restored stack pointer
