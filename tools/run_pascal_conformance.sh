@@ -67,7 +67,23 @@ done
 SKIPLIST="$ROOT/test/pascal-conformance/pxx.skip"
 LABEL="test-pascal-conformance"
 WORK="${TMPDIR:-/tmp}/pxx_pas_conformance.$$"
-TIMEOUT_S="$(awk -v s="${TESTMGR_TIME_SCALE:-1}" 'BEGIN { t=10*s; printf "%d", (t<10 ? 10 : t) }')"
+# BOTH scales, not just the hardware one. TESTMGR_LOAD_SCALE (= cap/cores) is
+# the live concurrency factor testmgr exports, and load_scale()'s own docstring
+# names this exact consumer: it exists because oversubscription "starves a
+# qemu-user conformance shard's per-program `timeout` and false-REDs the whole
+# shard with exit 124". This runner was reading TIME_SCALE only, so on a box
+# that is BUSY rather than SLOW the factor read 1.00 and a 10s inner budget
+# stayed 10s under 2x oversubscription. run_c_conformance.sh next door already
+# does it correctly and this is its sibling arm; run_sqlite_thread_test.sh was
+# the same defect, fixed by frankT at ea7cb2aa2.
+#
+# No inner cap here, unlike the sqlite runner: its inner budget was approaching
+# the 240s OUTER qemu-class timeout, where a job-level kill discards the line
+# the runner exists to print. Conformance's outer class budget is 1200s, so a
+# genuinely hung program is still caught there — the inner budget only has to
+# clear the slowest HONEST program under load, not police hangs.
+TIMEOUT_S="$(awk -v s="${TESTMGR_TIME_SCALE:-1}" -v l="${TESTMGR_LOAD_SCALE:-1}" \
+  'BEGIN { t=10*s*l; printf "%d", (t<10 ? 10 : t) }')"
 
 # Curated categories (ticket scope): what self-host never exercises.
 # Expand as rungs clear.
