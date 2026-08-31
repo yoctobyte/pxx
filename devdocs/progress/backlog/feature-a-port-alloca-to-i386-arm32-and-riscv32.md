@@ -76,6 +76,31 @@ The regression test to bring up on each target is
 row 9 (`a + (long)(alloca(32) != 0)`, no call in it at all) as the one that
 fails on an unported model.
 
+### From frankC, 2026-08-31, on the two argument blocks being written now
+
+frankC holds the C-ABI stack-argument group and reports that the i386 cdecl and
+arm32 AAPCS32 argument blocks address their arguments as fixed offsets from a
+stack pointer that is stable only because nothing moves sp during argument
+evaluation. They read that as the same defect, latent for want of an alloca arm
+to reach it.
+
+**Half right, and the half that differs is the useful half.** A fixed offset
+FROM sp is exactly what relocation preserves — the block and sp move together,
+so those two argument blocks are safe under this model as written, on any
+target. What relocation cannot save is an absolute stack pointer stored and used
+later, because its bytes move while its value does not. So the audit question
+for each block is not "does it use fixed offsets" (fine) but **"does it park an
+sp anywhere"** — a saved caller-esp in the call sequence, a pointer to a temp
+handed to a helper, an sp published to a global.
+
+x86-64 had exactly one such value and needed the delta pair; aarch64 had none
+and needed only the relocation. i386's call sequence is x86-64-shaped, so expect
+one there too.
+
+Recorded here rather than as its own ticket, at frankC's request via the
+coordinator, so it is waiting for whoever takes the port rather than expiring
+in a message.
+
 ## Verification
 
 `test/c_vla.c` and `test/c_alloca_in_call_argument.c` against a glibc-built

@@ -2170,8 +2170,8 @@ begin
           Unwinding was never the exposure, though. Expression temps are
           `str x0,[sp,#-16]!` / `ldr x0,[sp],#16` pairs, so a value pushed
           before an alloca and popped after read the alloca'd hole -- the same
-          defect x86-64 had, and NOT confined to argument lists, which is all
-          cparser.inc's CHoistAllocaArgs covers. So the hole is now carved at
+          defect x86-64 had, and NOT confined to the argument lists the C
+          frontend used to lift allocas out of. So the hole is now carved at
           the bottom of the FIXED FRAME and the live region between sp and the
           alloca base is relocated down to make room, exactly as on x86-64.
           Full model, including what it deliberately does not cover, in the

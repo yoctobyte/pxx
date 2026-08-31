@@ -144,63 +144,28 @@ function CAllocDeclVar(const name: AnsiString; tk: TTypeKind): Integer; forward;
   keep the underlying defect and are named in
   bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer,
   which is the BACKEND bug this normalisation routes around. It stays open. }
-function CReplaceAllocasWithTemps(node: Integer; var pre: Integer;
-                                  depth: Integer): Integer;
-var sym, idn, asn, cm, k: Integer;
-begin
-  Result := node;
-  if (node < 0) or (node >= ASTNodeCount) or (depth > 400) then Exit;
-  k := ASTKind[node];
-  if k = AN_ALLOCA then
-  begin
-    { the size expression may itself contain an alloca; lift those first so
-      they land EARLIER in the comma chain, keeping inner-before-outer. }
-    ASTLeft[node] := CReplaceAllocasWithTemps(ASTLeft[node], pre, depth + 1);
-    sym := CAllocDeclVar('$alloca$' + AIntToStr(node), tyPointer);
-    idn := AllocNode(AN_IDENT);
-    ASTIVal[idn] := sym; ASTTk[idn] := Ord(tyPointer);
-    asn := AllocNode(AN_ASSIGN);
-    ASTLeft[asn] := idn; ASTRight[asn] := node; ASTTk[asn] := Ord(tyPointer);
-    if pre < 0 then pre := asn
-    else
-    begin
-      cm := AllocNode(AN_COMMA);
-      ASTLeft[cm] := pre; ASTRight[cm] := asn; ASTTk[cm] := Ord(tyPointer);
-      pre := cm;
-    end;
-    idn := AllocNode(AN_IDENT);
-    ASTIVal[idn] := sym; ASTTk[idn] := Ord(tyPointer);
-    Result := idn;
-    Exit;
-  end;
-  if (k = AN_BINOP) or (k = AN_NEG) or (k = AN_NOT) or (k = AN_CALL) or
-     (k = AN_ARG) or (k = AN_INDEX) or (k = AN_FIELD) or (k = AN_ASSIGN) or
-     (k = AN_ADDR) or (k = AN_DEREF) or (k = AN_PTR_CAST) or
-     (k = AN_CALL_IND) or (k = AN_COMMA) or (k = AN_COMPOUND_ASSIGN) or
-     (k = AN_INCDEC) then
-  begin
-    ASTLeft[node]  := CReplaceAllocasWithTemps(ASTLeft[node], pre, depth + 1);
-    ASTRight[node] := CReplaceAllocasWithTemps(ASTRight[node], pre, depth + 1);
-  end;
-end;
+{ CReplaceAllocasWithTemps / CHoistAllocaArgs lived here, and they are GONE
+  rather than merely unused: they lifted each alloca out of a call's argument
+  list into a temporary evaluated before the call, to keep IR_ALLOCA away from
+  a backend that could not survive it. The backends survive it now -- both that
+  have the op carve the hole under the fixed frame and relocate the live
+  expression stack, so an alloca is legal wherever an expression is
+  (bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer).
 
-{ Rewrites callNode's ARGUMENT chain in place and returns either callNode or
-  an AN_COMMA that evaluates the lifted allocas first. The callee expression
-  (AN_CALL_IND's ASTRight) is deliberately NOT walked: it is evaluated by the
-  same sequence, but an alloca there is the same corner case the whitelist
-  above leaves to the backend ticket. }
-function CHoistAllocaArgs(callNode: Integer): Integer;
-var pre, cm: Integer;
-begin
-  Result := callNode;
-  if (callNode < 0) or (callNode >= ASTNodeCount) then Exit;
-  pre := -1;
-  ASTLeft[callNode] := CReplaceAllocasWithTemps(ASTLeft[callNode], pre, 0);
-  if pre < 0 then Exit;
-  cm := AllocNode(AN_COMMA);
-  ASTLeft[cm] := pre; ASTRight[cm] := callNode; ASTTk[cm] := ASTTk[callNode];
-  Result := cm;
-end;
+  Deleted rather than kept as a harmless optimisation, because it was never one.
+  It reordered argument evaluation, and its reach was a WHITELIST of AST kinds,
+  so it silently did not cover a ternary arm, a statement expression or an
+  indirect call's callee expression -- while a reader who saw it believed the
+  argument-list case was handled. A partial guard against a defect that no
+  longer exists is exactly the second path that stays broken.
+
+  Measured before deleting, on x86-64 AND aarch64: with the hoist disabled,
+  test/c_vla.c, test/c_alloca_in_call_argument.c (the busybox getopt32 shape it
+  was written for) and test/c_alloca_expression_stack.c all pass, and the
+  self-host fixedpoint converges. Deleting it is also what makes the backends'
+  new in-call-sequence path get exercised by those tests instead of hidden
+  behind the lift. }
+
 
 
 function CBinResultTk(opTok, l, r: Integer): Integer;
@@ -2055,7 +2020,7 @@ begin
           else
             Error('call to undeclared function: ' + name);
         end;
-        Result := CHoistAllocaArgs(node);
+        Result := node;
       end
       else
       begin
@@ -4261,7 +4226,7 @@ begin
         ASTIVal[inode]  := sig;
         ASTTk[inode]    := Ord(Procs[sig].RetType);
         ASTSLen[inode]  := 0;
-        node := CHoistAllocaArgs(inode);
+        node := inode;
       end
       else
         node := fnode;
@@ -4292,7 +4257,7 @@ begin
       ASTIVal[inode]  := sig;
       ASTTk[inode]    := Ord(Procs[sig].RetType);
       ASTSLen[inode]  := 0;
-      node := CHoistAllocaArgs(inode);
+      node := inode;
     end
     else if (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) then
     begin

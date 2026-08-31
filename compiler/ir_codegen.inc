@@ -5455,10 +5455,11 @@ end;
   parks on the stack sits ABOVE rsp at an offset that knows nothing about it: a
   BINOP left operand between its `push` and its `pop`, an outgoing stack
   argument, and a call sequence's saved-rsp slot. So an alloca reached with
-  anything already pushed hands the pop somebody else's bytes. This is NOT
-  confined to argument lists, which is what the C frontend's CHoistAllocaArgs
-  covers -- `a + (long)(alloca(32) != 0)` is enough, and it returned the
-  alloca'd hole rather than `a`.
+  anything already pushed hands the pop somebody else's bytes. The C frontend
+  used to lift allocas out of ARGUMENT LISTS to dodge this; that covered one
+  shape of many -- `a + (long)(alloca(32) != 0)` has no call in it at all and
+  returned the alloca'd hole rather than `a` -- and the lift is now deleted,
+  because this arrangement makes an alloca legal wherever an expression is.
 
   The arrangement, and it removes the frontend's obligation rather than adding
   a second hoist to it: a body containing an IR_ALLOCA reserves one frame
