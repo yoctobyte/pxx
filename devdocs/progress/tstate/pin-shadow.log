@@ -299,3 +299,4 @@
 2026-08-31T05:23:31Z	seven	17fd5566a65e365a97d0080b78c32a650f0b05e0	WOULD PIN 17fd5566a65e — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 5/2
 2026-08-31T05:36:03Z	seven	aac20e75ed1f58d94b12d8d4aea9fdff9356dad5	would NOT pin aac20e75ed1f — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-pascal-conformance#shard0/6
 2026-08-31T06:04:00Z	seven	0ba60c5f90a205fb90e5364977f7407745665616	would NOT pin 0ba60c5f90a2 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-pascal-conformance#shard0/6
+2026-08-31T06:24:13Z	seven	d28b77ce5d8887b6c143aaeafa9e77666b643d8b	would NOT pin d28b77ce5d88 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-pascal-conformance#shard0/6
