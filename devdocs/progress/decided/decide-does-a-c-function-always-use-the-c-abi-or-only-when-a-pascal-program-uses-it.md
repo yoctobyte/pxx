@@ -5,7 +5,7 @@ type: decision
 status: decided
 blocked-by: []
 owner: ""
-summary: "TRIGGER FIRED 2026-08-31 -- the measurement is IN and it says OPTION A; awaiting the owner's ruling, which is one clause. Ruled that morning as NEITHER YET, deferred on a named trigger (a gcc-built caller linking a pxx object on i386), because nothing could observe the answer. The i386 object writer landed and the trigger fired the same day. Measured, same compiler / writer / target / gcc -m32 -no-pie caller, differing only in CProcUsesCAbi: where it is FALSE (a standalone C unit -- option B's behaviour) two integer args arrive REVERSED (i_ii(1,2) = 21 = 2*10+1) and every double arg and return is -nan; where it is TRUE (Pascal cdecl, same signatures) all four are correct. x86-64 is correct throughout, as expected -- it never diverged. THREE LIMITS: this measures boundary BEHAVIOUR and not the COST of flipping (the seven `ProcCdecl and (not CProgramMode)` call-site guards are a different expression from CProcUsesCAbi and must move with the callee, unverified here); arm32 and aarch64 are still unmeasurable, having no object writer; and it is NOT confounded by bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function, which sits on the option-A side."
+summary: "RULED OPTION A, 2026-08-31, after the trigger fired the same day. A C function ALWAYS uses the C ABI: delete the third clause of CProcUsesCAbi (symtab.inc:11599). SUPERSEDES this ticket's earlier same-day ruling of 'neither yet, deferred on a trigger' -- the trigger was feature-a-object-output-for-i386-arm32-and-aarch64, it landed (be4442d9b), and the measurement is unambiguous. gcc -m32 calling a pxx i386 object: under the landed gate a standalone C TU gets i_ii(1,2)=21 (arguments REVERSED), every double argument or return -nan, i_id(2,3.5)=1074528256; the same signatures as Pascal cdecl are all correct. Reproduced independently on compiler 7821dd062028. Two supporting findings: the internal convention buys NO performance -- on i386 both conventions are entirely stack-based and differ only in push order, on arm32 both pass the first four words in registers -- so there is no fast path to protect; and the owner's framing is the right one, ABI binds at boundaries and internals are free, which is only now expressible because the object writer created an export surface. NOT a deletion: the positional arms stay for the population that still needs them, and the intra-C call sites must move with the callee or bug-a-the-c-abi-gate-moved-the-callee-but-not-the-intra-c-call-sites returns. SEQUENCING: bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function (p65) lands first or alongside. arm32/aarch64 stay unverifiable until they have a writer (p45)."
 ---
 
 # Does a C function always use the C ABI, or only when a Pascal program uses it?
@@ -273,3 +273,82 @@ the whole corpus is self-consistent under either answer — which is the propert
 this document identified as the reason to defer. **The object writer did not
 answer the question; it built the instrument that could.** That is what the
 umbrella was priced for.
+
+---
+
+# RULED OPTION A — 2026-08-31, and this supersedes the deferral above
+
+The deferral earlier today was correct **and is now spent**. It named a trigger;
+the trigger fired within hours. Everything above stands as history — including
+the corrected trigger — and this section is the answer.
+
+**A C function always uses the C ABI.** Delete the third clause:
+
+```pascal
+Result := (procIdx >= 0) and ProcCdecl[procIdx];   { was: and ((not CProgramMode) or CUnitOfPascalProgram) }
+```
+
+## The measurement that decided it
+
+`gcc -m32 -no-pie` calling a pxx-emitted i386 object. Only variable is
+`CProcUsesCAbi`. Reproduced independently on compiler `7821dd062028`:
+
+| call | expect | C translation unit (the landed gate) | Pascal cdecl (what A produces) |
+| --- | --- | --- | --- |
+| `i_ii(1,2)` | 12 | **21** — arguments reversed | 12 |
+| `d_d(2.5)` | 3.5 | **-nan** | 3.5 |
+| `i_id(2,3.5)` | 5 | **1074528256** | 5 |
+
+The population an external C caller gets wrong is exactly the population where
+`CProcUsesCAbi` is False. **Not confounded, and in the unhelpful direction:** the
+EBX bug below bites the *correct* arm — a printf-using caller SIGSEGVs while the
+function returns 12 via exit code — so it makes A look worse and A still wins.
+
+## Two findings that make this smaller than it looked
+
+**The internal convention buys no performance.** On **i386** both conventions are
+entirely stack-based (i386 cdecl passes nothing in registers); they differ *only*
+in push order, which costs nothing — the arm's own comment says pxx pushes
+left-to-right where cdecl pushes right-to-left, and that is the whole of the `21`.
+On **arm32** both pass the first four words in registers; AAPCS additionally has
+even-pair alignment, VFP and struct rules that pxx's flat word-index scheme does
+not implement. Simpler, not faster. **There is no register-optimized fast path
+being protected**, which is the usual reason to keep an internal convention.
+*(Read from the codegen arms, not benchmarked. i386 is structural; arm32 is a
+reading and deserves a benchmark before that target is touched.)*
+
+**The owner's framing, which no option here had:** *"we are talking calling
+convention... internally the only relevant stuff is performance and optimizations
+— we can't register optimize a call that can be called externally."* Right, and
+it explains why this sat so long: the convention was decided by **parse-context
+flags** (what language is this source, who included this unit) because there was
+no export surface to hang "does this symbol escape" on. That accident ended when
+the object writer landed. A and B were both variants of the same mistake; A is
+simply the one that stops asking the wrong question.
+
+## What this is NOT
+
+**Not a deletion of the positional arms.** They are load-bearing for the
+population that still uses them — measured with them removed outright: aarch64
+prints a 309-digit double, arm32 fails to compile, i386 segfaults. This is a
+careful swap.
+
+**And the intra-C call sites must move with the callee**, or
+`bug-a-the-c-abi-gate-moved-the-callee-but-not-the-intra-c-call-sites` returns by
+the other route. Verified here and it is the reassuring half: all nine reads go
+through this one predicate — caller (`ProcExternal or CProcUsesCAbi` in each
+backend), callee prologue, return side, i386 varargs — so they move together by
+construction. The only stale copy of the old spelling was a comment, fixed in
+`2812ffacb`.
+
+## Sequencing
+
+1. `bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function` (p65) first or
+   alongside. Otherwise the first real user of an i386 object hits a SIGSEGV that
+   reads as "the ABI change broke it".
+2. The flip.
+3. `feature-a-object-output-for-arm32-and-aarch64` (p45) — until then two of the
+   three divergent targets are changed but unverifiable, which is the residual
+   risk this ruling accepts knowingly.
+
+*Ruled by the owner 2026-08-31; measurement by frankC, reproduced by frank-user.*
