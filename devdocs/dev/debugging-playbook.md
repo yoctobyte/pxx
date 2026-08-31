@@ -2040,6 +2040,42 @@ untestable commits, and neither failure announces itself -- see
 `normalise-dont-special-case.md` on why the compensating case is the one that
 punishes bisection specifically.
 
+### The commit is right, an EXPECTATION was retired -- and the SHAPE of the divergence tells you which
+
+The cheaper cousin of the above, measured 2026-08-31 by Track T on seven, and the
+one I got wrong from the other side.
+
+`ce4d9004c` deliberately changed `SizeOf(Extended)` from 10 to 8, resolving
+`bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets` -- pxx really
+does store an `Extended` in 8 bytes, so the old `10` agreed with FPC while
+**misdescribing our own layout**, which is the worse of the two errors. The
+`Makefile` expectation still said 10. The bisect range was right, the commit is
+not a fault, and the fix is one character in an expectation nobody updated.
+
+**The discriminator is free and it is the shape, not the cause:**
+
+```
+actual   1 1 2 2 4 4 4 4 8 8 8 8 8 8 8 1 1 4 8 8  8 16 2 4 1 8 8
+expected 1 1 2 2 4 4 4 4 8 8 8 8 8 8 8 1 1 4 8 8 10 16 2 4 1 8 8
+                                                  ^ 1 of 27
+```
+
+**Exactly one of twenty-seven values moved.** A table merge going wide cannot
+produce that; a single retired expectation is the only thing that fits. Count the
+divergences before theorising about them -- one is an expectation, many is a
+mechanism.
+
+**And the trap that is mine, because it is a dispatch failure rather than a
+debugging one: a commit that did several things has several candidate mechanisms,
+and naming the commit does not pick one.** I circulated a don't-bisect note for
+that very commit describing the *shadowing* failure (builtins stealing a user's
+own type name). That is real and is frankwasm's measurement -- and it is **not**
+what the red was. `test/test_sizeof.pas` declares no shadowing user type; its one
+divergence is a builtin's own width. Same commit, different hunk, different
+mechanism, and **watching for one signature makes you look straight past the
+other.** A warning that names a commit but only one of its mechanisms is worse
+than a warning that names neither, because it will be believed for the wrong red.
+
 ## When you are about to conclude something
 
 Check it against a second source before writing it down. Every wrong root cause
