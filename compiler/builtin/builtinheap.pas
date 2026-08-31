@@ -2621,8 +2621,13 @@ begin
     HeapDbgAddr := Int64(p);
     { The allocator's size word sits immediately below the block it handed out,
       and a managed block's base IS that payload -- so this is the same size
-      class the write-after-free rows report. }
-    HeapDbgSize := PWord(PXXHdrBase(p) - 8)^;
+      class the write-after-free rows report.
+      RAW arithmetic, NOT PXXHdrBase: under PXX_HEAP_DEBUG that helper Halt(204)s
+      on exactly the input we are here to report (a poisoned kind byte is > 
+      PXX_KIND_MAX), so routing through it killed the process one line before
+      PXXDbgFlush and this check read as SILENT on every target that calls the
+      routine at all. }
+    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
     PXXDbgFlush;
     Exit;
   end;
@@ -2662,8 +2667,13 @@ begin
     HeapDbgAddr := Int64(p);
     { The allocator's size word sits immediately below the block it handed out,
       and a managed block's base IS that payload -- so this is the same size
-      class the write-after-free rows report. }
-    HeapDbgSize := PWord(PXXHdrBase(p) - 8)^;
+      class the write-after-free rows report.
+      RAW arithmetic, NOT PXXHdrBase: under PXX_HEAP_DEBUG that helper Halt(204)s
+      on exactly the input we are here to report (a poisoned kind byte is > 
+      PXX_KIND_MAX), so routing through it killed the process one line before
+      PXXDbgFlush and this check read as SILENT on every target that calls the
+      routine at all. }
+    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
     PXXDbgFlush;
     Exit;
   end;
