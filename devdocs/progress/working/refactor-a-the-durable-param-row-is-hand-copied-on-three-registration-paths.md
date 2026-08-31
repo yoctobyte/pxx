@@ -4,8 +4,8 @@ prio: 45
 type: refactor
 blocked-by: [bug-a-a-nested-routine-cannot-capture-a-fixed-size-array]
 summary: "ParseSubroutine registers a routine's params on THREE paths — `external` (which then Exits), forward/interface, and the body pass — and each hand-copies the ~20 durable ProcParam* columns. Measured 2026-08-30 BEFORE they were equalised: body wrote all of them, forward 14, external THREE, and that one asymmetry produced three divergences from fpc in both directions. All three copies are now complete, so no defect is open; the DUPLICATION is, and it is a standing trap because a new column added to one copy silently misses the other two. The collapse is written and blocked: the 21 staging arrays are fixed-size locals the compiler cannot capture in a nested routine, and ParseSubroutine is re-entrant so they cannot be globals."
-status: new
-owner: ""
+status: working
+owner: frankS
 ---
 
 # The durable param row is hand-copied on three registration paths

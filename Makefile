@@ -11842,6 +11842,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_nested_dynarray_alias26 "$$($(TESTTMP)/test_nested_dynarray_alias26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_nested_fixed_array_capture.pas $(TESTTMP)/test_nested_fixed_array_capture26
 	tools/expect_same.sh test_nested_fixed_array_capture26 "$$($(TESTTMP)/test_nested_fixed_array_capture26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	# How many captures a lifted nested routine may carry: the guard was a
+	# literal 16 while the staging arrays and TProc.Params are both
+	# MAX_PROC_PARAMS = 32 wide. 20 scalar captures and 20 fixed-array captures;
+	# pinned refuses the scalar half, and 40 is still refused today.
+	./$(COMPILER) test/test_nested_capture_param_bound.pas $(TESTTMP)/test_nested_cap_bound26
+	tools/expect_same.sh test_nested_cap_bound26 "$$($(TESTTMP)/test_nested_cap_bound26)" "NESTED CAPTURE PARAM BOUND OK checked=2"
 	./$(COMPILER) test/test_dynarray_managed_field_reassign.pas $(TESTTMP)/test_dynarray_managed_field_reassign26
 	tools/expect_same.sh test_dynarray_managed_field_reassign26 "$$($(TESTTMP)/test_dynarray_managed_field_reassign26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_fixed_array_of_dynarray.pas $(TESTTMP)/test_fixed_array_of_dynarray26

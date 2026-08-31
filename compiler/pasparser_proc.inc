@@ -1291,7 +1291,10 @@ begin
   begin
     if LiftNeedSelf[liftIdx] then
     begin
-      if nparams >= 16 then Error('nested routine: too many params after capture');
+      { MAX_PROC_PARAMS, not a smaller round number: the staging arrays and
+        TProc.Params are both 32 wide, so 32 is the real bound and the literal
+        16 refused half the space that exists. }
+      if nparams >= MAX_PROC_PARAMS then Error('nested routine: too many params after capture');
       pnames[nparams] := '__nestself';
       ptypes[nparams] := tyClass;
       ptypesRec[nparams] := REC_UCLASS_BASE + LiftSelfCi[liftIdx];
@@ -1310,7 +1313,7 @@ begin
     lcb := LiftCapStart[liftIdx];
     for i := 0 to LiftCapCount[liftIdx] - 1 do
     begin
-      if nparams >= 16 then Error('nested routine: too many params after capture');
+      if nparams >= MAX_PROC_PARAMS then Error('nested routine: too many params after capture');
       pnames[nparams] := LiftCapName[lcb + i];
       ptypes[nparams] := LiftCapTk[lcb + i];
       ptypesRec[nparams] := LiftCapRec[lcb + i];
