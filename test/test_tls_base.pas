@@ -73,11 +73,14 @@ begin
   end;
 end;
 
-{ Slot 2 is the first UNCLAIMED one (defs.inc TLS_SLOT_FIRST_FREE): slot 0 is the
-  self-pointer and slot 1 is the --threadsafe I/O lock's cached tid. Writing a tag
-  into slot 1 -- which this test did until the I/O lock started using it -- makes
-  every Writeln here see a bogus owner id. That failure is silent, which is why
-  the map lives in defs.inc and nothing picks an offset by hand. }
+{ Slot 4 is the first UNCLAIMED one (defs.inc TLS_SLOT_FIRST_FREE): slot 0 is the
+  self-pointer, slot 1 the --threadsafe I/O lock's cached tid, and slots 2/3 the
+  stack bounds that say whether that tid is really this thread's. Writing a tag
+  into any of them -- which this test did at slot 1, and then at slot 2 -- makes
+  every Writeln here see a bogus owner id or a bogus stack. That failure is
+  silent, which is why the map lives in defs.inc and nothing picks an offset by
+  hand. This test moved twice for exactly that reason; read the map, do not
+  count. }
 function TlsSlot(n: Integer): PInt64;
 begin
   TlsSlot := PInt64(PtrUInt(__pxxTlsBase) + PtrUInt(n * 8));
@@ -95,12 +98,12 @@ begin
   if PInt64(AutoBase[idx])^ <> Int64(PtrUInt(AutoBase[idx])) then Inc(Errs[idx]);
   { the stub zeroes the block; a reused stack must not show the previous
     thread's slots. }
-  if TlsSlot(2)^ <> 0 then Inc(Errs[idx]);
+  if TlsSlot(4)^ <> 0 then Inc(Errs[idx]);
   tag := 2000 + idx;
-  TlsSlot(2)^ := tag;
+  TlsSlot(4)^ := tag;
   for k := 1 to CHURN do
-    if TlsSlot(2)^ <> tag then Inc(Errs[idx]);
-  if TlsSlot(2)^ <> tag then Inc(Errs[idx]);
+    if TlsSlot(4)^ <> tag then Inc(Errs[idx]);
+  if TlsSlot(4)^ <> tag then Inc(Errs[idx]);
 end;
 
 { Phase B: install our own block over the stub's. }
@@ -110,9 +113,9 @@ begin
   idx := Integer(PtrUInt(arg));
   InstallTls(@Blocks[idx][0]);
   tag := 1000 + idx;
-  TlsSlot(2)^ := tag;
+  TlsSlot(4)^ := tag;
   for k := 1 to CHURN do
-    if TlsSlot(2)^ <> tag then Inc(Errs[idx]);
+    if TlsSlot(4)^ <> tag then Inc(Errs[idx]);
   { the self-pointer convention itself }
   if __pxxTlsBase <> Pointer(@Blocks[idx][0]) then Inc(Errs[idx]);
 end;
@@ -128,13 +131,19 @@ begin
   mb := __pxxTlsBase;
   if mb = nil then Inc(errors);
   if PInt64(mb)^ <> Int64(PtrUInt(mb)) then Inc(errors);   { slot 0 = self }
-  { slots 2..15 zero; slot 1 is the I/O lock's business, not ours }
-  for i := 2 to 15 do
+  { slots 4..15 zero. Slots 1..3 are the I/O lock's business and the ENTRY CODE
+    fills them (tid, stack low, stack high), so asserting they are zero here is
+    asserting the opposite of the contract -- which is how this loop failed the
+    day the bounds landed. }
+  for i := 4 to 15 do
     if PInt64(PtrUInt(mb) + PtrUInt(i * 8))^ <> 0 then Inc(errors);
 
   { and the manual path still works, over the top of that block }
+  { Installing our own block over the entry one leaves slots 1..3 zero, so every
+    Writeln below falls back to gettid instead of trusting a block whose bounds
+    nobody filled. That is the fail-safe direction, and this line exercises it. }
   InstallTls(@Blocks[NTHREADS][0]);
-  TlsSlot(2)^ := 999;
+  TlsSlot(4)^ := 999;
 
   { ---- phase A: the clone stub's automatic install ---- }
   for i := 0 to NTHREADS - 1 do begin Errs[i] := 0; AutoBase[i] := nil; end;
@@ -156,7 +165,7 @@ begin
     for j := 0 to NTHREADS - 1 do
       if (i <> j) and (AutoBase[i] = AutoBase[j]) then Inc(errors);
   end;
-  if TlsSlot(2)^ <> 999 then Inc(errors);   { four children later, ours is ours }
+  if TlsSlot(4)^ <> 999 then Inc(errors);   { four children later, ours is ours }
 
   { ---- phase B: a thread installing its own block over the stub's ---- }
   for i := 0 to NTHREADS - 1 do Errs[i] := 0;
@@ -170,9 +179,9 @@ begin
 
   for i := 0 to NTHREADS - 1 do Inc(errors, Errs[i]);
   for i := 0 to NTHREADS - 1 do
-    if Blocks[i][2] <> 1000 + i then Inc(errors);
+    if Blocks[i][4] <> 1000 + i then Inc(errors);
   { the parent's own base survived four children installing theirs }
-  if TlsSlot(2)^ <> 999 then Inc(errors);
+  if TlsSlot(4)^ <> 999 then Inc(errors);
   if __pxxTlsBase <> Pointer(@Blocks[NTHREADS][0]) then Inc(errors);
 
   Writeln('errors=', errors);

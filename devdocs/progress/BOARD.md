@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-no-cross-target-can-build-the-compiler-itself | A | 60 | bug | PARTLY FIXED 2026-08-30. i386, aarch64 and arm32 now BUILD the compiler, and the i386 and aarch64 binaries RUN under qemu and compile a working program -- their shared blocker was `LoadFile` with an array-element destination (cpreproc.inc), fixed by normalising in the frontend rather than teaching five backends a slot-address shape. TWO TARGETS REMAIN, with DIFFERENT causes, neither related to the first: riscv32 `jal displacement 2197196 is outside the encodable range` (reach) and xtensa `stack frame too large (> 32 KB) for a single ADDMI` (frame size) -- the latter is a THIRD defect this ticket originally missed. And the title claim was too strong: wasm32 built the compiler all along and was never measured. arm32 builds but its cross-built compiler SEGFAULTS, which is a fourth, separate defect. | — |
-| feature-a-io-lock-owner-from-tls-not-gettid | A | 40 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
 | feature-c-corpus-busybox-applet | C | 78 | feature | OWNER-SET TARGET 2026-08-30 -- rung 1 of feature-busybox-kiosk-selfhosting-target, re-priced 60->78 to match. UNBLOCKED: libbb.h compiles and the 145 TUs are REACHABLE (the preprocessor no longer dies); it does NOT link yet, and the residue is busybox's own libbb symbols. crtl getopt landed 2026-08-30. Build ONE busybox applet -- cat -- standalone, skipping the CONFIG_* maze. Success = pxx-built `cat` byte-identical output to a gcc-built one across a fixed input set, under tools/run_target.sh on x86-64 + aarch64. | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-generics) is the live edge and MOVED FAR on 2026-08-30 (frankwasm). 6a Generics.Defaults ok. 6b's parse wall is FIXED at its root: GenericMethodBodyEnd (pasparser_generic.inc) counted only begin/case when finding a generic method's body extent, so `try` and `asm` ended the body one `end` EARLY and the unit terminated in the wrong place -- which is why every error came out at the FILE'S LAST LINE regardless of where the defect was (ba99a4e81, with a regression test and a positive control against pinned). MAX_GENERIC_METHODS then had to go 512->2048, measured at 12 B of bss per slot (931b43ae0). 6b now reaches THREE named errors deep in the file (two of one kind): `undefined variable (OutOfMemoryError)` -- a LIBRARY gap, CLOSED by adding the FPC SysUtils routine -- and `for-in: enumerator has no readable Current` near TOpenAddressing<TKey,TValue,THashFactory>, which is the LIVE EDGE and is not yet reduced. Every OTHER wall table in this file is a dated snapshot and they disagree by design -- read THE ONE CANONICAL TABLE only, newest note first. NO coordinate on this corpus is trustworthy: near: has been stale across a UNIT boundary, the line has been a CONSTANT equal to the file length, and the two have taken turns being the reliable one. Reduce from the SHAPE. The probe time RISES as the compiler gets further -- 75s -> 118s -> 454s -> 472s -- so a timeout tuned to the last reading cuts off the next success. library_candidates/ is gitignored: compare across checkouts by CONTENT HASH, never by commit. | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -68,7 +67,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (393)
+## backlog (394)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -305,6 +304,7 @@ _none_
 | feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 45 | feature | Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix. | — |
 | feature-a-report-fixed-cap-headroom | A | 40 | feature | Three fixed caps in defs.inc have now been raised AFTER a user hit them — MAX_CODE 8->16 MB, MAX_STRS 8192->65536, MAX_CODE 16->32 MB — and each was found by a program failing, never by anyone looking. Nothing reports how close a compile came to any cap, so the only headroom signal the project has is an overflow. Proposal: a PXXDBG=a.caps topic printing per-cap utilisation at end of compile, so `the next one` is a number someone can read instead of an incident. Small, additive, no behaviour change. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 10 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
+| feature-a-tls-stack-bounds-for-cloned-threads | A | 20 | feature | Threads created by __pxxclone leave TLS_SLOT_STACK_LO/_HI zero, so they miss the I/O lock's TLS fast path and still pay a gettid syscall per I/O statement. The stub knows the top of the child's stack and not the bottom; only the allocator does. Two ways to close it, both cheap, neither obviously right. | — |
 | feature-a-typeinfo-integer-name-under-strict-fpc | A | 20 | feature | TypeInfo of a plain Integer rename reports `Integer`; FPC reports `LongInt`. decide-typeinfo-scalar-name-spelling settled this on 2026-08-21 -- keep ours by default, report FPC's under --strict-fpc -- and cited this slug as its Implementation. It was never filed. Measured NOT delivered: the name is `Integer` under default, --mimic-fpc and --strict-fpc alike. | — |
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
@@ -739,9 +739,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2909)
+## done (2910)
 
-2909 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2910 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 
@@ -1203,6 +1203,7 @@ _none_
 - [p 20] [U] decide-should-writeableconst-off-be-honoured
 - [p 20] [A] feature-a-merge-the-wasm-branch-the-shared-file-arms
 - [p 20] [A+S] feature-a-promoint-variant-esp-targets
+- [p 20] [A] feature-a-tls-stack-bounds-for-cloned-threads
 - [p 20] [A] feature-a-typeinfo-integer-name-under-strict-fpc
 - [p 20] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 20] [A+S] feature-bare-esp-supports-uses-builtin

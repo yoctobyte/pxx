@@ -3,8 +3,8 @@ track: A
 prio: 40
 type: feature
 blocked-by: []
-summary: "The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket."
-status: working
+summary: "DONE 2026-08-31. The --threadsafe I/O lock's owner tid now comes from the thread's TLS block behind a stack-bounds check, not a gettid syscall per I/O statement: 400k Writeln went 0.71s -> 0.49s against 0.48s unlocked, gettid 400000 -> 1. Foreign and cloned threads MISS the fast path and pay gettid, which is the fail-safe direction. Cloned-thread bounds are the one deliberate leftover -> feature-a-tls-stack-bounds-for-cloned-threads."
+status: done
 owner: frankS
 ---
 
@@ -127,3 +127,79 @@ measurement that turns up a bigger constant next door should not be thrown away.
 
 Back to `backlog` with the design above and the numbers to beat. Not blocked —
 just not a small change any more, and the small version is actively wrong.
+
+## 2026-08-31 — LANDED, with the design above, plus what the ticket's own gate could not see
+
+### What shipped
+
+`TLS_SLOT_TID` / `TLS_SLOT_STACK_LO` / `TLS_SLOT_STACK_HI` in the `defs.inc` slot
+map; the entry-point install (`EmitTlsMainInstall`) fills all three for the main
+thread; `EmitIoLockStubs` reads the tid only when `stackLow <= rsp < stackHigh`.
+
+Two things the design note above did not settle, decided here:
+
+- **Where the main thread's bounds come from:** `getrlimit(RLIMIT_STACK)` at the
+  ELF entry point. That is the kernel's own statement of how far the stack may
+  grow, and therefore of how far down it guarantees nothing else is mapped
+  (`mmap_base` is placed below that gap). Clamped to 64 MiB for the one case the
+  gap does not cover — an rlimit above ~5/6 of the address space is capped below
+  itself, and `RLIM_INFINITY` would make `hi - span` wrap. A **failed**
+  `getrlimit` needs no branch: the scratch is BSS, so the span reads 0 and the
+  test can never pass.
+- **HI is written LAST and 0 means "no bounds".** The block starts zeroed, so an
+  unset or half-written pair fails `rsp < 0` and takes the slow path. Writing HI
+  first would leave LO at 0, which every userspace rsp is above — the same pair,
+  in the other order, is a silent false hit.
+
+Numbers, and the shas they came from: `benchmarks/2026-08-31-threadsafe-io-lock-tls.md`.
+0.71s -> 0.49s against 0.48s unlocked; `gettid` 400000 -> 1.
+
+### The gate this ticket asked for would have BLESSED the broken build
+
+`Gate:` above says "`test_multithreading` green". Measured, on a compiler with
+the stack-bounds check deleted and nothing else changed:
+
+- `test_multithreading` — **PASSES.** It greps for `multithreading test
+  completed successfully`, and a lock that lost mutual exclusion still completes.
+- `test_threadsafe_io_lock` — **PASSES.** It is single-threaded.
+
+Both of the ticket's own threading gates are blind to the exact defect the
+ticket spends three sections explaining. This is frankA's rule of the same day
+in another shape: *a read-back test verifies agreement, not correctness* — and
+here, a completion marker verifies completion, not exclusion.
+
+So `test/test_threadsafe_io_lock_foreign.pas` asserts **atomicity**: four glibc
+`pthread_create` threads write 50 lines of 300 identical characters each (a
+`Writeln` is two `write(2)` calls, so an unserialised pair tears), and the
+Makefile demands exactly **200 whole lines** plus the `done`. Counting *bad*
+lines instead would have scored a crashed run as a pass. Watched failing at
+**52, 108 and 57** of 200 on the naive build, with 1200-character torn lines.
+
+### The other test that caught this, and it caught it by being a NEIGHBOUR
+
+`test_tls_base` went `errors=2` — it asserts slots 2..15 are zero in the main
+thread's block, and slots 2 and 3 are now the bounds. Its tag moved to slot 4
+(`TLS_SLOT_FIRST_FREE`); it has now moved twice, from slot 1 when the tid landed
+and from slot 2 when the bounds did. The assertion is worth keeping exactly
+because it is about a slot this test does not own.
+
+Its phase 0 and phase B also install their *own* blocks over the entry one,
+leaving slots 1..3 zero — so every `Writeln` after that falls back to `gettid`.
+That is the fail-safe path being exercised by a test written years before it
+existed.
+
+### Left deliberately on the slow path
+
+**Cloned threads.** The clone stub knows the top of the child's stack (the
+`childStack` argument) and not the bottom, and only the code that ALLOCATED the
+stack does. Their bounds stay zero, so they miss and pay `gettid` — exactly the
+behaviour they had before this change, with no new risk. Taking that last slice
+means either a sixth `__pxxclone` argument or having `palthread` fill the child's
+block after the clone returns; the trade-off is written up in
+`feature-a-tls-stack-bounds-for-cloned-threads`.
+
+**Foreign threads miss forever, by design.** That is not a limitation to be
+fixed: a thread reading a block it inherited must not be believed.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

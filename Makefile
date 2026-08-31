@@ -12738,6 +12738,16 @@ test-core: $(COMPILER)
 	done
 	./$(COMPILER) --threadsafe test/test_multithreading.pas $(TESTTMP)/test_multithreading26
 	$(TESTTMP)/test_multithreading26 | grep -q "multithreading test completed successfully"
+	# The I/O lock's owner tid comes from TLS, and a FOREIGN thread (glibc
+	# pthread_create) inherits the creator's block -- so believing that block's
+	# tid answers "already mine" for a lock it does not hold. The line above
+	# cannot see that: it greps for a completion marker, and the broken build
+	# prints it. This one counts WHOLE 300-character lines and demands all 200,
+	# so a torn run and a crashed run both fail. Watched failing at 52/108/57 of
+	# 200 with the stack-bounds check removed.
+	./$(COMPILER) --threadsafe test/test_threadsafe_io_lock_foreign.pas $(TESTTMP)/test_threadsafe_io_lock_foreign26
+	$(TESTTMP)/test_threadsafe_io_lock_foreign26 > $(TESTTMP)/test_threadsafe_io_lock_foreign.out
+	tools/expect_same.sh test_threadsafe_io_lock_foreign26 "$$(grep -c -E '^(A{300}|B{300}|C{300}|D{300})$$' $(TESTTMP)/test_threadsafe_io_lock_foreign.out) $$(tail -1 $(TESTTMP)/test_threadsafe_io_lock_foreign.out)" "200 done"
 	# pxx's thread pointer must not evict libc's. The main-thread TLS block was
 	# installed in fs -- where glibc keeps ITS thread pointer -- and a program
 	# calling strerror/malloc segfaulted before printing anything, while pinned

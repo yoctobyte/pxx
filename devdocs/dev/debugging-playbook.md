@@ -3454,3 +3454,40 @@ contains the answer, so no unit smaller than the program will do.
 Check it before reaching for a fix that worked on the sibling: find the array
 the site appends to, and see whether the pass that drains it runs per body or
 per image. It is one grep, and it is the whole design decision.
+
+## A completion marker cannot see a concurrency defect — it is preserved by almost every race
+
+Measured 2026-08-31 while landing `feature-a-io-lock-owner-from-tls-not-gettid`.
+I deleted the stack-bounds check from the `--threadsafe` I/O lock, changing
+nothing else, and rebuilt. The lock now believes an inherited TLS block, so a
+glibc `pthread_create` thread answers *"already mine"* for a lock it does not
+hold: **mutual exclusion is gone.** Then:
+
+| the suite's threading tests | result on that build |
+| --- | --- |
+| `test_multithreading` (4 glibc threads, heap churn, `write('.')`) | **PASS** |
+| `test_threadsafe_io_lock` (reentrancy, write-arg writes) | **PASS** |
+
+The first greps for `multithreading test completed successfully`; a program that
+races still completes. The second is single-threaded. **Both are the tests the
+ticket's own `Gate:` line named**, so the gate would have blessed the defect it
+spends three sections explaining.
+
+**The shape:** a race almost never stops a program — it changes what the program
+*produced*. So a concurrency guard must assert on the OUTPUT's structure, not on
+the run's survival. The replacement (`test_threadsafe_io_lock_foreign.pas`) has
+four threads each write 50 lines of 300 identical characters — a `Writeln` is
+two `write(2)` calls, so an unserialised pair tears — and demands **exactly 200
+whole lines**. Watched failing at 52, 108 and 57, with 1200-character lines.
+
+Two details that are the actual reusable part:
+
+- **Count the GOOD, never the bad.** "No malformed lines" scores an empty run,
+  a crash and a hang as a pass. `= 200` cannot.
+- **The tearing must be BIG.** `test_multithreading` also writes from those
+  threads — single dots. Interleaved dots are indistinguishable from ordered
+  dots. If the payload is one syscall wide, there is nothing to tear.
+
+Same family as frankA's *a read-back test verifies agreement, not correctness*
+(same day, `feature-signal-siginfo-ucontext`): the instrument answered honestly
+about the wrong question. Here the honest answer was "it finished".
