@@ -23,8 +23,37 @@ want="$(printf 'shared OK\nperthread OK\nall OK')"
 # Calibration: tools/testmgr.py exports TESTMGR_TIME_SCALE (probe-compile
 # time vs reference box) so run timeouts stretch on weak hardware instead of
 # false-failing. Serial make runs get the neutral default.
+#
+# TIME_SCALE ALONE IS NOT ENOUGH, and this runner was the last qemu one still
+# using only it. It is an IDLE HARDWARE probe: it stays ~1.00 on a fast box, so
+# it never captures "the box is busy", which is the condition a full sweep
+# creates for itself. The other three qemu runners (run_c_conformance.sh,
+# run_pascal_conformance.sh, run_fgl_corpus.sh) all multiply by
+# TESTMGR_LOAD_SCALE = cap/cores as well, for exactly this failure --
+# regression-testmgr-conformance-shard-timeout-under-load. Measured 2026-08-31
+# on seven: this job died at its hardcoded 120s with TESTMGR_TIME_SCALE=1.00
+# while a 592-second full tier ran around it. Seven is not slow; it is busy.
+# (frankS built the diagnostic that could say so, fc5762a2f; frankA read it.)
 SCALE="${TESTMGR_TIME_SCALE:-1}"
-scaled() { awk -v t="$1" -v s="$SCALE" 'BEGIN { printf "%d", (t*s < t ? t : t*s) }'; }
+LOAD="${TESTMGR_LOAD_SCALE:-1}"
+
+# THE CAP IS NOT TIMIDITY, IT IS A COLLISION THAT WAS EXACT. testmgr classes
+# this job as `qemu`, whose OUTER per-job timeout is 240s (CLASSES in
+# tools/testmgr.py). LOAD_SCALE is ~2.00 at default width (hard_cap = nproc*2),
+# so the sibling formula alone gives 120 * 1.00 * 2.00 = 240 -- precisely the
+# outer. The outer would then pre-empt the inner, and the job-level kill says
+# only "TIMED OUT", discarding the elapsed/budget/scale line this runner exists
+# to print. We would have spent the diagnostic to buy the budget.
+# So: stretch, but stay strictly under the outer.
+# tools/run_sqlite_inner_budget_devtest.py reads BOTH numbers -- this cap and
+# testmgr's qemu class timeout -- and fails if the gap ever closes, so changing
+# either one alone cannot silently recreate the collision.
+INNER_CAP=200
+scaled() {
+  awk -v t="$1" -v s="$SCALE" -v l="$LOAD" -v cap="$INNER_CAP" \
+      'BEGIN { v = t * s * l; if (v < t) v = t; if (v > cap) v = cap;
+               printf "%d", v }'
+}
 
 case "$ARCH" in
   x86_64)  tgt="";              qemu="";             run_to=60 ;;
@@ -83,7 +112,7 @@ elapsed="$(( $(date +%s) - started ))"
 if [ "$got" = "$want" ]; then
   echo "test-sqlite-threads: PASS $ARCH (libc-free, shared+per-thread) ${elapsed}s/${run_to}s"
 elif [ "$rc" = "124" ]; then
-  echo "test-sqlite-threads: FAIL $ARCH (TIMED OUT after ${run_to}s; TESTMGR_TIME_SCALE=$SCALE)"
+  echo "test-sqlite-threads: FAIL $ARCH (TIMED OUT after ${run_to}s; TESTMGR_TIME_SCALE=$SCALE TESTMGR_LOAD_SCALE=$LOAD cap=${INNER_CAP}s)"
   echo "  partial output: [$got]"
   exit 1
 else
