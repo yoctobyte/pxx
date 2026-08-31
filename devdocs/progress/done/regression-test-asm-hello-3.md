@@ -30,3 +30,6 @@ ok: /tmp/testmgr-scratch-430046/test_asm_dis_hello26  [code=65304B  data=2760B  
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-31 — auto-closed by the seven watcher: `test-asm#src:test/hello.pas` passes at e436930bac42 (tier native); it was red at 44ec32358394. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
