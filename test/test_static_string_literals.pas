@@ -1,7 +1,7 @@
 program test_static_string_literals;
 
-{ At -O3 a string literal that becomes a managed AnsiString is an ADDRESS into
-  the data section, not a call to PXXStrFromLit that allocates and copies the
+{ At -O2 AND ABOVE a string literal that becomes a managed AnsiString is an
+  ADDRESS into the data section, not a call to PXXStrFromLit that allocates and copies the
   same bytes on every evaluation. The block is built by the compiler
   (InternStr, emit.inc) with a saturated refcount, so nothing ever frees it and
   every write to it must copy first.
@@ -19,8 +19,10 @@ program test_static_string_literals;
 
   Every row therefore reads a literal AGAIN after something has been done to a
   copy of it, and the two answers are printed side by side. -O0 is the control:
-  the pass is -O3-gated, so -O0 provably cannot take the static path, and one
-  expectation covers both.
+  the pass is gated at `OptLevel < 2`, so -O0 provably cannot take the static
+  path, and one expectation covers both. (This said "-O3-gated" for as long as
+  that was false: 440c822e6a80 promoted the pass into -O2, which is why -O2 is
+  in the Makefile's level list and is not redundant with -O3.)
   bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
 
 var

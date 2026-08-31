@@ -4420,10 +4420,12 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_ssl226 "$$($(TESTTMP)/test_ssl226)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
 	# aarch64 carries the same pass through the same shared representation --
 	# the header is in the POOL, so the port is one predicate and three emit
-	# sites, not a second shim. It takes its reference with a call to
-	# PXXStrIncRef where x86-64 uses a four-byte `inc qword [rax-16]`: a
-	# hand-emitted aarch64 retain would have to reproduce the threadsafe arm
-	# too, and EmitStrIncRefA64 already gets that right.
+	# sites, not a second shim. NEITHER ARCH TAKES A REFERENCE ANY MORE: aarch64
+	# dropped its PXXStrIncRef call on 2026-08-30 and x86-64 dropped its
+	# four-byte `inc qword [rax-16]` on 2026-08-31, once the release blob was
+	# given the MSTR_STATIC_RC guard and there was no longer an unguarded
+	# decrement for a retain to balance
+	# (bug-a-string-release-has-two-implementations-that-already-disagree).
 	# Same deliberate break confirms it fires: MSTR_STATIC_RC=0 makes aarch64
 	# -O3 print `b=Zbcdef` while aarch64 -O0 stays correct.
 	# -O2 IS IN THIS LIST BECAUSE THE GATE SAYS `OptLevel < 2`, not `< 3`. When
