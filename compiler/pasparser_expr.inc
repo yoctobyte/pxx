@@ -8883,6 +8883,8 @@ end;
 procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
     ixTry: Integer;   { a repeat count coerced through __index__ }
+    shiftLitLeft: Boolean;        { shift over an operand with no DECLARED width }
+    shiftPromoS, shiftPromoU: TTypeKind;
 begin
   ParseFactor;
   while (((CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
@@ -9140,16 +9142,45 @@ begin
         made --strict-fpc the ONE mode that disagreed with FPC on this row,
         while pxx's own default agreed.
         bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right }
+      { …and a LITERAL left operand promotes to 64 bits on EVERY target, not to
+        the target's native width. It has no declared width to preserve, so
+        there is nothing for "native" to mean; capping it at native left
+        `writeln(1 shl 40)` answering 256 on i386 (x86 masks the count to 5
+        bits) and 0 on arm32 — two different wrong answers, neither of them a
+        model, and the exact trap the 2026-08-10 ruling was made to remove,
+        surviving on the targets that were dismissed with "native there IS 32
+        bits". It also disagreed with ConstEval, which folds
+        `const K = 1 shl 40` at Int64 on every target, in the SAME program.
+        A DECLARED narrow variable still promotes to native and no further:
+        that half is the ruling and does not move.
+        bug-a-an-untyped-literal-shift-is-target-width-on-32-bit-targets }
+      shiftLitLeft := (ASTKind[left] = AN_INT_LIT) or (ASTKind[left] = AN_NEG);
+      if shiftLitLeft then
+      begin
+        shiftPromoS := tyInt64;     shiftPromoU := tyUInt64;
+      end
+      else
+      begin
+        shiftPromoS := tyNativeInt; shiftPromoU := tyNativeUInt;
+      end;
       if (not CProgramMode) and
-         ((not StrictShiftWidth) or (ASTKind[left] = AN_INT_LIT) or
-          (ASTKind[left] = AN_NEG)) and
+         ((not StrictShiftWidth) or shiftLitLeft) and
          TypeIsMachineInt(IntToTypeKind(ASTTk[left])) and
-         (TypeSize(IntToTypeKind(ASTTk[left])) < TypeSize(tyNativeInt)) then
+         (TypeSize(IntToTypeKind(ASTTk[left])) < TypeSize(shiftPromoS)) then
       begin
         if TypeSigned(IntToTypeKind(ASTTk[left])) then
-          ASTTk[node] := Ord(tyNativeInt)
+          ASTTk[node] := Ord(shiftPromoS)
         else
-          ASTTk[node] := Ord(tyNativeUInt);
+          ASTTk[node] := Ord(shiftPromoU);
+        { Carry the width down onto the LITERAL itself, not just onto the binop
+          node. A 64-bit register makes the two indistinguishable, which is why
+          x86-64 and aarch64 were right with only the node tagged; the 32-bit
+          pair path reads the operand's OWN type to decide how to materialise
+          it, so a node tagged tyInt64 over a tyInt32 literal shifted a
+          half-built pair and answered 0. The literal has no declared width to
+          contradict — giving it the result's width is what "untyped" means —
+          and doing it here means no backend has to know. }
+        if shiftLitLeft then ASTTk[left] := ASTTk[node];
       end
       else
         ASTTk[node] := ASTTk[left];
