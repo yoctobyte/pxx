@@ -533,6 +533,14 @@ begin
             slot. The store was built while the header was parsed, before this
             Proc existed, so it names the hidden global instead and the pairing
             is made here -- after every registration site has settled. }
+{$ifdef PXX_NO_NILPY}
+          { ProcParamDefaultSym is only ever set by the NilPy header parser, so
+            with that frontend compiled out this arm is unreachable rather than
+            merely unused. It is guarded and not deleted because the reachable
+            version is the one that matters and it lives three lines down.
+            feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets }
+          Error('internal: a non-constant parameter default in a build without the NilPy frontend');
+{$else}
           pend := PyDfltPendFor(ProcParamDefaultGName[pi * MAX_PROC_PARAMS + k]);
           PyDfltPendOff[pend] := slot;
           if PxxDbgEnabled('n.sig') then
@@ -540,6 +548,7 @@ begin
                     Procs[pi].Params[k].Name, ' pend=', pend,
                     ' gname=', ProcParamDefaultGName[pi * MAX_PROC_PARAMS + k],
                     ' slot=', slot);
+{$endif}
           Continue;
         end;
         if ProcParamDefaultIsStr[pi * MAX_PROC_PARAMS + k] then Continue;

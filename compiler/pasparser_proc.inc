@@ -4515,6 +4515,15 @@ begin
 
   if isPyUnit then
   begin
+{$ifdef PXX_NO_NILPY}
+    { A Pascal unit may `use` a `.py` MODULE, which is the one place the Pascal
+      parser reaches into the NilPy frontend for something other than an
+      expression hook. Refused BY NAME rather than by a parse failure, the same
+      shape every other omitted frontend uses.
+      feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets }
+    Error('uses ' + lo + ': this compiler was built without the NilPy frontend (built with PXX_NO_NILPY); rebuild without that define to import a .py module');
+    Exit;
+{$else}
     { A `.py` module: lex it onto the end of the token stream, parse it as this
       unit, then put the importer's own position back — the same shape the C and
       Pascal branches below use. }
@@ -4546,6 +4555,7 @@ begin
     CurTok.IVal := savedCurTokIVal;
     CurTok.Line := savedCurTokLine;
     Exit;
+{$endif}
   end;
 
   if isCUnit then

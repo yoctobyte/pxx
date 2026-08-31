@@ -30,6 +30,17 @@
   deliberately NOT part of a refactor whose whole guarantee is that it changed
   nothing. }
 
+{ ---- PXX_NO_NILPY -------------------------------------------------------
+  Everything below is a forward for something pyparser.inc defines, so it goes
+  when pyparser.inc goes. THREE ISLANDS DO NOT: VariantCastToTemp and
+  PromoDemoteToInt64 (the two strays named in the header — shared, and their
+  bodies are in pasparser_expr.inc), and the two BODIES this file carries,
+  ParseArgExpr and PyIsStrBaseTk, both of which the shared Pascal parser calls
+  unconditionally. Each island is un-guarded where it sits rather than moved:
+  moving them is the semantic change the carve-out deliberately refused, and
+  it is still refused here.
+  feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets }
+{$ifndef PXX_NO_NILPY}
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;  { the NilPy half of ParseLValueAST, carved out into pyparser.inc — ParseLValueAST dispatches here on PyExprMode }
 function PyUClassIsIterable(ci: Integer): Boolean; forward;  { __iter__ OR the old-style __getitem__ sequence protocol; asked by every make-this-iterable site }
@@ -130,8 +141,10 @@ function PyStarMixedForwardCall(procIdx: Integer): Integer; forward;   { the one
 function PyNewContainerTemp(const clsName, tag: AnsiString): Integer; forward;   { a hoisted, empty pylib container temp (pyparser.inc) }
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
+{$endif}
 function VariantCastToTemp(n: Integer; target: TTypeKind): Integer; forward;   { a typecast of a VARIANT is the CONVERSION, not a reinterpret of the record; defined beside PromoDemoteToInt64 }
 function PromoDemoteToInt64(n: Integer): Integer; forward;   { promo -> machine int for a value CAST; defined beside PromoWidenToDouble, below its three call sites (FPC is strict about declaration order, pxx is not — bug-a-fpc-seed-drift-emitasmx64-forward) }
+{$ifndef PXX_NO_NILPY}
 function PyWiden(a, b: TTypeKind): TTypeKind; forward;   { Nil Python numeric-kind widening (pyparser.inc) }
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
@@ -246,6 +259,7 @@ procedure PyStarUnpackProcArgs(procIdx: Integer; var argsHead, lastArg, nArgs: I
 function PyIsSetCall: Boolean; forward;   { Nil Python `set(...)` builtin, user definition permitting (pyparser.inc) }
 function PyParseEmptySet: Integer; forward; { Nil Python set() / set(iterable) (pyparser.inc) }
 
+{$endif}
 procedure ParseArgExpr;
 { A call ARGUMENT under NilPy must be parsed by the Python precedence chain
   (or < and < not < comparison, and `in`/`is` with Python's meaning), not by
@@ -272,12 +286,20 @@ procedure ParseArgExpr;
   site's own check is now redundant and harmless: it fires first and does the
   same thing. }
 begin
+{$ifdef PXX_NO_NILPY}
+  { No NilPy frontend: PyExprMode can never be True, so the hook IS ParseExpr.
+    Spelled out rather than left to dead-code elimination, because the two
+    branches it drops are the only references the shared parser makes to
+    pyparser.inc's expression chain. }
+  ParseExpr;
+{$else}
   if PyExprMode and PyBareGenExprAhead then
   begin
     CurASTNode := PyParseCompExprValue(False);
     Exit;
   end;
   if PyExprMode then PyParseBoolExpr else ParseExpr;
+{$endif}
 end;
 
 { Types a NilPy str method may be called ON. tyChar is included because Python
@@ -289,6 +311,7 @@ function PyIsStrBaseTk(tk: TTypeKind): Boolean;
 begin
   PyIsStrBaseTk := (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar);
 end;
+{$ifndef PXX_NO_NILPY}
 procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc) }
 function PyClassCreateExpr: Integer; forward; { Nil Python ClassName(args) ctor (pyparser.inc) }
 function PyIsExactCtorName(const nm: AnsiString): Boolean; forward; { Nil Python: `Name(` is a ctor only on an EXACT-case class match (pyparser.inc) }
@@ -296,3 +319,5 @@ function PyIsClassTypeExact(const nm: AnsiString): Boolean; forward; { Nil Pytho
 function PyBuiltinBaseCi(const nm: AnsiString): Integer; forward; { Nil Python: the pylib class a BUILTIN type name (list/dict/set/bytes) stands for, or -1 (pyparser.inc) }
 function PyIsDictCompAhead: Boolean; forward; { Nil Python dict comprehension lookahead (pyparser.inc) }
 function PyParseDictCompExprValue: Integer; forward; { Nil Python dict comp in expression position (pyparser.inc) }
+
+{$endif}

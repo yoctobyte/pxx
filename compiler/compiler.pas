@@ -66,7 +66,16 @@ function IsNilLiteralNode(node: Integer): Boolean; forward;   { real body in ast
 {$include util.inc}   { shared helpers owned by no frontend/backend — AIntToStr lived in aparser.inc until 2026-08-19. AFTER lexer.inc, not before: AppendChar is defined there. }
 {$ifndef PXX_NO_CFRONT}{$include clexer.inc}{$endif}
 {$ifndef PXX_NO_BASIC}{$include blexer.inc}{$endif}
-{$include pylexer.inc}
+{ PXX_NO_NILPY IS NOT YET A WORKING DEFINE, and it is deliberately absent from
+  the thirteen listed in --help. The include guards, the driver refusal, the
+  `.py`-module refusal and the ParseArgExpr fallback are all in place and are
+  byte-identical no-ops in the default build; what is NOT in place is the
+  remaining NilPy code inside the shared Pascal expression chain. Measured
+  2026-08-31 with `fpc -dPXX_NO_NILPY`: 279 unresolved sites over 134 distinct
+  Py* symbols, in five routines of pasparser_expr.inc / _lval.inc / _stmt.inc.
+  That count IS the campaign's progress metric -- it is 0 when the define works.
+  feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets }
+{$ifndef PXX_NO_NILPY}{$include pylexer.inc}{$endif}
 {$ifndef PXX_NO_RUST}{$include rlexer.inc}{$endif}
 {$ifndef PXX_NO_ADA}{$include alexer.inc}{$endif}
 {$ifndef PXX_NO_ZIG}{$include zlexer.inc}{$endif}
@@ -202,7 +211,7 @@ function CmpFusible(node: Integer): Boolean; forward;
 {$include crtl_names.inc}
 {$ifndef PXX_NO_CFRONT}{$include cparser.inc}{$endif}
 {$ifndef PXX_NO_BASIC}{$include bparser.inc}{$endif}
-{$include pyparser.inc}
+{$ifndef PXX_NO_NILPY}{$include pyparser.inc}{$endif}
 {$ifndef PXX_NO_RUST}{$include rparser.inc}{$endif}
 {$ifndef PXX_NO_ADA}{$include aparser.inc}{$endif}
 {$ifndef PXX_NO_ZIG}{$include zparser.inc}{$endif}
@@ -1914,6 +1923,10 @@ begin
 
   if isNilPy then
   begin
+{$ifdef PXX_NO_NILPY}
+    writeln(StdErr, 'this compiler was built without the NilPy frontend (built with PXX_NO_NILPY); rebuild without that define to compile Nil-Python sources');
+    Halt(1);
+{$else}
     PyLoopElseFlag := -1;   { no enclosing loop yet; 0 is a real Syms index }
     for i := 0 to MAX_UCLASS - 1 do
     begin
@@ -1932,6 +1945,7 @@ begin
     TokPos := 0;
     Next;
     ParsePyProgram;
+{$endif}
   end
   else if isBasic then
   begin

@@ -3,8 +3,8 @@ track: A
 prio: 55
 type: feature
 blocked-by: []   # NOT blocked overall; ONE configuration is — see "Read this first"
-summary: "Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it."
-status: working
+summary: "Build-time selection of frontends and targets. Thirteen omission defines ship. PXX_NO_NILPY now has its INCLUDE GUARDS, driver refusal, `.py`-module refusal and ParseArgExpr fallback landed (byte-identical in the default build) but DOES NOT BUILD YET and is deliberately not advertised. The carve campaign it was parked behind has LANDED and did not finish the job: re-measured 2026-08-31, 134 symbols / 279 sites remain, down from 176/426 -- concentrated in five routines of the shared Pascal expression chain, as NilPy arms inside the shared ARGUMENT LOOPS (guarded by isNilPy, BELOW the PyParseFactorCore hook, which is why that hook did not close them). Parked again behind refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops. Also, unchanged and still the headline: omitting frontends is NOT the size lever -- nine frontends buy 4.4%, three host backends buy 20.7%."
+status: unfinished
 owner: frankA
 ---
 
@@ -899,3 +899,89 @@ Also relevant to this ticket's own framing: that ~19.5MB is a *measured* figure
 landing), and BSS is zero-fill-on-demand — so a non-wasm build pays address
 space rather than resident memory. Whether that is worth a guard at all is a
 judgement this ticket is better placed to make than the wasm lane was.
+## UNPARK 2026-08-31 (frankA) — the carve campaign landed, and it did NOT finish the job
+
+The park above says `PXX_NO_NILPY` follows the carve campaign. **All three carve
+tickets are now in `done/`**: `refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files`
+(which is why `parser.inc` no longer exists — it is the `pasparser_*.inc` set),
+`task-a-carve-nilpy-selectors-out-of-parser-inc`, and
+`task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc`. The re-entry condition
+fired and nobody was watching for it, which is the only reason this sat.
+
+But the metric this ticket handed the campaign — *"`PXX_NO_NILPY` compiling
+clean is the objective definition of done"* — is **not** met. Re-measured:
+
+| | symbols | sites |
+| --- | --- | --- |
+| 2026-08-19, `parser.inc` | 176 | 426 |
+| **2026-08-31, after the carve** | **134** | **279** |
+
+−24% in symbols, −35% in sites. Real progress, not the finish line. The command,
+so nobody re-derives it — it is one line and ten seconds:
+
+```
+fpc -O2 -Tlinux -Px86_64 -Se1000 -dPXX_NO_NILPY -FU<tmp> -o<tmp>/pc compiler/compiler.pas
+```
+
+### A MEASUREMENT THAT LIED, and it lied by being correct about something else
+
+The first run of that command answered **7**, not 279. Seven is a *believable*
+number — it is the shape the six esoteric probes have (two each, driver dispatch
+only), so it read as "the carve is finished". It was correct, about the wrong
+question: at that point only the two `{$include}` lines were guarded, so
+`pyforwards.inc` was still supplying ~190 `Py*` **forward declarations**. FPC
+resolves a name against a forward and does not complain until the *end of the
+module*, which it never reached — it aborted on the 7 symbols that had no
+forward at all. So the instrument was reporting **symbols with no declaration**,
+which is not **symbols with no body**, and the difference is 272 sites.
+
+What caught it was this ticket's own rule, three sections up: *decide what an
+implausible result would look like before you run it.* 176 → 7 in a campaign
+whose three tickets each described a bounded move fails that test on sight. The
+fix is mechanical — guard the forwards too — and the guarded number is 279.
+[[the-name-is-not-the-thing]], instrument-shaped: **nothing errored, it
+answered.**
+
+### What LANDED here, and what it is not
+
+Byte-identical in the default build (`9eb39c00c650` with and without the diff,
+two fresh `make compiler/pascal26` runs), so this is structure, not behaviour:
+
+- `pylexer.inc` / `pyparser.inc` includes guarded.
+- `pyforwards.inc`: the `Py*` forwards guarded in three spans, around the three
+  islands that must survive — the two strays its own header names
+  (`VariantCastToTemp`, `PromoDemoteToInt64`) and the two **bodies** it carries
+  that the shared parser calls unconditionally (`ParseArgExpr`, `PyIsStrBaseTk`).
+- `ParseArgExpr` gets a no-NilPy body: `PyExprMode` cannot be True, so the hook
+  *is* `ParseExpr`. Spelled out rather than left to dead-code elimination.
+- The driver's `isNilPy` arm refuses by name, the shape the other twelve use.
+- `uses` of a **`.py` module** (`pasparser_proc.inc`) refuses by name — the one
+  place the Pascal parser reaches into NilPy for something that is not an
+  expression hook.
+- `rtti_emit.inc`'s `ProcParamDefaultSym` arm, which only the NilPy header
+  parser can reach.
+
+**`PXX_NO_NILPY` DOES NOT BUILD, and is deliberately NOT in the documented
+thirteen.** A note at the include site says so and carries the 279/134 figure,
+because a define that is advertised and fails is worse than one that is absent.
+
+### Where the remaining 279 are — five routines, not a diffuse mess
+
+| file | sites | routines |
+| --- | --- | --- |
+| `pasparser_expr.inc` | 191 | `ParseFactorCore` 98, `ParseFactor` 56, `ParseSimpleExpr` 17, `ParseTerm` 11, `ParseExpr` 9 |
+| `pasparser_lval.inc` | 68 | |
+| `pasparser_stmt.inc` | 13 | |
+| `pasparser_call.inc` | 5 | |
+| `pasparser_name.inc` | 1 | `PyIsClassTypeExact` |
+| `cparser.inc` | 1 | `PyStoredName` — the **C** frontend depending on NilPy |
+
+`ParseFactorCore` **already** dispatches to `PyParseFactorCore` and `Exit`s at
+`pasparser_expr.inc:521`. The 98 that remain are all *below* that line, guarded
+by `isNilPy` rather than `PyExprMode` — NilPy arms inside the shared *argument
+loops*, not inside the shared expression parse. That is the actual shape of the
+remaining work and it is why the existing hook did not close it.
+
+Filed as `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops`.
+This ticket goes back to `unfinished/` behind it, for the same reason as before
+and with a smaller number attached.
