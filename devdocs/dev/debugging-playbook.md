@@ -4517,3 +4517,36 @@ as possibly-dead defensive text.
 The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
+
+## An instrument that reports a RESULT should report its DENOMINATOR
+
+Named 2026-08-31 (frankS), from three instruments that failed the same way in
+one day, each with a different surface story:
+
+| instrument | said | over |
+| --- | --- | --- |
+| a linter copied to the scratchpad | "clean" | **0** files (it resolved its repo root from `__file__`) |
+| a saturation check | PASS | an 11-token *head* sharing zero tokens with the query |
+| a benchmark / verdict | a number | a **stale binary** nobody printed the sha of |
+
+None errored. All answered. The common defect is not the logic — each one's
+logic was fine for what it was actually looking at — it is that **the report
+carried a numerator with no denominator, so "nothing found" and "nothing
+looked at" printed identically.**
+
+**So: before the verdict, print what was examined.** `files scanned: 7` makes
+`files scanned: 0` impossible to read as a pass. This is the same habit as the
+existing rule to print `sha256sum compiler/pascal26` beside every measurement,
+and as the corpus rule that a pass rate over a corpus of mostly-refusals is not
+a pass rate — three instruments, one missing field.
+
+It is the cheapest member of the *guard that cannot fail* family, because
+unlike a positive control it costs one line and no thought: a positive control
+asks you to imagine the failure, a denominator only asks you to print what you
+already have in hand.
+
+**Corollary for a NEGATIVE result, which is where it bites hardest.** "I
+grepped and found nothing" and "I grepped the wrong tree" are the same
+sentence. When a search comes back empty, report the size of what was searched
+in the same breath — and if you cannot state it, you have not run a search, you
+have run a script.

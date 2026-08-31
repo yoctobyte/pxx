@@ -59,7 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 423, ranked
+## Ready — top 30 of 422, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -92,4 +92,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 
-_393 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_392 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

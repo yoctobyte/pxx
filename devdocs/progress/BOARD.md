@@ -271,7 +271,7 @@ _none_
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
 | decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies | U | 60 | decide | The NilPy fixed tax (~2.2s/compile, ~1,940 CPU-s per full tier) has two possible routes and the ticket assumes one. Serialising the compiled unit image is a 176+ parallel-array checklist that every future Track A commit can silently invalidate. Deferring routine bodies persists nothing and has no staleness class, but only pays if most bodies are unreachable, which is unmeasured. Decide the route before either is built. | — |
 | decide-one-managed-string-kind-with-an-element-width-or-a-second-kind | U | 60 | decide | The UTF-16 model was decided as a distinct tyWideString kind. Measurement after the fact says that costs a 636-site audit with no chokepoint and silent failures, which contradicts the owner's stated 'almost free'. Option B -- one managed-string kind carrying an element width -- costs nothing at those sites. One AST measurement decides whether B is actually cheaper. | — |
-| decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual | U | 45 | decide | MEASURED on x86-64 Linux at 26b5a5d066ed: with --rtl-libc a Pascal binary's raw kernel-entry count falls 75 -> 1 (hello) and 86 -> 1 (try/except), and --rtl-libc --no-signals gives 0. So the entire residual for a non-threaded program is exactly ONE instruction, the rt_sigreturn in ir_codegen.inc:585, emitted via the syscall_raw mnemonic that is never routed through the thunk. It cannot be routed: rt_sigreturn restores the whole context from a signal frame at a fixed offset from rsp, so a call wrapper is a SIGSEGV on the first delivered signal. feature-port-openbsd-libc's acceptance says 'disassembly contains no raw syscall' and its own item 3 says that criterion is wrong and should be raised as a decide-*. This is that ticket. The fork: does OpenBSD pinsyscalls accept a binary whose only kernel entry is a sigreturn, and if not, does the OpenBSD target ship signals-off, use libc's sigreturn path, or is the port infeasible as specified? NOT measured: the clone child stub in thread_emit.inc, which is raw for the same class of reason -- no threaded program was scanned. | — |
+| decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual | U | 45→50 | decide | MEASURED on x86-64 Linux at 26b5a5d066ed: with --rtl-libc a Pascal binary's raw kernel-entry count falls 75 -> 1 (hello) and 86 -> 1 (try/except), and --rtl-libc --no-signals gives 0. So the entire residual for a non-threaded program is exactly ONE instruction, the rt_sigreturn in ir_codegen.inc:585, emitted via the syscall_raw mnemonic that is never routed through the thunk. It cannot be routed: rt_sigreturn restores the whole context from a signal frame at a fixed offset from rsp, so a call wrapper is a SIGSEGV on the first delivered signal. feature-port-openbsd-libc's acceptance says 'disassembly contains no raw syscall' and its own item 3 says that criterion is wrong and should be raised as a decide-*. This is that ticket. The fork: does OpenBSD pinsyscalls accept a binary whose only kernel entry is a sigreturn, and if not, does the OpenBSD target ship signals-off, use libc's sigreturn path, or is the port infeasible as specified? THE THREADED CASE IS NOW MEASURED (frankS, 2026-08-31): a --threadsafe program goes 198 -> 4 with --rtl-libc and -> 3 with --no-signals, so the clone child stub contributes exactly THREE, each irreducible for a different reason (SYS_clone itself, whose RETURN splits parent and child; arch_prctl installing GS in the child before any libc call is safe; and the child's own SYS_exit, which has no frame to return to). The binary runs correctly. So the full residual is 1 non-threaded, 4 threaded, 0 only with no signals AND no threads. | — |
 | decide-posix-master-vs-fpc-named-master-for-the-socket-facades | U | 25 | decide | `Posix.*` is master, or the FPC-named units are? The tree has already answered, the other way | — |
 | decide-release-signing-key-custody | U | 25→50 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | decide-settextbuf-needs-buffered-text-io-or-stays-missing | U | 55 | decide | SetTextBuf's contract is 'use this caller-supplied buffer for this handle', and lib/rtl/textfile.pas has no buffering at all — it reads one byte per PalRead syscall. So the fork is: build buffered Text I/O (a real win beyond this routine) and make SetTextBuf mean something, or leave it missing so the compile error stays honest. Stubbing it is already ruled out. | — |
@@ -388,7 +388,7 @@ _none_
 | feature-pcl-tk-windows-compat | M | 25 | feature | NilPy tk on Windows — quarantine the Tcl/Tk-DLL-swarm problem behind a {$ifdef WINDOWS} include in tk.pas; emulate/wrap, stub now fill later. Linux keeps the real embed | feature-port-windows-pe |
 | feature-pcl-win32-widgetset | M | 25→30 | feature | PCL: native Win32 widgetset — a 2nd TWidgetSet subclass over user32/gdi32, zero-dep (no GTK bundle). Best-effort, UN-GATED (no Windows box, Wine-smoke only) | feature-pcl-seam-seal, feature-port-windows-pe |
 | feature-port-multi-os-abstraction | A | 55 | feature | UMBRELLA: abstract the target-OS axis — FreeBSD (native) + Windows (PE, Wine-tested), phased | feature-port-freebsd-native, feature-port-rtl-over-libc, feature-port-windows-pe |
-| feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
+| feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so. The LOWERING landed (feature-port-rtl-over-libc, 3a0ed43fb); what remains is the target. Re-blocked 2026-08-31 on decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, because this ticket's own item 3 says its acceptance criterion ('no raw syscall') is WRONG and must be settled first: the measured residual is 1 instruction non-threaded and 4 threaded, each irreducible. It had been sitting at the head of Track A's ready queue on a satisfied blocker, offering an unstartable job to every idle agent — it also needs an OpenBSD VM built by qemu autoinstall, which is infrastructure nobody has stood up. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 15 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-rtl-libc-frontend-sites-and-thread-errno | A | 40 | feature | Finish --rtl-libc: convert the C/Rust/Zig frontend syscall sites, and test the thread errno hazard the raw clone stub creates | — |
@@ -903,6 +903,7 @@ _none_
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
+- [p 50] [U] decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 1)
 - [p 50] [U] decide-release-signing-key-custody (unblocks 1)
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
@@ -915,7 +916,6 @@ _none_
 - [p 50] [U] decide-does-the-legacy-gtk-alias-still-point-at-gtk-2
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
-- [p 50] [A] feature-port-openbsd-libc
 - [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
@@ -959,7 +959,6 @@ _none_
 - [p 45] [T] chore-t-make-every-cross-target-row-assert-the-exit-code
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 45] [T] chore-t-tools-devtest-is-one-job-that-runs-86-guards
-- [p 45] [U] decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 - [p 45] [U] decide-t-refuse-unscoped-pattern-kills-in-a-hook
 - [p 45] [A] feature-a-a-variant-has-no-null-tag
 - [p 45] [A] feature-a-classinfo-returns-the-typinfo-header
@@ -1253,6 +1252,7 @@ _none_
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
+- **1** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 - **1** — decide-posix-master-vs-fpc-named-master-for-the-socket-facades
 - **1** — decide-release-signing-key-custody
 - **1** — decide-t-per-assertion-subjects-or-accept-the-file-level-label
