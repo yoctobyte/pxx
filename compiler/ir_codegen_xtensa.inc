@@ -3388,10 +3388,13 @@ begin
 
             unsupported node in IR codegen: unknown
 
-        -- `unknown`, not `classref`, because IROpName has no entry for this op.
-        Seven of the 75 declared IR ops have no name there, so a missing arm for
-        any of them names nothing at all. Filed as
-        bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown. }
+        -- `unknown`, not `classref`, because IROpName had no entry for this
+        op. FIXED 2026-08-31: all seven unnamed ops were named and coverage is
+        now checked by tools/iropname_lint.py in gate.sh, so the message reads
+        `classref` today and an eighth gap cannot open silently
+        (bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown).
+        Left here because the ORIGINAL diagnostic is why this arm exists, and
+        deleting it would lose that. }
       EmitLoadDataRefXtensa(reg_xtensa_a2, -(CLASSREF_DATAREF_BASE + IRA[node]));
 
     IR_SET_LIT:

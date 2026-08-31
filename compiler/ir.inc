@@ -315,6 +315,20 @@ begin
     IR_TLSBASE: Result := 'tlsbase';
     IR_ALLOCA: Result := 'alloca';
     IR_FPU_MASK: Result := 'fpu_mask';
+    { The seven that were unnamed until 2026-08-31. Every one of them reported
+      itself as `unknown` in the `unsupported node in IR codegen` error on every
+      target, which is IROpName's one load-bearing caller -- so a backend gap in
+      any of these could only be identified by editing the backend and
+      self-compiling. That is how IR_CLASSREF was found, on xtensa, and it cost
+      a build. bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-
+      reports-unknown; coverage is now checked by tools/iropname_lint.py. }
+    IR_PROCADDR: Result := 'procaddr';
+    IR_CLASSREF: Result := 'classref';
+    IR_VMTADDR: Result := 'vmtaddr';
+    IR_IMTADDR: Result := 'imtaddr';
+    IR_SET_SIGNAL: Result := 'set_signal';
+    IR_IO_LOCK: Result := 'io_lock';
+    IR_IO_UNLOCK: Result := 'io_unlock';
   else
     Result := 'unknown';
   end;

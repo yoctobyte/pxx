@@ -4310,3 +4310,46 @@ They are what killed every *shape* explanation, and it was round 5's conclusion 
 *every shape explanation is now matched by a working program* — that made a
 **content** instrument (which register holds what) the only remaining move. The
 falsifications were the work; the delay was one unasked question inside them.
+
+## A selftest over fixtures YOU wrote tests the logic, not the input — run the control against the real file
+
+Sharpens *"the best positive control is one you FIND, not one you build"* above,
+with the failure that section does not quite cover: a control you build can be
+**green, asserted, and blind**.
+
+Measured 2026-08-31. `tools/iropname_lint.py` checks that `IROpName` names every
+declared IR op. It shipped with a selftest carrying a real positive control — a
+fixture with one op deliberately unnamed, asserted to be reported. It passed.
+
+The tool was still blind. It scanned the `case` body for `IR_*` tokens
+**including comments**, and the comment written above the seven new arms names
+`IR_CLASSREF`. So on the real file, deleting the `IR_CLASSREF` arm left it
+reporting **clean** — the prose satisfied the check.
+
+**The fixture could not have caught it, because the fixture had no comments.** I
+wrote both the tool and its fixture in one sitting, from one mental model of
+what the input looks like, so the fixture inherited the assumption instead of
+challenging it. That is the general shape:
+
+> **A synthetic fixture is written by the same person with the same blind spot.
+> It tests whether the logic does what the author meant. It cannot test whether
+> the author understood the input.**
+
+Only the real file has the properties you did not think of. So:
+
+- **Run the positive control against the REAL input**: delete a real arm, break
+  a real entry, mutate the real baseline — then require the failure.
+- **Assert the mutation LANDED before trusting the result.** A `sed` for a token
+  that is not there changes nothing and the tool says "clean", which is
+  indistinguishable from the control passing. `diff` against the backup and
+  print `control armed` first. Same day, same session, both halves of this:
+  *"I edited it"* and *"the edit landed"* are two claims and only the second is
+  worth anything.
+- Keep the fixture selftest anyway — it is fast and it catches logic
+  regressions. Just do not let green there mean the tool works.
+
+The sting is that this was `abi.inc`'s dead review grep reproduced from scratch,
+hours after replacing it, by the same author, in the tool written to prevent
+that class of thing. **A checker satisfied by prose is this repo's house failure
+mode**, and it gets *more* likely as the comments get better — which means the
+usual remedy, write a clearer comment near the hazard, feeds it.

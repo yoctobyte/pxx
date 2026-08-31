@@ -260,6 +260,23 @@ else
   echo "  SKIP  backends ask the ABI oracle (no abi_oracle_lint.py)"
 fi
 
+# IR OP NAME COVERAGE. IROpName's one load-bearing caller is the "unsupported
+# node in IR codegen" error every backend raises, so an op it does not name
+# reports itself as `unknown` on EVERY target and the only way to find out which
+# op is missing is to edit the backend and self-compile. Seven of 75 were
+# unnamed until 2026-08-31; IR_CLASSREF was found that expensive way, on xtensa.
+#
+# The gap could open because nothing counted -- the count that found it was a
+# parser run once by hand. This is that parser, wired, so the eighth cannot open
+# silently. Sub-second; it parses two files and builds nothing.
+# bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown
+if [ -f tools/iropname_lint.py ]; then
+  step "IROpName names every IR op" "$LOGDIR/iropname-lint.log" \
+       python3 tools/iropname_lint.py                                 || RC=1
+else
+  echo "  SKIP  IROpName names every IR op (no iropname_lint.py)"
+fi
+
 # THE UNWIRED-TEST CANARY. Same placement argument as the two blocks above --
 # before the case, so no mode can forget it -- and the same failure it fixes as
 # the forwardlint block: the checker already existed, already exited 1, and was
