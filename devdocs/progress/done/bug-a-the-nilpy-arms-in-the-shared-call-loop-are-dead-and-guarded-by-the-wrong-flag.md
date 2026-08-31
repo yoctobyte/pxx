@@ -160,4 +160,4 @@ metric at 209.
 - `bug-nilpy-keyword-arg-vs-overload-set` — the ticket whose example does not reach this code
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 23c4552af.
