@@ -2674,6 +2674,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-665 | T | 70 | regression | regression: test-core#665 red at 8d1e694a9d8d (auto-filed by twatch) | — |
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
+| regression-test-core-c-abi-pure-c-control | T | 70 | regression | regression: test-core#src:test/c_abi_pure_c_control.c at 0fd9454b879d in step 2/2, `tools/expect_same.sh c_abi_pure_c_control26 "$(/tmp/c_ab` (auto-filed by twatch) | — |
 | regression-test-core-c-crtl-tempfile-and-unlocked | C | 70 | regression | regression: test-core#src:test/c_crtl_tempfile_and_unlocked.c red at 7227f3e0f1f8 (auto-filed by twatch) | — |
 | regression-test-core-callbacks-2 | N | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-callbacks | T | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 410b7a40b516 (auto-filed by twatch) | — |
@@ -2704,6 +2705,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive-2 | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 7d4a3dbb99ce (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
+| regression-test-core-test-c-abi-intra-c-calls | T | 70 | regression | regression: test-core#src:test/test_c_abi_intra_c_calls.pas at 0fd9454b879d in step 2/2, `tools/expect_same.sh test_c_abi_intra26 "$(/tmp/test_c_a` (auto-filed by twatch) | — |
+| regression-test-core-test-c-abi-pascal-caller | T | 70 | regression | regression: test-core#src:test/test_c_abi_pascal_caller.pas at 0fd9454b879d in step 2/2, `tools/expect_same.sh test_c_abi_pascal_caller26 "$(/tmp/` (auto-filed by twatch) | — |
 | regression-test-core-test-c-cross-ns-arity | T | 70 | regression | regression: test-core#src:test/test_c_cross_ns_arity.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk-call-2 | T | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at 98ed38202254 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk-call-3 | C | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at bfec13534396 (auto-filed by twatch) | — |

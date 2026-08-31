@@ -64,15 +64,12 @@ _none_
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (5)
+## backlog (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-the-mandatory-fixedpoint-step-reports-success-from-a-stale-stamp | A | 60 | bug | `make compiler/pascal26` prints `self-host fixedpoint: verified — 2 round(s), <sha>` and exits 0 WITHOUT REBUILDING whenever a CONSISTENT binary+stamp pair carries an mtime newer than the sources. Reproduced deliberately, twice independently (frankB and frank-coordinator): plant f92c42a69850 plus a stamp naming it, touch both, run make against a tree whose real fixedpoint is 3d5308a75742 — success line, round count, sha, binary unchanged. THE DEFECT IS THAT THE REPLAY LINE IS CONFUSABLE WITH A RESULT, NOT THAT THE CHECK IS INADEQUATE: a genuine build prints `converged after N round(s)` AND `verified — N`, a replay prints only `verified`, so CLAUDE.md's existing rule (do not accept the build until you have seen `converged after N round(s)`) CATCHES THIS CLEANLY and is not defeated — two agents simply pattern-matched on the `verified` line instead of following it. Fix is small: make the replay line not look like a result. The round count is a stored stamp field and cannot separate a replay from a build. Sibling: bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case. | — |
 | bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one. | — |
-| regression-test-core-c-abi-pure-c-control | T | 70 | regression | regression: test-core#src:test/c_abi_pure_c_control.c at 0fd9454b879d in step 2/2, `tools/expect_same.sh c_abi_pure_c_control26 "$(/tmp/c_ab` (auto-filed by twatch) | — |
-| regression-test-core-test-c-abi-intra-c-calls | T | 70 | regression | regression: test-core#src:test/test_c_abi_intra_c_calls.pas at 0fd9454b879d in step 2/2, `tools/expect_same.sh test_c_abi_intra26 "$(/tmp/test_c_a` (auto-filed by twatch) | — |
-| regression-test-core-test-c-abi-pascal-caller | T | 70 | regression | regression: test-core#src:test/test_c_abi_pascal_caller.pas at 0fd9454b879d in step 2/2, `tools/expect_same.sh test_c_abi_pascal_caller26 "$(/tmp/` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
 
@@ -829,9 +826,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2959)
+## done (2962)
 
-2959 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2962 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (71)
 
@@ -930,9 +927,6 @@ _none_
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [C] regression-lib-test-crtl-reachability-6 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-optdiff-shard4-12
-- [p 70] [T] regression-test-core-c-abi-pure-c-control
-- [p 70] [T] regression-test-core-test-c-abi-intra-c-calls
-- [p 70] [T] regression-test-core-test-c-abi-pascal-caller
 - [p 70] [T] regression-test-core-test-rust-module-items
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-4
