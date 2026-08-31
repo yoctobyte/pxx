@@ -109,3 +109,39 @@ ceiling.
 
 Nothing else in this ticket is started; the OpenBSD target itself is untouched,
 and its acceptance still needs the qemu/autoinstall infra that does not exist.
+
+## 2026-08-31 (frankA) — the acceptance criterion's OTHER half, which nobody had measured
+
+Both prior updates measure the syscall count. This ticket's acceptance has a
+second clause — *"output byte-identical to the reference for a scalar +
+heap/string/exception torture"* — and it was untested. It passes.
+
+One source exercising every construct the clause names (scalar loop, dynamic
+array, `AnsiString` concat + `Copy`, a class with constructor and `Free`, a
+`raise` / `except on E` round trip; `uses SysUtils`), built three ways on
+`plexus`, HEAD `ed60c4a66`, compiler `393ba3c6006a` (self-hosted, converged 1
+round):
+
+| build | kernel entries | stdout sha256 |
+| --- | --- | --- |
+| default | 197 | `65547a06cca9` |
+| `--rtl-libc` | 1 | `65547a06cca9` |
+| `--rtl-libc --no-signals` | 0 | `65547a06cca9` |
+
+All three exit 0 with **byte-identical** output. So the thunk is observably
+transparent across managed strings, ARC objects and the exception path — not
+just on hello-world, where a wrong `write`/`exit_group` routing would still
+print correctly. The 197 and the 1 are the instrument's positive control: it can
+report non-zero on these very binaries, so the 0 is not vacuous.
+
+**Independent replication of the threaded figure, on a different program.**
+frankS and frank-rust measured 142 -> 4 -> 3 on `test_atomic_counter`.
+`test/test_thread_clone.pas` gives **4** (`--threadsafe --rtl-libc`) and **3**
+(`--no-signals`), same three survivors by opcode — clone(`$0x38`),
+arch_prctl(`$0x9e`, `ARCH_SET_GS` `$0x1001`), exit(`$0x3c`) — and the binary
+still prints `total ok 4 / 4 / THREADS OK`. Two programs, same floor; nothing
+new, and that is the point of saying so.
+
+No scope change. The fork stays
+[[decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual]], and the VM is still
+unbuilt.
