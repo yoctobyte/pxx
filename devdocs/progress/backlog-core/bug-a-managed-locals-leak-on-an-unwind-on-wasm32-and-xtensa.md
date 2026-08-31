@@ -3,7 +3,8 @@ track: A
 prio: 25
 type: bug
 blocked-by: []
-summary: "A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing."
+summary: "WASM32 ONLY NOW -- the xtensa half LANDED in af5d2b534 (Call0; windowed stays false, and that is the ABI condition, not a gap). A proc's managed locals are released by a proc CLEANUP FRAME, and TargetHasProcCleanupFrame today covers x86-64, i386, arm32, aarch64, riscv32 and xtensa-under-Call0 -- wasm32 is the only target left out, so an exception unwinding THROUGH a wasm32 frame still leaks everything that frame owned. Silent by construction: an unwind leak prints nothing and both sides of the native-vs-wasm differential produce identical OUTPUT. The stale source comment this ticket flagged is ALSO already fixed. Remaining work is one lane's: wire wasm32's existing WasmEmitExcEnter/shadow-frame machinery as a proc cleanup frame, then add the predicate arm LAST."
+
 ---
 
 # Managed locals leak on an unwind on wasm32 and xtensa
@@ -175,3 +176,60 @@ quoting in a repo where every lane pushes to master:
 Both sweeps had moved substantially against my *earlier* baselines (call0
 103→104, windowed 53→94) and none of that is this change — rebuilding the same
 HEAD without the diff reproduces both numbers exactly.
+
+
+---
+
+## 2026-09-01 (frankB) — half of this ticket is already done; retitling the rest
+
+Checked at HEAD rather than taken from the body, because two of this ticket's
+three stated obstacles have gone since it was written.
+
+**1. xtensa is IN.** `af5d2b534` ("fix(A+S): xtensa gets the proc exception
+cleanup frame, Call0 only"). The predicate now reads:
+
+```pascal
+Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or
+          (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_AARCH64) or
+          (TargetArch = TARGET_RISCV32) or
+          ((TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_CALL0));
+```
+
+Windowed stays false, and per frankS's 2026-08-30 note that is the ABI
+condition rather than an unfinished half: `IR_EXC_ENTER` and `IR_RAISE` both
+refuse under windowed, so there is no unwind to clean up after.
+
+**2. The stale comment is fixed too.** The ticket's closing section says
+`ir_codegen.inc` "still asserts *its managed-local arm handles AnsiString
+alone*" and defers the fix to a Track S grant. Both halves are obsolete: the
+comment now explicitly records that the claim *used to* be made and what
+retired it (`e1d7977a2` one kind to six, `3a1c1dc73` the seventh), and the grant
+system was cut on 2026-08-30, so no scoping reason remains for anyone to defer
+a comment fix in that file. **Nothing to do here — do not go looking for it.**
+
+**3. So the title and the summary were both wrong**, and a reader arriving from
+the board would have gone hunting for two targets and a comment, of which one
+target remains. Summary corrected in place; the title is left alone because the
+slug is cited from `umbrella-managed-memory-is-correct` and elsewhere, and a
+rename costs more than the wrong word saves.
+
+### What actually remains
+
+`TargetHasProcCleanupFrame` has no `TARGET_WASM32` arm, confirmed by grep. The
+machinery the original fix note points at does exist —
+`ir_codegen_wasm32.inc:4924` dispatches `IR_EXC_ENTER` to `WasmEmitExcEnter`,
+and the body already tracks `WasmExcSites` and maps each enter to its handler
+frame in the shadow frame. So the description "wiring, not new machinery"
+still holds, and the ordering warning still holds harder now that it is the
+only work left: **the predicate arm is the LAST line of the change.** Adding
+`TARGET_WASM32` to it before implementing the enter/leave arms reaches
+`Error('compiler error: no proc exception cleanup frame for this target')` and
+breaks every wasm build that owns a managed local.
+
+### Not taken, and why — with the owner named
+
+I hold the managed-memory group and this is one of its umbrella's blockers, but
+the remaining half is wasm backend work in a lane I have no loaded context for,
+and testing it needs the wasm host oracles rather than a native repro. Handing
+it to **frankwasm**, who filed this ticket and owns that lowering, rather than
+starting something I could not finish or verify well. Messaged 2026-09-01.
