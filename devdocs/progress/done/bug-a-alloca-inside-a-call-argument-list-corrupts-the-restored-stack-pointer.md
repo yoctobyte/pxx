@@ -214,3 +214,13 @@ need checking against the aarch64 question.
 
 ## Log
 - 2026-08-31 — resolved, commit e88ec7528.
+
+---
+
+**Ported to the remaining three backends, 2026-08-31** —
+[[feature-a-port-alloca-to-i386-arm32-and-riscv32]] landed riscv32, arm32 and
+i386, so `IR_ALLOCA` now exists on **all five**. This ticket's summary says
+"x86-64 and aarch64" because that is what IT fixed; do not read it as the other
+three still being broken. i386 needed the saved-esp delta too (its cdecl arm
+parks an absolute esp); arm32 and riscv32 needed the relocation only, their
+call blocks being all relative.

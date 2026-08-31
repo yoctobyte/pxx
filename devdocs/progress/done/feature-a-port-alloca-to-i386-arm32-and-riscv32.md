@@ -2,9 +2,9 @@
 track: A
 prio: 45
 type: feature
-status: working
+status: done
 blocked-by: []
-summary: "IR_ALLOCA now exists on x86-64, aarch64 and RISCV32 (ported 2026-08-31, binary a376d28d9ed1 -- relocation only, no saved-sp delta, verified byte-identical to gcc on c_vla / c_alloca_in_call_argument / c_alloca_expression_stack). i386 and arm32 still refuse it, so C alloca() and VLAs remain unbuildable for those two. The audit is COMPLETE for all five: arm32 needs the relocation only; i386 is the sole backend needing the saved-esp delta, by construction."
+summary: "DONE 2026-08-31, binary 73396b86f09a. IR_ALLOCA now exists on ALL FIVE backends -- x86-64, aarch64, riscv32, arm32, i386 -- so C alloca() and VLAs build everywhere. All five are byte-identical to gcc on all 17 rows of c_alloca_expression_stack plus c_alloca_in_call_argument and c_vla. riscv32 and arm32 needed the relocation only; i386 additionally needed the saved-esp DELTA, and that is MEASURED, not argued: disabling only the delta segfaults row 6."
 owner: frankA
 ---
 
@@ -183,16 +183,92 @@ Two riscv32-specific notes, both at the site:
 - `t0..t3` are the transient scratch class, never live across a subexpression,
   so the copy borrows them without saving.
 
-## What remains
+## COMPLETE — all five backends, 2026-08-31
 
-| backend | needs | status |
+| backend | needed | verified against gcc |
 | --- | --- | --- |
-| **arm32** | relocation only — its AAPCS32 block is all relative (`sub sp,#blk` / `add sp,#blk-16`), confirmed by frankC | **not started** |
-| **i386** | relocation **+ the saved-esp delta**, by construction — `and esp,-16` makes the subtracted amount unknowable at compile time, so the restore cannot become a relative `add` | **not started** |
+| x86-64 | relocation + saved-rsp delta | 17/17 rows |
+| aarch64 | relocation only | 17/17 rows |
+| **riscv32** | relocation only | 17/17 rows |
+| **arm32** | relocation only | 17/17 rows |
+| **i386** | relocation **+ saved-esp delta** | 17/17 rows |
 
-arm32 is the easier of the two and is the same shape as the riscv32 arm just
-landed; the one extra cost is that this backend emits raw `EmitI32($...)`
-encodings rather than named helpers, so the copy loop has to be hand-encoded.
-i386 is the only one that needs new *model*, and the x86-64 arm
-(`EmitSaveCallerRspX64` / `EmitLoadSavedRspX64` / `EmitRestoreCallerRspX64` in
-`ir_codegen.inc`) is its template.
+Plus `c_alloca_in_call_argument` and `c_vla` on every one. Binary
+`73396b86f09a`, self-host fixedpoint converged.
+
+### i386 was the only one needing new model, and the delta is measured
+
+Its cdecl arm parks an **absolute** esp, then emits the argument
+sub-expressions, then restores from that slot — so an alloca inside an argument
+list relocates the parked slot's *bytes* while its *value* goes stale. `and
+esp,-16` is why the restore cannot instead be a relative `add`: the amount
+subtracted is not a compile-time constant.
+
+**Positive control, because "the delta is needed" is a claim and not an
+observation:** disable ONLY the delta, keep the relocation, rebuild — **row 6
+segfaults.** Restore it and all 17 rows match gcc. The control could fail and
+did.
+
+Second i386 cost, absent everywhere else: **no red zone.** x86-64 spills its
+three copy registers to `[rsp-8..-24]`, which is safe there and is not here —
+anything below esp on i386 can be overwritten by a signal frame. So the copy
+registers spill to three frame words carved beside the base slot, above the
+relocated region. The copy is `rep movsd`, since esi/edi are being saved anyway.
+
+### The inertness claim, and the control that nearly wasn't one
+
+A body with no `IR_ALLOCA` carves no slot, which is also what keeps both i386
+delta conversions inert for every existing call. Verified for arm32 by compiling
+the same program with two **different** compilers (`a9ead9a2edf7` and
+`0021cc78eeb4`) and getting a byte-identical object.
+
+That replaced an earlier control that was **vacuous**: `git stash push --
+compiler/` found nothing to stash, because the change was already committed, so
+both arms ran the *same* binary and "byte-identical" was true by construction.
+It printed PASS and tested nothing. Worth recording because it is the exact
+failure mode this repo keeps meeting — a guard that cannot fail.
+
+## The i386 inertness measurement, with its positive control
+
+The delta conversion is emitted at every cdecl call site, guarded by
+`X386AllocaBaseOff <> 0`. A wrong guard would break *all* existing i386 code, so
+inertness is the thing to measure, and it was measured twice.
+
+**Verdict sweep, 140 Pascal sources, i386 vs the x86-64 oracle:**
+
+| | binary | MATCH | DIFF | CFAIL |
+| --- | --- | --- | --- | --- |
+| before | `0021cc78eeb4` (parent `b68a6d7aa^`, rebuilt) | 134 | 3 | 3 |
+| after | `73396b86f09a` | 134 | 3 | 3 |
+
+**Zero per-row verdict changes.** The 6 non-MATCH rows are present in the
+BEFORE arm, so they are pre-existing and not mine: `test_rtti` and
+`test_signal_default_revert_b336` are the known harness artifacts (a missing
+`-dPXX_MANAGED_STRING` and a hardcoded literal), `test_asm_ifdef_multiarch` has
+no i386 arm, and the three CFAILs are target-specific asm tests
+(`test_arm32_record_byval_wide`, `test_asm_rv32`, `test_record_temp_byval_arg`).
+
+**Object-level, which is the stronger claim:** all 137 sources that compile for
+i386 produce **byte-identical objects** under both binaries. 0 differing.
+
+**And the population is why that number needs a caveat.** All 140 are `.pas`;
+**none of them can emit `IR_ALLOCA` at all**, since alloca and VLAs are C. So
+this sweep proves the arm is INERT — it does not prove it CORRECT. Correctness
+is the separate 17-row byte-comparison against gcc.
+
+**Positive control, because "byte-identical" is exactly the shape that is true
+by construction when a control is vacuous** (this session already produced one
+such vacuous control — see above). The two binaries must be *able* to disagree:
+
+```
+$ pascal26 --target=i386 test/c_alloca_expression_stack.c   # binary 73396b86f09a
+new: compiled
+$ pascal26 --target=i386 test/c_alloca_expression_stack.c   # binary 0021cc78eeb4
+old: CFAIL -- refuses alloca on i386 outright
+```
+
+They disagree, loudly, on the one input that exercises the change. The control
+can fail, so the 137 identical objects mean something.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
