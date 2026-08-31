@@ -582,4 +582,4 @@ windowed faults on frozen strings, `Copy` and `SetLength`. All three pass.
   the other ticket's job and is unchanged by this.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 410d3eb03.
