@@ -1673,15 +1673,6 @@ begin
           (feature-riscv32-var-param-forwarding, same defect on xtensa). The 64-bit
           slot-addr emitter + load/store paths already deref; this aligns IR_LEA's
           scalar path. Arrays/strings keep their handling above. }
-        { abi-divergence: this arm depends on InLValueWrite, and
-          ABIParamSlotHoldsValueAddr takes only a symIdx -- the oracle cannot
-          see lvalue-write context, so this question is genuinely outside the
-          table rather than a ninth copy of it. The oracle IS consulted, as the
-          final arm of this same chain. Reviewed 2026-08-31,
-          bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire. }
-        else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
-                not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)
         { THE SHARED CATCH-ALL: a param whose slot holds the ADDRESS of the
           value rather than the value — by-ref anything, a by-ref fixed array,
           a frozen-string param, a by-value Variant (the slot points at the

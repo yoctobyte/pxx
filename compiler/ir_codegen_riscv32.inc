@@ -1688,15 +1688,6 @@ begin
           the caller (feature-riscv32-var-param-forwarding). The load/store paths
           and the 64-bit slot-addr emitter already deref; this brings IR_LEA's
           32-bit scalar path in line. Arrays/strings keep their handling above. }
-        { abi-divergence: this arm depends on InLValueWrite, and
-          ABIParamSlotHoldsValueAddr takes only a symIdx -- the oracle cannot
-          see lvalue-write context, so this question is genuinely outside the
-          table rather than a ninth copy of it. The oracle IS consulted, as the
-          final arm of this same chain. Reviewed 2026-08-31,
-          bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire. }
-        else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
-                not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
-          rv32_lw(reg_a0, reg_a0, 0)
         { By-ref FIXED array or frozen-string param: the slot holds a pointer
           the caller passed (the array data / buffer / forwarded slot), so load
           the pointer itself, not the slot address. Mirrors the i386/x86-64
