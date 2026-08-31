@@ -3,8 +3,8 @@ slug: bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads
 track: A
 prio: 55
 type: bug
-status: new
-owner: ""
+status: working
+owner: frankS
 blocked-by: []
 summary: "MEASURED: 91104 wrong answers in 400000 deliveries (~23%). `__pxxSigNum` / `__pxxSigCode` / `__pxxSigAddr` / `__pxxSigContext` read process-wide BSS slots that the dispatch stub writes. Under --threadsafe two threads taking signals concurrently clobber each other's parked values, so a handler reads a number belonging to the OTHER thread's signal. Single-threaded control on the same binary: 200000 deliveries, ZERO mismatches. This makes item 4's whole purpose -- an FPC-compatible `Signal(sig, handler)` dispatching on the number -- silently misroute under threads. The fix is per-thread storage, and the design question (always TLS, or only under --threadsafe) is why this is filed rather than fixed."
 ---
