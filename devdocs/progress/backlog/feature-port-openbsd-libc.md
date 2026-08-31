@@ -83,3 +83,29 @@ Four things carry over, and the last two are the ones that will bite:
 
 **Not closed by that work** — this ticket is the OpenBSD target, and none of it
 has been exercised on OpenBSD.
+
+## 2026-08-31 (frank-rust) — item 3's decide ticket now exists, with the number
+
+Item 3 above says the "no raw `syscall`" criterion is wrong and should be raised
+as a Track U `decide-*` rather than assuming the Linux shape transfers. Filed:
+[[decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual]], with the residual
+measured rather than estimated.
+
+**The residual is 1, and it is identified.** `--rtl-libc` takes a hello-world
+from 75 raw kernel entries to **1**, a try/except program from 86 to **1**, and
+`--rtl-libc --no-signals` gives **0** — which is the control proving the
+survivor is the `rt_sigreturn` at `ir_codegen.inc:585` and not the thunk or an
+unrouted RTL entry. The thunk contributes zero, because it `call`s libc's
+`syscall()` rather than executing one.
+
+So the acceptance criterion should be restated in terms of **pinsyscalls
+compliance**, not zero raw syscalls: those are different properties, and a
+binary can have one raw syscall and comply. That restatement is worth doing
+whichever way the OpenBSD question resolves.
+
+**Not measured:** the clone child stub in `thread_emit.inc`. No threaded binary
+was scanned, so "1" is the non-threaded figure only — do not quote it as the
+ceiling.
+
+Nothing else in this ticket is started; the OpenBSD target itself is untouched,
+and its acceptance still needs the qemu/autoinstall infra that does not exist.

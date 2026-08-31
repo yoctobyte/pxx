@@ -234,3 +234,48 @@ the identifier.
 
 ## Log
 - 2026-08-31 — resolved, commit bd909ff64.
+
+---
+
+## Follow-up, same day: it IS wired, via a baseline — frankwasm's design
+
+I closed this leaving the linter exiting 1 and unwired, reasoning that the only
+way to a green gate was marking the open aarch64 site, which would manufacture
+the false zero this ticket exists to complain about. **That was a false
+dichotomy and frankwasm supplied the third option**, with the empirical argument
+attached:
+
+> An unwired check's result has to be READ, and reading is the step that fails.
+
+They demonstrated it accidentally while verifying this very tool — ran
+`abi_oracle_lint.py | tail -15; echo exit=$?`, read `tail`'s status, and got
+exit 0 from a tool that was exiting 1. **Careful, specifically about that
+failure mode, four hours after fixing two instances of it.** A wired check's
+result cannot be misread, because nobody reads it.
+
+**The third option: a baseline that cannot outlive its cause.** One entry, the
+aarch64 site, carrying its ticket. Passes on exactly that set, fails on anything
+new. No suppression, because the entry does not say *this is not a finding* — it
+says *this is a finding, it is that one, and here is where it is tracked*. Only
+the second can fail later.
+
+The guard that stops it rotting into the thing it replaced, and it is the whole
+reason the design is acceptable: **a baseline entry matching nothing is an
+ERROR.** The day aarch64:2869 is fixed, the linter says "delete this line",
+rather than passing forever the way the grep did. Keyed on condition TEXT, not
+line number, because line numbers rot — three site coordinates in this ticket
+were stale within four days while their reasoning held.
+
+12 asserted controls now (`--selftest`), 4 of them on the baseline, including
+that a stale entry fails and that an entry cannot match a different condition in
+the same file. Wired into `tools/gate.sh` beside `forwardlint`, whose own
+comment is the precedent: *"NOTHING INVOKED IT -- so it caught both and told no
+one. A trigger nobody is assigned to watch is not a trigger."*
+
+**And a control of mine went inert while I was proving this.** My first stale
+test sed-replaced `tyAnsiString` in the baseline — a token that does not appear
+in that condition. The file was unchanged, the run said "clean", and I nearly
+recorded that as the stale check passing. It was caught by asserting the
+mutation had actually changed the file before trusting the result. **A control
+needs its own control when the control is a mutation**: "I edited it" and "the
+edit landed" are two claims, and only the second one is worth anything.

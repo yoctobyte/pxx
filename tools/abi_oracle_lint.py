@@ -24,6 +24,31 @@ in or immediately above the condition -- which is what abi.inc asks for, that
 divergence be "deliberate and reviewable instead of accidental and invisible".
 Silencing costs you a sentence; it cannot be done by accident.
 
+## The baseline, and why it is not a suppression list
+
+A site that is a KNOWN, FILED disagreement goes in `abi_oracle_lint.baseline`
+with its ticket. The check then passes on exactly that set and fails on anything
+new -- so it can be wired into a gate today, without marking the open aarch64
+site as "not a finding" to manufacture a green.
+
+The difference matters and is the whole design: a `{ abi-divergence: }` marker
+says *this is not a finding*; a baseline entry says *this is a finding, it is
+that one, and here is its ticket*. Only the second can fail later.
+
+Two guards stop it decaying into the dead grep it replaces:
+
+  * **A baseline entry that matches nothing is an ERROR, not silence.** The file
+    cannot outlive its cause -- the day aarch64:2869 is fixed, this tells you to
+    delete the line, rather than quietly passing forever the way the `IsRef or`
+    grep did.
+  * Entries are keyed on the CONDITION TEXT, not on a line number. Line numbers
+    rot: three separate site coordinates in the ticket that prompted this tool
+    were stale within four days, while their reasoning held.
+
+Credit for the baseline design: frankwasm, who also supplied the argument for
+wiring it -- an unwired check's result has to be READ, and reading is the step
+that fails.
+
 Run: tools/abi_oracle_lint.py [--list] [--selftest]
 """
 import glob, os, re, sys
@@ -116,6 +141,37 @@ def conditions(src):
                 pos = 0
 
 
+def load_baseline(path):
+    """-> [(file, condition, note)] ; blank lines and # comments ignored."""
+    out = []
+    if not os.path.exists(path):
+        return out
+    for line in open(path, encoding='utf-8'):
+        line = line.rstrip('\n')
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        parts = [p.strip() for p in line.split('\t') if p.strip()]
+        if len(parts) >= 2:
+            out.append((parts[0], parts[1], parts[2] if len(parts) > 2 else ''))
+    return out
+
+
+def apply_baseline(hits, baseline):
+    """-> (new_hits, stale_entries). Matching is on file + condition text, so an
+    edit elsewhere in the file cannot silently retire an entry."""
+    remaining = list(baseline)
+    new = []
+    for path, ln, cond in hits:
+        base = os.path.basename(path)
+        for i, (bf, bc, _note) in enumerate(remaining):
+            if bf == base and bc == cond:
+                remaining.pop(i)
+                break
+        else:
+            new.append((path, ln, cond))
+    return new, remaining
+
+
 def scan(paths):
     hits = []
     for path in paths:
@@ -196,6 +252,28 @@ def selftest():
         if got != want:
             ok = False
         print(f'  selftest {name}: expected {want} hit(s), got {got} -- {status}')
+
+    # --- baseline controls. A baseline is a suppression list unless it can fail.
+    hit = ('compiler/ir_codegen_probe.inc', 42, 'Syms[si].IsRef and (Syms[si].TypeKind = tyAnsiString)')
+    cases = (
+        # exact match -> nothing new, nothing stale
+        ('base_match',  [hit], [('ir_codegen_probe.inc', hit[2], 'tkt')], 0, 0),
+        # a finding absent from the baseline must still be reported
+        ('base_new',    [hit], [],                                        1, 0),
+        # THE control that stops rot: an entry matching nothing is STALE, and
+        # stale must be an error. Without this the file outlives its cause and
+        # passes forever -- which is exactly how the grep it replaced behaved.
+        ('base_stale',  [],    [('ir_codegen_probe.inc', 'Syms[x].IsRef and (Syms[x].TypeKind = tySet)', 'tkt')], 0, 1),
+        # an entry must not match a DIFFERENT condition in the same file
+        ('base_narrow', [hit], [('ir_codegen_probe.inc', 'Syms[q].IsRef and (Syms[q].TypeKind = tySet)', 'tkt')], 1, 1),
+    )
+    for name, hits_in, base_in, want_new, want_stale in cases:
+        new, stale = apply_baseline(hits_in, base_in)
+        good = (len(new) == want_new and len(stale) == want_stale)
+        if not good:
+            ok = False
+        print(f'  selftest {name}: expected new={want_new} stale={want_stale}, '
+              f'got new={len(new)} stale={len(stale)} -- {"ok" if good else "FAILED"}')
     return ok
 
 
@@ -206,10 +284,25 @@ def main():
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     paths = sorted(glob.glob(os.path.join(root, 'compiler', 'ir_codegen*.inc')))
-    hits = scan(paths)
+    all_hits = scan(paths)
+
+    bpath = os.path.join(root, 'tools', 'abi_oracle_lint.baseline')
+    baseline = load_baseline(bpath)
+    hits, stale = apply_baseline(all_hits, baseline)
+
+    if stale:
+        print('abi-oracle-lint: STALE BASELINE -- these entries matched nothing.\n'
+              'A baseline entry that cannot fire is the dead grep this tool replaced.\n'
+              'If the site was fixed, DELETE the line (and close its ticket):\n')
+        for bf, bc, note in stale:
+            print(f'  {bf}  {note}')
+            print(f'    {bc[:100]}')
+        return 1
 
     if not hits:
-        print('abi-oracle-lint: clean -- no unmarked convention re-derivation.')
+        n = len(baseline)
+        print('abi-oracle-lint: clean -- no unmarked convention re-derivation'
+              + (f' beyond {n} baselined site(s).' if n else '.'))
         print('  (if this is the FIRST run, that is not a pass: see --selftest)')
         return 0
 

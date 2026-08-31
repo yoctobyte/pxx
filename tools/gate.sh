@@ -239,6 +239,27 @@ else
   echo "  SKIP  fpc seed compiles (no forwardlint.py or compiler.pas)"
 fi
 
+# THE ABI-ORACLE CHECK. Wired for the reason the forwardlint block above gives:
+# a trigger nobody is assigned to watch is not a trigger. abi.inc's PREVIOUS
+# enforcement was a review grep -- something a human had to remember to run and
+# then read -- and it never fired once in its life, because it was calibrated to
+# the spelling `IsRef or` rather than to the shape. It ended up matching exactly
+# one line in the tree: a COMMENT quoting the rule. So the check was not merely
+# dead, it had become actively reassuring.
+#
+# Runs in well under a second (a regex pass over 7 files; it builds nothing).
+#
+# It carries a BASELINE of known, filed disagreements rather than suppressing
+# them, and it FAILS if a baseline entry matches nothing -- so the file cannot
+# outlive its cause the way the grep did. --selftest holds 12 asserted controls.
+# bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
+if [ -f tools/abi_oracle_lint.py ]; then
+  step "backends ask the ABI oracle" "$LOGDIR/abi-oracle-lint.log" \
+       python3 tools/abi_oracle_lint.py                              || RC=1
+else
+  echo "  SKIP  backends ask the ABI oracle (no abi_oracle_lint.py)"
+fi
+
 # THE UNWIRED-TEST CANARY. Same placement argument as the two blocks above --
 # before the case, so no mode can forget it -- and the same failure it fixes as
 # the forwardlint block: the checker already existed, already exited 1, and was

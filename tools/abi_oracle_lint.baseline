@@ -1,0 +1,11 @@
+# Known, FILED disagreements with the ABI oracle. NOT a suppression list:
+# each line is "this IS a finding, and it is that one", with its ticket.
+#
+# The linter FAILS if an entry here matches nothing -- a stale entry is an
+# error, not silence, so this file cannot outlive its cause. When the ticket
+# lands, delete the line.
+#
+# Keyed on <file> TAB <condition text> TAB <ticket>, not on a line number:
+# line numbers rot (three site coordinates in the originating ticket were
+# stale within four days, while the reasoning held).
+ir_codegen_aarch64.inc	(Syms[si].Kind = skParam) and TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray	bug-a-aarch64-setlength-on-a-frozen-string-param-diverges-from-the-abi-oracle
