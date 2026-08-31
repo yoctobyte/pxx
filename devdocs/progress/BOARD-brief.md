@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:10 backlog:398 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2950 rejected:71`
+`working:4 unfinished:28 blocked:10 backlog:399 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2950 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,7 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 431, ranked
+## Ready — top 30 of 432, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -91,4 +91,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 
-_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
