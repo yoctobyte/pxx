@@ -201,4 +201,4 @@ fixed under
 [[bug-p-a-member-on-an-array-element-silently-reads-the-elements-own-bytes]].
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 62a68575e.
