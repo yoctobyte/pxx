@@ -90,7 +90,7 @@ deny() {
   exit 0
 }
 
-hatch='Track T escapes with PXX_TRACK=T; anything else with PXX_ALLOW_FULL_SUITE=1 in front of the command, and only when the user has asked for it.'
+hatch='Track T escapes with PXX_TRACK=T; anything else with PXX_ALLOW_FULL_SUITE=1 in front of the command -- autonomously, no permission needed. This is a SPEED GUARDRAIL, not a permission gate: it exists to stop a full ten-minute run for every byte edited. Use it when you genuinely need the full suite, and say in the commit why the quick tier was not enough.'
 loop='The per-fix gate is: make compiler/pascal26 (that IS the byte-identical self-host fixedpoint), your repro, then tools/gate.sh quick. Track T sweeps the full matrix against the pushed sha and reports back asynchronously.'
 
 # --- 1. make test targets ----------------------------------------------------

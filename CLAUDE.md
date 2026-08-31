@@ -258,8 +258,10 @@ small irreversible one is not.
    data, anything that leaves this machine.
 2. **Genuine forks of intent** — what to build, what it should mean, a design
    choice the code cannot settle. That is Track U, and `decide-*` exists for it.
-3. **Authority only he holds** — `PXX_ALLOW_FULL_SUITE=1`, sudo, hardware,
-   money.
+3. **Authority only he holds** — sudo, hardware, money.
+   (`PXX_ALLOW_FULL_SUITE=1` was listed here and is NOT his to grant — see the
+   escape-hatch note below. It contradicted the reversibility test three
+   paragraphs up, and cost a finished ticket a park plus a Track U round trip.)
 
 **Everything else: act, then report.** Reporting is not asking. State what you
 did and what it cost.
@@ -647,8 +649,14 @@ tracked) denies `make test*`, `gate.sh full|limited`, `testmgr --tier
 full|limited`, and shell loops over a `test/` glob — that last one because a
 `for t in test/test_nilpy_*.npy` loop is the same ten minutes wearing a
 different hat. Track T escapes with `PXX_TRACK=T`; anything else with
-`PXX_ALLOW_FULL_SUITE=1` in front of the command, and only when the user asks
-for it. The rule was written here first and an agent still reached for the
+`PXX_ALLOW_FULL_SUITE=1` in front of the command — **autonomously, no permission
+needed** (owner, 2026-08-31). **It is a SPEED GUARDRAIL, not a permission gate.**
+The thing it exists to stop is an agent running the full ten minutes *for every
+byte it edits*, which is what actually happened and is pure waste. It was never
+about authority: running tests is reversible, so the reversibility rule above
+applies — **run it when you genuinely need it, and say in the commit why the
+quick tier was not enough.** If you find yourself reaching for it more than once
+in a session, that is the signal the rule is aimed at. The rule was written here first and an agent still reached for the
 suite twice in one session, which is why it is now enforced rather than
 advised.
 
