@@ -10886,10 +10886,27 @@ function EmitProcPrologue: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
+    { i386 psABI: ebx, esi and edi are CALLEE-saved. This backend writes all
+      three freely (ebx is also the `int 0x80` arg0 register), so an exported
+      cdecl routine handed control back to a C caller with them destroyed --
+      glibc keeps the GOT pointer in ebx, which is why the symptom was a SIGSEGV
+      inside printf rather than a wrong value. Spill all three at entry;
+      EmitProcEpilog reloads them on every return path, early Exit included.
+      Measured: a body doing int64/div/mod/shift/array/string work clobbered
+      all three (mask 7), not just ebx -- the ticket's simpler probe body only
+      ever reached ebx. bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function }
+    FrameSize := AlignTo(FrameSize + 12, 4);
+    if I386CsSaveTop >= I386_CS_SAVE_MAX then
+      Error('compiler error: i386 procedure nesting deeper than the callee-saved spill stack');
+    I386CsSaveOff[I386CsSaveTop] := -FrameSize;
+    Inc(I386CsSaveTop);
     EmitB($55);                          { push ebp }
     EmitB($89); EmitB($E5);              { mov ebp, esp }
     EmitB($81); EmitB($EC);              { sub esp, imm32 }
     Result := CodeLen; EmitI32(0);
+    EmitB($89); EmitB($9D); EmitI32(-FrameSize);       { mov [ebp+off+0], ebx }
+    EmitB($89); EmitB($B5); EmitI32(-FrameSize + 4);   { mov [ebp+off+4], esi }
+    EmitB($89); EmitB($BD); EmitI32(-FrameSize + 8);   { mov [ebp+off+8], edi }
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then
@@ -11008,6 +11025,10 @@ end;
 procedure PatchProcPrologue(patchPos, size: Integer);
 var aligned, a64imm, rvLo, rvHi: Integer;
 begin
+  { End of this routine's body: release its i386 callee-saved slot entry. This
+    is the true per-routine terminator -- the epilogue is not, because an early
+    Exit emits one mid-body. }
+  if (TargetArch = TARGET_I386) and (I386CsSaveTop > 0) then Dec(I386CsSaveTop);
   aligned := ((size + 15) div 16) * 16;
   { Windowed xtensa keeps sp constant and runs its expression/argument stack in
     a reserved region below the locals. The frame is a patched 32-bit LITERAL
@@ -11754,6 +11775,15 @@ begin
         EmitB($DD); EmitB($04); EmitB($24);                    { fld qword [esp] }
         EmitB($83); EmitB($C4); EmitB($08);                    { add esp, 8 }
       end;
+    end;
+    { Reload the callee-saved trio before tearing the frame down. Reads the top
+      of the LIFO: this epilogue belongs to the innermost routine still being
+      emitted, and PatchProcPrologue pops the entry once its body is complete. }
+    if I386CsSaveTop > 0 then
+    begin
+      EmitB($8B); EmitB($9D); EmitI32(I386CsSaveOff[I386CsSaveTop - 1]);
+      EmitB($8B); EmitB($B5); EmitI32(I386CsSaveOff[I386CsSaveTop - 1] + 4);
+      EmitB($8B); EmitB($BD); EmitI32(I386CsSaveOff[I386CsSaveTop - 1] + 8);
     end;
     EmitB($C9); EmitB($C3);                                    { leave; ret }
     Exit;

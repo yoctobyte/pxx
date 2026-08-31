@@ -1461,6 +1461,7 @@ const
     mis-compile). See devdocs/progress/*/feature-target-i386.md. }
   TARGET_X86_64 = 0;
   TARGET_I386   = 1;
+  I386_CS_SAVE_MAX = 64;   { max nesting depth of i386 prologue emission }
   TARGET_AARCH64 = 2;
   TARGET_ARM32   = 3;
   TARGET_XTENSA  = 4;
@@ -2742,6 +2743,13 @@ var
   ProcCount : Integer;
   ProcCapacity : Integer;   { allocated length of the parallel Proc*/ProcParam* tables — see EnsureProcCapacity }
   CurProc   : Integer;   { -1 = main }
+  { i386 callee-saved spill slots (ebx/esi/edi), base frame offset per active
+    routine. A LIFO, not a scalar: prologue emission NESTS (measured depth 2 on
+    test_zig_advanced.zig), so a single global would make an outer routine's
+    epilogue reload an inner routine's slots.
+    bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function }
+  I386CsSaveOff : array[0..I386_CS_SAVE_MAX - 1] of Integer;
+  I386CsSaveTop : Integer;
   BlockParent: array[0..32767] of Integer;
   BlockCount: Integer;
   CurBlockId: Integer;

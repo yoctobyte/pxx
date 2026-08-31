@@ -16890,6 +16890,44 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh test_emit_obj_386_exe "$$($(TESTTMP)/test_emit_obj_386_exe)" "45 pxx-emit-obj"; \
 	  echo "test-emit-obj: i386 .o links+runs under a gcc -m32 main ok"; \
 	else echo "gcc -m32 (multilib) not installed; i386 .o link check skipped"; fi
+	# 4c. THE ABI CONTRACT, not just "it links and runs". ebx, esi and edi are
+	#    callee-saved on i386 and this backend writes all three (ebx is also the
+	#    `int 0x80` arg0 register). The printf caller in 4b did NOT catch that
+	#    they were never restored: its exported function is `a*10+b`, a body so
+	#    simple it only ever reaches ebx -- which is also why the ticket was
+	#    filed recording "ESI and EDI ARE preserved" against a measured mask of
+	#    0x1. The source here does int64/div/mod/shift/array/string work and
+	#    reaches all three; the pre-fix compiler measures 0x7. KEEP THE BODY
+	#    RICH: simplify it and this row becomes a guard that cannot fail.
+	#    bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function
+	rm -f $(TESTTMP)/test_emit_obj_386_cs.o
+	./$(COMPILER) -Fulib/rtl --target=i386 --emit-obj test/test_emit_obj_386_callee_saved.pas $(TESTTMP)/test_emit_obj_386_cs.o
+	#    Structural half -- needs no multilib toolchain, so it guards on every
+	#    box. The three spills sit immediately after `sub esp` and the three
+	#    reloads immediately before `leave`, so the windows are exact rather
+	#    than a search of the whole body that a stray `mov ebx,...` could
+	#    satisfy. All six fail on the pre-fix object; checked, not assumed.
+	objdump -d -M intel $(TESTTMP)/test_emit_obj_386_cs.o | sed -n '/<cs_probe>:/,/^$$/p' > $(TESTTMP)/test_emit_obj_386_cs.dis
+	grep -A3 'sub *esp,' $(TESTTMP)/test_emit_obj_386_cs.dis | grep -q ',ebx$$'
+	grep -A3 'sub *esp,' $(TESTTMP)/test_emit_obj_386_cs.dis | grep -q ',esi$$'
+	grep -A3 'sub *esp,' $(TESTTMP)/test_emit_obj_386_cs.dis | grep -q ',edi$$'
+	grep -B3 'leave' $(TESTTMP)/test_emit_obj_386_cs.dis | grep -q 'mov *ebx,DWORD'
+	grep -B3 'leave' $(TESTTMP)/test_emit_obj_386_cs.dis | grep -q 'mov *esi,DWORD'
+	grep -B3 'leave' $(TESTTMP)/test_emit_obj_386_cs.dis | grep -q 'mov *edi,DWORD'
+	#    Runtime half -- the contract itself, via an external oracle. The caller
+	#    returns the clobber mask as its exit status and deliberately does not
+	#    printf on the checking path: glibc keeps the GOT pointer in ebx, so the
+	#    original symptom was a SIGSEGV *inside printf*, and a probe that prints
+	#    its own result cannot tell a clobbered register from a dead reporting
+	#    channel. It checks the return value too, so "preserved the registers by
+	#    breaking the function" fails rather than passing quietly.
+	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
+	  gcc -m32 -no-pie tools/i386_callee_saved_caller.c $(TESTTMP)/test_emit_obj_386_cs.o -o $(TESTTMP)/test_emit_obj_386_cs_exe || { echo "test-emit-obj: i386 callee-saved probe FAILED to link with gcc -m32 -no-pie"; exit 1; }; \
+	  $(TESTTMP)/test_emit_obj_386_cs_exe; rc=$$?; \
+	  if [ $$rc = 8 ]; then echo "test-emit-obj: i386 cs_probe returned the WRONG VALUE"; exit 1; fi; \
+	  if [ $$rc != 0 ]; then echo "test-emit-obj: i386 cdecl CLOBBERED callee-saved registers across the call, mask=$$rc (ebx=1 esi=2 edi=4)"; exit 1; fi; \
+	  echo "test-emit-obj: i386 cdecl preserves ebx/esi/edi across an exported call ok"; \
+	else echo "gcc -m32 (multilib) not installed; i386 callee-saved check skipped"; fi
 	# 5. POSITIVE CONTROL for the "defines nothing linkable" refusal. A guard
 	#    that cannot fail is not a guard and it prints PASS, so the refusal
 	#    gets a case it MUST reject: a program with data, bss and an external
