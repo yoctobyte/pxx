@@ -1889,6 +1889,39 @@ blocks took uforth's `core.fr` from 14.48M allocations to 8.04M, and the
 histogram said *why* — the 32-byte class alone fell by 6.14M, which is 95% of
 the whole reduction and exactly the size of a short literal's block.
 
+**A third, and it is a trap rather than a caveat: this census instruments
+`PXXAlloc`, so any fast path that BYPASSES `PXXAlloc` is invisible to it — and
+it will not say so.** It counts what still goes through the function, prints a
+smaller, entirely plausible number, and never errors.
+
+That matters most for the one change this tool exists to evaluate. The
+per-thread bin magazine specified in
+`feature-a-reentrant-heap-lock-and-per-thread-arenas` works by emitting an
+inline lock-free bin pop at the `tkGetMem`/`tkFreeMem` sites
+(`ir_codegen.inc:8948`, `:9059`) that returns **without calling `PXXAlloc`**.
+So the moment the optimisation starts working, the census stops seeing the
+traffic it was measuring: `allocs=` collapses, `reuse=` collapses with it, and
+the honest reading of that output — "allocation load dropped enormously" — is
+exactly wrong. The allocations still happen. The instrument left.
+
+**The general shape, and it is the sharpest member of the family in this file:
+an instrument that goes blind precisely when the thing it measures starts
+working.** It is worse than an instrument that is merely wrong, because its
+failure is *correlated with success* — it looks like the win. Every other
+instance in "The instrument answered, correctly, about something else" answers
+a different question than the one asked; this one answers the right question
+about a shrinking share of reality, and the share shrinks in proportion to how
+well the change under test performs.
+
+**Positive control before you trust a census across such a change:** make the
+fast path count too (a second counter in the emitted arm), or assert an
+invariant the bypass cannot satisfy silently — `census allocs + fastpath hits`
+should track a number you can get independently, such as the loop count of the
+benchmark itself. If you cannot instrument the bypass, say the census is
+uninformative for this comparison rather than quoting a fallen `allocs=`.
+Named 2026-09-01 by frank-user while reviewing the ticket, as the third open
+question the implementer has to answer.
+
 *Two things to know before you use it.* There is **no exit hook** — the
 program's exit is emitted by codegen, not by the runtime — so the report fires
 on a schedule instead: at each 12.5% growth in the allocation count. The last
