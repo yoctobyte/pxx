@@ -2,7 +2,7 @@
 track: A
 prio: 55
 type: feature
-blocked-by: []   # NOT blocked overall; ONE configuration is — see "Read this first"
+blocked-by: [refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops]  # every remaining increment is parked: PXX_NO_NILPY behind the carve (2026-08-31), the target axis behind someone wanting a host-only build. The prose said so; the edge did not.
 summary: "Build-time selection of frontends and targets. Thirteen omission defines ship. PXX_NO_NILPY now has its INCLUDE GUARDS, driver refusal, `.py`-module refusal and ParseArgExpr fallback landed (byte-identical in the default build) but DOES NOT BUILD YET and is deliberately not advertised. The carve campaign it was parked behind has LANDED and did not finish the job: re-measured 2026-08-31, 134 symbols / 279 sites remain, down from 176/426 -- concentrated in five routines of the shared Pascal expression chain, as NilPy arms inside the shared ARGUMENT LOOPS (guarded by isNilPy, BELOW the PyParseFactorCore hook, which is why that hook did not close them). Parked again behind refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops. Also, unchanged and still the headline: omitting frontends is NOT the size lever -- nine frontends buy 4.4%, three host backends buy 20.7%."
 status: unfinished
 owner: frankA

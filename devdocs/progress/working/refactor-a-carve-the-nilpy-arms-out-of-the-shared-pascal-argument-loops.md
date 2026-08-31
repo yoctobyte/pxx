@@ -3,8 +3,8 @@ slug: refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
 track: A
 prio: 45
 type: refactor
-status: new
-owner: ""
+status: working
+owner: frankA
 blocked-by: []
 summary: "The last 279 NilPy references in the shared Pascal parser, over 134 distinct Py* symbols, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every one of the 279 sits BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, overload promotion by keyword), which the expression hook never sees. Five routines carry 191 of them. Progress is measurable in one command and the target is zero: `fpc -dPXX_NO_NILPY` currently reports 279 unresolved sites."
 ---
