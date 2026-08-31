@@ -11589,9 +11589,9 @@ test-core: $(COMPILER)
 	# i386: the shared arm cannot yet do the job it would be given.
 	# bug-c-a-c-function-s-calling-convention-depends-on-the-target
 	./$(COMPILER) -Futest test/test_c_abi_pascal_caller.pas $(TESTTMP)/test_c_abi_pascal_caller26
-	tools/expect_same.sh test_c_abi_pascal_caller26 "$$($(TESTTMP)/test_c_abi_pascal_caller26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"
+	tools/expect_same.sh test_c_abi_pascal_caller26 "$$($(TESTTMP)/test_c_abi_pascal_caller26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00\nmix4 1234.00\neight 204\npairsum 17.50')"
 	./$(COMPILER) test/c_abi_pure_c_control.c $(TESTTMP)/c_abi_pure_c_control26
-	tools/expect_same.sh c_abi_pure_c_control26 "$$($(TESTTMP)/c_abi_pure_c_control26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00')"
+	tools/expect_same.sh c_abi_pure_c_control26 "$$($(TESTTMP)/c_abi_pure_c_control26)" "$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00\nmix4 1234.00\neight 204\npairsum 17.50')"
 	# `(double)someFloat` was a RETAG, not a conversion -- the node claimed
 	# tyDouble while the value was still four single bytes. Free on x86-64 and
 	# aarch64 (a single already rides as double bits in a register), wrong on
@@ -11614,7 +11614,7 @@ test-core: $(COMPILER)
 	# Cross-target rows live in the test-c-abi-cross target.
 	# bug-a-the-c-abi-gate-moved-the-callee-but-not-the-intra-c-call-sites
 	./$(COMPILER) -Futest test/test_c_abi_intra_c_calls.pas $(TESTTMP)/test_c_abi_intra26
-	tools/expect_same.sh test_c_abi_intra26 "$$($(TESTTMP)/test_c_abi_intra26)" "$$(printf 'dbl_first 1000\nint_first 1000\nthree_ints 123\ntwo_dbl 1750\nflt 1000\ndbl_arg_int_ret 1000')"
+	tools/expect_same.sh test_c_abi_intra26 "$$($(TESTTMP)/test_c_abi_intra26)" "$$(printf 'dbl_first 1000\nint_first 1000\nthree_ints 123\ntwo_dbl 1750\nflt 1000\ndbl_arg_int_ret 1000\nmix4 123400\neight 204\npairsum 1750')"
 	./$(COMPILER) test/c_float_to_double_cast_variadic.c $(TESTTMP)/c_f2d_cast26
 	tools/expect_same.sh c_f2d_cast26 "$$($(TESTTMP)/c_f2d_cast26)" "$$(printf '1 2.50\n2 2.50\n3 250\n4 250\n5 2.50\n6 2.50\n7 5.00\n8 2.50\n9 16777216.0\n10 16777216.0\n11 0.100000001')"
 	# The `f` SUFFIX, which is the third arm of the same double case and the one
