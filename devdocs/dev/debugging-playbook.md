@@ -168,6 +168,23 @@ The general form: a control asks "does this test still fail when I break the
 thing?", and *no* is both the alarming answer and the answer a control that never
 executed gives. **Assert that the artifact CHANGED before you read the result.**
 
+**And when the artifact DID change and the control still passes, that indicts the
+CHECK, not the thing you broke.** frankA again, same day, the other direction:
+his canary ran `collect(*[5, 6, 7])` against a compiler with the star-splice arm
+switched off — sha confirmed different, so not a silent instrument — and printed
+the right answer. A LITERAL star operand and a VARIABLE one take different paths:
+with the arm gone, `collect(*xs)`, `collect(1, *xs)` and `collect(*xs, *xs)` are
+all rejected, while `collect(*[...])` still compiles and answers correctly. One
+construct, two paths.
+
+**The trap is that the shorter spelling is the one you reach for when writing the
+test, so the wrong path is the DEFAULT.** Nobody writes `xs = [5,6,7]` on a line
+above when the literal fits inline. Same shape in his statement-position twin:
+`print(html.escape(s, quote=False))` exercises the EXPRESSION loop, because the
+call is an argument — a statement-position probe has to be a bare call statement,
+and the natural way to make a probe observable (wrap it in `print`) is exactly
+what moves it off the path under test.
+
 **A null from two COMPENSATING defects recommends the fix that breaks it**
 (frankA's phrasing, 2026-08-31, for a case measured that day). arm32, riscv32 and
 xtensa take no `PXXObjRetain` when boxing an object into a variant, *and* no cross
@@ -1905,6 +1922,34 @@ correct; it has to be on a path that runs when the answer is needed.**
   **a repair that depends on its caller having been polite is not a repair.**
   Guard that a second pass is a no-op, or an always-saving repair dirties the
   tree every cycle and wedges the publish loop.
+
+### Its worse sibling: a call site that DOES run, and does nothing
+
+frankA, 2026-08-31. The section above is about a correct path that never
+executes. This is a path that executes and has no effect, and it is worse for one
+reason: **a dead guard is visible to anyone who reads the condition; a live no-op
+is invisible to reading and only a control finds it.**
+
+He disabled `PyFixIterableArgs` outright — `Result := False; if True then Exit;`
+— and nothing anywhere changed. Including
+`test/test_nilpy_user_iterable_in_builtins.npy`, **the test that exists to cover
+it**, which emitted a byte-identical binary and the same 37 lines, still matching
+CPython. The routine runs; nothing depends on what it returns.
+
+Note what this is NOT evidence for. He found it while deleting a set of arms he
+had already proved inert, and the honest reading is that it says nothing about
+that deletion — it is a separate defect that the control happened to walk into.
+Filed on its own rather than folded into the change that found it, with the
+predicate to check named and an explicit instruction to **find an input that
+makes the control fire before deleting anything.** A routine that is inert on
+every input you tried is not the same as a routine that cannot matter.
+
+**The cheap general probe, and it is the same one that turned two hook designs
+into deletions:** before designing anything around a region, instrument the
+ENCLOSING function's ENTRY and print the flag the region is guarded by.
+`ParseStatementAST` gave **20603 entries on one canary, every one False, not one
+True.** That count is its own positive control — a zero out of twenty thousand
+is a measurement, where a zero out of zero is nothing — and it cost one build.
 
 ## A blocklist costs one outage per symptom; an allowlist closes the class
 
