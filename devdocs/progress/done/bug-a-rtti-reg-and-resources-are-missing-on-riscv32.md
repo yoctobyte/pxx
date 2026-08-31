@@ -109,4 +109,4 @@ about a different question. riscv32 obviously writes lines; that implausibility
 is the only reason it got checked.)*
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 7c788cb8a.
