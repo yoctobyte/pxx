@@ -4,7 +4,7 @@ prio: 60
 type: decide
 owner: ""
 blocked-by: []
-summary: "RULED 2026-08-31 by the owner: OPTION 1 -- seed from entropy at import, keep random.seed(n) for determinism. We follow CPython; the upward-compatibility charter is one-directional and settles it. This OVERRULES the ticket's own recommendation of option 2 (a PXX_RANDOM_SEED env var): CPython has no such knob for random, and the debuggability it protects is not being relied on -- MEASURED, which is what made this cheap. Five NilPy tests reference random; three only exercise import mechanics and never draw a value, and the two that draw seed explicitly and assert CONTRACTS not values (test_nilpy_math_surface_and_random.npy:4 says so in as many words). So entropy seeding breaks no test, and the stated cost lands on ad-hoc debugging, whose fix is the one line of random.seed(n) a CPython programmer already writes. Unblocks bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound."
+summary: "RULED 2026-08-31 by the owner: OPTION 1 -- seed from entropy at import, keep random.seed(n) for determinism. We follow CPython; the upward-compatibility charter is one-directional and settles it. This OVERRULES the ticket's own recommendation of option 2 (a PXX_RANDOM_SEED env var): CPython has no such knob for random, and the debuggability it protects is not being relied on -- MEASURED, which is what made this cheap. Five NilPy tests reference random; THREE draw values (not two -- see the correction below) and all three seed explicitly and assert CONTRACTS not values (test_nilpy_math_surface_and_random.npy:4 says so in as many words). So entropy seeding breaks no test, and the stated cost lands on ad-hoc debugging, whose fix is the one line of random.seed(n) a CPython programmer already writes. Unblocks bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound."
 status: decided
 ---
 
@@ -153,3 +153,57 @@ the leading `1` from `randint(1, 100)` was **not** a second defect — it is the
 fixed state's first draw happening to be ≡ 0 mod 100.
 
 *Ruled 2026-08-31 by the owner; test-dependency measurement by frank-user.*
+
+## CORRECTION 2026-08-31 — my census undercounted, and the reason matters
+
+frankB, implementing this, found that
+`test_nilpy_from_import_binds_provided_names` **does** draw a value:
+
+```python
+from random import seed, randint
+...
+seed(1)
+print(randint(5, 5))
+```
+
+I had put it in the "import mechanics only, never draws" group. **Three tests
+draw, not two.**
+
+**Why the census missed it, precisely:** I grepped `random\.seed`, which matches
+only the *dotted* spelling. This file uses `from random import seed, randint` and
+then a bare `seed(1)` — so the pattern **structurally could not match the very
+spelling the file exists to test.** A from-import test, invisible to a
+dotted-form grep. The instrument could not fail for the population it was aimed
+at, which is this repo's own recurring shape.
+
+**The conclusion is unchanged and for a better reason than I gave.** The file is
+safe under entropy seeding because it seeds explicitly *and* because
+`randint(5, 5)` is degenerate — one possible value — not because it never draws.
+Stated correctly: **all three drawing tests seed explicitly**, which is what makes
+the import-time default irrelevant to them.
+
+## The open item is closed, negative
+
+I flagged that I had not checked whether `pydiff.py` or the fuzz harness generate
+random-using programs. They do not. `tools/pydiff.py` states the rule for its own
+corpus in a comment near line 199 — *"Keep it deterministic (no time, no
+randomness, and SORT anything set-derived — set order is unspecified and
+CPython's own varies per run)"* — spot-checked here. `fuzz.sh` mutates Pascal
+sources, whose `Randomize`/`RandSeed` surface this change does not alter
+behaviourally.
+
+## Landed
+
+`4fa9f66e5` (frankB) — `PXXEntropy64` extracted from `builtin.pas`'s `Randomize`
+(interface-declared; `Randomize` is now one line over it, no second syscall
+table), `pylib.pas` seeds `PyRandState` in the unit's `initialization`, no env
+var. Seeding is unconditional at init rather than lazy on first draw: CPython is
+not conditional either, and a have-I-been-seeded flag would have to get the
+`seed()` interaction right for no gain.
+
+A **third** stale comment was corrected that neither of us knew about: the
+riscv32 note in the moved block said *"Randomize is the only caller, so a program
+that never randomizes never issues it"* — now false, since pylib's init issues
+`clock_gettime64` at startup for any program pulling pylib. It still cannot reach
+a bare ESP boot, because pylib uses builtin and builtin does not compile there,
+but that is the reason and it had never been written down.
