@@ -2097,6 +2097,37 @@ that re-derives it.** If you are given a number, ask what command produced it
 before asking whether it is right — and expect the answer to change it by a
 factor of three.
 
+### A BUILD FAILURE is a census that stops counting at the first fatal error
+
+frankA, 2026-08-31, on `feature-a-build-a-reduced-compiler`. The question was how
+many NilPy symbols the Pascal-only compiler still depends on. The instrument was
+`fpc -dPXX_NO_NILPY`, read as *"the errors are the list"*. It answered **7**.
+The true answer was **279**.
+
+Seven is not an absurd number — it is exactly the shape the six esoteric
+frontends have, so it read as a small, finished job. And the instrument had not
+malfunctioned: `pyforwards.inc` was still supplying ~190 forward declarations, so
+FPC resolved each name against a forward and deferred the complaint to the
+end-of-module pass — which the fatal error meant it never reached. **7 was the
+count of symbols with no DECLARATION. The question was symbols with no BODY.**
+
+Two things generalise, and the second is the sharper one:
+
+- **A compiler used as a census counts only what its FRONT passes reject.** A
+  forward declaration, a weak symbol, a `{$ifdef}`-supplied stub — anything that
+  satisfies the early pass — is invisible, and the answer comes back small and
+  confident rather than empty.
+- **A fatal error truncates exactly the pass that would have reported the rest.**
+  This is worse than a partial count, because the truncation point is chosen by
+  the very defect you are measuring: the more broken the build, the earlier it
+  stops, so the count falls as the problem grows.
+
+**What caught it was an implausibility test registered BEFORE the run** — the
+ticket said the population was 176 symbols, and 176 -> 7 fails on sight. Nothing
+in the output was wrong; there was no discrepancy to notice. A number you have
+pre-committed to disbelieving is the only guard that fires when the instrument
+answers cleanly, which is this whole section's failure mode.
+
 ## A STANDING-RULES block is skipped by whoever has landed the most slices
 
 Measured 2026-08-30, and proposed by the agent it happened to — who was wary of
