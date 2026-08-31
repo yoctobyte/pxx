@@ -154,4 +154,4 @@ it is the same job as
 [[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]].
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit fdb343874.
