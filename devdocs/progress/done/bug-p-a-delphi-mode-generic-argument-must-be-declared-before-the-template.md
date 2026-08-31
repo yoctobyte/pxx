@@ -3,9 +3,9 @@ slug: bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template
 track: P
 prio: 55
 type: bug
-status: working
+status: done
 blocked-by: []
-summary: "In mode Delphi, `TE = TBox<TOuter>;` fails with `unknown type: TOuter` when TOuter is declared AFTER TBox in the same type section — reorder the two declarations and the identical program compiles and runs. FPC accepts both orders. DelphiRewriteGenericUses splices its minted alias declarations immediately behind the TEMPLATE, so they can only name types already declared at that point. objfpc is unaffected (its aliases are emitted at the use). 20-line repro, both orders."
+summary: "FIXED. In mode Delphi, `TE = TBox<TOuter>;` failed with `unknown type: TOuter` when TOuter was declared AFTER TBox in the same type section -- DelphiRewriteGenericUses spliced its minted alias behind the TEMPLATE, so everything the alias named had to exist by then, and the error pointed into the template's own body. The alias now anchors at position B, immediately before the declaration that USES it, found by a forward walk that tracks class/record body depth and remembers the last depth-0 `;`. The three cases this ticket listed as unanswered -- a use in a var section, a use in a routine body, several tuples anchored separately -- are the SAME walk stopping at the end of the type section instead of at the use, which is position C, and C is correct exactly there because every user is then later by construction. insertAt stays the sweep start and no longer doubles as the callers' did-work signal; the procedure is now a FUNCTION returning the tokens emitted. test_delphi_generic_arg_declared_later.pas, 7 arms, matches FPC 3.2.2. gate.sh quick GREEN."
 owner: frankwasm
 ---
 
@@ -141,3 +141,73 @@ ordered splice into several.
 `make compiler/pascal26` (the byte-identical self-host fixedpoint) + the repro in
 both orders + `test/test_generic_qualified_arg_delphi.pas` (which pins the
 working order and cites this ticket for the other). Track T sweeps the matrix.
+
+## FIXED (frankwasm, 2026-08-31) — and all three "still need an answer" cases are answered
+
+The anchor is position **B** as measured above, and the three open cases turned
+out to be **the same walk stopping earlier**, not three separate changes.
+
+`DGenDeclAnchor(fromIdx, useIdx)` walks forward from the current splice point to
+the use, tracking class/record/interface/object body depth and paren depth, and
+remembers the position after every depth-0 `;`. It returns the last such position
+at or before the use. It stops early — keeping what it has — when the walk leaves
+the type section (`var`, `const`, `begin`, a fresh `type`, `uses`, `asm`,
+`implementation`/`threadvar`/`resourcestring`/`label`/`initialization`/
+`finalization`, a bare `procedure`/`function` heading, or an unbalanced `end`).
+
+**That early stop IS position C, and C is right there.** C failed for an
+in-section use because the alias would land after a declaration that names it;
+for a use in a `var` section or a routine body every user is later by
+construction, so the end of the type section is exactly correct. One walk, two
+answers, chosen by whichever boundary comes first — which is why this is smaller
+than the ticket estimated rather than larger.
+
+Three details that are not obvious from the sketch:
+
+* **`case` is NOT counted as a body.** A record variant part introduces no `end`
+  of its own, and in a type section `case` appears nowhere else.
+* **`X = procedure(...)` is a procedural TYPE**, not a section terminator; a bare
+  heading is. `Tokens[k-1].Kind = tkEq` separates them.
+* **A bodiless `class;` / `class(TB);` opens nothing**, the same exemption
+  `CollectNestedTypeNames` carries and the same bug it exists for.
+
+### The per-tuple splice, which WAS the real cost
+
+Each tuple now splices at its own anchor, so one ordered insertion became several
+and every one shifts the indices after it. Handled by recording `seenUse[si]`
+during the sweep (safe: the sweep only ever REMOVES tokens *after* the use it
+just rewrote, so a recorded position never moves) and re-adding each insertion's
+width to the uses at or after it.
+
+`insertAt` stays the SWEEP START and only advances for a splice at or before
+itself — so it can no longer double as the callers' "this round did work" signal.
+It never really was one; it was a proxy, and the direct answer is the number of
+tokens emitted. `DelphiRewriteGenericUses` is now a **function returning that
+count**, and both fixed-point loops test it. The nested case then works for free:
+an alias is itself a declaration, so the outer tuple's walk stops *after* the
+inner alias the previous round emitted.
+
+### Evidence
+
+`test/test_delphi_generic_arg_declared_later.pas`, wired into `test-core`, seven
+arms, `total ok 7 / 7` under both pxx and FPC 3.2.2 on the same source:
+
+1. the plain case, argument declared below the template;
+2. the use in a **class field** (nearest preceding `;` is inside the class body);
+3. two tuples first used in **different declarations**;
+4. a procedural type and a bodiless class in the crossed section;
+5. **nested** `TBox<TBox<TLater>>`;
+6. the use in a **var section** (open case #1);
+7. the use in a **routine body** (open case #2).
+
+Open case #3 — several tuples anchored separately — is arm 3 and is what the
+shift bookkeeping exists for.
+
+`gate.sh quick` GREEN; self-host fixedpoint converges in 1 round; the seven
+existing `*delphi*generic*` tests all pass, including the cross-unit one that
+exercises the second call site (`DesugarImportedDelphiGenericUses`), where the
+walk correctly finds no open type section and falls back to today's position with
+the caller's leading `type` keyword intact.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

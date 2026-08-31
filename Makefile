@@ -8036,6 +8036,16 @@ test-core: $(COMPILER)
 	# a mode-Delphi generic declared in a USED UNIT, specialized with the angle-bracket
 	# surface from the program and from a third unit (the desugar used to sweep only
 	# forward from the template, and the program is lexed BEFORE the unit)
+	# mode Delphi: a generic's ARGUMENT may be declared AFTER the template. The
+	# minted alias used to be spliced behind the TEMPLATE, so everything it named
+	# had to exist by then -- and the error pointed into the template's own body,
+	# a line the author never wrote. The alias now anchors before the declaration
+	# that USES it, or at the end of the type section when the use is outside it.
+	# Seven arms, all FPC 3.2.2-verified, including the class-field, var-section
+	# and routine-body uses the ticket listed as unanswered.
+	# bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template
+	./$(COMPILER) test/test_delphi_generic_arg_declared_later.pas $(TESTTMP)/test_dgen_arg_later26
+	tools/expect_same.sh test_dgen_arg_later26 "$$($(TESTTMP)/test_dgen_arg_later26 | tail -1)" "total ok 7 / 7"
 	./$(COMPILER) -Futest/delphi_generic_units test/test_delphi_generic_cross_unit.pas $(TESTTMP)/test_delphi_generic_cross_unit26
 	tools/expect_same.sh test_delphi_generic_cross_unit26 "$$($(TESTTMP)/test_delphi_generic_cross_unit26 | tail -1)" "total ok 4 / 4"
 	# the objfpc arm of the same defect: INLINE `specialize T<X>` in a non-binder

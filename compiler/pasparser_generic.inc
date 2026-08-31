@@ -1053,6 +1053,133 @@ begin
   end;
 end;
 
+{ Does Tokens[k] spell this identifier? `object`, `interface`, `implementation`
+  and friends are tkIdent -- there is no token kind for them. }
+function DGenIdentIs(k: Integer; const s: AnsiString): Boolean;
+begin
+  DGenIdentIs := (Tokens[k].Kind = tkIdent) and
+                 CaseEqual(GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen), s);
+end;
+
+{ Does the `class` at k open a BODY? A modifier (`class function`, `class of`,
+  ...) opens nothing, and a bodiless `TFwd = class;` / `TD = class(TB);` closes
+  on its own semicolon. Same two exemptions CollectNestedTypeNames documents,
+  and the same bug they exist for
+  (bug-p-a-bodiless-class-with-a-parent-swallows-the-rest-of-the-type-section). }
+function DGenClassOpensBody(k, limit: Integer): Boolean;
+var kk, pd: Integer;
+begin
+  DGenClassOpensBody := False;
+  if (k + 1 < limit) and
+     ((Tokens[k+1].Kind = tkFunction) or (Tokens[k+1].Kind = tkProcedure) or
+      (Tokens[k+1].Kind = tkVar) or (Tokens[k+1].Kind = tkConst) or
+      (Tokens[k+1].Kind = tkOf) or
+      DGenIdentIs(k+1, 'operator') or DGenIdentIs(k+1, 'constructor') or
+      DGenIdentIs(k+1, 'destructor')) then Exit;
+  kk := k + 1;
+  while (kk < limit) and (DGenIdentIs(kk, 'abstract') or DGenIdentIs(kk, 'sealed')) do Inc(kk);
+  if (kk < limit) and (Tokens[kk].Kind = tkLParen) then
+  begin
+    pd := 0;
+    while kk < limit do
+    begin
+      if Tokens[kk].Kind = tkLParen then Inc(pd)
+      else if Tokens[kk].Kind = tkRParen then
+      begin
+        Dec(pd);
+        if pd <= 0 then begin Inc(kk); Break; end;
+      end;
+      Inc(kk);
+    end;
+  end;
+  DGenClassOpensBody := (kk >= limit) or (Tokens[kk].Kind <> tkSemicolon);
+end;
+
+{ Where a minted alias declaration for the use at useIdx must go: immediately
+  BEFORE the top-level declaration that contains that use, or -1 when the use is
+  not in the same open type section as fromIdx.
+
+  The alias is pinned between two constraints and only one position satisfies
+  both. Measured on the identical program with the declaration hand-written in
+  all three positions (frankP, 2026-08-30):
+
+    A  behind the TEMPLATE (what this rewrite did)   `unknown type: TOuter`
+    B  before the declaration that USES it           compiles, prints 8
+    C  at the END of the type section                `unknown type: TBox_TOuter`
+
+  A fails because the alias names types declared later in the section; C fails
+  because the alias is named by a declaration that comes earlier. B is the only
+  anchor that can satisfy both, and it does so by construction: the use site is
+  legal Pascal, so everything the alias names is already declared there, and
+  nothing that refers to the alias can precede its own declaration.
+
+  So: forward walk to useIdx tracking class/record body depth, remembering the
+  position after every depth-0 `;`. The last one at or before the use is the
+  anchor. It is NOT "scan back to the previous `;`" -- a use can sit in a class
+  field (`F: TBox<TOuter>;`) where the nearest preceding `;` is inside the class
+  body and a type declaration spliced there is nonsense.
+
+  When the use is OUTSIDE fromIdx's type section (a `var` section, a routine
+  body), the walk stops at the section's end and returns that -- position C,
+  which is wrong for an in-section use and right here, because every user of the
+  alias is then later by construction. One walk answers both: it stops at the
+  use or at the section, whichever comes first. When fromIdx is not in a type
+  section at all (the imported-unit caller splices after a `uses` clause) no
+  depth-0 `;` is ever recorded and the answer is fromIdx -- today's position,
+  with the callers' leading `type` keyword still doing its job.
+
+  `case` is NOT counted -- a record variant part introduces no `end` of its own
+  -- and `interface`/`object` are, because in a type section they are type
+  constructors.
+  bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template }
+function DGenDeclAnchor(fromIdx, useIdx: Integer): Integer;
+var k, depth, paren: Integer;
+begin
+  DGenDeclAnchor := fromIdx;
+  depth := 0; paren := 0;
+  k := fromIdx;
+  while k < useIdx do
+  begin
+    if Tokens[k].Kind = tkLParen then Inc(paren)
+    else if Tokens[k].Kind = tkRParen then Dec(paren)
+    else if (Tokens[k].Kind = tkRecord) or
+            DGenIdentIs(k, 'object') or DGenIdentIs(k, 'interface') then
+      Inc(depth)
+    else if Tokens[k].Kind = tkClass then
+    begin
+      if DGenClassOpensBody(k, useIdx) then Inc(depth);
+    end
+    else if Tokens[k].Kind = tkEnd then
+    begin
+      Dec(depth);
+      if depth < 0 then Exit;   { left the section -- keep what we have }
+    end
+    else if (depth = 0) and (paren = 0) then
+    begin
+      { The section ENDS here. Stop and keep the last position recorded, which
+        is the end of the type section -- position C. C is wrong for a use
+        INSIDE the section (the alias would come after a declaration that names
+        it) and right for a use after it, because then every user is later by
+        construction. The two cases are the same walk: it stops at the use, or
+        it stops at the section, whichever comes first. }
+      if (Tokens[k].Kind = tkVar) or (Tokens[k].Kind = tkConst) or
+         (Tokens[k].Kind = tkBegin) or (Tokens[k].Kind = tkType) or
+         (Tokens[k].Kind = tkUses) or (Tokens[k].Kind = tkAsm) or
+         DGenIdentIs(k, 'implementation') or DGenIdentIs(k, 'threadvar') or
+         DGenIdentIs(k, 'resourcestring') or DGenIdentIs(k, 'label') or
+         DGenIdentIs(k, 'initialization') or DGenIdentIs(k, 'finalization') then
+        Exit;
+      { `X = procedure(...)` is a procedural TYPE and stays in the section; a
+        bare `procedure`/`function` at depth 0 is a heading and ends it. }
+      if ((Tokens[k].Kind = tkProcedure) or (Tokens[k].Kind = tkFunction)) and
+         ((k = 0) or (Tokens[k-1].Kind <> tkEq)) then
+        Exit;
+      if Tokens[k].Kind = tkSemicolon then DGenDeclAnchor := k + 1;
+    end;
+    Inc(k);
+  end;
+end;
+
 { mode-Delphi generics desugar. After template ti (`TFoo<T> = class...`) is
   captured, rewrite every later use of the Delphi surface into the objfpc
   surface the existing template/specialization machinery parses:
@@ -1066,7 +1193,7 @@ end;
   Guards: the name must match ti's, the `<...>` group must be a plain
   comma-separated list of type idents closed by `>`, and the arity must match
   — anything else (e.g. a real `a < b` comparison) is left untouched. }
-procedure DelphiRewriteGenericUses(ti: Integer; var insertAt: Integer; delphiPattern: Boolean);
+function DelphiRewriteGenericUses(ti: Integer; var insertAt: Integer; delphiPattern: Boolean): Integer;
 { insertAt is VAR so a caller can run this to a FIXED POINT: each round leaves it
   past the alias declarations that round emitted, so the next round's aliases land
   AFTER them -- which is the whole ordering requirement, since an outer alias
@@ -1080,6 +1207,7 @@ var
   seenKey: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
   seenOff: array[0..MAX_DGEN_TUPLES-1] of Integer;
   seenLen: array[0..MAX_DGEN_TUPLES-1] of Integer;
+  seenUse: array[0..MAX_DGEN_TUPLES-1] of Integer;   { first use's token index -- the anchor }
   seenArg: array[0..MAX_DGEN_TUPLES*MAX_TEMPLATE_PARAMS-1] of TRawToken;
   ins: array[0..MAX_TEMPLATE_PARAMS*2+8] of TRawToken;
   ok, isParamForm, specB, dgDbg: Boolean;
@@ -1093,7 +1221,9 @@ var
   dgQPath: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
   dgQCount: Integer;
   qPath, qMint: AnsiString;
+  anchor: Integer;
 begin
+  DelphiRewriteGenericUses := 0;
   dgQCount := 0;
   tname := Templates[ti].Name;
   np := TemplateNParams[ti];
@@ -1334,6 +1464,11 @@ begin
             seenKey[si] := key;
             seenOff[si] := TokCharsAppend(aname);
             seenLen[si] := Length(aname);
+            { The USE's own index, which is where this alias has to be declared
+              in front of. Recorded here and still valid later: the sweep only
+              ever REMOVES tokens after i (the `<Args>` group it just
+              rewrote), so nothing shifts a position already recorded. }
+            seenUse[si] := i;
             for k := 0 to na - 1 do
               seenArg[si * MAX_TEMPLATE_PARAMS + k] := argTok[k];
             Inc(seenCnt);
@@ -1359,6 +1494,9 @@ begin
     begin
       InsertTokens(insertAt, NSpecIns, NSpecInsCnt);
       insertAt := insertAt + NSpecInsCnt;
+      { every recorded use sits at or after insertAt -- the sweep starts there }
+      for k := 0 to seenCnt - 1 do seenUse[k] := seenUse[k] + NSpecInsCnt;
+      DelphiRewriteGenericUses := DelphiRewriteGenericUses + NSpecInsCnt;
     end;
   end;
 
@@ -1376,10 +1514,16 @@ begin
                                  seenArg[si * MAX_TEMPLATE_PARAMS + k].SLen), ' ');
       writeln;
     end;
+    { Position B: immediately before the declaration that USES this tuple, not
+      behind the template. -1 means the use is outside insertAt's type section
+      and today's position is the only one that can work there -- see
+      DGenDeclAnchor. }
+    anchor := DGenDeclAnchor(insertAt, seenUse[si]);
+    if (anchor < insertAt) or (anchor > seenUse[si]) then anchor := insertAt;
     sOff := TokCharsAppend('specialize');
     tOff := TokCharsAppend(tname);
     insCnt := 0;
-    ins[insCnt].Kind := tkIdent; ins[insCnt].IVal := 0; ins[insCnt].Line := Tokens[insertAt].Line;
+    ins[insCnt].Kind := tkIdent; ins[insCnt].IVal := 0; ins[insCnt].Line := Tokens[anchor].Line;
     ins[insCnt].SOffset := seenOff[si]; ins[insCnt].SLen := seenLen[si]; Inc(insCnt);
     ins[insCnt].Kind := tkEq; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
     ins[insCnt].SOffset := 0; ins[insCnt].SLen := 0; Inc(insCnt);
@@ -1402,8 +1546,15 @@ begin
     ins[insCnt].SOffset := 0; ins[insCnt].SLen := 0; Inc(insCnt);
     ins[insCnt].Kind := tkSemicolon; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
     ins[insCnt].SOffset := 0; ins[insCnt].SLen := 0; Inc(insCnt);
-    InsertTokens(insertAt, ins, insCnt);
-    insertAt := insertAt + insCnt;
+    InsertTokens(anchor, ins, insCnt);
+    { insertAt is the SWEEP START and the caller's cursor; it moves only for a
+      splice at or before it. Every later use shifts by what was inserted ahead
+      of it, including this tuple's own -- the next tuple's anchor walk reads
+      the token stream as it now stands. }
+    if anchor <= insertAt then insertAt := insertAt + insCnt;
+    for k := si to seenCnt - 1 do
+      if seenUse[k] >= anchor then seenUse[k] := seenUse[k] + insCnt;
+    DelphiRewriteGenericUses := DelphiRewriteGenericUses + insCnt;
   end;
 end;
 
@@ -1436,7 +1587,7 @@ end;
   token in front, added only when a round actually emitted something. }
 procedure DesugarImportedDelphiGenericUses;
 var
-  at, rounds, before, atBefore, t, resume: Integer;
+  at, rounds, before, atBefore, t, resume, emitted: Integer;
   ins: array[0..0] of TRawToken;
 begin
   if (TemplateCount = 0) or (CurTok.Kind = tkEOF) or (TokPos < 1) then Exit;
@@ -1451,8 +1602,9 @@ begin
     before := TokCount;
     atBefore := at;
     CollectSpecializationBoundNamesFromTokens;
+    emitted := 0;
     for t := 0 to TemplateCount - 1 do
-      DelphiRewriteGenericUses(t, at, TemplateIsDelphi[t]);
+      emitted := emitted + DelphiRewriteGenericUses(t, at, TemplateIsDelphi[t]);
     Inc(rounds);
     if rounds > 16 then
       Error('generic specialization nested deeper than 16 levels (or a rewrite loop)');
@@ -1460,7 +1612,11 @@ begin
     declarations and removes the `<Args>` groups it rewrote, and the two cancel
     exactly when one tuple is used twice. `at` advances only on an alias, so the
     pair of them is what "this round was idle" actually means. }
-  until (TokCount = before) and (at = atBefore);
+  { An unchanged `at` is no longer "nothing was emitted": since aliases anchor
+    at their USE, a round can splice several declarations without moving the
+    cursor at all. The emitted-token count is the direct answer the `at`
+    comparison was standing in for. }
+  until (TokCount = before) and (at = atBefore) and (emitted = 0);
   { `at` advances by exactly the alias tokens each round emits, so `at > resume`
     is "something was declared" -- TokCount is NOT, because the same round also
     REMOVES each rewritten `<Args>` group and the two cancel: one tuple used
@@ -1897,7 +2053,7 @@ procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm
 var
   templateName: AnsiString;
   depth, startTok, cur, finalCur, np, gi, scan, bEnd: Integer;
-  dgenAt, dgenRounds, dgenBefore, dgenAtBefore, dgenT: Integer;   { the nested-specialize fixed point }
+  dgenAt, dgenRounds, dgenBefore, dgenAtBefore, dgenT, dgenEmitted: Integer;   { the nested-specialize fixed point }
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   doneParams, bodyless: Boolean;
   { per-parameter constraints, flushed into TPCon* with the names below }
@@ -2219,15 +2375,17 @@ begin
       turned the inner group into a plain ident is what finishes the outer one. }
     dgenAtBefore := dgenAt;
     CollectSpecializationBoundNamesFromTokens;
+    dgenEmitted := 0;
     for dgenT := 0 to TemplateCount - 1 do
-      DelphiRewriteGenericUses(dgenT, dgenAt, TemplateIsDelphi[dgenT]);
+      dgenEmitted := dgenEmitted +
+                     DelphiRewriteGenericUses(dgenT, dgenAt, TemplateIsDelphi[dgenT]);
     Inc(dgenRounds);
     if dgenRounds > 16 then
       Error('generic specialization nested deeper than 16 levels (or a rewrite loop)');
   { …and dgenAt, for the reason spelled out in DesugarImportedDelphiGenericUses:
     inserted aliases and removed `<Args>` groups cancel in TokCount, so TokCount
     alone can read "idle" on a round that did work. }
-  until (TokCount = dgenBefore) and (dgenAt = dgenAtBefore);
+  until (TokCount = dgenBefore) and (dgenAt = dgenAtBefore) and (dgenEmitted = 0);
 
   TokPos := finalCur;
   Next;

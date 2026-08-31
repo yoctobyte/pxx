@@ -7,12 +7,15 @@ program test_generic_qualified_arg_delphi;
 
   Oracle is FPC's output for this exact file.
 
-  NOTE the declaration ORDER: TOuter comes FIRST. A Delphi-mode argument naming
-  a type declared AFTER the template fails for an unrelated, pre-existing reason
-  -- the rewrite puts its alias declarations immediately behind the template, so
-  they can name only what is already declared there. That is
-  bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template and
-  is deliberately NOT exercised here. }
+  The declaration ORDER here -- TOuter FIRST -- used to be load-bearing: a
+  Delphi-mode argument naming a type declared AFTER the template failed for an
+  unrelated reason, because the rewrite put its alias declarations immediately
+  behind the template where they could name only what was already declared.
+  That was bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template,
+  FIXED 2026-08-31: the alias now anchors before the declaration that USES it.
+  The order is kept as written -- this file's subject is qualified NAMES, and
+  the ordering case has its own file (test_delphi_generic_arg_declared_later.pas,
+  seven arms) rather than being folded in here. }
 {$mode delphi}
 type
   TOuter = class
