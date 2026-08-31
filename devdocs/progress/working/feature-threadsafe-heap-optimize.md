@@ -1,13 +1,13 @@
 ---
 track: A
 prio: 53  # auto
-owner: ""
+owner: frankA
 ---
 
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A
-- **Status:** unfinished — the lock half, the benchmark and the TLS blocker are all done. The magazine half is PARKED with its diagnosis banked: the lock it would bypass is not only the allocator's, so it needs a design change first (see the 2026-08-21 note at the bottom).
+- **Status:** working
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Follows the M0 contract
   [[feature-threadsafe-heap-contract]] (correctness) — this is the *speed* half.
@@ -339,3 +339,100 @@ an ABA problem hiding in it.
 for, not the implementation: the implementation is a Track A change across 26
 call sites under the self-host gate, and a half-applied one is the specific
 failure CLAUDE.md warns about for this lane. Nothing here is applied.
+
+## 2026-08-31 (later) — the obstacle I named this morning is NOT one. The site needs atomic refcounts, not two locks.
+
+The note above says `EmitDynArrayUnique` "needs BOTH locks" and prices step 1
+around a deadlock surface. **That framing is wrong**, and reading
+`PXXDynArrayUnique` line by line (`compiler/builtin/builtinheap.pas:3681`) is
+what shows it. I wrote it from the *shape* of the routine — a refcount read
+followed by an allocation inside one critical section — without asking what each
+line actually needs from the lock.
+
+### What each step needs, and it is never "both locks at once"
+
+| line | what it touches | what it needs |
+| --- | --- | --- |
+| `arrData := PWord(arrSlot)^` | **the caller's own slot** | nothing |
+| `rc := refCountPtr^; if rc <= 1 then Exit(arrData)` | shared refcount | an **atomic word read** |
+| `len := lenPtr^`, `PXXBlockCopy(... arrData ...)` | the shared source | nothing — see below |
+| `PXXAlloc(...)` | the heap | the **allocator lock**, inside `PXXAlloc` |
+| `PXXDynArrayRetainImmediate(newArrData, ...)` | the *elements'* refcounts | **atomic increments** |
+| `PWord(arrSlot)^ := newArrData` | the caller's own slot | nothing |
+| `PXXDynArrayRelease(arrData, desc)` | shared refcount, maybe free | **atomic dec**, free if it hits 0 |
+
+No row wants two locks held together. The refcount rows want *atomic
+operations*, which is not the same thing as a lock-guarded region — and that is
+the whole difference between "add an ordering rule" and "delete a lock".
+
+**The copy needs no protection, and the reason is a real invariant rather than
+luck:** we only reach it when `rc >= 2`, and any other thread wishing to *write*
+that array must itself call `Unique` first, which (seeing `rc >= 2`) copies and
+leaves ours alone. So the source is immutable for exactly as long as it is
+shared. The same argument fixes `len`: `SetLength` on a shared array goes through
+`Unique` too.
+
+### The `rc <= 1` early exit — the one genuinely load-bearing read
+
+This is the only place an unlocked read can decide something unsafe: read 1,
+conclude "unique", and write in place while another thread holds a reference.
+
+Working through the directions, the failure requires `rc` to rise 1→2 between
+the read and the write. That needs another thread to *retain*, which needs it to
+*reach* the array — and if `rc == 1` the only reference is ours. The one way it
+happens is a second thread reading the same shared variable we are writing
+(`b := g` racing `g[0] := x`), which is an unsynchronised read/write of one
+variable, i.e. already user-level UB.
+
+**And crucially it is not a regression, which is the argument that actually
+matters here.** Under today's single global heap lock the same interleaving is
+equally possible: A takes the lock, reads `rc = 1`, returns, releases the lock,
+*then* writes; B takes the lock and retains. The lock never spanned the decision
+and the write, so it was never protecting this. The optimistic scheme is
+**no weaker than what we ship** — that is the correct bar, not absolute safety.
+
+The other direction is benign by construction: reading a stale `rc >= 2` when it
+has since dropped to 1 costs one redundant copy. **Copying too often is waste;
+copying too rarely is corruption.** The unlocked read can only err toward waste.
+
+### So ABA does not arise on this path
+
+The 2026-08-21 note flagged "re-validate and retry" as an ABA shape. It is —
+but the scheme above **has no re-validate step**, because it never needs one:
+the copy path is safe under `rc >= 2` regardless of what `rc` does afterwards,
+and the release is a single atomic decrement where only the thread that drives
+the count to zero frees. There is no compare-and-swap whose operand could
+change and change back, so there is nothing for ABA to attack. The retry loop
+was an artifact of the proposed *shape*, not a requirement of the problem.
+
+### What this changes about step 1
+
+Step 1 stops being "classify 24 sites and invent a lock order" and becomes
+**"give the refcount role atomic primitives, then delete it from the lock"**.
+That is smaller, it removes a mechanism rather than adding one, and it is the
+direction `normalise-dont-special-case.md` points. The 9-of-24 separable count
+in the note above still holds and is now the *whole* job rather than the easy
+part of it.
+
+### Not applied, and what would falsify this
+
+**This is an argument, not a measurement**, and it is the kind that looks
+obviously right — which is exactly the failure mode the 2026-08-21 note warned
+about, so it does not get to be self-certifying. Before any code:
+
+- The claim "another thread wishing to write must call `Unique` first" is a
+  claim about **codegen**, not about this routine. It needs checking against
+  `EmitDynArrayUnique`'s call sites — every mutating path on a dyn array must
+  route through it, with **no** direct-write path that skips the check. One
+  unguarded store falsifies the immutability argument and the whole copy-safety
+  case with it.
+- `PXXDynArrayRetainImmediate` walks nested elements; "atomic increments" is
+  cheap to say and needs the per-arch primitives to exist on all four targets
+  that accept `--threadsafe`, which is the same cross-target surface the lock
+  half already crossed.
+- The bench (`make benchmark-threadsafe-heap`) is the acceptance check and
+  already exists, with the 2026-08-20 numbers as the baseline to beat.
+
+Still parked. Nothing here is applied; this replaces the obstacle in the
+morning's note rather than clearing the ticket.
+
