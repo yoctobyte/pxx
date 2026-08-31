@@ -219,4 +219,4 @@ lock — and that is the NilPy path, now its own ticket. So direction 1's premis
 is refuted and direction 2 is what landed.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 4cb515000.
