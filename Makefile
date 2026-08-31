@@ -6771,6 +6771,13 @@ test-core: $(COMPILER)
 	# catches the slot never being written at all.
 	./$(COMPILER) test/test_signal_num.pas $(TESTTMP)/test_signal_num26
 	tools/expect_same.sh test_signal_num26 "$$($(TESTTMP)/test_signal_num26)" "usr1=2 usr2=1 int=1 zero=0"
+	# A signal delivery must not disturb BSS offset 0. BSS_SIG_NUM allocated in
+	# one arch's emitter reads 0 everywhere else -- aliased onto BSS_INITIAL_RSP,
+	# which ParamCount dereferences -- so one signal used to make the next
+	# ParamCount segfault. test_signal_num CANNOT see it (store and load agree
+	# on the wrong slot), so this asserts on the NEIGHBOUR instead.
+	./$(COMPILER) test/test_signal_bss_alias.pas $(TESTTMP)/test_signal_bss_alias26
+	tools/expect_same.sh test_signal_bss_alias26 "$$($(TESTTMP)/test_signal_bss_alias26)" "hit=1 argv-intact=TRUE"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
@@ -13243,6 +13250,13 @@ test-i386: $(COMPILER)
 	# intrinsic refused here rather than answer 0.
 	./$(COMPILER) --target=i386 test/test_signal_num.pas $(TESTTMP)/test_i386_signum
 	tools/expect_same.sh i386/test_i386_signum "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_signum)" "usr1=2 usr2=1 int=1 zero=0"
+	# A signal delivery must not disturb BSS offset 0. BSS_SIG_NUM allocated in
+	# one arch's emitter reads 0 everywhere else -- aliased onto BSS_INITIAL_RSP,
+	# which ParamCount dereferences -- so one signal used to make the next
+	# ParamCount segfault. test_signal_num CANNOT see it (store and load agree
+	# on the wrong slot), so this asserts on the NEIGHBOUR instead.
+	./$(COMPILER) --target=i386 test/test_signal_bss_alias.pas $(TESTTMP)/test_i386_bssalias
+	tools/expect_same.sh i386/test_i386_bssalias "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_bssalias)" "hit=1 argv-intact=TRUE"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
@@ -13725,6 +13739,13 @@ test-aarch64: $(COMPILER)
 	# intrinsic refused here rather than answer 0.
 	./$(COMPILER) --target=aarch64 test/test_signal_num.pas $(TESTTMP)/test_aarch64_signum
 	tools/expect_same.sh aarch64/test_aarch64_signum "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_signum)" "usr1=2 usr2=1 int=1 zero=0"
+	# A signal delivery must not disturb BSS offset 0. BSS_SIG_NUM allocated in
+	# one arch's emitter reads 0 everywhere else -- aliased onto BSS_INITIAL_RSP,
+	# which ParamCount dereferences -- so one signal used to make the next
+	# ParamCount segfault. test_signal_num CANNOT see it (store and load agree
+	# on the wrong slot), so this asserts on the NEIGHBOUR instead.
+	./$(COMPILER) --target=aarch64 test/test_signal_bss_alias.pas $(TESTTMP)/test_aarch64_bssalias
+	tools/expect_same.sh aarch64/test_aarch64_bssalias "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_bssalias)" "hit=1 argv-intact=TRUE"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
@@ -13960,6 +13981,13 @@ test-riscv32: $(COMPILER)
 	# intrinsic refused here rather than answer 0.
 	./$(COMPILER) --target=riscv32 test/test_signal_num.pas $(TESTTMP)/test_riscv32_signum
 	tools/expect_same.sh riscv32/test_riscv32_signum "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_signum)" "usr1=2 usr2=1 int=1 zero=0"
+	# A signal delivery must not disturb BSS offset 0. BSS_SIG_NUM allocated in
+	# one arch's emitter reads 0 everywhere else -- aliased onto BSS_INITIAL_RSP,
+	# which ParamCount dereferences -- so one signal used to make the next
+	# ParamCount segfault. test_signal_num CANNOT see it (store and load agree
+	# on the wrong slot), so this asserts on the NEIGHBOUR instead.
+	./$(COMPILER) --target=riscv32 test/test_signal_bss_alias.pas $(TESTTMP)/test_riscv32_bssalias
+	tools/expect_same.sh riscv32/test_riscv32_bssalias "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_bssalias)" "hit=1 argv-intact=TRUE"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
@@ -15535,6 +15563,13 @@ test-arm32: $(COMPILER)
 	# intrinsic refused here rather than answer 0.
 	./$(COMPILER) --target=arm32 test/test_signal_num.pas $(TESTTMP)/test_arm32_signum
 	tools/expect_same.sh arm32/test_arm32_signum "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_signum)" "usr1=2 usr2=1 int=1 zero=0"
+	# A signal delivery must not disturb BSS offset 0. BSS_SIG_NUM allocated in
+	# one arch's emitter reads 0 everywhere else -- aliased onto BSS_INITIAL_RSP,
+	# which ParamCount dereferences -- so one signal used to make the next
+	# ParamCount segfault. test_signal_num CANNOT see it (store and load agree
+	# on the wrong slot), so this asserts on the NEIGHBOUR instead.
+	./$(COMPILER) --target=arm32 test/test_signal_bss_alias.pas $(TESTTMP)/test_arm32_bssalias
+	tools/expect_same.sh arm32/test_arm32_bssalias "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_bssalias)" "hit=1 argv-intact=TRUE"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check

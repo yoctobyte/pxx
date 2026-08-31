@@ -9,7 +9,7 @@ owner: frankA
 # Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** working
+- **Status:** working (frankA). Items 1 (SA_SIGINFO/ucontext) and 3 (sigaltstack) DONE. Item 4's COMPILER half DONE on all five hosted targets as of 2026-08-31 — `__pxxSigNum` parks on x86-64/i386/aarch64/arm32/riscv32 and the x86-64-only refusal is gone; its RTL half is Track B's [[feature-b-fpc-signal-compat-unit]]. **Items 2 (`--threadsafe` masks) and 5 (SIGPIPE policy) are all that is left here.** (`progress.sh claim` overwrote this line with the bare word `working` on 2026-08-31; restored, because this ticket has no frontmatter `summary` and this line is what a reader routes on.)
 - **Opened:** 2026-07-16, split out of [[feature-signal-handlers]] once the base
   slice (libc-free `rt_sigaction` handler install + `SetSignalHandler`) shipped
   and pinned on all five hosted targets (x86-64 b336, aarch64 b370,
@@ -553,3 +553,80 @@ half (Track B), and parking the signal number on the other four targets. That is
 it. The park is a staffing state, not a blocked one.
 
 **Re-priced: unchanged (p55).** No stale resume condition.
+
+## Progress — 2026-08-31: the signal number on the remaining four targets (item 4's follow-up slice)
+
+`__pxxSigNum` now works on all five hosted targets and the x86-64-only refusal
+is gone. Each dispatch stub parks the kernel's first handler argument beside
+si_code / si_addr / ucontext*, before anything else:
+
+| target | how |
+| --- | --- |
+| i386 | `mov eax,[ebp+8]` / `mov [num],eax` (args on the stack, cdecl frame) |
+| arm32 | `str r0,[ip]` (ip = &num via the pc-literal idiom) |
+| aarch64 | `mov w10,w0` / `str x10,[x9]` (the w-form mov zero-extends into x10) |
+| riscv32 | `sw a0, 0(t1)` |
+
+Backend cost, as with the other four slots: **zero** — the read is IRC 5 through
+`IRExcStoreSlot`. No cross assembler on this box, so the two hand-written
+encodings are derived from verified siblings in the same file
+(`str r2,[ip]`=$E58C2000 -> Rd=0 gives $E58C0000; `mov w19,w0`=$2A0003F3 ->
+Rd=10 gives $2A0003EA) and the qemu run is the oracle — a wrong Rd stores
+garbage and fails the `zero=0` row.
+
+### The storage move is the real fix, and it is the THIRD time
+
+`BSS_SIG_NUM` was allocated inside x86-64's `EmitSignalRuntime`, with a comment
+saying that was safe because x86-64 was its only target. **A slot allocated by
+one arch's emitter is 0 on every other**, i.e. aliased onto BSS[0]. Moved to
+`EnsureSignalBss` beside the other dispatch-parked slots — the same move
+`BSS_SIG_HOOKS/_CODE/_ADDR/_CTX` needed out of the Pascal driver, and
+`_ALTSTK/_ALTSS` needed out of this same function on 2026-08-21.
+
+The comment was **true when written and wrong by the time it mattered**.
+*"X is still the only user"* is a fact with an expiry date, and a comment does
+not set an alarm.
+
+### MEASURED, not reasoned — and the damage is severe
+
+The allocation was deliberately put back in x86-64's emitter and the four
+targets re-run. BSS[0] is `BSS_INITIAL_RSP`, which is what `ParamCount` and
+`ParamStr` dereference, so one delivered signal overwrites the saved initial
+stack pointer with the signal number:
+
+```
+aarch64  before=0 hit=1 after=<SIGSEGV>
+i386     before=0 hit=1 after=<SIGSEGV>
+arm32    before=0 hit=1 after=<SIGSEGV>
+riscv32  before=0 hit=1 after=<no output>
+```
+
+### The obvious test CANNOT see it, which is the part worth carrying forward
+
+On that same deliberately-broken build, `test_signal_num.pas` printed the
+correct `usr1=2 usr2=1 int=1 zero=0` **on all four cross targets**. The store
+and the load both go to the aliased slot and agree with each other. Its `zero=0`
+guard was written precisely to catch *"the slot is never written"* and is blind
+to *"the slot is somebody else's"*.
+
+**A read-back test cannot detect a slot that is consistently wrong.** So
+`test/test_signal_bss_alias.pas` asserts on the **neighbour** instead: deliver a
+signal, then compare `ParamCount` before and after. Wired into all five suites;
+it fails loudly on the broken build and passes on all five now.
+
+### The test had to be fixed before it could be used
+
+`test_signal_num.pas` used raw syscalls 39/62 — getpid/kill on x86-64 and
+something else everywhere else — so it was never arch-independent despite being
+this item's test. Rewritten to `tkill(gettid(), sig)` with the same per-arch
+const block `test_signal_siginfo.pas` uses, and **the numbers are lifted from
+that file** rather than looked up fresh: they are already proven on all five
+targets there, and a wrong getpid number fails as *"the signal never arrives"*,
+which reads exactly like the dispatch bug the test exists to catch. A test whose
+failure mode is indistinguishable from its subject's is not a test.
+
+### What is left on this ticket
+
+Items **2** (`--threadsafe` masks: which thread runs the handler, mask
+inheritance under `clone(2)`) and **5** (SIGPIPE policy, parked until the net
+library). Nothing else.
