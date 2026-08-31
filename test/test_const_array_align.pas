@@ -45,13 +45,18 @@ program test_const_array_align;
   test would have passed on any binary whose section happened to land right,
   which is why there are several arrays here at several positions.
 
-  NO FLOAT-ELEMENT ARRAY, DELIBERATELY: `@C[0]` where C is an `array of Double`
-  does not COMPILE on i386/arm32/riscv32 -- `unsupported float operator`, with
-  no float operation in the program. That is a separate defect in address
-  computation, filed as
+  THE FLOAT ROWS ARE HERE NOW, and they were absent for a reason worth keeping:
+  `@C[0]` where C is an `array of Double` did not COMPILE on i386/arm32/riscv32
+  -- `unsupported float operator`, in a program with no float operation in it --
+  because an IR_INDEX node's IRTk names the type AT the address, so an address
+  computation over a float array was dispatched into the soft-float lowering.
+  Fixed 2026-08-31 by IRValueKind (ir.inc),
   bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit.
-  A Double element needs the same 8 that Int64 needs, so no alignment coverage
-  is lost by using Int64 here; add the float rows when that ticket closes. }
+
+  So E and S below carry alignment coverage the Int64 rows could not: they are
+  the only rows whose ELEMENT TYPE reaches the type-directed half of address
+  lowering. S is asserted at 4, not 8, for the same reason D is -- a Single
+  element contracts to 4 and asserting 8 would be asserting luck. }
 
 const
   { first in the section -- the case with nothing of ours before it }
@@ -66,6 +71,9 @@ const
   F: array[0..2] of Byte = (1, 2, 3);
   G: array[0..3] of Int64 = (9, 10, 11, 12);
   H: array[0..3] of Cardinal = (5, 6, 7, 8);
+  { float ELEMENTS -- the rows the address-lowering bug kept out of this test }
+  E: array[0..3] of Double = (1.5, 2.5, 3.5, 4.5);
+  S: array[0..3] of Single = (0.5, 1.5, 2.5, 3.5);
 
 var
   bad, checked: Integer;
@@ -89,6 +97,8 @@ begin
   Check('G', PtrUInt(@G[0]), 8);
   Check('D', PtrUInt(@D[0]), 4);
   Check('H', PtrUInt(@H[0]), 4);
+  Check('E', PtrUInt(@E[0]), 8);
+  Check('S', PtrUInt(@S[0]), 4);
   { read the data too, so the arrays cannot be optimised out of .data and
     leave the alignment assertions checking addresses nothing uses }
   if (A[3] + B[3] + G[3]) <> (4 + 8 + 12) then
@@ -99,6 +109,15 @@ begin
   if (D[3] + H[3] + F[2]) <> (4 + 8 + 3) then
   begin
     writeln('WRONG VALUES 32');
+    Inc(bad);
+  end;
+  { and read the float arrays, for the same reason: an array nothing reads can
+    be dropped from .data, leaving its alignment assertion checking an address
+    no program uses. Exact binary fractions, so this is an equality on values
+    that are representable and not a float-accuracy assertion. }
+  if (E[3] + Double(S[3])) <> 8.0 then
+  begin
+    writeln('WRONG VALUES FLOAT');
     Inc(bad);
   end;
   { A positive token the subject itself emits, never a bare exit status: a

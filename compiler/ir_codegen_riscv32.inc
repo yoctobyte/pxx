@@ -2229,9 +2229,14 @@ begin
           64-bit check below — Double is now Is64Bit (a0:a1 storage shape) but its
           arithmetic is soft-float, not integer. Key off the operands: a compare
           carries a Boolean result tk. }
+        { IRValueKind on the OPERANDS, not IRTk: an IR_LEA/IR_FIELD/IR_INDEX
+          operand is an ADDRESS whose IRTk names the type AT it, so `@V[0]`
+          over an array of Double reported tyDouble and sent a pure address
+          computation in here -- arriving with `and`, which no soft-float
+          kernel implements. See IRValueKind in ir.inc for the measurement. }
         if IsFloatRISCV32(IntToTypeKind(IRTk[node])) or
-           IsFloatRISCV32(IntToTypeKind(IRTk[left])) or
-           IsFloatRISCV32(IntToTypeKind(IRTk[right])) then
+           IsFloatRISCV32(IRValueKind(left)) or
+           IsFloatRISCV32(IRValueKind(right)) then
         begin
           EmitFloatBinopRISCV32(node);
           Exit;

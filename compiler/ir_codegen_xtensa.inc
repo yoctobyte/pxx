@@ -2202,9 +2202,14 @@ begin
         { Float arithmetic/compare via the soft-float kernels. MUST precede the
           64-bit check — Double is Is64Bit (a2:a3 storage shape) but its
           arithmetic is soft-float, not integer. Key off the operands. }
+        { IRValueKind on the OPERANDS, not IRTk: an IR_LEA/IR_FIELD/IR_INDEX
+          operand is an ADDRESS whose IRTk names the type AT it, so `@V[0]`
+          over an array of Double reported tyDouble and sent a pure address
+          computation in here -- arriving with `and`, which no soft-float
+          kernel implements. See IRValueKind in ir.inc for the measurement. }
         if IsFloatXtensa(IntToTypeKind(IRTk[node])) or
-           IsFloatXtensa(IntToTypeKind(IRTk[left])) or
-           IsFloatXtensa(IntToTypeKind(IRTk[right])) then
+           IsFloatXtensa(IRValueKind(left)) or
+           IsFloatXtensa(IRValueKind(right)) then
         begin
           EmitFloatBinopXtensa(node);
           Exit;

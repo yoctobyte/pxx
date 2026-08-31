@@ -2582,8 +2582,12 @@ begin
           Exit;
         end;
 
-        lhsTk := IntToTypeKind(IRTk[left]);
-        rhsTk := IntToTypeKind(IRTk[right]);
+        { IRValueKind, not IRTk: an IR_LEA/IR_FIELD/IR_INDEX operand is an
+          ADDRESS whose IRTk names the type AT it, so `@V[0]` over an array of
+          Double reported tyDouble and sent an address computation into the
+          float path. See IRValueKind in ir.inc for the measurement. }
+        lhsTk := IRValueKind(left);
+        rhsTk := IRValueKind(right);
         if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then
         begin
           IREmitNode386(left);

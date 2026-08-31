@@ -5147,16 +5147,40 @@ test-core: $(COMPILER)
 	  echo "=== test-core: qemu-aarch64 not present, skipping aarch64 aggregate-result row ==="; \
 	fi
 	./$(COMPILER) test/test_const_array_align.pas $(TESTTMP)/test_const_align26
-	tools/expect_same.sh test_const_align26 "$$($(TESTTMP)/test_const_align26)" "CONST-ARRAY-ALIGN OK checked=5"
+	tools/expect_same.sh test_const_align26 "$$($(TESTTMP)/test_const_align26)" "CONST-ARRAY-ALIGN OK checked=7"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1 \
 	   && command -v qemu-riscv32 >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32 riscv32; do \
 	    ./$(COMPILER) --target=$$arch test/test_const_array_align.pas $(TESTTMP)/test_const_align_$$arch >/dev/null; \
-	    tools/expect_same.sh $$arch/test_const_align_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_const_align_$$arch)" "CONST-ARRAY-ALIGN OK checked=5" \
+	    tools/expect_same.sh $$arch/test_const_align_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_const_align_$$arch)" "CONST-ARRAY-ALIGN OK checked=7" \
 	      || { echo "cross const-array alignment FAIL on $$arch"; exit 1; }; \
 	  done; echo "cross const-array alignment ok: i386 aarch64 arm32 riscv32"; \
 	else \
 	  echo "=== test-core: qemu-user not present, skipping cross const-array alignment ==="; \
+	fi
+	# bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit
+	# An IR_INDEX node's IRTk names the type AT the address, so `@V[0]` over an
+	# array of Double dispatched an ADDRESS computation into the float lowering.
+	# Loud on the soft-float 32-bit targets (PtrUInt is `and $FFFFFFFF`, and no
+	# kernel implements `and`, so it did not compile); SILENT on x86-64, where
+	# PtrUInt is `x + 0` and `+` IS in the float set -- at -O0 it emitted an
+	# addsd of the address reinterpreted as a double, which is bit-preserving
+	# and therefore returned the right answer, and at -O1+ an imm-fold arm keyed
+	# on the NODE type caught it first. RUN AT -O0 TOO, deliberately: the
+	# default-level native row could never have failed.
+	./$(COMPILER) test/test_float_elem_address.pas $(TESTTMP)/test_feaddr26
+	tools/expect_same.sh test_feaddr26 "$$($(TESTTMP)/test_feaddr26)" "FLOAT-ELEM-ADDR OK checked=11"
+	./$(COMPILER) -O0 test/test_float_elem_address.pas $(TESTTMP)/test_feaddr26_o0
+	tools/expect_same.sh test_feaddr26_o0 "$$($(TESTTMP)/test_feaddr26_o0)" "FLOAT-ELEM-ADDR OK checked=11"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1 \
+	   && command -v qemu-riscv32 >/dev/null 2>&1; then \
+	  for arch in i386 aarch64 arm32 riscv32; do \
+	    ./$(COMPILER) --target=$$arch test/test_float_elem_address.pas $(TESTTMP)/test_feaddr_$$arch >/dev/null; \
+	    tools/expect_same.sh $$arch/test_feaddr_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_feaddr_$$arch)" "FLOAT-ELEM-ADDR OK checked=11" \
+	      || { echo "cross float-element address FAIL on $$arch"; exit 1; }; \
+	  done; echo "cross float-element address ok: i386 aarch64 arm32 riscv32"; \
+	else \
+	  echo "=== test-core: qemu-user not present, skipping cross float-element address ==="; \
 	fi
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
 	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \

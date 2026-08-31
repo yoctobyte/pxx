@@ -4,9 +4,9 @@ track: A
 prio: 50
 type: bug
 blocked-by: []
-status: backlog
+status: working
 found: 2026-08-30
-owner: unassigned
+owner: frankS
 summary: "`@V[0]` where V is an `array of Double` or `array of Single` fails to COMPILE on i386, arm32 and riscv32 -- `unsupported float operator` -- in a program containing no float operation. The element type routes an ADDRESS computation into the softfloat binop lowering. `@V` (whole array) is fine, `@V[0]` on an `array of Int64` is fine, and real float work (`V[0] := 1.5`) is fine, so it is the indexed-address path specifically."
 ---
 

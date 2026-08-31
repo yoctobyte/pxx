@@ -325,6 +325,54 @@ begin
   Result := (idx >= 0) and (idx < IRCount);
 end;
 
+{ The type of the VALUE a node produces — which for the three ADDRESS-producing
+  kinds is NOT what IRTk records.
+
+  IR_LEA, IR_FIELD and IR_INDEX all compute an address, and their IRTk carries
+  the type of what LIVES AT that address, because that is what the IR_LOAD_MEM
+  stacked on top needs to know. Ask IRTk what an `@V[0]` is and the answer is
+  `tyDouble`; the node is a pointer.
+
+  MEASURED 2026-08-31, and the compile error was the mild end of it. Every
+  backend's binop dispatch asks "is either operand a float" as
+  `TypeIsFloat(IntToTypeKind(IRTk[left]))`, so an address computation over a
+  float array routed into the FLOAT path:
+
+    var V: array[0..1] of Double;  writeln(PtrUInt(@V[0]));
+
+  * i386 / arm32 / riscv32 (and xtensa) — `PtrUInt` on a 32-bit target is
+    `x and $FFFFFFFF`, and the soft-float lowering has no `and` kernel, so it
+    stops at `unsupported float binop` in a program containing no float
+    arithmetic. That is how this was found.
+  * x86-64 at -O0 — `PtrUInt` is `x + 0`, and `+` IS in the float set, so it
+    emitted `movq xmm1, rax / cvtsi2sd xmm0, rcx / addsd xmm0, xmm1 / movq rax,
+    xmm0`: the ADDRESS reinterpreted as a double, added to 0.0, reinterpreted
+    back. It gives the right answer only because a finite double + 0.0 is
+    bit-preserving and an address is a tiny denormal — so the wrong code and the
+    right answer have coexisted silently. At -O1 and above an imm-fold arm
+    keyed on the NODE's type (not the operands') catches it first and emits
+    `add rax, 0`, which is why no test ever saw it.
+
+  So the loud 32-bit failure and the silent 64-bit miscompile are ONE defect,
+  and this is the one place to answer the question. `ir_codegen_wasm32.inc`
+  already had this rule privately as WasmNodeResultType's `IR_LEA, IR_FIELD,
+  IR_INDEX : tyPointer` arm — the second mechanism for one concept, which is
+  the smell devdocs/dev/normalise-dont-special-case.md names.
+
+  NOT a replacement for IRTk in general: a LOAD_MEM over one of these still
+  reports the element type, correctly, because a load's own IRTk is its own.
+  bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit }
+function IRValueKind(node: Integer): TTypeKind;
+begin
+  Result := tyUnknown;
+  if node < 0 then Exit;
+  if (IRKind[node] = IR_LEA) or (IRKind[node] = IR_FIELD) or
+     (IRKind[node] = IR_INDEX) then
+    Result := tyPointer
+  else
+    Result := IntToTypeKind(IRTk[node]);
+end;
+
 function IRNewLabel: Integer;
 begin
   Result := IRLabelCount;
