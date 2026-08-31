@@ -202,4 +202,4 @@ block after the clone returns; the trade-off is written up in
 fixed: a thread reading a block it inherited must not be believed.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit ab4cf1226.
