@@ -8,7 +8,7 @@ found: 2026-08-31
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "MOSTLY FIXED 2026-08-31; ONE BACKEND LEFT (xtensa). Two defects of one shape -- an optimisation living only in the x86-64 emitter with every other backend routed to a correct-but-quadratic shared path -- and the one this title names was NOT the one that mattered. (a) FIXED in the runtime, so ALL SIX targets get it: PXXStrSetLen always reallocated and copied, so `SetLength(s, Length(s)+1)` copied the whole string per call; AppendChar in lexer.inc does exactly that per character, which made the COMPILER'S OWN string building O(n^2) everywhere but x86-64. It now grows in place when sole-owner and APPENDABLE with capacity, and over-allocates 2x only when an existing string grows. (b) FIXED on i386, arm32, aarch64 and riscv32: IRIsSelfStrAppend is forwarded in compiler.pas and each backend emits a 2-argument call to the new runtime wrappers PXXStrAppendStr/Char. XTENSA STILL TAKES THE CONCAT PATH -- an arm was written, crashed on a local as well as a global, and was REMOVED rather than shipped; xtensa wants it most because there the quadratic path is functional rather than slow. ACCEPTANCE: the i386-hosted compiler now builds compiler.pas natively (rc=0) and reaches a byte-identical self-host fixedpoint, which it has never done; arenas 13-then-SIGSEGV -> 4, matching x86-64. NOT a 32-bit bug -- aarch64 is 64-bit and was equally quadratic."
+summary: "MOSTLY FIXED 2026-08-31; ONE BACKEND LEFT (xtensa). Two defects of one shape -- an optimisation living only in the x86-64 emitter with every other backend routed to a correct-but-quadratic shared path -- and the one this title names was NOT the one that mattered. (a) FIXED in the runtime, so ALL SIX targets get it: PXXStrSetLen always reallocated and copied, so `SetLength(s, Length(s)+1)` copied the whole string per call; AppendChar in lexer.inc does exactly that per character, which made the COMPILER'S OWN string building O(n^2) everywhere but x86-64. It now grows in place when sole-owner and APPENDABLE with capacity, and over-allocates 2x only when an existing string grows. (b) FIXED on i386, arm32, aarch64 and riscv32: IRIsSelfStrAppend is forwarded in compiler.pas and each backend emits a 2-argument call to the new runtime wrappers PXXStrAppendStr/Char. XTENSA STILL TAKES THE CONCAT PATH -- an arm was written, crashed on a local as well as a global, and was REMOVED rather than shipped; xtensa wants it most because there the quadratic path is functional rather than slow. ACCEPTANCE: the i386-hosted compiler now builds compiler.pas natively (rc=0), and the x86-64-CROSS-built i386 compiler, its self-built child and its grandchild are all THREE byte-identical (95b703fd1bc5bc5d) -- a true i386 fixedpoint, which it has never reached; arenas 13-then-SIGSEGV -> 4, matching x86-64 exactly. NOT a 32-bit bug -- aarch64 is 64-bit and was equally quadratic."
 ---
 
 # The in-place string append is x86-64 only, so every other backend is quadratic
@@ -88,6 +88,18 @@ It also independently confirms the fix direction: lowering the recogniser into
 the shared IR and emitting an ordinary call means xtensa and riscv32 get this
 without anyone hand-encoding an append fast path into the two instruction sets
 that already carry the most open codegen tickets.
+
+## 2026-08-31 — acceptance
+
+```
+  x86-64 cross-built i386 compiler   95b703fd1bc5bc5d
+  built by itself (gen2)             95b703fd1bc5bc5d
+  built by gen2   (gen3)             95b703fd1bc5bc5d
+```
+
+Three generations, one sha. Before this the first of those three segfaulted at
+19780 allocations with 13 arenas mapped. This is i386 only -- it is not a claim
+about arm32, aarch64, riscv32 or xtensa hosting, none of which was run.
 
 ## 2026-08-31 — what it actually was, and what is left
 
