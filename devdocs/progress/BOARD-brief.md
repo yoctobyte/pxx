@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:11 backlog:400 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:131 done:2941 rejected:68`
+`working:4 unfinished:28 blocked:10 backlog:400 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:132 done:2941 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -45,10 +45,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (11) — has an unmet blocker; do not claim
+## blocked (10) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
-- `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
 - `bug-c-a-c-function-s-calling-convention-depends-on-the-target` [A+C] — blocked-by: bug-a-the-shared-cdecl-spill-arm-cannot-yet-do-the-job-it-would-be-given
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
@@ -89,7 +88,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies (unblocks 1)
+- `[p 60] [A]` bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer
 
 _402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

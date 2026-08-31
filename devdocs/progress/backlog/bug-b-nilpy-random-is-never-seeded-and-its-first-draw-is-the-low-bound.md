@@ -5,7 +5,7 @@ type: bug
 owner: frank1-AN
 blocked-by: [decide-does-nilpy-random-seed-itself-at-import]
 summary: "`import random` then `random.randint(1,100)` produces the SAME sequence on every run — CPython seeds from OS entropy at import and NilPy never does. PARKED: the fixed seed is DELIBERATE and argued in pylib.pas, so it needs decide-does-nilpy-random-seed-itself-at-import first."
-status: blocked
+status: backlog
 ---
 
 # NilPy's `random` is never seeded, and its first draw is the low bound
