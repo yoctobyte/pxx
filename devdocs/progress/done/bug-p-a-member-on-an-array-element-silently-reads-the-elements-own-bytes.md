@@ -6,7 +6,7 @@ blocked-by: []
 summary: "FIXED 2026-08-31. `.member` on an ARRAY ELEMENT of a non-record type fell through to a field access at offset 0 and read the element's own bytes: `a[0].NoSuchMember` on an array of AnsiString COMPILED and printed a pointer as an integer, and `ai[0].NoSuch.AndAnother` printed the element itself with the whole selector tail silently dropped. FPC rejects both. The valid reading of the same shape -- a type helper on the element, `a[0].Twice` -- was refused, so one guard fixed both directions. THIRD instance of this hole in three routines; each earlier fix's own comment asserted the sibling was covered."
 status: done
 owner: frankS
-resolved: PENDING-COMMIT
+resolved: bd577a8dd
 ---
 
 # A member on an array element read the element's own bytes
