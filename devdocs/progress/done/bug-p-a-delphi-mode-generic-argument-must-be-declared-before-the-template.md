@@ -210,4 +210,4 @@ walk correctly finds no open type section and falls back to today's position wit
 the caller's leading `type` keyword intact.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit b613b5fcf.
