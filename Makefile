@@ -16843,7 +16843,7 @@ test-quick: $(COMPILER)
 	# THIS recipe and not test-core, so the tier that validated the edit was the
 	# one tier containing none of the collateral.
 	./$(COMPILER) test/quick_canary_nilpy.npy $(TESTTMP)/qc_nilpy26
-	tools/expect_same.sh qc_nilpy26 "$$($(TESTTMP)/qc_nilpy26 | tail -1)" "total ok 27 / 27"
+	tools/expect_same.sh qc_nilpy26 "$$($(TESTTMP)/qc_nilpy26 | tail -1)" "total ok 36 / 36"
 	# NAMESPACE SCOPE, both directions. Deep on purpose where the rest of this
 	# tier is broad: when `uses` went non-transitive, quick stayed green while
 	# five corpus sources went red, because nothing here imported deeply enough

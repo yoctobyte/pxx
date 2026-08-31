@@ -7727,90 +7727,31 @@ begin
       { NilPy: a `-> None` def is a procedure; its call statement flows through
         the expression parser (PyParseStatement's fallthrough), so accept
         proc calls here in NilPy mode only. Pascal keeps rejecting proc-in-expr. }
+      { NOTHING NILPY BELONGS BELOW THIS LINE, and the reason is structural
+        rather than stylistic. ParseFactorCore opens with an unconditional
+        `if PyExprMode then begin PyParseFactorCore; Exit; end` — so every
+        statement in this routine runs with PyExprMode FALSE, i.e. while parsing
+        a PASCAL unit (defs.inc:4199, pasparser_proc.inc:4697), whoever pulled
+        it in. NilPy source is parsed by pyparser.inc's own copy of this
+        argument loop, which is where its star/keyword handling lives and works.
+
+        Nine `isNilPy` arms used to sit here — star-unpack in four spellings, the
+        keyword-overload retarget, the bare generator expression, the dict-keyword
+        builder and both iterable fixups. They were reached ~3000 times per NilPy
+        compile and did nothing, because `isNilPy` asks "did this compilation
+        start from a .npy file" and the question here is "is THIS unit Python".
+        Removed 2026-08-31 with the measurement in
+        bug-a-the-nilpy-arms-in-the-shared-call-loop-are-dead-and-guarded-by-the-wrong-flag.
+
+        If you are about to add an `isNilPy` arm here: it cannot fire. Add it to
+        PyParseFactorCore instead. }
       else if (procIdx >= 0) and (Procs[procIdx].IsFunc or isNilPy) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next;
-        { keyword-name-aware overload re-target — `html.escape(s, quote=False)`
-          (bug-nilpy-keyword-arg-vs-overload-set): FindProc/FindProcInUnit above
-          hands back whichever overload was declared first; a sibling in the
-          same unit may be the one that actually declares the keyword used. }
-        if isNilPy then procIdx := PyPromoteProcOverloadByKwAt(procIdx, 0, PyKwNamesTokPos);
         Expect(tkLParen, '(');
         argsHead := -1;
         lastArg := -1;
         nArgs := 0;
-        { `dict(**src)` — before the star-forward branch below, because for
-          `dict` a `**` is not a forwarded kwargs pack: its keys ARE the dict
-          being built, so the spread merges rather than binding parameters.
-          The keyword form is handled inside the loop; both go through the one
-          builder. }
-        if PyKwDictArgsHere(procIdx) or
-           (isNilPy and PyKeywordsAreKeys(procIdx) and
-            CaseEqual(Procs[procIdx].Name, 'dict') and (CurTok.Kind = tkRParen)) then
-        begin
-          { The empty `dict()` rides the same builder: it is the keyword form
-            with no keywords, and pylib's `dict` has no zero-argument overload
-            (`dict()` answered "no overload of dict matches these arguments"
-            before this, on the pinned binary too). }
-          argSeq := AllocNode(AN_ARG);
-          ASTLeft[argSeq] := PyBuildKeywordDictHere;
-          ASTIVal[argSeq] := 0;
-          argsHead := argSeq;
-          lastArg := argSeq;
-          nArgs := 1;
-        end
-        { `f(*args, **kwargs)` FORWARDED into this callee's ordinary parameters:
-          the argument count is a run-time fact, so it desugars to a dispatch on
-          len(args) (PyStarForwardCall). Detected before the argument loop —
-          which parses expressions, and `*x` is not one. }
-        else if isNilPy and (ProcPyStarIdx[procIdx] < 0) and
-                not PyStarIsIterableForm(name) and PyArgListHasStarElem then
-        begin
-          { ONE generic collector for every spelling — positional, `*iterable`,
-            `name=value`, `**mapping`, in any order. What stood here was two
-            hand-rolled shapes: a leading-`**` arm, and a leading-`*` arm that
-            accepted exactly one trailing star follower and refused everything
-            else with "an argument after *unpacking is not supported yet". Three
-            of the four spellings failed, each for a different reason.
-            bug-a-nilpy-double-star-in-a-mixed-argument-list }
-          CurASTNode := PyStarMixedForwardCall(procIdx);
-          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-          Exit;
-        end;
-        { `max(*xs)` / `min(*xs)` — for these two, and only these two, CPython's
-          starred call means exactly the ITERABLE form the callee already takes,
-          so the run-time arity dispatch is the wrong mechanism: it looked for a
-          three-argument max and raised "forwarded call got 3 arguments,
-          expected 2 to 2" at run time. One argument, and ordinary overload
-          matching below picks max(TPyList).
-          bug-nilpy-star-unpack-into-a-fixed-arity-builtin
-
-          The equivalence `max(*xs)` == `max(xs)` holds only for TWO OR MORE
-          starred elements, where comparing the elements is comparing the list.
-          With exactly one it is `max(xs[0])` — over that element's CONTENTS —
-          so `max(*[[4, 9, 2]])` is 9 and the bare rewrite answered `[4, 9, 2]`,
-          a silent wrong value. The count is a run-time fact, so pystar_iterable
-          picks between the two; for two or more it hands the list straight back
-          and this is exactly the old lowering.
-          bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload }
-        if isNilPy and (CurTok.Kind = tkStar) and PyStarIsIterableForm(name) and
-           (TokPos < TokCount) and (Tokens[TokPos].Kind <> tkStar) then
-        begin
-          Next;                          { the '*' }
-          ParseArgExpr;
-          argSeq := AllocNode(AN_ARG);
-          ASTLeft[argSeq] := PyStarIterableNode(PyZipStarOperand(CurASTNode));
-          ASTIVal[argSeq] := 0;
-          ASTRight[argSeq] := -1;
-          argsHead := argSeq;
-          lastArg := argSeq;
-          nArgs := 1;
-        end;
-        { `f(1, *xs)` — a star that is not the FIRST argument, which the
-          forwarding arm above is the only one that handles. Same helper the
-          method-call sites use, so the two spellings of one construct agree. }
-        if isNilPy and (ProcPyStarIdx[procIdx] < 0) and PyStarArgAhead then
-          PyStarUnpackProcArgs(procIdx, argsHead, lastArg, nArgs);
         while CurTok.Kind <> tkRParen do
         begin
           { `dict(a=1, b=2)` / `dict(**e)` — in Python the keyword NAMES are dict
@@ -7828,29 +7769,6 @@ begin
             Inc(nArgs);
             Break;
           end;
-          { `f(*xs)` where `f` itself COLLECTS. The forwarding arm above declines
-            this by construction (it dispatches into a callee's fixed slots, of
-            which a variadic has none), so it used to reach the expression parse
-            and report "expected expression". A collecting callee wants the
-            operand SPLICED into the packing instead — `extend` where a written
-            argument `append`s — which PyPackStarArgs does with the marker set
-            here. bug-nilpy-star-unpack-into-a-star-args-callee }
-          if isNilPy and (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] >= 0) and
-             (TokPos < TokCount) and (Tokens[TokPos].Kind <> tkStar) then
-          begin
-            Next;                        { the '*' }
-            ParseArgExpr;
-            argSeq := AllocNode(AN_ARG);
-            ASTLeft[argSeq] := CurASTNode;
-            ASTIVal[argSeq] := PY_ARG_SPLICE;
-            if argsHead = -1 then argsHead := argSeq else ASTRight[lastArg] := argSeq;
-            lastArg := argSeq;
-            Inc(nArgs);
-            if CurTok.Kind = tkComma then Next
-            else if CurTok.Kind <> tkRParen then
-              Error('expected comma or close parenthesis');
-            Continue;
-          end;
           { NilPy `key=expr`: consumes the name, yields paramIndex+1 (0 = positional) }
           kwIdx := PyKwArgIndex(procIdx, 0);
           if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := nArgs;
@@ -7859,14 +7777,6 @@ begin
           else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
             CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
               OpenArrayCtorRowLen(procIdx, slotIdx), ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
-          else if isNilPy and PyBareGenExprAhead then
-            { a BARE generator expression as an argument — `sum(x*2 for x in xs)`.
-              It must be diverted BEFORE the element expression is parsed, since
-              that expression names the loop variable, which is not in scope
-              until the `for`. The str-method argument path already did this for
-              `"".join(...)`; ordinary calls did not, so every other consumer of
-              a genexpr (sum, max, any, ...) failed on the loop variable. }
-            CurASTNode := PyParseCompExprValue(False)
           else
           begin
             node := TryDelphiBareProcArg;
@@ -7896,7 +7806,6 @@ begin
           that type performs — BEFORE the types below are read, since they are
           what picks the overload (bug-nilpy-a-builtin-type-as-a-key-callback-
           segfaults) }
-        if isNilPy then PyFixCallableTypeArgs(name, argsHead, nArgs);
         currArg := argsHead;
         for i := 0 to nArgs - 1 do
         begin
@@ -7927,24 +7836,6 @@ begin
         end;
 
         procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
-        { A user object implementing the iterator protocol, passed to a pylib
-          routine that wants a container: drain it and retry ONCE, or fix the
-          argument of a match that was made on class assignability rather than
-          on meaning. See PyFixIterableArgs — one rule keyed on the PARAMETER,
-          not a list of builtin names
-          (bug-nilpy-builtins-over-a-user-iterable-answer-empty). }
-        if isNilPy and (procIdx < 0) and PyFixIterableArgs(-1, argsHead, nArgs) then
-        begin
-          currArg := argsHead;
-          for i := 0 to nArgs - 1 do
-          begin
-            argTypes[i] := IntToTypeKind(ASTTk[ASTLeft[currArg]]);
-            currArg := ASTRight[currArg];
-          end;
-          procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
-        end
-        else if isNilPy and (procIdx >= 0) then
-          PyFixIterableArgs(procIdx, argsHead, nArgs);
         if procIdx < 0 then
         begin
           { Generic dynamic-array Copy(arr[, index [, count]]) intrinsic. Only when

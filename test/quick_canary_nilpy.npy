@@ -155,4 +155,42 @@ for _ in range(200):
     tmp = "loop literal"                # re-evaluated; must not walk a shared
 chk(27, tmp == "loop literal" and len(tmp) == 12)   # refcount down to a free
 
-print("total ok " + str(ok) + " / 27")
+# --- star and keyword CALL FORMS --------------------------------------------
+# The arms that served these lived in TWO places: pyparser.inc's own argument
+# loop, and a dead copy inside the shared Pascal one (ParseFactorCore), guarded
+# by `isNilPy` where the question was `PyExprMode`. The dead copy was deleted
+# 2026-08-31 after every arm was shown never to fire
+# (bug-a-the-nilpy-arms-in-the-shared-call-loop-are-dead-and-guarded-by-the-wrong-flag).
+# These checks are what says the SURVIVING copy is the one doing the work. They
+# are here and not in the full tier for the reason the section above records:
+# `make test-nilpy` runs after the push, and this class of change is exactly the
+# one that can look green at push time.
+def two(a, b):
+    return a * 10 + b
+
+
+def collect(*args):
+    n = 0
+    for v in args:
+        n = n + v
+    return n
+
+
+star_xs = [3, 4]
+chk(28, two(*star_xs) == 34)            # star into a callee's fixed slots
+chk(29, two(1, *[9]) == 19)             # ...and a star that is NOT the first argument
+star_more = [5, 6, 7]
+chk(30, collect(*star_more) == 18)      # star spliced into a collecting callee
+chk(31, collect(1, *star_more) == 19)   # ...mixed with a written argument
+chk(32, sum(v * 2 for v in [1, 2]) == 6)   # a BARE generator expression as an argument
+chk(33, dict(a=1, b=2) == {"a": 1, "b": 2})   # keyword names are dict KEYS
+kw_src = {"c": 3}
+chk(34, dict(**kw_src) == {"c": 3})     # ...and a mapping spread
+chk(35, sorted(["bb", "a"], key=len) == ["a", "bb"])   # a callable in a callback slot
+
+# A VARIABLE operand above and a LITERAL one here, deliberately: they do not
+# take the same path. With pyparser.inc's splice arm disabled as a control,
+# every variable form was REJECTED ("expected expression") and `collect(*[..])`
+# still compiled and answered 18 -- so a literal-only check watches nothing.
+chk(36, collect(*[5, 6, 7]) == 18)      # ...and the literal operand's own path
+print("total ok " + str(ok) + " / 36")
