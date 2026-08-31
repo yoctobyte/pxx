@@ -439,6 +439,37 @@ your idiom invites you to change it.
 **So: branch on `$?` being 1 versus 128. Never test an ancestry query with `!` or
 `||`. Do not redirect its stderr.**
 
+## A RADIX is part of a value, and `db 65` was hex
+
+Measured 2026-08-31, and it is small enough to be worth stating plainly because
+the disambiguating evidence could not have been closer to hand.
+
+Two `test-asm` jobs had been red for days with no visible failure. I found the
+cause — one undecoded byte, `db 65`, at the same line of two different
+disassemblies — and wrote into the ticket that **65 was decimal, so `0x41`, so
+REX.B**, plus a hypothesis: *"a lone `0x41` immediately before an instruction
+that carries its own REX is suggestive of a redundant prefix."* Plausible,
+internally consistent, and about a byte that was never there.
+
+**It is `0x65`: the `gs` segment prefix.** The `-S` output's own second line says
+the fallback is `db 0xNN`, and I had **pasted that line into the same ticket**.
+The decoder simply does not accept `$65` as a legacy prefix
+(`compiler/asmdisasm_x64.inc:328` takes `$66`, `$F2`, `$F3` only), so a correct
+`gs`-prefixed TLS access falls through to the raw-byte fallback. **The compiler
+emits correct code; the disassembler cannot read it back** — which inverts the
+lane the ticket was headed for.
+
+**A bare integer in tool output carries no radix, and the reader supplies one
+from habit.** `65`, `41`, `10`, `20` are all legal in both and mean different
+things; only `0x`, or the tool's own documentation of its format, settles it.
+The rule that would have caught me is this file's own, applied one notch
+earlier: *what would this be if it were false?* — and the answer was two lines up
+in text I had already copied.
+
+The corollary worth keeping: **the disambiguating fact is often already inside
+the artefact you are quoting.** I did not need to go and find anything; I needed
+to read what I had pasted.
+
 #### The family, because it is four operators and it caught three agents in four hours
 
 The coordinator saw all three instances (each was reported to it separately, and
@@ -1180,6 +1211,9 @@ name.
   not a gap; compile it standalone before filing
 - ``## "The pinned binary reproduces it" may be a claim about a MIXED compiler``
 - `## A silent assertion makes the harness report something else, confidently`
+- ``## A RADIX is part of a value, and `db 65` was hex`` -- I read a byte as
+  decimal and built a hypothesis on it; the file's own second line said
+  `db 0xNN`, and I had already quoted that line into the ticket
 - ``## The self-host fixedpoint builds at `-O2` `` -- I named PROPAGATION as the
   mechanism when the pass was simply never compiled in; I had written that the
   separating check was free and unrun, then ranked the interesting mechanism
