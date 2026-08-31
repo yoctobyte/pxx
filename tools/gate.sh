@@ -177,7 +177,17 @@ if [ "$MODE" = check ]; then
   echo "  quick -> self-host fixedpoint (pinned seed) | testmgr --tier quick   (~30s)"
   echo "  lib   -> make lib-test"
   echo "  full  -> quick + make test-nilpy + make test   (only when Track T is down)"
-  tools/twatch.py --status 2>/dev/null | sed 's/^/  /' || echo "  (twatch status unavailable)"
+  # `{ cmd || echo ...; } | sed`, NOT `cmd | sed ... || echo ...`. The second
+  # form was here and could never fire: `||` reads the PIPELINE's status, which
+  # is sed's, and sed exits 0 on empty input -- so a missing or failing
+  # twatch.py printed NOTHING where a status block belongs, and the fallback
+  # that exists for exactly that case was unreachable for its whole life.
+  # Measured: with the command exiting 3, the old form captured "" and the new
+  # one captures the message; a succeeding command still passes through
+  # unchanged (both arms asserted). One of three instances of this shape found
+  # in one night across three agents -- `!`, `&&`/`||`, a pipe and `2>/dev/null`
+  # each replace the exit status you asked for, and none of them says so.
+  { tools/twatch.py --status 2>/dev/null || echo "(twatch status unavailable)"; } | sed 's/^/  /'
   # --status answers "is anyone covering the repo"; `trackt health` answers
   # "is the watcher on THIS box trustworthy right now", incl. alive-but-wedged.
   echo "  (watcher health on this box: tools/trackt.py health)"

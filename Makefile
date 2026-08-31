@@ -17512,11 +17512,25 @@ pxx-stable-check:
 # `latest` or `stable_latest`. $(PXX_STABLE) is `pinned`, and the only
 # other reference is this target reading stable_latest as a copy SOURCE.
 # Re-check that before copying this pattern there.
+# OLDSHA below is `{ sha256sum || echo none; } | awk`, NOT the
+# `test -e ... && sha256sum ... | awk ... || echo none` it replaced. That form's
+# `||` read the PIPELINE's status, which is awk's, and awk exits 0 on empty
+# input -- so the fallback fired only because `test -e` short-circuited BEFORE
+# the pipeline ever ran. Any other failure (present but unreadable, sha256sum
+# missing) left OLDSHA EMPTY and wrote `(was )` into pin.log: a labelled blank
+# in the pin ledger, which reads as a truncation rather than an absence and so
+# invites the reader to assume the value exists and merely failed to print.
+# Both arms are asserted: present -> the real 12-hex prefix, absent -> `none`.
+# The `test -e` is now redundant and is gone.
+# One of several instances of this shape found in a single night across three
+# agents. `!`, `&&`/`||`, a pipe and `2>/dev/null` EACH replace the exit status
+# you asked for, and none of them says so -- so a fallback written for a
+# failure case can be unreachable for its whole life while looking correct.
 pin:
 	@test -e $(STABLE_DEFAULT_DIR)/stable_latest || \
 	  (echo "No stable yet. Run: make stabilize"; exit 1)
 	@NV=$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?'); \
-	 OLDSHA=$$(test -e $(STABLE_DEFAULT_DIR)/pinned && sha256sum $(STABLE_DEFAULT_DIR)/pinned | awk '{print substr($$1,1,12)}' || echo 'none'); \
+	 OLDSHA=$$({ sha256sum $(STABLE_DEFAULT_DIR)/pinned 2>/dev/null || echo 'none'; } | awk '{print substr($$1,1,12)}'); \
 	 cp $(STABLE_DEFAULT_DIR)/stable_latest $(STABLE_DEFAULT_DIR)/stable_pinned.new || \
 	   { rm -f $(STABLE_DEFAULT_DIR)/stable_pinned.new; \
 	     echo "pin: could not stage the new binary -- nothing moved"; exit 1; }; \
