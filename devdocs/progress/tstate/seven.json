@@ -11634,6 +11634,7 @@
   },
   {
    "bad": "afc0da53c859d936039cbebc07b6c2e44ea0fb7e",
+   "bad_untestable": true,
    "cascade": [
     "test-core#src:examples/tk/shadow_format_except.npy",
     "test-core#src:test/fpcv.pas@2",
@@ -11669,6 +11670,7 @@
    "good": "bebac33366f5a2e4196bf7970769d208d9ae8b6a",
    "job": "cascade@afc0da53c859",
    "name": "",
+   "no_testable_change": false,
    "opened": "2026-08-31T02:36:51Z",
    "range": [
     "76722e07f97c9f66b7faf273765f9fcc8592aded"
