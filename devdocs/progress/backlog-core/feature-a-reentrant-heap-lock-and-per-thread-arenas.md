@@ -3,7 +3,7 @@ track: A+O
 prio: 45
 type: feature
 blocked-by: []
-summary: "Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix."
+summary: "PROMISE MEASURED 2026-09-01, and a PREREQUISITE nobody had named. Promise: 2M GetMem/FreeMem pairs, total fixed, split across N workers (flat = perfect scaling) goes 0.14s at 1 worker to 0.39s at 12 — 2.8x WORSE, i.e. adding threads makes fixed allocator work slower. A null with the identical loop and per-iteration call but no heap traffic is flat at <=0.01s at every worker count, so dispatch is under 3% and the degradation is entirely the global heap lock. Measured at f23f141f997d, AFTER the refcount path went lock-free (274a9da6c), so it is allocator contention and nothing else. PREREQUISITE: TLS is NOT reachable from where the arenas would live — every TLS_SLOT read is hand-emitted code in ir_codegen.inc, and builtinheap.pas (PXXAlloc, HeapPtr, HeapEnd) has no TLS reference of any spelling. A Pascal-reachable TLS accessor comes first. The reentrancy half stays parked by the owner 2026-08-21; do not re-litigate it."\n
 status: backlog
 owner: unassigned
 ---
@@ -106,3 +106,89 @@ This does NOT park the ticket. **Per-thread arenas stand on their own merit** �
 the allocator serialises every thread through one lock, which is a measured
 ceiling (see the TTAS table above), and that is a performance ticket, not a
 correctness one. Reentrancy is the half the user set aside.
+
+
+---
+
+## 2026-09-01 (frankB) — promise measured, and the blocker is not the one on file
+
+I did not implement this. I measured whether it is worth implementing, which is
+what this ticket's own "Costs, measured before committing" section asks for, and
+found a prerequisite that changes the shape of the job.
+
+### Promise: yes, and it is the bad kind of curve
+
+`allocscale.pas` — 2,000,000 GetMem/FreeMem pairs TOTAL, split across N workers
+by `pwFixed`, each pair in its own frame so nothing is shared. Total work is
+constant, so **a perfectly scaling allocator would be FLAT**. Compiler
+`f23f141f997d`, 12 cores, load 0.54, min of 3:
+
+| workers | alloc | null | vs 1 worker |
+| ---: | ---: | ---: | ---: |
+| 1 | 0.14s | 0.01s | 1.00x |
+| 2 | 0.21s | 0.00s | 1.50x |
+| 4 | 0.33s | 0.00s | 2.36x |
+| 8 | 0.40s | 0.00s | 2.86x |
+| 12 | 0.39s | 0.00s | 2.79x |
+
+**Adding threads makes fixed allocator work 2.8x slower.** That is worse than
+"does not scale" — it is negative scaling, and it is the ceiling the TTAS
+measurement in `EmitAcquireHeapLock` predicted in words.
+
+The null column is load-bearing and cost me one wrong version. My first null
+replaced `GetMem`/`FreeMem` with `p := nil; if p <> nil then FreeMem(p)`, which
+is dead code: the compiler removed the loop and I measured an empty program at
+0.00s, which "confirmed" what I wanted. The null above keeps the identical loop
+and an identical per-iteration CALL, and feeds a non-foldable result into the
+reduction — `acc=1000000` proves 2M iterations ran. It is flat at <=0.01s at
+every worker count, so parallel-for dispatch contributes under 3% of the 0.39s
+and **the entire degradation is the heap lock**.
+
+Measured AFTER `274a9da6c` made retain/release lock-free, so this is allocation
+and freeing only. A pre-274a9da6c whole-program number would have conflated the
+two.
+
+### The prerequisite: TLS is not reachable from the allocator
+
+This ticket says the TLS clause in `EmitAcquireHeapLock`'s comment "is now
+stale" because TLS landed 2026-08-20. **Half right, and the surviving half is
+the blocker.**
+
+- TLS exists, with the slot convention in `compiler/defs.inc`
+  (`TLS_SLOT_SELF`, `_TID`, `_STACK_LO`, `_STACK_HI`, `_SIG_*`) and free slots.
+- **Every read of a slot is hand-emitted machine code in `ir_codegen.inc`.**
+  `grep -rn 'TLS_SLOT' compiler/builtin/ lib/rtl/` returns nothing, and
+  `builtinheap.pas` — which is where `PXXAlloc`, `HeapPtr` and `HeapEnd`
+  actually live — contains no TLS reference of any spelling.
+
+`PXXAlloc` is Pascal and cannot ask which thread it is on. So per-thread arenas
+need **a Pascal-reachable TLS accessor first**. That is a prerequisite rather
+than a detail, and it is the real answer to "why has nobody done this" — not
+that nobody got to it.
+
+The comment in `ir_codegen.inc` has been corrected to say this. I had first
+written it as "the stated blocker is gone and the work is open on its merits",
+which is what this ticket says and is wrong in the direction that would have
+sent the next agent straight into `builtinheap.pas` looking for a TLS read that
+is not there.
+
+### What the job actually is, in order
+
+1. A Pascal-reachable TLS accessor (or move the arena bookkeeping to where TLS
+   already is). **Unmeasured** — I did not price this.
+2. Per-thread bump regions: grab a chunk under the lock, bump lock-free, so the
+   common path stops touching the global word.
+3. Free-list interaction, including cross-thread frees, which is where the
+   correctness risk is and which the 2.8x above says nothing about.
+
+Step 1 is the one to price next. The promise number is now on file so nobody has
+to re-derive it, and the harness is `allocscale.pas` + its null.
+
+### Not taken further
+
+I hold the managed-memory group and this is its umbrella's last open child, but
+step 1 is a different piece of work in a different file than the one this ticket
+names, and step 3 carries real correctness risk that wants its own session.
+Banking the measurement rather than starting a three-step change I could not
+finish. The reentrancy half remains parked by the owner's 2026-08-21 position —
+unchanged and not re-litigated here.

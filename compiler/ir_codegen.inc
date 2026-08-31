@@ -61,9 +61,37 @@ procedure EmitAcquireHeapLock;
   Single-thread cost is unchanged (the uncontended path is one atomic either
   way; the 66-vs-60 gap is run-to-run noise, not a win to claim). It does NOT
   make the allocator scale — the lock is still global and one thread allocates
-  at a time; that needs per-thread arenas, which needs real TLS, which this
-  runtime does not have yet (see the ticket). This is the part of the cliff that
-  was pure contention overhead rather than serialisation. }
+  at a time; that needs per-thread arenas.
+
+  THE TLS CLAUSE HERE WAS HALF STALE, and the surviving half is the one that
+  matters, so it is corrected rather than deleted — "why has nobody done this"
+  is the question the next reader arrives with, and the honest answer is not
+  "nobody got to it".
+
+  It said per-thread arenas need "real TLS, which this runtime does not have
+  yet". TLS landed 2026-08-20 (feature-a-thread-local-storage-via-clone-settls)
+  and `compiler/defs.inc` carries the slot convention — TLS_SLOT_SELF, _TID,
+  _STACK_LO, _STACK_HI, _SIG_* — with free slots reserved.
+
+  BUT IT IS NOT REACHABLE FROM WHERE THE ARENAS WOULD LIVE. Every read of a TLS
+  slot is hand-emitted machine code in THIS file; `grep -rn TLS_SLOT` finds
+  nothing under `compiler/builtin/` or `lib/rtl/`, and `builtinheap.pas` — which
+  is where PXXAlloc, HeapPtr and HeapEnd actually are — contains no TLS
+  reference of any spelling. PXXAlloc is Pascal and has no way to ask which
+  thread it is on. So per-thread arenas need a Pascal-reachable TLS accessor
+  FIRST; that is a prerequisite, not a detail, and it is the real reason this
+  has not happened. feature-a-reentrant-heap-lock-and-per-thread-arenas.
+
+  What this blob still is: the part of the cliff that was pure contention
+  overhead rather than serialisation.
+
+  One thing that HAS changed under it since these numbers were taken, and it
+  moves the baseline any future measurement must beat — the retain and release
+  blobs no longer take this lock at all. A refcount update is one `lock inc` or
+  `lock dec` and touches no allocator state, so the lock now covers allocation
+  and freeing only (274a9da6c). The 400k-GetMem/FreeMem-pair table below was
+  always an allocator benchmark and so is unaffected, but a whole-program
+  measurement taken before that change was measuring both. }
 begin
   if ThreadSafeMode then
     EmitAsmX64([
