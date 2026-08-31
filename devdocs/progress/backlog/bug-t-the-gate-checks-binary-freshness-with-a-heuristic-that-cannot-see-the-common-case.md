@@ -122,11 +122,87 @@ is the *guard that cannot fail* family: it never errored, it answered correctly
 about mtime, and mtime was not the question. (Eighteen days, not "years" — the
 first draft of this ticket said years and nobody had measured it.)
 
+## The same mechanism one layer down: `make compiler/pascal26` can print proof without building
+
+Raised by the coordinator, whose own diagnosis of it went into dispute with
+frankB and is NOT what is recorded here. This is the narrow version,
+constructed locally and confirmed against the recipe.
+
+`Makefile:307-319`. The `$(COMPILER)` rule depends on the sources AND on
+`$(COMPILER_STAMP)` (`compiler/.pascal26.fixedpoint`), and its recipe is only a
+verification:
+
+```make
+have=$(sha256sum $(COMPILER)); want=$(sed -n 's/^sha256 //p' $(COMPILER_STAMP))
+if [ "$have" != "$want" ]; then ... "Something replaced the binary without rebuilding." exit 1
+echo "self-host fixedpoint: verified — $(sed -n 's/^rounds //p' STAMP) round(s), $(want | cut -c1-12)"
+```
+
+So when mtimes say there is nothing to do, `make compiler/pascal26` **does not
+build**, and prints:
+
+```
+self-host fixedpoint: verified — 1 round(s), 3d5308a75742
+```
+
+Measured, clean tree, binary `touch`ed so it is newer than every source: no
+build ran, the binary's sha was unchanged, and that single line was the entire
+output.
+
+**Both numbers in that line come from the stamp, not from a build.** Positive
+control: forge `rounds 1` to `rounds 7` in the stamp, leave the sha correct, and
+`make` prints `self-host fixedpoint: verified — 7 round(s), 3d5308a75742`. The
+round count is replayed verbatim; it is not a measurement of anything.
+
+**What the line therefore does and does not prove.** The sha guard is a real
+PROVENANCE check and it works — it caught a swapped binary in frankB's test, and
+it is precedent that the fix proposed above already exists twenty lines away in
+this repo. But the pair only proves *this binary was once a fixedpoint of some
+sources* and *nobody has swapped it since*. **Nothing in it ties the binary to
+the sources on disk now.**
+
+### CLAUDE.md's prescribed tell is NOT broken — do not "fix" it
+
+The coordinator's report said the documented tell *"does not discriminate"* this
+case, because the line contains the words "fixedpoint", "verified" and a round
+count. Measured, it discriminates perfectly:
+
+```
+real build:   grep -c 'converged after' -> 1     (plus the summary line)
+no-op verify: grep -c 'converged after' -> 0     (summary line only)
+```
+
+CLAUDE.md says to grep for `converged after N round(s)`, and that string is
+emitted by the BUILD, never by the verify recipe. The doc is correct as written
+and needs no change. What is true is the weaker, human-factors claim: the
+summary line *reads* like proof, so an agent eyeballing output rather than
+grepping the prescribed string will be satisfied by it. That is an argument for
+the verify line naming what it is ("stamp only — no build ran"), not for
+rewriting the tell.
+
+### Consequence for the round-count heuristic below
+
+The round count is only evidence **on a line accompanied by `converged after`**.
+On a no-op it is a stored historical number that can say anything. And frankB
+showed the count cannot distinguish *stale* from *deliberately planted* even
+when it is real — they seeded a wrong binary on a clean tree, got
+`converged after 2 round(s)`, and converged correctly to `3d5308a75742`. So:
+
+- **1 round** — your seed was already the fixedpoint;
+- **2+ rounds** — your seed was not the answer; stale, planted, or wrong for
+  some other reason, and the count does not say which;
+- **no `converged after` line at all** — nothing was built and the number you
+  are reading came out of a file.
+
+frankB's seed-independence result is worth recording on its own: forced from a
+deliberately wrong seed, a clean tree still converged to `3d5308a75742`, which
+rules out "which binary seeded the round" as a mechanism for the REDs above.
+
 ## Cheap mitigation available today, no code
 
-`converged after N round(s)` already carries the answer. A fresh binary at a
-settled tree converges in **1** round; **2 means the sources moved under the
-binary.** Every one of the three REDs above printed 2. Worth putting in the
-failure message itself, since the message currently offers "local seed
-contamination, or a self-perpetuating miscompile" as the two explanations and
-the actual cause is neither.
+`converged after N round(s)` already carries part of the answer, with the
+caveats in the section above: **1** means your seed was already the fixedpoint,
+**2+** means it was not, and its ABSENCE means no build ran at all. Every one of
+the REDs above printed 2. Worth putting in the failure message itself, since the
+message currently offers "local seed contamination, or a self-perpetuating
+miscompile" as the two explanations and the actual cause was neither.
