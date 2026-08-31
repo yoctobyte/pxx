@@ -11635,7 +11635,7 @@
    "status": "fail"
   },
   {
-   "bad": "99af5f3270cfd1a2f36857c6d46bc5863a21d6e8",
+   "bad": "314481dd7553d56bc5f23f89b7eb3a2a6739f2fa",
    "bad_untestable": true,
    "first_seen": false,
    "good": "2bdb3c4ef3f61161dc944c91e392a8ab97be18a4",
@@ -11647,8 +11647,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "314481dd7553d56bc5f23f89b7eb3a2a6739f2fa",
-    "4b3d34f7403cdf9b62cd1a412ec3918a32e805ee"
+    "314481dd7553d56bc5f23f89b7eb3a2a6739f2fa"
    ],
    "src": "test/test_rust_module_items.rs tools/expect_same.sh +1",
    "status": "fail"

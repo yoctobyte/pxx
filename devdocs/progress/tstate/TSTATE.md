@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `9a21c4fd1ea6` on seven, 2026-08-31T18:13:46Z (21m ago).**
+**Newest full tier in the fleet: `9a21c4fd1ea6` on seven, 2026-08-31T18:13:46Z (24m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `9a21c4fd1ea6` | RED | 21m | — (newest) |
+| seven | `9a21c4fd1ea6` | RED | 24m | — (newest) |
 | plexus | `27424c927b65` | RED | 1d8h | 1d7h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -53,4 +53,4 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `tools-devtest#00`
   </details>
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `aac20e75ed1f`, last good `17fd5566a65e`, 1 commit(s) in range
-- **test-core#src:test/test_rust_module_items.rs** — test/test_rust_module_items.rs tools/expect_same.sh +1 (seven): bad `99af5f3270cf`, last good `2bdb3c4ef3f6`, 2 commit(s) in range
+- **test-core#src:test/test_rust_module_items.rs** — test/test_rust_module_items.rs tools/expect_same.sh +1 (seven): bad `314481dd7553`, last good `2bdb3c4ef3f6`, 1 commit(s) in range
