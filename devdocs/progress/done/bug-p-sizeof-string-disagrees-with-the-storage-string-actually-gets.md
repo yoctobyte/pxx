@@ -3,7 +3,7 @@ slug: bug-p-sizeof-string-disagrees-with-the-storage-string-actually-gets
 track: P
 type: bug
 prio: 55
-status: working
+status: done
 found: 2026-08-31
 found-by: frank-rust
 owner: frank-rust
@@ -97,3 +97,6 @@ copies:
   `SizeOf(Pointer)` = 8. No i386 FPC is installed here, so the 32-bit half is
   pxx's own internal consistency, which is the stronger claim anyway — the
   compiler was contradicting itself within one program.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
