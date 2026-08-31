@@ -2,9 +2,10 @@
 track: A
 type: bug
 prio: 50
-status: open
+status: working
 found: 2026-08-30
 found-by: frankS
+owner: frank-rust
 ---
 
 # `IR_RTTI_REG` and `IR_RESOURCES` have no riscv32 arm — anything that USES typinfo fails to compile

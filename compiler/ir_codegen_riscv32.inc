@@ -3028,6 +3028,22 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_RTTI_REG:
+      { a0 = the RTTI-registry address, through the -100 data-ref sentinel the
+        linker fills in. Mirrors aarch64 and xtensa; x86-64 emits the same
+        sentinel by hand.
+
+        Two lines, and without them `lib/rtl/typinfo.pas` ITSELF would not
+        compile — so any riscv32 program that so much as USES typinfo, directly
+        or through streaming, LFM or `class of`, died at
+        "unsupported node in IR codegen: rtti_reg" before reaching its own code.
+        bug-a-rtti-reg-and-resources-are-missing-on-riscv32 }
+      EmitLoadDataRefRISCV32(reg_a0, -100);
+
+    IR_RESOURCES:
+      { a0 = the resource-table address (-101 sentinel). Same arm, same gap. }
+      EmitLoadDataRefRISCV32(reg_a0, -101);
+
     IR_SYSCALL:
       begin
         { Raw linux syscall (hosted qemu-user): args (nr, a0..a5) pushed, then
