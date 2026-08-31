@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frank-user, at the owner's direction
 owner: ""
 blocked-by: []
-summary: "Standing umbrella, priced ABOVE bug fixing by the owner 2026-08-31. FIRST CHILD DONE: the general x86-64 relocatable object writer landed 41045d7b4 (frankC) -- a gcc-built main now links a pxx object and calls into it, and clang and tcc link the same object; export surface is the C-convention routines, and a link needs -no-pie. What remains: i386/arm32/aarch64 object output (p70, and i386 is the one that MATTERS -- x86-64 never diverged, so it structurally cannot settle decide-does-a-c-function-always-use-the-c-abi; i386 can), position-independent x86-64 output, --shared for compiled sources (blocked on the same backend work, and -no-pie cannot rescue a .so), and a Pascal `library` unit (now worth LESS than it looked -- `cdecl` on a definition is already a working export spelling). pxx can now be linked into something; it still cannot be linked into everything."
+summary: "Standing umbrella, priced ABOVE bug fixing by the owner 2026-08-31. OBJECT OUTPUT NOW WORKS ON FOUR TARGETS: x86-64 (41045d7b4, frankC), i386 (writeELFRel386General, frankC), riscv32 and xtensa -- a gcc-built main links a pxx object and calls into it; clang and tcc link the same object; export surface is the C-convention routines; a link needs -no-pie. i386 ALREADY PAID THE DEBT IT WAS PRICED FOR: the C-ABI trigger fired and says OPTION A, and it exposed bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function (fixed 7a30658e7 -- ebx, esi AND edi, all three unrestored across an exported cdecl call). What remains: arm32 + aarch64 object output (p45, feature-a-object-output-for-arm32-and-aarch64, explicitly NOT urgent -- they are a second and third oracle for a ruling already made, and aarch64 is gated on making cparser.inc's positional param spill AAPCS first), position-independent x86-64 output, --shared for compiled sources (a .so is relocated at load, so -no-pie cannot rescue it), and a Pascal `library` unit (worth LESS than it looked -- `cdecl` on a definition is already a working export spelling). pxx can now be linked into most things; it still cannot be linked into everything."
 ---
 
 # Meta: pxx produces linkable code, not just programs
@@ -43,11 +43,15 @@ direction only.
 after 41045d7b4; the original text is one paragraph down, because the diagnosis
 in it is what the fix was built on.
 
-- `--emit-obj` writes a general relocatable object for **x86-64, xtensa and
-  riscv32**. On x86-64 the export surface is the C-convention routines and a
-  link needs `-no-pie`. **i386, aarch64 and arm32 still refuse** —
-  [[feature-a-object-output-for-i386-arm32-and-aarch64]], and i386 is the one
-  the C-ABI decision waits on.
+- `--emit-obj` writes a general relocatable object for **x86-64, i386, xtensa
+  and riscv32** (measured 2026-08-31, one invocation per target). On x86-64 and
+  i386 the export surface is the C-convention routines and a link needs
+  `-no-pie`. **aarch64 and arm32 still refuse** —
+  [[feature-a-object-output-for-arm32-and-aarch64]]. i386 was the one the C-ABI
+  decision waited on; it has since been built
+  ([[feature-a-object-output-for-i386-arm32-and-aarch64]], whose TITLE still
+  names three targets but whose summary is accurate: i386 done, the other two
+  split out), the trigger fired, and the answer is recorded in the decide.
 - `--shared` is still `.asm`-frontend only (`compiler.pas:1238`), and for a
   reason the `.o` did not have to face: a `.so` is relocated at load, so the
   absolute model `-no-pie` accepts cannot work there at all
