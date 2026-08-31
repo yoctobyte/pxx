@@ -2,10 +2,11 @@
 track: A+S
 type: bug
 prio: 50
-status: working
+status: done
 found: 2026-08-30
 found-by: frankS
 owner: frankS
+summary: "FIXED 2026-08-31 (5ac00ac71) after five rounds that killed every SHAPE hypothesis. It is a CONTENT property, exactly the class round 5 concluded was needed: the managed-string marshalling arms use a4-a7 because `a2-a7 survive call8` -- true of the Xtensa ABI, false of THIS COMPILER, which keeps the WINDOWED FRAME POINTER in a7 (EmitFrameAddrXtensa). Every concat and compare overwrote it; the next frame-relative local read faulted far from the cause. A07=00000001 in round 2's dump was literally the `movi a7, 1` the Char-operand arm emits, and it was set aside as `downstream, not load-bearing`. Call0 is byte-identical across the fix, proven. New sixth windowed canary, proven able to go red."
 ---
 
 # The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength
@@ -467,3 +468,118 @@ clean and `compiler/**` is untouched by this ticket.
 it is unheld and free to take. A fresh session with context to spend is arguably
 the better holder now, since what it needs next is a new instrument rather than
 more analysis of the existing measurements.
+
+
+## Round 6 (frankS, 2026-08-31) — FIXED. It was a CONTENT property, and round 2 had it in its hands
+
+`5ac00ac71`. Round 5 ended: *"what remains must be something about what `Copy`
+puts in those frames — a content or address property rather than a shape
+property."* That was right, and the content in question is **which register
+holds what**.
+
+### The defect, in one sentence
+
+`ir_codegen_xtensa.inc`'s managed-string concat and compare arms marshal their
+operands into **a4-a7**, and the comment says why — *"a2-a7 survive call8"* —
+which is **true of the Xtensa windowed ABI and false of this compiler**, because
+`EmitFrameAddrXtensa` puts the **windowed frame pointer in a7**:
+
+```pascal
+if XtensaABI = XTENSA_ABI_WINDOWED then fp := reg_xtensa_a7 else fp := reg_xtensa_a15;
+```
+
+So every concat and every compare overwrote the frame pointer, and the next
+frame-relative local access read from garbage.
+
+### Measured
+
+`qemu-xtensa -d in_asm,cpu` on `r := Copy(s, 2, 3)`, the last block executed:
+
+```
+0x080876fe:  addi a2, a7, -32     <- a frame-relative local
+0x08087701:  l32i a2, a2, 0       <- loads from 0xFFFFFFE1.  SIGBUS.
+
+A07=00000001
+```
+
+**`A07=00000001` is literally the `movi a7, 1` that the Char-operand arm emits
+for `lenB`** (`EmitLoadConstXtensa(reg_xtensa_a7, 1)`, the "neither ansistring
+nor frozen" branch). Not a corrupted value — the value the compiler asked for,
+in the register the compiler had reserved for something else.
+
+### The part worth carrying: round 2 saw this and set it aside
+
+Round 2's own words:
+
+> *(The post-fault A-register view shows `A07=00000001` where a7 is the windowed
+> frame pointer, and a following block would compute `addi a2, a7, -32`. That is
+> downstream of a failed window restore and is NOT load-bearing evidence —
+> recorded so the next reader does not chase it as the cause.)*
+
+Every clause of that is accurate except the verdict. a7 *is* the windowed frame
+pointer — round 2 says so — and the `addi a2, a7, -32` *is* the faulting
+instruction. It was classified as downstream because a **more interesting
+story** was already in hand (`retw`, `WINDOWSTART`, a window underflow), and the
+register reading as a plausible consequence of that story fitted it.
+
+The guard that would have caught it is the one this repo keeps arriving at from
+other directions: **ask what this would be if it were false.** If `A07=1` were
+NOT downstream, it would be a value someone deliberately put there — and one
+`grep reg_xtensa_a7` on the file answers that in seconds. Rounds 3, 4 and 5 cost
+three programs and five falsifications between that note and this grep.
+
+The four earlier rounds are **not wasted** and should not be re-run: they are
+what proved the shape explanations dead, and it was round 5's *"every shape
+explanation is now matched by a working program"* that made a content instrument
+the only remaining move.
+
+### The fix
+
+`XtensaMarshalReg4` returns **a3 under windowed, a7 on Call0**, and both
+marshalling arms ask it instead of naming a7. a3 is free at that point on both
+ABIs: the operands are already pushed to expression slots, `IREmitNodeXtensa`
+leaves its value in a2, and the quad is consumed into a10-a13 (windowed) or
+a2-a5 (Call0) before anything else runs.
+
+### Controls, both directions
+
+| | result |
+| --- | --- |
+| **Call0 codegen unchanged** | the same source through the pre-fix and post-fix compilers produces a **byte-identical ELF** (`ea0dbee7cd3c`) |
+| **windowed, pre-fix** (`1860af97a4aa`) | **signal 7, rc 135**, output truncated mid-`Copy` — both gate slots fire |
+| **windowed, post-fix** | matches the x86-64 oracle byte for byte |
+
+And the ticket's three original repros, all green under windowed:
+`string[8]` + `Length`, `Copy(s,2,3)`, `SetLength(a,50)` + `a[49]`. Plus a 5x4
+`Copy(i,n)` sweep, concat and compare over every operand shape, and `Pos`.
+
+### Test
+
+**`test/test_cross_managed_strings.pas`**, new: concat, compare and `Copy` over
+every operand shape the marshalling arms distinguish (ansistring, frozen string,
+Char), **with a local read after every helper call**. That last part is the
+actual assertion and it is why an obvious test would not have worked: **the
+helper's own result was never wrong.** A row checking only the returned string
+passes on the broken compiler. What broke was everything the function did
+afterwards through its frame pointer.
+
+Wired as the **sixth windowed canary** in `test-xtensa`, alongside a **Call0 row
+that exists as the control** for the ABI split rather than as extra coverage —
+so a later edit that "simplifies" `XtensaMarshalReg4` away has to break
+something visible.
+
+The `test-xtensa` header comment is corrected in the same commit: it still said
+windowed faults on frozen strings, `Copy` and `SetLength`. All three pass.
+
+### What this does NOT resolve
+
+- **`bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp`
+  stays open and stays exonerated.** Round 5 measured that it does not cause this
+  fault; round 6 names a cause that is not it. The ABI violation is still real
+  and still unfixed — it just was not this.
+- The frozen-string and `SetLength` arms remain green on the **data-section
+  alignment side effect** described above, not on an asserted invariant. That is
+  the other ticket's job and is unchanged by this.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
