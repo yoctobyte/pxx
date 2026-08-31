@@ -154,6 +154,29 @@ agent nearly recorded "TKey is not collected" from a probe written twenty minute
 earlier; the probe's own `sort -u | head -12` was truncating its output and the
 real number was 4800.
 
+**When your finding is an ABSENCE, ask what ELSE produces that same absence — and
+put one of those in the probe.** The paragraph above is about a null from a
+*broken* instrument. This is the harder one: the instrument is fine, the null is
+**true**, and the fix built on it is still wrong. Measured 2026-08-31. A census of
+all 51 builtin type names found twelve that `var v: N` accepts and `SizeOf(N)`
+rejects, so the fix was to chain the declaration table as the builtin table's
+fallback. It built, kept the fixedpoint, and turned the census clean. It also made
+a builtin **steal the name from a user's own type** — `type Currency = record a,
+b, c: Integer; end` went from `SizeOf` 12 to 8, a `Boolean` named `longbool` from
+1 to 4, a ten-byte array named `tdatetime` from 10 to 8. `SizeOf` consults the
+builtin table *before* the user tables, so a rejection there was never a
+rejection: **it was the fallthrough into the user-type lookup.** Every probe
+program in the census declared no user types, which makes those two causes emit
+byte-identical output.
+
+The tell was in reach and was read past: the table's own header says *"callers
+must consult a user type alias FIRST where that matters."* So the guard is
+population, not scepticism — the author was already sceptical and already
+measuring. **One case where the absence has the OTHER cause is worth more than
+fifty where it has the one you are looking for**, and it is the same asymmetry as
+a positive control, pointed at a negative result. Full numbers and the control
+program: `bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts`.
+
 **An unmeasured baseline in a control does not weaken a comparison — it inverts
 it.** A control asserting "green on all five targets" was written having checked
 one. Two later results would have read backwards: a real regression as
