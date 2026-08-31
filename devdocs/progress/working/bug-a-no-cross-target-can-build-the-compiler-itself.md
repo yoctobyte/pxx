@@ -6,7 +6,7 @@ type: bug
 status: working
 owner: frankS
 blocked-by: []
-summary: "PARTLY FIXED 2026-08-30. i386, aarch64 and arm32 now BUILD the compiler, and the i386 and aarch64 binaries RUN under qemu and compile a working program -- their shared blocker was `LoadFile` with an array-element destination (cpreproc.inc), fixed by normalising in the frontend rather than teaching five backends a slot-address shape. TWO TARGETS REMAIN, with DIFFERENT causes, neither related to the first: riscv32 `jal displacement 2197196 is outside the encodable range` (reach) and xtensa `stack frame too large (> 32 KB) for a single ADDMI` (frame size) -- the latter is a THIRD defect this ticket originally missed. And the title claim was too strong: wasm32 built the compiler all along and was never measured. arm32 builds but its cross-built compiler SEGFAULTS, which is a fourth, separate defect."
+summary: "PARTLY FIXED; re-measured 2026-08-31 by frankA at fixedpoint 7dd26baa7a80 and it was STALE: both causes it named as remaining are fixed. ALL SEVEN targets now BUILD the compiler -- i386, aarch64, arm32, riscv32, wasm32, native x86_64, and xtensa with `--platform=posix --xtensa-long-calls`. The two blockers this ticket was left waiting on are both in `done/` (riscv32 `jal` reach, xtensa >32 KB frame), so neither of the two remaining causes it named is a cause any more. ONE defect remains and it is the FOURTH one, the one this ticket found last: the arm32 cross-built compiler builds and then SEGFAULTS under qemu-arm on `hello.pas`, while the i386, aarch64 and riscv32 cross-built compilers each run and emit a binary that runs and prints correctly. Two open sub-questions, neither measured: the i386 cross-built compiler faults ~30s into rebuilding the COMPILER (small programs are fine), and the xtensa binary cannot be exercised on this host -- qemu-xtensa carries no ESP32 core and SIGILLs on every model it does have, which is a HOST limit and not a measured defect. Under the default platform xtensa refuses `compiler.pas` at ParamStr by design (an ESP image has no argv), which is a target contract, not this bug. The title is false as written and was false when filed: wasm32 built all along."
 ---
 
 # No cross target can build the compiler itself
@@ -165,3 +165,45 @@ runtime fault is folded into the second half of this ticket, which stays open.
 
 Gate: fixedpoint converged; `tools/gate.sh quick` GREEN; the five new cross rows
 executed exactly as written.
+
+
+## Re-measured 2026-08-31 (frankA) — the two remaining causes are gone; only arm32's runtime fault is left
+
+Not new work on this ticket: a **state check** of the four Track A tickets in
+`working/`, which found this one still naming two causes that are both closed. Binary:
+`compiler/pascal26` at self-host fixedpoint `7dd26baa7a80` (`converged after 2
+round(s)`), HEAD `35a88931f`. Probe as the ticket defines it — judged on the
+**artifact**, not on the text.
+
+| target | builds? | cross-built compiler RUNS? |
+| --- | --- | --- |
+| x86_64 | yes (native self-host) | — |
+| i386 | yes, 12.0 MB | **yes** — compiles `hello.pas`; the output runs and prints |
+| aarch64 | yes, 22.1 MB | **yes** — same |
+| arm32 | yes, 23.3 MB | **NO — `qemu: uncaught target signal 11`** |
+| riscv32 | **yes, 20.7 MB** (was: `jal displacement ... outside the encodable range`) | **yes** — same |
+| xtensa | **yes, 24.4 MB** with `--platform=posix --xtensa-long-calls` (was: `stack frame too large`) | not answerable on this host — see below |
+| wasm32 | yes, 7.1 MB | not attempted |
+
+Both spun-out blockers named under *What remains* are in `done/`:
+`bug-a-riscv32-cannot-reach-a-far-call-so-the-compiler-will-not-link` and
+`bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi`. This ticket was
+the last thing still asserting they were open.
+
+**xtensa needs two flags and the reason is not a defect.** Under the DEFAULT
+platform, `--target=xtensa` derives `PLATFORM_ESP`, and `ir_codegen_xtensa.inc:2772`
+then refuses `ArgStr/ParamStr` deliberately — *"an ESP image has not a command
+line"* — so `compiler.pas`, which reads a command line, cannot be an ESP image by
+construction. That is the target's contract, not this bug, and it is why a bare
+`--target=xtensa` probe still shows a red line here. With `--platform=posix` it
+builds.
+
+**What is NOT established:** the xtensa binary could not be exercised. This box's
+`qemu-xtensa` offers `dc232b dc233c de212 de233_fpu dsp3400 lx106
+sample_controller` — no ESP32 core — and SIGILLs immediately on all of them.
+Absence of a runner is not a measurement; cf. *an instrument that cannot speak
+reads as a negative*.
+
+**So the whole of what is left under this ticket is the arm32 runtime fault** —
+the fourth defect, the one the original filing could not see because the build
+failed first. Everything the title and the first table were about is closed.
