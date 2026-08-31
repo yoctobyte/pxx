@@ -5,13 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:28 blocked:10 backlog:399 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:134 done:2944 rejected:69`
+`urgent:1 working:3 unfinished:28 blocked:10 backlog:399 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:134 done:2944 rejected:69`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
+
+## urgent (1) — jump the queue
+
+- `bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic` [A]
 
 ## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
@@ -57,8 +61,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 431, ranked
+## Ready — top 30 of 432, ranked
 
+- `[p 85] [A]` bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -88,6 +93,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [U]` decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies (unblocks 1)
-- `[p 60] [A]` bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer
 
-_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
