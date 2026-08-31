@@ -16509,6 +16509,27 @@ test-c-abi-cross: $(COMPILER)
 # oracle available on this box.
 # bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area
 .PHONY: test-c-abi-glibc-oracle
+# WHAT THE ran/want ASSERT BELOW PROVES, AND WHAT IT DOES NOT.
+# It catches a SKIP: an iteration that ran and bailed (qemu absent) while
+# leaving `overall` untouched, which before 19090ba72 printed PASS and exited 0
+# having measured half the targets. Positive control: remove qemu-arm from PATH
+# and this target must print "1 of 2 targets measured" and exit nonzero.
+#
+# It does NOT catch a TRUNCATED REQUEST, and cannot, because `want` and `ran`
+# are both incremented inside the same `for` loop -- they share a source, so
+# anything that shortens the list moves both and the assert still passes. That
+# is sound HERE only because the list is a literal in this recipe, which makes
+# the recipe itself the independent statement of intent.
+#
+# So if you lift this pattern -- and it is being lifted -- the denominator must
+# come from somewhere the loop cannot shorten. A `want` computed from whatever
+# the loop happened to iterate is not a denominator, it is a second copy of the
+# numerator. The failure it would then inherit is the one testmgr's `--job` has
+# (argparse without action="append": `--job A --job B` discards A in the parser,
+# so the program truthfully reports 1/1 and no check inside it can see the loss).
+# Rule of thumb: the positive control for a lifted version must truncate the
+# SOURCE, not skip an iteration -- the qemu-off-PATH control above would pass a
+# truncated-list version of this guard, which is exactly why it is not enough.
 test-c-abi-glibc-oracle: $(COMPILER)
 	@exp="$$(printf 'ints 11 22 33 44 55 66\nmixed 7 2.50 9\nwide 1 1.50 2 2.50 3')"; \
 	overall=0; ran=0; want=0; \
