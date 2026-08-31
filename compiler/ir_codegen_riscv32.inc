@@ -244,6 +244,14 @@ var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
+  { A dynamic array's slot holds a pointer-sized heap handle, not an element.
+    TypeSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
+    ONE-BYTE access to a pointer slot: the store zeroes only the low byte and
+    leaves three stale ones, and the load reads a truncated handle. Force a
+    full pointer-width access. Twin of the guard in EmitStoreVarA64 -- aarch64
+    got this and arm32/riscv32/xtensa did not, which is what
+    bug-a-no-cross-target-can-build-the-compiler-itself turned out to be. }
+  if Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then sz := TARGET_PTR_SIZE;
   sgn := TypeSigned(tk);
 
   if Syms[idx].Kind = skGlobal then
@@ -267,6 +275,14 @@ var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
+  { A dynamic array's slot holds a pointer-sized heap handle, not an element.
+    TypeSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
+    ONE-BYTE access to a pointer slot: the store zeroes only the low byte and
+    leaves three stale ones, and the load reads a truncated handle. Force a
+    full pointer-width access. Twin of the guard in EmitStoreVarA64 -- aarch64
+    got this and arm32/riscv32/xtensa did not, which is what
+    bug-a-no-cross-target-can-build-the-compiler-itself turned out to be. }
+  if Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then sz := TARGET_PTR_SIZE;
 
   if Syms[idx].Kind = skGlobal then
   begin
