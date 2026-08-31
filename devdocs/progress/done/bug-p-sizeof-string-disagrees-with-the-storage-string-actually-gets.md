@@ -99,4 +99,4 @@ copies:
   compiler was contradicting itself within one program.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit e42c4518d.
