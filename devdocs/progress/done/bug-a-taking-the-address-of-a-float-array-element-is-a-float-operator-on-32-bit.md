@@ -215,5 +215,43 @@ right and the high word is discarded, so this is a cost question and not a
 correctness one. Changing it would alter a working path with no measured
 benefit; noting it here rather than folding it in silently.
 
+**MEASURED 2026-08-31 (frankA), and the deferral holds — do not repeat this
+experiment.** The reasoning above ("correct today") is the same reassurance that
+failed for the float half on x86-64, so it was worth constructing the cases the
+note does not cover.
+
+*Tried to break it, could not.* Four shapes where the high word is **not**
+discarded and the full 64-bit value is observed — `Int64(PtrUInt(@W[0]))` read
+back via `shr 32`, a 64-bit difference of two element addresses, and a pointer
+comparison (Boolean result tk, so the operands drive the dispatch). Correct on
+x86_64, i386, arm32 and riscv32. The address is not merely truncated safely, it
+is **correctly zero-extended** into the pair — a stronger property than this note
+claimed.
+
+*Then the control, by disabling the change rather than changing the input.* The
+parallel edit at `ir_codegen_riscv32.inc:2248` (`IRValueKind(left)/(right)`,
+matching the float dispatch two lines above), rebuilt, same sources through both
+compilers:
+
+| | |
+| --- | --- |
+| the path is live | binaries differ; compiler determinism checked first (same compiler twice = byte-identical) |
+| code size | 249708B both — unchanged |
+| where the effect lands | first differing byte at offset **168827**, the *same* offset for a 5-line and a 15-line program |
+
+A constant offset independent of user source means the delta is in **RTL
+codegen**, not at the address site the change is justified by. No size win, blast
+radius in the wrong place. Reverted, nothing pushed.
+
+*Limits on those numbers, since they cut against the confidence:* `code=` is
+RTL-dominated (identical for both programs) and so is coarse here, and no finer
+instrument was available — these binaries carry no section headers, so
+`readelf -S` returns nothing. The broad riscv32 suites were **not** run against
+the changed compiler, so it is unproven-safe, not proven-unsafe.
+
+**If anyone revisits this, fix the instrument first:** a way to measure one
+procedure's emitted size on a cross target turns this into a five-minute
+question instead of a rebuild-and-diff.
+
 ## Log
 - 2026-08-31 — resolved, commit b3a6cddc0.
