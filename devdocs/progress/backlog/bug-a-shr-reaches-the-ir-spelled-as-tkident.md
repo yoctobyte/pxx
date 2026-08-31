@@ -8,7 +8,7 @@ blocked-by: []
 status: open
 owner: ""
 created: 2026-08-28
-summary: "The Pascal lexer never produces tkShr — it lexes `shr` as an identifier — so an IR_BINOP carrying Pascal shr carries Ord(tkIdent) in its operator field. But tkShr DOES exist and the C lexer produces it correctly (clexer.inc:871), so one IR operator field means two different things depending on which frontend built the node, across 25 sites. ir.inc:9518 substitutes for exactly one consumer; ir_codegen_wasm32.inc:1276 is the second arm. Normalise at IRAppend. Repriced 20 -> 60 on 2026-08-31: eight shr tickets have been closed individually since 2026-06-26 and this is upstream of that family, but none of them declared a blocked-by edge to it (seven predate it), so prio propagation could never see it."
+summary: "The IR spells LOGICAL shift-right as Ord(tkIdent) — Pascal `shr` and C `>>` on an unsigned operand both write it — while Ord(tkShr) means ARITHMETIC shr (C `>>` on a signed operand). One meaning per ordinal, both frontends agreeing; what is wrong is the NAME, across ~25 sites. So the fix is a RENAME (a new ordinal appended to TTokenKind), and the `# Fix` section below, which says to substitute Ord(tkShr), is a MISCOMPILE — measured: `i shr 1` for i: Integer = -8 would emit `sar` and answer -4 on all five native backends. First live symptom found and FIXED 2026-08-31 (5b12e6a5e): ASTConstIntValue had no tkIdent arm, so a constant containing `shr` did not fold and `IntToHex(-(256 shr 4), 8)` printed 16 digits. Repriced 20 -> 60 on 2026-08-31."
 ---
 
 # The shape
@@ -99,3 +99,116 @@ ticket existed, so they could never have declared one.** The ranker reads one
 ticket at a time and has no way to see the shape of a pile. Tooling follow-up:
 `feature-t-detect-ticket-clusters-that-share-a-construct`.
 
+
+---
+
+## 2026-08-31 — the prescribed fix is a MISCOMPILE, and the first live symptom is fixed (frankC)
+
+**Do not perform the `# Fix` section as written.** Substituting `Ord(tkShr)`
+for `Ord(tkIdent)` at IRAppend sends Pascal's `shr` to the arm that emits
+`sar`. Measured at HEAD: the backends distinguish logical from arithmetic
+right-shift by exactly these two ordinals, and the C frontend already relies on
+it —
+
+```pascal
+{ cparser.inc, CMakeBinop }
+if TypeSigned(IntToTypeKind(ASTTk[l])) then ivalOp := Ord(tkShr)   { arithmetic }
+else                                       ivalOp := Ord(tkIdent); { logical    }
+```
+
+```pascal
+{ ir_codegen386.inc:1212 and its four siblings }
+else if (op = Ord(tkShr)) and signedOp then ... sar
+```
+
+So `i shr 1` for `i: Integer = -8` would answer **-4** instead of the logical
+value, on x86-64, i386, arm32, aarch64 and riscv32 at once. That is
+`bug-c-signed-arith-shift-right` run backwards — the same collision, from the
+other side.
+
+### The premise, corrected once more — and this direction OVERSTATES it
+
+The 2026-08-31 note says the field "means two different things depending on
+which frontend built the node". It does not. It means **one** thing, and both
+frontends already agree on it:
+
+| ordinal | means | written by |
+| --- | --- | --- |
+| `Ord(tkIdent)` = 1 | logical shr | Pascal `shr`; C `>>` on an **unsigned** operand |
+| `Ord(tkShr)` = 119 | arithmetic shr | C `>>` on a **signed** operand only |
+
+C normalises at `CMakeBinop`, at the frontend boundary, which is the right
+place. The IR is *already* normalised. What is wrong is only the **spelling**:
+the logical-shr opcode is spelled with a name that says "identifier".
+
+That distinction is the whole ticket. "Two meanings, one field" invites a merge,
+and the merge is the miscompile above. "One meaning, a lying name" invites a
+rename, which is safe and is what this needs.
+
+### The count that says it is a design flaw, not a wart
+
+`root-cause-over-microfix.md`: two mechanisms for one concept is a smell, three
+is a design flaw. There are **three**, and the third is not in this ticket:
+
+| ordinal | static backends | variant runtime (`VarBitwiseInt`, builtinheap.pas:4702) |
+| --- | --- | --- |
+| `Ord(tkIdent)` = 1 | logical | — |
+| `Ord(tkShr)` = 119 | **arithmetic** | **arithmetic** (NilPy `>>`) |
+| `1119` | — | **logical** (Pascal, via `PXXVarBinOpPas`) |
+
+`ir.inc:9518`'s `if item = Ord(tkIdent) then item := Ord(tkShr)` maps *logical*
+onto the ordinal that means *arithmetic* in the static vocabulary. It is correct
+only because `PXXVarBinOpPas` rewrites 119 back to 1119 for Pascal — two
+rewrites that cancel, in different files, one of them in the runtime, which
+`builtinheap.pas:4679` notes "is not a token: it is the out-of-band opcode". A
+reader who finds either rewrite alone will draw the wrong conclusion, which is
+how the `# Fix` above got written.
+
+### The live symptom — this ticket is no longer "nothing is wrong today"
+
+Measured 2026-08-31, and fixed in `5b12e6a5e`:
+
+```pascal
+writeln(IntToHex(-(256 shr 4), 8));   { pxx FFFFFFFFFFFFFFF0, fpc FFFFFFF0 }
+writeln(IntToHex(-(256 shl 1), 8));   { FFFFFE00 — correct, both }
+```
+
+`ASTConstIntValue` (`pasparser_stmt.inc`) had arms for `tkShl` and `tkShr` and
+none for `tkIdent`, so it fell to `else Result := False` for every Pascal `shr`
+and the enclosing constant did not fold. Its two callers are the ones that type
+a folded constant the way FPC does — smallest signed type that holds it — so the
+unfolded operand was typed `Int64` and bound the `Int64` `IntToHex` overload.
+
+That is a **third** consumer, and it was neither of the two this ticket says
+"handle it". It failed in precisely the way the ticket predicts — dispatching on
+a small ordinal and defaulting — which is the argument for the rename, made by
+the code rather than by the doc. `test/test_shr_const_fold_typing.pas` guards it,
+with the `shl` and plain-constant controls that made it legible.
+
+### What is actually left, and it is a rename
+
+Add a distinct ordinal for logical shr — appended at the END of `TTokenKind`, so
+no existing ordinal moves and no emitted byte changes — and replace the ~25
+`Ord(tkIdent)` shift sites with it. Reference list, from HEAD:
+
+```
+ir_codegen.inc:3079,6940,7176   ir_codegen386.inc:1171,1184,2745
+ir_codegen_aarch64.inc:1649,2743  ir_codegen_arm32.inc:702,713,2198
+ir_codegen_riscv32.inc:845,851,2395  ir_codegen_xtensa.inc:969,2370
+ir_codegen_wasm32.inc:1289      ir.inc:1421,4854,9518   cir.inc:86
+cparser.inc:959   pasparser_expr.inc:9115   pasparser_call.inc:134
+pasparser_stmt.inc (the arm added by 5b12e6a5e)   pyparser.inc:43532
+```
+
+The substitution point is `IRAppend`, conditioned on `kind = IR_BINOP` — the
+`c` field is an operator only there, and a blanket rewrite would corrupt every
+other node whose `c` happens to be 1.
+
+**Acceptance is byte-identity, not a green suite.** A pure rename must leave
+every emitted binary unchanged on every target; anything else means an ordinal
+moved. That is a positive control the change carries for free, and it is
+stronger than any test in the tree.
+
+Not attempted in this session: the two live wrongs above were worth more than
+the rename, and a 25-site cross-backend rename deserves its own gate run rather
+than the tail of someone else's.
