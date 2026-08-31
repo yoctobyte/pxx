@@ -24092,3 +24092,57 @@ effective 70 for the whole session, and I warned frankA, frankS and frank-optimi
 off it **by hand** — one of the four near-duplicates. The reprice 70 → 20 fixed it
 structurally. **A dispatch problem I had been solving by relay was a ranking
 problem all along**, and the lane that owned the ticket fixed it in one line.
+
+### The pager is part of the instrument (2026-08-31, coordinator)
+
+frankA relayed that `tools/trackt.py health` reported DOWN on plexus while Track
+T swept normally on seven — structural, since `health` asks the LOCAL process
+table for a daemon that has run on another host since 2026-08-29. That DOWN is
+named in CLAUDE.md as proof T is down, and the prescribed response is to run your
+lane's FULL gate, so a check with exactly one reachable answer was licensing the
+ten-minute widening the no-full-suite hook exists to prevent — through the
+documented command rather than around it. frankT fixed it at `78bbe63b8a49`
+(REMOTE / DOWN off the published archive, one-hour threshold measured against a
+median-205s publish gap, with a devtest that leads with the case it must
+REJECT). Verified from plexus, which is the one box that can verify it: on seven
+a local daemon exists, so the branch frankT wrote never executes there.
+
+**What I nearly relayed instead, and it is the point of this entry.** I ran
+`tools/twatch.py --status | head -5`. It listed borg (RETIRED) and plexus with a
+16h-old full and a STALE breadth warning, and never mentioned `seven`. I read
+that as a second and larger finding — that `--status`, the instrument frankA had
+just told the fleet to trust, did not know about the live host either — and began
+composing the broadcast. Untruncated, `--status` enumerates seven with breadth
+**3 minutes old** and ends `UP`. The finding was my `head -5`.
+
+So "ask which instrument said so" is not tight enough, and neither is "verify
+it". Both were satisfied: the instrument was right and I had run it myself.
+**Ask what you did to the instrument's output between running it and reading
+it.** A `head`, a `tail`, a `grep`, a `| head -1` — none of them error, all of
+them answer, and every one is perfectly correct about the fragment it returns.
+This is the twelfth instrument's family with the operator supplying the lie, and
+it is the second truncation-shaped error of the night.
+
+**And the union error, twice in one night, identical shape.** Chasing the
+cascade's bad commit I ran `git log origin/master -1 --format=... afc0da53c859`.
+Two revs beside each other is a UNION, not "that commit on that branch", so `-1`
+returned the tip and I read frankT's subject line as the cascade's. The correct
+form is `git show -s --format=... <sha>` with nothing else on the line. I had
+already banked this exact trap earlier tonight after doing it to a range.
+
+**The cascade itself was a non-event and I was about to make it one.**
+`open CASCADE: 30 of 30 swept job(s) still red, bad=afc0da53c859` — that sha is a
+`tstate(seven)` publish commit touching only `devdocs/progress/tstate/**`, and
+`--status` says so on the same line: *bad touches NO buildable file: it is the
+tested upper bound, not a lead.* I was preparing to relay an instrument's own
+caveat as a finding. Second time tonight I reached for the more interesting
+story; the tell both times was that the story arrived before the verification
+did.
+
+Broadcast to eight lanes, one actionable line: the repaired tool is only in a
+checkout that has pulled since 04:37, and the broken copy says DOWN with total
+confidence and no error. **CLAUDE.md needs no edit** — its sentence was false for
+two days and is true again — and frankA declining to edit the owner's file while
+the tool owner fixed the tool produced the better outcome, not merely the more
+cautious one. Editing the doc would have permanently removed a working instrument
+to route around a two-hour bug.
