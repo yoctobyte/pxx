@@ -11886,6 +11886,19 @@ test-core: $(COMPILER)
 	# zeroes the span itself -- so it uses class instances; see the file header.
 	./$(COMPILER) test/test_heap_zero_on_reuse.pas $(TESTTMP)/test_heap_zero_on_reuse26
 	tools/expect_same.sh test_heap_zero_on_reuse26 "$$($(TESTTMP)/test_heap_zero_on_reuse26)" "HEAP ZERO ON REUSE OK dirty=0"
+	# SetLength on a MANAGED STRING through a pointer deref. The classifier only
+	# recognised a deref whose pointee was a dynamic ARRAY, so it saw the POINTER
+	# symbol (tyPointer) and routed the target to the frozen-string path -- the
+	# failure then surfaced two phases later, from lib/rtl/strings.pas, as
+	# `SetLength expects a string variable in IR codegen`. Output is byte-identical
+	# to FPC 3.2.2. pinned REFUSES both files, which is what makes them controls.
+	./$(COMPILER) test/test_setlen_through_pointer_and_capture.pas $(TESTTMP)/test_setlen_ptr26
+	tools/expect_same.sh test_setlen_ptr26 "$$($(TESTTMP)/test_setlen_ptr26)" "$$(printf 'ptr grow  len=6 s=abczzz\nptr shrink len=2 s=ab\ncap       len=5 s=qqqqq')"
+	@# ...and the shape that motivated it: a `parallel for` body lifts the captured
+	@# string BY POINTER, so every SetLength in one was refused while `s := s + 'x'`
+	@# in the same body compiled. Needs --threadsafe.
+	./$(COMPILER) --threadsafe test/test_setlen_in_parallel_for_body.pas $(TESTTMP)/test_setlen_parfor26
+	tools/expect_same.sh test_setlen_parfor26 "$$($(TESTTMP)/test_setlen_parfor26)" "PARALLEL SETLEN OK total=8000"
 	# How many captures a lifted nested routine may carry: the guard was a
 	# literal 16 while the staging arrays and TProc.Params are both
 	# MAX_PROC_PARAMS = 32 wide. 20 scalar captures and 20 fixed-array captures;
@@ -13113,6 +13126,12 @@ test-i386: $(COMPILER)
 	# unmeasured everywhere it is not x86-64.
 	./$(COMPILER) --target=i386 test/test_heap_zero_on_reuse.pas $(TESTTMP)/test_i386_heapzero
 	tools/expect_same.sh i386/test_i386_heapzero "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_heapzero)" "HEAP ZERO ON REUSE OK dirty=0"
+	# The SetLength deref fix is in the shared CLASSIFIER, not in a backend, so it
+	# reached all five targets at once -- which is the evidence that the classifier
+	# was the single root cause and the four per-backend `SetLength expects a
+	# string variable` errors were only downstream reporters.
+	./$(COMPILER) --target=i386 test/test_setlen_through_pointer_and_capture.pas $(TESTTMP)/test_i386_setlenptr
+	tools/expect_same.sh i386/test_i386_setlenptr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setlenptr)" "$$(printf 'ptr grow  len=6 s=abczzz\nptr shrink len=2 s=ab\ncap       len=5 s=qqqqq')"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=i386 test/test_variant_class_cross.pas $(TESTTMP)/test_i386_varcls

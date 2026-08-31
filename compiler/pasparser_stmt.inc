@@ -5643,6 +5643,33 @@ begin
                               GetASTIdentName(valNode)) = tyAnsiString)
         else if ASTKind[valNode] = AN_INDEX then
           slIsArrTarget := True   { nested dynamic sub-array }
+        else if (ASTKind[valNode] = AN_DEREF) and (idx >= 0) and
+                (SymPtrElemStrTk[idx] <> 0) then
+          { `p^` where the pointee is a MANAGED STRING. Routed to the
+            address-based IR_SETLEN_STR, which defs.inc has always documented as
+            reaching a target through ANY lvalue "(symbol, record/class field,
+            var-param field, index, deref)" -- the lowering was there; only this
+            classifier never sent a deref to it.
+
+            Without this arm the deref fell through to the `idx >= 0` test below,
+            where idx is the POINTER symbol: not an array, and TypeKind
+            tyPointer rather than tyAnsiString, so slIsArrTarget stayed False and
+            the target was classed as a FROZEN string. The failure then surfaced
+            two phases later as `SetLength expects a string variable in IR
+            codegen`, pointing at a line in lib/rtl/strings.pas.
+
+            This is the sibling of the dyn-array arm immediately below, and it was
+            missed when that one was written: the same comment there describes
+            this exact fall-through for arrays. A pointer-to-string and a
+            pointer-to-dyn-array are one shape, and only one of them was handled.
+
+            It is not a niche form. A nested routine that captures a managed
+            string is lifted with the string passed BY POINTER, so every
+            `parallel for` body doing SetLength on a captured AnsiString hit it:
+            `parallel(pdChunked) for i := ... do begin s := ''; SetLength(s, 64); end`
+            was refused outright, while `s := s + 'x'` in the same body compiled.
+            bug-a-setlength-on-a-captured-managed-string-is-refused }
+          slIsArrTarget := True
         else if (ASTKind[valNode] = AN_DEREF) and (NodeDynDepth(valNode) > 0) then
           { `SetLength(p^, n)` where p: ^TDyn. fpc accepts it and pxx does not.
             Refused HERE, by name, because the alternative is worse: the
