@@ -56,14 +56,39 @@ fi
 if readelf -d "$bin" 2>/dev/null | grep -qi 'NEEDED'; then
   echo "test-sqlite-threads: FAIL $ARCH (not libc-free — has DT_NEEDED)"; exit 1
 fi
-run_to="$(scaled "$run_to")"
+# CSTT_RUN_TIMEOUT overrides the scaled budget. It exists so the TIMED OUT
+# branch below can be EXERCISED -- `CSTT_RUN_TIMEOUT=5 tools/run_sqlite_thread_test.sh
+# aarch64` must print TIMED OUT, and a branch nobody has ever seen fire is not
+# a diagnostic, it is a guess written in the imperative.
+run_to="${CSTT_RUN_TIMEOUT:-$(scaled "$run_to")}"
+# A TIMEOUT AND A WRONG ANSWER USED TO PRINT THE SAME LINE. `timeout` kills the
+# run, `got` comes back EMPTY, and the mismatch branch reported "output
+# mismatch" -- so a job that is merely too slow on a loaded box was
+# indistinguishable from a miscompile, and a red that sat untracked for three
+# days could not be triaged from the report at all
+# (regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29).
+# Measured on plexus: the aarch64 run takes ~37s of its 120s budget and
+# `timeout 5` on the same binary gives rc=124 with empty output, which the old
+# branch called a mismatch.
+# So: keep the exit code, name the timeout, and PRINT WHAT WE GOT. The report
+# quotes this text and nothing else, which is why the actual output has to be in
+# it rather than in a variable nobody can see.
+started="$(date +%s)"
 if [ -n "$qemu" ]; then
-  got="$(timeout "$run_to" tools/run_target.sh "${ARCH}" "$bin")"
+  got="$(timeout "$run_to" tools/run_target.sh "${ARCH}" "$bin")"; rc=$?
 else
-  got="$(timeout "$run_to" "$bin")"
+  got="$(timeout "$run_to" "$bin")"; rc=$?
 fi
+elapsed="$(( $(date +%s) - started ))"
 if [ "$got" = "$want" ]; then
-  echo "test-sqlite-threads: PASS $ARCH (libc-free, shared+per-thread)"
+  echo "test-sqlite-threads: PASS $ARCH (libc-free, shared+per-thread) ${elapsed}s/${run_to}s"
+elif [ "$rc" = "124" ]; then
+  echo "test-sqlite-threads: FAIL $ARCH (TIMED OUT after ${run_to}s; TESTMGR_TIME_SCALE=$SCALE)"
+  echo "  partial output: [$got]"
+  exit 1
 else
-  echo "test-sqlite-threads: FAIL $ARCH (output mismatch)"; exit 1
+  echo "test-sqlite-threads: FAIL $ARCH (output mismatch, exit $rc, ${elapsed}s/${run_to}s)"
+  echo "  want: [$(printf '%s' "$want" | tr '\n' '|')]"
+  echo "  got:  [$(printf '%s' "$got" | tr '\n' '|')]"
+  exit 1
 fi
