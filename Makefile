@@ -8142,6 +8142,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_nested_proc_sibling_call26 "$$($(TESTTMP)/test_nested_proc_sibling_call26)" "$$(printf 'a\nb-before\na7\nb-after\na7\na42\n3\n2\n1\n0\n15\n10005\n10')"
 	./$(COMPILER) test/test_nested_routine_depth2_capture.pas $(TESTTMP)/test_nested_routine_depth2_capture26
 	$(TESTTMP)/test_nested_routine_depth2_capture26 | diff -u test/test_nested_routine_depth2_capture.expected -
+	# A DISCARDED function result, called with a static array bound to a `var`
+	# open-array param: the copy-OUT would clobber the result register, so the
+	# result is spilled to a compiler-minted temp -- typed from the call
+	# STATEMENT's AST node, which has no type. Nothing to do with nested
+	# routines; a fixed-array capture is merely how it was found.
+	./$(COMPILER) test/test_discarded_result_var_open_array.pas $(TESTTMP)/test_discarded_oa26
+	$(TESTTMP)/test_discarded_oa26 | diff -u test/test_discarded_result_var_open_array.expected -
 	# Real-valued CONSTANT EXPRESSIONS — folded at compile time, so a wrong fold
 	# is a silently wrong literal rather than a diagnostic.
 	./$(COMPILER) test/test_const_real_expressions.pas $(TESTTMP)/test_const_real_expr26
@@ -13020,6 +13027,12 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_i386_oaslot "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_oaslot)" "$$(cat test/test_open_array_param_slot_is_a_handle.expected)"
 	./$(COMPILER) --target=i386 test/test_call_result_as_open_array_argument.pas $(TESTTMP)/test_i386_calloa
 	tools/expect_same.sh i386/test_i386_calloa "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_calloa)" "$$(cat test/test_call_result_as_open_array_argument.expected)"
+	# i386 is the ONLY backend that refuses a compiler-minted temp with an
+	# unresolved type, so it is the only place the discarded-result open-array
+	# spill (see test_discarded_result_var_open_array below) shows as a failure
+	# at all -- elsewhere the temp is dead and the default was harmless.
+	./$(COMPILER) --target=i386 test/test_discarded_result_var_open_array.pas $(TESTTMP)/test_i386_discoa
+	tools/expect_same.sh i386/test_i386_discoa "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_discoa)" "$$(cat test/test_discarded_result_var_open_array.expected)"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=i386 test/test_variant_class_cross.pas $(TESTTMP)/test_i386_varcls

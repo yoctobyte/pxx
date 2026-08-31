@@ -1,0 +1,11 @@
+bool  : 10 1 2 3
+double: 0 21 2 3
+str   : 0 1 32 3
+int64 : 0 1 2 43
+bool   consumed: TRUE 10
+double consumed: 2.50 21
+str    consumed: sink 32
+int64  consumed: 1234567890123 43
+ind   : 10 1 2 3
+ind    consumed: TRUE 10
+DISCARDED-RESULT VAR OPEN ARRAY OK checked=10

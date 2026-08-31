@@ -3092,6 +3092,34 @@ begin
       Ord(tkPlus), 0, Ord(tyPointer));
 end;
 
+{ Type for the function-result SPILL temp both open-array writeback flushes
+  mint (a copy-out would clobber rax/xmm0, so the result is parked in a temp
+  across it). A call STATEMENT's AST node carries NO type -- ASTTk is 0,
+  tyUnknown -- because nothing consumes the result, and a temp minted with
+  tyUnknown reaches codegen unresolved. The callee's declared RetType is the
+  answer and is in hand at both sites.
+
+  i386-ONLY as a symptom, and not because the type mattered there: i386
+  ASSERTS on an unresolved temp ("a compiler-minted temporary reached codegen
+  with an UNRESOLVED type"), while every other backend defaults it and is
+  harmlessly right -- the spilled value is DISCARDED by construction, since a
+  typed ASTTk is exactly what an expression context would have supplied. So
+  the fix removes a refusal, not a wrong value.
+
+  Two-line repro, nothing to do with nested routines (which is how it was
+  found -- a fixed-array capture lowers to a `var` open-array param, so the
+  new feature walked into an old refusal):
+
+    var a: array[0..3] of Integer;
+    function F(var o: array of Integer): Boolean; begin o[0] := 9; F := True; end;
+    begin F(a); end.   { --target=i386 }  }
+function PendOAWBSpillTk(astTk, procIdx: Integer): TTypeKind;
+begin
+  Result := IntToTypeKind(astTk);
+  if (Result = tyUnknown) and (procIdx >= 0) then
+    Result := Procs[procIdx].RetType;
+end;
+
 { ===== {$MODE DELPHI}: a bare procvar in a VALUE context is CALLED ===========
   A procedural variable named where a VALUE is wanted must be called; taking its
   address is what `@fp` is for. `fp()` was already right, so the two spellings
@@ -6280,6 +6308,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
     spineN: Integer;            { spine table growth — see the arm }
     pcBase: Integer;                { pending by-value interface temps at statement start }
+    spillTk: TTypeKind;             { open-array copy-out result spill — PendOAWBSpillTk }
     ecSym: Integer;                 { System.ExitCode, when builtinheap is linked — see AN_HALT }
     bmDest, bmSecond, bmThird: Integer;   { __pxxblockmove/fill operands — see AN_BLOCK_MEM }
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
@@ -12218,8 +12247,9 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       begin
         if Procs[ASTIVal[node]].IsFunc then
         begin
-          value := AllocVar('', IntToTypeKind(ASTTk[node]));
-          IRAppend(IR_STORE_SYM, value, Result, -1, 0, ASTTk[node]);
+          spillTk := PendOAWBSpillTk(ASTTk[node], ASTIVal[node]);
+          value := AllocVar('', spillTk);
+          IRAppend(IR_STORE_SYM, value, Result, -1, 0, Ord(spillTk));
           while PendOAWBCount > pendBase do
           begin
             Dec(PendOAWBCount);
@@ -12228,7 +12258,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
               PendOAWBSrcAddr(PendOAWBTemp[PendOAWBCount]),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;
-          Result := IRAppend(IR_LOAD_SYM, value, -1, -1, 0, ASTTk[node]);
+          Result := IRAppend(IR_LOAD_SYM, value, -1, -1, 0, Ord(spillTk));
         end
         else
           while PendOAWBCount > pendBase do
@@ -12352,8 +12382,9 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       begin
         if (cpi >= 0) and Procs[cpi].IsFunc then
         begin
-          value := AllocVar('', IntToTypeKind(ASTTk[node]));
-          IRAppend(IR_STORE_SYM, value, Result, -1, 0, ASTTk[node]);
+          spillTk := PendOAWBSpillTk(ASTTk[node], cpi);
+          value := AllocVar('', spillTk);
+          IRAppend(IR_STORE_SYM, value, Result, -1, 0, Ord(spillTk));
           while PendOAWBCount > pendBase do
           begin
             Dec(PendOAWBCount);
@@ -12362,7 +12393,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
               PendOAWBSrcAddr(PendOAWBTemp[PendOAWBCount]),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;
-          Result := IRAppend(IR_LOAD_SYM, value, -1, -1, 0, ASTTk[node]);
+          Result := IRAppend(IR_LOAD_SYM, value, -1, -1, 0, Ord(spillTk));
         end
         else
           while PendOAWBCount > pendBase do
