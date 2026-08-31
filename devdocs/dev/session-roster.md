@@ -24317,3 +24317,50 @@ stuck on PASS) sat on that axis.
 suggested commit line now prints `pin vN -- binary sha256 <12>` — so the next pin
 message cannot reproduce the error I made, and the rationale lives at the line in
 the Makefile where the next pinner will be standing rather than in a ticket.
+
+### Two sharpenings, and a dispatch that had to be refused
+
+**frank-rust: the residual is most dangerous when the sweep was RIGHT.** frankS
+cleared all 30 cascade jobs by exit status and *said so* — "I checked compiles and
+exits 0, not matches expected output; the defect was a SIGSEGV, so exit status is
+the discriminator for this bug specifically". Impeccable. And the two `test-asm`
+reds it excluded are asserted by a **negative** `grep -q "^    db "` over `-S`
+disassembly, which is invisible to exit status: a failing `grep -q` prints
+nothing, so the stored reason ends on an `ok:` line with no error text anywhere.
+"Not theirs" was true of the population checked and false of those two.
+
+A sloppy clearing invites a re-check. **A rigorous one that names its own scope
+reads as complete precisely because it was honest.** So the exculpation rule needs
+its strongest form: the "then what?" needs a named owner *especially* when the
+clearing is methodologically sound. Ours had one, which is the only reason this
+did not sit.
+
+**The cause, and it is the pattern at two characters.** The fallback prints
+`db 65`. frank-rust read it as decimal — 0x41, a stray REX.B — and had a complete,
+plausible, wrong story about a redundant prefix escaping codegen, aimed at a
+different lane and a different fix. It is **hex**: `0x65`, the gs prefix from
+frankS's TLS conversion, and `asmdisasm_x64.inc:328` accepts only `$66/$F2/$F3`
+(verified). The compiler emits correct code; the **disassembler** cannot read the
+byte back. Its own account of the miss is the durable bit: **the number was small
+enough to feel unambiguous.** Two hex digits do not look like an identifier, so
+they never trigger the identifier discipline — `db 65` joins twelve hex characters
+and a session name on the list of things that are never re-checked.
+
+**Blast radius note for A:** a codegen change reached a **tool** nobody lists among
+its dependencies. When you add a byte to the instruction stream, the readers of
+that stream are part of the change's surface, and they fail by *falling through*
+rather than by erroring.
+
+**The dispatch I refused, which is the ranker working as designed and still wrong
+for a human to follow.** Track P's head is `feature-pascal-corpus-expansion`
+[p75] — but its own summary says the remaining distance is *one pin, one RTL
+line, re-measure*. It is blocked on a `make pin`, the owner's call. Sending an
+idle agent there means re-deriving a wall that is already reduced and waiting.
+Dispatched frank-rust to Track A's p50 instead.
+
+I checked the host prerequisite first, because a p75 corpus ticket froze once on
+`fpc-source-3.2.2` never being installed while `fpc` was: it **is** installed now
+(3.2.2+dfsg-49). Recording it so nobody re-derives it. Note the shape — the old
+blocker was cleared and a *different* one had taken its place, which is the
+`feature-random-library` case again: two blockers genuinely closed and a third
+wall standing behind them.
