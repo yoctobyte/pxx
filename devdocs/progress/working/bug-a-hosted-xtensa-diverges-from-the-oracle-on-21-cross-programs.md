@@ -6,9 +6,16 @@ status: working
 found: 2026-08-30
 found-by: frankS
 owner: frankA
+summary: "Hosted xtensa vs the x86-64 oracle. Re-measured 2026-08-31 at compiler db19ff591808: 140 sources, 115 MATCH / 5 DIFF / 20 CFAIL. Of the 5, only 2 are compiler bugs (test_cross_syscall; test_cross_float is Track F) -- 2 are sweep artifacts and 1 is a test-coverage gap, all reconciled below. The slug's `21 cross programs` and the body's `142 sources` are BOTH stale; the denominator is derived from the Makefile and moves."
 ---
 
 # Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs
+
+> **PREMISE CORRECTED, slug kept (frankA, 2026-08-31).** Neither number in that
+> heading survives measurement: the denominator is not 142 and never was, and
+> the divergence count is 5, of which 2 are defects in this sweep rather than in
+> the compiler. Read the 2026-08-31 section at the bottom, not this table — the
+> table below is the 2026-08-30 state and is kept as history.
 
 The first differential sweep xtensa has ever had. Of the 142 sources
 `test-riscv32` uses, **55 match the x86-64 oracle exactly** (now wired as
@@ -287,3 +294,98 @@ passed the "no `IsRef or` chain outside the helper" grep by having no copy at
 all. When a sweep converts N call sites onto a shared helper, **enumerate the
 backends that should call it and check each one does** — the first list is
 closed and countable, the second is defined by what already exists.
+
+---
+
+# RE-MEASURED — 115/5/20 of 140, and only two of the five are compiler bugs. frankA, 2026-08-31
+
+Compiler `db19ff591808` (self-host fixedpoint, `converged after 1 round(s)`,
+sha differs from `pinned`). Source list re-derived from the `test-xtensa` and
+`test-riscv32` recipes at HEAD.
+
+```
+xtensa    MATCH 115   DIFF 5   CFAIL 20     of 140
+riscv32   MATCH 127   DIFF 4   CFAIL  8     of 140   (same harness, for contrast)
+```
+
+**State the denominator as derived, never as a constant.** 140 is what the two
+recipes name today; it was 129 yesterday. The slug's 21 and the body's 142 are
+both stale, which is how three numbers in one ticket came to disagree.
+
+## The five, reconciled against how the Makefile actually asserts each row
+
+**Two of them were my sweep, not the compiler.** A source path is not a test
+row: the real row also carries flags, an output filter and sometimes a fixed
+expected literal, and re-deriving a list from the recipes throws all of that
+away. The resulting figure is credible because most rows have no special
+handling — which is exactly why it needs reconciling rather than reporting.
+
+| row | verdict |
+| --- | --- |
+| `test_cross_trunc_round_saturate` | **REAL — FIXED this session**, see below |
+| `test_cross_syscall` | **REAL**, `0 0 -1` vs `1 1 12345`. Genuine oracle row (7 Makefile rows across targets), pre-dates the syscall-table work, still unowned |
+| `test_cross_float` | **REAL, Track F** — exponent digit count and mantissa width. Float *formatting*, needs a ticket in `float/` |
+| `test_asm_ifdef_multiarch` | **TEST GAP, not a compiler bug.** `test/test_asm_ifdef_multiarch.pas` has arms for `CPUX86_64`, `CPURISCV32` and `CPUAARCH64` and **none for xtensa**, so no branch is taken and it prints `0`. Wants an xtensa arm added, not a fix |
+| `test_rtti` | **SWEEP ARTIFACT.** The real row (`Makefile:15206-15216`) compiles with `-dPXX_MANAGED_STRING` and filters `pointer:|RTTI value:|InstanceSize:` — the exact lines my sweep reported. The earlier "80 vs 64 is a real layout difference" note reads through the same missing filter |
+| `test_signal_altstack` | **SWEEP ARTIFACT** (caught by frankS). `Makefile:15386` wires this for xtensa deliberately and asserts a hardcoded literal containing `code=2`. `code=` is `si_code`: SEGV_MAPERR(1) vs SEGV_ACCERR(2) is a per-arch guard-page reporting difference, also 2 on arm32/aarch64. **The test's real assertion passes on xtensa** — `handler-off-faulting-stack=TRUE`, so sigaltstack works there |
+
+**Do not re-file the last two.** Any sweep that compares them naively to the
+x86-64 oracle will rediscover them; that is a property of the comparison, not of
+xtensa.
+
+## Fixed: Trunc/Round to Int64 saturated at 2^31 — and it was two targets
+
+xtensa's `-203/-204` arm called the 32-bit `__pxx_d2i`/`__pxx_s2i` and
+sign-extended, so every Int64 result past 2^31 came back `2147483647`.
+`Trunc(1.0e15)`:
+
+| | single trunc | single round | double trunc |
+| --- | --- | --- | --- |
+| x86-64 oracle | 999999986991104 | 999999986991104 | 1000000000000000 |
+| arm32 | correct | correct | correct |
+| **riscv32** | **2147483647** | **2147483647** | correct |
+| **xtensa** | **2147483647** | **2147483647** | **2147483647** |
+
+**riscv32's Single arm is the half nobody had reported.** Its double arm was
+already on the 64-bit kernel; the single arm beside it was not, and no ticket
+named it. Found by varying the operand width while reproducing the xtensa
+defect — the "grep for the sibling" rule paying out across targets rather than
+within one file.
+
+There is no `__pxx_s2i64`, so the fix promotes to double and uses
+`__pxx_d2i64`/`_rne` for both widths — what arm32 already does, and why arm32
+was the one correct target. Each backend's two float arms collapse into one.
+
+One trap named at the site: `EmitFloatUnaryCallXtensa`'s `dstDouble` argument
+means *the result occupies the a2:a3 pair*, not *the result is a float*. It is
+what moves `a11 -> a3` under the windowed ABI, so `False` for a `d2i64` would
+drop the Int64's high word — correct under Call0, wrong under windowed.
+
+## The signal cluster: the arms exist AND there is real work behind them
+
+frankS verified the two "no arm" tickets are phantoms but could not say whether
+anything real sat behind them. Measured from the other side, there is:
+
+- 3 x `undefined variable (SYS_gettid)` — a missing `lib/rtl` row, not a backend gap
+- 1 x the `__pxxSigPCPtr`/`__pxxSigSPPtr` ucontext offsets —
+  [[feature-a-xtensa-ucontext-pc-sp-offsets]], the live one
+- `test_signal_altstack` **passes its real assertion** (above)
+
+`UContextPCOffset`/`UContextSPOffset` in `ir.inc` claimed "xtensa never reaches
+here" and marked both fallthroughs `unreachable`. False: `test_signal_pc_rewrite`
+and `test_signal_sp_rewrite` reach them and stop at the `-1` guard with the
+intended error. Corrected in the same session (comment-only, binary
+byte-identical). frankS's read that those comments are *why* the phantoms still
+scan as open looks right.
+
+## Harness note, so the next sweep does not repeat either mistake
+
+1. **Feed the source list on fd 3 and give every child `</dev/null`.** Fed on
+   stdin, the test programs inherit the fd and eat the list: my first run
+   silently processed **74 of 140** and reported a clean partition, and the
+   stdin-reading row "diverged" by printing my own source list back. Assert
+   `rows == wc -l < list`; nothing else catches it, because the skipped rows
+   produce no output.
+2. **Reconcile every non-matching row against its Makefile recipe** before
+   reporting it — flags, filters, expected literals. That is what turned 6 into
+   3, and it only happened because a peer disputed one row.

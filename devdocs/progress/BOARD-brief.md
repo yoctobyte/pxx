@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:9 backlog:5 backlog-umbrella:5 backlog-core:142 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:21 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2958 rejected:71`
+`working:5 unfinished:28 blocked:9 backlog:5 backlog-umbrella:5 backlog-core:141 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:21 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2958 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs` [A+S] — owner: frankA
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why` [A] — owner: frankB
@@ -57,11 +58,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 436, ranked
+## Ready — top 30 of 435, ranked
 
 - `[p 90] [C]` feature-c-corpus-busybox-multi-applet (unblocks 1)
 - `[p 85] [U]` decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
-- `[p 80] [A+S]` bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs (unblocks 1)
 - `[p 80] [A]` feature-a-port-alloca-to-i386-arm32-and-riscv32 (unblocks 1)
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -89,5 +89,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
 - `[p 70] [T]` regression-tools-devtest-00-3
+- `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 
-_406 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_405 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
