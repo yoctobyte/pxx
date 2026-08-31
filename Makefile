@@ -7945,6 +7945,30 @@ test-core: $(COMPILER)
 	# broken binary, which is how the first draft of this test passed pre-fix.
 	./$(COMPILER) -Futest/generic_bodyend_units test/test_generic_body_end_counting.pas $(TESTTMP)/test_generic_bodyend26
 	tools/expect_same.sh test_generic_bodyend26 "$$($(TESTTMP)/test_generic_bodyend26)" "9 9 7 5 9 100"
+	# A generic constraint against a name that is NOT in the class table used to be
+	# skipped entirely, because at that point "not a class" and "not declared yet"
+	# are the same observation. Two kinds of name are not "not yet": a builtin
+	# scalar (answered from a fixed table) and `TClass` (a class REFERENCE, not a
+	# class instance type). Both are settled and stay settled, so a `class`
+	# constraint can refuse them. fpc 3.2.2 refuses both too -- these are
+	# fpc-testsuite tgenconstraint4 and 5, marked %FAIL and previously accepted.
+	# NEGATIVE half: must not compile, and the message must name the constraint.
+	@./$(COMPILER) test/test_generic_constraint_longint_fail.pas $(TESTTMP)/test_gconlong26 2>&1 \
+	  | grep -q 'is constrained to `class`, but LongInt is a value type' \
+	  || { echo 'test_generic_constraint_longint_fail: FAIL - expected a constraint error naming LongInt'; exit 1; }
+	@./$(COMPILER) test/test_generic_constraint_tclass_fail.pas $(TESTTMP)/test_gcontcl26 2>&1 \
+	  | grep -q 'is constrained to `class`, but TClass is a class reference' \
+	  || { echo 'test_generic_constraint_tclass_fail: FAIL - expected a constraint error naming TClass'; exit 1; }
+	@./$(COMPILER) test/test_generic_constraint_named_fail.pas $(TESTTMP)/test_gconnamed26 2>&1 \
+	  | grep -q 'is constrained to TSomeClass, but LongInt is a value type' \
+	  || { echo 'test_generic_constraint_named_fail: FAIL - expected a named-constraint error'; exit 1; }
+	# ACCEPT half, and it is the half that matters: over-rejection is the failure
+	# mode that breaks working code silently, and only this arm can catch it. An
+	# unconstrained template with a builtin argument, a forward-declared class, and
+	# a class declared earlier in the section (the shape the not-declared-yet exit
+	# exists to protect) must ALL still compile. fpc 3.2.2 agrees line for line.
+	./$(COMPILER) test/test_generic_constraint_accept_control.pas $(TESTTMP)/test_gconacc26
+	tools/expect_same.sh test_gconacc26 "$$($(TESTTMP)/test_gconacc26)" "accepted 3"
 	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and
 	# real code calls it bare in grow paths -- rtl-generics does, five times. We had
 	# EOutOfMemory and not the routine. Asserts it raises the right class, not just

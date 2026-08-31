@@ -6,8 +6,8 @@ type: bug
 blocked-by: []
 status: unfinished
 created: 2026-08-30
-summary: "Generic constraint checking runs inside ParseSpecialization, which the Delphi rewriter reaches BEFORE the argument's class is parsed, so any argument that is not already a fully declared class must be skipped. Cost: tgenconstraint4 (`LongInt`) and 5 (`TClass`) are still wrongly accepted, and no constraint is enforced against a forward-declared class. The fix is to check at end of type section; the hook exists but its call site is guarded."
-owner: ""
+summary: "HALF DONE. Constraint checking runs inside ParseSpecialization, where 'not a class' and 'not declared yet' are the same observation, so unresolvable arguments are skipped. FIXED for names that are SETTLED rather than not-yet-known -- a builtin scalar and the metaclass `TClass` are answered outside the symbol table and cannot become classes later, so a `class`/`constructor`/named-type constraint now refuses them: tgenconstraint4 and 5 flip to correctly-rejected, corpus 35/40 -> 37/40, no valid program newly rejected (before/after measured on two binaries). STILL OPEN: constraints against a FORWARD-declared class (tgenconstraint38, 39). And THE PRESCRIBED FIX BELOW IS WRONG for them -- fpc 3.2.2 checks AT the specialization point, not at end of section: it rejects tgenconstraint39 even though the forward TTest does descend from the constraint by the time the section closes. Deferring the check would ACCEPT 39 and diverge. See the 2026-08-31 note."
+owner: frankwasm
 ---
 
 # P: generic constraints are checked before the type section closes
@@ -52,6 +52,11 @@ All **missed rejections, never wrong ones** — the failure mode is laxness, whi
 is the right way round for a check that did not exist at all until today.
 
 ## The fix
+
+> **CORRECTED 2026-08-31 (frankwasm) — read the note at the bottom before
+> implementing this section. Measured against fpc 3.2.2, deferring the check to
+> the end of the type section produces the WRONG answer for `tgenconstraint39`.
+> The section below is kept as filed; it is no longer the plan.**
 
 Record `(ti, k, argName, argKind, line)` at `ParseSpecialization` instead of
 checking there, and drain the list when the type section closes — by which point
@@ -149,3 +154,84 @@ two agents costs more coordination than the change is worth.
 
 Nothing in the original diagnosis is disputed; only the sizing. Parked rather
 than half-done, and unclaimed so the ranker offers it again.
+
+
+---
+
+## 2026-08-31 (frankwasm) — half fixed, and the OTHER half's prescribed fix is wrong
+
+Binary `df796c0b6edc` (self-host fixedpoint, `converged after 1 round(s)`).
+Corpus: `fpc-testsuite/tests/test/tgenconstraint*.pp`, 40 files, each scored
+against its own `{ %FAIL }` marker. This checkout does not carry that corpus;
+it was read from a sibling checkout, unmodified.
+
+### Measured, before and after, on two binaries
+
+| | baseline `eda10567f26a` | with the fix `df796c0b6edc` |
+| --- | --- | --- |
+| agree with the `%FAIL` marker | **35 / 40** | **37 / 40** |
+| accepted-invalid | 4, 5, 38, 39 | 38, 39 |
+| rejected-valid | 37 | 37 |
+
+`tgenconstraint37` is rejected-valid on BOTH binaries — pre-existing, and it is
+[[bug-p-a-forward-interface-declaration-is-not-parsed]], not this ticket. **No
+program went from accepted to rejected**, which is the only direction that could
+break working code.
+
+### What was fixed, and why it needed no deferral at all
+
+The bail is right for a name the parse has not REACHED. It is wrong for a name
+that is **settled**:
+
+- a **builtin scalar** — `BuiltinTypeNameTk` answers from a fixed table, not the
+  symbol table, so its answer cannot change later in the parse. If a user type
+  shadows the name, `FindUClass` found it and we never reach here.
+- **`TClass`** — `ParseTypeKind` (`pasparser_decl.inc:729`) lowers a bare
+  `TClass` to a class REFERENCE (tyPointer with a tyClass element). A class
+  reference is not a class instance type, which is what `T: class` asks for.
+
+Both are knowable at `ParseSpecialization` time. The ticket's framing —
+*"the fix is to check at end of type section"* — was true of the ROWS IT NAMED
+only by coincidence: 4 and 5 are not blocked on the type section closing, they
+were blocked on the check having no way to say *"this name is not a class and
+never will be"*. Only the constraints that REQUIRE a class or interface are
+enforced on that path; `record` is left alone, so the failure mode stays laxness.
+
+### The correction, and it is the reason to read this note
+
+**fpc 3.2.2 checks the constraint AT THE SPECIALIZATION POINT, not at the end of
+the type section.** `tgenconstraint39` is the discriminating case, and it is
+already in the corpus:
+
+```pascal
+  TSomeClass = class end;
+  generic TGeneric<T: TSomeClass> = class end;
+  TTest = class;                              { forward }
+  TGenericTTest = specialize TGeneric<TTest>; { <-- FPC errors HERE }
+  TTest = class(TSomeClass) end;              { ...and TTest DOES descend }
+```
+
+```
+tgenconstraint39.pp(16,39) Error: Incompatible types: got "TTest" expected "TSomeClass"
+```
+
+By the time the section closes, `TTest` satisfies the constraint. FPC rejects it
+anyway, because at the point of use the forward stub carries no parent. **A
+drain at end of section would accept `tgenconstraint39` and diverge from the
+oracle** — it would turn one accepted-invalid into another accepted-invalid
+while looking like progress, and `tgenconstraint38` passing would make it look
+like the whole thing worked.
+
+So the remaining half is not "defer the check". It is closer to: **a
+specialization argument that is a forward stub is an ERROR in its own right**,
+which is a different rule with a different diagnostic. That is a design
+question, not a placement one, and whoever takes it should confirm the rule
+against more of the corpus before writing it — `T: class` against a forward
+stub may well be legal where `T: TSomeClass` is not, since the former needs no
+ancestor chain.
+
+### Note on the hook this ticket was named after
+
+`FlushPendingClassSpecializations`'s guarded call site in `pasparser_decl.inc`
+is untouched. Nothing here needed it, and given the above it should not be
+widened on this ticket's authority.

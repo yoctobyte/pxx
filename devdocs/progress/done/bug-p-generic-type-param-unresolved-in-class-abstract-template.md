@@ -4,7 +4,7 @@ track: P
 prio: 70
 type: bug
 blocked-by: []
-status: unfinished
+status: done
 created: 2026-08-30
 summary: "A generic template's own type parameter is not in scope inside a `class abstract(...)` body: generics.collections' TCustomPointersEnumerator<T, PT> reports `unknown type: PT` for its own PT. This is the wall the rtl-generics corpus hits now that bug-p-object-value-types-standard-meaning cleared the one 26 lines later that used to abort the parse first."
 owner: 
@@ -427,3 +427,51 @@ is open. The corpus uses constrained generics (`collections.pas:423`,
 errors are unbound-identifier errors rather than constraint violations, which is
 *weak* evidence for independence and not proof. **Re-measure against a post-fix
 binary before concluding anything here.**
+
+---
+
+## RESOLVED 2026-08-31 (frankwasm) — does not reproduce under its own probe
+
+Binary `4ab02d96a777` (self-host fixedpoint at HEAD, not a copied-in seed).
+Corpus content hash `generics.collections.pas` `5a3402725ab53181` — **identical
+to the bytes every earlier note in this family measured**, so this is
+like-for-like and not a different corpus. `library_candidates/` is gitignored;
+that hash is the only durable handle.
+
+**The probe is this ticket's own**, verbatim from the Repro section above: a
+one-line program whose entire body is `uses Generics.Collections`, compiled with
+`-Fu` pointing at `packages/rtl-generics/src`. 6m50s.
+
+```
+pascal26:1481: error: for-in: enumerator has no readable Current
+  near: ; procedure TOpenAddressing < TKey , >>> TValue , THashFactory
+```
+
+**One error, and it is not this one.** No `unknown type: PT`, and no
+`unknown type: TArray` — both symptoms this ticket filed. The parse now reaches
+:1481, far past the `:120`/`:123`/`:135` cluster it was stopping at, and past
+`TCustomPointersEnumerator<T, PT>` itself.
+
+**Why this is a sound closure and not an absence-of-evidence.** The trap with a
+vanished error is that the parse might simply be stopping earlier — an
+exculpation that is really a different failure. It is not that here, for two
+independent reasons: the wall MOVED FORWARD by 1300 lines rather than backward,
+and the interface-only probe (truncated at `implementation`, line 948, which
+contains the whole `:120`-`:135` cluster) compiles **ok** on its own. The
+identical probe that produced these three errors produces none of them.
+
+**Which fix closed it is not established, and does not need to be.** Several
+landed in the same window — `bug-p-object-value-types-standard-meaning`, the
+TKey wall, `MAX_TEMPLATE_PARAMS`, `GenericMethodBodyEnd`'s body-extent counter
+(ba99a4e81), `MAX_GENERIC_METHODS` 512->2048. Naming one would need a bisect
+over ~500 commits to answer a question nobody is asking; the ticket's claim is
+that these three errors fire, and they do not.
+
+**Residual, with an owner, because "not this bug" is half a finding.** The one
+remaining error on rung 6b is the `for-in` gap at :1480, which is NOT a compiler
+defect: it is a pin-ordering dependency owned by
+[[feature-pascal-corpus-expansion]] (one `make pin` postdating ba99a4e81, then
+one line in `lib/rtl/classes.pas`). Nothing from this ticket is left unowned.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

@@ -1655,11 +1655,55 @@ begin
     those means checking constraints AFTER the type section closes rather than
     mid-parse, which is where this check belongs -- see the ticket. It is a
     missed rejection, never a wrong one, which is the right way round. }
-  if argCi < 0 then Exit;
-  if UClsForward[argCi] then Exit;
-
   pfx := 'generic constraint violated: ' + Templates[ti].Name + '<' +
          TemplateParamNames[base] + '> ';
+
+  { NOT in the class table. The bail above is right for a name the parse has
+    not REACHED yet, but two kinds of name are not "not yet" -- they are
+    settled now and stay settled, so a constraint that requires a class can be
+    refused on them without waiting for anything:
+
+      * a builtin scalar (`LongInt`, `Double`, ...). BuiltinTypeNameTk answers
+        from a fixed table, not from the symbol table, so its answer cannot
+        change later in the parse. A user type may SHADOW the name, but then
+        FindUClass above already found it and we never get here.
+      * `TClass`, the metaclass. ParseTypeKind (pasparser_decl.inc:729) lowers
+        a bare `TClass` to a class REFERENCE -- tyPointer with a tyClass
+        element -- and a class reference is not a class instance type, which is
+        what `T: class` asks for. A user-declared TClass wins there too, and
+        would likewise have been found above.
+
+    Only the constraints that REQUIRE a class or interface are enforced here
+    (`class`, `constructor`, and any named-type constraint): none of those can
+    ever be satisfied by a scalar or a metaclass. `record` is deliberately left
+    alone -- whether a builtin scalar satisfies a value-type constraint is a
+    separate question this ticket did not measure, and the failure mode stays
+    laxness, which is the right way round.
+    Fixes tgenconstraint4 (`TTest1<LongInt>`) and 5 (`TTest1<TClass>`), both
+    `T: class`, both previously accepted. }
+  if argCi < 0 then
+  begin
+    if BuiltinTypeNameTk(specArg) <> tyUnknown then
+      what := 'a value type'
+    else if CaseEqual(specArg, 'tclass') then
+      what := 'a class reference'
+    else
+      Exit;   { merely not declared YET -- see the note above }
+
+    if (flags and TPC_CLASS) <> 0 then
+      Error(pfx + 'is constrained to `class`, but ' + specArg + ' is ' + what);
+    if (flags and TPC_CTOR) <> 0 then
+      Error(pfx + 'is constrained to `constructor`, but ' + specArg + ' is ' +
+            what + ' and only a class can have one');
+    if nT > 0 then
+      Error(pfx + 'is constrained to ' +
+            GetTokenStrFromRaw(TPConTypeOff[base * MAX_TPC_TYPES],
+                               TPConTypeLen[base * MAX_TPC_TYPES]) +
+            ', but ' + specArg + ' is ' + what);
+    Exit;
+  end;
+  if UClsForward[argCi] then Exit;
+
   { argCi >= 0 past the guard above, so these three are the whole space:
     `object` and `record` both arrive as UClsIsRecord and read as a value type. }
   if isClass then what := 'a class type'
