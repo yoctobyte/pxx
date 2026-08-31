@@ -5,19 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:28 blocked:10 backlog:399 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2913 rejected:68`
+`working:6 unfinished:29 blocked:10 backlog:398 backlog_new:25 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2914 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-no-cross-target-can-build-the-compiler-itself` [A] — owner: frankS
 - `bug-a-the-exception-shadow-chain-is-process-wide-so-two-threads-crash` [A] — owner: frankS
 - `feature-c-corpus-busybox-applet` [C] — owner: frankC
-- `feature-pascal-corpus-expansion` [P] — owner: frankwasm
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-threadsafe-heap-optimize` [A] — owner: frankA
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 
-## unfinished (28) — parked mid-flight; re-claim, do not duplicate
+## unfinished (29) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength` [A+S]
@@ -41,6 +40,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O]
 - `feature-opt-static-literal-blocks-should-never-be-written-to` [A+O]
 - `feature-pal-esp-posix-fd-semantics` [S] — blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
+- `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P]
 - `feature-rust-option-type` [R]
@@ -64,10 +64,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 433, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
+- `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [P]` bug-p-generic-constraints-are-checked-before-the-type-section-closes
 - `[p 70] [P]` bug-p-generic-type-param-unresolved-in-class-abstract-template
-- `[p 70] [T]` regression-cascade-afc0da53c859
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [P]` regression-test-asm-hello-3
