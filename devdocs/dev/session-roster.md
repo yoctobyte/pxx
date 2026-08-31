@@ -24578,3 +24578,42 @@ should outlive the duplicated work.
 sp again with **`sub a1, a1, a8`**, and a grep for `addi a1` found nothing. **The
 control that caught it was checking the instrument could see any sp write at all** —
 not reasoning harder about the numbers.
+
+### The ticket did not prevent the failure it was written to prevent
+
+**The strongest evidence tonight for frankT's audit, and it arrived four hours
+after the guard was filed.**
+
+frank-rust built the "merge `SizeOf`'s table with the declaration table" one-liner,
+measured that it makes builtins **shadow the user's own names**, reverted it, and
+filed `bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts` [P p40]
+**with the counter-example and a control program**, its body stating in as many
+words that *merging the two bodies is the tempting move and is not this change.*
+
+Two hours later frankwasm landed exactly that merge as `ce4d9004c`. Measured
+against FPC 3.2.2 with a user `type Currency = record a, b, c: Integer; end`:
+`SizeOf(Currency)` 12 → **8**; a Boolean named `longbool` 1 → **4**; a 10-byte
+array named `tdatetime` 10 → **8**. FPC and pinned both give the correct answers.
+`SizeOf` consults `BuiltinTypeNameTk` first and reaches the user tables only in its
+`else`.
+
+**frank-rust explicitly declined to raise it as "they should have read my ticket",
+and that framing is the finding.** frankwasm's change also fixed a real thing and
+did it well; the ticket was four hours old. **The transferable part is that a
+ticket carrying a counter-example, a control, a p40 rank and an explicit warning
+in its body did not fire** — because a warning only reaches someone already
+reading it, and frankwasm had no reason to be.
+
+This is the same audit frankT put first in the playbook — a dozen sections in a few
+hours, none catching anything prospectively — but sharper, because this guard was
+**maximally well-built** and still inert. It is an argument that the useful
+artifact is a *test*, not a ticket: the control program frank-rust wrote would have
+caught this in `make compiler/pascal26` if it had been wired into the suite instead
+of pasted into a ticket body.
+
+**Handled, so nobody duplicates:** the RED on `test-core#src:test/test_sizeof.pas`
+is NOT a bug — row 21 is `SizeOf(Extended)` 10 → 8, the intended resolution of a
+`done/` ticket, with the Makefile's inline expectation the last place the old
+answer survived. And a separate PRE-EXISTING defect fell out of the oracle:
+`SizeOf(v)` for a user record *variable* answers 8 on pinned and master where FPC
+says 12 — older, being filed separately rather than folded in.
