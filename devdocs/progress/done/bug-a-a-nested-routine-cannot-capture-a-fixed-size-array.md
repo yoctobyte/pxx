@@ -116,4 +116,4 @@ trade is off the table now.
 - 2026-08-31 — resolved as a duplicate of
   `feature-nested-routine-fixed-array-capture`; multi-dimensional capture stays
   refused, deliberately.
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 22da693a5.
