@@ -1326,6 +1326,15 @@ begin
       pout[nparams] := False;
       pNDims[nparams] := 0;
       pDynDepth[nparams] := LiftCapDyn[lcb + i];
+      { A captured FIXED array becomes exactly the named-fixed-array `var` param
+        the arm below already handles: without the extent it would keep
+        AllocParam's open-array placeholder (ArrLen := 1000) and size a
+        whole-array copy at 1000 elements, and without the low bound IR_INDEX
+        would subtract 0 and put `g[1]` of an `array[1..3]` one slot high.
+        ALWAYS written -- these staging rows are reused across routines, so 0
+        has to clear a previous capture's shape. }
+      pFixedLen[nparams] := LiftCapFixedLen[lcb + i];
+      pFixedLo[nparams] := LiftCapFixedLo[lcb + i];
       pElemRowLen[nparams] := 0;
       pElemRowLo[nparams] := 0;
       pElemDynDepth[nparams] := 0;

@@ -2125,6 +2125,16 @@ var
   LiftCapRec         : array[0..MAX_LIFT_CAPS-1] of Integer;
   LiftCapArr         : array[0..MAX_LIFT_CAPS-1] of Boolean;
   LiftCapDyn         : array[0..MAX_LIFT_CAPS-1] of Integer;
+  { A captured FIXED-size array's shape. A dynamic array is self-describing at
+    runtime (LiftCapDyn > 0, ArrLen := -1), but a fixed one carries its extent
+    only in its TYPE, and the enclosing Syms slot is recycled before the lifted
+    body is parsed -- so the element count and low bound have to be snapshotted
+    here or the lifted `var` param inherits AllocParam's open-array placeholder
+    (ArrLen := 1000) and indexes off a lo of 0. Both are what pFixedLen/pFixedLo
+    already carry for an ordinary named-fixed-array param. 0 = not a fixed
+    array. }
+  LiftCapFixedLen    : array[0..MAX_LIFT_CAPS-1] of Integer;
+  LiftCapFixedLo     : array[0..MAX_LIFT_CAPS-1] of Integer;
   LiftCapPtrTk       : array[0..MAX_LIFT_CAPS-1] of TTypeKind;
   LiftCapPtrRec      : array[0..MAX_LIFT_CAPS-1] of Integer;
   { ...and the rest of the captured pointer's identity, so a nested routine that

@@ -1,11 +1,12 @@
 ---
 prio: 50
+owner: frankA
 ---
 
 # Nested routines: capture of fixed-size array locals not supported
 
 - **Type:** feature gap (frontend/codegen — nested-routine uplevel access) — **Track A**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-11, filed from Track B (feature-dns-resolver-library) while
   writing `DnsParseIpv6` in `lib/rtl/dns_config.pas`.
 

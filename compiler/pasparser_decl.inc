@@ -6597,6 +6597,8 @@ var
   capPtrDepth, capPtrBaseTk, capPtrBaseRec: array[0..MAX_NEST_CAPS-1] of Integer;
   capPtrTk: array[0..MAX_NEST_CAPS-1] of TTypeKind;
   capArr: array[0..MAX_NEST_CAPS-1] of Boolean;
+  capFixedLen: array[0..MAX_NEST_CAPS-1] of Integer;
+  capFixedLo: array[0..MAX_NEST_CAPS-1] of Integer;
   capActOff: array[0..MAX_NEST_CAPS-1] of Integer;
   capCount: Integer;
   core: array[0..2*MAX_NEST_CAPS+3] of TRawToken;
@@ -6792,15 +6794,34 @@ begin
               capRec[capCount] := Syms[sidx].ElemRecName;
               capArr[capCount] := True;
               capDyn[capCount] := SymDynDepth[sidx];
+              capFixedLen[capCount] := 0;
+              capFixedLo[capCount] := 0;
             end
+            else if Syms[sidx].IsArray and (SymArrNDims[sidx] >= 2) then
+              Error('nested routine: capture of multi-dimensional array ''' + nm +
+                    ''' not yet supported (1-D fixed arrays are)')
             else if Syms[sidx].IsArray then
-              Error('nested routine: capture of fixed-size array ''' + nm + ''' not yet supported')
+            begin
+              { Fixed-size array: lift it exactly as a named-fixed-array `var`
+                param, which already works (ParseSubroutine's pFixedLen/pFixedLo
+                arm). Only the SHAPE has to travel -- the enclosing symbol is
+                recycled before the lifted body is parsed, so reading it later
+                is not an option. }
+              capTk[capCount] := Syms[sidx].ElemType;
+              capRec[capCount] := Syms[sidx].ElemRecName;
+              capArr[capCount] := True;
+              capDyn[capCount] := 0;
+              capFixedLen[capCount] := Syms[sidx].ArrLen;
+              capFixedLo[capCount] := Syms[sidx].ConstVal;
+            end
             else
             begin
               capTk[capCount] := Syms[sidx].TypeKind;
               capRec[capCount] := Syms[sidx].RecName;
               capArr[capCount] := False;
               capDyn[capCount] := 0;
+              capFixedLen[capCount] := 0;
+              capFixedLo[capCount] := 0;
             end;
             capPtrTk[capCount] := Syms[sidx].PtrElemTk;
             capPtrRec[capCount] := Syms[sidx].PtrElemRec;
@@ -6859,6 +6880,8 @@ begin
     LiftCapRec[LiftCapTot]    := capRec[k];
     LiftCapArr[LiftCapTot]    := capArr[k];
     LiftCapDyn[LiftCapTot]    := capDyn[k];
+    LiftCapFixedLen[LiftCapTot] := capFixedLen[k];
+    LiftCapFixedLo[LiftCapTot]  := capFixedLo[k];
     LiftCapPtrTk[LiftCapTot]  := capPtrTk[k];
     LiftCapPtrRec[LiftCapTot] := capPtrRec[k];
     LiftCapPtrDepth[LiftCapTot]   := capPtrDepth[k];

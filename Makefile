@@ -11815,6 +11815,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_nested_dynarray26 "$$($(TESTTMP)/test_nested_dynarray26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_nested_dynarray_alias.pas $(TESTTMP)/test_nested_dynarray_alias26
 	tools/expect_same.sh test_nested_dynarray_alias26 "$$($(TESTTMP)/test_nested_dynarray_alias26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_nested_fixed_array_capture.pas $(TESTTMP)/test_nested_fixed_array_capture26
+	tools/expect_same.sh test_nested_fixed_array_capture26 "$$($(TESTTMP)/test_nested_fixed_array_capture26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_managed_field_reassign.pas $(TESTTMP)/test_dynarray_managed_field_reassign26
 	tools/expect_same.sh test_dynarray_managed_field_reassign26 "$$($(TESTTMP)/test_dynarray_managed_field_reassign26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_fixed_array_of_dynarray.pas $(TESTTMP)/test_fixed_array_of_dynarray26
