@@ -6572,6 +6572,24 @@ test-core: $(COMPILER)
 	# ...and the half that RUNS: output verified against fpc 3.2.2.
 	./$(COMPILER) test/test_param_row_external_forward_ok.pas $(TESTTMP)/test_prowok26
 	tools/expect_same.sh test_prowok26 "$$($(TESTTMP)/test_prowok26)" "ok 5 42 8 15 TRUE 4 12 3 13 35"
+	# x86-64 SetLength no longer zeroes the block it just allocated: the inline
+	# lowering's `rep stosb` was zeroing bytes PXXAlloc had already zeroed. That
+	# makes three call sites DEPEND on PXXAlloc's contract, invisibly at each of
+	# them, so this file is the guard. Sizes straddle both zeroing thresholds
+	# (MEMZERO_REP_MIN, ALLOC_INLINE_ZERO_MAX) and the largest is past
+	# HEAP_BIN_MAX onto the first-fit path; every array is poisoned with $$FF and
+	# freed BEFORE it is reallocated, so the block comes back off its bin dirty.
+	# NON-VACUOUS, ASSERTED: disabling PXXAlloc's inline zero arm makes this
+	# print 90 and 780 instead of 0 and 0.
+	# NATIVE ONLY, DELIBERATELY -- and this is a measurement, not an omission.
+	# The cross backends lower SetLength through PXXDynSetLen/PXXStrSetLen, which
+	# still zero the data a second time, so on aarch64/arm32/i386 the SAME
+	# control prints 0 and 0: the test cannot fail there and would be a guard
+	# that cannot fail. test_heap_zero_on_reuse.pas is the all-targets guard for
+	# the allocator contract itself; this one guards the x86-64 removal.
+	# feature-opt-heap-per-thread-cache
+	./$(COMPILER) test/test_heap_alloc_zeroed.pas $(TESTTMP)/test_hazero26
+	tools/expect_same.sh test_hazero26 "$$($(TESTTMP)/test_hazero26)" "$$(cat test/test_heap_alloc_zeroed.expected)"
 	# A class that is its own ancestor through a CHAIN is refused, and the
 	# refusal REPORTS rather than spinning. This hung the compiler forever with
 	# no output, no exit and no error: ~72 sites step UClsParent across five

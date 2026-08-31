@@ -325,3 +325,62 @@ the target arrives as a pointer deref and the SetLength classifier recognised
 only a deref whose pointee was a dynamic *array*. `s := s + 'x'` in the same
 body compiled. Fixed in the shared classifier, so all five targets went green at
 once.
+
+## 2026-08-31 (frankS) — the double zeroing IS real and IS worth 1.1-1.5x. It has a SECOND implementation, and x86-64 runs the other one
+
+Not a contradiction of the retraction above — a correction to its **scope**, and
+the retraction's own numbers are the evidence. Removing `PXXDynSetLen`'s second
+pass measured **1.00x at every size including 1 MB**. The reason is not that a
+redundant `rep stosb` is free at 1 MB. It is that **`PXXDynSetLen` is the CROSS
+backends' SetLength and x86-64 never calls it.** The host it was measured on
+lowers `SetLength` inline in `ir_codegen.inc` (`specialId = 102`), and that
+lowering had its own `rep stosb` over the new slots, three instructions after
+`EmitHeapAllocLocked` returned a block PXXAlloc had already zeroed.
+
+So the deleted call was dead code on the measuring host, and a flat 1.00x from
+8 B to 1 MB is what a dead path looks like. Reading it as "the second pass is
+free" required the 1 MB row to mean that 20 GB of extra stores cost nothing;
+reading it as "the second pass never ran" costs nothing to believe.
+
+**Removing the x86-64 one**, `3b0833e71eaf -> eff141f03d41`, min of 7
+interleaved, 3M x `b := nil; SetLength(b, n)`:
+
+| payload | with the fill | without | gain | FPC 3.2.2 |
+| --- | --- | --- | --- | --- |
+| 8 B | 0.27 | **0.24** | 1.13x | 0.19 |
+| 32 B | 0.30 | **0.25** | 1.20x | 0.20 |
+| 128 B | 0.32 | **0.29** | 1.10x | 0.20 |
+| 256 B | 0.35 | **0.30** | 1.17x | 0.23 |
+| 512 B | 0.35 | **0.28** | 1.25x | 0.26 |
+| 1024 B | 0.44 | **0.34** | 1.29x | 0.49 |
+| 2048 B | 0.68 | **0.46** | 1.48x | 0.64 |
+
+It grows with size, as duplicated work should. On `Copy(arr)` it was a THIRD
+pass, because the `rep movsb` right after overwrites the prefix again.
+
+### The measurement that settles which path runs where, rather than arguing it
+
+`test/test_heap_alloc_zeroed.pas` with PXXAlloc's inline zero arm disabled:
+
+| target | control prints |
+| --- | --- |
+| x86-64 | **90 / 780** — nothing else zeroes; the dependency is live |
+| aarch64 | 0 / 0 |
+| arm32 | 0 / 0 |
+| i386 | 0 / 0 |
+
+The three cross targets still zero twice, which is exactly why the same control
+cannot fail there. That is also why the test is wired **native only** — on the
+cross targets it would be a guard that cannot fail.
+
+### What this leaves open, stated as a question and not as a plan
+
+The cross backends still double-zero, and **nobody has measured that**, because
+the only measurement of it was taken on the host where the path is dead. The
+concern behind not landing it stands on its own merits — it moves a correctness
+guarantee onto a contract established a call away — and it is now the same
+dependency x86-64 already took, with `test_heap_alloc_zeroed` as the guard that
+would have to be made to fail there first.
+
+Claim 1 (threaded contention, 3.3x slower than serial) remains untouched by all
+of this, and its 2026-07-20 numbers remain unverified.

@@ -9167,16 +9167,27 @@ begin
             EmitB($48); EmitB($8D); EmitB($78); EmitB($18);  { lea rdi, [rax+24] (new data) }
             EmitB($57);                     { push new data pointer }
 
-            { Zero all new slots, then copy the preserved old prefix over it. }
-            if elemSize = 8 then
-              begin EmitB($48); EmitB($C1); EmitB($E1); EmitB($03); end
-            else if elemSize > 1 then
-              begin
-                EmitB($48); EmitB($C7); EmitB($C0); EmitI32(elemSize);
-                EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
-              end;
-            EmitB($31); EmitB($C0);          { xor eax, eax }
-            EmitB($F3); EmitB($AA);          { rep stosb }
+            { NO ZERO-FILL HERE, DELIBERATELY -- the new slots are ALREADY zero.
+              EmitHeapAllocLocked calls PXXAlloc, whose contract is a zeroed
+              payload on every path (bin reuse and the large free list zero
+              explicitly, bump is virgin mmap memory, the ESP/libc profiles get
+              it from calloc), and the request just above spans the 24-byte
+              header AND the data. A `rep stosb` over the data therefore zeroed
+              bytes PXXAlloc had just zeroed -- and on `Copy(arr)` a THIRD time,
+              because the `rep movsb` below overwrites the prefix again.
+
+              THIS IS THE X86-64 SITE AND IT IS NOT PXXDynSetLen. That routine
+              is the CROSS backends' SetLength; x86-64 lowers SetLength inline
+              here and never calls it, which is why removing the redundant pass
+              from PXXDynSetLen measures 1.00x on this host at every size
+              (feature-opt-heap-per-thread-cache, frankA's retraction) while
+              removing it HERE is worth 1.2-1.3x on the same benchmark. Same
+              redundancy, two implementations, and only one of them runs.
+
+              The in-place ansistring grow further up keeps ITS `rep stosb`:
+              nothing was allocated on that path, so nothing zeroed the bytes
+              between the old and the new length. Only the post-allocation fill
+              is redundant. feature-opt-heap-per-thread-cache }
 
             EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);           { mov rdi, [rsp] = new data }
             EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi, [rsp+8] = old data }
