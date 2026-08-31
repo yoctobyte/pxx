@@ -102,6 +102,38 @@ ALLOWED = {
         "builds a throwaway git repo under tempfile and writes both the "
         "request queue and a runs-box.ndjson fixture into ITS tstate; it "
         "asserts on that fixture and never opens the checkout's own",
+    # The three below became VISIBLE to this guard on 2026-08-31, when the
+    # positive control forced PATH_JOIN to cover `Path(x) / TSTATE_REL`. They
+    # are not new files and they were never exempt -- the detector simply could
+    # not see the idiom they use, so they had been slipping the sweep for as
+    # long as they have existed. Categorised by reading each one, not waved
+    # through: in all three the mkdtemp is the line immediately above the join.
+    "twatch_clone_clean_devtest.py":
+        "same fixture case: mkdtemp at line 38, then (tmp / TSTATE_REL) at 39 "
+        "to plant an xeon.json; line 58 reads back out of the FakeClone's own "
+        "path, never the checkout's",
+    "twatch_host_epoch_devtest.py":
+        "same fixture case: mkdtemp at line 38, join at 39; lines 56/67 join "
+        "TSTATE_REL onto clone.path, which is that fixture's clone. Line 52 is "
+        "an assertion about the CONSTANT's shape and opens nothing",
+    "twatch_quiet_host_devtest.py":
+        "same fixture case: mkdtemp at line 68 and the join at 69, so "
+        "regen_index has a scratch tstate to write TSTATE.md into; it reads "
+        "back only what it just generated",
+    "trackt_remote_health_devtest.py":
+        "same fixture case: make_repo() joins TSTATE_REL onto the "
+        "TemporaryDirectory() it was handed (line 39) and writes its own "
+        "runs-<host>.ndjson rows there. It never opens the repo's archive -- "
+        "which is load-bearing here rather than incidental, because the code "
+        "under test picks the NEWEST published verdict across hosts and "
+        "compares its age to a threshold; against the live archive the "
+        "assertions would pass or fail on what the watcher happened to publish "
+        "in the last hour",
+    "twatch_cascade_qualifier_devtest.py":
+        "same fixture case: make_repo() git-inits a repo under tempfile (line "
+        "45) and commits a docs/tstate-only change and a compiler/ one, so "
+        "bad_qualifier has real shas of each shape to classify. The tstate "
+        "path it writes is that fixture's, never the checkout's",
     "autotriage.py":
         "reads tstate off the REF by default (git show origin/master:...) — the "
         "path join remains only for the explicit `--rev ''` worktree opt-in, "
@@ -112,8 +144,14 @@ ALLOWED = {
 # tstate at length in its comments and touches none of it — so a bare mention
 # must not trip this, or the guard gets muted as noisy, which is how enforcement
 # dies.
+# The second alternative was added 2026-08-31 because the positive control
+# below caught its absence on the control's FIRST run: `Path(clone) / TSTATE_REL`
+# put TSTATE outside the parens, so the pathlib-division idiom -- the natural one
+# in any file already using Path -- was invisible to the sweep. Uppercase is
+# deliberate; it keeps prose mentioning devdocs/progress/tstate from tripping.
 PATH_JOIN = re.compile(
-    r"(?:os\.path\.join|Path)\s*\([^)]*(?:TSTATE|devdocs/progress/tstate)", re.S)
+    r"(?:os\.path\.join|Path)\s*\([^)]*(?:TSTATE|devdocs/progress/tstate)"
+    r"|/\s*(?:\w+\.)?TSTATE\w*", re.S)
 
 
 def case_no_unlisted_tool_reads_tstate_by_path():
@@ -129,6 +167,41 @@ def case_no_unlisted_tool_reads_tstate_by_path():
         "route them through twatch.materialize_tstate()/states_at(), or add "
         "them to ALLOWED with the reason" % ", ".join(offenders))
     return f"{len(ALLOWED)} allowed, all argued"
+
+
+def case_the_detector_can_still_fail():
+    """POSITIVE CONTROL for the sweep above, which is the case that can rot.
+
+    `case_no_unlisted_tool_reads_tstate_by_path` asserts an EMPTY offender list.
+    That assertion passes just as cleanly when PATH_JOIN has stopped matching
+    anything at all -- a tightened regex, a renamed constant, a refactor that
+    moves the join behind a helper -- and it would go on printing PASS while
+    enforcing nothing. A guard that cannot fail is not a guard.
+
+    It has fired for real (2026-08-31, on two devtests added that morning), but
+    "it fired once" is history, not a property. So pin the detector's BOTH
+    directions against literals, here, where a change to PATH_JOIN has to face
+    them.
+    """
+    must_match = [
+        'tdir = os.path.join(tmp, twatch.TSTATE_REL)',
+        'p = os.path.join(root, "devdocs/progress/tstate", name)',
+        'Path(clone) / TSTATE_REL',
+    ]
+    for src in must_match:
+        assert PATH_JOIN.search(src), \
+            "PATH_JOIN no longer detects a real tstate path join: %r — the "\
+            "sweep above is now vacuous and will keep reporting PASS" % src
+    must_not_match = [
+        '# testmgr discusses devdocs/progress/tstate at length in comments',
+        'print("see devdocs/progress/tstate for the archive")',
+    ]
+    for src in must_not_match:
+        assert not PATH_JOIN.search(src), \
+            "PATH_JOIN now trips on prose (%r) — a noisy guard gets muted, "\
+            "which is how enforcement dies" % src
+    return "%d joins detected, %d prose mentions ignored" % (
+        len(must_match), len(must_not_match))
 
 
 def case_the_shared_helper_exists_and_is_whole():
@@ -197,6 +270,7 @@ def case_helper_falls_back_rather_than_raising():
 
 CASES = [
     case_no_unlisted_tool_reads_tstate_by_path,
+    case_the_detector_can_still_fail,
     case_the_shared_helper_exists_and_is_whole,
     case_detachment_is_detected,
     case_helper_falls_back_rather_than_raising,
