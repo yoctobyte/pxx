@@ -6,7 +6,8 @@ status: open
 found: 2026-08-31
 found-by: frankC
 owner: frankC
-summary: "A C function taking a struct BY VALUE is compiled to take a POINTER, on every target. Self-consistent inside pxx, so every existing test passes; a gcc caller passes the struct bytes, our callee dereferences the first word as an address, SEGFAULT. Confirmed at instruction level: take_p2 does `mov %rdi,-0x8(%rbp)` then `movslq (%rax)` on it. GATE NOW EXISTS and is RED: `make test-c-abi-mixed-link` (gcc main + pxx object, both call directions, x86-64 and i386 -- no gcc cross exists for the other targets), unwired while this is open. Root cause is one predicate: ABIParamSlotIsPointer returns True for tyRecord, so the whole C-ABI family allocates one pointer slot where the psABI wants the aggregate classified into eightbytes. Two things the first pass got wrong and are now corrected: the ir_codegen.inc warning about a duplicate SysV prologue in cparser.inc is STALE (the collapse is done, and its line citation had drifted onto unrelated code) so there is ONE site; and i386 has a PRIOR gap -- it refuses by-value records in any convention, Pascal included, so it needs them at all before it can have them correctly. Lands whole per target or not at all: a partial classification shifts every later parameter, which is how the xtensa two-of-three state turned data loss into active corruption."
+summary: "A C function taking a struct BY VALUE is compiled to take a POINTER. Self-consistent inside pxx, so every existing test passes; gcc passes the struct bytes, our callee dereferences them as an address, SEGFAULT on x86-64 and i386. ROOT CAUSE FOUND and it is a DELIBERATE DESIGN, not an oversight: cparser.inc:11107 marks every C struct param isRef:=True with a comment saying so -- the caller copies to a temp and passes &temp, which gives correct by-value SEMANTICS at any size but is not the ABI gcc implements. Pascal differs (pasparser_proc.inc:2284): <=8 bytes by value, >8 by reference, so Pascal is SysV-correct below 8 bytes by construction and equally wrong above it. SysV wants eightbyte classification up to 16 and MEMORY beyond. So the work is REPLACING a working convention with the psABI one, not repairing a broken one -- bigger than the first filing implied. GATE BUILT and RED: `make test-c-abi-mixed-link` (gcc main + pxx object, both call directions, x86-64 and i386; no gcc cross exists for the other targets), unwired while this is open. If split, split at 8 bytes: <=8 occupies one slot under both schemes so it cannot shift a later argument, and above 8 the slot count changes, which is where the xtensa two-of-three state turned data loss into active corruption."
+
 
 ---
 
@@ -130,13 +131,57 @@ supported yet` (`ir_codegen.inc:1279`, since 2797638e5, 2026-08-21). x86-64,
 arm32, aarch64 and riscv32 all compile and run that same Pascal. So i386 needs
 by-value aggregates at all before it can have them *correctly*.
 
-**Not established, and deliberately not claimed:** whether the INTERNAL (Pascal)
-convention passes a record by value or by pointer on x86-64. The Pascal probe
-runs correctly, but that is self-consistency again and proves nothing about the
-representation. pxx executables carry no section headers so `objdump -d` reads
-nothing; measuring it needs a different instrument. Whoever takes this should
-settle it first — if the internal convention already copies bytes, the machinery
-is there to reuse.
+## ROOT CAUSE, and it is a DELIBERATE DESIGN, not an oversight
+
+Settled with gdb (`-g`, then `disassemble` — `objdump -d` reads nothing from a
+pxx executable, which carries no section headers; gdb reads the program headers).
+The IR is identical for both frontends (`lea sym=p` then `field`), so the
+divergence is entirely in how the symbol is FLAGGED.
+
+**`cparser.inc:11107` marks every C struct parameter `isRef := True`, on
+purpose, and says so:**
+
+> *"A C record param is by-value but passed via the by-ref ABI (an 8-byte
+> pointer slot the callee derefs); the caller copies the record to a temp and
+> passes &temp (IRLowerCallArg), giving true by-value with correct field access
+> for records of ANY size (the inline 8-byte slot could not hold >8B)."*
+
+That is a coherent scheme. It delivers correct by-value *semantics* at every
+size — it is simply not the *ABI* gcc implements. `isRef` then makes
+`ABIParamSlotHoldsValueAddr` true, and `IR_LEA` lowers to `mov` (load the
+pointer) instead of `lea` (address of the slot).
+
+**Pascal's rule is different and size-dependent** (`pasparser_proc.inc:2284`,
+*"Records larger than a qword are passed by reference"*):
+
+| | <= 8 bytes | > 8 bytes |
+| --- | --- | --- |
+| Pascal | by VALUE in a register (`isRef` False -> `lea`) | by reference (`mov`) |
+| C | by reference, ALWAYS | by reference |
+| **SysV wants** | eightbyte-classified in registers, up to 16 | **MEMORY: bytes on the stack** |
+
+Measured, x86-64, same 8-byte `{int a, b;}`:
+
+```
+Pascal TakeP2:  mov %rdi,-0x8(%rbp) ; lea -0x8(%rbp),%rax ; movslq (%rax)
+C      take_p2: mov %rdi,-0x8(%rbp) ; mov -0x8(%rbp),%rax ; movslq (%rax)
+```
+
+One instruction apart. Pascal's arm is SysV-correct here by construction; the C
+arm dereferences the data gcc put in `rdi`. Pascal's `TakeP4`/`TakeP6`/`TakeD2`
+all use `mov`, so Pascal is equally non-psABI above 8 bytes — it just happens to
+agree below it.
+
+**So this is not "restore a broken path", it is "replace a working convention
+with the psABI one"** on the C side, and extend it above 8 bytes on both. That
+is a larger and more deliberate change than the original filing implied, and it
+is why the estimate belongs in the ticket rather than in someone's head.
+
+**The one genuinely safe increment, if this gets done piecewise:** a record of
+<= 8 bytes occupies ONE slot under both schemes, so switching it from
+pointer-to-copy to by-value cannot shift any later argument. Above 8 bytes the
+slot count changes, which is exactly where the xtensa two-of-three corruption
+lives. If you split this, split it there.
 
 **Why this was not started here:** partial aggregate classification is worse
 than none. The precedent is in this repo — a two-of-three xtensa state
