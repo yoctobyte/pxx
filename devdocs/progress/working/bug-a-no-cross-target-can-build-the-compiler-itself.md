@@ -358,3 +358,33 @@ env PXXPAD=$(head -c 100 /dev/zero | tr '\0' x) qemu-arm <arm32-pascal26> --targ
 ```
 
 Gate: no code changed; ticket text only. Nobody is on the bisect.
+
+#### Correction to the row above, and one more dead theory (frankA, 2026-08-31)
+
+**"SEGV on all seven targets" was my process, not the bug.** 4de6ac439 is right:
+replicated on *my* binary (`7dd26baa7a80`), with binary, source, argv and cwd all
+fixed and only the length of one exported variable varying —
+
+`pad=0 SEGV · 10 SEGV · 50 SEGV · 100 OK · 200 OK · 400 OK · 1000 SEGV · 2000 OK · 3000 SEGV`
+
+— so the target set I published was one sample of a knob I was not holding. What
+survives is the half that was worth having: **the minimal program is enough to
+fault**, so the reduction needs no hello and no RTL string path. What does not
+survive is any table of which targets work.
+
+**Not stack exhaustion, which was the best remaining theory.** The compiler is a
+deep recursive-descent program and env size shifts where the kernel puts the
+initial stack, so "the guest runs off qemu's 8 MB default" fits the signature
+exactly. It is wrong: under `qemu-arm -s 268435456` (a 32x larger stack) the
+sweep is **pass-for-pass identical** — 100/400/2000 clean, 0/10/50/1000/3000
+faulting. The sensitivity is to stack *placement*, not stack *size*.
+
+That is now three dead theories (argv reads, 100 MB BSS in 32 bits, stack size),
+all cheap, none of which explain it.
+
+**And the residual question neither of us has named:** every reading on this
+defect, from both agents, is `qemu-arm`. Nobody has run the arm32 compiler on
+arm32 hardware, so "the arm32 backend miscompiles the big binary" and "qemu-arm
+mishandles it" are not yet separated. The negative controls narrow it — a small
+arm32 program is correct at every pad — but a control that never faults cannot
+tell those two apart either.
