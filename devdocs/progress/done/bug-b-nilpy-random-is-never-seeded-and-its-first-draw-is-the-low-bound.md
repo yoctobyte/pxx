@@ -182,4 +182,4 @@ set-derived)"* — and `fuzz.sh` mutates Pascal sources, whose
 `Randomize`/`RandSeed` surface is behaviourally unchanged by this commit.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 4fa9f66e5.
