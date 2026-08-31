@@ -529,11 +529,11 @@ begin
     too — allocating it in ONE arch's emitter is exactly how it read 0, aliased
     onto BSS[0], in every other.
 
-    The signal-number slot stays here, for the same reason it was moved out of
-    the Pascal driver: allocating in ParseProgram is what left every non-Pascal
-    driver's copy at 0, aliased onto offset 0. This is the only code that
-    writes it, and x86-64 is still its only target. }
-  BSS_SIG_NUM    := BSSSize; Inc(BSSSize, 8);
+    BSS_SIG_NUM used to be allocated HERE too, on the reasoning that x86-64 was
+    its only writer. That reasoning expired the moment a second target parked the
+    number, and it expired the same way the alt stack's did: a slot allocated by
+    ONE arch's emitter is 0 on every other, i.e. aliased onto BSS[0]. It now
+    lives in EnsureSignalBss with the other four dispatch-parked slots. }
 
   { --- restorer --- }
   SigRestorerAddr := CodeLen;
@@ -773,6 +773,14 @@ begin
   BSS_SIG_CODE    := BSSSize; Inc(BSSSize, 8);
   BSS_SIG_ADDR    := BSSSize; Inc(BSSSize, 8);
   BSS_SIG_CTX     := BSSSize; Inc(BSSSize, 8);
+  { The signal NUMBER. Moved here from x86-64's EmitSignalRuntime on 2026-08-31,
+    when the other four hosted targets started parking it — the third time this
+    exact move has been needed (BSS_SIG_HOOKS/_CODE/_ADDR/_CTX out of the Pascal
+    driver, then _ALTSTK/_ALTSS out of x86-64's emitter, now this). Allocating a
+    slot beside its first writer rather than beside ALL its writers is the bug;
+    "x86-64 is still its only target" is a fact with an expiry date, and the
+    comment saying so was true when written and wrong by the time it mattered. }
+  BSS_SIG_NUM     := BSSSize; Inc(BSSSize, 8);
   { The signal ALT STACK and its stack_t descriptor. Allocated HERE, for every
     target, rather than inside x86-64's EmitSignalRuntime where they used to
     live — which is the exact bug the rest of this function exists to prevent:

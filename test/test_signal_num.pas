@@ -15,12 +15,41 @@ program test_signal_num;
   never being written at all (it would then read 0 for every signal and pile
   every count into seen[0]).
 
-  x86-64 only so far — the other four hosted targets install with SA_SIGINFO but
-  do not park the number, and the intrinsic REFUSES there rather than answering
-  0. feature-signal-siginfo-ucontext item 4. }
+  ALL FIVE HOSTED TARGETS as of 2026-08-31 (feature-signal-siginfo-ucontext item
+  4's follow-up slice). It was x86-64 only until then, and the intrinsic REFUSED
+  elsewhere rather than answer 0.
+
+  tkill(gettid(), sig) rather than kill(getpid(), sig), and the two syscall
+  numbers are lifted from test_signal_siginfo.pas rather than looked up fresh:
+  they are already proven on all five targets there, and a wrong getpid number
+  would fail as a *signal that never arrives*, which reads exactly like the
+  dispatch bug this test exists to catch. Self-directed delivery also removes the
+  pid round-trip. }
+
+const
+{$ifdef CPUX86_64}
+  SYS_gettid = 186; SYS_tkill = 200;
+{$endif}
+{$ifdef CPUAARCH64}
+  SYS_gettid = 178; SYS_tkill = 130;   { asm-generic unistd }
+{$endif}
+{$ifdef CPURISCV32}
+  SYS_gettid = 178; SYS_tkill = 130;   { asm-generic unistd }
+{$endif}
+{$ifdef CPUARM}
+  SYS_gettid = 224; SYS_tkill = 238;   { ARM EABI }
+{$endif}
+{$ifdef CPUI386}
+  SYS_gettid = 224; SYS_tkill = 238;
+{$endif}
+
 var seen: array[0..64] of Integer; r: Int64;
-function Pid: Int64; begin Pid := __pxxrawsyscall(39, 0, 0, 0, 0, 0, 0); end;
-procedure SendSig(s: Int64); begin r := __pxxrawsyscall(62, Pid, s, 0, 0, 0, 0); end;
+procedure SendSig(s: Int64);
+var tid: Int64;
+begin
+  tid := __pxxrawsyscall(SYS_gettid);
+  r := __pxxrawsyscall(SYS_tkill, tid, s);
+end;
 procedure Hook;
 begin
   seen[__pxxSigNum] := seen[__pxxSigNum] + 1;

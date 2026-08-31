@@ -13235,6 +13235,14 @@ test-i386: $(COMPILER)
 	# frame's `pop eax`) both landed with it.
 	./$(COMPILER) --target=i386 test/test_signal_siginfo.pas $(TESTTMP)/test_i386_siginfo
 	tools/expect_same.sh i386/test_i386_siginfo "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# __pxxSigNum: ONE hook for three signals, counted per number. usr1=2 is
+	# the row that matters -- a hook that merely counted deliveries would pass
+	# with the slot stuck at any single value -- and zero=0 catches a dispatch
+	# stub that never parks the number at all (every count would pile into
+	# seen[0]). This target parks it as of 2026-08-31; before that the
+	# intrinsic refused here rather than answer 0.
+	./$(COMPILER) --target=i386 test/test_signal_num.pas $(TESTTMP)/test_i386_signum
+	tools/expect_same.sh i386/test_i386_signum "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_signum)" "usr1=2 usr2=1 int=1 zero=0"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
@@ -13709,6 +13717,14 @@ test-aarch64: $(COMPILER)
 	# (16 here, 12 on ILP32) cannot pass; the negative SI_TKILL is the sign canary.
 	./$(COMPILER) --target=aarch64 test/test_signal_siginfo.pas $(TESTTMP)/test_aarch64_siginfo
 	tools/expect_same.sh aarch64/test_aarch64_siginfo "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# __pxxSigNum: ONE hook for three signals, counted per number. usr1=2 is
+	# the row that matters -- a hook that merely counted deliveries would pass
+	# with the slot stuck at any single value -- and zero=0 catches a dispatch
+	# stub that never parks the number at all (every count would pile into
+	# seen[0]). This target parks it as of 2026-08-31; before that the
+	# intrinsic refused here rather than answer 0.
+	./$(COMPILER) --target=aarch64 test/test_signal_num.pas $(TESTTMP)/test_aarch64_signum
+	tools/expect_same.sh aarch64/test_aarch64_signum "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_signum)" "usr1=2 usr2=1 int=1 zero=0"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
@@ -13936,6 +13952,14 @@ test-riscv32: $(COMPILER)
 	# measured that. The negative SI_TKILL is the sign canary.
 	./$(COMPILER) --target=riscv32 test/test_signal_siginfo.pas $(TESTTMP)/test_riscv32_siginfo
 	tools/expect_same.sh riscv32/test_riscv32_siginfo "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# __pxxSigNum: ONE hook for three signals, counted per number. usr1=2 is
+	# the row that matters -- a hook that merely counted deliveries would pass
+	# with the slot stuck at any single value -- and zero=0 catches a dispatch
+	# stub that never parks the number at all (every count would pile into
+	# seen[0]). This target parks it as of 2026-08-31; before that the
+	# intrinsic refused here rather than answer 0.
+	./$(COMPILER) --target=riscv32 test/test_signal_num.pas $(TESTTMP)/test_riscv32_signum
+	tools/expect_same.sh riscv32/test_riscv32_signum "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_signum)" "usr1=2 usr2=1 int=1 zero=0"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
@@ -15503,6 +15527,14 @@ test-arm32: $(COMPILER)
 	# the restorer's sigreturn->rt_sigreturn flip landed with it.
 	./$(COMPILER) --target=arm32 test/test_signal_siginfo.pas $(TESTTMP)/test_arm32_siginfo
 	tools/expect_same.sh arm32/test_arm32_siginfo "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# __pxxSigNum: ONE hook for three signals, counted per number. usr1=2 is
+	# the row that matters -- a hook that merely counted deliveries would pass
+	# with the slot stuck at any single value -- and zero=0 catches a dispatch
+	# stub that never parks the number at all (every count would pile into
+	# seen[0]). This target parks it as of 2026-08-31; before that the
+	# intrinsic refused here rather than answer 0.
+	./$(COMPILER) --target=arm32 test/test_signal_num.pas $(TESTTMP)/test_arm32_signum
+	tools/expect_same.sh arm32/test_arm32_signum "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_signum)" "usr1=2 usr2=1 int=1 zero=0"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check

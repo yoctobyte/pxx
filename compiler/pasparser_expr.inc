@@ -4357,16 +4357,12 @@ begin
           CaseEqual(name, '__pxxSigNum')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
-        { __pxxSigNum is x86-64 only for now — the other four hosted targets
-          install with SA_SIGINFO but their dispatch stubs do not park the
-          signal number yet. REFUSING is the point: answering 0 there would be a
-          plausible wrong value in a handler that dispatches on it, which is the
-          failure mode this repo pays most for. Same call slice 1 made when
-          si_code was x86-64 only. }
-        if CaseEqual(name, '__pxxSigNum') and (TargetArch <> TARGET_X86_64) then
-          Error('__pxxSigNum is x86-64 only so far — this target''s signal '
-                + 'dispatch stub does not park the signal number '
-                + '(feature-signal-siginfo-ucontext item 4)');
+        { __pxxSigNum used to refuse everywhere but x86-64, because only that
+          dispatch stub parked the number and answering 0 would have sent every
+          signal to handler 0 — a plausible wrong value in the place hardest to
+          notice. All five hosted stubs park it as of 2026-08-31, so the refusal
+          is gone and the question below (does this target have a signal runtime
+          at all) is the only one left. }
         { Every target that HAS a signal runtime installs it with SA_SIGINFO, so
           this asks that one question and nothing else. It used to read
           `TargetArch = TARGET_XTENSA`, which was a fact about the PLATFORM

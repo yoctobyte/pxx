@@ -297,6 +297,8 @@ begin
     field's true width), so one word is the whole value — no sign word to
     synthesize the way an Int64 slot would have needed. r1 nil is defensive
     only. Hex verified against arm-linux-gnueabi-as. }
+  EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_NUM);   { ip = &num slot }
+  EmitI32($E58C0000);   { str r0, [ip]      sig }
   EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_CTX);   { ip = &ctx slot }
   EmitI32($E58C2000);   { str r2, [ip]      ucontext* }
   EmitI32($E3510000);   { cmp r1, #0 }

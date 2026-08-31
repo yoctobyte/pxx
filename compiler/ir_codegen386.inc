@@ -220,6 +220,8 @@ begin
     is NOT padded and si_addr is at **12**, not 16 as on the 64-bit targets.
     __pxxSigCode is typed Integer (the field's true width), so one dword is the
     whole value. The siginfo pointer being nil is defensive only. }
+  EmitB($8B); EmitB($45); EmitB($08);             { mov eax, [ebp+8]   sig }
+  EmitB($A3); EmitGlobRef(BSS_SIG_NUM);           { mov [num], eax }
   EmitB($8B); EmitB($45); EmitB($10);             { mov eax, [ebp+16]  ucontext* }
   EmitB($A3); EmitGlobRef(BSS_SIG_CTX);           { mov [ctx], eax }
   EmitB($8B); EmitB($45); EmitB($0C);             { mov eax, [ebp+12]  siginfo* }

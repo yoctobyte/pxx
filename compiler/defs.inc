@@ -4020,8 +4020,11 @@ var
     is deliberately PARAMETERLESS, so a handler that needs to serve several
     signals from one body — which is exactly what an FPC-compatible
     `Signal(sig, handler)` wrapper is — has no other way to learn which one
-    fired. x86-64 only so far; the other targets REFUSE the intrinsic rather
-    than answer 0 (feature-signal-siginfo-ucontext). }
+    fired. All five hosted targets park it as of 2026-08-31; until then it was
+    x86-64 only and the intrinsic REFUSED elsewhere rather than answer 0, which
+    would have sent every signal to handler 0 (feature-signal-siginfo-ucontext
+    item 4). Allocated in EnsureSignalBss, NOT in one arch's emitter -- see the
+    note there. }
   TlsMainInstalled: Boolean;     { the entry-point code that installs the main thread's TLS block was emitted -- false for --emit-obj/--shared, which have no ELF entry, so anything reading gs: must fall back }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TLS_BLOCK_SIZE bytes); cloned threads carve theirs off their own stack }
   BSS_SIG_NUM     : Integer;

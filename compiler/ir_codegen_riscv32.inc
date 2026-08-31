@@ -81,6 +81,8 @@ begin
     __pxxSigCode is typed Integer (32-bit signed, the field's true width), so
     unlike x86-64 there is no sign word to synthesize — which is exactly why the
     intrinsic was retyped before this target landed. a1 nil is defensive only. }
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_NUM);
+  rv32_sw(reg_a0, reg_t1, 0);
   EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_CTX);
   rv32_sw(reg_a2, reg_t1, 0);
   bNoSi := CodeLen; rv32_beq(reg_a1, reg_zero, 0);  { -> .nosi (patched) }

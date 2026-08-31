@@ -244,6 +244,9 @@ begin
     is defensive only (a handler installed without SA_SIGINFO by other means):
     two instructions to turn a would-be handler-time SIGSEGV into zeroed slots.
     All hex verified against aarch64-linux-gnu-as. }
+  EmitI32($2A0003EA);   { mov  w10, w0         sig, zero-extended into x10 }
+  EmitLoadGlobAddrA64(9, BSS_SIG_NUM);
+  EmitI32($F900012A);   { str  x10, [x9] }
   EmitLoadGlobAddrA64(9, BSS_SIG_CTX);
   EmitI32($F9000122);   { str  x2, [x9]        ucontext* }
   cbzAt := CodeLen;
