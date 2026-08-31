@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -35,6 +35,9 @@ CTESTSUITE_COMMIT="5c7275656d751de0e68b2d340a95b5681858ed07"
 
 ZLIB_URL="https://github.com/madler/zlib"
 ZLIB_COMMIT="51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"   # v1.3.1 release tag
+BUSYBOX_URL="https://git.busybox.net/busybox"
+BUSYBOX_COMMIT="1a64f6a20aaf6ea4dbba68bbfa8cc1ab7e5c57c4"   # 1.36.1 release
+
 TCC_URL="https://github.com/TinyCC/tinycc"
 TCC_COMMIT="a338258d309c888bde96b2d1f206299231a54ddf"   # mob, 2026-07 snapshot
 
@@ -160,6 +163,22 @@ fetch_commit() {  # $1=url $2=destsubdir $3=commit ; $4.. = sparse paths (option
   rm -rf "$DEST/$sub"; mkdir -p "$DEST/$sub"
   ( cd "$tmp" && tar --exclude=.git -cf - . ) | ( cd "$DEST/$sub" && tar -xf - )
   rm -rf "$tmp"
+}
+
+fetch_busybox() {
+  if present busybox; then say "busybox present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$BUSYBOX_URL" busybox "$BUSYBOX_COMMIT"
+  cat > "$DEST/busybox/PROVENANCE.md" <<EOF
+# busybox Candidate
+Upstream: ${BUSYBOX_URL}
+Commit:   ${BUSYBOX_COMMIT} (1.36.1)
+Licence:  GPL-2.0
+Used by:  tools/busybox_cat_diff.sh -- builds the \`cat\` applet with pxx and
+          diffs its output against gcc's build of the same source, on x86-64
+          and aarch64. That script also CONFIGURES this tree; do not expect
+          \`make defconfig && make\` to work, it fails in networking/tc.c
+          against current kernel headers.
+EOF
 }
 
 fetch_tiny_regex() {
@@ -652,7 +671,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_fpc_rtl; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_rtl_generics; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_fpc_rtl; fetch_zlib; fetch_tcc; fetch_busybox; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_rtl_generics; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -666,6 +685,7 @@ EOF
     fpc-rtl)       fetch_fpc_rtl ;;
     zlib)          fetch_zlib ;;
     tcc)           fetch_tcc ;;
+    busybox)       fetch_busybox ;;
     chess|vice)    fetch_vice ;;
     zengl)         fetch_zengl ;;
     quickjs)       fetch_quickjs ;;
@@ -680,7 +700,7 @@ EOF
     tinycss2)      fetch_tinycss2 ;;
     html5lib)      fetch_html5lib ;;
     nilpy-stack)   fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack|reportlab)" ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack|reportlab)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

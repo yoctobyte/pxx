@@ -11834,6 +11834,17 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_libgen_basename_dirname.c $(TESTTMP)/c_libgen26
 	tools/expect_same.sh c_libgen26 "$$($(TESTTMP)/c_libgen26)" "$$(printf '[/usr/lib] base=[lib] dir=[/usr]\n[/usr/] base=[usr] dir=[/]\n[usr] base=[usr] dir=[.]\n[/] base=[/] dir=[/]\n[.] base=[.] dir=[.]\n[..] base=[..] dir=[.]\n[] base=[.] dir=[.]\n[//] base=[/] dir=[//]\n[///] base=[/] dir=[/]\n[////] base=[/] dir=[/]\n[a//b//] base=[b] dir=[a]\n[/a] base=[a] dir=[/]\n[a/] base=[a] dir=[.]\n[///a///b///] base=[b] dir=[///a]\n[foo.txt] base=[foo.txt] dir=[.]\n[./x] base=[x] dir=[.]\nnull base=[.] dir=[.]')"
+	# crtl's <sys/sysmacros.h> against glibc's. Linux's dev_t is not "major
+	# on top, minor below": it is the split encoding where BOTH fields live in
+	# two pieces, so major() and minor() each read two and OR them. A naive
+	# `(dev >> 8) & 0xfff` agrees for every device on a typical desktop, which
+	# is why getting it wrong is expensive -- it diverges only on the large
+	# minors (loop devices and /dev/pts past 255) a test box does not have.
+	# Those are the rows here, with the majors past 4095 and the makedev round
+	# trip for both.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_sysmacros_dev.c $(TESTTMP)/c_sysmacros26
+	tools/expect_same.sh c_sysmacros26 "$$($(TESTTMP)/c_sysmacros26)" "$$(printf 'makedev(0,0)=0 major=0 minor=0 roundtrip=1\nmakedev(1,3)=259 major=1 minor=3 roundtrip=1\nmakedev(8,0)=2048 major=8 minor=0 roundtrip=1\nmakedev(7,255)=2047 major=7 minor=255 roundtrip=1\nmakedev(7,256)=1050368 major=7 minor=256 roundtrip=1\nmakedev(7,300)=1050412 major=7 minor=300 roundtrip=1\nmakedev(136,1048575)=4293953791 major=136 minor=1048575 roundtrip=1\nmakedev(4095,1)=1048321 major=4095 minor=1 roundtrip=1\nmakedev(4096,1)=17592186044417 major=4096 minor=1 roundtrip=1\nmakedev(1048575,1048575)=4486011736293375 major=1048575 minor=1048575 roundtrip=1\nliteral: major(0x1234)=18 minor(0x1234)=52')"
 	# the same unit included twice, once spelled with a './': one file, allowed
 	./$(COMPILER) test/c_pasunit_twice.c $(TESTTMP)/c_pasunit_twice26
 	tools/expect_same.sh c_pasunit_twice26 "$$($(TESTTMP)/c_pasunit_twice26)" "42"
