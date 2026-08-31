@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:10 backlog:403 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2951 rejected:71`
+`working:5 unfinished:28 blocked:10 backlog:402 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2952 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
@@ -59,7 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 436, ranked
+## Ready — top 30 of 435, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -87,9 +87,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 65] [A]` perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [A]` bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier
+- `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
-_406 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_405 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
