@@ -258,3 +258,70 @@ obviously redundant it looks. That obviousness is exactly what I acted on.
 
 `PXXStrSetLen` has the same shape and was not measured; assume the same answer
 until someone shows otherwise.
+
+## 2026-08-31 (frankA) — claim 1's baseline re-measured, and the two contended mechanisms separated for the first time
+
+**The 2026-07-20 numbers are still directionally right and the absolutes have
+moved.** `examples/parallel/pow.pas --hash sha256`, binary `3b0833e71eaf`, this
+box (12 cores, load ~6), `taskset -c 0` for the serial arm:
+
+| | 2026-07-20 (8 workers) | 2026-08-31 (12 workers) |
+| --- | --- | --- |
+| serial | 63.3 K hash/s | **101 K hash/s** |
+| parallel | 19.2 K hash/s | **29 K hash/s** |
+| speedup | 0.30x | **0.28x** |
+
+Serial throughput is up ~1.6x since filing; the cliff is unchanged. So quote
+0.28x, not 0.30x, and quote the rates not at all without a date.
+
+### The ticket named two contended mechanisms and measured neither separately
+
+It says the spinlock is the cause and adds "AnsiString refcount atomics add a
+second source of the same cache-line ping-pong". Three rows, identical loop
+serial and under `parallel for`, N = 4,000,000, repeated three times:
+
+| | what it contends on | serial | parallel | speedup |
+| --- | --- | --- | --- | --- |
+| **A** `GetMem(64)/FreeMem`, no managed type | heap spinlock ONLY | 250-260 ms | 954-2169 ms | **0.11-0.26x** |
+| **B** copy a **shared** AnsiString handle, no allocation | refcount atomics ONLY | 148-155 ms | 1595-1787 ms | **0.08-0.09x** |
+| **C** `SetLength` churn | both, like sha256 | 364-380 ms | 1366-1536 ms | **0.23-0.27x** |
+
+**Three things fall out, and the second one is the reason to read this table.**
+
+1. **Direction 1 is validated, not merely plausible.** Row A contains no managed
+   type at all — no refcount can be involved — and 12 workers still take it to
+   0.11-0.26x. The spinlock alone is *sufficient* to produce the cliff. A
+   per-thread free-list cache is aimed at the right thing.
+
+2. **C ≈ A, so refcounting on PRIVATE strings costs essentially nothing.** Row C
+   allocates *and* refcounts, and lands on row A's number. The sha256 workload's
+   cliff is the allocator; the ticket's "second source" is not firing there,
+   because each worker's buffers are its own and its refcount words are not
+   shared lines.
+
+3. **Row B is a genuinely separate cliff, and it is the WORST of the three** —
+   consistently 0.08-0.09x, three times worse than A, with **zero allocation in
+   the loop**. A per-thread heap cache cannot touch it. It needs one shared
+   `AnsiString` that every worker copies, which is an ordinary thing to write
+   (a shared prefix, a lookup table, a config string read in a hot loop), and
+   the failure has nothing to do with the heap.
+
+**Row B is a worst case for SHARING, not a general verdict on refcount
+atomics** — every worker hammers one refcount word, so it is the maximally
+contended shape. Row C is the unshared control and shows the same mechanism
+costing nothing. Do not quote B as "refcounting is 11x"; quote it as "a shared
+string handle in a parallel loop is 11x", which is the true and more useful
+claim.
+
+**Filing the third finding separately is deliberate.** It is not this ticket's
+subject, a per-thread cache will not fix it, and folding it in here would leave
+it invisible under a title about the heap.
+
+### Incidental, and it blocked the measurement itself
+
+Writing row C was impossible until `aada606bc`: `SetLength` on a captured
+managed string inside a `parallel for` body was **refused outright**, because
+the target arrives as a pointer deref and the SetLength classifier recognised
+only a deref whose pointee was a dynamic *array*. `s := s + 'x'` in the same
+body compiled. Fixed in the shared classifier, so all five targets went green at
+once.
