@@ -9,7 +9,7 @@ found: 2026-08-31
 found-by: frank-rust
 owner: unassigned
 blocked-by: []
-summary: "MEASURED on x86-64 Linux at 26b5a5d066ed: with --rtl-libc a Pascal binary's raw kernel-entry count falls 75 -> 1 (hello) and 86 -> 1 (try/except), and --rtl-libc --no-signals gives 0. So the entire residual for a non-threaded program is exactly ONE instruction, the rt_sigreturn in ir_codegen.inc:585, emitted via the syscall_raw mnemonic that is never routed through the thunk. It cannot be routed: rt_sigreturn restores the whole context from a signal frame at a fixed offset from rsp, so a call wrapper is a SIGSEGV on the first delivered signal. feature-port-openbsd-libc's acceptance says 'disassembly contains no raw syscall' and its own item 3 says that criterion is wrong and should be raised as a decide-*. This is that ticket. The fork: does OpenBSD pinsyscalls accept a binary whose only kernel entry is a sigreturn, and if not, does the OpenBSD target ship signals-off, use libc's sigreturn path, or is the port infeasible as specified? THE THREADED CASE IS NOW MEASURED (frankS, 2026-08-31): a --threadsafe program goes 198 -> 4 with --rtl-libc and -> 3 with --no-signals, so the clone child stub contributes exactly THREE, each irreducible for a different reason (SYS_clone itself, whose RETURN splits parent and child; arch_prctl installing GS in the child before any libc call is safe; and the child's own SYS_exit, which has no frame to return to). The binary runs correctly. So the full residual is 1 non-threaded, 4 threaded, 0 only with no signals AND no threads."
+summary: "MEASURED, both halves, on x86-64 Linux. NON-THREADED: --rtl-libc takes a Pascal binary 75 -> 1 raw kernel entries, and --no-signals gives 0, so the residual is exactly one rt_sigreturn (ir_codegen.inc:585, emitted via the syscall_raw mnemonic that is never thunked). THREADED (frankS, re-measured independently by frank-rust on test_atomic_counter): 142 -> 4 -> 3, and the three are the clone stub, INDEPENDENT of the rt_sigreturn rather than one instruction double-counted. So the floor is FOUR, not one, and each is irreducible for its OWN reason: rt_sigreturn restores context from a signal frame at a fixed offset from rsp; SYS_clone's RETURN is the point (a wrapper returns into a frame the child does not have); arch_prctl installs GS before TLS exists; and the child's SYS_exit has no frame to return to. None is a missed thunk routing. THE FORK: does OpenBSD pinsyscalls accept a binary whose kernel entries are these four? feature-port-openbsd-libc's acceptance says "disassembly contains no raw syscall" and its own item 3 says that criterion is wrong -- this is that decide. Options: (a) signals off, measured to give 0 non-threaded but still 3 threaded, so it does NOT reach zero; (b) route sigreturn via libc's sigreturn and the clone stub via libc's own thread creation -- recommended, but it is a per-OS contract, not a flag; (c) restate the criterion as PINSYSCALLS COMPLIANCE rather than zero raw syscalls, which is worth doing whichever way the rest lands, because a binary can have four raw syscalls and comply."
 ---
 
 # The measurement
@@ -139,3 +139,54 @@ requires literally zero raw kernel entries from arbitrary text, then:
 
 That third row is the one worth the owner's attention, because it is the only
 one where the answer changes the *shape* of the work rather than a flag.
+
+---
+
+## 2026-08-31 — the threaded half is measured, and it moves the floor from 1 to 4
+
+Filed with *"Not measured: the clone child stub... do not quote 1 as the
+ceiling."* **frankS measured it, and the caveat was load-bearing.**
+
+| program | default | `--rtl-libc` | `+ --no-signals` |
+| --- | --- | --- | --- |
+| non-threaded (`hello`, `try/except`) | 75 / 86 | 1 | **0** |
+| threaded (frankS) | 198 | 4 | **3** |
+| threaded (`test_atomic_counter`, frank-rust) | 142 | **4** | **3** |
+
+Re-measured independently before writing it here. The base figures differ
+because we used different threaded programs; **the residuals — 4 and 3 — match
+exactly**, which is the part the decision rests on. The three surviving sites
+span 0x23 bytes (`41a574`, `41a58a`, `41a597`): one small stub, not three
+scattered call sites.
+
+### The four are independent, and that is what the decision needs
+
+Not one instruction counted four times, and not a thunk-routing gap. Each is
+irreducible **for its own reason** (mechanisms: frankS):
+
+| entry | why it cannot be thunked |
+| --- | --- |
+| `rt_sigreturn` | restores the whole context from a signal frame at a fixed offset from `rsp`; a call wrapper moves `rsp` before the kernel reads it |
+| `SYS_clone` | its **return** is the point — a wrapper returns into a frame the child does not have |
+| `arch_prctl` | installs GS **before TLS exists**, so there is no thread context for a wrapper to run in |
+| child `SYS_exit` | no frame to return to |
+
+**This kills option (a) as a route to zero.** `--no-signals` was measured to give
+0 on a non-threaded program, which made "ship OpenBSD with managed signals off"
+look like a clean escape. On a threaded program it gives **3**. Any option that
+has to reach zero must address thread creation, which is a much larger
+commitment than dropping graceful Ctrl-C.
+
+**It strengthens (c) correspondingly.** Four irreducible entries with four
+distinct mechanisms is not a tidiness problem to be optimised away; it is the
+shape of the target. Restating the criterion as *pinsyscalls compliance* rather
+than *zero raw syscalls* stops being a nicety and becomes the only formulation
+the port can actually satisfy.
+
+### Note on this ticket's own history
+
+The first version of this summary said the residual was "exactly ONE
+instruction". True, and true only for the population I had measured — which the
+body said explicitly and the summary did not carry. **The summary is the part
+everyone reads**, so a scope caveat that lives only in the body is a caveat that
+does not exist. Both figures are now in the summary.
