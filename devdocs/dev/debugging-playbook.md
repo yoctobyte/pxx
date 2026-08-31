@@ -3927,3 +3927,75 @@ find it, the key is wrong. This is the positive-control rule (a guard that
 cannot fail is not a guard, and it prints PASS) applied to a *search* rather
 than to a test — and a search is where it is easiest to forget, because a
 search's output is a list and a list looks like evidence.
+
+## The best positive control is one you FIND, not one you build — look for a case the change must still refuse
+
+The rule above says a search needs a control. The objection to it is always cost,
+and the answer is that the control is usually already sitting in the population
+you are about to sweep.
+
+Worked example, 2026-08-31 (frankA). The `-S` disassembler's prefix scan accepted
+only `$66/$F2/$F3`, so the `$65` (gs) prefix on the new per-thread status slots
+fell through to the raw-byte path and printed `db 65`. The fix widens the scan
+into a **loop** over prefix bytes — and a loop is exactly the shape that fails
+*permissively*: written a little too broadly it swallows bytes it does not
+understand and reports a clean sweep, which looks identical to a correct fix.
+
+The control cost nothing and was not constructed:
+
+```
+hello.pas / compiler.pas       db=0   (the two jobs that were red)  -> must be 0
+test_asm_sse_packed.pas        db=75  -> must STAY 75
+test_asm_avx.pas               db=77  -> must STAY 77
+```
+
+The AVX and SSE-packed programs contain VEX and packed forms this disassembler
+genuinely does not cover and **must** still fall back to `db`. They assert
+nothing in any job, they were red in neither, and they were already in the tree.
+So the sweep proves both directions at once: the fallback *stopped* firing where
+it should and *still fires* where it must.
+
+**The move to copy is the question, not the example.** Before building a control,
+ask: *what in the existing population must this change still refuse?* A widening
+almost always has one — an input outside the widened set, a target the fix does
+not claim, a construct the feature does not cover. Finding it is a grep; building
+one is an afternoon, which is why the control gets skipped.
+
+## A reader that drops a byte it does not know does not report "unknown" — it makes a confident statement about a different instruction
+
+The same bug, read for its blast radius, because it is worse than a cosmetic gap.
+
+`db 65` on its own line is **not** a decode failure. It is a decode of the
+remaining bytes *as if the prefix were absent*: the `mov` behind it rendered as
+`mov r8, [0x00000000]` — an **absolute** access, where the binary holds a
+**per-thread** one. The tool did not error. It answered, fluently, about an
+instruction that is not there.
+
+**The near-miss is the reason this is here** (frankS, whose change it was). Their
+proof that the per-thread form costs a prefix byte rather than a load was a count
+of `0x65` in the raw object bytes: 10 under the new compiler, 0 under the
+control. Had they reached for `-S` instead — *the obvious tool, and the one they
+would have recommended to anyone else* — it would have shown the absolute form,
+they would have read it as "the TLS conversion did not take", and they would have
+gone hunting a codegen bug that does not exist, with a correct change as the
+prime suspect. They got past it by accident.
+
+So: **when you add a byte to the instruction stream, every reader of that stream
+is part of your change's surface.** Disassembler, profiler, coverage tool,
+anything that resyncs. A reader that resyncs *always produces plausible output* —
+that is what resyncing means.
+
+**And the ambiguity can be two characters wide.** In the same hour, frank-rust
+read `db 65` as decimal — `0x41`, a stray REX.B — and had built a story about a
+redundant prefix in the code generator before checking the radix (`DisHexByte`
+settles it in one grep). One ambiguous surface, two entirely different suspects:
+a spurious prefix *from* codegen versus a missing prefix *in* the disassembler.
+Only the second is real, and only the implausible reading was checkable. They
+caught it against themselves; a subtler byte would have entered a ticket as fact.
+
+The companion, also frank-rust's, for anyone diffing a `case` statement for
+per-target node coverage: a grep anchored at line start reported `IR_WRITELN`
+missing from riscv32. It is the trailing label of `IR_WRITE, IR_WRITELN:`. That
+was caught only because "riscv32 cannot write a line" is absurd on its face — so
+**a coverage diff over a `case` needs its own positive control: a node you KNOW
+the backend has, asserted present.**
