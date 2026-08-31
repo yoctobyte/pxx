@@ -2,11 +2,11 @@
 track: A+S
 type: bug
 prio: 40
-status: working
+status: done
 found: 2026-08-30
 found-by: frankS
 owner: frankA
-summary: "Hosted xtensa vs the x86-64 oracle. Re-measured 2026-08-31 at binary f996aace9d75, commit 97e96fc1b (both labelled deliberately -- the old baseline e866cc16d4fe is a BINARY sha in a commit-shaped slot, so no row of the original table can be re-checked by anyone): 140 sources, 116 MATCH / 4 DIFF / 20 CFAIL. ZERO unexplained compiler divergences remain -- of the 4, two are artifacts of a naive oracle comparison, one is a test-coverage gap, and one is Track F float formatting. The slug's `21 cross programs` and the body's `142 sources` are both stale; the denominator is derived from the Makefile and moves."
+summary: "RESOLVED 2026-08-31 at binary b91c0ceab90b, commit d702b0641: 140 sources, 117 MATCH / 3 DIFF / 20 CFAIL, and ZERO unexplained compiler divergences. Of the 3, one is Track F float FORMATTING (filed as bug-f-xtensa-writes-a-double-in-single-width-digits) and two are artifacts of comparing naively to the oracle instead of through the real Makefile recipes. The 20 CFAIL are feature gaps already partitioned into named tickets. The slug's `21 cross programs` and the body's `142 sources` were both stale."
 ---
 
 # Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs
@@ -349,7 +349,31 @@ riscv32   MATCH 127   DIFF 4   CFAIL  8     of 140   (same harness, for contrast
 recipes name today; it was 129 yesterday. The slug's 21 and the body's 142 are
 both stale, which is how three numbers in one ticket came to disagree.
 
-## FINAL — 116/4/20, and nothing unexplained is left
+## RESOLVED — 117/3/20, zero unexplained compiler divergences
+
+**binary `b91c0ceab90b`, commit `d702b0641`**, 140/140 rows, denominator
+asserted. Superseding the 116/4/20 below, which was one sweep earlier.
+
+```
+xtensa    MATCH 117   DIFF 3   CFAIL 20     of 140
+```
+
+The three: `test_cross_float` (Track F formatting, now filed), `test_rtti` and
+`test_signal_altstack` (both sweep artifacts, documented below — **do not
+re-file**). The 20 CFAIL are feature gaps, already partitioned into named
+tickets by the 2026-08-30 handback.
+
+**Fixed in this group:** `test_cross_trunc_round_saturate` (`9da47b2cc`, which
+also fixed riscv32's Single arm — a defect with no ticket), `test_cross_syscall`
+(`97e96fc1b`, a missing test arm that exposed a live `PalBackendMmapAnon` bug),
+`test_asm_ifdef_multiarch` (`d702b0641`, a missing asm arm, now run under both
+ABIs). All three rows are wired into `test-xtensa` rather than excluded.
+
+**Two of the original "divergences" were never compiler bugs and two more were
+my own sweep** — the reconciliation below is the durable part of this ticket,
+because a naive oracle comparison rediscovers those rows by construction.
+
+## Superseded: 116/4/20
 
 **binary `f996aace9d75`, commit `97e96fc1b`** — labelled, because the previous
 baseline `e866cc16d4fe` is a binary sha256 sitting in a slot the sentence reads
@@ -475,3 +499,6 @@ scan as open looks right.
 2. **Reconcile every non-matching row against its Makefile recipe** before
    reporting it — flags, filters, expected literals. That is what turned 6 into
    3, and it only happened because a peer disputed one row.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

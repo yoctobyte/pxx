@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs | A+S | 40→80 | bug | Hosted xtensa vs the x86-64 oracle. Re-measured 2026-08-31 at binary f996aace9d75, commit 97e96fc1b (both labelled deliberately -- the old baseline e866cc16d4fe is a BINARY sha in a commit-shaped slot, so no row of the original table can be re-checked by anyone): 140 sources, 116 MATCH / 4 DIFF / 20 CFAIL. ZERO unexplained compiler divergences remain -- of the 4, two are artifacts of a naive oracle comparison, one is a test-coverage gap, and one is Track F float formatting. The slug's `21 cross programs` and the body's `142 sources` are both stale; the denominator is derived from the Makefile and moves. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why | A | 60→50 | perf | ANSWERED and partly fixed. Profiled: the managed-string + heap runtime is ~47% of a self-compile (PXXStrFromLit 17%, PXXAlloc 10%, PXXFree 8.6%, refcount thunks 8.6%) — resolved through the compiler's own .map file, not DWARF. GetTokenStr built every token string a char at a time and was 17 of the 18 AppendChar samples; fixed in 4b3d34f74 for 13.8% off a self-compile. Top remaining item split out as perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass. FPC oracle now measured: we are 1.28x fpc 3.2.2 on the same file, i.e. inside the 2x band the ticket set as its own de-escalation criterion. Still open: the July-3.4s vs today-21.7s discrepancy. | — |
@@ -648,7 +647,7 @@ _none_
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 | meta-fpc-error-reporting-parity-cluster | U | 10 | meta | Parking lot for the whole FPC error-REPORTING parity cluster: the SEGV default, stack overflow's 202, --mimic-fpc not implying the --fpc-*-errors flags, tier-2 catchable EAccessViolation, and the per-arch gap. All low prio by the recorded principle that a strict flag governs compilation, not death. NOT in scope: emitted nil checks, which are language-level catchability and stay ranked. | — |
 
-## float (23)
+## float (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -656,6 +655,7 @@ _none_
 | bug-b-f-fixed-point-rounding-of-a-tie-goes-down-where-fpc-goes-up | B+F | 15 | bug | Fixed-point rendering of a decimal tie rounds the OTHER WAY from FPC: Format('%.2f', [1.005]) is 1.00 here and 1.01 there, likewise 2.675 -> 2.67 vs 2.68. Ours is the correctly-rounded answer for the actual Double (1.005 is 1.00499999999999989); FPC rounds the decimal literal as written. Pre-existing in FmtFixed, so it hits '%f', '%n', '%m' and FloatToStrF's ffFixed/ffNumber/ffCurrency alike. Last-digit-only — Track F by definition. | — |
 | bug-b-fpc-numeric-compat-floor-ceil-return-float-currency-is-double | B+F | 25 | bug | Two FPC numeric divergences in lib/rtl: Math.Floor/Ceil return Double where FPC returns Integer (and Floor64/Ceil64 are missing), and sysutils declares Currency = Double where FPC's is a fixed-point 4-decimal Int64 — so a money type cannot represent 0.10 | idea-cobol-frontend-feasibility-costing |
 | bug-b-rounding-api-gaps-setroundmode-roundto-lround | B+F | 35 | bug | Per-language rounding DEFAULTS are all correct (Pascal banker's = FPC, C round() half-away = gcc, Python round() = CPython incl. round(2.675,2)=2.67) — but the escape hatches are missing: no SetRoundMode/RoundTo/SimpleRoundTo in lib/rtl/math.pas, no lround/llround in crtl | feature-a-expose-rounding-mode-intrinsic-to-pascal |
+| bug-f-xtensa-writes-a-double-in-single-width-digits-and-a-2-digit-exponent | F+S | 25 | bug | WriteLn of a Double on hosted xtensa prints 10 significant digits and a 2-digit exponent (3.500000000E+00) where every other target prints 17 and 3 (3.5000000000000000E+000). The VALUES are correct -- this is digit count and exponent width only. Last remaining real divergence in the hosted-xtensa differential. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N+F | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
 | bug-nilpy-complex-pow-is-a-few-ulp-off-cpython | B+F | 20 | bug | `(-8) ** (1/3)` answers a complex now, but its imaginary part is 5 ulp low: pylib cannot `uses math`, so complex pow rides hand-rolled sqrt/sin/cos beside PyMathLn/PyMathExp. Every other line of the complex oracle matches CPython exactly. | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N+F | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
@@ -829,9 +829,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2958)
+## done (2959)
 
-2958 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2959 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (71)
 
@@ -1356,7 +1356,6 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
-- **1** — bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
 - **1** — bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults
 - **1** — bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
 - **1** — bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv
