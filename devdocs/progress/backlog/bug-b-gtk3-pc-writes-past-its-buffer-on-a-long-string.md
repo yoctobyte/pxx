@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frank-user
 owner: ""
 blocked-by: []
-summary: "TWO bugs and a MEASUREMENT that may delete both. (1) PC() has no length check: a 1024-char string at slot 3 writes one past CBuf, and at slots 0-2 a long string corrupts the next live slot. (2) NEW, owner 2026-08-31: the four-slot ring is arbitrary and unenforced, so a call taking FIVE PChar parameters reuses a slot the caller still holds -- no long string needed. FIRST JOB IS NOT THE BOUNDS CHECK: the owner recalls AnsiString reserving len+1 for a NUL, and that is CONFIRMED FOR LITERALS (elfwriter.inc:1003; ir_codegen_riscv32.inc:3001 already skips the 8-byte prefix for a frozen string on an external call) but NOT established for runtime-built strings. If runtime strings carry the NUL too, PC() can be DELETED -- pass the char data, and both bugs vanish. Measure that first. The static buffer ruling still stands: no allocation, no ownership scheme -- deleting the copy is the opposite of introducing one."
+summary: "TWO bugs in lib/pcl/gtk3.pas PC(). (1) No length check: a 1024-char string at slot 3 writes one past CBuf; at slots 0-2 a long string corrupts the next live slot. (2) The four-slot ring is arbitrary and unenforced, so a call taking FIVE PChar parameters reuses a slot the caller still holds -- no long string needed. PC() IS NOT DELETABLE, owner 2026-08-31: @s[1] of an EMPTY string is a nil pointer, and NULL is not the same argument as a pointer to \"\" -- PC() always writes a NUL and returns a valid pointer, which is a real job. (NilPy hit this and answered it by making empty strings carry a valid pointer; whether that representation is general is measurement 1.) THREE MEASUREMENTS IN ORDER: (1) is an empty AnsiString nil or a valid pointer, and is Pascal the same as NilPy; (2) do RUNTIME-built strings reserve len+1 for the NUL, or only literals (confirmed for literals: elfwriter.inc:1003, and ir_codegen_riscv32.inc:3001 already skips the prefix for a frozen string); (3) only if both are favourable does the copy go. Likely outcome: PC() survives with a bounds check and deterministic truncation, maybe a non-empty fast path. Owner ruling unchanged: no allocation, no ownership scheme."
 ---
 
 # `PC()` writes past its buffer on a long string
@@ -116,3 +116,41 @@ literals" — and even then the ring-depth bug still needs an answer.
 
 The owner's design ruling above is unaffected either way: no allocation, no
 ownership scheme. Deleting the copy is the *opposite* of introducing one.
+
+## CORRECTION — `PC()` is NOT deletable. The empty string is why. (owner, 2026-08-31)
+
+*"the only issue is with possible empty strings (nil pointer) ... vs pchar and
+nil references etc.. so, the PC() function is likely not obsolete, since we
+cannot simply do `string s=""; pointer p=s[1]; callsome(PChar(p))`."*
+
+The section above proposed deleting `PC()` if runtime strings carry the NUL.
+**That is wrong on its own, and this is the constraint that breaks it:** taking
+`@s[1]` of an **empty** string yields a nil pointer, and `NULL` is not the same
+argument as a pointer to `""`. Many GTK/GLib functions treat them differently —
+some accept `NULL` as "unset", others crash. A pass-through would silently turn
+`SetTitle('')` into `SetTitle(NULL)`.
+
+`PC()` handles this today by construction: it always writes a NUL and returns a
+pointer to it, so an empty string arrives as a valid empty C string. **That is a
+real job and it survives every other change proposed here.**
+
+Prior art the owner cites, and it should be checked before anything is designed:
+**NilPy hit the same problem, and the answer there was to make an empty string
+still carry a valid pointer.** If that representation is general rather than
+NilPy-specific, the pass-through becomes safe after all — which is why it is a
+measurement and not an assumption.
+
+## The three measurements, in order
+
+1. **Is an empty AnsiString a nil pointer, or a valid pointer to a NUL?** And is
+   the answer the same for Pascal and NilPy strings, or did the NilPy fix apply
+   only there? This gates everything else.
+2. **Do runtime-built strings (concat, `SetLength`, computed) reserve `len+1`
+   and store the NUL,** or only literals? Confirmed for literals only so far.
+3. Only if 1 and 2 both come back favourable does the copy go away. Otherwise
+   `PC()` stays and gets a bounds check plus an answer for the ring depth.
+
+**Most likely outcome, stated so nobody over-reads the section above:** `PC()`
+survives, gains a length check with deterministic truncation, and *may* gain a
+fast path that passes char data straight through for a non-empty string whose
+NUL is guaranteed. The empty case goes through the buffer regardless.
