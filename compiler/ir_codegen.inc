@@ -702,31 +702,59 @@ procedure EmitIoLockStubs;
 { --threadsafe statement-atomic console I/O (feature-threadsafe-io-serialization).
   Reentrant owner-tid spinlock: BSS_IO_OWNER holds the owning thread id (0 =
   free), BSS_IO_DEPTH the owner's nesting depth — so a write argument calling a
-  function that itself writes cannot self-deadlock. gettid is one syscall per
-  I/O statement -- see the note at the acquire path for why TLS cannot remove it;
+  function that itself writes cannot self-deadlock. The owner tid comes from the
+  thread's TLS block when the block is provably its own, and from a gettid
+  syscall otherwise -- see the acquire path;
   x86 total-store-order gives the store-release /
   cmpxchg-acquire semantics for free. Clobbers rax/rcx/rsi/r11 — called only at
   statement boundaries, where no evaluation registers are live. }
 var spinStart, d: Integer;
 begin
   IOLockAddr := CodeLen;
-  { The owner tid still costs a gettid SYSCALL PER I/O STATEMENT, and the TLS
-    slot that would remove it is right there -- but it is NOT safe, and the
-    attempt is recorded in feature-a-io-lock-owner-from-tls-not-gettid rather
-    than repeated. A pxx program can host threads it did not create (glibc
-    pthread_create, a callback from a C library). Those threads' thread pointer
-    is not ours, and the base is INHERITED across clone, so a foreign thread
-    reads the main thread's block and would take the main thread's tid as its
-    own -- which makes the reentrancy check answer "already mine" for a lock it
-    does not hold. Silent loss of mutual exclusion, in the primitive whose whole
-    job is mutual exclusion.
-    No content check fixes it: inheritance reproduces the block exactly. The
-    ticket carries the design that does (validate rsp against per-thread stack
-    bounds stored in the block, fall back to gettid on a miss). }
+  { ---- the owner tid, from TLS when the block is provably ours ----
+    This used to be an unconditional gettid SYSCALL PER I/O STATEMENT: measured
+    at 43% of a 400k-Writeln run, one third of all syscalls. The cached tid in
+    slot TLS_SLOT_TID replaces it -- but ONLY behind the stack-bounds check,
+    because the thread pointer is inherited across clone and a thread we did not
+    create (glibc pthread_create; test_multithreading has done exactly this for
+    months) reads the block of whoever created it. Taking that thread's tid
+    would answer "the lock is already mine" for a lock this thread does not
+    hold: silent loss of mutual exclusion, in the primitive whose entire job is
+    mutual exclusion. No content check catches it -- inheritance reproduces the
+    block byte for byte -- so the test is the one thing inheritance cannot fake,
+    the reader's own rsp against the bounds the block's owner recorded.
+    A miss (a foreign thread, a handler on the sigaltstack, or bounds nobody
+    filled) falls through to gettid: correct, just not faster.
+    feature-a-io-lock-owner-from-tls-not-gettid }
+  if TlsMainInstalled then
+  begin
+    { mov rsi, gs:[0] -- the block, through the self-pointer convention
+      IR_TLSBASE reads. Guarded by TlsMainInstalled and not by a runtime test:
+      with --emit-obj/--shared there is no ELF entry, nothing installed a base,
+      and this load would take address 0 rather than return one. }
+    EmitB($65); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(0);
+    EmitAsmX64([
+      'mov rcx, rsp',
+      'cmp rcx, [rsi+%]', 8 * TLS_SLOT_STACK_LO,
+      'jb .iogettid',
+      'cmp rcx, [rsi+%]', 8 * TLS_SLOT_STACK_HI,
+      'jae .iogettid',                 { HI = 0 (bounds unset) always lands here }
+      'mov rsi, [rsi+%]', 8 * TLS_SLOT_TID,
+      'jmp .iohaveowner',
+      '.iogettid:',
+      'mov eax, %', 186,               { gettid }
+      'syscall',
+      'mov rsi, rax',
+      '.iohaveowner:'
+    ]);
+  end
+  else
+    EmitAsmX64([
+      'mov eax, %', 186,               { gettid }
+      'syscall',
+      'mov rsi, rax'
+    ]);
   EmitAsmX64([
-    'mov rax, %', 186,                 { gettid }
-    'syscall',
-    'mov rsi, rax',
     'cmp [@glob], rsi', BSS_IO_OWNER,
     'je +19'                           { already ours -> depth bump (over the 19-byte spin block) }
   ]);
@@ -995,10 +1023,47 @@ begin
     returns glibc's TCB. }
   if EmitObjMode or EmitSharedMode then Exit;
   TlsMainInstalled := True;
-  BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TLS_BLOCK_SIZE);
-  EmitAsmX64(['mov rsi, @glob', BSS_TLS_MAIN]);
-  EmitB($48); EmitB($89); EmitB($36);          { mov [rsi], rsi  (slot 0 = self) }
+  { The block, plus 16 bytes past its end used ONCE, here, as the `struct
+    rlimit` getrlimit writes into. Past the end rather than in a slot, because
+    the slot map is an ABI other code reads and this scratch is not part of it. }
+  BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TLS_BLOCK_SIZE + 16);
   EmitAsmX64([
+    { hi = the stack pointer at process entry. Every later frame is BELOW it, so
+      it is a conservative high bound and needs no rounding. Captured first:
+      everything after this clobbers registers, not rsp. }
+    'mov r8, rsp',
+    'mov r9, @glob', BSS_TLS_MAIN,
+    { getrlimit(RLIMIT_STACK, &scratch) -- the KERNEL's own statement of how far
+      down the main stack may grow, which is also how far down it guarantees
+      nothing else is mapped (mmap_base is placed below that gap). Deriving the
+      span from it beats picking a constant, and a failure needs no branch: the
+      scratch is BSS, so rlim_cur reads 0, the span is 0, and the bounds test
+      can never pass. }
+    'lea rsi, [r9+%]', TLS_BLOCK_SIZE,
+    'mov edi, %', 3,                           { RLIMIT_STACK }
+    'mov eax, %', 97,                          { getrlimit }
+    'syscall',
+    'mov rcx, [r9+%]', TLS_BLOCK_SIZE,         { rlim_cur }
+    { Clamp to 64 MiB. Not a safety margin on the limit itself -- it is the one
+      case the kernel's gap does NOT cover: for an rlimit above ~5/6 of the
+      address space the gap is capped below it, and RLIM_INFINITY would make
+      hi-span wrap. Both then land the low bound in territory that may be
+      mapped. A main stack deeper than 64 MiB simply misses and pays gettid. }
+    'mov r10, %', 64 * 1024 * 1024,
+    'cmp rcx, r10',
+    'jbe .tlsspan',
+    'mov rcx, r10',
+    '.tlsspan:',
+    'mov r10, r8',
+    'sub r10, rcx',                            { lo = hi - span }
+    { The tid, once per process instead of once per I/O statement. }
+    'mov eax, %', 186,                         { gettid }
+    'syscall',
+    'mov [r9], r9',                            { slot 0 = self }
+    'mov [r9+%], rax', 8 * TLS_SLOT_TID,
+    'mov [r9+%], r10', 8 * TLS_SLOT_STACK_LO,
+    'mov [r9+%], r8', 8 * TLS_SLOT_STACK_HI,   { HI LAST -- see the slot map }
+    'mov rsi, r9',
     'mov edi, %', $1001,                       { ARCH_SET_GS -- NOT fs, see below }
     'mov eax, %', 158,                         { arch_prctl }
     'syscall'

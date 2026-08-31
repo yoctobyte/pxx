@@ -632,9 +632,34 @@ const
   TLS_BLOCK_SIZE   = 128;
   { THE slot map. Every runtime user of the block takes its index from here --
     an ad-hoc offset is how two consumers end up sharing a slot, which is a
-    silent wrong VALUE, not a crash. Slots 1..15 are unclaimed. }
+    silent wrong VALUE, not a crash. Slots 4..15 are unclaimed. }
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
-  TLS_SLOT_FIRST_FREE = 1;
+  { The I/O lock's cached owner tid, plus the STACK BOUNDS that say whether this
+    block is REALLY the reading thread's. Both halves are needed and neither is
+    optional: the tid is the prize (it replaces a gettid syscall per I/O
+    statement), the bounds are what make reading it safe.
+
+    Why bounds at all: the thread pointer is INHERITED across clone, so a thread
+    this program did not create -- glibc pthread_create, a callback from a C
+    library -- reads the block of whoever created it and would take that
+    thread's tid as its own. In the I/O lock that is not a stale value, it is
+    the answer "the lock is already mine" for a lock the thread does not hold.
+    No CONTENT check can catch it: inheritance reproduces the block byte for
+    byte, so a magic word, a self-pointer or a version stamp all pass.
+    Ground truth that inheritance cannot fake is the stack -- threads do not
+    share one -- so the reader checks its own rsp against the bounds the
+    block's owner recorded.
+
+    TLS_SLOT_STACK_HI IS WRITTEN LAST AND 0 MEANS "NO BOUNDS". The block starts
+    zeroed, so a thread whose bounds nobody filled fails `rsp < 0` and takes the
+    slow path: correct, just not faster. That is the fail-safe direction, and it
+    is the only reason a half-filled pair is harmless -- writing HI first would
+    leave LO at 0, which every userspace rsp is above.
+    feature-a-io-lock-owner-from-tls-not-gettid }
+  TLS_SLOT_TID      = 1;  { the owning thread's tid, cached once per thread }
+  TLS_SLOT_STACK_LO = 2;  { low bound of the owner's stack, inclusive }
+  TLS_SLOT_STACK_HI = 3;  { high bound, exclusive -- WRITTEN LAST, 0 = unset }
+  TLS_SLOT_FIRST_FREE = 4;
 
   AN_GUIDCONST     = 100; { an INTERFACE type name used as a VALUE -- which in Pascal means
                            exactly one thing, its GUID: `g := IHello`, `Supports(o, IHello, f)`.
