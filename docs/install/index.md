@@ -28,6 +28,43 @@ exist, the signing key's fingerprint will be published here and on the website,
 and verifying against it will be the check that matters — not the address you
 got the file from.
 
+### What a release will carry, and how to check it
+
+No release has been cut yet, so there is nothing to verify today. When one is
+published it will carry two separate files, answering two different questions —
+worth knowing apart, because only the second is unusual:
+
+- **`SHA256SUMS`** — the checksum of the archive itself, published in the
+  GitHub Release. Check it **before extracting**:
+
+  ```sh
+  sha256sum -c SHA256SUMS      # with the .tar.gz beside it
+  ```
+
+  This answers *is this the archive we published?* A site impersonating this
+  project can copy a page; it cannot make its tarball match a hash published in
+  a repository it does not control.
+
+- **`selfcheck.sh`** — shipped inside the bundle, beside `MANIFEST.sha256`. It
+  recompiles every prebuilt binary **on your machine, from the source in the
+  same bundle**, and diffs the result against the manifest.
+
+  ```sh
+  ./selfcheck.sh
+  ```
+
+  This answers the harder question — *are the binaries I was given the ones this
+  source produces?* — and it is a check most compilers cannot offer, because
+  PXX's build is a byte-identical self-host fixed point. It is a statement about
+  determinism of *our own* build; it is not a comparison against any other
+  compiler's output.
+
+The archive itself is not byte-reproducible (gzip records an mtime, and the
+binaries are built fresh), which is exactly why both files exist: `SHA256SUMS`
+pins the artifact, `selfcheck.sh` proves its contents. A **signature** over
+`SHA256SUMS` is the remaining piece and is not in place yet; until it is,
+`SHA256SUMS` is only as trustworthy as the repository serving it.
+
 The root `install.sh` is the friendly setup script. It verifies that a compiler
 can run on the host, writes a ready-to-use `./pxx` wrapper in the project root,
 and optionally offers to install a PATH wrapper, fetch external libraries,

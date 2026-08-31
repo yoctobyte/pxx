@@ -2,16 +2,18 @@
 prio: 50
 track: A
 type: feature
-status: working
-owner: ""
-blocked-by: []
+status: blocked
+owner: frankS
+blocked-by: [decide-release-signing-key-custody]
+summary: "STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one."
 ---
 
 # Verifiable releases: checksums + signatures + the reproducible-build claim
 
 - **Type:** feature (release engineering / supply chain)
 - **Track:** A (core — owns the build + the self-host gate)
-- **Status:** working
+- **Status:** blocked on [[decide-release-signing-key-custody]] for STEP 4 only —
+  steps 1-3 landed 2026-08-31.
 - **Owner:** frankS
 - **Related:** [[feature-web-track-w-bootstrap]] (the download page consumes this)
 
@@ -95,3 +97,73 @@ human.
 Steps 1-3 carry most of the anti-impersonation value the ticket argues for: a
 clone site cannot make its binary match a hash published in a repo it does not
 control, and cannot make it rebuild byte-for-byte at all.
+
+---
+
+## Steps 1-3 done (frankS, 2026-08-31). Step 4 is still the owner's.
+
+### 1. `SHA256SUMS` over the published tarball — done
+
+`tools/release.sh` writes `dist/SHA256SUMS` over `pxx-<tag>.tar.gz` right after
+the archive is created, and `gh release create` now attaches it alongside the
+tarball and `MANIFEST.sha256`. Until now the only published hash was
+`MANIFEST.sha256`, which lives **inside** the bundle — so verifying anything
+meant first unpacking the thing you had not verified.
+
+The two files answer two different questions and both ship:
+
+| file | question | where |
+| --- | --- | --- |
+| `SHA256SUMS` | is this the archive we published? | Release asset, checkable before extracting |
+| `MANIFEST.sha256` | do these binaries rebuild here? | inside the bundle, driven by `selfcheck.sh` |
+
+**Measured, not assumed** — `build_dist` run for real (all four host targets):
+
+```
+==> build: dist/pxx-v0.0.0-test + pxx-v0.0.0-test.tar.gz + SHA256SUMS
+    72ad97c43a7e...  pxx-v0.0.0-test.tar.gz
+$ sha256sum -c SHA256SUMS
+pxx-v0.0.0-test.tar.gz: OK
+```
+
+**Negative control, because a checksum that cannot fail is not a checksum:**
+appending one byte to the tarball makes `sha256sum -c` report `FAILED`, and
+restoring it makes it pass again. Run.
+
+### 2. The reproducible-build doc — done, and one claim deliberately NOT made
+
+In the generated `RELEASE.md` (ships in every bundle) and in
+`docs/install/index.md`. Both say what `selfcheck.sh` actually does — recompile
+each prebuilt binary on the downloader's host from the source in the same bundle
+and diff against the manifest — and both state it as determinism of **our own**
+build, never as a comparison with another compiler's output (CLAIMS discipline).
+
+**The tarball is NOT byte-reproducible and the docs say so.** gzip records an
+mtime and the binaries are built fresh, so two runs of `build_dist` differ. That
+is exactly why both files exist: `SHA256SUMS` pins the artifact, `selfcheck.sh`
+proves its contents. Writing "reproducible release" unqualified would have been
+false in the one place it would be checked.
+
+### 3. Download-page copy — the doc half is done; the website half is W's
+
+`docs/install/index.md` gained a "What a release will carry, and how to check
+it" section. It opens by saying **no release has been cut yet** — verified
+locally, not assumed: `git tag` has no version tags and
+`devdocs/release-notes/CODENAMES` is empty. So the section describes what a
+release will carry rather than implying there is something to download, which is
+the same trap the existing "no binary release channel yet" sentence was already
+avoiding. The **website** copy is Track W's, in the separate repo, and is not
+touched here.
+
+### 4. minisign signature — UNCHANGED, still blocked on the owner
+
+Not attempted. No key generated, no substitute tool. Until a signature exists,
+`SHA256SUMS` is only as trustworthy as the repository serving it — which the
+install doc now says in as many words rather than letting the checksum imply
+more than it carries.
+
+**So this ticket is done except for step 4, which no agent may do.** Leaving it
+open on that one step is what put it at the head of Track A's ready queue where
+nobody could finish it — the situation the 2026-08-25 note already flagged. It
+moves to `blocked/` on `decide-release-signing-key-custody` rather than staying
+ready, so the queue stops offering three finished steps and one impossible one.

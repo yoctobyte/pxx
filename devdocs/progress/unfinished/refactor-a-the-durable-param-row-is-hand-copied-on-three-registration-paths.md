@@ -4,7 +4,7 @@ prio: 45
 type: refactor
 blocked-by: [bug-a-a-nested-routine-cannot-capture-a-fixed-size-array]
 summary: "WRITTEN AND PARKED 2026-08-31, one step from done: the collapse builds and self-hosts (0a7978a21cbc, 1 round) with both guard tests unchanged, and is committed as a PATCH at devdocs/progress/patches/refactor-a-durable-param-row-collapse.patch. It cannot LAND until a `make pin` — the nested PersistParamRow captures 21 fixed-size staging arrays and `pinned` predates fixed-array capture, so the pinned-seed fixedpoint goes RED and the tree would be unbuildable from the pin for every lane. Needs the pin, not more work. Was: ParseSubroutine registers a routine's params on THREE paths — `external` (which then Exits), forward/interface, and the body pass — and each hand-copies the ~20 durable ProcParam* columns. Measured 2026-08-30 BEFORE they were equalised: body wrote all of them, forward 14, external THREE, and that one asymmetry produced three divergences from fpc in both directions. All three copies are now complete, so no defect is open; the DUPLICATION is, and it is a standing trap because a new column added to one copy silently misses the other two. The collapse is written and blocked: the 21 staging arrays are fixed-size locals the compiler cannot capture in a nested routine, and ParseSubroutine is re-entrant so they cannot be globals."
-status: working
+status: unfinished
 owner: frankS
 ---
 
@@ -72,11 +72,12 @@ single write site actually reaches all three registration paths.
 
 ## Written, measured, and parked on a PIN (frankS, 2026-08-31)
 
-**The blocker this ticket was filed under is gone** —
-`feature-nested-routine-fixed-array-capture` landed this morning, so a nested
-`PersistParamRow` capturing the 21 fixed-size staging arrays now compiles. The
-collapse is written and green. It is parked on a *different* dependency, which
-is sequencing rather than engineering.
+**This ticket's ONLY remaining dependency is a `make pin`.** Nothing about
+fixed-array capture is outstanding: it landed this morning (`50fcbddef`), so a
+nested `PersistParamRow` capturing the 21 fixed-size staging arrays now
+compiles, and the collapse is written and green. What it waits on is the pin
+that blesses a compiler containing that capability — sequencing, not
+engineering. Do not read the old dependency as live.
 
 ### What exists
 

@@ -328,7 +328,23 @@ build_dist() {
   cp -a tools/selfcheck.sh "$d/selfcheck.sh" 2>/dev/null || true
   write_release_readme "$d" "$tag" "$codename"
   ( cd "$DIST" && tar czf "pxx-$tag.tar.gz" "pxx-$tag" )
-  echo "==> build: $d + pxx-$tag.tar.gz"
+  # SHA256SUMS over the TARBALL ITSELF, so a downloader can verify BEFORE
+  # extracting. MANIFEST.sha256 (inside the bundle) covers the prebuilt binaries
+  # and is what selfcheck.sh reproduces; until now that was the only hash we
+  # published, so verifying anything meant first unpacking the thing you had not
+  # verified. The two files answer different questions and both ship:
+  #
+  #   SHA256SUMS          is this the archive we published?   (integrity)
+  #   MANIFEST.sha256     do these binaries rebuild here?     (reproducibility)
+  #
+  # Deliberately NOT claiming the tarball is reproducible: gzip stores an mtime
+  # and the freshly-built binaries carry build-time mtimes, so two runs of this
+  # function produce different bytes. The binaries reproduce; the archive
+  # wrapping them does not, and saying otherwise would be the kind of claim
+  # CLAUDE.md's CLAIMS rule exists to stop.
+  ( cd "$DIST" && sha256sum "pxx-$tag.tar.gz" > SHA256SUMS )
+  echo "==> build: $d + pxx-$tag.tar.gz + SHA256SUMS"
+  echo "    $(cat "$DIST/SHA256SUMS")"
 }
 
 # Top-level RELEASE.md documenting the bundle layout, run, and rebuild paths — so
@@ -364,8 +380,24 @@ included source — no separate packages to fetch.
     make bootstrap             # FPC seeds gen0, then it self-hosts (needs fpc)
     make test-fpc              # optional: prove FPC still compiles us (compliance)
 
+## Verify what you downloaded (do this FIRST, before extracting)
+Fetch \`SHA256SUMS\` from the same GitHub Release and check the archive:
+
+    sha256sum -c SHA256SUMS    # with pxx-$tag.tar.gz beside it
+
+A site impersonating this project can copy this page. It cannot make its
+tarball match a hash published in a repository it does not control.
+
 ## Verify reproducibility
     ./selfcheck.sh             # rebuild each binary, diff against MANIFEST.sha256
+
+\`selfcheck.sh\` recompiles every prebuilt binary in \`compiler/\` **on your
+machine, from the source in this bundle**, and diffs the result against
+\`MANIFEST.sha256\`. If it passes, the binaries you were given are the ones this
+source produces — determinism we can offer because the build is a byte-identical
+self-host fixed point, not a claim about any other compiler's output. (The
+archive itself is not byte-reproducible: gzip stores an mtime. \`SHA256SUMS\`
+pins that artifact; \`selfcheck.sh\` is what proves the contents.)
 
 This is a $( [[ "$tag" == *-* ]] && echo "prerelease" || echo "stable release" ); 0.x means the language, ABI, and CLI may still change.
 EOF
@@ -421,7 +453,8 @@ publish() {
     # GitHub's auto-generated notes when none is prepared.
     local notes_args=(--generate-notes) nf="$REPO_ROOT/devdocs/release-notes/$tag.md"
     [[ -f "$nf" ]] && { notes_args=(--notes-file "$nf"); echo "==> release body: $nf"; }
-    gh release create "$tag" "$DIST/pxx-$tag.tar.gz" "$DIST/pxx-$tag/MANIFEST.sha256" \
+    gh release create "$tag" "$DIST/pxx-$tag.tar.gz" "$DIST/SHA256SUMS" \
+      "$DIST/pxx-$tag/MANIFEST.sha256" \
       --title "PXX $tag — $codename" "${notes_args[@]}"
   else
     git tag -a "$tag" -m "PXX $tag — codename $codename"
