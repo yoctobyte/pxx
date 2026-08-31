@@ -2203,6 +2203,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-n-nilpy-ast-based-typing | N | 70 | feature | NilPy: type locals from the AST, like Rust and Zig already do | — |
 | feature-native-arch-binaries | A | 50 | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-nested-anonymous-fixed-array | A | 50 | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
+| feature-nested-routine-fixed-array-capture | A | 50 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
 | feature-net-a-first-connect-by-name | B | 35 | feature | Connect-by-name with A-first, AAAA-fallback ordering | — |
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
