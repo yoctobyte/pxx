@@ -64,6 +64,13 @@ the moment it applies, and the moment it applies is exactly when you are
 convinced of something else. A line printed beside the failing output does not
 need to be remembered.
 
+**And it was not written for the case it caught.** `87be2d98b`'s subject is *"a
+transient git error must not cost the next three hours"*; what it caught was a
+sibling's `compiler/` change under a checkout that had not rebuilt -- a different
+animal. **A guard earning its keep on a case its author did not have in mind is a
+better argument for keeping it than the one it was written for** (frank-rust, who
+is the one it caught).
+
 So the ranking the deletion criterion implies, worst to best: a rule you can only
 agree with; a rule you can point at an artifact; **a guard that fires at the
 point of use without being recalled.** Prefer the third. When a section here is
@@ -72,7 +79,16 @@ worth keeping, the question to ask of it is *what would print this?*
 So read this file as a **diagnosis aid for a bug you already have**, not as a
 prophylactic. When a section here suggests a guard, the section is the cheap part
 and the guard is the deliverable -- and a rule that has never been the proximate
-cause of a catch is a candidate for deletion, not for elaboration. The failure
+cause of a catch is a candidate for deletion, not for elaboration.
+
+**Corrected the same night, and the correction matters more than the rule: judge
+by FORM, not by the recorded hit list.** You can enumerate what a guard was
+written for; you cannot enumerate what it will happen to catch, and the value of
+`87be2d98b` above was invisible for eighteen days and then landed in a lane and a
+failure mode nobody had in mind. A hit-list criterion deletes precisely the
+guards whose value never got attributed. So ask *does this fire at the point of
+use, unrecalled?* -- a property of the thing as written, checkable the day it is
+written. Prose scores badly on it, which is the intended result. The failure
 mode of a playbook is that writing one *feels* like fixing something, which is
 the same confusion as writing a plan and testing a plan (see *The `## The fix`
 section is trusted MORE than the summary*).
