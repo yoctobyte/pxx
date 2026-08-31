@@ -632,4 +632,4 @@ because the honest version of it is "someone would have to reproduce the July
 measurement first", and that is the work, not a follow-up to it.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 45d36ca0e.
