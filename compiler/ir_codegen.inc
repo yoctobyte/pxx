@@ -7972,9 +7972,23 @@ begin
     IR_ALLOCA:
       begin
         { rax = size -> 16-align -> grow the dynamic stack area -> rax = hole.
-          The epilogue's `leave` restores rsp from rbp, so nothing to unwind;
-          call sequences align rsp dynamically and address args relative to
-          the moved rsp, so they are unaffected. }
+          The epilogue's `leave` restores rsp from rbp, so nothing to unwind.
+
+          Call sequences are NOT unaffected -- this comment used to claim they
+          were, and the claim is what made the bug below look impossible. The
+          IR_CALL path saves the caller's rsp with `push r11` BELOW the
+          outgoing argument area and restores it with `mov rsp, [rsp + pad +
+          mStack*8]`, a FIXED offset. `sub rsp, rax` here moves rsp by a
+          run-time amount that offset knows nothing about, so an alloca
+          evaluated while a call's arguments are being pushed shifts the saved
+          slot out from under the restore and rsp comes back holding the
+          alloca'd bytes. Measured on busybox getopt32.c:373.
+
+          INVARIANT, upheld by the FRONTEND: an IR_ALLOCA must not be reachable
+          from inside a call's argument evaluation. cparser.inc's
+          CHoistAllocaArgs lifts them out. Anything that starts emitting
+          IR_ALLOCA must do the same, or fix the call sequence --
+          bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer }
         IREmitNode(IRA[node]);
         EmitB($48); EmitB($83); EmitB($C0); EmitB($0F);  { add rax, 15 }
         EmitB($48); EmitB($83); EmitB($E0); EmitB($F0);  { and rax, -16 }

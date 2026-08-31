@@ -109,6 +109,95 @@ procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
 { Result type of a binary node: comparisons/logical -> Boolean; otherwise widen
   to Int64 if either operand is Int64, else Integer. }
 function CIntegerPromoteTk(tk: TTypeKind): TTypeKind; forward;
+function CAllocDeclVar(const name: AnsiString; tk: TTypeKind): Integer; forward;
+
+{ ---- alloca() must not run inside a call's argument evaluation -------------
+
+  x86-64's call sequence saves the caller's rsp BELOW the outgoing argument
+  area and restores it with `mov rsp, [rsp + pad + mStack*8]` -- a FIXED offset
+  from rsp. alloca() moves rsp. So an alloca evaluated while a call's arguments
+  are being pushed shifts that offset out from under the restore, and rsp comes
+  back holding whatever bytes the alloca'd hole happens to contain.
+
+  Measured on busybox getopt32.c:373, `strcpy(alloca(len + 1), applet_opts)`:
+  control left for an address inside asctime_r, three bytes into a seven-byte
+  instruction. No diagnostic, no fault at the site, and a backtrace naming a
+  function the program never calls.
+
+  So hoist it. Each AN_ALLOCA in the ARGUMENT list is replaced by a temporary,
+  and the alloca is evaluated into that temporary BEFORE the call via AN_COMMA.
+  gcc reaches the same arrangement from the same constraint (it pre-expands
+  alloca in argument position rather than letting it move sp mid-sequence).
+
+  C leaves the order of argument evaluation unspecified, so moving the alloca
+  -- and the side effects of its SIZE expression -- ahead of the other
+  arguments picks one of the orders the standard already permits.
+
+  The descent is a WHITELIST of ordinary expression kinds, and that is
+  deliberate. It must not reach into a loop, a block or a ternary arm: an
+  alloca inside `({ for (...) { p = alloca(4); } p; })` allocates once per
+  iteration, and hoisting it out of the loop would allocate once. Those shapes
+  keep the underlying defect and are named in
+  bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer,
+  which is the BACKEND bug this normalisation routes around. It stays open. }
+function CReplaceAllocasWithTemps(node: Integer; var pre: Integer;
+                                  depth: Integer): Integer;
+var sym, idn, asn, cm, k: Integer;
+begin
+  Result := node;
+  if (node < 0) or (node >= ASTNodeCount) or (depth > 400) then Exit;
+  k := ASTKind[node];
+  if k = AN_ALLOCA then
+  begin
+    { the size expression may itself contain an alloca; lift those first so
+      they land EARLIER in the comma chain, keeping inner-before-outer. }
+    ASTLeft[node] := CReplaceAllocasWithTemps(ASTLeft[node], pre, depth + 1);
+    sym := CAllocDeclVar('$alloca$' + AIntToStr(node), tyPointer);
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := sym; ASTTk[idn] := Ord(tyPointer);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := idn; ASTRight[asn] := node; ASTTk[asn] := Ord(tyPointer);
+    if pre < 0 then pre := asn
+    else
+    begin
+      cm := AllocNode(AN_COMMA);
+      ASTLeft[cm] := pre; ASTRight[cm] := asn; ASTTk[cm] := Ord(tyPointer);
+      pre := cm;
+    end;
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := sym; ASTTk[idn] := Ord(tyPointer);
+    Result := idn;
+    Exit;
+  end;
+  if (k = AN_BINOP) or (k = AN_NEG) or (k = AN_NOT) or (k = AN_CALL) or
+     (k = AN_ARG) or (k = AN_INDEX) or (k = AN_FIELD) or (k = AN_ASSIGN) or
+     (k = AN_ADDR) or (k = AN_DEREF) or (k = AN_PTR_CAST) or
+     (k = AN_CALL_IND) or (k = AN_COMMA) or (k = AN_COMPOUND_ASSIGN) or
+     (k = AN_INCDEC) then
+  begin
+    ASTLeft[node]  := CReplaceAllocasWithTemps(ASTLeft[node], pre, depth + 1);
+    ASTRight[node] := CReplaceAllocasWithTemps(ASTRight[node], pre, depth + 1);
+  end;
+end;
+
+{ Rewrites callNode's ARGUMENT chain in place and returns either callNode or
+  an AN_COMMA that evaluates the lifted allocas first. The callee expression
+  (AN_CALL_IND's ASTRight) is deliberately NOT walked: it is evaluated by the
+  same sequence, but an alloca there is the same corner case the whitelist
+  above leaves to the backend ticket. }
+function CHoistAllocaArgs(callNode: Integer): Integer;
+var pre, cm: Integer;
+begin
+  Result := callNode;
+  if (callNode < 0) or (callNode >= ASTNodeCount) then Exit;
+  pre := -1;
+  ASTLeft[callNode] := CReplaceAllocasWithTemps(ASTLeft[callNode], pre, 0);
+  if pre < 0 then Exit;
+  cm := AllocNode(AN_COMMA);
+  ASTLeft[cm] := pre; ASTRight[cm] := callNode; ASTTk[cm] := ASTTk[callNode];
+  Result := cm;
+end;
+
 
 function CBinResultTk(opTok, l, r: Integer): Integer;
 begin
@@ -1962,7 +2051,7 @@ begin
           else
             Error('call to undeclared function: ' + name);
         end;
-        Result := node;
+        Result := CHoistAllocaArgs(node);
       end
       else
       begin
@@ -4168,7 +4257,7 @@ begin
         ASTIVal[inode]  := sig;
         ASTTk[inode]    := Ord(Procs[sig].RetType);
         ASTSLen[inode]  := 0;
-        node := inode;
+        node := CHoistAllocaArgs(inode);
       end
       else
         node := fnode;
@@ -4199,7 +4288,7 @@ begin
       ASTIVal[inode]  := sig;
       ASTTk[inode]    := Ord(Procs[sig].RetType);
       ASTSLen[inode]  := 0;
-      node := inode;
+      node := CHoistAllocaArgs(inode);
     end
     else if (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) then
     begin
@@ -5143,6 +5232,43 @@ begin
   if CLocalStaticDecl then CurProc := -1;
   Result := AllocArray(name, elemType, lo, hi);
   CurProc := savedCurProc;
+end;
+
+{ `extern T name[];` in a header, then `T name[] = { ... };` in the .c. The
+  header's declarator is an INCOMPLETE array type -- it carries no size -- so
+  the declaration reserved ONE element and fixed name's offset there. The
+  definition then found the symbol already present and reused it AS IS, so the
+  initializer wrote its full length straight over whatever globals happened to
+  follow. No diagnostic, and the damage lands on unrelated variables.
+
+  Measured on busybox: bkm_suffixes, cwbkMG_suffixes and kmg_i_suffixes -- 128
+  bytes each -- were allocated EIGHT bytes apart, and msg_eol, logmode and
+  xfunc_error_retval landed inside them. `strlen(msg_eol)` then walked a
+  pointer assembled half from a suffix table entry, and the first error message
+  the program tried to print segfaulted.
+
+  A global gets its offset at ALLOCATION time, but that offset is only READ
+  during codegen, after the whole translation unit is parsed. So the fix is to
+  reserve the real extent now and repoint the symbol at it; the single element
+  the declaration reserved is left behind as a few unused bytes, which is
+  cheaper than a second layout pass and invisible.
+
+  Only GROWS. A definition that is smaller than an earlier declaration cannot
+  happen for an incomplete array type, and shrinking would move a symbol other
+  declarations may already have sized.
+
+  No ticket: found, fixed and covered by test/c_extern_array_without_a_size.c
+  in one commit, so there was nothing to coordinate, rank or remember. }
+procedure CGrowGlobalArray(idx: Integer; elemTk: TTypeKind; newLen: Integer);
+var grown: Integer;
+begin
+  if (idx < 0) or (newLen <= 0) then Exit;
+  if not Syms[idx].IsArray then Exit;
+  if Syms[idx].Kind <> skGlobal then Exit;
+  if newLen <= Syms[idx].ArrLen then Exit;
+  grown := AllocArray('', elemTk, 0, newLen - 1);
+  Syms[idx].Offset := Syms[grown].Offset;
+  Syms[idx].ArrLen := newLen;
 end;
 
 { Wrap a static-local declaration's initializer chain (AN_SEQ head) in a
@@ -8183,7 +8309,8 @@ begin
     begin
       if wasArr then idx := AllocArray(name, tyPointer, 0, arrLen - 1)
       else idx := AllocVar(name, tyPointer);
-    end;
+    end
+    else if wasArr then CGrowGlobalArray(idx, tyPointer, arrLen);
     if idx >= 0 then
     begin
       { An ARRAY of callable pointers carries its ELEMENT signature in
@@ -8474,7 +8601,8 @@ begin
         idx := AllocArray(name, baseTk, 0, arrLen - 1)
       else
         idx := AllocVar(name, baseTk);
-    end;
+    end
+    else if wasArr then CGrowGlobalArray(idx, baseTk, arrLen);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and
       the init walker distributes nested braces per dimension. }
     if (idx >= 0) and wasArr and (dimCount >= 2) then

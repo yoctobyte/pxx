@@ -234,3 +234,72 @@ Both were found by *reading the undefined list as evidence rather than as a
 shopping list*. The five names were exactly the five `xxx()` empty-argument
 forms across the instantiations the config reaches, and nothing else — a
 one-to-one match that named the mechanism before any code was read.
+
+## 2026-08-31 (later) — rung 1's x86-64 half is MET
+
+`busybox cat`, built by pxx from upstream unvendored source, produces output
+**byte-identical to a gcc-built `busybox_CAT`** across the fixed input set:
+empty file, 4 KB binary file, multi-file concat, file with no trailing
+newline, `-` mixed with named files, stdin pipe, no args, `-u`, a missing file
+alone, a missing file between two good ones, and the same file three times —
+including the `cat: can't open '...': No such file or directory` diagnostic
+and every exit status.
+
+**It is a real single-applet build, not a hand-picked file list.** `.config`
+was reduced with upstream's own `make_single_applets.sh CAT`
+(`NUM_APPLETS 1`, `SINGLE_APPLET_MAIN cat_main`), and the pxx unity is the
+**exact 25 archive members `ld` pulled** for that link, read off
+`busybox_unstripped.map`. Zero undefined symbols. The oracle is the binary
+that build produced.
+
+One deviation from the object list, and it is upstream's own switch:
+`#define BB_GLOBAL_CONST` (documented at `include/libbb.h:379`). `libbb.h`
+declares `ptr_to_globals` const and `libbb/ptr_to_globals.c` re-declares it
+writable — which only works while they are separate translation units. **gcc
+refuses that combination outright** ("conflicting type qualifiers"); we
+accepted it silently and then jumped into hyperspace when `lbb_prepare` wrote
+through the const object. Emptying `BB_GLOBAL_CONST` gives the whole unity the
+writable object a real link produces.
+
+### Three compiler bugs stood between "links" and "runs", none of them C-frontend-shaped
+
+1. **`alloca()` inside a call's argument list corrupted rsp.** x86-64 restores
+   the caller's rsp from a FIXED offset below the outgoing argument area;
+   `alloca` moves rsp. `strcpy(alloca(len + 1), applet_opts)`
+   (`getopt32.c:373`) left control at `asctime_r + 1019`, three bytes into a
+   seven-byte instruction. The frontend now hoists such allocas into a
+   temporary evaluated before the call — what gcc does, for the same reason.
+   The backend invariant is filed as
+   [[bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer]].
+
+2. **An `extern T name[];` declaration kept its one-element size when the
+   definition arrived.** `bkm_suffixes`, `cwbkMG_suffixes` and
+   `kmg_i_suffixes` — 128 bytes each — were allocated **eight bytes apart**,
+   and `msg_eol`, `logmode` and `xfunc_error_retval` landed inside them.
+   `strlen(msg_eol)` then walked a pointer assembled half from a suffix-table
+   entry. This is the ordinary way C shares a table through a header, so the
+   blast radius is every C program that does it.
+
+3. **`<alloca.h>` resolved from the host** and its declaration made pxx's
+   builtin step aside, so the program linked against an `alloca` symbol that
+   cannot exist. crtl now carries `alloca.h` with the macro only — which is
+   what every compilation of glibc's header actually uses.
+
+Also landed: crtl `<malloc.h>` + `mallopt` (a truthful `return 0`: our
+allocator has no trim threshold to set).
+
+### The aarch64 half is BLOCKED, and not on anything C
+
+Two things, in this order:
+
+- **`IR_ALLOCA` is x86-64 only.** `--target=aarch64` refuses outright:
+  `target aarch64: IR op not yet supported: alloca`. busybox uses `alloca`
+  unconditionally in `getopt32.c`, so no applet builds for any cross target
+  until the op is ported. Track A, and whatever lands there must not repeat
+  the fixed-offset restore that bug (1) came from.
+- **The cross targets get no host-header fallback** (correctly — `/usr/include`
+  is x86-64's). The x86-64 build silently resolved `byteswap.h`,
+  `sys/param.h`, `endian.h`, `pwd.h`, `grp.h`, `mntent.h`, `paths.h`,
+  `sys/statfs.h` and friends from the host; aarch64 stops at the first one.
+  That is crtl surface to write, mechanical but real — and note it means the
+  x86-64 result above leans on host headers for those declarations.

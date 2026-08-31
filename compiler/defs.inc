@@ -944,7 +944,12 @@ const
                            address in the accumulator. Only legal in bodies whose epilogue
                            restores the stack pointer from the frame pointer (x86-64 `leave`);
                            the other backends Error at codegen until ported
-                           (feature-c-alloca-dynamic-stack). }
+                           (feature-c-alloca-dynamic-stack). And it must NOT be reachable from
+                           inside a call's argument evaluation: x86-64 restores the caller's rsp
+                           from a fixed offset below the outgoing argument area, which this op
+                           moves. cparser.inc's CHoistAllocaArgs upholds that for C; see the
+                           IR_ALLOCA note in ir_codegen.inc and
+                           bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer. }
 
   IR_BLOCK_MEM     = 74; { bulk memory op with a RUNTIME byte count. IRA = destination
                            address, IRB = byte count, IRC = source address (move) or the

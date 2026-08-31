@@ -11745,6 +11745,32 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_termios_no_tty.c $(TESTTMP)/c_termios26
 	tools/expect_same.sh c_termios26 "$$($(TESTTMP)/c_termios26 < /dev/null)" "$$(printf 'raw iflag: 0\nraw oflag: 4\nraw lflag: 272\nraw cs8: 1 parenb: 0 cread kept: 1 clocal kept: 1\nraw vmin: 1 vtime: 0\nsetospeed: 0\ngetospeed==B9600: 1\nispeed follows ospeed: 1\ncs8 survived: 1\nsetispeed: 0\ngetospeed==B115200: 1\ntcgetattr(pipe): -1 ENOTTY: 1\nVMIN=6 VTIME=5 VINTR=0 VEOF=4')"
+	# alloca() evaluated INSIDE another call's argument list. x86-64's call
+	# sequence saves the caller's rsp below the outgoing argument area and
+	# restores it at a FIXED offset from rsp; alloca moves rsp, so the restore
+	# read the wrong slot and rsp came back holding the alloca'd bytes. Measured
+	# on busybox getopt32.c:373 `strcpy(alloca(len + 1), applet_opts)`: control
+	# left for an address three bytes into an instruction inside asctime_r, with
+	# a backtrace naming a function the program never calls. The parser now
+	# lifts each such alloca into a temporary evaluated before the call.
+	# `still here:` is the row that catches a fix which merely stops the crash
+	# by handing back memory the next call overwrites. x86-64 only by design:
+	# IR_ALLOCA is not ported to the other backends, which refuse it outright.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_alloca_in_call_argument.c $(TESTTMP)/c_alloca_arg26
+	tools/expect_same.sh c_alloca_arg26 "$$($(TESTTMP)/c_alloca_arg26)" "$$(printf 'dup: [hello]\n[hello]\ntwo: 1\nsized: 7\nplain: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nstill here: hello')"
+	# `extern T name[];` in a header + `T name[] = {...};` in the .c -- the
+	# ordinary way C shares a table. The declarator is an INCOMPLETE array type,
+	# so the declaration reserved ONE element and fixed the symbol's offset
+	# there; the definition reused the symbol as is and the initializer wrote
+	# its full length over the globals that followed. Measured on busybox: three
+	# 128-byte suffix tables allocated EIGHT bytes apart, with msg_eol, logmode
+	# and xfunc_error_retval inside them. The rows that matter are `after1` /
+	# `after2` / `after3` -- declared BETWEEN the declaration and the definition,
+	# and printed twice, before and after every table read.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_extern_array_without_a_size.c $(TESTTMP)/c_extern_arr26
+	tools/expect_same.sh c_extern_arr26 "$$($(TESTTMP)/c_extern_arr26)" "$$(printf 'after1=111 after2=[second] after3=2.5\ntbl[0]=[aa],1\ntbl[1]=[bb],2\ntbl[2]=[cc],3\ntbl[3]=[dd],4\ntbl[4]=[],0\nnums[0]=10\nnums[1]=20\nnums[2]=30\nnums[3]=40\nnums[4]=50\nnums[5]=60\nnums[6]=70\nnums[7]=80\ntext=[a fairly long string that needs more than one slot] len=50\nsizeof tbl=40 nums=32 text=51\nafter1=111 after2=[second] after3=2.5')"
 	# Two preprocessor rules with NO diagnostic when wrong, both of which
 	# busybox's xatonum_template.c is written entirely in. (1) 6.10.3p4: `m()`
 	# on a macro that HAS parameters supplies ONE argument that is EMPTY, not
