@@ -219,17 +219,34 @@ rename costs more than the wrong word saves.
 machinery the original fix note points at does exist —
 `ir_codegen_wasm32.inc:4924` dispatches `IR_EXC_ENTER` to `WasmEmitExcEnter`,
 and the body already tracks `WasmExcSites` and maps each enter to its handler
-frame in the shadow frame. So the description "wiring, not new machinery"
-still holds, and the ordering warning still holds harder now that it is the
-only work left: **the predicate arm is the LAST line of the change.** Adding
+frame in the shadow frame.
+
+**But do not price the job off "wiring, not new machinery."** That phrase is the
+ticket body's own, and frankwasm — who wrote it — states it came from the ticket
+rather than from reading the backend: *"a plausible read, not a measurement."*
+What I verified is narrower and should be quoted at that width: the dispatch and
+the shadow-frame bookkeeping EXIST. Whether they are sufficient as a proc
+cleanup frame is unmeasured by anyone. I cited that phrase back at frankwasm as
+though it were their confirmation, which it was not, and they corrected it — an
+unverified claim travelling beside verified ones is how it picks up credibility
+it did not earn.
+
+The ordering warning does hold, and holds harder now that it is the only work
+left: **the predicate arm is the LAST line of the change.** Adding
 `TARGET_WASM32` to it before implementing the enter/leave arms reaches
 `Error('compiler error: no proc exception cleanup frame for this target')` and
 breaks every wasm build that owns a managed local.
 
-### Not taken, and why — with the owner named
+### UNOWNED — not taken by me, and NOT handed off either
 
 I hold the managed-memory group and this is one of its umbrella's blockers, but
 the remaining half is wasm backend work in a lane I have no loaded context for,
-and testing it needs the wasm host oracles rather than a native repro. Handing
-it to **frankwasm**, who filed this ticket and owns that lowering, rather than
-starting something I could not finish or verify well. Messaged 2026-09-01.
+and verifying it needs the wasm host oracles rather than a native repro.
+
+**I messaged frankwasm to take it and that did not land. Do not read this ticket
+as owned.** frankwasm is stood down and idle by the owner's instruction (2-3
+concurrent agents; the slots are held elsewhere), and a peer cannot put an agent
+back in rotation — that is the owner's call. So the wasm32 remainder is
+**unowned**, which is a different state from parked and should be raised as such
+rather than left looking assigned. Recorded here because a handoff nobody
+accepted is exactly the residual that goes missing.
