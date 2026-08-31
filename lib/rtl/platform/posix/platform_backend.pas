@@ -731,10 +731,25 @@ begin
   Result := Integer(__pxxrawsyscall(SYS_utimensat, PAL_AT_FDCWD, Int64(path), Int64(@ts[0]), 0, 0, 0));
 end;
 
+{ MAP_PRIVATE|MAP_ANONYMOUS. 34 ($22) everywhere EXCEPT xtensa, which is one of
+  the architectures carrying non-standard MAP_* values: its MAP_ANONYMOUS is
+  $800, so the pair is $802 = 2050. Getting this wrong does not fail loudly --
+  with 34 the kernel sees MAP_PRIVATE with no ANONYMOUS bit, tries to map fd -1
+  and returns EBADF, which becomes a negative "pointer". Measured under
+  qemu-xtensa -strace, which decodes the flags as `MAP_PRIVATE|0x20` and names
+  the errno. compiler/builtin/builtinheap.pas has carried this arm since hosted
+  xtensa first ran; the PAL backend never got it, which is why the heap worked
+  on xtensa while PalMmapAnon did not. }
+{$ifdef CPU_XTENSA}
+const MAP_ANON_PRIV = 2050;
+{$else}
+const MAP_ANON_PRIV = 34;
+{$endif}
+
 function PalBackendMmapAnon(len: Int64): Pointer;
 begin
   { mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0); 32-bit = mmap2, page-offset 0 }
-  Result := Pointer(__pxxrawsyscall(SYS_mmap, 0, len, 3, 34, -1, 0));
+  Result := Pointer(__pxxrawsyscall(SYS_mmap, 0, len, 3, MAP_ANON_PRIV, -1, 0));
 end;
 
 { Anonymous mmap with an EXPLICIT protection, for callers needing executable
@@ -742,8 +757,9 @@ end;
   its existing callers are untouched. }
 function PalBackendMmapAnonProt(len: Int64; prot: Integer): Pointer;
 begin
-  { MAP_PRIVATE|MAP_ANONYMOUS = 34; 32-bit uses mmap2 with a page offset of 0 }
-  Result := Pointer(__pxxrawsyscall(SYS_mmap, 0, len, prot, 34, -1, 0));
+  { 32-bit uses mmap2 with a page offset of 0. See MAP_ANON_PRIV above -- xtensa
+    needs 2050, not 34. }
+  Result := Pointer(__pxxrawsyscall(SYS_mmap, 0, len, prot, MAP_ANON_PRIV, -1, 0));
 end;
 
 function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;

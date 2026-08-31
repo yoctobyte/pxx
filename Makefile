@@ -14899,8 +14899,13 @@ test-riscv32: $(COMPILER)
 # by-value wide records. (The other one named there, test_shortstring_trunc's
 # `b-CLOBBERED`, was NOT memory corruption -- see the row below -- and is fixed.)
 # NO LONGER A LEAD (frankA, 2026-08-31): test_arm32_record_byval_wide is
-# byte-identical to the oracle at db19ff591808. Nobody claimed it; something
-# else in that night's ABI work took it out, so the pointer outlived the bug.
+# byte-identical to the oracle at binary db19ff591808. It was fixed by frankS in
+# COMMIT a5f5bd42f ("four spots, not the three filed"), 2026-08-30 --
+# done/bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address. My first
+# draft here said "nobody claimed it; something else in that night's ABI work
+# took it out", which was me reading a failed search as an observation: the
+# sweep showed it green and I found no ticket, so I inferred there was none.
+# There was. Corrected on frankC's citation.
 #
 # THE SYSCALL-TABLE SWEEP BOUGHT ONE ROW, and that is the honest number.
 # lib/rtl had per-arch syscall blocks for five arches and no xtensa row, so 14
@@ -14955,6 +14960,14 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_const_alias.pas $(TESTTMP)/test_xtensa_test_cross_const_alias
 	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/test_xtensa_test_cross_const_alias_x64
 	tools/expect_same.sh xtensa/test_cross_const_alias "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_const_alias)" "$$($(TESTTMP)/test_xtensa_test_cross_const_alias_x64)"
+	# Was excluded as a divergence until 2026-08-31, and it was excluded for a
+	# real reason: the source had no CPUXTENSA arm, so nothing was assigned and
+	# it printed zeros. Adding the arm then exposed a genuine bug in
+	# PalBackendMmapAnon -- xtensa's MAP_ANONYMOUS is $800, not $20 -- which is
+	# why this row is worth having rather than being a formality.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_syscall.pas $(TESTTMP)/test_xtensa_syscall
+	./$(COMPILER) test/test_cross_syscall.pas $(TESTTMP)/test_xtensa_syscall_x64
+	tools/expect_same.sh xtensa/test_cross_syscall "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_syscall)" "$$($(TESTTMP)/test_xtensa_syscall_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_dynarray.pas $(TESTTMP)/test_xtensa_test_cross_dynarray
 	./$(COMPILER) test/test_cross_dynarray.pas $(TESTTMP)/test_xtensa_test_cross_dynarray_x64
 	tools/expect_same.sh xtensa/test_cross_dynarray "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_dynarray)" "$$($(TESTTMP)/test_xtensa_test_cross_dynarray_x64)"

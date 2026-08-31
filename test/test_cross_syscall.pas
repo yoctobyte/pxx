@@ -22,6 +22,19 @@ begin
   pid := __pxxrawsyscall(20);                        { getpid }
   p := __pxxrawsyscall(192, 0, 4096, 3, 34, -1, 0);  { mmap2 }
 {$endif}
+{$ifdef CPUXTENSA}
+  { xtensa linux has its own numbering, neither asm-generic nor i386's. Both
+    values are the MEASURED ones from lib/rtl/platform/posix/platform_backend.pas
+    (getpid=120, mmap2=80) -- do not recall them, that table records why.
+    80 is mmap2, so the last arg is a page offset, and 0 is what every other
+    mmap2 arm here passes too. The FLAGS also differ: xtensa's MAP_ANONYMOUS is
+    $800, so MAP_PRIVATE|MAP_ANONYMOUS is $802 = 2050, not the 34 every arm
+    above passes. With 34 the kernel sees no ANONYMOUS bit, tries to map fd -1,
+    and returns EBADF -- which is what this row printed before the constant was
+    fixed, and what PalBackendMmapAnon was doing for real. }
+  pid := __pxxrawsyscall(120);                        { getpid }
+  p := __pxxrawsyscall(80, 0, 4096, 3, 2050, -1, 0);  { mmap2 }
+{$endif}
   if pid > 0 then writeln(1) else writeln(0);
   { mmap failure is -4095..-1; high addresses go negative on 32-bit, so
     accept anything outside the errno window as success }
