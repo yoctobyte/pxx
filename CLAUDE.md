@@ -361,7 +361,13 @@ charged per firing per session, and there are eleven sessions.
 The cheaper replacements already exist and are already the rule elsewhere —
 this only makes them universal:
 
-- Background a long job; **its completion notification IS the wait.**
+- Background a long job; **its completion notification is the WAIT — but not
+  the VERDICT.** Read the result out of the log text. Measured three times on
+  2026-08-31, once in the coordinator's own hands: the task notification said
+  *"completed (exit code 0)"* while the log said `gate: RED (exit 1)`, because
+  **the notification reports the WRAPPER, not the gate.** A green notification
+  on a red gate is the worst shape this repo has — it does not error, and it
+  answers correctly about something else.
 - Track T's findings arrive as tstate reports and tickets. You do not poll for them.
 - To know when a peer finishes: `notify_when_idle` on ONE message, never a loop.
 
@@ -809,8 +815,18 @@ fix the doc, not the loop.
   session on 2026-08-01. Reach for the heavy modes when you are about to
   **bless** a binary, not while you are still changing it.
 - **When you DO run one, background THAT — never poll a `make` you started.** It
-  runs the whole gate to completion, prints one line per step, and exits with the
-  result, so the completion notification is the answer. Polling a long run with
+  runs the whole gate to completion and prints one line per step, so the
+  notification tells you it is DONE — then **grep the log for the verdict**
+  (`gate: GREEN` / `gate: RED`). Do not read the notification's exit code: it is
+  the wrapper's, not the gate's, and it said 0 over a `gate: RED (exit 1)` three
+  times on 2026-08-31. Two gate greens from that day are trustworthy only
+  because the agent read the verdict out of the log text.
+  **And check the gate's own diagnosis before believing a RED** — it prints
+  `compiler/pascal26 is OLDER than the last commit touching compiler/ … that is
+  a STALE BINARY, not a miscompile`, which is what a `git stash` control
+  produces by construction: the stash reverts the sources and leaves the binary
+  built WITH the diff on disk. Clean tree, wrong binary — the case CLAUDE.md
+  lists because four agents hit it in one day. Polling a long run with
   repeated `sleep N; tail log`
   burns a turn per poll and learns nothing; and `until ! pgrep -f "make test"`
   never exits, because the watcher's own command line matches the pattern. It
