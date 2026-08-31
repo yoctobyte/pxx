@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:10 backlog:401 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:133 done:2943 rejected:68`
+`working:3 unfinished:28 blocked:10 backlog:401 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:133 done:2944 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-no-cross-target-can-build-the-compiler-itself` [A] — owner: frankS
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
