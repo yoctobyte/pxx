@@ -151,3 +151,75 @@ across every lexer, `cpreproc.inc` (72), `pyparser.inc` (53), `elfwriter.inc`
   nothing and gdb is the instrument.
 - `kernel.yama.ptrace_scope` is 1: `sudo gdb -p`, or launch the inferior as
   gdb's own child. Do not make either a persistent system change.
+
+---
+
+## CORRECTION, same day — the profile above was read without its family
+
+Filed by the same agent that wrote the profile, hours after filing
+`feature-t-detect-ticket-clusters-that-share-a-construct`, and demonstrating its
+need on itself. **Read this section before acting on the profile.**
+
+### 1. The quadratic append was already fixed, and the fix is IN the tree I profiled
+
+`bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic`
+(track A, **prio 92**, found and closed by frankA 2026-08-31, resolved
+`af07a59ff`, landed 15:15). Verified rather than assumed:
+`git merge-base --is-ancestor af07a59ff 4546a42bf` → **yes**.
+
+Its finding: `PXXStrSetLen` always reallocated and copied, so
+`SetLength(s, Length(s)+1)` copied the whole string per call — making the
+compiler's own string building O(n^2) **everywhere but x86-64**, which had an
+inline fast path in its emitter. Now fixed in the runtime for all six targets:
+*"20000 appends: 19780 allocations -> 16 on every target."*
+
+**So step 2 of "Next steps" above is answered, and answered the other way.** The
+profile was taken on x86-64, which already had the fast path, and `AppendChar`
+is still 17.5% of self time. This is **not** a quadratic-realloc problem. It is
+the per-character cost of the *already-optimised* path multiplied by an enormous
+call count — a different problem needing a different fix. Do not go looking for
+the reallocation; it is not there.
+
+### 2. The obvious attack was already tried and rejected ON MEASUREMENT
+
+`rejected/feature-opt-lazy-token-sval` (2026-07-10, prio 55) prototyped
+"don't materialise token strings" in full — gated pool storage in
+`LexAll`/`LexAppend`, keep-everything inside `asm..end`, monotone SOffset
+preserved. Measured on the frozen-string self-host binary:
+
+```
+baseline pascal26 self-compile:  3.406 s ± 0.038  (hyperfine, 8 runs)
+patched stage1 self-compile:     3.455 s ± 0.049  → no win, ~1% noise
+```
+
+Rejected 2026-07-11 per the campaign's measured-not-speculative rule. **Do not
+re-derive this.** If you believe it should win now, say what changed since
+2026-07-11 and measure that, rather than re-running the same prototype.
+
+### 3. The cluster this ticket belongs to
+
+Six prior tickets on "the compiler is slow at string building / startup", none
+of which were consulted before this one was filed:
+
+| ticket | state |
+| --- | --- |
+| `perf-compiler-hotspots-algorithmic` | done, 2026-07-03 |
+| `feature-opt-lazy-token-sval` | rejected, 0 win measured |
+| `bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost` | done, p80 |
+| `bug-o-the-in-place-string-append-is-x86-64-only-...` | done today, p92 |
+| `decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies` | rejected today |
+| *this ticket* | open |
+
+This is the exact blind spot `feature-t-detect-ticket-clusters-that-share-a-construct`
+exists to close, reproduced by the agent who filed that ticket, on the same day.
+**A profile is evidence about the binary; it is not evidence that the question
+is new.**
+
+### 4. One OPEN and UNVERIFIED discrepancy
+
+The July baseline above is a **3.406s** self-compile. The measurement at the top
+of this ticket is **19.7s** for the same operation. The compiler has grown since
+July and this box's load was not recorded (CLAUDE.md notes the watcher costs
+2-3x), so it may be entirely explained. **It is also 5.8x and nobody has
+checked.** Do not report this as a regression; do not dismiss it either.
+Re-measure both under known load before drawing anything from it.
