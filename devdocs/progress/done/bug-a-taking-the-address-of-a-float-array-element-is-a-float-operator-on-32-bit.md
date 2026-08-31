@@ -215,6 +215,40 @@ right and the high word is discarded, so this is a cost question and not a
 correctness one. Changing it would alter a working path with no measured
 benefit; noting it here rather than folding it in silently.
 
+**frankA disagreed, measured it, and came back agreeing — and his numbers make
+this deferral evidence rather than a judgement call.** His reason for looking is
+the right one: *"it produces the correct answer today"* is exactly the
+reassurance that failed for the float half, where x86-64 was correct by denormal
+luck for as long as the bug existed.
+
+- **He tried to break it and could not.** Four shapes where the high word is NOT
+  discarded and the full 64-bit value is observed — `Int64(PtrUInt(@W[0]))` read
+  back via `shr 32`, a 64-bit difference of two element addresses, and a pointer
+  comparison whose Boolean result tk forces the operands to drive the dispatch.
+  All correct on x86-64, i386, arm32 and riscv32. **So the address is not merely
+  truncated safely, it is correctly zero-extended into the pair** — a stronger
+  property than the paragraph above claims, and the one that matters.
+- **Then the control, built by disabling the change rather than varying the
+  input:** he applied the parallel edit at `ir_codegen_riscv32.inc:2248`, rebuilt,
+  and diffed the same sources through both compilers. The path is live (the
+  binaries differ, and the compiler is deterministic — checked first). Code size
+  unchanged at 249708B. And the deciding row: **the first differing byte is at
+  offset 168827 for a 5-line program and for a 15-line one — the same offset.**
+  A constant offset independent of user source means the delta lands in RTL
+  codegen, not at the address site the edit was aimed at. The blast radius is not
+  where the justification is.
+- **Two limits he put on his own numbers:** `code=` is RTL-dominated and is a
+  coarse instrument here, and he could not get a finer one — these binaries carry
+  no section headers, so `readelf -S` returns nothing and the `--emit-obj` route
+  was unavailable. And he did not run the broad riscv32 suites against the
+  changed compiler, so his claim is "it changed no answer I checked", not "it is
+  safe".
+
+Conclusion, his: no measured benefit, effect in the wrong place, unproven safety
+— leave it. **The thing to fix first if anyone revisits this is the instrument:
+a way to measure a single procedure's emitted size on a cross target would have
+made it a five-minute question instead of a rebuild-and-diff.**
+
 **MEASURED 2026-08-31 (frankA), and the deferral holds — do not repeat this
 experiment.** The reasoning above ("correct today") is the same reassurance that
 failed for the float half on x86-64, so it was worth constructing the cases the

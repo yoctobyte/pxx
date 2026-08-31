@@ -4153,3 +4153,51 @@ missing from riscv32. It is the trailing label of `IR_WRITE, IR_WRITELN:`. That
 was caught only because "riscv32 cannot write a line" is absurd on its face — so
 **a coverage diff over a `case` needs its own positive control: a node you KNOW
 the backend has, asserted present.**
+
+## When a better story is already in hand, the one-command check gets filed as "downstream"
+
+Measured 2026-08-31, over six rounds of
+`bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength`.
+A `Copy` under the xtensa windowed ABI died with SIGBUS. Round 2's register dump
+contained this, and round 2 wrote this note about it:
+
+> *(The post-fault A-register view shows `A07=00000001` where a7 is the windowed
+> frame pointer, and a following block would compute `addi a2, a7, -32`. That is
+> downstream of a failed window restore and is NOT load-bearing evidence —
+> recorded so the next reader does not chase it as the cause.)*
+
+**Every clause of that is true except the verdict.** a7 *is* the windowed frame
+pointer. `addi a2, a7, -32` *is* the faulting instruction. And `A07=00000001` was
+not corruption at all — it is literally the `movi a7, 1` the compiler emits for a
+Char operand's length in the managed-string marshalling arm, which had chosen
+a4-a7 as its scratch quad on the grounds that *"a2-a7 survive call8"*: true of
+the Xtensa ABI, false of this compiler.
+
+**Why it was set aside is the transferable part, and it is not carelessness.** A
+better story was already in hand — `retw`, `WINDOWSTART`, a window underflow
+whose reload dies — and it is a *good* story: mechanical, specific, and one in
+which a garbage frame pointer is exactly what you would expect to see afterwards.
+The register fitted the story as a **consequence**, so it was labelled a
+consequence. The note even exists to protect the next reader, which is the right
+instinct aimed one step wrong.
+
+Rounds 3, 4 and 5 then cost three purpose-built programs and five falsifications
+— misaligned copy, `sp`-movement volume, call depth, the prologue's ABI
+violation, frame size, and finally a program reproducing the exact fault state
+(`wb=2 ws=04`, identical frame shapes, same wrap depth) **that passes**. All of
+that sat between the note and `grep reg_xtensa_a7 ir_codegen_xtensa.inc`, which
+answers it in seconds and names seven sites.
+
+**The rule: before you write "downstream, not the cause", ask what this would be
+if it were NOT downstream.** Here that is "a value someone deliberately put
+there", and the check for it is one grep. A *dismissal* is a claim, and it needs
+its own cheap check exactly as much as an accusation does — the more so when a
+satisfying mechanism is already available to absorb it. This is the exculpation
+rule (*"not X" is half a finding*) pointed at a single register instead of a
+commit.
+
+**What is NOT the lesson: rounds 1-5 were not wasted and must not be re-run.**
+They are what killed every *shape* explanation, and it was round 5's conclusion —
+*every shape explanation is now matched by a working program* — that made a
+**content** instrument (which register holds what) the only remaining move. The
+falsifications were the work; the delay was one unasked question inside them.
