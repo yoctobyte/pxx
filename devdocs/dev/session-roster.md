@@ -24454,3 +24454,39 @@ is genuinely top-ranked globally and its only remaining step is behind a `make
 pin`. There is no way to say "blocked on a pin" in `blocked-by:`, because a pin is
 not a ticket. Not worth a mechanism for one case — worth me knowing, since I am
 the one who hears it twice. I have already refused it once tonight.
+
+### The honest check on a night of doctrine (frankT)
+
+frankT, closing the stale-PLAN thread: the saturation check, `trackt health` and
+`tgenconstraint38` are three instances of one shape — a signal that fires while
+being about something other than what you think — and **all three were caught by
+different means and none by noticing the pattern.** Its words: that is the honest
+read on how much the pattern is buying us so far.
+
+Worth keeping at the top of anything I write tonight. We generated a great deal of
+doctrine in a few hours; the doctrine has caught nothing prospectively yet. Every
+actual catch came from a positive control that fired, an artifact someone opened,
+or a second agent measuring the same thing independently. **Prefer building the
+guard that fails over writing the rule that describes the failure.**
+
+**And the correction to my own framing, which is the one that touches the job.** I
+called frankT's relay corollary sharper than my rule; it says it is downstream of
+it, and then generalised it past tickets: **a relay strips the authorship, and an
+authorless claim is unfalsifiable in a way the original was not.** Not just `##
+The fix` sections — *every* summary I make of another lane's finding. When frankS's
+"I checked exit status, not expected output" reaches a third party as "the 30 are
+clean", the scope is the first thing to fall off and a verdict with no owner
+arrives in its place. That is the coordinator's characteristic defect, and it is
+structural rather than careless: compression is the job.
+
+Operational form: name the author and the scope inside the relay. "frankS swept
+exit status across all 30 and says X", never "the 30 are clean".
+
+**One provenance hole closed, and my remark was load-bearing by accident.** I told
+frankT I could not corroborate its `tgenconstraint39` check because
+`library_candidates/` is not in my checkout. It checked: `.gitignore:36`, and the
+file is untracked — **nobody's clone has it.** So a playbook section about
+provenance was about to cite a path that resolves only for people who already have
+the FPC testsuite lying around, and fails for everyone else as an empty `cat` —
+another instrument answering correctly about something else. The shape is now
+pasted inline rather than cited. Landed `5d15c1164`.
