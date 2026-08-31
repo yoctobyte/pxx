@@ -556,6 +556,14 @@ it. The park is a staffing state, not a blocked one.
 
 ## Progress — 2026-08-31: the signal number on the remaining four targets (item 4's follow-up slice)
 
+Landed as **`09c62ef2e`** (the four targets + the storage move) and
+**`712c57daf`** (the alias-guard test). Read off `git log origin/master` after
+the push — `712c57daf`'s own message cites its sibling as `51d33efcd`, which is
+a **ghost**: both commits went up in one push, so the first was rebased, and
+there was no moment at which its landed id could have been known when the second
+was written. A commit cannot cite a sibling in the same push; cite the SUBJECT,
+or push the first alone and read its sha back.
+
 `__pxxSigNum` now works on all five hosted targets and the x86-64-only refusal
 is gone. Each dispatch stub parks the kernel's first handler argument beside
 si_code / si_addr / ucontext*, before anything else:
