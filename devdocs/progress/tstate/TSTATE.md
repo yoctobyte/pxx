@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `0ba60c5f90a2` | 2026-08-31T06:04:00Z | RED (full) | 536.0s | `0ba60c5f90a2` RED |
+| seven | `d28b77ce5d88` | 2026-08-31T06:11:20Z | RED (native) | 109.2s | `0ba60c5f90a2` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `0ba60c5f90a2` on seven, 2026-08-31T06:04:00Z (0m ago).**
+**Newest full tier in the fleet: `0ba60c5f90a2` on seven, 2026-08-31T06:04:00Z (7m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `0ba60c5f90a2` | RED | 0m | — (newest) |
+| seven | `0ba60c5f90a2` | RED | 7m | — (newest) |
 | plexus | `27424c927b65` | RED | 19h | 19h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -53,3 +53,4 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `tools-devtest#00`
   </details>
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `aac20e75ed1f`, last good `17fd5566a65e`, 1 commit(s) in range
+- **test-core#src:test/test_setlen_in_parallel_for_body.pas** — test/test_setlen_in_parallel_for_body.pas tools/expect_same.sh (seven): bad `d28b77ce5d88`, last good `unknown`, 0 commit(s) in range
