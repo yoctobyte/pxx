@@ -127,4 +127,4 @@ because of it. Rewritten to past tense with the resolution rather than deleted:
 the original diagnostic is why that arm exists.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 60f0f1982.
