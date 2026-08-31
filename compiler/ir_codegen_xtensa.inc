@@ -966,7 +966,7 @@ begin
       'mov a2, a4',
       'mov a3, a5',
       '.end:' ])
-  else if op = Ord(tkIdent) then   { 'shr' parses as ident; logical on Int64/UInt64 }
+  else if op = Ord(tkShrLogical) then   { logical shr on Int64/UInt64 }
     EmitAsmXtensa([
       'movi a8, 63',
       'and a8, a2, a8',     { n }
@@ -2367,10 +2367,10 @@ begin
           xtensa_ssl(reg_xtensa_a3);
           xtensa_sll(reg_xtensa_a2, reg_xtensa_a2);
         end
-        else if op = Ord(tkIdent) then
+        else if op = Ord(tkShrLogical) then
         begin
-          { 'shr' parses as an identifier operator (logical right shift, like the
-            riscv path): SAR from a3, then SRL takes the value in t=a2. }
+          { Logical right shift (like the riscv path): SAR from a3, then SRL takes
+            the value in t=a2. }
           xtensa_ssr(reg_xtensa_a3);
           xtensa_srl(reg_xtensa_a2, reg_xtensa_a2);
         end

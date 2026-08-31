@@ -1168,7 +1168,7 @@ begin
       PatchRel8(pMulSkip);
     end;
   end
-  else if (op = Ord(tkShl)) or (op = Ord(tkIdent)) or (op = Ord(tkShr)) then
+  else if (op = Ord(tkShl)) or (op = Ord(tkShrLogical)) or (op = Ord(tkShr)) then
   begin
     { shift count in eax (right.lo) -> cl; value = left from stack. }
     EmitB($89); EmitB($C1);                        { mov ecx, eax (count) }
@@ -1181,7 +1181,7 @@ begin
       fix (bug-shl-signed-integer-width): zero the hi word before a logical
       shr; re-derive the narrow result after a shl. Found by the first
       --wide --cross pasmith run (seed 60). }
-    if (op = Ord(tkIdent)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
+    if (op = Ord(tkShrLogical)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
     begin
       EmitB($31); EmitB($D2);                      { xor edx, edx (32-bit operand: zero-extend) }
     end;
@@ -2742,7 +2742,7 @@ begin
         else if op = Ord(tkOr) then begin EmitB($09); EmitB($C8); end    { or eax, ecx }
         else if op = Ord(tkXor) then begin EmitB($31); EmitB($C8); end   { xor eax, ecx }
         else if op = Ord(tkShl) then begin EmitB($D3); EmitB($E0); end   { shl eax, cl }
-        else if op = Ord(tkIdent) then begin EmitB($D3); EmitB($E8); end { 'shr' parses as ident; shr eax, cl }
+        else if op = Ord(tkShrLogical) then begin EmitB($D3); EmitB($E8); end { logical shr; shr eax, cl }
         else if op = Ord(tkShr) then begin EmitB($D3); EmitB($F8); end   { C signed >> (bug-c-signed-arith-shift-right); sar eax, cl (ModRM /7) }
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then

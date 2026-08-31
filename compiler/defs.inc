@@ -1652,7 +1652,30 @@ type
       for the same frozen-ordinal reason as tkPowEq/tkAtEq. It has to lex as ONE
       token: `a >< b` otherwise reads as `a > (< b)` and dies on "expected
       expression" (bug-p-set-symmetric-difference-operator-not-supported). }
-    tkSymDiff
+    tkSymDiff,
+    { The IR's LOGICAL shift-right operator. Not a token the lexer ever mints:
+      it is the honest NAME for what an IR_BINOP's operator field has always
+      meant when Pascal's `shr` — or C's `>>` on an UNSIGNED operand — built the
+      node. That field used to say `Ord(tkIdent)`, because Pascal spells `shr`
+      as an identifier and nobody renamed it on the way in.
+
+      Its sibling `tkShr` means the OTHER shift-right: arithmetic, sign
+      propagating, which is C's `>>` on a signed operand (cparser.inc's
+      CMakeBinop picks between the two by operand signedness, and every backend
+      keys its `shr`-vs-`sar` choice on which of the two it sees). The pair must
+      stay distinct — collapsing logical onto `tkShr` makes `i shr 1` for
+      i: Integer = -8 answer -4 on all five native backends, which is
+      bug-c-signed-arith-shift-right run backwards.
+
+      `Ord(tkIdent)` was not merely ugly. It is token 1: it passes any range
+      check on a small operator ordinal, and it is the value a consumer that
+      dispatches on a `case` will silently decline. Both happened —
+      IRValidate's range check at ir.inc admitted it for the wrong reason, and
+      ASTConstIntValue declined every `shr` for two months.
+
+      APPENDED at the tail like tkPowEq/tkAtEq/tkSymDiff, so no existing ordinal
+      moves. bug-a-shr-reaches-the-ir-spelled-as-tkident }
+    tkShrLogical
   );
 
   TToken = record

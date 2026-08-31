@@ -43521,15 +43521,16 @@ begin
           - a pure ARITHMETIC/shift AN_BINOP (`x-1`, `x shr 1`): its operator is
             unambiguously numeric, so unlike a comparison/`and`/`or`/`xor` binop
             (which PXX sometimes mistags integer though it is logically boolean)
-            it can never be boolean. `shr` is lexed as an identifier, so its
-            operator id is Ord(tkIdent) — the only ident-operator binop.
+            it can never be boolean. `shr` is lexed as an identifier, but the
+            binop it builds carries Ord(tkShrLogical), the IR's own name for a
+            logical shift right (bug-a-shr-reaches-the-ir-spelled-as-tkident).
         and/or/xor stay logical (ambiguous), matching the prior behaviour, so the
         compiler's own `not (a or b)` / `not (r and v)` keep self-host identical. }
       notOp := Integer(ASTIVal[left]);
       opIsArith := (notOp = Ord(tkPlus)) or (notOp = Ord(tkMinus)) or
                    (notOp = Ord(tkStar)) or (notOp = Ord(tkDiv)) or
                    (notOp = Ord(tkMod)) or (notOp = Ord(tkShl)) or
-                   (notOp = Ord(tkIdent)) or
+                   (notOp = Ord(tkShrLogical)) or
                    { and/or/xor are distrusted in general because a LOGICAL
                      and/or is sometimes mistagged tyInteger (self-host relies
                      on those staying logical — trusting all integer-tagged

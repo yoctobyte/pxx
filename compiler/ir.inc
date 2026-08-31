@@ -502,7 +502,14 @@ begin
         IRRequireNode(IRA[i], 'binop left');
         IRRequireNode(IRB[i], 'binop right');
         op := IRC[i];
-        if (op < 0) or ((op > Ord(tkShl)) and (op <> Ord(tkXor)) and (op <> Ord(tkShr))) then
+        { tkShrLogical is appended at the TAIL of TTokenKind, so it is outside
+          the `<= Ord(tkShl)` range the rest of the operator set happens to sit
+          in — it has to be named, like tkXor and tkShr. Worth noting WHY this
+          check never rejected the old spelling: Ord(tkIdent) is 1, so it
+          passed the range test for a reason unrelated to being an operator.
+          bug-a-shr-reaches-the-ir-spelled-as-tkident }
+        if (op < 0) or ((op > Ord(tkShl)) and (op <> Ord(tkXor)) and
+                        (op <> Ord(tkShr)) and (op <> Ord(tkShrLogical))) then
           Error('invalid operator token kind in binop');
       end;
 
@@ -1407,18 +1414,18 @@ begin
   else if op = tkXor then PromoOpHelper := 'PXXPromoXor'
   else if op = tkShl then PromoOpHelper := 'PXXPromoShl'
   else if op = tkShr then PromoOpHelper := 'PXXPromoShr'
-  { Pascal's `shr` is lexed as an IDENTIFIER — there is no tkShr token for it —
-    and the term parser stores Ord(tkIdent) as the operator. That is the
-    repo-wide convention (see IRLowerSetBitMutate and the shift arm of every
-    backend), so it must not be "fixed" in the lexer; the promo path simply has
-    to know it. Without this arm PromoOpHelper answered '' for `n shr k`, the
-    promo branch declined the node, and the generic integer path shifted two
-    SLOT ADDRESSES — then the promo store read the result as a slot and died in
-    SlotTag. `shl` was fine because it has a real token, which is exactly why
-    the pair looked like a one-operator bug.
-    In a BINOP, tkIdent is only ever `shr`: the parser admits it solely when the
-    identifier text is 'shr'. }
-  else if op = tkIdent then PromoOpHelper := 'PXXPromoShr';
+  { tkShrLogical is the LOGICAL shift right — Pascal's `shr`, and C's `>>` on an
+    unsigned operand. It shares a helper with tkShr (arithmetic) because the
+    promo path widens rather than shifting in the sign, so the two coincide
+    there; everywhere the sign CAN be shifted in they must not be merged.
+    Historical: this arm was missing while the operator was spelled Ord(tkIdent),
+    so PromoOpHelper answered '' for `n shr k`, the promo branch declined the
+    node, and the generic integer path shifted two SLOT ADDRESSES — the promo
+    store then read the result as a slot and died in SlotTag. `shl` was fine
+    because it had a real token, which is exactly why the pair looked like a
+    one-operator bug, and why the operator now has an honest name of its own
+    (bug-a-shr-reaches-the-ir-spelled-as-tkident). }
+  else if op = tkShrLogical then PromoOpHelper := 'PXXPromoShr';
 end;
 
 { Box a promotable-int-typed expression (or a wide literal) into a fresh
@@ -4836,7 +4843,8 @@ end;
   node; valNode is an already-lowered integer value. Emits the load/modify/store
   as a statement. Target-independent: only IR_BINOP / IR_LOAD_MEM / IR_STORE_MEM
   primitives, which every backend already implements. (`shr` is IR_BINOP with op
-  Ord(tkIdent), matching the term parser.) }
+  Ord(tkShrLogical) — the LOGICAL shift right, which is what a byte-index divide
+  wants; Ord(tkShr) is the arithmetic one and would be wrong here.) }
 procedure IRLowerSetBitMutate(setAddrNode, valNode: Integer; isIncl: Boolean);
 var vTmp, ptrTmp, mask, curByte, newByte: Integer;
 begin
@@ -4851,7 +4859,7 @@ begin
       IRAppend(IR_BINOP,
         IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, vTmp, -1, -1, 0, Ord(tyInteger)),
           IRAppend(IR_CONST_INT, -1, -1, -1, 255, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
-        IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)), Ord(tkIdent), 0, Ord(tyInteger)),
+        IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)), Ord(tkShrLogical), 0, Ord(tyInteger)),
       Ord(tkPlus), 0, Ord(tyPointer)),
     -1, 0, Ord(tyPointer));
   { mask := 1 shl ((val and 255) and 7). }
@@ -9504,18 +9512,20 @@ begin
                             IRLowerAST(ASTRight[node]), Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
         end;
         item := Integer(ASTIVal[node]);
-        { Pascal spells `shr` as an IDENTIFIER — there is no tkShr token for
-          it, and ParseTerm stores Ord(tkIdent) as the operator. Every other
-          consumer of that convention already knows it (PromoOpHelper has the
-          same arm; so does the shift arm of each backend), but the variant
-          path did not, so `v shr 1` arrived at EmitVarBinOp as tkIdent and was
-          refused outright: "Variant arithmetic: unsupported operator". Turn it
-          into the one operator here, once, instead of teaching the convention
-          to the promo table and six backends separately.
-          In a BINOP tkIdent is only ever `shr` — the parser admits the
-          identifier solely when its text is 'shr'.
-          bug-a-not-on-an-integer-variant-answers-a-boolean }
-        if item = Ord(tkIdent) then item := Ord(tkShr);
+        { The VARIANT runtime has its own operator vocabulary, and it disagrees
+          with the static one about this exact pair. Static: tkShrLogical is
+          logical, tkShr is arithmetic. Runtime (`VarBitwiseInt`,
+          builtinheap.pas): 119 = Ord(tkShr) is ARITHMETIC, and LOGICAL is the
+          out-of-band opcode 1119, which PXXVarBinOpPas substitutes for Pascal.
+          So this line and that substitution are two rewrites that CANCEL, in
+          two files, one of them in the runtime — read either alone and you will
+          conclude the wrong thing. Do not "simplify" one without the other.
+          Why it exists at all: the variant path did not know the convention, so
+          `v shr 1` reached EmitVarBinOp as an operator it had no arm for and
+          was refused outright — "Variant arithmetic: unsupported operator".
+          bug-a-not-on-an-integer-variant-answers-a-boolean
+          bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
+        if item = Ord(tkShrLogical) then item := Ord(tkShr);
         { A variant may hold a PROMOTABLE INT whose value does not fit 64 bits.
           Its payload is then a managed string, and the ordinary variant binop
           reads a payload as an integer — `v + w` returned pointer arithmetic, a

@@ -1273,20 +1273,22 @@ begin
                    or (op = tkLe) or (op = tkGt) or (op = tkGe);
 end;
 
-{ Pascal spells `shr` as an IDENTIFIER — the lexer never produces tkShr for it,
-  so an IR_BINOP carrying `shr` carries Ord(tkIdent) as its operator
-  (compiler/ir.inc:8867 says so in as many words, and ir.inc:8878 performs
-  exactly this substitution for the one consumer that predates this backend).
-  Doing it again here is the second arm of a double case, which is the shape
-  devdocs/dev/normalise-dont-special-case.md says to fix at the source rather
-  than duplicate — filed as bug-a-shr-reaches-the-ir-spelled-as-tkident. Until
-  that lands, a backend that did NOT translate would not merely miss `shr`, it
-  would mistake every `shr` for whatever it does with tkIdent. }
+{ This backend has ONE right-shift instruction per width (`shr_u`), because it
+  does not implement C's signed `>>` yet — so it folds the IR's two operators
+  onto one. tkShrLogical is the logical shift (Pascal `shr`, C `>>` on an
+  unsigned operand); tkShr is the arithmetic one. When this backend grows a
+  signed `>>`, that fold is the line to delete: emit `shr_s` for tkShr.
+
+  This function used to read `if op = tkIdent then op := tkShr`, duplicating a
+  substitution ir.inc also performed, because the IR spelled logical shr as
+  Ord(tkIdent). It does not any more (bug-a-shr-reaches-the-ir-spelled-as-
+  tkident) — what is left here is this backend's own instruction-set fold, not
+  a second arm of anyone else's convention. }
 function WasmBinopOp(node: Integer): TTokenKind;
 var op: TTokenKind;
 begin
   op := TTokenKind(IRC[node]);
-  if op = tkIdent then op := tkShr;
+  if op = tkShrLogical then op := tkShr;
   WasmBinopOp := op;
 end;
 

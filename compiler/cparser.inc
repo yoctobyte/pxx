@@ -99,12 +99,16 @@ procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
   IR lowering and all backends apply unchanged.
 
   Operator-token mapping into AN_BINOP.IVal: the IR's binop validator accepts
-  ops with ordinal <= Ord(tkShl) plus tkXor, and encodes shift-right as the
-  *tkIdent* operator (shift-left = tkShl). So the distinct C lexer tokens from
-  Slice A are translated here to the operator tokens the IR understands:
+  ops with ordinal <= Ord(tkShl) plus tkXor, tkShr and tkShrLogical. The distinct
+  C lexer tokens from Slice A are translated here to the operators the IR
+  understands:
     C `&`(tkAmp)->tkAnd bitwise, `|`(tkPipe)->tkOr bitwise, `^`->tkXor,
-    `<<`->tkShl, `>>`->tkIdent(shr), `/`->tkDiv (integer division),
-    `&&`->tkAnd / `||`->tkOr but tagged tyBoolean for the short-circuit path. }
+    `<<`->tkShl, `/`->tkDiv (integer division),
+    `&&`->tkAnd / `||`->tkOr but tagged tyBoolean for the short-circuit path.
+  `>>` is the one that splits by OPERAND TYPE rather than by spelling:
+  tkShrLogical when the left operand is unsigned, tkShr (arithmetic) when it is
+  signed — see CMakeBinop, which is where C's own semantics get resolved so no
+  backend has to ask about C. }
 
 { Result type of a binary node: comparisons/logical -> Boolean; otherwise widen
   to Int64 if either operand is Int64, else Integer. }
@@ -956,7 +960,7 @@ begin
     if TypeSigned(IntToTypeKind(ASTTk[l])) then
       ivalOp := Ord(tkShr)
     else
-      ivalOp := Ord(tkIdent);
+      ivalOp := Ord(tkShrLogical);
   end
   else if cTok = Ord(tkAmp) then ivalOp := Ord(tkAnd)     { bitwise AND }
   else if cTok = Ord(tkPipe) then ivalOp := Ord(tkOr);    { bitwise OR }

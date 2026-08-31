@@ -1646,7 +1646,7 @@ function W1LeadingExtA64(node, left, op: Integer): Integer;
 begin
   W1LeadingExtA64 := 0;
   if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
-  if op = Ord(tkIdent) then                                  { Pascal `shr` }
+  if op = Ord(tkShrLogical) then                             { logical `shr` }
   begin
     if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
        TypeSigned(IntToTypeKind(IRTk[left])) then
@@ -2740,7 +2740,7 @@ begin
               EmitI32($2A0003E0);                          { mov w0, w0 }
           end;
         end
-        else if op = Ord(tkIdent) then
+        else if op = Ord(tkShrLogical) then
         begin
           { Logical shr on a <=32-bit operand: zero-extend (`mov w0, w0` clears the
             upper 32 of x0) so a sign-extended negative value's high bits don't

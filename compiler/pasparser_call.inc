@@ -125,13 +125,15 @@ begin
       lexes as a plain tkIdent whose text is 'shr' -- ParseTerm spells the pair
       `(CurTok.Kind in [... tkShl]) or ((CurTok.Kind = tkIdent) and
       (CurTok.SVal = 'shr'))` at every one of its three sites for exactly that
-      reason. So the OVERLOAD KEY has to be Ord(tkIdent) too, because that is
-      what `ASTIVal[node] := Ord(op)` stores on the AN_BINOP the use site builds
-      and what FindOpOverload2 is then queried with. The asymmetry is
-      pre-existing and wrong -- one concept, two lexings -- but unifying it is a
-      lexer change with three parser sites behind it, so it is flagged, not
-      folded in here. }
-    else if CaseEqual(CurTok.SVal, 'shr') then opKey := Ord(tkIdent);
+      reason. That is a LEXING asymmetry and it survives; what does not is the
+      operator id it used to leak into the AST. ParseTerm now renames it once,
+      on the way in, so `ASTIVal[node]` carries Ord(tkShrLogical) — and this
+      OVERLOAD KEY has to be the same value, because it is what FindOpOverload2
+      is queried with when the use site's AN_BINOP is matched. The two must move
+      together; test/test_operator_unary_and_keyword_forms.pas covers the pair and
+      is what notices if they do not.
+      bug-a-shr-reaches-the-ir-spelled-as-tkident }
+    else if CaseEqual(CurTok.SVal, 'shr') then opKey := Ord(tkShrLogical);
   end;
   if opKey < 0 then
     Error('expected operator symbol after operator keyword');

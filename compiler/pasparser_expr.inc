@@ -8900,6 +8900,16 @@ begin
     opSOffset := Tokens[TokPos - 1].SOffset;
     opSLen := Tokens[TokPos - 1].SLen;
     op := CurTok.Kind; Next;
+    { The loop condition above admits tkIdent only when its text is 'shr', so
+      here tkIdent IS `shr` and nothing else. Rename it on the way in, once, so
+      the AN_BINOP — and the IR_BINOP lowered from it — carries the IR's own
+      name for the operator instead of the lexer's accident. Every consumer
+      downstream reads tkShrLogical; none has to know how Pascal spells it.
+      NOT tkShr, which is the ARITHMETIC shift-right (C's `>>` on a signed
+      operand): collapsing the two makes `i shr 1` for i: Integer = -8 emit
+      `sar` and answer -4 on every native backend.
+      bug-a-shr-reaches-the-ir-spelled-as-tkident }
+    if op = tkIdent then op := tkShrLogical;
     left := CurASTNode;
     ParseFactor;
     right := CurASTNode;
@@ -9112,7 +9122,7 @@ begin
       ASTTk[node] := Ord(TypeDivideResultPair(IntToTypeKind(ASTTk[left]),
                                               IntToTypeKind(ASTTk[right])));
     end
-    else if (op = tkIdent) or (op = tkShl) then
+    else if (op = tkShrLogical) or (op = tkShl) then
     begin
       { A SHIFT happens at NATIVE width, and its result is not truncated back to
         the operand's declared width — `1 shl 40` is 2^40, not 0, and

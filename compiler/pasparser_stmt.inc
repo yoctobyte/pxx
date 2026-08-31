@@ -90,7 +90,7 @@ begin
             spelling of the same expression was right, which is the double case
             devdocs/dev/normalise-dont-special-case.md is about.
             bug-a-shr-reaches-the-ir-spelled-as-tkident }
-          tkIdent: if (b < 0) or (b > 63) then Result := False else v := a shr b;
+          tkShrLogical: if (b < 0) or (b > 63) then Result := False else v := a shr b;
           tkShr:   if (b < 0) or (b > 63) then Result := False else v := a shr b;
           tkAnd:   v := a and b;
           tkOr:    v := a or b;

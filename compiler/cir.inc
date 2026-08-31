@@ -83,7 +83,7 @@ begin
   if shift > 0 then
     value := IRAppend(IR_BINOP, value,
                       IRAppend(IR_CONST_INT, -1, -1, -1, shift, Ord(tyInteger)),
-                      Ord(tkIdent), 0, Ord(storageTk));
+                      Ord(tkShrLogical), 0, Ord(storageTk));
   maskNode := IRAppend(IR_CONST_INT, -1, -1, -1, IRBitMask(width), Ord(storageTk));
   Result := IRAppend(IR_BINOP, value, maskNode, Ord(tkAnd), 0, Ord(storageTk));
 

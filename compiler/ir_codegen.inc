@@ -3076,7 +3076,7 @@ function W1LeadingWidenKind(node, left: Integer; op: TTokenKind): Integer;
 begin
   W1LeadingWidenKind := 0;
   if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
-  if op = tkIdent then                                        { Pascal `shr` }
+  if op = tkShrLogical then                                   { logical `shr` }
   begin
     if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
        TypeSigned(IntToTypeKind(IRTk[left])) then
@@ -6937,7 +6937,7 @@ begin
           else if (op = tkPlus) or (op = tkMinus) or (op = tkAnd) or
                   (op = tkOr) or (op = tkXor) then
             WriteLn('PXXDBG a.w1left ALU')
-          else if (op = tkIdent) or (op = tkShr) or (op = tkShl) then
+          else if (op = tkShrLogical) or (op = tkShr) or (op = tkShl) then
             WriteLn('PXXDBG a.w1left SHIFT')
           else
             WriteLn('PXXDBG a.w1left OTHER');
@@ -7173,7 +7173,7 @@ begin
             the full gate. That also buys the cleanest possible verification —
             -O0/-O1/-O2 must come out BYTE-IDENTICAL and only -O3 may differ. }
           if (OptLevel >= 3) and
-             ((op = tkIdent) or (op = tkShr) or (op = tkShl)) and
+             ((op = tkShrLogical) or (op = tkShr) or (op = tkShl)) and
              (IRIVal[right] >= 0) and (IRIVal[right] <= 63) then
             shiftImmCnt := Integer(IRIVal[right])
           else if (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) then
@@ -7676,7 +7676,7 @@ begin
             Int64/UInt64 typecast propagates an 8-byte IRTk — otherwise
             `UInt64(1) shl 40` (IRTk understated to 32-bit) would wrongly truncate
             to 0. See bug-shl-signed-integer-width. }
-          tkIdent:
+          tkShrLogical:
             begin
               if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
               begin

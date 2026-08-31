@@ -842,13 +842,13 @@ begin
         rv32_addi(reg_a1, reg_zero, 0);
     end;
   end
-  else if (op = Ord(tkIdent)) or ((op = Ord(tkShr)) and not signedOp) then
+  else if (op = Ord(tkShrLogical)) or ((op = Ord(tkShr)) and not signedOp) then
   { Pascal 'shr' (tkIdent) or C unsigned '>>' (tkShr): logical on Int64/UInt64 }
   begin
     { <8-byte operand reaches here SIGN-EXTENDED by the 64-bit promotion, but
       Pascal shr is a 32-bit LOGICAL shift at the operand's width: zero the
       hi word first (longint($80000000) shr 9 = 4194304, not -4194304). }
-    if (op = Ord(tkIdent)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
+    if (op = Ord(tkShrLogical)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
       rv32_addi(reg_t1, reg_zero, 0);
     EmitAsmRv32([
       'andi t5, a0, 63',
@@ -2392,7 +2392,7 @@ begin
         else if op = Ord(tkOr) then rv32_or(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkXor) then rv32_xor(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkShl) then rv32_sll(reg_a0, reg_a0, reg_a1)
-        else if op = Ord(tkIdent) then rv32_srl(reg_a0, reg_a0, reg_a1) { 'shr' parses as ident }
+        else if op = Ord(tkShrLogical) then rv32_srl(reg_a0, reg_a0, reg_a1) { logical shr }
         else if op = Ord(tkShr) then rv32_sra(reg_a0, reg_a0, reg_a1)  { C signed >> (bug-c-signed-arith-shift-right) }
         else if op = Ord(tkEq) then
         begin
