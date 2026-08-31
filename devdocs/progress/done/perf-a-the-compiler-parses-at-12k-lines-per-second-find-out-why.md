@@ -12,7 +12,21 @@ owner: frankB
 # The compiler runs at ~12,000 lines/sec — find out why
 
 Supersedes `rejected/decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies`
-and closes `unfinished/perf-a-cache-the-compiled-nilpy-runtime-unit-image`. Read
+and ~~closes `unfinished/perf-a-cache-the-compiled-nilpy-runtime-unit-image`~~.
+
+> **The "closes" claim was FALSE and is withdrawn (frankB, 2026-08-31, at
+> resolution time).** That ticket is `owner: frankA`, still open, and is about a
+> cost this ticket never measured: every `.npy` compile parses and lowers all
+> 24,460 lines of `pylib.pas` + `pyeval.pas` before it looks at the user's
+> program. Nothing here touches per-compile NilPy runtime overhead — this ticket
+> de-escalated on OVERALL compiler throughput (1.28x FPC, ~18,700 lines/s), which
+> is a different quantity, and a wrong rate at that when the sentence was
+> written. It stays open and is frankA's.
+> `progress.sh check` separately reports it as `BLOCKED-BY-REJECTED` (its
+> `blocked-by` names a `decide-*` that was rejected, so it can never become
+> ready) — also frankA's to clear, flagged here rather than edited.
+
+Read
 the rejection for why caching was the wrong attack; this ticket is the right one.
 
 ## The number

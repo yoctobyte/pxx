@@ -1547,18 +1547,39 @@ pre code{background:none;padding:0}
                 # experimental/ each have one); BOARD*.md are generated.
                 if path.name == "README.md" or path.name.startswith("BOARD"):
                     continue
-                head = ""
+                head_lines: list[str] = []
                 try:
                     with path.open(encoding="utf-8", errors="replace") as fh:
-                        head = fh.readline()
+                        for _n, _ln in enumerate(fh):
+                            if _n >= 12:
+                                break
+                            head_lines.append(_ln)
                 except OSError as exc:
                     lines.append(f"UNREADABLE: {st}/{path.name} — {exc}")
                     problems = 1
                     continue
+                head = head_lines[0] if head_lines else ""
+                # A LEADING `---` IS NOT FRONTMATTER, and testing only for it is
+                # how an orphan walked past this check on 2026-08-31.
+                # `be154a3ca` split a ticket across two folders and left an
+                # 88-line tail in backlog-core/ whose first line was a bare
+                # `---` and whose second was a `##` heading. Line 1 matched, so
+                # this check passed it; the file had no track, no prio, no
+                # summary and no slug, and 69 of its 88 lines existed nowhere
+                # else. So require a KEY as well as the fence — that is the
+                # thing the ranker actually needs and the thing a fragment
+                # never has.
                 if head.strip() != "---":
                     lines.append(
                         f"NO-FRONTMATTER: {st}/{path.name} does not start with '---' — "
                         f"an orphan fragment or a truncated ticket, not a ticket the ranker can read")
+                    problems = 1
+                elif not any(re.match(r"[A-Za-z_][A-Za-z0-9_-]*:", ln)
+                             for ln in head_lines[1:]):
+                    lines.append(
+                        f"NO-FRONTMATTER: {st}/{path.name} opens with '---' but carries no "
+                        f"frontmatter key in its first 12 lines — an orphan fragment wearing a "
+                        f"fence, which is exactly what a split ticket's tail looks like")
                     problems = 1
                 slug_toks.append((st, path.name, {
                     t for t in re.split(r"[-_.]", path.stem.lower())

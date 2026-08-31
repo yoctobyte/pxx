@@ -106,3 +106,33 @@ The repro above MUST fail after the fix: a consistent stale pair with newer
 mtimes must trigger a rebuild to `3d5308a75742`, not a `verified` line. And the
 honest-build arm must stay green — deleting the stamp and rebuilding gives
 `converged after 1 round(s)` → `3d5308a75742`.
+
+---
+
+## 2026-08-31, later the same night — it happened to me for real, and the tell worked
+
+Not a constructed case this time. After `git pull --rebase` brought in a
+sibling's `compiler/**` (`9c68b9f0a`), `tools/gate.sh quick` went RED with the
+usual `the fixedpoint reached from PINNED differs from compiler/pascal26`. I ran
+the mandatory step and it printed:
+
+```
+self-host fixedpoint: verified — 1 round(s), 1b252b0eb05e
+```
+
+**`verified` with no `converged` line above it.** Nothing was rebuilt: the
+binary and stamp were a consistent pair, and the gate's own earlier run had
+refreshed both, so the pair was newer than the pulled sources. Deleting the
+stamp and re-running gave `converged after 1 round(s)` — a genuine build — and
+the gate then went GREEN with no other change.
+
+Two things this pins down that the constructed repro could not:
+
+1. **The trigger is ordinary.** `git pull` plus a gate run that rebuilds as a
+   side effect is enough; nobody has to plant anything. This is CLAUDE.md's
+   documented case 3 (*"a sync that pulled someone else's `compiler/**`"*) with
+   the stamp replay on top, which is what stops the mandatory step from
+   correcting it.
+2. **The verb tell is sufficient in practice**, which was asserted here and is
+   now used. `converged` absent was the whole diagnosis, and the fix was one
+   `rm` — against a RED gate that otherwise reads as a miscompile on master.
