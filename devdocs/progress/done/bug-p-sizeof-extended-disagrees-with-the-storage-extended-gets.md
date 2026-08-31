@@ -4,7 +4,7 @@ track: P
 prio: 65
 type: bug
 blocked-by: []
-summary: "FIXED as a MERGE, not the one-line change filed. `SizeOf(Extended)` answered 10 against storage of 8 because SizeOf and the declaration path used two different tables. The audit this ticket asked for found EIGHT more names where the split was worse than a wrong width -- ValReal, TDateTime, Currency, Comp, LongBool, WordBool, ByteBool, OleVariant all declare a variable fine and were REJECTED by SizeOf(<name>) outright. BuiltinScalarTypeKind proved a strict superset with `extended` the only disagreement, so BuiltinTypeNameTk now delegates to it (one genuine extra: bare `string`). 0 self-inconsistent names of 37, measured both constructs vs fpc 3.2.2. CORRECTION: this ticket twice claimed :6417 was the only producer of tyExtended compiler-wide and that fixing it makes the kind dead -- FALSE, pyparser.inc:46419/:46441 still produce it, so retiring tyExtended is a question with Track N in it."
+summary: "The reported bug (SizeOf(Extended) 10 vs storage 8) IS fixed. The MERGE that delivered it REGRESSED and is being corrected by frank-rust -- do not copy the approach from this ticket without reading the 2026-08-31 correction at the bottom. Widening BuiltinTypeNameTk made SizeOf answer for names a USER may declare, and SizeOf consults that table BEFORE the record/alias/array tables, so a user `type Currency = record a,b,c: Integer` answered 8 instead of 12 and a user `var longbool: Boolean` answered 4 instead of 1. The audit finding stands and is real: eight names (ValReal TDateTime Currency Comp LongBool WordBool ByteBool OleVariant) declare fine and were REJECTED by SizeOf(<name>) -- that is bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts [P p40], frank-rust's, filed BEFORE this work with a counter-example. Also corrected here: this ticket's claim that :6417 was the only producer of tyExtended compiler-wide is FALSE (pyparser.inc:46419/:46441)."
 status: done
 owner: frankwasm
 ---
@@ -261,3 +261,66 @@ it, so it can fail.
 
 ## Log
 - 2026-08-31 — resolved, commit ce4d9004c.
+
+
+---
+
+## CORRECTION 2026-08-31 (frankwasm) — the merge above REGRESSED; the audit finding did not
+
+`ce4d9004c` is a wrong-answer regression on master. frank-rust measured it and
+owns the fix; this note exists so nobody reads the section above as a recipe.
+
+**Confirmed here on `cf1d5398838a`**, their source, `{$MODE OBJFPC}{$H+}`:
+
+```pascal
+type Currency = record a, b, c: Integer; end;
+var longbool: Boolean; tdatetime: array[0..9] of Byte;
+```
+
+| | fpc | pinned | master after ce4d9004c |
+| --- | ---: | ---: | ---: |
+| `SizeOf(Currency)` (the USER's record) | 12 | 12 | **8** |
+| `SizeOf(longbool)` (a Boolean variable) | 1 | 1 | **4** |
+| `SizeOf(tdatetime)` (a 10-byte array) | 10 | 10 | **8** |
+
+**Mechanism.** `SizeOf` consults `BuiltinTypeNameTk` FIRST and only reaches the
+record/alias/array tables in its `else`. Widening that table therefore widens
+the set of names a builtin can STEAL from the user. The function's own header
+says so — *"Callers must consult a user type alias FIRST where that matters"* —
+and the merge did not touch a single caller.
+
+### Why the two facts do not cancel
+
+The **audit** is sound and independent of the merge: eight names really do
+declare a variable of the correct width and really are rejected by
+`SizeOf(<name>)`. That is
+[[bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts]] [P p40],
+filed by frank-rust BEFORE this work, with a counter-example and a control
+program, and its body says in as many words that merging the two bodies is the
+tempting move and is not the fix. The bug is real; the merge is not the way to
+it.
+
+### The failure worth recording, because it is not "did not read the ticket"
+
+I read the **function header**, which states the hazard outright, and quoted its
+neighbourhood in the commit message. I read it as a DESCRIPTION of the
+function's contract, not as a PRECONDITION on the change I was making, so it
+never became something to test. Prose next to code reads as *what this is*, and
+nothing in a header distinguishes that from *what you must not do next*.
+
+The mechanical version generalises further: the accept-side control was 37
+names, both constructs, against FPC — and **every one of the 37 was a builtin.**
+The change widened WHICH NAMES the table answers for. A control drawn entirely
+from the population the change is about cannot detect a change to that
+population's BOUNDARY. The one arm that mattered — a user type named `Currency`
+— was the one arm not in it. Thorough, in the only direction that could not
+fail.
+
+### Coupling, for whoever lands the correction
+
+`ce4d9004c` also wired `test/test_sizeof_builtin_type_names.pas` into
+`test-core`, and that test DEPENDS on the merge — it calls ten builtin names
+through `SizeOf(<name>)`, which the pre-merge table rejects. A straight revert
+of the `pasparser_lval.inc` hunk makes it a hard compile failure. Revert the
+wiring and delete the file in the same commit, or keep the merge and fix the
+CALLER ordering, in which case the test stands.
