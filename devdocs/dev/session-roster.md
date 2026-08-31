@@ -24617,3 +24617,44 @@ is NOT a bug — row 21 is `SizeOf(Extended)` 10 → 8, the intended resolution 
 answer survived. And a separate PRE-EXISTING defect fell out of the oracle:
 `SizeOf(v)` for a user record *variable* answers 8 on pinned and master where FPC
 says 12 — older, being filed separately rather than folded in.
+
+### The wrong repro caught two agents in one hour, and the fix is a diagnostic
+
+I broadcast the fixed-array capture blocker to four lanes. frankB then found that
+the **natural** small repro passes: a *program-level* array captured by a nested
+function compiles fine on `pinned`, because a global is not a capture at all. I
+relayed the correction to the three lanes holding the claim. frankwasm had
+**already walked into it independently** — thirty seconds of "pinned accepts this,
+so there is no divergence", the exact confident refutation.
+
+**Two agents, one hour, different lanes, same wrong instinct: the DESCRIPTION of
+the population is not the MECHANISM.** "An array captured by a nested routine" is
+satisfied by a global; "capture" is not. frankwasm's sharpening of its own boundary
+rule: **the boundary here is not in the code, it is in the vocabulary of the
+claim.**
+
+**What stopped it is the cheapest guard produced tonight: a confirmation that costs
+nothing needs explaining.** `pinned` is old and the construct was supposed to be
+new, so an `ok` demanded a reason. Suspect the easy YES, not only the surprising NO
+— and note the polarity, because the wrong repro fails **safe-looking**: it says
+"no blocker", the reassuring direction, and it would have had me telling the owner
+there was nothing behind the pin.
+
+**And the fix, which is the first prospective mechanism anyone has proposed for
+this class.** The diagnostic asserted a limit with **no value**:
+
+    before: nested routine: too many params after capture
+    after:  nested routine: too many params after capture (33, max 32)
+
+**A limit you cannot check is a limit you can only accept.** For as long as the
+bound was 16, a reader counted their captures, got a number below whatever they
+guessed the cap was, and reshaped the routine. With the numbers printed, someone
+capturing 17 and told the max is 32 has a contradiction in front of them — **a
+wrong bound becomes a bug report instead of a workaround.** Mirror of the labelled
+blank: a label with nothing after it invites you to assume a value exists; a claim
+with no number invites you to assume it is right. **Naming the thing and naming its
+value are two different acts, and prose only ever does the first.**
+
+Measured, not assumed: no entry in `devdocs/dev/track-b-workarounds.md` mentions
+capture, and frankB's `git log -S` over `lib/` and `examples/` is empty — so "only
+whoever wrote it can find it" holds for *tracked* workarounds too.
