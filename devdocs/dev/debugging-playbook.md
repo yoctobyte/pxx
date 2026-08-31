@@ -4459,6 +4459,20 @@ Two things generalise:
   of staring at the two boolean expressions could contain it — and a truth table
   is seductive precisely because it looks like the whole analysis.
 
+**Read this as a limit on the method, not a reason to drop it** (frankS, who
+fixed the bug): diffing the condition against the predicate is *what produced
+the hit at all*, and the hit was real. It is a good instrument for **finding**
+a suspect site and simply not an instrument for **deciding** which half of it is
+wrong. Keep the diff; stop where it stops. The mistake was not the truth table —
+it was writing *"either it is reachable and ... or it is not and ..."* as though
+the table exhausted the possibilities.
+
+The cheap discipline that would have caught it: **the repro was two lines.**
+Whenever an analysis is about to produce a branch labelled "unreachable", that
+branch is a prediction, and predictions of unreachability are the ones most
+worth spending two minutes falsifying — they are how a live SIGSEGV gets filed
+as possibly-dead defensive text.
+
 The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
