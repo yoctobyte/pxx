@@ -38,3 +38,51 @@ pascal26:41: error: Unsupported operator in IR codegen
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## Confirmed live at HEAD 763233473 (frank-rust, 2026-08-31) — measurement only, ticket NOT claimed
+
+Still RED. Not stale, not already-fixed, not a load flake.
+
+- Binary: `compiler/pascal26` sha256 `f92c42a698509b6112d882bac1097efd63b1eefed50e960d6c2bad9e77e320a1`,
+  built by `make compiler/pascal26` → `converged after 2 round(s)`, self-host fixedpoint verified.
+- Repro, no testmgr needed:
+  ```
+  cat test/rust_unity/*.rs > u.rs && ./compiler/pascal26 u.rs out
+  pascal26:41: error: Unsupported operator in IR codegen
+    near:    n   >>>  Board
+  ```
+
+**Do not read `>>>` as a shift operator — it is the error printer's position
+marker.** Current token is `Board`, previous token is `n`. There is no `>>>` in
+any of the four sources (`grep '>>'` finds one line, `(b >> i)` in `attacks.rs`,
+which is not this). Taking this as a member of the SHR family is the obvious
+wrong turn and costs a session; it is the same identifier-standing-in-for-the-
+thing shape CLAUDE.md's *The name is not the thing* is about.
+
+**Location.** Line 41 of the concatenation is `pub struct Board {` — the first
+token of `board.rs`, i.e. immediately after `attacks.rs` ends on `return n; }`
+and the `//!` inner-doc block plus `use crate::attacks::knight_from;` are
+consumed. That is why the previous token is `n`: everything between was skipped
+or dropped.
+
+**The defect is in the concatenated/module path, not in any one file.** Compiled
+alone, each of the four fails only for its expected standalone reason, and none
+of them with this error:
+
+| file | alone |
+| --- | --- |
+| `attacks.rs` | `Rust: no fn main() found` |
+| `board.rs` | `Rust: no fn main() found` |
+| `movegen.rs` | `Rust: unknown type Board` |
+| `main.rs` | `Rust: no associated fn Board::new` |
+
+**Lane is still open and I did not guess it.** The header's Track T is the
+watcher's fallback. The error string is emitted by IR codegen (suggesting A) but
+is reached through the Rust frontend's module/`use` handling (suggesting R), and
+nothing measured here separates the two — whoever takes it should localise that
+first rather than inherit either letter from this note.
+
+Recorded and parked under the 2026-08-31 concurrency cap (2-3 active agents);
+no code touched, no claim taken.
