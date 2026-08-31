@@ -76,6 +76,21 @@ begin
           tkDiv:   if b = 0 then Result := False else v := a div b;
           tkMod:   if b = 0 then Result := False else v := a mod b;
           tkShl:   if (b < 0) or (b > 63) then Result := False else v := a shl b;
+          { tkIdent is Pascal's `shr` (the lexer mints no tkShr for it) and C's
+            `>>` on an UNSIGNED operand: logical either way. tkShr is C's `>>`
+            on a SIGNED operand, which is arithmetic — and its arm below is
+            reached only from C, whose own const evaluator folds first.
+            Without the tkIdent arm this `case` fell to `else Result := False`
+            for every Pascal `shr`, so a constant expression CONTAINING one did
+            not fold — and the callers of this function are the two that type a
+            folded constant the way FPC does (smallest signed type that holds
+            it). Measured: `IntToHex(-(256 shr 4), 8)` printed
+            FFFFFFFFFFFFFFF0 where FPC prints FFFFFFF0, because the unfolded
+            operand was typed Int64 and picked the Int64 overload. The `shl`
+            spelling of the same expression was right, which is the double case
+            devdocs/dev/normalise-dont-special-case.md is about.
+            bug-a-shr-reaches-the-ir-spelled-as-tkident }
+          tkIdent: if (b < 0) or (b > 63) then Result := False else v := a shr b;
           tkShr:   if (b < 0) or (b > 63) then Result := False else v := a shr b;
           tkAnd:   v := a and b;
           tkOr:    v := a or b;
