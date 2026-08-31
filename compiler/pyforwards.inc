@@ -149,6 +149,7 @@ function PyWiden(a, b: TTypeKind): TTypeKind; forward;   { Nil Python numeric-ki
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
+procedure PyStrCallResultSuffix(var node: Integer; var tk: TTypeKind); forward; { Nil Python `f()[i]` / `f()[a:b]` on a str-returning CALL (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyNotSubscriptableNode(ci: Integer): Integer; forward; { Nil Python: run-time TypeError for a class with no __getitem__ (pyparser.inc) }
 function PyClassErrCallNode(const procName: AnsiString; ci: Integer): Integer; forward; { Nil Python: a run-time error call naming the class (pyparser.inc) }
@@ -298,6 +299,26 @@ begin
     Exit;
   end;
   if PyExprMode then PyParseBoolExpr else ParseExpr;
+{$endif}
+end;
+
+{ ---- a FRONTEND HOOK, and the pattern the region carve uses ---------------
+  The shared Pascal parser selects the arm; the frontend owns the body. The
+  selecting condition stays at the call site because it names nothing
+  frontend-specific (PyExprMode is a plain flag in defs.inc), so only this
+  trampoline has to know that pyparser.inc may be absent.
+
+  Six NilPy references in pasparser_lval.inc became zero for six lines here,
+  which is the ratio that decides whether the carve is worth doing at all: a
+  hook PER SYMBOL would be the 176-stub answer wearing a different hat, and a
+  hook per REGION is not.
+  refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops }
+procedure FrontendStrCallResultSuffix(var node: Integer; var tk: TTypeKind);
+begin
+{$ifdef PXX_NO_NILPY}
+  Error('internal: a NilPy subscript arm was reached in a build without the NilPy frontend');
+{$else}
+  PyStrCallResultSuffix(node, tk);
 {$endif}
 end;
 

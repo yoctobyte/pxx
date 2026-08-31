@@ -4800,39 +4800,13 @@ begin
     tk := tyUInt8;
   end
   else if PyExprMode and (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) then
-  begin
     { NilPy indexes a str-returning call the same way it indexes a NAMED str:
-      0-based, negative from the end, and slices allowed. It used to fall into
-      the Pascal arm below, whose AN_INDEX is 1-BASED with neither — so
-      `f()[1]` yielded character 0, `f()[-1]` yielded nothing, and `f()[1:2]`
-      did not compile. Silent, and `f()[0]` was "correct", which is how it
-      survived (bug-nilpy-subscript-of-a-call-result-ignores-the-index).
-
-      No hidden temp is needed on this path: pystr_at and the slice builder take
-      the string as an ARGUMENT, so the call is evaluated exactly once by
-      construction — which is also the property the Pascal arm needs its temp
-      for. }
-    if PySliceBracketAt(TokPos - 1) then
-    begin
-      Next;
-      if CurTok.Kind = tkColon then
-        node := PyParseSliceTail(node, -1)
-      else
-      begin
-        PyParseBoolExpr;
-        node := PyParseSliceTail(node, CurASTNode);
-      end;
-      tk := IntToTypeKind(ASTTk[node]);
-    end
-    else
-    begin
-      Next;
-      PyParseBoolExpr;
-      node := PyMakeStrIndex(node, CurASTNode);
-      Expect(tkRBrack, ']');
-      tk := tyAnsiString;   { a 1-character str — see PyMakeStrIndex }
-    end;
-  end
+      0-based, negative from the end, and slices allowed. The BODY is the NilPy
+      frontend's and lives in pyparser.inc; only the arm that selects it is
+      shared, and it selects on nothing but PyExprMode and two shared token
+      facts. First worked example of the region carve --
+      refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops. }
+    FrontendStrCallResultSuffix(node, tk)
   else if (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) and
           not (ProcRetIsDynArray[procIdx] or (ProcRetFixedArrBytes[procIdx] > 0)) then
   begin

@@ -6,7 +6,7 @@ type: refactor
 status: working
 owner: frankA
 blocked-by: []
-summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 272 now, after StoredName moved to util.inc and closed the compilers only frontend-to-frontend dependency (cparser.inc -> pyparser.inc)."
+summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 266 now, after two steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) and the first REGION carve, which closed six references with a six-line hook. Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead."
 ---
 
 # Carve the NilPy arms out of the shared Pascal *argument* loops
@@ -165,3 +165,48 @@ So the 272 are at least three species and only one of them is a move:
 Anyone planning this as one mechanical sweep will get species 1's answer and
 apply it to species 2 and 3, which is how the 176 stubs the parent rejected get
 written by accident.
+## Step 1b DONE 2026-08-31 — the first REGION carve, and the ratio that justifies the campaign
+
+`ApplyCallResultPtrSuffix`'s NilPy arm (`f()[i]` / `f()[a:b]` on a str-returning
+call) moved to `pyparser.inc` as `PyStrCallResultSuffix`, behind a neutral
+trampoline in `pyforwards.inc`'s unguarded island beside `ParseArgExpr`.
+
+**272 → 266. Six references closed by a six-line hook.**
+
+That ratio is the whole argument. A hook **per symbol** is the 176-stub answer
+the parent ticket rejected, wearing a different hat; a hook **per region** is
+not, and this measures the difference on a real region rather than asserting it.
+Anyone continuing this should report the ratio for their region — if it
+approaches 1:1 they have found a species-2 site and should stop and design the
+concept-level hook instead.
+
+### The shape, so it does not have to be re-derived
+
+- **The selecting condition stays at the call site**, because it names nothing
+  frontend-specific: `PyExprMode` is a plain flag in `defs.inc`, and `tk` and
+  `CurTok.Kind` are shared. Only the BODY is NilPy's. Regions where the
+  *condition* needs a Py function are species 2 and want a different answer.
+- **The trampoline carries the `{$ifdef PXX_NO_NILPY}`**, so exactly one place
+  knows `pyparser.inc` may be absent.
+- **`var` parameters, not a return**, because the caller walks a suffix CHAIN and
+  both the node and its type kind feed the next suffix.
+- Trampolines live beside `ParseArgExpr` for now. **When there are more than a
+  handful they should move to their own `frontend_hooks.inc`** — noted so the
+  next person moves them deliberately rather than discovering a pile.
+
+### Verified, and the population was checked rather than assumed
+
+Output equivalence, before-build vs after-build, on eleven programs including
+`compiler/compiler.pas` itself: **11 identical, 0 differing**. Five of them are
+the `.npy` subscript tests, and each also matches CPython.
+
+**And a positive control, because six greens over code that is never reached is
+not a measurement.** `PyMakeStrIndex(node, CurASTNode)` was changed to
+`PyMakeStrIndex(node, GenZeroLit)` — always index 0 — the compiler rebuilt, and
+`test_nilpy_subscript_of_a_call_result.npy` diverged from CPython immediately
+(`b a e e a` → `a a a a a`). The tests do reach the carved code. Reverted, and
+the restored build is byte-identical to the pre-control one (`be40b3454349`).
+
+That test's own header, written by whoever fixed the original bug, says
+*"`f()[0]` was 'correct', which is exactly how it survived — any probe must use
+a NON-ZERO index"*. The control was designed against that sentence.
