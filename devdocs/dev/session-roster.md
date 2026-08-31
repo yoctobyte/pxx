@@ -24364,3 +24364,46 @@ I checked the host prerequisite first, because a p75 corpus ticket froze once on
 blocker was cleared and a *different* one had taken its place, which is the
 `feature-random-library` case again: two blockers genuinely closed and a third
 wall standing behind them.
+
+### The family was in shipped code too — and the triage rule that stops a churn campaign
+
+frankwasm asked the question none of the three of us asked: *is the shell-exit
+family also in the committed tooling?* One live hit and one near-miss.
+
+**`tools/gate.sh:180`, unreachable for its whole life:**
+`twatch.py --status 2>/dev/null | sed 's/^/  /' || echo "(twatch status unavailable)"`
+— `||` reads `sed`'s status, `sed` exits 0 on empty input. When twatch is broken,
+`gate.sh check` printed **nothing** where the status block belongs, and the
+fallback for exactly that case could never fire. In the PIN GATE.
+
+**`Makefile:17502`, the near-miss, in the pin ledger:** the `||` sits downstream of
+`awk`, so it fired only because `test -e` short-circuited before the pipeline. Any
+other failure wrote `(was )` into `pin.log` — a labelled blank in the ledger this
+whole thread started from.
+
+**The triage rule, which is what keeps this from becoming a churn campaign across
+the tooling: a dead suppressor is noise; a dead fallback is a LIE.** `sync.sh:555`,
+`release.sh:224` and friends are `| cut … || true` — the `||` is dead there too,
+but the intended behaviour on failure is "empty, don't abort", which happens
+either way. **The shape is only a defect when the `||` branch is meant to be
+reachable.** Deliberately not changed, and recorded so nobody re-scans them.
+
+**And the method note is the better generalisation: the obvious grep is wrong, and
+the scan needed a positive control.** `… | grep -q X || fail` is the CORRECT idiom
+and dominates the hits. The defect requires the pipeline to end in a *passthrough*
+that succeeds regardless — `cut|head|tail|tr|sed|awk|wc|tee|sort|uniq|xargs`.
+frankwasm gave the scan a control (a file holding its own pre-fix line, asserted
+to match) because **a scan that finds nothing and a scan that cannot find anything
+print the same result.** That is the guard doctrine applied to a SEARCH rather
+than to a check, and searches are where we have been trusting bare counts all
+night.
+
+**One hazard it declined to ship, and the reasoning is the point.** It first put
+the explanation inside the `pin:` recipe as `#` lines between backslash
+continuations. Make splices those into one logical line, so a shell comment there
+*looks* like it should swallow the rest of `make pin`. It does not — `#` ends at
+the real newline — but it only knew that by building a throwaway makefile and
+running it. It moved the note above the target anyway: **a construct whose safety
+depends on a subtlety you had to measure does not belong in the pin recipe,
+however correct it turned out to be.** That is the right standard for the one
+command that holds a repo-wide lock.
