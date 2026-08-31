@@ -407,8 +407,10 @@ is last in both, so key off that rather than a field index"* — so the tooling 
 not exposed; the exposure is entirely in reading the pin **commit's subject
 line**, which is hand-written and puts the binary hash where a reader expects a
 commit. Verify with `sha256sum stable_linux_amd64/default/pinned` before
-concluding anything, and note that `--is-ancestor` will not tell you: a
-malformed argument and a false answer leave through the same exit code.
+concluding anything. `--is-ancestor` *will* tell you — 128 with a fatal for a
+bogus sha, 1 and silence for a real non-ancestor — but only if you read `$?`
+rather than branching on it with `!` or `||`, which is how that distinction gets
+thrown away in practice (measured; shape 5 has the table).
 
 #### Correction: `--is-ancestor` DOES distinguish them. My row blamed the tool for what the idiom did.
 
@@ -549,6 +551,56 @@ states its own blind spot cannot be mistaken for one that has none.**
    about with the last stage's. The artifact check is still the better
    instrument — its failure is `invalid object name`, a different KIND of answer
    rather than a plausible one — but it is only better if you let it speak.
+
+### The bias that has a trigger: a tool you were *just* told is broken
+
+Every instance above is about an instrument. This one is about **when you are
+most likely to misread one**, and it is the only entry here that names a moment
+rather than a command.
+
+**The mechanism (frank-coordinator's, and it is the load-bearing half): being
+told an instrument is unreliable SHIFTS YOUR PRIOR, so the same evidence now
+buys a filing it would not have bought an hour earlier.** Nothing about the
+evidence changed. What changed is what you were willing to conclude from it.
+
+**The symptom, which is how you meet it: a real mislabel and a correct report
+are identical from one command away.** You see a tool print something odd, you
+have just been warned that tool was broken, and the two readings are
+indistinguishable without one more question.
+
+Three instances on 2026-08-30/31, all within an hour of `trackt.py health` being
+fixed and announced:
+
+- I saw `health` name a sha whose subject was a `tstate(...)` commit and
+  concluded it was printing the **publishing** commit instead of the **tested**
+  one. It was not. The watcher genuinely tested a tstate commit, because that
+  was the tip when it sampled. I was one command from filing a bug against a
+  tool fixed an hour earlier.
+- The coordinator read a truncated `--status` and began composing a second,
+  larger alarm about the instrument everyone had just been told to trust.
+- The coordinator then called `992065f21f33` in the pin commit's subject a
+  pre-rebase ghost. It is the first twelve of the pinned **binary's sha256**
+  (`sha256sum stable_linux_amd64/default/pinned` — verified). Third recorded
+  instance of that confusion, produced by the agent who had been quoting the
+  first two at other people all night.
+
+**Why it earns an entry rather than "watch out for confirmation bias":** that
+advice converts into nothing you can do. This one has a **trigger**, so it
+converts into a question you can actually ask:
+
+> **Have I just been told this instrument is unreliable?**
+
+If yes, the bar for concluding "it is still broken" goes UP, not down — and the
+cheapest way over it is one more question aimed at the *other* explanation. For
+each instance above that question was: does the ndjson row's `sha` field hold
+what health printed (it did); is `--status` truncated (it was); is this twelve
+hex a 40-hex prefix or a 64-hex one (`sha256sum` answers in one line).
+
+**The general form is the section's own rule pointed at yourself: "what would
+this be if it were false?" — where *this* is your suspicion of the tool, not the
+tool's answer.** The three instances above cost nothing only because somebody
+asked that before filing. It is the same move as pairing a green with a row that
+would have gone red: pair a suspicion with the observation that would clear it.
 
 ### The habit that defeats all five
 
