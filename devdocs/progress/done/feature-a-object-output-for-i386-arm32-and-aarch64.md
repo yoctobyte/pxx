@@ -142,4 +142,4 @@ would hide both. That is the platonic-code rule.
 - `tools/doclinks.py`, `tools/docsnip.py`: 0 broken.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit be4442d9b.
