@@ -1,9 +1,9 @@
 ---
 track: U
-prio: 60
+prio: 0
 type: decide
 blocked-by: []
-summary: "The NilPy fixed tax (~2.2s/compile, ~1,940 CPU-s per full tier) has two possible routes and the ticket assumes one. Serialising the compiled unit image is a 176+ parallel-array checklist that every future Track A commit can silently invalidate. Deferring routine bodies persists nothing and has no staleness class, but only pays if most bodies are unreachable, which is unmeasured. Decide the route before either is built."
+summary: "REJECTED 2026-08-31 (owner): neither A nor B. The premise is wrong. Measured the same day: the compiler parses its OWN 235,854 lines at ~12,000 lines/sec, and pylib+pyeval's 25,551 lines at ~11,600 lines/sec — the SAME RATE. There is no NilPy runtime tax; there is a general compiler throughput figure applied to 24,000 lines, reframed as a per-frontend pathology. A cache would also be invalid for the population that compiles most often (developers rebuild the compiler every fix, invalidating any compiler-keyed cache on every loop) and its failure mode is an intermittent machine-dependent wrong answer. Superseded by perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why."
 ---
 
 # Serialise the compiled unit image, or defer the bodies?
@@ -208,3 +208,80 @@ Method note: the timing harness asserts each compile printed `ok:` and captures
 `$?` immediately, after frankC and frank-coordinator found gates reporting exit 0
 because a `tail`/`echo` ran last. A compile that fails reports a beautifully fast
 time, which is the same failure shape.
+
+---
+
+## REJECTED 2026-08-31 (owner) — neither A nor B; the premise does not survive one measurement
+
+### The measurement
+
+| | lines | time | rate |
+| --- | ---: | ---: | ---: |
+| `compiler/*.inc` + `compiler.pas` (self-compile, pinned) | 235,854 | 19.7s | **~12,000 lines/s** |
+| `pylib.pas` + `pyeval.pas` | 25,551 | 2.2s | **~11,600 lines/s** |
+
+**Those are the same rate.** There is no "NilPy fixed tax". There is a general
+compiler throughput number, applied to 24,000 lines of Pascal, that this ticket
+and its parent framed as a NilPy-specific pathology and then proposed to route
+around with a cache.
+
+(Load caveat, stated because it cuts the right way: the 2.2s was measured by
+frankA at loadavg 2.76 on 2026-08-30; the 19.7s was measured on this box on
+2026-08-31 under unknown load. If the later measurement was the more loaded one
+its 12,000 is a floor, and the two rates agree even more closely.)
+
+### The owner's reasoning, which stands independently of that number
+
+> *"the first best time our cache not matches reality, we waste more time fixing
+> that. if any, we should try to reduce those 2.2 seconds since 2.2 seconds for
+> 24000 lines may or may not be reasonable. i still don't see the issue, apart
+> speeding up testing. in general, i dont like the presumption."*
+
+Three separate objections, all correct:
+
+1. **The cost/benefit of a cache miss is inverted.** A wrong cache does not fail
+   loudly; it compiles something else. That bug is intermittent and
+   machine-dependent — the most expensive shape this repo has — and one instance
+   costs more than every second the cache ever saved.
+2. **The population that compiles most often gets nothing.** A developer
+   rebuilds the compiler on every fix (the mandatory `make compiler/pascal26`
+   loop). Any cache must be keyed on the compiler binary or it emits code built
+   by yesterday's compiler — so it is cold on *every* compile of the loop it
+   would most like to speed up. This was never addressed by either option.
+3. **The right target is the 2.2 seconds itself**, not a way to avoid paying it.
+
+### What the ticket got right, and where its argument actually lands
+
+The only real cost is **the test fleet**: 719 NilPy jobs per full tier each
+re-parsing the same two files. That is worth something, since CLAUDE.md makes
+sweep rate the binding constraint on how fast a regression is localised. But it
+is *also* fixed by making the compiler faster, without a cache, without 176
+parallel arrays, and without a new failure class — and that fix helps every
+frontend, every compile and every agent's 12-second loop instead of one tier of
+one suite.
+
+The counted work in this ticket is still good and is why the rejection is cheap
+to trust: 176 parallel arrays behind a five-item design sketch, and the
+observation that single-program byte-identity would pass a serialiser that
+forgot 170 of them. That analysis killed A on its own terms before the
+throughput number killed the whole question.
+
+### Also closed by this
+
+`unfinished/perf-a-cache-the-compiled-nilpy-runtime-unit-image` — the parent that
+assumed caching. Nothing in it survives; it should not be picked up.
+
+### Superseded by
+
+`perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why` — profiling,
+no new mechanism, broad payoff.
+
+### The generated-serialiser idea, recorded so it is not re-derived
+
+While ruling, it was established that all **257** `array of` globals in
+`defs.inc` are the uniform one-line form and 247 are plain scalars, so the
+serialiser could have been *generated* from the declarations, which would have
+made "a future commit adds an array and the serialiser forgets it" structurally
+impossible. **That is a sound answer to A's objection and it does not matter**,
+because the question it answers is not worth asking. Recorded only so that a
+future reader who rediscovers it does not mistake it for a reason to reopen this.
