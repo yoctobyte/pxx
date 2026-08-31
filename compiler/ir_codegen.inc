@@ -151,11 +151,21 @@ end;
 
 procedure EmitAnsiStrRetainLocked;
 { rax = managed-string data pointer. Preserve rax. Caller holds the heap lock
-  when threading is enabled. }
+  when threading is enabled.
+
+  The MSTR_STATIC_RC guard is the same one PXXStrIncRef carries, and it is here
+  for the same reason: a static literal block must never be WRITTEN, not merely
+  never freed, because a store dirties a page shared with code (1600x under
+  qemu) and defeats ever placing the literal pool in a non-writable segment.
+  It must move together with the one in the release blob below and with
+  builtinheap.pas's pair — suppressing one direction only is what lets a static
+  block's count drift. }
 begin
   EmitAsmX64([
     'test rax, rax',
     'jz .done',
+    'cmp qword [rax-16], %', MSTR_STATIC_RC,
+    'jae .done',
     'inc qword [rax-16]',
   '.done:'
   ]);
@@ -3182,7 +3192,7 @@ end;
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
-    pRelNil, pRelLive, pAsciiSkip: Integer;
+    pRelNil, pRelLive, pRelStatic, pAsciiSkip: Integer;
 begin
   EmitAnsiStrFromLiteral;
 
@@ -3209,6 +3219,12 @@ begin
   EmitAcquireHeapLock;
   EmitAsmX64(['test rax, rax']);
   EmitB($74); pRelNil := CodeLen; EmitB(0);       { jz done }
+  { Saturated static literal: no write, and no free to consider. Same guard as
+    PXXStrDecRef, which every OTHER backend reaches and this blob used to
+    bypass — see the retain blob above for why the WRITE is what matters. The
+    compare reads a line the decrement was about to dirty anyway. }
+  EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
+  EmitB($73); pRelStatic := CodeLen; EmitB(0);    { jae done }
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
   EmitB($75); pRelLive := CodeLen; EmitB(0);      { jnz done }
@@ -3219,6 +3235,7 @@ begin
   EmitHeapFreeLocked;
   EmitAsmX64(['pop rax']);
   PatchRel8(pRelNil);
+  PatchRel8(pRelStatic);
   PatchRel8(pRelLive);
   EmitReleaseHeapLock;
   EmitB($C3);                                     { ret }
@@ -3787,21 +3804,21 @@ begin
   else
   begin
     EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset + 8);   { the handle: Offset is the length prefix, data follows }
-    { AND TAKE A REFERENCE. Every call site this replaces used to receive a
-      FRESH block at rc=1 and take ownership of it — no retain on the store, a
-      release when the reference dies. Handing back the static block without
-      the increment keeps that release, so each store/overwrite cycle walks the
-      static refcount permanently DOWN by one, and a program that assigns
-      literals in a hot loop reaches zero and frees a .data block. 2^30 sounds
-      out of reach until you price it: this ticket's own subject runs for ~400
-      seconds, and 2.5M literal stores a second is an ordinary rate.
+    { NO RETAIN, since 2026-08-31 — the same shape aarch64 has had since
+      2026-08-30, and for the same reason. This used to emit `inc qword
+      [rax-16]` to compensate for the release blob's UNGUARDED `dec`: handing
+      back a static block to a call site that takes ownership and later
+      releases would otherwise walk the static refcount down by one per
+      store/overwrite cycle. That compensation is gone because its cause is:
+      the release blob now carries the MSTR_STATIC_RC guard and refuses to
+      write a saturated block, exactly as PXXStrDecRef always did on the five
+      backends that call the routine instead.
 
-      So restore the convention exactly, in four bytes and no call:
-      `inc qword [rax-16]` (48 FF /0, disp8 -16). The saturated start then does
-      the job it was actually chosen for — keeping PXXStrDecRef's `rc = 0` test
-      false — rather than standing in for an increment nobody makes. }
-    if ThreadSafeMode then EmitB($F0);                       { lock }
-    EmitB($48); EmitB($FF); EmitB($40); EmitB($F0);          { inc qword [rax-16] }
+      So the pair is balanced by both sides doing NOTHING rather than by an
+      increment cancelling a decrement — which also stops 9,307 sites in a
+      self-compiled compiler from dirtying the literal pool's pages.
+      One change or nothing: this, the two blobs above, and builtinheap.pas's
+      PXXStrIncRef/PXXStrDecRef guards move together. }
   end;
   EmitStaticLitHandle := True;
 end;

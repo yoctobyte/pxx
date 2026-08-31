@@ -86,3 +86,45 @@ the slowdown is silent.
 [[feature-opt-heap-per-thread-cache]] (where the separation was measured; that
 ticket keeps rows A and C) · `lib/rtl/palparallel.pas` ·
 `compiler/builtin/builtinheap.pas` (the retain/release helpers).
+
+
+---
+
+## 2026-08-31 (frankB) — part of row B was the LITERAL, and it is fixed; the rest is the lock order
+
+Row B's `shared` is a **string literal**, so at `-O2` it is a static pool block
+with a saturated refcount — and until today x86-64's hand-emitted retain/release
+blobs wrote that refcount unconditionally, `lock`-prefixed under `--threadsafe`.
+Twelve workers were doing a locked RMW on one immutable word, per iteration.
+
+`bug-a-string-release-has-two-implementations-that-already-disagree` gave both
+blobs the `MSTR_STATIC_RC` guard that `PXXStrDecRef`/`PXXStrIncRef` always had,
+so a saturated block is now never written. Measured on this ticket's own shape
+(4M iterations, 12 workers, binary `4ae31c9e10cf` vs `f92c42a69850`, min of 3):
+
+| | before | after | |
+| --- | ---: | ---: | --- |
+| parallel only | 1.18 s | **0.95 s** | ~19% |
+| serial only, `--threadsafe` | 0.14 s | **0.12 s** | ~14% |
+
+**So this ticket is not closed, and the remaining gap has a named cause.**
+Parallel is still ~8x serial, and it is no longer the refcount word: both blobs
+call `EmitAcquireHeapLock` **before** the nil test and before the guard, so a
+release that is about to do nothing at all still takes the global heap spinlock
+first. Twelve workers now serialise on the *lock* line instead of the
+*refcount* line.
+
+That also sharpens the summary's claim. "A per-thread heap free-list cache
+cannot fix this" is still right — there is no allocation — but the reason has
+two halves, and only one of them was refcount atomics. The other is a lock
+acquired for a path with nothing to protect.
+
+**The fix, and why it was not done in the same change:** hoist the nil test and
+the `MSTR_STATIC_RC` compare above `EmitAcquireHeapLock`, leaving the lock
+around only the `dec`-and-maybe-free. It is sound — the lock protects the free
+list, not the refcount word, and a saturated block's count is immutable, which
+is the argument `PXXStrIncRef` already makes for its own lock-free read of the
+same word. It needs rel32 patch sites (the jumps now span the whole TTAS lock
+body, which can exceed a rel8 displacement) and it lands in threadsafe-only
+code that `--tier quick` barely exercises, so it wants its own change and its
+own measurement rather than riding along.
