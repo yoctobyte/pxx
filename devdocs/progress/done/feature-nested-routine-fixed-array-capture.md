@@ -122,3 +122,39 @@ Not done here — that is B's file and B's gate.
 
 ## Log
 - 2026-08-31 — resolved, commit 6bc2d8c5c.
+
+---
+
+## Addendum (frankS, 2026-08-31): the i386 leg, and three acceptance rows
+
+I implemented this concurrently and dropped my duplicate — same design, same
+three files, and `50fcbddef` was first. Two things from that work are additive
+and landed on top:
+
+**1. `29704fd69` — i386 refused the feature, for a reason that predates it.**
+`TwoArrays` calls a nested FUNCTION as a STATEMENT. The capture is a `var`
+open-array param, so its copy-OUT runs after the call and would clobber the
+result register; the caller spills the result to a compiler-minted temp typed
+from the call STATEMENT's AST node, which has no type. i386 is the only backend
+that asserts on an unresolved temp.
+
+Measured rather than argued: a compiler with `29704fd69` reverted rejects
+`test/test_nested_fixed_array_capture.pas` at `TwoArrays` for `--target=i386`
+and compiles it fine for x86-64. **The native-only Makefile row could not have
+seen it**, which is why there is now an i386 row.
+
+Not this feature's bug — the two-line repro in that commit has no nested
+routine in it and `pinned` refuses it today:
+
+```pascal
+var a: array[0..3] of Integer;
+function F(var o: array of Integer): Boolean; begin o[0] := 9; F := True; end;
+begin F(a); end.        { --target=i386 }
+```
+
+**2. `416cbc997` — three acceptance clauses had no row.** Folded into the same
+test file rather than a second one: `ElemKinds` (record / Double / Char /
+AnsiString elements — different byte counts, and the AnsiString rides the
+copy-in/copy-out as raw handles), `Depth3`, and `ParamCapture` (the acceptance
+says "local **and array parameter**"; every existing row captured a local).
+6 rows -> 9, byte-identical to FPC, matching on i386/aarch64/arm32/riscv32.
