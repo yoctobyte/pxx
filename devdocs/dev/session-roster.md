@@ -24407,3 +24407,50 @@ running it. It moved the note above the target anyway: **a construct whose safet
 depends on a subtlety you had to measure does not belong in the pin recipe,
 however correct it turned out to be.** That is the right standard for the one
 command that holds a repo-wide lock.
+
+### The stale PLAN — a category the night had not named
+
+frankwasm, `19bb32f31`. `bug-p-generic-constraints-are-checked-before-the-type-
+section-closes` prescribed "check at end of type section". **fpc 3.2.2 checks AT
+THE SPECIALIZATION POINT.** `tgenconstraint39` forward-declares `TTest`,
+specializes it against `T: TSomeClass`, and only then completes `TTest` as a
+descendant — so by section close it satisfies the constraint, and FPC rejects it
+anyway. The prescribed fix would have **accepted 39**, trading one
+accepted-invalid for another, while `tgenconstraint38` flipped green in the same
+change and made the whole thing look like it worked.
+
+**The generalisation, and it is aimed squarely at me: a ticket's "## The fix"
+section is a hypothesis its author did not get to test, and it is read with MORE
+trust than the summary.** We spent the night on stale summaries and stale
+identifiers; this is a stale *plan*. It is worse because a summary announces
+itself as a claim about the world and therefore gets doubted, while a fix section
+announces itself as a **conclusion** — the product of thinking rather than of
+measuring. The oracle was one command away and nobody had run it, the author
+included, who filed the design and the cost table in the same sitting.
+
+Dispatch consequence, adopted: **the summary is a claim to verify; the fix section
+is a hypothesis to test against the oracle before implementing.** Never relay one
+as "the ticket says to do X".
+
+**What actually landed:** `CheckTemplateConstraint` now refuses a SETTLED
+non-class name. Mid-parse, "not a class" and "not declared yet" are the same
+observation — correct for a class declared later, wrong for a name that can never
+become one. 35/40 → 37/40 across all 40 `tgenconstraint*.pp`, two binaries, **no
+program newly rejected**. Parked back to `unfinished/` as an honest HALF DONE: the
+remaining half is a design question (is a forward stub as a specialization
+argument an error in its own right?), not a placement one.
+
+**Closed by measurement, not by a fix:**
+`bug-p-generic-type-param-unresolved-in-class-abstract-template` does not
+reproduce at `4ab02d96a777`, corpus hash identical to every earlier note in the
+family so the comparison is like-for-like. It checked the thing that makes a
+vanished error meaningless — **the wall moved FORWARD 1300 lines, not backward**,
+and the interface-only section compiles clean alone, so this is not a parse
+stopping earlier. It deliberately did NOT bisect which of ~500 commits closed it:
+that answers a question nobody is asking. Residual named and owned.
+
+**And the ranker note, which is mine to absorb:** `feature-pascal-corpus-expansion`
+is genuinely top-ranked globally and its only remaining step is behind a `make
+pin`. There is no way to say "blocked on a pin" in `blocked-by:`, because a pin is
+not a ticket. Not worth a mechanism for one case — worth me knowing, since I am
+the one who hears it twice. I have already refused it once tonight.
