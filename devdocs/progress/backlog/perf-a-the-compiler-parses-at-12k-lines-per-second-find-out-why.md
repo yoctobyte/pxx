@@ -65,3 +65,24 @@ convenient to believe.
   per-char loops that already know their span, so `AppendRange` applies cleanly.
 - **Do not start anyone on the cpreproc/pyparser conversion.** It is not
   supported by any measurement and the one measurement taken points elsewhere.
+
+### Carried forward from the same finding — two cheap habits
+
+1. **Before converting any candidate, grep for a done-right twin.** The 13.8%
+   win was not new work: `GetTokenStrFromRaw` already existed, already carried
+   the O(n^2) comment, and its sibling had simply been missed. So before taking
+   `ExpandPasMacros` / `ExpandIncludes` / `IncEmitLineMarker`, check whether any
+   of them has a correct twin elsewhere. The pattern has now paid twice and
+   costs one grep.
+2. **A sampling aggregator needs a positive control.** frankB's first script
+   could not see `AppendChar` at all (its regex required `funcname ()`; every
+   such frame carries arguments) and printed a plausible ranking anyway. Assert
+   that a known-present symbol appears in the aggregation *before* trusting the
+   ranking — the same rule CLAUDE.md already states for guards, applied to
+   instruments. Worth a line in `devdocs/dev/debugging-playbook.md`.
+
+Also still open: the **46% `??` frames** remain unattributed. frankB's 70-sample
+run may already answer it if those frames sat under `GetTokenStr` — worth
+checking against the OLD binary, since the win makes them harder to reproduce.
+And if the re-profile shows the time moved somewhere unrelated, that is the
+signal to stop converting sites and go back to attribution.
