@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer | A | 60 | bug | alloca() moves rsp, and so does everything else in the x86-64 value model -- the call sequence's saved-rsp slot AND the push/pop expression stack are both addressed at fixed offsets from it. So an alloca evaluated mid-expression reads back somebody else's bytes. The C frontend hoists allocas out of ARGUMENT LISTS (d7df19543), which is what busybox needed; a binop arm is still wrong and measured. Eight realistic alloca shapes all pass, so nothing reachable is broken today. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why | A | 60→50 | perf | ANSWERED and partly fixed. Profiled: the managed-string + heap runtime is ~47% of a self-compile (PXXStrFromLit 17%, PXXAlloc 10%, PXXFree 8.6%, refcount thunks 8.6%) — resolved through the compiler's own .map file, not DWARF. GetTokenStr built every token string a char at a time and was 17 of the 18 AppendChar samples; fixed in 4b3d34f74 for 13.8% off a self-compile. Top remaining item split out as perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass. FPC oracle now measured: we are 1.28x fpc 3.2.2 on the same file, i.e. inside the 2x band the ticket set as its own de-escalation criterion. Still open: the July-3.4s vs today-21.7s discrepancy. | — |
@@ -756,9 +755,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2952)
+## done (2953)
 
-2952 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2953 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (71)
 

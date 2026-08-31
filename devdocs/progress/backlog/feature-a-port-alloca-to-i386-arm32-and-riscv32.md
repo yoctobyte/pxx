@@ -38,12 +38,43 @@ access: every expression temp in these backends is sp-relative, so an odd
 
 ## The invariant that comes with the op
 
-`IR_ALLOCA` must not be reachable from inside a call's argument evaluation, or
-from an expression with a value already spilled to the stack. The C frontend
-upholds the first (`cparser.inc`, `CHoistAllocaArgs`); the second is still open
-as [[bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer]],
-measured but not reachable by any realistic shape. A port must not assume the
-arrangement is safe just because the epilogue unwinds.
+> **SUPERSEDED, 2026-08-31.** There is no frontend invariant to uphold any more.
+> [[bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer]]
+> is fixed in both backends, and the five-instruction template above is NOT what
+> to copy — it is the arrangement that was wrong. Read the new model first.
+
+The op's contract is now: **an alloca may be reached with anything already on
+the expression stack, and must not disturb it.** Both backends meet it by
+carving the hole at the bottom of the FIXED FRAME rather than at sp: a body
+containing an `IR_ALLOCA` reserves one frame word, the ALLOCA BASE, holding
+where its expression stack starts; an alloca lowers sp by the rounded size,
+relocates everything between sp and the base down by that amount, and returns
+the gap that opens under the base. The region moves as a unit, so every
+sp-relative offset into it survives.
+
+**The question a port must answer FIRST is not whether the epilogue unwinds.**
+It is *where this backend's expression temps live, and whether it ever stores an
+ABSOLUTE stack pointer* — because relocation moves such a value's bytes while
+leaving the value itself stale.
+
+- **i386** has the x86-64 shape on both counts: push/pop expression temps AND a
+  saved absolute esp in its call sequence. It needs both halves, including the
+  save-as-delta-from-base / restore-as-base-plus-delta pair
+  (`EmitSaveCallerRspX64` and friends are the model).
+- **arm32 and riscv32** need checking against the aarch64 question: aarch64
+  needed only the relocation half, because its call sequence reads argument
+  temps at fixed offsets from sp and drops them with a RELATIVE `add sp, sp,
+  #imm`, so it never parks an absolute sp.
+
+Relocation deliberately does not cover a statement-level scratch area addressed
+through a saved absolute pointer (an exception frame, a shortstring concat
+buffer). Unreachable with an alloca today because those are Pascal constructs
+and `IR_ALLOCA` is C-only; a port that changes either half must revisit it.
+
+The regression test to bring up on each target is
+`test/c_alloca_expression_stack.c` — 17 rows, differential against gcc, with
+row 9 (`a + (long)(alloca(32) != 0)`, no call in it at all) as the one that
+fails on an unported model.
 
 ## Verification
 

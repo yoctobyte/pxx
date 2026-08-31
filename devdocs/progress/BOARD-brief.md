@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:10 backlog:402 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2952 rejected:71`
+`working:4 unfinished:28 blocked:10 backlog:402 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2953 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer` [A] — owner: frank-user-a
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `perf-a-the-compiler-parses-at-12k-lines-per-second-find-out-why` [A] — owner: frankB
