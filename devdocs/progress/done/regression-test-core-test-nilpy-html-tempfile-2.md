@@ -38,3 +38,6 @@ expect_same: MISMATCH [test_nilpy_htmltmp26.2]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-31 — auto-closed by the seven watcher: `test-core#src:test/test_nilpy_html_tempfile.npy` passes at a6b010e00e4d (tier native); it was red at ef59aaf72b5d. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
