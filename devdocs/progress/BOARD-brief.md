@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:10 backlog:1 backlog-core:145 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:21 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2954 rejected:71`
+`working:4 unfinished:28 blocked:10 backlog:1 backlog-umbrella:5 backlog-core:145 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:21 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2954 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
@@ -60,12 +60,23 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 435, ranked
 
+- `[p 90] [C]` feature-c-corpus-busybox-multi-applet (unblocks 1)
+- `[p 85] [U]` decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
+- `[p 80] [A+S]` bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs (unblocks 1)
+- `[p 80] [A]` feature-a-port-alloca-to-i386-arm32-and-riscv32 (unblocks 1)
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
+- `[p 75] [A]` bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa (unblocks 1)
+- `[p 75] [A]` bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv (unblocks 1)
+- `[p 75] [A]` bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree (unblocks 1)
+- `[p 75] [A+O]` feature-a-reentrant-heap-lock-and-per-thread-arenas (unblocks 1)
 - `[p 75] [P]` feature-pascal-corpus-expansion
+- `[p 70] [A]` bug-a-emitzeroframeslot-has-no-wasm32-arm (unblocks 1)
+- `[p 70] [A]` bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile (unblocks 1)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- `[p 70] [A]` feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host (unblocks 1)
+- `[p 70] [A+B]` feature-target-wasm (unblocks 1)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
-- `[p 70] [C]` feature-c-corpus-busybox-multi-applet
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [C]` regression-lib-test-crtl-reachability-6
 - `[p 70] [T]` regression-optdiff-shard4-12
@@ -79,16 +90,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
-- `[p 65] [N]` bug-n-yield-from-is-not-implemented
-- `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
-- `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
-- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
-- `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
-- `[p 62] [N]` feature-nilpy-enum-class
-- `[p 60] [A]` bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier
-- `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
 _405 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

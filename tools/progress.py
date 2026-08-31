@@ -72,6 +72,13 @@ STATUSES = [
     # `find_ticket` looks up "*/<slug>.md", so physical subdirs would need
     # surgery on the same paths claim/resolve walk. Not worth it for a
     # distinction the filename already carries.
+    # UMBRELLAS -- the goal cells of devdocs/dev/the-goal-cross-cross.md. Not a
+    # lane: a lane says WHERE code lives, an umbrella says WHAT REAL PROGRAM has
+    # to work. They carry the only prio numbers anyone hand-sets; every other
+    # ticket inherits through `blocked-by` edges (see effective_prio). A ticket
+    # may sit under SEVERAL umbrellas -- membership is an EDGE, not a folder, so
+    # many-to-many costs nothing and the ranker takes the max.
+    "backlog-umbrella",
     "backlog-core",
     "backlog-nilpy",
     "backlog-tools",
@@ -482,6 +489,23 @@ class Ticket:
         """
         return (self.slug.startswith("idea-")
                 or self.fm.get("type", "").strip().strip('"').lower() == "idea")
+
+    @property
+    def is_umbrella(self) -> bool:
+        """A GOAL, not a unit of work — the same dispatch semantics as is_idea.
+
+        An umbrella names a real program that has to work (compile DOSBox, host
+        pxx on a second platform). It exists to be the TOP of a dependency chain
+        so `effective_prio` can push its rating down onto whatever blocks it —
+        which is why it stays ranked and visible in `ready`, and why only `next`
+        declines to hand one over. Claiming one is claiming a campaign.
+
+        Rating an umbrella is the ONE number a human still sets. Everything
+        below inherits, which is the whole point: 402 tickets each carrying a
+        hand-typed guess is what the umbrella scheme replaces (2026-08-31).
+        """
+        return (self.slug.startswith("umbrella-")
+                or self.fm.get("type", "").strip().strip('"').lower() == "umbrella")
 
     @property
     def guessed_track(self) -> str:
@@ -930,6 +954,9 @@ class Board:
                 extra += " [parked — re-claim, do not duplicate]"
             if t.not_dispatchable:
                 extra += " [!! DO NOT CLAIM — the ticket says so; read it]"
+            if t.is_umbrella:
+                extra += (" [umbrella — a GOAL, not a unit of work; "
+                          "take something it blocks]")
             if t.is_idea:
                 extra += (" [idea — a brainstorm parent, not a unit of work; "
                           "spin out a concrete ticket instead of claiming it]")
@@ -946,8 +973,8 @@ class Board:
         # Drop tickets that declare themselves unclaimable. `next` prints a
         # paste-ready `claim` line, so offering one of these is an invitation;
         # `ready` still lists them (flagged) because seeing them is useful.
-        skipped = [t for t in rt if t.not_dispatchable or t.is_idea]
-        rt = [t for t in rt if not (t.not_dispatchable or t.is_idea)]
+        skipped = [t for t in rt if t.not_dispatchable or t.is_idea or t.is_umbrella]
+        rt = [t for t in rt if not (t.not_dispatchable or t.is_idea or t.is_umbrella)]
         if not rt:
             scope = f" for Track {track_filter}" if track_filter else ""
             return f"no ready ticket{scope} (all blocked or none in urgent/backlog/unfinished)\n"
@@ -974,7 +1001,7 @@ class Board:
         if skipped:
             lines.append(
                 f"  (skipped {len(skipped)} higher-ranked ticket(s) — "
-                f"do-not-claim or brainstorm-parent: "
+                f"do-not-claim, brainstorm-parent or umbrella: "
                 f"{', '.join(t.slug for t in skipped)})")
         if t.guessed_track:
             lines.append(

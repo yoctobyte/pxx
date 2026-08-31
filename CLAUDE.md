@@ -424,6 +424,76 @@ A genuinely isolated ticket is still fine to fix alone — the rule is against
 fixed" is the useful shape, and it is the measure this file already asks for:
 **tickets-closed-per-change, not lines touched.**
 
+## Umbrellas — the goal is the ranking (all tracks)
+
+Owner, 2026-08-31: *"not a backlog of 300+ tickets. But a bunch of umbrellas to
+focus on."* And the reason, which is the design: **tickets like to be solved in
+context.**
+
+An **umbrella** is a GOAL — a real program that has to work. It lives in
+`backlog-umbrella/`, carries `type: umbrella`, and is the **top of a dependency
+chain**. It is not a lane: a lane says WHERE code lives, an umbrella says WHAT
+HAS TO WORK.
+
+### Why this replaces `prio:`
+
+`prio:` is one scalar guessing at a two-axis question (which language, which
+platform) with no stated goal behind either. It cannot weigh *"pxx compiles
+DOSBox"* against *"a float's last decimal disagrees with FPC"*, so it did not —
+and 426 tickets accumulated in **eight days**, most accurate and off-target.
+
+The ranker already solves this and always did (`tools/progress.py`,
+`effective_prio`): **a ticket's effective priority is the max of its own `prio`
+and of everything it unblocks, transitively — you rate the goal, the chain
+follows.** The defect was never the algorithm. It was that **249 of 402 tickets
+had no dependency edge at all**, so every one of them fell back on a hand-typed
+guess.
+
+**So an umbrella's `prio:` is the only number a human still sets.** Six numbers,
+not four hundred. Everything else inherits — and it works: `feature-c-corpus-
+busybox-multi-applet` reads *"effective prio 90 (own 70, inherited from work it
+unblocks)"* because DOSBox needs it.
+
+### Membership is an EDGE, not a folder
+
+**A ticket belongs to as many umbrellas as need it.** That is why membership is
+`blocked-by` and not a directory — a file lives in one folder, but
+`bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa` genuinely blocks
+*managed memory*, *cross-target codegen* AND *wasm*. The ranker takes the **max**
+over dependents, so multi-umbrella membership costs nothing and gives the right
+answer. Wire it to all three.
+
+### How to grow one: ATTEMPT THE TARGET, don't triage the backlog
+
+**Do NOT populate an umbrella by reading the backlog and guessing what it might
+need.** That is the estimate this scheme exists to delete. Go and try to compile
+DOSBox. Each failure names a ticket, in the order it actually matters, and that
+ticket gets wired. **Whatever the attempt never touches was, by construction,
+not blocking real-world usage** — and it does not need ranking, only somewhere
+to sit.
+
+An umbrella with **no** blockers is not empty paperwork; it is an accurate report
+that **nobody has attempted that cell yet** (Minix 2/3, GNU and Windows today).
+A flat 400-ticket backlog could never say that.
+
+### `next` will not hand you an umbrella
+
+Same dispatch semantics as `type: idea`: ranked, visible in `ready`, annotated —
+and `next` declines to offer it, because claiming a goal is claiming a campaign.
+Take something it blocks.
+
+### The other half: not everything deserves a ticket
+
+An edge case is **not wrong, it is unranked.** If no umbrella needs it, it is a
+one-paragraph note in `devdocs/progress/bugnotes.md`, not a ticket — filing it
+is not a mistake, letting it compete with DOSBox was. Triage later, in bulk,
+when an umbrella reaches for it. The intake question is **"which umbrella does
+this block?"** — answerable, and often measurable — not "how important is this?",
+which nobody answered consistently across 400 tickets.
+
+Full statement of the goal, and the two proofs it turns on:
+**`devdocs/dev/the-goal-cross-cross.md`**.
+
 ## The name is not the thing (all tracks)
 
 Six incidents on 2026-08-30, five agents, one shape — named by frankS:
