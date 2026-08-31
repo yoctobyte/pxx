@@ -474,4 +474,4 @@ defect: it is a pin-ordering dependency owned by
 one line in `lib/rtl/classes.pas`). Nothing from this ticket is left unowned.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 19bb32f31.
