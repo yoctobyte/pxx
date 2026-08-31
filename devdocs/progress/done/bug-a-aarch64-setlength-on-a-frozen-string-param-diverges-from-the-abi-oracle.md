@@ -142,5 +142,6 @@ their bare-metal stage 1. An honest compile-time refusal, not a wrong value, and
 unrelated.
 
 ## Log
-- 2026-08-31 — fixed; three sites widened to `TypeIsFrozenString`, aarch64's
-  condition corrected to `not IsRef` and marked, baseline entry retired.
+- 2026-08-31 — fixed, commit e53b6a6fd. Three sites widened to
+  `TypeIsFrozenString`, aarch64's condition corrected to `not IsRef` and marked
+  `abi-divergence`, baseline entry retired.
