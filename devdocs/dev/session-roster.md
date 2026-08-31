@@ -24699,3 +24699,69 @@ believing they had no address for another session; all three did. `ListAgents`
 lists every live session and the name is the address. **I am telling people to go
 direct — the relay earns its place only where the two ends genuinely cannot see
 each other.**
+
+## SESSION CLOSE — frank-coordinator, 2026-08-31 ~06:00
+
+**Going quiet at the weekly token limit. Nothing is blocked on me. Route
+peer-to-peer: `ListAgents` lists every live session and the name is the address.**
+
+### The one thing waiting on the owner: `make stabilize-fast && make pin` (~35s)
+
+Four independent items behind that one command. Verified first-hand unless marked:
+
+1. **A new language capability the fleet is already using.** `50fcbddef` ("a nested
+   routine can capture a fixed-size array local", 05:48) is on origin/master and
+   NOT in the pin (`4c4a5c125`, 19:34 the previous day). Verified both binaries:
+   `pinned 992065f21f33` rejects, HEAD `d85fc3e152c4` prints 7. Until pinned, that
+   shape in `compiler/**` reds `gate.sh quick`'s first step **for every lane**.
+2. **frankS's durable-param-row collapse** — finished, self-hosts in 1 round,
+   parked as a patch at `devdocs/progress/patches/`. Blocked by (1). *Its
+   measurement, not reproduced by me.*
+3. **Rung 6b's one-line RTL `property Current`** — cannot land early because it
+   reds "pinned builds live lib/rtl" for every lane.
+4. **`feature-pascal-corpus-expansion` [p75]**, the global queue head. I
+   intercepted it three times; frank-rust has committed to the post-pin
+   re-measure and deliberately has NOT claimed it, since a claim that sits
+   unactionable is the status hint lying.
+
+**After the pin:** apply frankS's patch; add the RTL line; frank-rust re-measures
+rung 6b. About five minutes of work, then three tickets move.
+
+### Live state at close
+
+Track T **UP**, newest full tier 1 minute old on `seven`. Cascade down from 30/30
+to 1 of 18, and that one's `bad` is docs-only — a tested upper bound, not a lead.
+Pin-verify reds explicitly NOT corroborated (all pass 11h later; load-shaped
+flakes). Every open red has a named owner.
+
+### Open loops, each with an owner
+
+- **seven-36** holds frankA's answer: heap-debug = **compiler build only**, and the
+  800/zero must not publish until it states **which detector produced it** — a
+  grep for `pxx-heap:` structurally cannot see the read class frankA asked about
+  (`debug-switches.md:40-47`: a dangling read prints NOTHING). Two free controls
+  named: peak RSS above the plain build at the same sha, and one deliberate
+  double-free to prove stderr is captured.
+- **`bug-p-a-forward-interface-declaration-is-not-parsed` [P p45] is a LANDMINE, say
+  so out loud when dispatching it.** Closing it should take the corpus to 40/40 OR
+  send a parentless interface stub into `GCIntfDescends`; being surprised is the
+  failure mode.
+- Two `decide-*` await the owner: `decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0` [p65]
+  and `decide-do-we-introduce-the-named-trade-off-flag-axis-and-what-is-the-bar` [U p55].
+- frank-user's ClawHub `pxx` skill: staged, validated, **NOT published** — held on
+  the owner's device login and explicit go.
+
+### What I got wrong, since the next coordinator inherits the habits
+
+Two unsent relays reported as sent. A dispatch collision (~40 min of two agents)
+from not screening a parked ticket's `owner:` against `ListAgents`. A ghost-sha
+claim about the pin ledger that was a binary sha256 prefix. An `--is-ancestor`
+verdict from an idiom that collapsed exit 1 and 128, relayed to frankT and landed
+as doctrine before the measurement caught it. A truncated `--status` that nearly
+became a fleet alert. A queue observation relayed without re-running the queue.
+
+**The through-line, and it is the handoff: every one of those instruments
+answered. None errored.** And the structural conclusion the fleet reached
+independently three times tonight — **a relay is only observable to the relayer,
+so the honest fix is fewer hops.** Three peers routed through me believing they
+had no address for another session; all three had one.
