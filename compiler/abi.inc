@@ -224,19 +224,31 @@ end;
   is the reason this asks ABIParamSlotIsPointer rather than TypeIsFloat alone.
 
   bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
-procedure ABIA64CdeclArgSlot(procIdx, argIdx: Integer; var isFp: Boolean;
+{ `selfCount` is how many INJECTED arguments precede the declared parameters --
+  a method's Self, always integer-class. Argument i therefore carries parameter
+  i - selfCount, and an index outside [0, ParamCount) is integer-class by
+  construction: below the range it is injected Self, above it is a variadic
+  tail, and AAPCS64 puts both in the GP bank. The direct call arm and the
+  callee spill pass 0; only the INDIRECT arm can see a nonzero one.
+  This parameter exists so the indirect arm does not hand-roll a second
+  NGRN/NSRN/NSAA walk -- it had one, register-only, and growing an NSAA into
+  it would have made two mechanisms for one convention.
+  devdocs/dev/normalise-dont-special-case.md }
+procedure ABIA64CdeclArgSlot(procIdx, argIdx, selfCount: Integer; var isFp: Boolean;
                              var regIdx, stackOff: Integer);
-var i, ngrn, nsrn, nsaa: Integer;
+var i, pi, ngrn, nsrn, nsaa: Integer;
     fp: Boolean;
 begin
   ngrn := 0; nsrn := 0; nsaa := 0;
   isFp := False; regIdx := -1; stackOff := -1;
   for i := 0 to argIdx do
   begin
-    fp := TypeIsFloat(Procs[procIdx].Params[i].TypeKind) and
-          (not ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
-                                     Procs[procIdx].Params[i].IsRef,
-                                     Procs[procIdx].Params[i].IsArray));
+    pi := i - selfCount;
+    fp := (pi >= 0) and (pi < Procs[procIdx].ParamCount) and
+          TypeIsFloat(Procs[procIdx].Params[pi].TypeKind) and
+          (not ABIParamSlotIsPointer(Procs[procIdx].Params[pi].TypeKind,
+                                     Procs[procIdx].Params[pi].IsRef,
+                                     Procs[procIdx].Params[pi].IsArray));
     isFp := fp; regIdx := -1; stackOff := -1;
     if fp then
     begin
@@ -252,16 +264,18 @@ begin
 end;
 
 { The 16-byte-aligned size of the AAPCS64 stack argument area for `procIdx`'s
-  first `nparams` parameters -- 0 when everything fits in the banks. 16 and not
+  first `nparams` ARGUMENTS (not parameters: pass the arg count, and the same
+  `selfCount` shift the slot walk uses) -- 0 when everything fits in the banks.
+  16 and not
   8 because sp must stay 16-byte aligned at a public interface. }
-function ABIA64CdeclStackBytes(procIdx, nparams: Integer): Integer;
+function ABIA64CdeclStackBytes(procIdx, nparams, selfCount: Integer): Integer;
 var i, regIdx, stackOff, hiOff: Integer;
     isFp: Boolean;
 begin
   hiOff := -1;
   for i := 0 to nparams - 1 do
   begin
-    ABIA64CdeclArgSlot(procIdx, i, isFp, regIdx, stackOff);
+    ABIA64CdeclArgSlot(procIdx, i, selfCount, isFp, regIdx, stackOff);
     if stackOff > hiOff then hiOff := stackOff;
   end;
   if hiOff < 0 then ABIA64CdeclStackBytes := 0

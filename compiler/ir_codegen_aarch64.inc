@@ -3406,7 +3406,7 @@ begin
               the call. Argument i's temp sits at sp + blk + (nArgs-1-i)*16
               once the block is reserved (arg0 was pushed deepest).
               bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
-            cdeclBlkA64 := ABIA64CdeclStackBytes(procIdx, Procs[procIdx].ParamCount);
+            cdeclBlkA64 := ABIA64CdeclStackBytes(procIdx, Procs[procIdx].ParamCount, 0);
             if cdeclBlkA64 + nArgs * 16 > 32760 then
               Error('target aarch64: cdecl call with ' + AIntToStr(nArgs) +
                     ' arguments needs a temp block past the 32760-byte reach of '
@@ -3417,7 +3417,7 @@ begin
               argument register that the register half has already loaded. }
             for i := 0 to nArgs - 1 do
             begin
-              ABIA64CdeclArgSlot(procIdx, i, a64Fp, lo, hi);
+              ABIA64CdeclArgSlot(procIdx, i, 0, a64Fp, lo, hi);
               if hi >= 0 then
               begin
                 sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
@@ -3428,7 +3428,7 @@ begin
             { Register half, high index first so x0 is written last. }
             for i := nArgs - 1 downto 0 do
             begin
-              ABIA64CdeclArgSlot(procIdx, i, a64Fp, lo, hi);
+              ABIA64CdeclArgSlot(procIdx, i, 0, a64Fp, lo, hi);
               if hi >= 0 then Continue;
               sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
               EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
@@ -3571,36 +3571,66 @@ begin
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
-          if nArgs > 8 then
-            Error('target aarch64: cdecl indirect call with more than 8 arguments not supported');
-          { Pop reverse (top = last arg) into the target class register. }
+          { AAPCS64 stack arguments, mirroring the DIRECT arm above. This used to
+            refuse past eight; the refusal was the last of the four this ticket
+            named and the only one left after the direct and variadic arms landed.
+
+            The register walk this replaced was hand-rolled and register-only: it
+            recomputed lo/hi with an inner j-loop per argument, which is an
+            NGRN/NSRN walk with no NSAA. Growing an overflow area into it would
+            have made a SECOND mechanism for one convention, so the walk moved
+            into ABIA64CdeclArgSlot instead -- the same oracle the direct arm and
+            the callee spill ask. Its `selfCount` argument exists for this call
+            site: an injected Self shifts every parameter by one, and an index
+            outside [0, ParamCount) is integer-class either way (below = Self,
+            above = variadic tail).
+
+            Temps are read by OFFSET rather than popped, because the outgoing
+            block has to be built while they are all still live. Pushes go
+            downward, and the callee was pushed FIRST, so once the block is
+            reserved argument i sits at sp + blk + (nArgs-1-i)*16 and the callee
+            at sp + blk + nArgs*16. Everything drops in one add after the call.
+            bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
+          cdeclBlkA64 := ABIA64CdeclStackBytes(procIdx, nArgs, Integer(IRC[node]));
+          if cdeclBlkA64 + (nArgs + 1) * 16 > 32760 then
+            Error('target aarch64: cdecl indirect call with ' + AIntToStr(nArgs) +
+                  ' arguments needs a temp block past the 32760-byte reach of ' +
+                  'a scaled LDR immediate');
+          if cdeclBlkA64 > 0 then
+            EmitI32($D10003FF or (cdeclBlkA64 shl 10));   { sub sp, sp, #blk }
+          { Stack half first: it only reads temps, so it cannot disturb an
+            argument register the register half has already loaded. }
+          for i := 0 to nArgs - 1 do
+          begin
+            ABIA64CdeclArgSlot(procIdx, i, Integer(IRC[node]), a64Fp, lo, hi);
+            if hi >= 0 then
+            begin
+              sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
+              EmitI32($F94003E9 or ((sz div 8) shl 10));   { ldr x9, [sp, #sz] }
+              EmitI32($F90003E9 or ((hi div 8) shl 10));   { str x9, [sp, #off] }
+            end;
+          end;
+          { Register half, high index first so x0 is written last. }
           for i := nArgs - 1 downto 0 do
           begin
-            lo := 0; hi := 0;
-            for j := 0 to i - 1 do
-              if (j >= Integer(IRC[node])) and
-                 ((j - Integer(IRC[node])) < Procs[procIdx].ParamCount) and
-                 TypeIsFloat(Procs[procIdx].Params[j - Integer(IRC[node])].TypeKind) and
-                 (not Procs[procIdx].Params[j - Integer(IRC[node])].IsRef) then
-                Inc(hi)
-              else
-                Inc(lo);
-            EmitI32($F84107E9);                      { ldr x9, [sp], #16 }
-            if (i >= Integer(IRC[node])) and
-               ((i - Integer(IRC[node])) < Procs[procIdx].ParamCount) and
-               TypeIsFloat(Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind) and
-               (not Procs[procIdx].Params[i - Integer(IRC[node])].IsRef) then
+            ABIA64CdeclArgSlot(procIdx, i, Integer(IRC[node]), a64Fp, lo, hi);
+            if hi >= 0 then Continue;
+            sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
+            EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
+            if a64Fp then
             begin
               { by-REF float = pointer -> int bank; see the direct path above. }
-              EmitI32($9E670120 + hi);               { fmov d[hi], x9 }
+              EmitI32($9E670120 + lo);                     { fmov d[lo], x9 }
               if Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind = tySingle then
-                EmitI32($1E624000 + (hi shl 5) + hi); { fcvt s[hi], d[hi] }
+                EmitI32($1E624000 + (lo shl 5) + lo);      { fcvt s[lo], d[lo] }
             end
             else
-              EmitI32($AA0903E0 + lo);               { mov x[lo], x9 }
+              EmitI32($AA0903E0 + lo);                     { mov x[lo], x9 }
           end;
-          EmitI32($F84107F0);                        { ldr x16, [sp], #16 (callee) }
-          EmitI32($D63F0200);                        { blr x16 }
+          sz := cdeclBlkA64 + nArgs * 16;
+          EmitI32($F94003F0 or ((sz div 8) shl 10));       { ldr x16, [sp, #sz] (callee) }
+          EmitI32($D63F0200);                              { blr x16 }
+          EmitI32($910003FF or ((cdeclBlkA64 + (nArgs + 1) * 16) shl 10)); { add sp, sp, #drop }
           if TypeIsFloat(Procs[procIdx].RetType) then
           begin
             if Procs[procIdx].RetType = tySingle then

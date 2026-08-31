@@ -1428,7 +1428,7 @@ begin
       begin
         idx := Procs[procIdx].Params[i].SymIdx;
         sz := ParamSize(idx);
-        ABIA64CdeclArgSlot(procIdx, i, a64Fp, intIdx, stackOff);
+        ABIA64CdeclArgSlot(procIdx, i, 0, a64Fp, intIdx, stackOff);
         EmitLoadImmA64(9, Syms[idx].Offset);
         EmitI32($8B0903A8);                       { add x8, x29, x9 (slot addr) }
         if stackOff >= 0 then
